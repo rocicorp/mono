@@ -196,6 +196,159 @@ export const astSchema: v.Type<AST> = v.readonlyObject({
     .optional(),
 });
 
+/**
+ * Maximum nesting depth permitted in any AST that crosses the wire boundary
+ * or that read-authorizer rewrites traverse.
+ *
+ * The AST is recursive across two mutually-recursive axes:
+ *   - Condition.conditions (and/or)          -> Condition
+ *   - CorrelatedSubqueryCondition.related    -> CorrelatedSubquery -> AST
+ *   - AST.where                              -> Condition
+ *   - AST.related[].subquery                 -> AST
+ *
+ * Every visitor in zero-cache (`transformQuery`, `transformCondition`,
+ * `simplifyCondition`, `bindStaticParameters`, `hashOfAST`/`normalizeAST`,
+ * `transformAST`) recurses through these links, so an attacker can blow the
+ * JS call stack and burn many seconds of CPU by sending a single
+ * deeply-nested AST (e.g. nested AND, or nested EXISTS) over an
+ * unauthenticated WebSocket.
+ *
+ * `MAX_AST_DEPTH = 50` leaves headroom for the deepest realistic queries
+ * (permission rules wrapped around user-supplied `whereExists` chains tend
+ * to be < 10 levels deep) while keeping each request well below any JS
+ * engine's default call-stack capacity.
+ */
+export const MAX_AST_DEPTH = 50;
+
+/**
+ * Narrows `unknown` to a property-bag so we can read fields off untrusted
+ * input without `as` casts during the depth walk.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Counts depth iteratively across the *combined* Condition / AST surface.
+ *
+ * Depth is incremented every time we descend through:
+ *   - an `and` / `or` `conditions[]` entry,
+ *   - a `correlatedSubquery` Condition's `related.subquery` (which is an AST),
+ *   - an AST's `where` (an entry into a Condition tree),
+ *   - an AST's `related[].subquery` (which is an AST).
+ *
+ * Implementation is an explicit worklist (`stack`) rather than recursion so
+ * that this guard cannot itself trigger the stack overflow it is preventing.
+ *
+ * Operates on the *raw decoded JSON* (i.e. `unknown`) so it can run before
+ * `valita.parse(...)` -- valita's own schema is structurally recursive via
+ * `v.lazy(...)` and overflows around depth ~900 on a default Node stack.
+ *
+ * Throws an `Error` (caught by `connection.ts` and converted into an
+ * `InvalidMessage` ProtocolError) if any branch exceeds `max`.
+ */
+export function assertAstDepth(
+  root: unknown,
+  max: number = MAX_AST_DEPTH,
+): void {
+  // Stack entries are tagged so we know which sub-tree shape each `node`
+  // refers to. We don't trust the input enough to call helpers that would
+  // recurse; everything is hand-walked here.
+  type Frame =
+    | {readonly kind: 'ast'; readonly node: unknown; readonly depth: number}
+    | {
+        readonly kind: 'condition';
+        readonly node: unknown;
+        readonly depth: number;
+      };
+
+  if (!isRecord(root)) {
+    return;
+  }
+
+  const stack: Frame[] = [{kind: 'ast', node: root, depth: 0}];
+
+  while (stack.length > 0) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    const frame = stack.pop()!;
+    if (frame.depth > max) {
+      throw new Error(
+        `AST nesting exceeds maximum depth of ${max} (found depth ${frame.depth})`,
+      );
+    }
+    const node = frame.node;
+    if (!isRecord(node)) {
+      continue;
+    }
+
+    if (frame.kind === 'ast') {
+      // AST.where introduces a Condition tree at the *same* depth -- the
+      // wrapping AST already accounts for one level, and `where` is not a
+      // user-controllable nesting axis on its own.
+      const where = node.where;
+      if (where !== undefined && where !== null) {
+        stack.push({kind: 'condition', node: where, depth: frame.depth});
+      }
+      const related = node.related;
+      if (Array.isArray(related)) {
+        for (const sq of related) {
+          if (!isRecord(sq)) {
+            continue;
+          }
+          const subquery = sq.subquery;
+          if (subquery !== undefined && subquery !== null) {
+            stack.push({kind: 'ast', node: subquery, depth: frame.depth + 1});
+          }
+        }
+      }
+      continue;
+    }
+
+    // frame.kind === 'condition'
+    const type = node.type;
+    if (type === 'and' || type === 'or') {
+      const conditions = node.conditions;
+      if (Array.isArray(conditions)) {
+        for (const c of conditions) {
+          stack.push({kind: 'condition', node: c, depth: frame.depth + 1});
+        }
+      }
+      continue;
+    }
+    if (type === 'correlatedSubquery') {
+      const related = node.related;
+      if (isRecord(related)) {
+        const subquery = related.subquery;
+        if (subquery !== undefined && subquery !== null) {
+          stack.push({kind: 'ast', node: subquery, depth: frame.depth + 1});
+        }
+      }
+      continue;
+    }
+    // 'simple' and unknown shapes have no recursive children to walk; we
+    // leave structural validation to valita downstream.
+  }
+}
+
+/**
+ * `astSchema` wrapped in a `chain` that pre-walks the value with
+ * `assertAstDepth` before delegating to the structurally-recursive parse.
+ * Use this at wire-entry sites where untrusted clients can supply ASTs
+ * (e.g. `desiredQueriesPatch[*].ast`). Server-internal callers that parse
+ * already-validated CVR rows should keep using `astSchema` directly, so
+ * legacy stored ASTs are not rejected after an upgrade.
+ */
+export const depthBoundedAstSchema: v.Type<AST> = v.unknown().chain(value => {
+  try {
+    assertAstDepth(value, MAX_AST_DEPTH);
+  } catch (e) {
+    return v.err({
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+  return astSchema.try(value);
+});
+
 export type Bound = {
   row: Row;
   exclusive: boolean;
