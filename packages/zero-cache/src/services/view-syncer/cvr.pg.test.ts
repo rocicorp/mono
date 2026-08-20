@@ -356,6 +356,93 @@ describe('view-syncer/cvr', () => {
     });
   });
 
+  test('serializes concurrent first flushes for a new CVR', async () => {
+    // Delay creation so both stores reach the missing-row path before either
+    // first flush commits. Without serialization, both flushes can commit the
+    // same CVR version with different clients.
+    await cvrDb.unsafe(`
+      CREATE FUNCTION delay_cvr_instance_insert()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        PERFORM pg_sleep(0.1);
+        RETURN NEW;
+      END;
+      $$;
+
+      CREATE TRIGGER delay_cvr_instance_insert
+      BEFORE INSERT ON "dapp_3/cvr".instances
+      FOR EACH ROW
+      EXECUTE FUNCTION delay_cvr_instance_insert();
+    `);
+
+    const storeA = new CVRStore(
+      lc,
+      cvrDb,
+      SHARD,
+      'task-a',
+      'new-client-group',
+      ON_FAILURE,
+    );
+    const storeB = new CVRStore(
+      lc,
+      cvrDb,
+      SHARD,
+      'task-b',
+      'new-client-group',
+      ON_FAILURE,
+    );
+    const [cvrA, cvrB] = await Promise.all([
+      storeA.load(lc, LAST_CONNECT),
+      storeB.load(lc, LAST_CONNECT),
+    ]);
+    const updaterA = new CVRConfigDrivenUpdater(storeA, cvrA, SHARD);
+    const updaterB = new CVRConfigDrivenUpdater(storeB, cvrB, SHARD);
+    updaterA.ensureClient('client-a');
+    updaterB.ensureClient('client-b');
+
+    const lastActive = Date.UTC(2024, 3, 20);
+    const results = await Promise.allSettled([
+      updaterA.flush(
+        lc,
+        LAST_CONNECT,
+        lastActive,
+        ttlClockFromNumber(lastActive),
+      ),
+      updaterB.flush(
+        lc,
+        LAST_CONNECT,
+        lastActive,
+        ttlClockFromNumber(lastActive),
+      ),
+    ]);
+
+    expect(
+      results.filter(result => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    const rejected = results.find(result => result.status === 'rejected');
+    expect(rejected).toBeDefined();
+    expect((rejected as PromiseRejectedResult).reason).toBeInstanceOf(
+      ConcurrentModificationException,
+    );
+
+    expect(
+      await cvrDb`
+        SELECT "version"
+        FROM "dapp_3/cvr".instances
+        WHERE "clientGroupID" = 'new-client-group'
+      `,
+    ).toEqual([{version: '00:01'}]);
+    expect(
+      await cvrDb`
+        SELECT "clientID"
+        FROM "dapp_3/cvr".clients
+        WHERE "clientGroupID" = 'new-client-group'
+      `,
+    ).toHaveLength(1);
+  });
+
   test('set client schema', async () => {
     const pgStore = new CVRStore(
       lc,

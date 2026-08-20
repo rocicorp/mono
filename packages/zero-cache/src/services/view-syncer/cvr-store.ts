@@ -1023,12 +1023,33 @@ export class CVRStore {
   ): Promise<void> {
     const start = Date.now();
     lc.debug?.('checking cvr version and ownership');
+    const expected = versionString(expectedCurrentVersion);
+
+    if (expected === EMPTY_CVR_VERSION.stateVersion) {
+      // SELECT FOR UPDATE cannot lock a row that does not exist. Ensure that
+      // new CVRs have a row before taking the lock so concurrent first flushes
+      // serialize on the primary key. After a conflicting insert commits, the
+      // SELECT below sees its version and rejects the stale writer.
+      await tx`
+        INSERT INTO ${this.#cvr('instances')} (
+          "clientGroupID",
+          "version",
+          "lastActive"
+        )
+        VALUES (
+          ${this.#id},
+          ${EMPTY_CVR_VERSION.stateVersion},
+          to_timestamp(0)
+        )
+        ON CONFLICT ("clientGroupID") DO NOTHING
+      `;
+    }
+
     const result = await tx<
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
     >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
         FOR UPDATE`;
-    const expected = versionString(expectedCurrentVersion);
     const {version, owner, grantedAt} =
       result.length > 0
         ? result[0]
