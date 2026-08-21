@@ -1,6 +1,20 @@
 import {readdirSync} from 'node:fs';
 import {defineConfig} from 'vitest/config';
 
+// Electron-hosted terminals (VSCode's integrated terminal, Cursor, Claude
+// Code, ...) leak ELECTRON_RUN_AS_NODE=1 into spawned shells. node-gyp-build
+// treats the mere *presence* of that var as proof the process is Electron
+// (see node-gyp-build.js's isElectron(), which checks
+// `process.env.ELECTRON_RUN_AS_NODE` directly, without also requiring
+// `process.versions.electron` to be set) — so it looks for an Electron-ABI
+// prebuild of native deps like @rocicorp/zero-sqlite3, which isn't
+// installed, and fails with a confusing "No native build was found" error
+// across every test that touches SQLite. This must run before Vitest spawns
+// its worker pool (workers inherit process.env at fork time), and doesn't
+// affect genuine Electron test runs, which are still detected via the
+// (unmodified) process.versions.electron check.
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 const {TEST_PG_MODE} = process.env;
 
 // Find all vitest.config*.ts files up to depth 2 from repo root, skipping node_modules.
