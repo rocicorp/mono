@@ -2,6 +2,7 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
@@ -352,25 +353,25 @@ export default async function runWorker(
     changeStreamer,
   });
 
-  const changeStreamerWebServer = new ChangeStreamerHttpServer(
-    lc,
-    {port, keepaliveTimeoutMs, startupDelayMs},
-    parent,
-    changeStreamer,
-  );
-
+  let readinessGate = promiseVoid;
   if (waitForFirstBackupBeforeServing) {
     const start = performance.now();
     lc.info?.(`awaiting initial backup ...`);
 
-    void backupMonitor.firstBackupReceived().then(() => {
+    readinessGate = backupMonitor.firstBackupReceived().then(() => {
       const elapsed = performance.now() - start;
       lc.info?.(`initial backup confirmed after ${elapsed.toFixed(2)}ms`);
-      parent.send(['ready', {ready: true}]);
     });
-  } else {
-    parent.send(['ready', {ready: true}]);
   }
+
+  const changeStreamerWebServer = new ChangeStreamerHttpServer(
+    lc,
+    {port, keepaliveTimeoutMs, startupDelayMs, readinessGate},
+    parent,
+    changeStreamer,
+  );
+
+  void readinessGate.then(() => parent.send(['ready', {ready: true}]));
 
   // Note: The changeStreamer itself is not started here; it is started by the
   //       changeStreamerWebServer after a delay to ensure that routing
