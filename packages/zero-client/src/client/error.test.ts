@@ -18,6 +18,7 @@ import {
   isOfflineError,
   isServerError,
   isZeroError,
+  MAX_AMBIGUOUS_ERROR_RETRIES,
   NO_STATUS_TRANSITION,
 } from './error.ts';
 
@@ -313,6 +314,8 @@ describe('getErrorConnectionTransition', () => {
     ClientErrorKind.CleanClose,
     ClientErrorKind.ConnectTimeout,
     ClientErrorKind.PingTimeout,
+    ClientErrorKind.PullTimeout,
+    ClientErrorKind.UnexpectedBaseCookie,
   ] as const)(
     'returns no status transition for retryable client error %s',
     kind => {
@@ -328,9 +331,27 @@ describe('getErrorConnectionTransition', () => {
     },
   );
 
-  test('returns error status for fatal client errors', () => {
+  test('bounds retries for an internal client error', () => {
     const error = new ClientError({
       kind: ClientErrorKind.Internal,
+      message: 'internal',
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: NO_STATUS_TRANSITION,
+      reason: error,
+      maxRetries: MAX_AMBIGUOUS_ERROR_RETRIES,
+    });
+  });
+
+  test.each([
+    // The client sent a message the server refused (e.g. an oversized
+    // mutation). Reconnecting replays it, so this must not retry.
+    ClientErrorKind.InvalidMessage,
+    ClientErrorKind.UserDisconnect,
+  ] as const)('returns error status for fatal client error %s', kind => {
+    const error = new ClientError({
+      kind,
       message: 'fatal',
     });
 
@@ -423,6 +444,37 @@ describe('getErrorConnectionTransition', () => {
     },
   );
 
+  test('bounds retries for an unmarked server internal error', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.Internal,
+      message: 'internal',
+      origin: ErrorOrigin.Server,
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: NO_STATUS_TRANSITION,
+      reason: error,
+      maxRetries: MAX_AMBIGUOUS_ERROR_RETRIES,
+    });
+  });
+
+  test.each([true, false] as const)(
+    'honors retryable=%s on a server internal error',
+    retryable => {
+      const error = new ProtocolError({
+        kind: ErrorKind.Internal,
+        message: 'internal',
+        origin: ErrorOrigin.Server,
+        retryable,
+      });
+
+      expect(getErrorConnectionTransition(error)).toEqual({
+        status: retryable ? NO_STATUS_TRANSITION : ConnectionStatus.Error,
+        reason: error,
+      });
+    },
+  );
+
   test.each([ErrorKind.AuthInvalidated, ErrorKind.Unauthorized] as const)(
     'returns needs auth status for auth error %s',
     kind => {
@@ -442,24 +494,147 @@ describe('getErrorConnectionTransition', () => {
   test('wraps unknown errors as internal client error', () => {
     const result = getErrorConnectionTransition(new Error('boom'));
 
-    expect(result.status).toBe(ConnectionStatus.Error);
+    expect(result.status).toBe(NO_STATUS_TRANSITION);
     expect(result.reason).toBeInstanceOf(ClientError);
     expect(result.reason?.kind).toBe(ClientErrorKind.Internal);
     expect(result.reason?.message).toBe('Unexpected internal error: boom');
     expect(result.reason?.errorBody.message).toBe(
       'Unexpected internal error: boom',
     );
+    expect(result).toHaveProperty('maxRetries', MAX_AMBIGUOUS_ERROR_RETRIES);
   });
 
   test('wraps string errors as internal client error', () => {
     const result = getErrorConnectionTransition('string error');
 
-    expect(result.status).toBe(ConnectionStatus.Error);
+    expect(result.status).toBe(NO_STATUS_TRANSITION);
     expect(result.reason).toBeInstanceOf(ClientError);
     expect(result.reason?.kind).toBe(ClientErrorKind.Internal);
     expect(result.reason?.message).toBe(
       'Unexpected internal error: string error',
     );
+    expect(result).toHaveProperty('maxRetries', MAX_AMBIGUOUS_ERROR_RETRIES);
+  });
+
+  test.each([
+    {reason: ErrorReason.HTTP, status: 500},
+    {reason: ErrorReason.HTTP, status: 408},
+    {reason: ErrorReason.HTTP, status: 425},
+    {reason: ErrorReason.HTTP, status: 429},
+    {reason: ErrorReason.Timeout},
+  ] as const)('PushFailed with %o keeps retrying', body => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      message: 'push failed',
+      mutationIDs: [],
+      ...body,
+    } as ErrorBody);
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: NO_STATUS_TRANSITION,
+      reason: error,
+    });
+  });
+
+  test.each([
+    {reason: ErrorReason.HTTP, status: 500},
+    {reason: ErrorReason.Timeout},
+  ] as const)('TransformFailed with %o keeps retrying', body => {
+    const error = new ProtocolError({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      message: 'transform failed',
+      queryIDs: [],
+      ...body,
+    } as ErrorBody);
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: NO_STATUS_TRANSITION,
+      reason: error,
+    });
+  });
+
+  test.each([
+    {reason: ErrorReason.HTTP, status: 400},
+    {reason: ErrorReason.Parse},
+  ] as const)('PushFailed with %o is fatal', body => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      message: 'push failed',
+      mutationIDs: [],
+      ...body,
+    } as ErrorBody);
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Error,
+      reason: error,
+    });
+  });
+
+  test.each([ErrorKind.PushFailed, ErrorKind.TransformFailed] as const)(
+    'bounds retries for an unmarked %s internal error',
+    kind => {
+      const error = new ProtocolError({
+        kind,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.Internal,
+        message: 'internal',
+        ...(kind === ErrorKind.PushFailed ? {mutationIDs: []} : {queryIDs: []}),
+      } as ErrorBody);
+
+      expect(getErrorConnectionTransition(error)).toEqual({
+        status: NO_STATUS_TRANSITION,
+        reason: error,
+        maxRetries: MAX_AMBIGUOUS_ERROR_RETRIES,
+      });
+    },
+  );
+
+  test('honors an explicit retryable marker over inferred classification', () => {
+    const retryableParse = new ProtocolError({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.Parse,
+      retryable: true,
+      message: 'temporary parse failure',
+      queryIDs: [],
+    });
+    const nonRetryable500 = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      retryable: false,
+      status: 500,
+      message: 'do not retry',
+      mutationIDs: [],
+    });
+
+    expect(getErrorConnectionTransition(retryableParse)).toEqual({
+      status: NO_STATUS_TRANSITION,
+      reason: retryableParse,
+    });
+    expect(getErrorConnectionTransition(nonRetryable500)).toEqual({
+      status: ConnectionStatus.Error,
+      reason: nonRetryable500,
+    });
+  });
+
+  // Retrying would replay the same unsupported push forever.
+  test('PushFailed with an unsupported push version is fatal', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.UnsupportedPushVersion,
+      message: 'unsupported push version',
+      mutationIDs: [],
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Error,
+      reason: error,
+    });
   });
 
   test('returns needs auth status for auth errors via HTTP status codes', () => {
