@@ -1,9 +1,15 @@
-import {expect, test} from 'vitest';
+import {LogContext} from '@rocicorp/logger';
+import {expect, test, vi} from 'vitest';
+import {getSizeOfValue} from '../../../shared/src/size-of-value.ts';
+import type {Chunk} from '../dag/chunk.ts';
 import {TestStore} from '../dag/test-store.ts';
+import {Read as DBRead} from '../db/read.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import type {Hash} from '../hash.ts';
-import {withWrite} from '../with-transactions.ts';
+import {ReadTransactionImpl} from '../transactions.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import type {DataNodeImpl, Entry, InternalNodeImpl} from './node.ts';
+import {BTreeRead} from './read.ts';
 import {BTreeWrite} from './write.ts';
 
 const formatVersion = FormatVersion.Latest;
@@ -181,5 +187,54 @@ test('prefetch is opt-in', async () => {
     expect((await prefetchScan.next()).done).toBe(false);
     expect(map.poisonReads).toBeGreaterThan(0);
     await prefetchScan.return?.();
+  });
+});
+
+test('limit 1 scan reads only the root-to-leaf path', async () => {
+  const dagStore = new TestStore();
+  const value = 'x'.repeat(256);
+  const entries = Array.from({length: 20_000}, (_, i) => [
+    String(i).padStart(8, '0'),
+    value,
+  ]) as [string, string][];
+
+  const rootHash = await withWrite(dagStore, async dagWrite => {
+    const map = new BTreeWrite(dagWrite, formatVersion);
+    await map.putMany(entries);
+    const hash = await map.flush();
+    await dagWrite.setHead('scan-test', hash);
+    return hash;
+  });
+
+  const rootLevel = await withRead(dagStore, async dagRead => {
+    const map = new BTreeRead(dagRead, formatVersion, rootHash);
+    return (await map.getNode(rootHash)).level;
+  });
+  expect(rootLevel).toBeGreaterThan(1);
+
+  await withRead(dagStore, async dagRead => {
+    const chunksRead: Chunk[] = [];
+    const mustGetChunk = dagRead.mustGetChunk.bind(dagRead);
+    vi.spyOn(dagRead, 'mustGetChunk').mockImplementation(async hash => {
+      const chunk = await mustGetChunk(hash);
+      chunksRead.push(chunk);
+      return chunk;
+    });
+
+    const map = new BTreeRead(dagRead, formatVersion, rootHash);
+    const dbRead = new DBRead(dagRead, map, new Map());
+    const tx = new ReadTransactionImpl('client-id', dbRead, new LogContext());
+
+    expect(await tx.scan({limit: 1}).entries().toArray()).toEqual([entries[0]]);
+
+    // A cold scan needs one chunk for each level, including the root and leaf.
+    // Reading more means the B-tree eagerly loaded siblings that the limit
+    // prevented the public scan from visiting.
+    const bytesRead = chunksRead.reduce(
+      (sum, chunk) => sum + getSizeOfValue(chunk.data),
+      0,
+    );
+    expect(bytesRead).toBeLessThanOrEqual((rootLevel + 1) * 16 * 1024);
+    expect(chunksRead).toHaveLength(rootLevel + 1);
   });
 });
