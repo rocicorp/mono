@@ -67,7 +67,7 @@ describe('parseUpstreamMessage', () => {
   );
 
   test.each(['ast', 'value'] as const)(
-    'rejects an inspector analyze-query %s without inspecting it',
+    'leaves an inspector analyze-query %s unparsed',
     field => {
       expect(() =>
         parseUpstreamMessage(
@@ -81,7 +81,7 @@ describe('parseUpstreamMessage', () => {
           ],
           false,
         ),
-      ).toThrow(/Legacy queries are not supported/);
+      ).not.toThrow();
     },
   );
 
@@ -115,16 +115,6 @@ describe('parseUpstreamMessage', () => {
               ast: {table: 'issues'},
             },
           ],
-        },
-      ],
-    },
-    {
-      message: [
-        'inspect',
-        {
-          id: 'inspect-1',
-          op: 'analyze-query',
-          ast: {table: 'issues'},
         },
       ],
     },

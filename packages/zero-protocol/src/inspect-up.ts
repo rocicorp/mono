@@ -52,6 +52,16 @@ export const inspectAnalyzeQueryUpSchema = inspectUpBase.extend({
   args: v.readonlyArray(jsonSchema).optional(),
 });
 
+const unparsedInspectAnalyzeQueryUpSchema = inspectUpBase.extend({
+  op: v.literal('analyze-query'),
+  /** @deprecated Use {@linkcode ast} instead */
+  value: v.unknown().optional(),
+  options: analyzeQueryOptionsSchema.optional(),
+  ast: v.unknown().optional(),
+  name: v.string().optional(),
+  args: v.readonlyArray(jsonSchema).optional(),
+});
+
 export type InspectAnalyzeQueryUpBody = v.Infer<
   typeof inspectAnalyzeQueryUpSchema
 >;
@@ -69,6 +79,25 @@ export const inspectUpMessageSchema = v.tuple([
   inspectUpBodySchema,
 ]);
 
+const unparsedInspectUpBodySchema = v.union(
+  inspectQueriesUpBodySchema,
+  inspectMetricsUpSchema,
+  inspectVersionUpSchema,
+  inspectAuthenticateUpSchema,
+  unparsedInspectAnalyzeQueryUpSchema,
+);
+
+export const unparsedInspectUpMessageSchema = v.tuple([
+  v.literal('inspect'),
+  unparsedInspectUpBodySchema,
+]);
+
 export type InspectUpMessage = v.Infer<typeof inspectUpMessageSchema>;
 
 export type InspectUpBody = v.Infer<typeof inspectUpBodySchema>;
+
+export type UnparsedInspectUpMessage = v.Infer<
+  typeof unparsedInspectUpMessageSchema
+>;
+
+export type UnparsedInspectUpBody = v.Infer<typeof unparsedInspectUpBodySchema>;
