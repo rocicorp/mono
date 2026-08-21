@@ -15,9 +15,6 @@ function resolve(path: string): URL {
 // All these urls must be relative to this file and be located in the same directory.
 
 export const CHANGE_STREAMER_URL = resolve('./change-streamer.ts');
-export const BACKUP_WATERMARK_POLLER_URL = resolve(
-  './backup-watermark-poller.ts',
-);
 export const MAIN_URL = resolve('./main.ts');
 export const MUTATOR_URL = resolve('./mutator.ts');
 export const REAPER_URL = resolve('./reaper.ts');

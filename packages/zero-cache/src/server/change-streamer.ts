@@ -345,11 +345,9 @@ export default async function runWorker(
 
   const backupMonitor = createBackupCleanupMonitor({
     lc,
-    processes,
     config,
     replicaFile: replica.file,
     changeStreamer,
-    env,
   });
 
   const changeStreamerWebServer = new ChangeStreamerHttpServer(

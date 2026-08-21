@@ -979,7 +979,8 @@ export const zeroOptions = {
       desc: [
         `Backs up the replica using Litestream v0.5.x and monitors cleanup`,
         `watermarks by reading the backup through the Litestream SQLite VFS.`,
-        `This requires {bold ZERO_LITESTREAM_RESTORE_USING_V5}.`,
+        `This requires {bold ZERO_LITESTREAM_RESTORE_USING_V5} and`,
+        `{bold ZERO_LITESTREAM_VFS_QUERY_EXECUTABLE}`,
       ],
     },
 
@@ -1009,15 +1010,15 @@ export const zeroOptions = {
       ],
     },
 
-    vfsExtensionPath: {
-      type: v.string().default('/usr/local/lib/litestream-vfs.so'),
+    vfsQueryExecutable: {
+      type: v.string().optional(),
       desc: [
-        `Path to the Litestream v0.5.x SQLite VFS loadable extension used by`,
-        `the backup watermark reader to query the backup directly.`,
+        `Path to the rocicorp vfs-query executable that runs the VFS-based`,
+        `polling of backup watermark. This is required when backing up with V5.`,
       ],
     },
 
-    vfsProbeIntervalMs: {
+    vfsPollIntervalMs: {
       type: v.number().default(15 * 1000),
       desc: [
         `Interval in milliseconds litestream vfs extension polls the backup store (e.g. s3)`,
@@ -1028,11 +1029,10 @@ export const zeroOptions = {
       ],
     },
 
-    vfsProbeTimeoutMs: {
-      type: v.number().default(30 * 1000),
+    vfsPollTimeoutMs: {
+      type: v.number().default(10 * 1000),
       desc: [
-        `Timeout in milliseconds for requests to the Litestream VFS backup`,
-        `watermark reader worker.`,
+        `Timeout in milliseconds for requests to the Litestream VFS poller.`,
       ],
     },
 

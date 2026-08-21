@@ -90,7 +90,13 @@ export function assertNormalized(
       config.litestream.executableV5 ||
       !(config.litestream.restoreUsingV5 || config.litestream.backupUsingV5),
     '--litestream-restore-using-v5 and --litestream-backup-using-v5 ' +
-      'require --litestream-executable to be specified',
+      'require --litestream-executable-v5 to be specified',
+  );
+  assert(
+    !config.litestream.backupURL ||
+      !config.litestream.backupUsingV5 ||
+      config.litestream.vfsPollIntervalMs,
+    '--litestream-backup-using-v5 requires --litestream-vfs-query-executable to be specified',
   );
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
