@@ -22,13 +22,14 @@ import {
   type DeepReadonly,
   type ReadTransaction,
 } from '../../../replicache/src/transactions.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
 import {
   hashOfAST,
   hashOfNameAndArgs,
@@ -925,7 +926,7 @@ describe('getQueriesPatch', () => {
       const patch = await queryManager.getQueriesPatch(testReadTransaction);
       expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
       const op = patch.get('1hydj1t7t5yv4');
-      assert(op?.op === 'put', 'Expected a put query patch');
+      v.assert(op, upPutOpSchema);
       return op.ttl;
     }
 

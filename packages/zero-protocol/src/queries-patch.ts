@@ -1,6 +1,6 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
-import {unsupportedLegacyQueryASTSchema} from './legacy-query.ts';
+import {astSchema} from './ast.ts';
 
 export const putOpSchema = v.object({
   op: v.literal('put'),
@@ -9,10 +9,10 @@ export const putOpSchema = v.object({
 });
 
 export const upPutOpSchema = putOpSchema.extend({
-  // Keep the field in the inferred wire type so legacy clients can still be
-  // built, but reject it without inspecting or recursively parsing its value.
-  // This prevents untrusted legacy ASTs from reaching zero-cache internals.
-  ast: unsupportedLegacyQueryASTSchema.optional(),
+  // All fields are optional in this transitional period.
+  // - ast is filled in for client queries
+  // - name and args are filled in for custom queries
+  ast: astSchema.optional(),
   name: v.string().optional(),
   args: v.readonly(v.array(jsonSchema)).optional(),
 });

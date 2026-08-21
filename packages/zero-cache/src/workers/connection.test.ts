@@ -21,11 +21,117 @@ import {MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from '../../../zero-protocol/src/pro
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {
   DownstreamSender,
+  parseUpstreamMessage,
   send,
   sendError,
   WEBSOCKET_SEND_TIMEOUT_MS,
   type WebSocketLike,
 } from './connection.ts';
+
+function uninspectableAST() {
+  return new Proxy(
+    {},
+    {
+      get() {
+        throw new Error('AST was inspected');
+      },
+      ownKeys() {
+        throw new Error('AST was inspected');
+      },
+    },
+  );
+}
+
+describe('parseUpstreamMessage', () => {
+  test.each(['initConnection', 'changeDesiredQueries'] as const)(
+    'rejects a legacy query in %s without inspecting its AST',
+    messageType => {
+      expect(() =>
+        parseUpstreamMessage(
+          [
+            messageType,
+            {
+              desiredQueriesPatch: [
+                {
+                  op: 'put',
+                  hash: 'query-hash',
+                  ast: uninspectableAST(),
+                },
+              ],
+            },
+          ],
+          false,
+        ),
+      ).toThrow(/Legacy queries are not supported/);
+    },
+  );
+
+  test.each(['ast', 'value'] as const)(
+    'rejects an inspector analyze-query %s without inspecting it',
+    field => {
+      expect(() =>
+        parseUpstreamMessage(
+          [
+            'inspect',
+            {
+              id: 'inspect-1',
+              op: 'analyze-query',
+              [field]: uninspectableAST(),
+            },
+          ],
+          false,
+        ),
+      ).toThrow(/Legacy queries are not supported/);
+    },
+  );
+
+  test('accepts a custom query when legacy queries are disabled', () => {
+    const message = [
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {
+            op: 'put',
+            hash: 'query-hash',
+            name: 'issuesByAssignee',
+            args: ['user-1'],
+          },
+        ],
+      },
+    ];
+
+    expect(parseUpstreamMessage(message, false)).toEqual(message);
+  });
+
+  test.each([
+    {
+      message: [
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {
+              op: 'put',
+              hash: 'query-hash',
+              ast: {table: 'issues'},
+            },
+          ],
+        },
+      ],
+    },
+    {
+      message: [
+        'inspect',
+        {
+          id: 'inspect-1',
+          op: 'analyze-query',
+          ast: {table: 'issues'},
+        },
+      ],
+    },
+  ])('accepts a legacy query when enabled', ({message}) => {
+    expect(parseUpstreamMessage(message, true)).toEqual(message);
+  });
+});
 
 class MockSocket implements WebSocketLike {
   readyState: WebSocket['readyState'] = WebSocket.OPEN;
