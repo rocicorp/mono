@@ -206,6 +206,7 @@ jobs:
           cp "$TARBALL_PATH" "source/packages/zero/pkgs/$TARBALL"
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
+            --build-context monogo=source/go \
             --build-arg ZERO_VERSION="$VERSION" \
             --build-arg ZERO_PACKAGE="$TARBALL" \
             --label org.opencontainers.image.revision="$SOURCE_SHA" \
