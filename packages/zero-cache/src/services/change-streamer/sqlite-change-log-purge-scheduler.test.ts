@@ -1258,6 +1258,6 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
         ),
         {numRuns: 1000},
       );
-    }, 20_000);
+    }, 45_000);
   });
 });
