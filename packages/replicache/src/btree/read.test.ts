@@ -52,14 +52,14 @@ test('scan over a multi-level btree yields all entries in order', async () => {
 
     const sorted = keys.toSorted();
 
-    expect(await drainKeys(map.scan(''))).toEqual(sorted);
-    expect(await drainKeys(map.scan('0100'))).toEqual(
+    expect(await drainKeys(map.scan('', {prefetch: true}))).toEqual(sorted);
+    expect(await drainKeys(map.scan('0100', {prefetch: true}))).toEqual(
       sorted.filter(k => k >= '0100'),
     );
-    expect(await drainKeys(map.scan('01005'))).toEqual(
+    expect(await drainKeys(map.scan('01005', {prefetch: true}))).toEqual(
       sorted.filter(k => k >= '01005'),
     );
-    expect(await drainKeys(map.scan('9999'))).toEqual([]);
+    expect(await drainKeys(map.scan('9999', {prefetch: true}))).toEqual([]);
   });
 });
 
@@ -67,9 +67,11 @@ test('scan over a multi-level btree yields all entries in order', async () => {
 // probe the boundaries of the prefetch added to scanForHash.
 class PoisonBTree extends BTreeWrite {
   poisonHash: Hash | undefined = undefined;
+  poisonReads = 0;
 
   override getNode(hash: Hash): Promise<DataNodeImpl | InternalNodeImpl> {
     if (this.poisonHash !== undefined && hash === this.poisonHash) {
+      this.poisonReads++;
       return Promise.reject(new Error('poisoned chunk'));
     }
     return super.getNode(hash);
@@ -101,7 +103,9 @@ test('prefetch error on a node the scan reaches is not masked by the catch', asy
     // Child 0 is reached first when scanning from the start. The prefetch
     // swallows its own read error, but the serial recursion must still throw.
     map.poisonHash = (root.entries[0] as Entry<Hash>)[1];
-    await expect(drainKeys(map.scan(''))).rejects.toThrow('poisoned chunk');
+    await expect(drainKeys(map.scan('', {prefetch: true}))).rejects.toThrow(
+      'poisoned chunk',
+    );
   });
 });
 
@@ -137,8 +141,45 @@ test('prefetch respects fromKey and does not read children before the search ind
     expect(fromKey > firstChildMaxKey).toBe(true);
 
     const sorted = keys.toSorted();
-    expect(await drainKeys(map.scan(fromKey))).toEqual(
+    expect(await drainKeys(map.scan(fromKey, {prefetch: true}))).toEqual(
       sorted.filter(k => k >= fromKey),
     );
+  });
+});
+
+test('prefetch is opt-in', async () => {
+  const dagStore = new TestStore();
+  const keys = Array.from({length: 200}, (_, i) => String(i).padStart(4, '0'));
+
+  await withWrite(dagStore, async dagWrite => {
+    const map = new PoisonBTree(
+      dagWrite,
+      formatVersion,
+      undefined,
+      2,
+      3,
+      () => 1,
+      0,
+    );
+    for (const k of keys) {
+      await map.put(k, k);
+    }
+    await map.flush();
+
+    const root = await map.getNode(map.rootHash);
+    expect(root.level).toBeGreaterThan(0);
+    expect(root.entries.length).toBeGreaterThan(1);
+
+    map.poisonHash = (root.entries.at(-1) as Entry<Hash>)[1];
+
+    const lazyScan = map.scan('');
+    expect((await lazyScan.next()).done).toBe(false);
+    expect(map.poisonReads).toBe(0);
+    await lazyScan.return?.();
+
+    const prefetchScan = map.scan('', {prefetch: true});
+    expect((await prefetchScan.next()).done).toBe(false);
+    expect(map.poisonReads).toBeGreaterThan(0);
+    await prefetchScan.return?.();
   });
 });
