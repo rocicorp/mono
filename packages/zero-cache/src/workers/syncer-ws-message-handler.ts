@@ -7,7 +7,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
-import type {Upstream} from '../../../zero-protocol/src/up.ts';
+import type {UpstreamWithUnparsedAnalyzeQuery} from '../../../zero-protocol/src/up.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import {
@@ -69,7 +69,9 @@ export class SyncerWsMessageHandler implements MessageHandler {
     };
   }
 
-  async handleMessage(msg: Upstream): Promise<HandlerResult[]> {
+  async handleMessage(
+    msg: UpstreamWithUnparsedAnalyzeQuery,
+  ): Promise<HandlerResult[]> {
     const lc = this.#lc;
     const msgType = msg[0];
     const viewSyncer = this.#viewSyncer;

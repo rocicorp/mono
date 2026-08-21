@@ -23,7 +23,10 @@ import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
-import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
+import {
+  upstreamSchemaWithUnparsedAnalyzeQuery,
+  type UpstreamWithUnparsedAnalyzeQuery,
+} from '../../../zero-protocol/src/up.ts';
 import {getOrCreateCounter} from '../observability/metrics.ts';
 import type {ViewSyncerDownstream} from '../types/downstream.ts';
 import {
@@ -62,7 +65,9 @@ export type StreamResult =
     };
 
 export interface MessageHandler {
-  handleMessage(msg: Upstream): Promise<HandlerResult[]>;
+  handleMessage(
+    msg: UpstreamWithUnparsedAnalyzeQuery,
+  ): Promise<HandlerResult[]>;
 }
 
 function hasOwn(value: unknown, property: string): boolean {
@@ -83,13 +88,6 @@ function containsLegacyQuery(message: unknown): boolean {
     return false;
   }
 
-  if (message[0] === 'inspect') {
-    return (
-      body['op'] === 'analyze-query' &&
-      (hasOwn(body, 'ast') || hasOwn(body, 'value'))
-    );
-  }
-
   if (
     message[0] !== 'initConnection' &&
     message[0] !== 'changeDesiredQueries'
@@ -107,11 +105,11 @@ function containsLegacyQuery(message: unknown): boolean {
 export function parseUpstreamMessage(
   value: unknown,
   allowLegacyQueries: boolean,
-): Upstream {
+): UpstreamWithUnparsedAnalyzeQuery {
   if (!allowLegacyQueries && containsLegacyQuery(value)) {
     throw new Error('Legacy queries are not supported');
   }
-  return valita.parse(value, upstreamSchema);
+  return valita.parse(value, upstreamSchemaWithUnparsedAnalyzeQuery);
 }
 
 // Ensures that a downstream message is sent at least every interval, sending a

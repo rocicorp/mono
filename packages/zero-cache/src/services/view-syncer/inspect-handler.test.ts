@@ -1,7 +1,73 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {TDigest} from '../../../../shared/src/tdigest.ts';
 import type {QueryServerMetrics} from '../../../../zero-protocol/src/inspect-down.ts';
-import {metricsForProtocol} from './inspect-handler.ts';
+import type {NormalizedZeroConfig} from '../../config/normalize.ts';
+import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import type {ClientHandler} from './client-handler.ts';
+import type {ConnectionContext} from './connection-context-manager.ts';
+import type {CVRStore} from './cvr-store.ts';
+import type {CVRSnapshot} from './cvr.ts';
+import {handleInspect, metricsForProtocol} from './inspect-handler.ts';
+
+describe('handleInspect authentication', () => {
+  const lc = createSilentLogContext();
+
+  test('does not inspect an unauthenticated analyze-query AST', async () => {
+    const sendInspectResponse = vi.fn();
+    const ast = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('AST was inspected');
+        },
+        ownKeys() {
+          throw new Error('AST was inspected');
+        },
+      },
+    );
+
+    await handleInspect(
+      lc,
+      {op: 'analyze-query', id: 'inspect-1', ast},
+      {} as CVRSnapshot,
+      {sendInspectResponse} as unknown as ClientHandler,
+      {isAuthenticated: () => false} as unknown as InspectorDelegate,
+      'client-group-1',
+      {} as CVRStore,
+      {} as NormalizedZeroConfig,
+      {} as ConnectionContext,
+    );
+
+    expect(sendInspectResponse).toHaveBeenCalledWith(lc, {
+      op: 'authenticated',
+      id: 'inspect-1',
+      value: false,
+    });
+  });
+
+  test('validates an analyze-query AST after authentication', async () => {
+    const sendInspectResponse = vi.fn();
+
+    await handleInspect(
+      lc,
+      {op: 'analyze-query', id: 'inspect-1', ast: {}},
+      {} as CVRSnapshot,
+      {sendInspectResponse} as unknown as ClientHandler,
+      {isAuthenticated: () => true} as unknown as InspectorDelegate,
+      'client-group-1',
+      {} as CVRStore,
+      {} as NormalizedZeroConfig,
+      {} as ConnectionContext,
+    );
+
+    expect(sendInspectResponse).toHaveBeenCalledWith(lc, {
+      op: 'error',
+      id: 'inspect-1',
+      value: expect.any(String),
+    });
+  });
+});
 
 describe('metricsForProtocol', () => {
   test('returns null unchanged', () => {
