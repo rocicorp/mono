@@ -631,7 +631,7 @@ test('zero-cache --help', () => {
                                                                                    * ZERO_LITESTREAM_LOG_LEVEL for the log level                                                                              
                                                                                    * ZERO_LOG_FORMAT for the log type                                                                                         
                                                                                                                                                                                                               
-     --litestream-vfs-query-executable string                                      required                                                                                                                   
+     --litestream-vfs-query-executable string                                      optional                                                                                                                   
        ZERO_LITESTREAM_VFS_QUERY_EXECUTABLE env                                                                                                                                                               
                                                                                    Path to the rocicorp vfs-query executable that runs the VFS-based                                                          
                                                                                    polling of backup watermark. This is required when backing up with V5.                                                     
