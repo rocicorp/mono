@@ -124,7 +124,15 @@ export type SQLiteCatchupOptions = {
 export type SQLiteChangeLogServeOptions = {
   /** Stable percentage of eligible serving tasks routed to SQLite. */
   readPercent: number;
-  /** A reseeded log must age through this whole window before it can serve. */
+  /**
+   * Stable percentage of eligible serving tasks routed to a log that has not
+   * yet aged through {@link retentionMs}. Zero keeps a reseeded log on PG for
+   * that whole window; above zero it serves that share of tasks, and a
+   * reservation it cannot cover is demoted rather than held pending.
+   * Defaults to zero.
+   */
+  coldReadPercent?: number | undefined;
+  /** The warm-up window a reseeded log ages through. */
   retentionMs: number;
   /** Injectable for deterministic breaker tests. */
   failureCooldownMs?: number | undefined;
@@ -423,6 +431,21 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     'sqlite_change_log.catchup_routes',
     'Catchup subscriptions by selected source and low-cardinality reason.',
   );
+  readonly #reservationDemotions = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.reservation_demotions',
+    'Snapshot reservations demoted from SQLite to PG because the change ' +
+      'log could not cover the backup being restored. With PG retired ' +
+      'these followers have no fallback, so this is the rate at which one ' +
+      'would instead have to wait for a later backup.',
+  );
+  readonly #reservationConfirmDelays = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.reservation_confirm_delays',
+    'Snapshot reservations whose confirmation was deferred because the ' +
+      "selected source's change-log minimum was later than the backup " +
+      'watermark. Counted once per reservation, by that source.',
+  );
 
   #latestStatus: Status;
   #latestLagReportCommitTimeMs = 0;
@@ -500,6 +523,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         ? new SQLiteChangeLogReadRouter({
             shard,
             readPercent: serveOptions.readPercent,
+            coldReadPercent: serveOptions.coldReadPercent,
             retentionMs: serveOptions.retentionMs,
             failureCooldownMs: serveOptions.failureCooldownMs,
             now: serveOptions.now,
@@ -1014,18 +1038,41 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     // per call even when every reservation is pinned to SQLite.
     const pgState = await this.#getChangeLogState();
     for (const taskID of reservations.unconfirmedTaskIDs()) {
-      const route = this.#readRouter?.peek(taskID);
+      let route = this.#readRouter?.peek(taskID);
       // startSnapshotReservation pins only after an in-flight purge has
       // completed. A task with no pin yet is confirmed by that path instead.
       if (this.#readRouter && route === undefined) {
         continue;
       }
 
+      if (route?.source === 'sqlite') {
+        const coverage = must(
+          route.coverage,
+          'a pinned SQLite route must carry its covered range',
+        );
+        if (coverage.minWatermark > backupWatermark) {
+          // A log seeded after this backup, most often. Holding the
+          // reservation until a backup reaches the log's minimum would stall
+          // a follower that PG can serve now, so move it -- pin included.
+          this.#lc.info?.(
+            `demoting ${taskID} to PG catchup: SQLite change-log minimum ` +
+              `${coverage.minWatermark} is later than backupWatermark ` +
+              backupWatermark,
+          );
+          this.#reservationDemotions.add(1);
+          route = must(this.#readRouter).demote(taskID);
+        }
+      }
+
+      const source = route?.source ?? 'pg';
       let minWatermark: string;
       if (route?.source === 'sqlite') {
-        const coverage = route.coverage;
-        assert(coverage, 'a pinned SQLite route must carry its covered range');
-        minWatermark = coverage.minWatermark;
+        // Demotion above already moved every SQLite route the backup is
+        // outside of, so this one covers it and confirms below.
+        minWatermark = must(
+          route.coverage,
+          'a pinned SQLite route must carry its covered range',
+        ).minWatermark;
       } else {
         ({minWatermark} = pgState);
       }
@@ -1035,15 +1082,19 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           taskID,
           pgState.replicaVersion,
           backupWatermark,
+          source,
         );
       } else {
-        // The selected source cannot catch a restored replica up from this
-        // backup yet. Keep the reservation pending until a later backup moves
-        // the durable watermark into its covered range.
+        // PG cannot catch a restored replica up from this backup yet. Keep
+        // the reservation pending until a later backup moves the durable
+        // watermark into its covered range.
+        if (reservations.noteConfirmationDelayed(taskID)) {
+          this.#reservationConfirmDelays.add(1);
+        }
         this.#lc.error?.(
-          `${route?.source ?? 'pg'} change-log minWatermark ${minWatermark} ` +
-            `is later than backupWatermark ${backupWatermark}. Delaying ` +
-            `confirmation of snapshot reservation until next backup.`,
+          `pg change-log minWatermark ${minWatermark} is later than ` +
+            `backupWatermark ${backupWatermark}. Delaying confirmation of ` +
+            `snapshot reservation until next backup.`,
         );
       }
     }
@@ -1357,9 +1408,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         catchup,
         reason: route?.reason ?? 'selector',
         coverage: route?.coverage,
-        // Every route the router selects has passed the warm-up gate.
         // Legacy focused-test selection has no warm classification.
-        logWarm: route === undefined ? undefined : true,
+        logWarm:
+          route === undefined ? undefined : route.reason !== 'selected-cold',
       };
     } else {
       this.#recordCatchupRoute('pg', 'log-unavailable');

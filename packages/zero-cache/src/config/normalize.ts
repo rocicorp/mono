@@ -46,6 +46,7 @@ export function assertNormalized(
   const {
     sqliteChangeLogMode,
     sqliteChangeLogReadPercent,
+    sqliteChangeLogColdReadPercent,
     sqliteChangeLogComparePercent,
     sqliteChangeLogRetentionMs,
     sqliteChangeLogReadBatchRows,
@@ -58,6 +59,12 @@ export function assertNormalized(
       sqliteChangeLogReadPercent <= 100,
     '--change-streamer-sqlite-change-log-read-percent must be an integer between 0 and 100',
   );
+  assert(
+    Number.isSafeInteger(sqliteChangeLogColdReadPercent) &&
+      sqliteChangeLogColdReadPercent >= 0 &&
+      sqliteChangeLogColdReadPercent <= 100,
+    '--change-streamer-sqlite-change-log-cold-read-percent must be an integer between 0 and 100',
+  );
   // This setting has no mode restriction. Comparison starts in `compare` mode.
   assert(
     Number.isSafeInteger(sqliteChangeLogComparePercent) &&
@@ -68,6 +75,18 @@ export function assertNormalized(
   assert(
     sqliteChangeLogMode === 'serve' || sqliteChangeLogReadPercent === 0,
     '--change-streamer-sqlite-change-log-read-percent must be 0 unless --change-streamer-sqlite-change-log-mode=serve',
+  );
+  assert(
+    sqliteChangeLogMode === 'serve' || sqliteChangeLogColdReadPercent === 0,
+    '--change-streamer-sqlite-change-log-cold-read-percent must be 0 unless --change-streamer-sqlite-change-log-mode=serve',
+  );
+  // The cold gate only admits a task to the read gate; it never serves one on
+  // its own. A nonzero cold percentage with a zero read percentage is a
+  // silent no-op, which is the shape of a rollout that looks enabled and
+  // serves nothing.
+  assert(
+    sqliteChangeLogReadPercent > 0 || sqliteChangeLogColdReadPercent === 0,
+    '--change-streamer-sqlite-change-log-cold-read-percent must be 0 when --change-streamer-sqlite-change-log-read-percent is 0',
   );
   for (const [flag, value] of [
     ['retention-ms', sqliteChangeLogRetentionMs],

@@ -20,10 +20,18 @@ export type SQLiteChangeLogCoverage = {
 
 export type ChangeLogReadRouteReason =
   | 'selected'
+  // Selected while the log was still inside its warm-up window. Kept
+  // distinct from 'selected' so bootstrap serving is separable in metrics
+  // from steady-state serving.
+  | 'selected-cold'
   | 'percentage'
   | 'cold-log'
   | 'log-unavailable'
-  | 'breaker-open';
+  | 'breaker-open'
+  // Pinned to SQLite, then demoted because the log could not cover the
+  // backup the reservation is restoring from. See {@link
+  // SQLiteChangeLogReadRouter.demote}.
+  | 'backup-uncovered';
 
 export type ChangeLogReadRoute = {
   readonly source: ChangeLogReadSource;
@@ -35,6 +43,12 @@ export type ChangeLogReadRoute = {
 export type SQLiteChangeLogReadRouterOptions = {
   readonly shard: ShardID;
   readonly readPercent: number;
+  /**
+   * Percentage of eligible tasks served from a log that has not yet aged
+   * through {@link retentionMs}. Defaults to zero, which keeps every such
+   * task on PG.
+   */
+  readonly coldReadPercent?: number | undefined;
   readonly retentionMs: number;
   readonly inspect: () => SQLiteChangeLogCoverage | undefined;
   readonly failureCooldownMs?: number | undefined;
@@ -56,6 +70,7 @@ const DEFAULT_FAILURE_COOLDOWN_MS = 30_000;
 export class SQLiteChangeLogReadRouter {
   readonly #shard: ShardID;
   readonly #readPercent: number;
+  readonly #coldReadPercent: number;
   readonly #retentionMs: number;
   readonly #inspect: () => SQLiteChangeLogCoverage | undefined;
   readonly #failureCooldownMs: number;
@@ -68,6 +83,7 @@ export class SQLiteChangeLogReadRouter {
   constructor(opts: SQLiteChangeLogReadRouterOptions) {
     this.#shard = opts.shard;
     this.#readPercent = opts.readPercent;
+    this.#coldReadPercent = opts.coldReadPercent ?? 0;
     this.#retentionMs = opts.retentionMs;
     this.#inspect = opts.inspect;
     this.#failureCooldownMs =
@@ -101,6 +117,28 @@ export class SQLiteChangeLogReadRouter {
   /** Releases a pin whose snapshot reservation ended before subscribing. */
   release(taskID: string): void {
     this.#pins.delete(taskID);
+  }
+
+  /**
+   * Replaces a pinned SQLite route with PG, for a reservation whose backup
+   * the log cannot cover -- most often a log seeded after that backup.
+   *
+   * The pin moves, not just the reservation's advertised bounds. Confirming
+   * with PG bounds while the task's `/changes` request still resolves to
+   * SQLite is exactly the mismatch the reservation path exists to prevent,
+   * so the two have to change together.
+   *
+   * A task with no pin is left alone: `consume` makes it a fresh choice.
+   */
+  demote(taskID: string): ChangeLogReadRoute {
+    const route: ChangeLogReadRoute = {
+      source: 'pg',
+      reason: 'backup-uncovered',
+    };
+    if (this.#pins.has(taskID)) {
+      this.#pins.set(taskID, route);
+    }
+    return route;
   }
 
   /** Opens the post-registration failure breaker. */
@@ -146,7 +184,16 @@ export class SQLiteChangeLogReadRouter {
     // -- does not leave the cooldown armed against the next ordinary
     // unavailability.
     this.#breakerUntilMs = undefined;
-    if (now - coverage.seededAtMs < this.#retentionMs) {
+    // A log seeded less than a retention window ago holds less history than
+    // the purger promises to keep, so it is the case that most often cannot
+    // cover a follower. It is also the only path that has no PG to fall back
+    // to once PG is retired, which is the argument for exercising it now
+    // rather than meeting it at the cutover: `coldReadPercent` is that dial.
+    const cold = now - coverage.seededAtMs < this.#retentionMs;
+    if (
+      cold &&
+      !isSampledForShard(this.#shard, taskID, this.#coldReadPercent)
+    ) {
       return {source: 'pg', reason: 'cold-log', coverage};
     }
 
@@ -155,7 +202,11 @@ export class SQLiteChangeLogReadRouter {
     if (!isSampledForShard(this.#shard, taskID, this.#readPercent)) {
       return {source: 'pg', reason: 'percentage', coverage};
     }
-    return {source: 'sqlite', reason: 'selected', coverage};
+    return {
+      source: 'sqlite',
+      reason: cold ? 'selected-cold' : 'selected',
+      coverage,
+    };
   }
 
   #asPinned(route: ChangeLogReadRoute): ChangeLogReadRoute {
