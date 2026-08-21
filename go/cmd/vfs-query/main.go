@@ -77,21 +77,36 @@ func main() {
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json, text")
 	watchStdin := flag.Bool("watch-stdin", true, "exit when stdin closes (parent-death guard); disable for standalone use")
+	maxPollLag := flag.Duration("max-poll-lag", 0, "exit non-zero if the VFS hasn't polled the replica successfully within this window (0 = derive from remote-poll-interval); the parent then restarts the process, which recovers a wedged follower")
 	flag.Parse()
 
 	logger := newLogger(*logLevel, *logFormat)
-	if err := run(*replicaURL, *query, *remotePollInterval, *localPollInterval, *queryTimeout, *emitMetadata, *watchStdin, logger); err != nil {
+	if err := run(*replicaURL, *query, *remotePollInterval, *localPollInterval, *queryTimeout, *maxPollLag, *emitMetadata, *watchStdin, logger); err != nil {
 		logger.Error("vfs-query exited with error", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(replicaURL, query string, remotePollInterval, localPollInterval, queryTimeout time.Duration, emitMetadata, watchStdin bool, logger *slog.Logger) error {
+func run(replicaURL, query string, remotePollInterval, localPollInterval, queryTimeout, maxPollLag time.Duration, emitMetadata, watchStdin bool, logger *slog.Logger) error {
 	if replicaURL == "" {
 		return errors.New("--replica-url is required")
 	}
 	if strings.TrimSpace(query) == "" {
 		return errors.New("--query is required")
+	}
+
+	// Watchdog for a permanently-wedged follower. The VFS can get stuck such
+	// that its background poll loop keeps failing (e.g. litestream's
+	// "non-contiguous ltx file" at L1) while queries still succeed against the
+	// frozen page index — so nothing surfaces the failure to us. `PRAGMA
+	// litestream_lag` reports seconds since the VFS last polled the replica
+	// *successfully*: near-zero for a healthy (even idle) follower, and growing
+	// without bound only when polls fail. If it exceeds maxPollLag we exit
+	// non-zero; the parent poller restarts us, and a fresh open re-seeds the
+	// index from real L1 boundaries, which clears the wedge.
+	if maxPollLag <= 0 {
+		// Default to missing 2 poll intervals, or at least 20 seconds.
+		maxPollLag = min(20*time.Second, (2*remotePollInterval)+localPollInterval)
 	}
 
 	// Build the replica client and register the VFS. The client is bound to the
@@ -167,6 +182,16 @@ func run(replicaURL, query string, remotePollInterval, localPollInterval, queryT
 			}
 		}
 
+		// Bail out if the VFS poll loop has been failing long enough that we're
+		// serving stale data with no prospect of self-recovery. A read error
+		// here (e.g. ctx canceled during shutdown, or a backend that doesn't
+		// support the pragma) is not itself a wedge signal, so we only log it.
+		if lag, lerr := pollLagSeconds(ctx, db, queryTimeout); lerr != nil {
+			logger.Debug("could not read litestream_lag", "err", lerr)
+		} else if staleLag(lag, maxPollLag) {
+			return fmt.Errorf("vfs poll stale: %ds since last successful replica poll exceeds %s; exiting for restart", lag, maxPollLag)
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil
@@ -231,6 +256,31 @@ func backupTime(ctx context.Context, db *sql.DB, first bool, timeout time.Durati
 		return ""
 	}
 	return t
+}
+
+// pollLagSeconds reads `PRAGMA litestream_lag`: seconds since the VFS last
+// successfully polled the replica, or -1 if it has never polled successfully.
+// It's an in-memory read on the VFS (no S3 round trip), cheap to call each
+// cycle. Returns an error if the pragma can't be read (e.g. a non-VFS backend).
+func pollLagSeconds(ctx context.Context, db *sql.DB, timeout time.Duration) (int64, error) {
+	qctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	var lag int64
+	if err := db.QueryRowContext(qctx, "PRAGMA litestream_lag").Scan(&lag); err != nil {
+		return 0, err
+	}
+	return lag, nil
+}
+
+// staleLag reports whether a litestream_lag reading (in seconds) indicates the
+// VFS poll loop is wedged past maxLag. A negative reading (-1 = never polled
+// successfully) is not treated as stale, so cold starts before the first backup
+// don't trip the watchdog.
+func staleLag(lagSeconds int64, maxLag time.Duration) bool {
+	if lagSeconds < 0 {
+		return false
+	}
+	return time.Duration(lagSeconds)*time.Second > maxLag
 }
 
 func runQuery(ctx context.Context, db *sql.DB, query string, timeout time.Duration) (queryResult, error) {

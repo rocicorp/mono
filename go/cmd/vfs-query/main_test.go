@@ -132,6 +132,41 @@ func TestBackupTime_FirstQueryFailureReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestStaleLag(t *testing.T) {
+	const maxLag = 60 * time.Second
+	cases := []struct {
+		name string
+		lag  int64
+		want bool
+	}{
+		{"never polled is not stale", -1, false},
+		{"zero is fresh", 0, false},
+		{"below threshold", 59, false},
+		{"at threshold is not stale", 60, false}, // strict >
+		{"just over threshold", 61, true},
+		{"far over threshold", 600, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := staleLag(c.lag, maxLag); got != c.want {
+				t.Errorf("staleLag(%d, %s) = %v, want %v", c.lag, maxLag, got, c.want)
+			}
+		})
+	}
+}
+
+func TestPollLagSeconds_UnsupportedPragmaErrors(t *testing.T) {
+	db := openMemDB(t)
+
+	// A plain (non-VFS) connection doesn't understand `PRAGMA litestream_lag`
+	// (it returns no rows), so pollLagSeconds should surface an error rather
+	// than a bogus lag reading — the caller treats that as "can't tell", not
+	// as a wedge.
+	if _, err := pollLagSeconds(context.Background(), db, 5*time.Second); err == nil {
+		t.Error("pollLagSeconds on non-VFS connection = nil error, want error")
+	}
+}
+
 func TestNewLogger_LevelMapping(t *testing.T) {
 	cases := map[string]slog.Level{
 		"debug": slog.LevelDebug,
