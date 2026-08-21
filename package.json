@@ -18,6 +18,7 @@
     "check-types:watch": "turbo watch check-types",
     "start-zero-cache": "cd packages/zero-cache && pnpm run start",
     "verify-deps": "cd tools/verify-package-deps && pnpm run verify",
+    "check-logs": "cd tools/log-app-data-check && pnpm run check",
     "verify-deps:fix": "cd tools/verify-package-deps && pnpm run verify:fix",
     "api-snapshot": "vitest run --config tools/tsnapi/vitest.config.ts",
     "api-snapshot:update": "vitest run -u --config tools/tsnapi/vitest.config.ts",
