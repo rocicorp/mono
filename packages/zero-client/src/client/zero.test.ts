@@ -34,6 +34,7 @@ import {
   overrideBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -79,7 +80,11 @@ import {ConnectionStatus} from './connection-status.ts';
 import type {ConnectionState} from './connection.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
-import {ClientError, isServerError} from './error.ts';
+import {
+  ClientError,
+  isServerError,
+  MAX_AMBIGUOUS_ERROR_RETRIES,
+} from './error.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
@@ -100,12 +105,35 @@ import {
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   DEFAULT_PING_TIMEOUT_MS,
   getInternalReplicacheImplForTesting,
+  MAX_RUN_LOOP_INTERVAL_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
+  RUN_LOOP_JITTER_FRACTION,
+  STABLE_CONNECTION_MS,
   type Zero,
 } from './zero.ts';
 
 const startTime = 1678829450000;
+
+/**
+ * The base backoff the run loop uses after `consecutiveFailures` failed
+ * attempts, before jitter. Jitter is additive, so the actual sleep lands in
+ * `[minBackoffMs(n), maxBackoffMs(n)]`.
+ */
+function minBackoffMs(consecutiveFailures: number): number {
+  return Math.min(
+    RUN_LOOP_INTERVAL_MS * 2 ** (consecutiveFailures - 1),
+    MAX_RUN_LOOP_INTERVAL_MS,
+  );
+}
+
+/**
+ * Advancing fake timers by this much guarantees the run loop's backoff for
+ * `consecutiveFailures` has elapsed, whatever the jitter.
+ */
+function maxBackoffMs(consecutiveFailures: number): number {
+  return minBackoffMs(consecutiveFailures) * (1 + RUN_LOOP_JITTER_FRACTION);
+}
 
 let rejectionHandler: (event: PromiseRejectionEvent) => void;
 beforeEach(() => {
@@ -411,7 +439,7 @@ describe('onOnlineChange callback', () => {
     // and we got an offline callback on timeout
     expect(getOfflineCount()).toBe(1);
     // and back online
-    await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(maxBackoffMs(1));
     await z.triggerConnected();
     expect(z.online).toBe(true);
     expect(getOnlineCount()).toBe(2);
@@ -432,7 +460,8 @@ describe('connect error metrics', () => {
         message: 'boom',
         origin: ErrorOrigin.ZeroCache,
       });
-      await z.waitForConnectionStatus(ConnectionStatus.Error);
+      // A zero-cache Internal error is retried, so we land back in connecting.
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
 
       const newLogs = z.testLogSink.messages.slice(initialLogCount);
       const disconnectLog = newLogs.find(
@@ -2482,10 +2511,11 @@ test('connect() without opts preserves existing auth', async () => {
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  // Trigger a non-auth error
+  // Trigger a non-auth error that is fatal (a zero-cache Internal error is
+  // retried, so it would not park the connection here).
   await z.triggerError({
-    kind: ErrorKind.Internal,
-    message: 'internal error',
+    kind: ErrorKind.InvalidPush,
+    message: 'invalid push',
     origin: ErrorOrigin.ZeroCache,
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
@@ -2592,6 +2622,75 @@ test('Disconnect on error', async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+});
+
+test('ambiguous internal errors have a bounded retry budget', async () => {
+  const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+  const z = zeroForTest({logLevel: 'debug'});
+  await z.triggerConnected();
+
+  const triggerInternal = () =>
+    z.triggerError({
+      kind: ErrorKind.Internal,
+      message: 'ambiguous internal failure',
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+  for (let attempt = 1; attempt <= MAX_AMBIGUOUS_ERROR_RETRIES; attempt++) {
+    await triggerInternal();
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+    await vi.advanceTimersByTimeAsync(minBackoffMs(attempt));
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+  }
+
+  await triggerInternal();
+  await z.waitForConnectionStatus(ConnectionStatus.Error);
+  expect(z.connectionState).toMatchObject({
+    name: ConnectionStatus.Error,
+    reason: {
+      errorBody: {
+        kind: ErrorKind.Internal,
+        message: 'ambiguous internal failure',
+      },
+    },
+  });
+
+  // Explicit developer intervention starts a fresh bounded retry budget.
+  await z.connection.connect();
+  await z.triggerConnected();
+  await triggerInternal();
+  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+
+  randomSpy.mockRestore();
+  await z.close();
+});
+
+test('a stable connection resets the ambiguous error retry budget', async () => {
+  const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+  const z = zeroForTest();
+  await z.triggerConnected();
+
+  const triggerInternal = () =>
+    z.triggerError({
+      kind: ErrorKind.Internal,
+      message: 'ambiguous internal failure',
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+  for (let attempt = 1; attempt <= MAX_AMBIGUOUS_ERROR_RETRIES; attempt++) {
+    await triggerInternal();
+    await vi.advanceTimersByTimeAsync(minBackoffMs(attempt));
+    await z.triggerConnected();
+  }
+
+  await vi.advanceTimersByTimeAsync(STABLE_CONNECTION_MS);
+  await triggerInternal();
+  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+
+  randomSpy.mockRestore();
+  await z.close();
 });
 
 test('No backoff on errors', async () => {
@@ -2756,6 +2855,9 @@ function connectEvents(
 }
 
 test('Connect timeout', async () => {
+  // Pin the backoff jitter to zero so the retry schedule below is exact.
+  // Math.random is only used by the run loop's backoff in this package.
+  const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
   const z = zeroForTest({logLevel: 'debug'});
 
   const connectionStates: ConnectionState[] = [];
@@ -2772,18 +2874,33 @@ test('Connect timeout', async () => {
     },
   ]);
 
-  const step = async (sleepMS: number) => {
+  const connectAttempts = () =>
+    z.testLogSink.messages.filter(
+      ([level, _context, messages]) =>
+        level === 'info' && messages.includes('Connecting...'),
+    ).length;
+
+  // Once the disconnect timeout elapses the run loop keeps retrying but the
+  // reported status stays `disconnected`, so accept either here.
+  const expectNotConnected = () => {
+    expect([
+      ConnectionStatus.Connecting,
+      ConnectionStatus.Disconnected,
+    ]).toContain(z.connectionStatus);
+  };
+
+  const step = async (attempt: number) => {
     // Need to drain the microtask queue without changing the clock because we are
     // using the time below to check when the connect times out.
     for (let i = 0; i < 10; i++) {
       await vi.advanceTimersByTimeAsync(0);
     }
 
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+    expectNotConnected();
     await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 1);
     expect(z.connectionStatus).not.toBe(ConnectionStatus.Connected);
     await vi.advanceTimersByTimeAsync(1);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+    expectNotConnected();
     expectLogMessages(z).contain(connectTimeoutMessage);
     const events = connectEvents(connectTimeoutErrors(z).at(-1));
     expect(events.map(([_date, event]) => event)).toEqual([
@@ -2801,15 +2918,17 @@ test('Connect timeout', async () => {
       true,
     );
     const nextSocketPromise = z.socket;
+    const attemptsBeforeSleep = connectAttempts();
 
-    // We stay in connecting state and sleep for RUN_LOOP_INTERVAL_MS before trying again
-
-    await vi.advanceTimersByTimeAsync(sleepMS - 1);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+    // The run loop backs off exponentially before trying again, so each
+    // successive attempt waits twice as long as the last.
+    await vi.advanceTimersByTimeAsync(minBackoffMs(attempt) - 1);
+    expect(connectAttempts()).toBe(attemptsBeforeSleep);
     await vi.advanceTimersByTimeAsync(1);
     for (let i = 0; i < 10; i++) {
       await vi.advanceTimersByTimeAsync(0);
     }
+    expect(connectAttempts()).toBe(attemptsBeforeSleep + 1);
     const nextSocket = await nextSocketPromise;
     // After the timeout the state can remain Disconnected; confirming a new socket ensures
     // the reconnect attempt is happening even without a visible status change.
@@ -2817,14 +2936,20 @@ test('Connect timeout', async () => {
     currentSocket = nextSocket;
   };
 
-  await step(RUN_LOOP_INTERVAL_MS);
+  await step(1);
 
-  // Try again to connect
-  await step(RUN_LOOP_INTERVAL_MS);
-  await step(RUN_LOOP_INTERVAL_MS);
-  await step(RUN_LOOP_INTERVAL_MS);
+  // Try again to connect, each time after a longer backoff.
+  await step(2);
+  await step(3);
+  await step(4);
 
-  expect(connectionStates.length).toEqual(1 + 4 * 2);
+  // Each retry publishes a fresh `connecting` state. Once the disconnect
+  // window elapses the client reports `disconnected` while the run loop keeps
+  // retrying underneath, so don't pin the exact count to the backoff schedule.
+  expect(
+    connectionStates.filter(s => s.name === 'connecting').length,
+  ).toBeGreaterThanOrEqual(4);
+  expect(connectionStates.at(-1)?.name).toBe('disconnected');
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
     'connecting',
     'disconnected',
@@ -2841,6 +2966,7 @@ test('Connect timeout', async () => {
   ]);
 
   connectionStatusCleanup();
+  randomSpy.mockRestore();
 });
 
 test('connect timeout during setup retries without an unhandled rejection', async () => {
@@ -2888,7 +3014,7 @@ test('connect timeout during setup retries without an unhandled rejection', asyn
       'initializing active clients',
     ]);
 
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+    await tickAFewTimes(vi, maxBackoffMs(1));
     expect(connectAttempts()).toBe(2);
   } finally {
     window.removeEventListener('unhandledrejection', onUnhandled);
@@ -3647,7 +3773,7 @@ describe('Downstream message with unknown fields', () => {
 });
 
 describe('Downstream handler errors', () => {
-  test('disconnects with internal error when handler throws', async () => {
+  test('disconnects and retries when handler throws', async () => {
     const spy = vi
       .spyOn(DeleteClientsManager.prototype, 'clientsDeletedOnServer')
       .mockImplementation(() => {
@@ -3666,13 +3792,21 @@ describe('Downstream handler errors', () => {
     ] as unknown as Downstream);
 
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Error);
 
+    // The handler bug drops the connection, but the client keeps retrying --
+    // reconnecting starts a fresh snapshot, which clears most such failures.
+    await vi.waitFor(() => {
+      assert(
+        z.connectionState.name === ConnectionStatus.Connecting,
+        'Expected connection state to be Connecting',
+      );
+      expect(z.connectionState.reason).toBeDefined();
+    });
     assert(
-      z.connectionState.name === ConnectionStatus.Error,
-      'Expected connection state to be Error',
+      z.connectionState.name === ConnectionStatus.Connecting,
+      'Expected connection state to be Connecting',
     );
-    const {reason} = z.connectionState;
+    const reason = must(z.connectionState.reason);
     expect(reason).toBeInstanceOf(ClientError);
     expect(reason.kind).toBe(ClientErrorKind.Internal);
     expect(reason.message).toBe('handler boom');
@@ -3841,7 +3975,7 @@ test('Close during connect should sleep', async () => {
   );
   expect(hasSleeping).toBe(true);
 
-  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
+  await vi.advanceTimersByTimeAsync(maxBackoffMs(1));
 
   const reconnectAfterSleep = z.socket;
   await reconnectAfterSleep;
@@ -4592,7 +4726,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
 });
 
 describe('WebSocket event error handling', () => {
-  test('onOpen catches unexpected errors and transitions to error state', async () => {
+  test('onOpen catches unexpected errors and keeps retrying', async () => {
     const z = zeroForTest({logLevel: 'debug'});
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     const socket = (await z.socket) as unknown as MockSocket;
@@ -4600,13 +4734,20 @@ describe('WebSocket event error handling', () => {
     (socket as {url: string}).url = 'not a valid url';
     socket.dispatchEvent(new Event('open'));
 
-    await z.waitForConnectionStatus(ConnectionStatus.Error);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+    // An unexpected exception is transient as far as the client can tell, so it
+    // stays in connecting and retries rather than parking in a terminal state.
+    await vi.waitFor(() => {
+      assert(
+        z.connectionState.name === ConnectionStatus.Connecting,
+        'Expected connection state to be Connecting after onOpen failure',
+      );
+      expect(z.connectionState.reason).toBeDefined();
+    });
     assert(
-      z.connectionState.name === ConnectionStatus.Error,
-      'Expected connection state to be Error after onOpen failure',
+      z.connectionState.name === ConnectionStatus.Connecting,
+      'Expected connection state to be Connecting after onOpen failure',
     );
-    const {reason} = z.connectionState;
+    const reason = must(z.connectionState.reason);
     expect(reason).toBeInstanceOf(ClientError);
     expect(reason.kind).toBe(ClientErrorKind.Internal);
     expect(reason.message).toContain('URL');
@@ -4620,7 +4761,7 @@ describe('WebSocket event error handling', () => {
     await z.close().catch(() => {});
   });
 
-  test('onClose catches unexpected errors and transitions to error state', async () => {
+  test('onClose catches unexpected errors and keeps retrying', async () => {
     const z = zeroForTest({logLevel: 'debug'});
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     const socket = (await z.socket) as unknown as MockSocket;
@@ -4630,13 +4771,18 @@ describe('WebSocket event error handling', () => {
       new CloseEvent('close', {code: 1006, reason: 'test', wasClean: false}),
     );
 
-    await z.waitForConnectionStatus(ConnectionStatus.Error);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+    await vi.waitFor(() => {
+      assert(
+        z.connectionState.name === ConnectionStatus.Connecting,
+        'Expected connection state to be Connecting after onClose failure',
+      );
+      expect(z.connectionState.reason).toBeDefined();
+    });
     assert(
-      z.connectionState.name === ConnectionStatus.Error,
-      'Expected connection state to be Error after onClose failure',
+      z.connectionState.name === ConnectionStatus.Connecting,
+      'Expected connection state to be Connecting after onClose failure',
     );
-    const {reason} = z.connectionState;
+    const reason = must(z.connectionState.reason);
     expect(reason).toBeInstanceOf(ClientError);
     expect(reason.kind).toBe(ClientErrorKind.Internal);
     expect(reason.message).toContain('URL');
@@ -4805,7 +4951,7 @@ describe('Zero replicache refresh integration', () => {
 
       // Trigger error to transition to Error state
       await z.triggerError({
-        kind: ErrorKind.Internal,
+        kind: ErrorKind.InvalidPush,
         message: 'test error',
         origin: ErrorOrigin.ZeroCache,
       });
@@ -4896,7 +5042,7 @@ describe('Zero replicache refresh integration', () => {
 
       // Trigger disconnect via error
       await z.triggerError({
-        kind: ErrorKind.Internal,
+        kind: ErrorKind.InvalidPush,
         message: 'test error',
         origin: ErrorOrigin.ZeroCache,
       });

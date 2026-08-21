@@ -131,6 +131,7 @@ describe('fetchFromAPIServer', () => {
     metricsOptions: Parameters<typeof fetchFromAPIServer>[6],
     options: FetchContextOptions = {},
     requestBody: typeof body = body,
+    requestTimeoutMs?: number,
   ) {
     return fetchFromAPIServer(
       validator,
@@ -140,6 +141,7 @@ describe('fetchFromAPIServer', () => {
       shard,
       requestBody,
       metricsOptions,
+      requestTimeoutMs,
     );
   }
 
@@ -289,10 +291,17 @@ describe('fetchFromAPIServer', () => {
 
     const promise = fetchWithContext(validator, 'push', {operation: 'mutate'});
 
-    await Promise.all([
-      expect(promise).rejects.toThrow(/non-OK status 502/),
-      vi.advanceTimersByTimeAsync(5000),
-    ]);
+    const caughtPromise = promise.catch(error => error);
+    await vi.advanceTimersByTimeAsync(5000);
+    const caught: unknown = await caughtPromise;
+
+    assert(isProtocolError(caught), 'Expected protocol error');
+    expect(caught.errorBody).toMatchObject({
+      kind: ErrorKind.PushFailed,
+      reason: ErrorReason.HTTP,
+      status: 502,
+      retryable: true,
+    });
 
     expect(metrics.attemptsAdd).toHaveBeenCalledTimes(4);
     expect(metrics.attemptsAdd).toHaveBeenLastCalledWith(
@@ -795,6 +804,7 @@ describe('fetchFromAPIServer', () => {
     expect(caught.errorBody.status).toBe(400);
     expect(caught.errorBody.bodyPreview).toBe('failure-body');
     expect(caught.errorBody.message).toMatch(/non-OK status 400/);
+    expect(caught.errorBody.retryable).toBe(false);
   });
 
   test('wraps JSON parse failures in ProtocolError with parse type', async () => {
@@ -821,6 +831,7 @@ describe('fetchFromAPIServer', () => {
     );
     expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
     expect(caught.errorBody.message).toMatch(/Failed to parse response/);
+    expect(caught.errorBody.retryable).toBe(false);
   });
 
   test('wraps JSON parse failures for transform in ProtocolError with parse type', async () => {
@@ -975,7 +986,7 @@ describe('fetchFromAPIServer', () => {
       vi.useFakeTimers();
     });
 
-    test.each([500, 502, 503, 504, 599])(
+    test.each([408, 425, 429, 500, 502, 503, 504, 599])(
       'retries on %i and succeeds',
       async status => {
         mockFetch
@@ -1014,6 +1025,90 @@ describe('fetchFromAPIServer', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
+    test('times out, retries, and marks exhaustion retryable', async () => {
+      mockFetch.mockImplementation(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              'abort',
+              () => reject(init.signal?.reason),
+              {once: true},
+            );
+          }),
+      );
+
+      const promise = fetchWithContext(
+        validator,
+        'push',
+        {operation: 'mutate'},
+        {},
+        body,
+        10,
+      );
+      const caughtPromise = promise.catch(error => error);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      const caught: unknown = await caughtPromise;
+
+      assert(isProtocolError(caught), 'Expected protocol error');
+      expect(caught.errorBody).toMatchObject({
+        kind: ErrorKind.PushFailed,
+        reason: ErrorReason.Timeout,
+        retryable: true,
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+      expect(metrics.attemptsAdd).toHaveBeenLastCalledWith(
+        1,
+        expect.objectContaining({
+          attempt: 4,
+          result: 'timeout',
+          will_retry: false,
+        }),
+      );
+      expect(metrics.requestsAdd).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          result: 'timeout',
+          attempt_count: 4,
+          error_reason: ErrorReason.Timeout,
+        }),
+      );
+    });
+
+    test('the timeout also bounds reading the response body', async () => {
+      const stalledResponse = new Response('', {status: 200});
+      Object.defineProperty(stalledResponse, 'json', {
+        value: vi.fn().mockReturnValue(new Promise(() => {})),
+      });
+      mockFetch
+        .mockResolvedValueOnce(stalledResponse)
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({success: true}), {status: 200}),
+        );
+
+      const promise = fetchWithContext(
+        validator,
+        'push',
+        {operation: 'mutate'},
+        {},
+        body,
+        10,
+      );
+
+      await vi.advanceTimersByTimeAsync(1200);
+
+      await expect(promise).resolves.toEqual({success: true});
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(metrics.attemptsAdd).toHaveBeenNthCalledWith(
+        1,
+        1,
+        expect.objectContaining({
+          result: 'timeout',
+          will_retry: true,
+        }),
+      );
+    });
+
     test('fails after max retries (status code)', async () => {
       mockFetch.mockResolvedValue(new Response('bad gateway', {status: 502}));
 
@@ -1039,10 +1134,16 @@ describe('fetchFromAPIServer', () => {
       });
 
       // Exhaust all retries
-      await Promise.all([
-        expect(promise).rejects.toThrow(/threw error: fetch failed/),
-        vi.advanceTimersByTimeAsync(5000),
-      ]);
+      const caughtPromise = promise.catch(error => error);
+      await vi.advanceTimersByTimeAsync(5000);
+      const caught: unknown = await caughtPromise;
+
+      assert(isProtocolError(caught), 'Expected protocol error');
+      expect(caught.errorBody).toMatchObject({
+        kind: ErrorKind.PushFailed,
+        reason: ErrorReason.Internal,
+        retryable: true,
+      });
 
       // Initial + 3 retries = 4 calls
       expect(mockFetch).toHaveBeenCalledTimes(4);

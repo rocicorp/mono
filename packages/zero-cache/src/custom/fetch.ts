@@ -13,6 +13,7 @@ import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {
   errorBodySchema,
+  isRetryableHTTPStatus,
   isProtocolError,
   type ErrorBody,
 } from '../../../zero-protocol/src/error.ts';
@@ -83,11 +84,52 @@ export const getBodyPreview = async (
 };
 
 const MAX_ATTEMPTS = 4;
+export const API_REQUEST_TIMEOUT_MS = 10_000;
 
 type ApiFailedReason =
   | typeof ErrorReason.HTTP
   | typeof ErrorReason.Parse
-  | typeof ErrorReason.Internal;
+  | typeof ErrorReason.Internal
+  | typeof ErrorReason.Timeout;
+
+class APIRequestTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Fetch from API server timed out after ${timeoutMs} ms`);
+    this.name = 'APIRequestTimeoutError';
+  }
+}
+
+class APIRequestTimeout {
+  readonly #controller = new AbortController();
+  readonly #timeout: Promise<never>;
+  readonly #timeoutID: ReturnType<typeof setTimeout>;
+
+  constructor(timeoutMs: number) {
+    const timeoutError = new APIRequestTimeoutError(timeoutMs);
+    let rejectTimeout: (reason: APIRequestTimeoutError) => void;
+    this.#timeout = new Promise<never>((_resolve, reject) => {
+      rejectTimeout = reject;
+    });
+    this.#timeoutID = setTimeout(() => {
+      // Reject pending races before aborting so callers consistently receive
+      // the timeout error even when fetch rejects synchronously on abort.
+      rejectTimeout(timeoutError);
+      this.#controller.abort(timeoutError);
+    }, timeoutMs);
+  }
+
+  get signal(): AbortSignal {
+    return this.#controller.signal;
+  }
+
+  race<T>(promise: Promise<T>): Promise<T> {
+    return Promise.race([promise, this.#timeout]);
+  }
+
+  clear(): void {
+    clearTimeout(this.#timeoutID);
+  }
+}
 
 export type FetchMetricsOptions = {
   operation: ApiOperation;
@@ -102,6 +144,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   shard: ShardID,
   body: ReadonlyJSONValue,
   metricsOpts: FetchMetricsOptions,
+  requestTimeoutMs = API_REQUEST_TIMEOUT_MS,
 ) {
   const metricAttrs: ApiMetricBaseAttrs =
     metricsOpts.operation === 'cleanup' && metricsOpts.cleanupType !== undefined
@@ -142,6 +185,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
         source === 'push'
           ? `URL "${url}" is not allowed by the ZERO_MUTATE_URL configuration`
           : `URL "${url}" is not allowed by the ZERO_QUERY_URL configuration`,
+        false,
       );
       requestMetricAttrs = apiRequestMetricAttrs(metricAttrs, {
         result: 'url_not_allowed',
@@ -210,25 +254,28 @@ export async function fetchFromAPIServer<TValidator extends Type>(
         return false;
       };
       const attemptStart = performance.now();
+      const requestTimeout = new APIRequestTimeout(requestTimeoutMs);
       try {
-        const response = await fetch(finalUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        });
+        const response = await requestTimeout.race(
+          fetch(finalUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            signal: requestTimeout.signal,
+          }),
+        );
 
         if (!response.ok) {
-          const bodyPreview = await getBodyPreview(response, lc);
+          const bodyPreview = await requestTimeout.race(
+            getBodyPreview(response, lc),
+          );
           lc.warn?.('fetch from API server returned non-OK status', {
             url: finalUrl,
             status: response.status,
             bodyPreview,
           });
-          // Server errors can be transient, so retry if attempts remain.
-          const willRetry =
-            response.status >= 500 &&
-            response.status < 600 &&
-            attempt < MAX_ATTEMPTS;
+          const retryable = isRetryableHTTPStatus(response.status);
+          const willRetry = retryable && attempt < MAX_ATTEMPTS;
           recordApiAttempt(performance.now() - attemptStart, metricAttrs, {
             attempt,
             result: 'http_error',
@@ -243,6 +290,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
             source,
             ErrorReason.HTTP,
             `Fetch from API server returned non-OK status ${response.status}`,
+            retryable,
             response,
             bodyPreview,
           );
@@ -255,8 +303,10 @@ export async function fetchFromAPIServer<TValidator extends Type>(
           throw new ProtocolErrorWithLevel(errorBody, 'warn');
         }
 
+        let readingBody = true;
         try {
-          const json = await response.json();
+          const json = await requestTimeout.race(response.json());
+          readingBody = false;
           const result = validator.parse(json, {
             mode: 'passthrough',
           });
@@ -291,6 +341,12 @@ export async function fetchFromAPIServer<TValidator extends Type>(
           lc.debug?.('fetch from API server succeeded');
           return result;
         } catch (error) {
+          if (
+            error instanceof APIRequestTimeoutError ||
+            (readingBody && error instanceof TypeError)
+          ) {
+            throw error;
+          }
           lc.warn?.(
             'failed to parse response',
             {
@@ -303,6 +359,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
             source,
             ErrorReason.Parse,
             `Failed to parse response from API server: ${getErrorMessage(error)}`,
+            false,
           );
           recordApiAttempt(performance.now() - attemptStart, metricAttrs, {
             attempt,
@@ -324,21 +381,25 @@ export async function fetchFromAPIServer<TValidator extends Type>(
           throw error;
         }
 
-        const isFetchFailed =
-          error instanceof TypeError && error.message === 'fetch failed';
+        const isTimeout = error instanceof APIRequestTimeoutError;
+        // A TypeError thrown by fetch represents a network-layer failure in
+        // Node (DNS, connection reset, TLS, etc.). The request URL and init are
+        // constructed above, so it is safe to retry this class of failure.
+        const isFetchFailed = error instanceof TypeError;
+        const retryable = isTimeout || isFetchFailed;
         // unexpected/unknown errors should be logged at 'error' level so they
         // are investigated
-        let logLevel: LogLevel = isFetchFailed ? 'warn' : 'error';
+        const logLevel: LogLevel = retryable ? 'warn' : 'error';
         lc[logLevel]?.(
           'fetch from API server threw error',
           {url: finalUrl},
           error,
         );
 
-        const willRetry = isFetchFailed && attempt < MAX_ATTEMPTS;
+        const willRetry = retryable && attempt < MAX_ATTEMPTS;
         recordApiAttempt(performance.now() - attemptStart, metricAttrs, {
           attempt,
-          result: 'fetch_error',
+          result: isTimeout ? 'timeout' : 'fetch_error',
           willRetry,
         });
 
@@ -348,15 +409,20 @@ export async function fetchFromAPIServer<TValidator extends Type>(
 
         const errorBody = apiFailedBody(
           source,
-          ErrorReason.Internal,
-          `Fetch from API server threw error: ${getErrorMessage(error)}`,
+          isTimeout ? ErrorReason.Timeout : ErrorReason.Internal,
+          isTimeout
+            ? getErrorMessage(error)
+            : `Fetch from API server threw error: ${getErrorMessage(error)}`,
+          retryable,
         );
         requestMetricAttrs = apiRequestMetricAttrs(metricAttrs, {
-          result: 'fetch_error',
+          result: isTimeout ? 'timeout' : 'fetch_error',
           attemptCount,
           errorBody,
         });
         throw new ProtocolErrorWithLevel(errorBody, logLevel, {cause: error});
+      } finally {
+        requestTimeout.clear();
       }
     }
     unreachable();
@@ -412,6 +478,7 @@ function apiFailedBody(
   source: 'push' | 'transform',
   reason: ApiFailedReason,
   message: string,
+  retryable: boolean,
   response?: Response | undefined,
   bodyPreview?: string | undefined,
 ): ErrorBody {
@@ -421,6 +488,7 @@ function apiFailedBody(
           kind: ErrorKind.PushFailed,
           origin: ErrorOrigin.ZeroCache,
           reason,
+          retryable,
           status: response?.status ?? 0,
           ...(bodyPreview !== undefined ? {bodyPreview} : {}),
           message,
@@ -430,6 +498,7 @@ function apiFailedBody(
           kind: ErrorKind.PushFailed,
           origin: ErrorOrigin.ZeroCache,
           reason,
+          retryable,
           message,
           mutationIDs: [],
         };
@@ -440,6 +509,7 @@ function apiFailedBody(
         kind: ErrorKind.TransformFailed,
         origin: ErrorOrigin.ZeroCache,
         reason,
+        retryable,
         status: response?.status ?? 0,
         ...(bodyPreview !== undefined ? {bodyPreview} : {}),
         message,
@@ -449,6 +519,7 @@ function apiFailedBody(
         kind: ErrorKind.TransformFailed,
         origin: ErrorOrigin.ZeroCache,
         reason,
+        retryable,
         message,
         queryIDs: [],
       };
