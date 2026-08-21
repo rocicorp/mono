@@ -93,6 +93,7 @@ export class VfsWatermarkPoller {
     );
     this.#stream = Subscription.create<BackedUpWatermark>({
       cleanup: () => {
+        this.#disableRemotePoller();
         clearInterval(this.#localPollTimer);
         clearTimeout(this.#remotePollerBackoffTimer);
         this.#state.stop(this.#lc);
@@ -130,15 +131,73 @@ export class VfsWatermarkPoller {
     if (
       this.#localWatermark.stateVersion !== this.#remoteWatermark?.watermark
     ) {
-      this.#shouldPollRemote = true;
       this.#enableRemotePoller();
-    } else if (
-      this.#localWatermark.stateVersion === this.#remoteWatermark?.watermark
-    ) {
-      this.#shouldPollRemote = false;
+    } else {
       this.#disableRemotePoller();
     }
   };
+
+  #enableRemotePoller() {
+    if (this.#remotePoller || this.#remotePollerBackoffTimer) {
+      return; // already polling or backing off
+    }
+    this.#shouldPollRemote = true;
+    if (this.#remoteWatermark) {
+      this.#lc.debug?.(
+        `local and remote watermarks differ. resuming backup polling`,
+        {local: this.#localWatermark, remote: this.#remoteWatermark},
+      );
+    }
+    const child = spawn(
+      this.#pollerConfig.executable,
+      [
+        '--replica-url',
+        buildLitestreamVfsReplicaURL(this.#pollerConfig),
+        '--query',
+        `SELECT stateVersion, writeTimeMs FROM "_zero.replicationState"`,
+        '--remote-poll-interval',
+        `${this.#pollerConfig.remotePollIntervalMs}ms`,
+        ...(this.#pollerConfig.logLevel
+          ? ['--log-level', this.#pollerConfig.logLevel]
+          : []),
+        ...(this.#pollerConfig.logFormat
+          ? ['--log-format', this.#pollerConfig.logFormat]
+          : []),
+        ...(this.#pollerConfig.remoteQueryTimeoutMs
+          ? ['--query-timeout', `${this.#pollerConfig.remoteQueryTimeoutMs}ms`]
+          : []),
+      ],
+      {stdio: ['pipe', 'pipe', 'inherit']},
+    )
+      .on('error', err => {
+        this.#lc.error?.(`received error from vfs-query process`, err);
+      })
+      .on('close', (code, signal) => {
+        this.#remotePoller = undefined;
+        if (this.#shouldPollRemote) {
+          if (code !== 0) {
+            this.#lc.error?.(`vfs-query exited with ${code}, ${signal}`);
+          }
+          if (!this.#remotePollerBackoffTimer) {
+            this.#remotePollerBackoffTimer = setTimeout(() => {
+              this.#remotePollerBackoffTimer = undefined;
+              if (this.#shouldPollRemote) {
+                this.#enableRemotePoller();
+              }
+            }, this.#remotePollerBackoffMs);
+            this.#remotePollerBackoffMs = Math.min(
+              this.#remotePollerBackoffMs * 2,
+              MAX_BACKOFF_MS,
+            );
+          }
+        }
+      });
+    createInterface({input: child.stdout}).on(
+      'line',
+      this.#readRemotePollerLine,
+    );
+    this.#remotePoller = child;
+  }
 
   readonly #readRemotePollerLine = (line: string) => {
     try {
@@ -169,79 +228,11 @@ export class VfsWatermarkPoller {
     }
   };
 
-  #enableRemotePoller() {
-    if (
-      !this.#shouldPollRemote || // shouldn't polling anymore
-      this.#remotePoller || // already polling
-      this.#remotePollerBackoffTimer // backing off
-    ) {
-      return;
-    }
-    if (this.#remoteWatermark) {
-      this.#lc.debug?.(
-        `local and remote watermarks differ. resuming backup polling`,
-        {local: this.#localWatermark, remote: this.#remoteWatermark},
-      );
-    }
-    const child = spawn(
-      this.#pollerConfig.executable,
-      [
-        '--replica-url',
-        buildLitestreamVfsReplicaURL(this.#pollerConfig),
-        '--query',
-        `SELECT stateVersion, writeTimeMs FROM "_zero.replicationState"`,
-        '--remote-poll-interval',
-        `${this.#pollerConfig.remotePollIntervalMs}ms`,
-        ...(this.#pollerConfig.logLevel
-          ? ['--log-level', this.#pollerConfig.logLevel]
-          : []),
-        ...(this.#pollerConfig.logFormat
-          ? ['--log-format', this.#pollerConfig.logFormat]
-          : []),
-        ...(this.#pollerConfig.remoteQueryTimeoutMs
-          ? ['--query-timeout', `${this.#pollerConfig.remoteQueryTimeoutMs}ms`]
-          : []),
-      ],
-      {
-        stdio: ['pipe', 'pipe', 'inherit'],
-        signal: this.#state.signal,
-      },
-    );
-    this.#remotePoller = child;
-
-    child.on('error', err => {
-      const log =
-        err instanceof Error && err.name === 'AbortError' ? 'info' : 'error';
-      this.#lc[log]?.(`received error from vfs-query process`, err);
-    });
-    child.on('close', (code, signal) => {
-      this.#remotePoller = undefined;
-      if (this.#shouldPollRemote) {
-        if (code !== 0) {
-          this.#lc.error?.(`vfs-query exited with ${code}, ${signal}`);
-        }
-        if (!this.#remotePollerBackoffTimer) {
-          this.#remotePollerBackoffTimer = setTimeout(() => {
-            this.#remotePollerBackoffTimer = undefined;
-            this.#enableRemotePoller();
-          }, this.#remotePollerBackoffMs);
-          this.#remotePollerBackoffMs = Math.min(
-            this.#remotePollerBackoffMs * 2,
-            MAX_BACKOFF_MS,
-          );
-        }
-      }
-    });
-    createInterface({input: child.stdout}).on(
-      'line',
-      this.#readRemotePollerLine,
-    );
-  }
-
   #disableRemotePoller() {
-    if (this.#shouldPollRemote) {
+    if (!this.#shouldPollRemote) {
       return;
     }
+    this.#shouldPollRemote = false;
     if (this.#remotePoller || this.#remotePollerBackoffTimer) {
       this.#lc.debug?.(
         `local and remote watermarks match. pausing backup polling`,
