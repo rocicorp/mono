@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {must} from '../../../../shared/src/must.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {Source} from '../../types/streams.ts';
 import {getLastBackupTime} from '../litestream/commands.ts';
@@ -38,11 +39,14 @@ export function createBackupCleanupMonitor({
       logLevel,
       endpoint,
       region,
-      vfsQueryExecutable: executable,
+      vfsQueryExecutable,
       vfsPollIntervalMs: remotePollIntervalMs,
     } = litestream;
     stream = new VfsWatermarkPoller(lc, replicaFile, {
-      executable,
+      executable: must(
+        vfsQueryExecutable,
+        `litestream-vfs-query-executable must be defined`,
+      ),
       remotePollIntervalMs,
       backupURL,
       region,

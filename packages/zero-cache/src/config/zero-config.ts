@@ -1011,7 +1011,7 @@ export const zeroOptions = {
     },
 
     vfsQueryExecutable: {
-      type: v.string(),
+      type: v.string().optional(),
       desc: [
         `Path to the rocicorp vfs-query executable that runs the VFS-based`,
         `polling of backup watermark. This is required when backing up with V5.`,
