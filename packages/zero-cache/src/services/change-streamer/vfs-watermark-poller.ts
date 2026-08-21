@@ -176,7 +176,9 @@ export class VfsWatermarkPoller {
         this.#remotePoller = undefined;
         if (this.#shouldPollRemote) {
           if (code !== 0) {
-            this.#lc.error?.(`vfs-query exited with ${code}, ${signal}`);
+            this.#lc.warn?.(
+              `vfs-query exited with ${code}, ${signal}. retrying in ${this.#remotePollerBackoffMs}ms`,
+            );
           }
           if (!this.#remotePollerBackoffTimer) {
             this.#remotePollerBackoffTimer = setTimeout(() => {
