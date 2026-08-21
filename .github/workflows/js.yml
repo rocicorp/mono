@@ -200,7 +200,7 @@ jobs:
         working-directory: packages/zero
         env:
           ZERO_TARBALL: ${{ steps.pack.outputs.filename }}
-        run: docker buildx build --platform linux/amd64 --build-arg=ZERO_VERSION="$ZERO_TARBALL" --progress=plain .
+        run: docker buildx build --platform linux/amd64 --build-context monogo=../../go --build-arg=ZERO_VERSION="$ZERO_TARBALL" --progress=plain .
 
   test:
     name: Test (Shard ${{ matrix.shard }}/3)

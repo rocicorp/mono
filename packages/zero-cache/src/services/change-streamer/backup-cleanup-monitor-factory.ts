@@ -1,15 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
-import {BACKUP_WATERMARK_POLLER_URL} from '../../server/worker-urls.ts';
-import {forkChildWorker} from '../../types/processes.ts';
 import type {Source} from '../../types/streams.ts';
-import {Subscription} from '../../types/subscription.ts';
-import type {ProcessManager} from '../life-cycle.ts';
 import {getLastBackupTime} from '../litestream/commands.ts';
-import {
-  type BackupWatermarkUpdate,
-  getVfsEnv,
-} from '../litestream/vfs-watermark-poller.ts';
 import {type BackedUpWatermark, BackupMonitor} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import {
@@ -17,27 +9,24 @@ import {
   Litestream3PrometheusPoller,
 } from './litestream3-prometheus-poller.ts';
 import {ReplicaPoller} from './replica-poller.ts';
+import {VfsWatermarkPoller} from './vfs-watermark-poller.ts';
 
 export type BackupCleanupMonitorFactoryOptions = {
   lc: LogContext;
   config: NormalizedZeroConfig;
-  processes: ProcessManager;
   replicaFile: string;
   changeStreamer: ChangeStreamerService;
   verifyBackupState?: BackupStateVerifier | undefined;
-  env?: NodeJS.ProcessEnv | undefined;
 };
 
 export function createBackupCleanupMonitor({
   lc,
   config,
-  processes,
   replicaFile,
   changeStreamer,
   verifyBackupState,
-  env = process.env,
 }: BackupCleanupMonitorFactoryOptions): BackupMonitor {
-  const {litestream, replica} = config;
+  const {log, litestream, replica} = config;
   const {backupURL} = litestream;
 
   let stream: Source<BackedUpWatermark>;
@@ -49,28 +38,18 @@ export function createBackupCleanupMonitor({
       logLevel,
       endpoint,
       region,
-      vfsLogFile: logFile,
-      vfsProbeIntervalMs: remotePollIntervalMs,
+      vfsQueryExecutable: executable,
+      vfsPollIntervalMs: remotePollIntervalMs,
     } = litestream;
-    const sub = Subscription.create<BackedUpWatermark>();
-    const vfsEnv = getVfsEnv({
-      backupURL,
-      endpoint,
-      region,
-      logLevel,
-      logFile,
+    stream = new VfsWatermarkPoller(lc, replicaFile, {
+      executable,
       remotePollIntervalMs,
-    });
-    processes
-      .addWorker(
-        forkChildWorker(BACKUP_WATERMARK_POLLER_URL, {...env, ...vfsEnv}),
-        'supporting',
-        'backup-watermark-poller',
-      )
-      .onMessageType<BackupWatermarkUpdate>('backupWatermarkUpdate', msg =>
-        sub.push(msg),
-      );
-    stream = sub;
+      backupURL,
+      region,
+      endpoint,
+      logLevel,
+      logFormat: log.format,
+    }).start();
   } else {
     const {port: metricsPort} = litestream;
     stream = new Litestream3PrometheusPoller(

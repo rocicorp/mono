@@ -40,6 +40,7 @@ describe('config/normalize litestream v5 gating', () => {
           restoreUsingV5: false,
           executable: '/bin/litestream-v5',
           executableV5: '/bin/litestream-v5',
+          vfsQueryExecutable: '/bin/vfs-query',
         }),
       ),
     ).toThrow(
@@ -47,7 +48,7 @@ describe('config/normalize litestream v5 gating', () => {
     );
   });
 
-  test('restoreUsingV5 requires executableV5 to actually be configured', () => {
+  test('backupUsingV5 requires executableV5 to actually be configured', () => {
     expect(() =>
       assertNormalized(
         configWith({
@@ -58,7 +59,22 @@ describe('config/normalize litestream v5 gating', () => {
         }),
       ),
     ).toThrow(
-      '--litestream-restore-using-v5 and --litestream-backup-using-v5 require --litestream-executable to be specified',
+      '--litestream-restore-using-v5 and --litestream-backup-using-v5 require --litestream-executable-v5 to be specified',
+    );
+  });
+
+  test('backupUsingV5 requires vfs-query-executable to actually be configured', () => {
+    expect(() =>
+      assertNormalized(
+        configWith({
+          backupURL: 's3://foo/bar',
+          backupUsingV5: true,
+          restoreUsingV5: true,
+          executableV5: '/bin/litestream-v5',
+        }),
+      ),
+    ).toThrow(
+      '--litestream-backup-using-v5 requires --litestream-vfs-query-executable to be specified',
     );
   });
 
@@ -74,7 +90,7 @@ describe('config/normalize litestream v5 gating', () => {
         }),
       ),
     ).toThrow(
-      '--litestream-restore-using-v5 and --litestream-backup-using-v5 require --litestream-executable to be specified',
+      '--litestream-restore-using-v5 and --litestream-backup-using-v5 require --litestream-executable-v5 to be specified',
     );
   });
 
@@ -86,6 +102,7 @@ describe('config/normalize litestream v5 gating', () => {
           restoreUsingV5: true,
           executable: '/bin/litestream-v3',
           executableV5: '/bin/litestream-v5',
+          vfsQueryExecutable: '/bin/vfs-query',
         }),
       ),
     ).not.toThrow();
