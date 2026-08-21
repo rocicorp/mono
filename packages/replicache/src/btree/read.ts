@@ -30,6 +30,16 @@ import {
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
+export type BTreeScanOptions = {
+  /**
+   * Read sibling nodes in parallel before traversing them so stores can batch
+   * the reads. This can read nodes that the caller never visits. Enable it
+   * only when the caller expects to consume most of the scan or explicitly
+   * accepts that extra work.
+   */
+  prefetch?: boolean | undefined;
+};
+
 /**
  * The size of the header of a node. (If we had compile time
  * constants we would have used that).
@@ -117,7 +127,10 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
   // determining from an entry.key alone whether it is a regular key or an
   // encoded IndexKey in an index map. Without encoding regular map keys the
   // caller has to deal with encoding and decoding the keys for the index map.
-  scan(fromKey: string): AsyncIterableIterator<Entry<FrozenJSONValue>> {
+  scan(
+    fromKey: string,
+    {prefetch = false}: BTreeScanOptions = {},
+  ): AsyncIterableIterator<Entry<FrozenJSONValue>> {
     return scanForHash(
       this.rootHash,
       () => this.rootHash,
@@ -138,6 +151,7 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
           this.getEntrySize,
         );
       },
+      prefetch,
     );
   }
 
@@ -295,6 +309,7 @@ async function* scanForHash(
   hash: Hash,
   fromKey: string,
   readNode: ReadNode,
+  prefetch: boolean,
 ): AsyncIterableIterator<Entry<FrozenJSONValue>> {
   if (hash === emptyHash) {
     return;
@@ -307,26 +322,30 @@ async function* scanForHash(
     i = binarySearch(fromKey, entries);
   }
   if (data[NODE_LEVEL] > 0) {
-    // Preload children in parallel so the backing store can coalesce their
-    // reads. This can waste work when a caller stops before visiting every
-    // child. Zero currently accepts that tradeoff: startup scans the entire
-    // cached entity range into IVM memory before becoming ready (see
-    // `ZeroRep.init` in packages/zero-client/src/client/zero-rep.ts), and client
-    // views are intended to remain small. If views commonly outgrow the 100 MB
-    // `LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT`, reconsider the preload
-    // window, although batching may still be a useful general optimization.
-    // Longer term, the Replicache/IVM boundary should also be revisited because
-    // materializing entities into `MemorySource` duplicates B-tree storage.
-    //
-    // The serial scan below preserves traversal order and remains the
-    // authoritative read, so speculative failures are ignored here.
-    await Promise.all(
-      entries
-        .slice(i)
-        .map(entry =>
-          readNode((entry as Entry<Hash>)[1]).catch(() => undefined),
-        ),
-    );
+    if (prefetch) {
+      // Preload children in parallel so the backing store can coalesce their
+      // reads. This can waste work when a caller stops before visiting every
+      // child, so callers must explicitly opt in when they expect to consume
+      // the full scan. Zero currently accepts that tradeoff: startup scans the
+      // entire cached entity range into IVM memory before becoming ready (see
+      // `ZeroRep.init` in packages/zero-client/src/client/zero-rep.ts), and
+      // client views are intended to remain small. If views commonly outgrow
+      // the 100 MB `LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT`, reconsider the
+      // preload window, although batching may still be a useful general
+      // optimization. Longer term, the Replicache/IVM boundary should also be
+      // revisited because materializing entities into `MemorySource`
+      // duplicates B-tree storage.
+      //
+      // The serial scan below preserves traversal order and remains the
+      // authoritative read, so speculative failures are ignored here.
+      await Promise.all(
+        entries
+          .slice(i)
+          .map(entry =>
+            readNode((entry as Entry<Hash>)[1]).catch(() => undefined),
+          ),
+      );
+    }
     for (; i < entries.length; i++) {
       yield* scanForHash(
         expectedRootHash,
@@ -334,6 +353,7 @@ async function* scanForHash(
         (entries[i] as Entry<Hash>)[1],
         fromKey,
         readNode,
+        prefetch,
       );
       fromKey = '';
     }
@@ -348,6 +368,7 @@ async function* scanForHash(
           rootHash,
           entries[i][0],
           readNode,
+          prefetch,
         );
         return;
       }
