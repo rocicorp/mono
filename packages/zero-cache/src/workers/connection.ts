@@ -101,13 +101,16 @@ function containsLegacyQuery(message: unknown): boolean {
   );
 }
 
+const LEGACY_QUERIES_DISABLED_MESSAGE =
+  'Legacy queries are disabled by this Zero server. This client must use custom queries instead of sending query ASTs directly. To temporarily restore compatibility, set ZERO_ALLOW_LEGACY_QUERIES=true on zero-cache.';
+
 // Exported for testing purposes.
 export function parseUpstreamMessage(
   value: unknown,
   allowLegacyQueries: boolean,
 ): UpstreamWithUnparsedAnalyzeQuery {
   if (!allowLegacyQueries && containsLegacyQuery(value)) {
-    throw new Error('Legacy queries are not supported');
+    throw new Error(LEGACY_QUERIES_DISABLED_MESSAGE);
   }
   return valita.parse(value, upstreamSchemaWithUnparsedAnalyzeQuery);
 }

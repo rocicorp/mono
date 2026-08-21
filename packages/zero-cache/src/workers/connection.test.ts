@@ -62,7 +62,9 @@ describe('parseUpstreamMessage', () => {
           ],
           false,
         ),
-      ).toThrow(/Legacy queries are not supported/);
+      ).toThrow(
+        'Legacy queries are disabled by this Zero server. This client must use custom queries instead of sending query ASTs directly. To temporarily restore compatibility, set ZERO_ALLOW_LEGACY_QUERIES=true on zero-cache.',
+      );
     },
   );
 
