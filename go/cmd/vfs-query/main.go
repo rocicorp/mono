@@ -56,6 +56,17 @@ const vfsName = "litestream"
 
 const maxLocalPollInterval time.Duration = 30 * time.Second
 
+// shutdownGracePeriod bounds how long we wait, after receiving SIGINT/SIGTERM
+// or seeing stdin close, for a graceful exit before forcing one. Normally
+// ctx cancellation is enough: the poll loop's `select` sees ctx.Done() and
+// returns promptly. But litestream's VFS Open() blocks in its own internal
+// loop while waiting for the *first* backup to appear (a loop with no
+// visibility into our ctx at all), and Go cannot interrupt a call blocked in
+// someone else's library — so if that's what we're stuck in, this is the
+// only way out. Verified: steady-state polling already exits cleanly on
+// signal well within this window; only the pre-first-backup case needs it.
+const shutdownGracePeriod = 5 * time.Second
+
 func main() {
 	replicaURL := flag.String("replica-url", "", "Litestream replica URL, e.g. s3://bucket/path (required)")
 	query := flag.String("query", "", "SQL query to poll and stream on change (required)")
@@ -110,6 +121,14 @@ func run(replicaURL, query string, remotePollInterval, localPollInterval, queryT
 	// don't linger with open S3 connections after the caller is gone.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	go func() {
+		<-ctx.Done()
+		t := time.NewTimer(shutdownGracePeriod)
+		defer t.Stop()
+		<-t.C
+		logger.Warn("graceful shutdown did not complete in time; forcing exit", "grace", shutdownGracePeriod)
+		os.Exit(0)
+	}()
 	if watchStdin {
 		go func() {
 			_, _ = io.Copy(io.Discard, os.Stdin)
