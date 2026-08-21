@@ -65,6 +65,55 @@ export interface MessageHandler {
   handleMessage(msg: Upstream): Promise<HandlerResult[]>;
 }
 
+function hasOwn(value: unknown, property: string): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.hasOwn(value, property)
+  );
+}
+
+function containsLegacyQuery(message: unknown): boolean {
+  if (!Array.isArray(message)) {
+    return false;
+  }
+
+  const body = message[1];
+  if (typeof body !== 'object' || body === null) {
+    return false;
+  }
+
+  if (message[0] === 'inspect') {
+    return (
+      body['op'] === 'analyze-query' &&
+      (hasOwn(body, 'ast') || hasOwn(body, 'value'))
+    );
+  }
+
+  if (
+    message[0] !== 'initConnection' &&
+    message[0] !== 'changeDesiredQueries'
+  ) {
+    return false;
+  }
+
+  const patch = body['desiredQueriesPatch'];
+  return (
+    Array.isArray(patch) && patch.some(operation => hasOwn(operation, 'ast'))
+  );
+}
+
+// Exported for testing purposes.
+export function parseUpstreamMessage(
+  value: unknown,
+  allowLegacyQueries: boolean,
+): Upstream {
+  if (!allowLegacyQueries && containsLegacyQuery(value)) {
+    throw new Error('Legacy queries are not supported');
+  }
+  return valita.parse(value, upstreamSchema);
+}
+
 // Ensures that a downstream message is sent at least every interval, sending a
 // 'pong' if necessary. This is set to be slightly longer than the client-side
 // PING_INTERVAL of 5 seconds, so that in the common case, 'pong's are sent in
@@ -96,6 +145,7 @@ export class Connection {
   readonly #lc: LogContext;
   readonly #onClose: () => void;
   readonly #messageHandler: MessageHandler;
+  readonly #allowLegacyQueries: boolean;
   readonly #downstreamSender: DownstreamSender;
   readonly #downstreamMsgTimer: NodeJS.Timeout | undefined;
   readonly #webSocketErrors = getOrCreateCounter(
@@ -112,11 +162,13 @@ export class Connection {
     lc: LogContext,
     connectParams: ConnectParams,
     ws: WebSocket,
+    allowLegacyQueries: boolean,
     messageHandler: MessageHandler,
     onClose: () => void,
   ) {
     const {clientGroupID, clientID, wsID, protocolVersion} = connectParams;
     this.#messageHandler = messageHandler;
+    this.#allowLegacyQueries = allowLegacyQueries;
 
     this.#ws = ws;
     this.#wsID = wsID;
@@ -213,7 +265,7 @@ export class Connection {
     let msg;
     try {
       const value = JSON.parse(data);
-      msg = valita.parse(value, upstreamSchema);
+      msg = parseUpstreamMessage(value, this.#allowLegacyQueries);
     } catch (e) {
       const errorBody = {
         kind: ErrorKind.InvalidMessage,

@@ -218,6 +218,12 @@ test('zero-cache --help', () => {
                                                                                    are made from view-syncers to the upstream db, and push messages with CRUD mutations                                       
                                                                                    result in an InvalidPush response.                                                                                         
                                                                                                                                                                                                               
+     --allow-legacy-queries boolean                                                default: false                                                                                                             
+       ZERO_ALLOW_LEGACY_QUERIES env                                                                                                                                                                          
+                                                                                   Allows clients to send legacy query ASTs directly to zero-cache.                                                           
+                                                                                   Keep this disabled when using custom queries so that zero-cache rejects                                                    
+                                                                                   client-supplied ASTs without parsing them.                                                                                 
+                                                                                                                                                                                                              
      --cvr-db string                                                               optional                                                                                                                   
        ZERO_CVR_DB env                                                                                                                                                                                        
                                                                                    The Postgres database used to store CVRs. CVRs (client view records) keep track                                            
@@ -889,6 +895,27 @@ test('--enable-query-covering can be disabled', () => {
   });
 
   expect(config.enableQueryCovering).toBe(false);
+});
+
+test('legacy queries are disabled by default', () => {
+  const {config} = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+
+  expect(config.allowLegacyQueries).toBe(false);
+});
+
+test('ZERO_ALLOW_LEGACY_QUERIES enables legacy queries', () => {
+  const {config} = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_ALLOW_LEGACY_QUERIES: 'true'},
+  });
+
+  expect(config.allowLegacyQueries).toBe(true);
 });
 
 test('--shard-id disallowed', () => {

@@ -433,6 +433,15 @@ export const zeroOptions = {
     ],
   },
 
+  allowLegacyQueries: {
+    type: v.boolean().default(false),
+    desc: [
+      `Allows clients to send legacy query ASTs directly to zero-cache.`,
+      `Keep this disabled when using custom queries so that zero-cache rejects`,
+      `client-supplied ASTs without parsing them.`,
+    ],
+  },
+
   cvr: {
     db: {
       type: v.string().optional(),
