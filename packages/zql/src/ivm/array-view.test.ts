@@ -2268,3 +2268,703 @@ test('unique relationship aliases work correctly', () => {
   const userAfter = data[0] as {all_applications: unknown[]};
   expect(userAfter.all_applications).toHaveLength(0);
 });
+
+/**
+ * Tests that a change flowing through the pipeline that does not alter the
+ * view output does not notify listeners.
+ *
+ * whereExists subqueries (zsubq_*) are present in the pipeline schema but not
+ * in the view format. Edits to rows matched by the subquery propagate to the
+ * view as child changes that alter nothing; the view must not flag itself
+ * dirty for them, otherwise every subscriber re-renders with identical data.
+ */
+test('whereExists subquery edit does not notify listeners', () => {
+  const issues = createSource(
+    lc,
+    testLogConfig,
+    'issues',
+    {id: {type: 'number'}, title: {type: 'string'}},
+    ['id'],
+  );
+  const labels = createSource(
+    lc,
+    testLogConfig,
+    'labels',
+    {
+      id: {type: 'number'},
+      issueID: {type: 'number'},
+      name: {type: 'string'},
+    },
+    ['id'],
+  );
+
+  consume(issues.push(makeSourceChangeAdd({id: 1, title: 'issue'})));
+  consume(labels.push(makeSourceChangeAdd({id: 1, issueID: 1, name: 'bug'})));
+
+  const delegate = new TestBuilderDelegate({issues, labels});
+
+  // issues.whereExists('labels')
+  const ast: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['issueID']},
+        subquery: {
+          table: 'labels',
+          alias: 'zsubq_labels',
+          orderBy: [
+            ['issueID', 'asc'],
+            ['id', 'asc'],
+          ],
+        },
+      },
+      op: 'EXISTS',
+    },
+  };
+
+  const view = new ArrayView(
+    buildPipeline(ast, delegate, 'test-query'),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+
+  let callCount = 0;
+  let data: unknown;
+  view.addListener(entries => {
+    ++callCount;
+    data = entries;
+  });
+
+  expect(callCount).toBe(1);
+  expect(data).toEqual([{id: 1, title: 'issue', [refCountSymbol]: 1}]);
+  const snapshot = data;
+
+  // Edit a field of the matched label that affects neither the correlation
+  // nor the view output. The change reaches the view as a zsubq_labels child
+  // change but alters nothing: no notification, same data reference.
+  consume(
+    labels.push(
+      makeSourceChangeEdit(
+        {id: 1, issueID: 1, name: 'bug!'},
+        {id: 1, issueID: 1, name: 'bug'},
+      ),
+    ),
+  );
+  view.flush();
+  expect(callCount).toBe(1);
+  expect(view.data).toBe(snapshot);
+
+  // A change that does alter the view still notifies.
+  consume(
+    issues.push(
+      makeSourceChangeEdit({id: 1, title: 'issue!'}, {id: 1, title: 'issue'}),
+    ),
+  );
+  view.flush();
+  expect(callCount).toBe(2);
+  expect(data).not.toBe(snapshot);
+  expect(data).toEqual([{id: 1, title: 'issue!', [refCountSymbol]: 1}]);
+});
+
+test('no-op push does not dirty the view', () => {
+  // A child change for a relationship that is in the pipeline schema but not
+  // in the view format is a no-op for the view.
+  const schema: SourceSchema = {
+    tableName: 'issue',
+    primaryKey: ['id'],
+    system: 'client',
+    columns: {
+      id: {type: 'number'},
+      name: {type: 'string'},
+    },
+    sort: [['id', 'asc']],
+    isHidden: false,
+    compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+    relationships: {
+      ['zsubq_labels']: {
+        tableName: 'label',
+        primaryKey: ['id'],
+        columns: {
+          id: {type: 'number'},
+          name: {type: 'string'},
+        },
+        isHidden: false,
+        sort: [['id', 'asc']],
+        system: 'client',
+        compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+        relationships: {},
+      },
+    },
+  };
+
+  const input: Input = {
+    fetch() {
+      return [];
+    },
+    destroy() {},
+    getSchema() {
+      return schema;
+    },
+    setOutput() {},
+  };
+
+  const view = new ArrayView(
+    input,
+    // zsubq_labels is not part of the view format.
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+
+  let callCount = 0;
+  let data: unknown;
+  view.addListener(entries => {
+    ++callCount;
+    data = entries;
+  });
+  expect(callCount).toBe(1);
+
+  const labelNode = {
+    row: {id: 1, name: 'label'},
+    relationships: {},
+  } as const;
+  consume(
+    view.push(
+      makeAddChange({
+        row: {id: 1, name: 'issue'},
+        relationships: {['zsubq_labels']: () => [labelNode]},
+      }),
+    ),
+  );
+  view.flush();
+  expect(callCount).toBe(2);
+  const snapshot = data;
+
+  const noopChange = makeChildChange(
+    {row: {id: 1, name: 'issue'}, relationships: {}},
+    {
+      relationshipName: 'zsubq_labels',
+      change: makeEditChange(
+        {row: {id: 1, name: 'label edited'}, relationships: {}},
+        labelNode,
+      ),
+    },
+  );
+  consume(view.push(noopChange));
+  view.flush();
+
+  // No notification, same data reference.
+  expect(callCount).toBe(2);
+  expect(data).toBe(snapshot);
+  expect(view.data).toBe(snapshot);
+
+  // A transaction mixing no-op and real changes still notifies once.
+  consume(view.push(noopChange));
+  consume(
+    view.push(
+      makeAddChange({
+        row: {id: 2, name: 'issue2'},
+        relationships: {['zsubq_labels']: () => []},
+      }),
+    ),
+  );
+  consume(view.push(noopChange));
+  view.flush();
+  expect(callCount).toBe(3);
+  expect(data).not.toBe(snapshot);
+  expect(data).toEqual([
+    {id: 1, name: 'issue', [refCountSymbol]: 1},
+    {id: 2, name: 'issue2', [refCountSymbol]: 1},
+  ]);
+});
+
+test('a listener throwing during flush does not freeze the view', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+
+  let throwOnce = false;
+  let callCount = 0;
+  let data: unknown;
+  view.addListener(entries => {
+    ++callCount;
+    data = entries;
+    if (throwOnce) {
+      throwOnce = false;
+      throw new Error('listener error');
+    }
+  });
+  expect(callCount).toBe(1);
+
+  consume(ms.push(makeSourceChangeAdd({a: 1, b: 'a'})));
+  throwOnce = true;
+  // In production the throw is swallowed by ZeroContext#endTransaction.
+  expect(() => view.flush()).toThrow('listener error');
+  expect(callCount).toBe(2);
+  const snapshot = data;
+
+  // The next transaction must still copy-on-write and notify. If the throw
+  // left the committed root marked as owned by the flushed transaction,
+  // applyChange would mutate it in place and return an identical reference,
+  // which push() would read as "no change" — silencing the view forever.
+  consume(ms.push(makeSourceChangeAdd({a: 2, b: 'b'})));
+  view.flush();
+  expect(callCount).toBe(3);
+  expect(data).not.toBe(snapshot);
+  expect(data).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+  ]);
+  // The snapshot delivered before the throw was not mutated in place.
+  expect(snapshot).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+});
+
+test('a listener pushing synchronously during flush is not lost', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+
+  let pushOnce = false;
+  let callCount = 0;
+  let data: unknown;
+  view.addListener(entries => {
+    ++callCount;
+    data = entries;
+    if (pushOnce) {
+      pushOnce = false;
+      consume(ms.push(makeSourceChangeAdd({a: 2, b: 'b'})));
+    }
+  });
+  expect(callCount).toBe(1);
+
+  consume(ms.push(makeSourceChangeAdd({a: 1, b: 'a'})));
+  pushOnce = true;
+  view.flush();
+  expect(callCount).toBe(2);
+  const snapshot = data;
+  // The re-entrant push must not mutate the just-delivered snapshot in place;
+  // it belongs to the next transaction and is delivered by the next flush.
+  expect(snapshot).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+
+  view.flush();
+  expect(callCount).toBe(3);
+  expect(data).not.toBe(snapshot);
+  expect(data).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+  ]);
+});
+
+// Schema for the nested no-op tests: comments is in the view format, its
+// zsubq_reactions sub-relationship (a whereExists subquery on the related
+// query) is not.
+function nestedNoopSchema(): SourceSchema {
+  return {
+    tableName: 'issue',
+    primaryKey: ['id'],
+    system: 'client',
+    columns: {
+      id: {type: 'number'},
+      name: {type: 'string'},
+    },
+    sort: [['id', 'asc']],
+    isHidden: false,
+    compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+    relationships: {
+      comments: {
+        tableName: 'comment',
+        primaryKey: ['id'],
+        columns: {
+          id: {type: 'number'},
+          issueID: {type: 'number'},
+          text: {type: 'string'},
+        },
+        isHidden: false,
+        sort: [['id', 'asc']],
+        system: 'client',
+        compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+        relationships: {
+          ['zsubq_reactions']: {
+            tableName: 'reaction',
+            primaryKey: ['id'],
+            columns: {
+              id: {type: 'number'},
+              commentID: {type: 'number'},
+              emoji: {type: 'string'},
+            },
+            isHidden: false,
+            sort: [['id', 'asc']],
+            system: 'client',
+            compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+            relationships: {},
+          },
+        },
+      },
+    },
+  };
+}
+
+function nestedNoopIssueNode() {
+  return {
+    row: {id: 1, name: 'issue'},
+    relationships: {
+      comments: () => [
+        {
+          row: {id: 1, issueID: 1, text: 'comment'},
+          relationships: {
+            ['zsubq_reactions']: () => [
+              {
+                row: {id: 1, commentID: 1, emoji: 'up'},
+                relationships: {},
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
+// issue.related('comments', q => q.whereExists('reactions', ...)): an edit of
+// a matched reaction arrives as a child change for the format-present
+// comments relationship wrapping a zsubq change one level down. Suppressing
+// the notification depends on applyChange's identity-propagation checks
+// (return parentEntry when the descendant did not change).
+function nestedNoopChange() {
+  return makeChildChange(
+    {row: {id: 1, name: 'issue'}, relationships: {}},
+    {
+      relationshipName: 'comments',
+      change: makeChildChange(
+        {row: {id: 1, issueID: 1, text: 'comment'}, relationships: {}},
+        {
+          relationshipName: 'zsubq_reactions',
+          change: makeEditChange(
+            {row: {id: 1, commentID: 1, emoji: 'down'}, relationships: {}},
+            {row: {id: 1, commentID: 1, emoji: 'up'}, relationships: {}},
+          ),
+        },
+      ),
+    },
+  );
+}
+
+test('nested no-op child change does not notify listeners', () => {
+  const schema = nestedNoopSchema();
+  const input: Input = {
+    fetch() {
+      return [nestedNoopIssueNode()];
+    },
+    destroy() {},
+    getSchema() {
+      return schema;
+    },
+    setOutput() {},
+  };
+
+  const view = new ArrayView(
+    input,
+    {
+      singular: false,
+      relationships: {comments: {singular: false, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
+
+  let callCount = 0;
+  let data: unknown;
+  view.addListener(entries => {
+    ++callCount;
+    data = entries;
+  });
+  expect(callCount).toBe(1);
+  expect(data).toEqual([
+    {
+      id: 1,
+      name: 'issue',
+      comments: [{id: 1, issueID: 1, text: 'comment', [refCountSymbol]: 1}],
+      [refCountSymbol]: 1,
+    },
+  ]);
+  const snapshot = data;
+
+  consume(view.push(nestedNoopChange()));
+  view.flush();
+  expect(callCount).toBe(1);
+  expect(view.data).toBe(snapshot);
+});
+
+test('nested no-op child change does not notify listeners (singular root)', () => {
+  const schema = nestedNoopSchema();
+  const input: Input = {
+    fetch() {
+      return [nestedNoopIssueNode()];
+    },
+    destroy() {},
+    getSchema() {
+      return schema;
+    },
+    setOutput() {},
+  };
+
+  const view = new ArrayView(
+    input,
+    {
+      singular: true,
+      relationships: {comments: {singular: false, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
+
+  let callCount = 0;
+  let data: unknown;
+  view.addListener(d => {
+    ++callCount;
+    data = d;
+  });
+  expect(callCount).toBe(1);
+  const snapshot = data;
+
+  consume(view.push(nestedNoopChange()));
+  view.flush();
+  expect(callCount).toBe(1);
+  expect(view.data).toBe(snapshot);
+});
+
+// Schema for the hidden junction edit tests, matching the 'collapse' tests:
+// issue -> issueLabel (hidden junction) -> label.
+function hiddenJunctionSchema(): SourceSchema {
+  return {
+    tableName: 'issue',
+    primaryKey: ['id'],
+    system: 'client',
+    columns: {
+      id: {type: 'number'},
+      name: {type: 'string'},
+    },
+    sort: [['id', 'asc']],
+    isHidden: false,
+    compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+    relationships: {
+      labels: {
+        tableName: 'issueLabel',
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        columns: {
+          id: {type: 'number'},
+          issueId: {type: 'number'},
+          labelId: {type: 'number'},
+          extra: {type: 'string'},
+        },
+        isHidden: true,
+        compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+        relationships: {
+          labels: {
+            tableName: 'label',
+            primaryKey: ['id'],
+            columns: {
+              id: {type: 'number'},
+              name: {type: 'string'},
+            },
+            isHidden: false,
+            sort: [['id', 'asc']],
+            system: 'client',
+            compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+            relationships: {},
+          },
+        },
+      },
+    },
+  };
+}
+
+function hiddenJunctionIssueNode() {
+  return {
+    row: {id: 1, name: 'issue'},
+    relationships: {
+      labels: () => [
+        {
+          row: {id: 1, issueId: 1, labelId: 1, extra: 'a'},
+          relationships: {
+            labels: () => [
+              {
+                row: {id: 1, name: 'label'},
+                relationships: {},
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
+// Edit of a non-key column of the hidden junction row. The junction row is
+// collapsed out of the view, so this must not notify.
+function hiddenJunctionEditChange() {
+  return makeChildChange(
+    {row: {id: 1, name: 'issue'}, relationships: {}},
+    {
+      relationshipName: 'labels',
+      change: makeEditChange(
+        {row: {id: 1, issueId: 1, labelId: 1, extra: 'a2'}, relationships: {}},
+        {row: {id: 1, issueId: 1, labelId: 1, extra: 'a'}, relationships: {}},
+      ),
+    },
+  );
+}
+
+// Edit of the visible leaf label, which must notify.
+function hiddenJunctionLeafEditChange() {
+  return makeChildChange(
+    {row: {id: 1, name: 'issue'}, relationships: {}},
+    {
+      relationshipName: 'labels',
+      change: makeChildChange(
+        {row: {id: 1, issueId: 1, labelId: 1, extra: 'a2'}, relationships: {}},
+        {
+          relationshipName: 'labels',
+          change: makeEditChange(
+            {row: {id: 1, name: 'label2'}, relationships: {}},
+            {row: {id: 1, name: 'label'}, relationships: {}},
+          ),
+        },
+      ),
+    },
+  );
+}
+
+test('hidden junction row edit does not notify listeners', () => {
+  const schema = hiddenJunctionSchema();
+  const input: Input = {
+    fetch() {
+      return [hiddenJunctionIssueNode()];
+    },
+    destroy() {},
+    getSchema() {
+      return schema;
+    },
+    setOutput() {},
+  };
+
+  const view = new ArrayView(
+    input,
+    {
+      singular: false,
+      relationships: {labels: {singular: false, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
+
+  let callCount = 0;
+  let data: unknown;
+  view.addListener(entries => {
+    ++callCount;
+    data = entries;
+  });
+  expect(callCount).toBe(1);
+  expect(data).toEqual([
+    {
+      id: 1,
+      name: 'issue',
+      labels: [{id: 1, name: 'label', [refCountSymbol]: 1}],
+      [refCountSymbol]: 1,
+    },
+  ]);
+  const snapshot = data;
+
+  consume(view.push(hiddenJunctionEditChange()));
+  view.flush();
+  expect(callCount).toBe(1);
+  expect(view.data).toBe(snapshot);
+
+  // An edit of the visible leaf still notifies with a new reference.
+  consume(view.push(hiddenJunctionLeafEditChange()));
+  view.flush();
+  expect(callCount).toBe(2);
+  expect(data).not.toBe(snapshot);
+  expect(data).toEqual([
+    {
+      id: 1,
+      name: 'issue',
+      labels: [{id: 1, name: 'label2', [refCountSymbol]: 1}],
+      [refCountSymbol]: 1,
+    },
+  ]);
+});
+
+test('hidden junction row edit does not notify listeners (singular child format)', () => {
+  const schema = hiddenJunctionSchema();
+  const input: Input = {
+    fetch() {
+      return [hiddenJunctionIssueNode()];
+    },
+    destroy() {},
+    getSchema() {
+      return schema;
+    },
+    setOutput() {},
+  };
+
+  const view = new ArrayView(
+    input,
+    {
+      singular: false,
+      relationships: {labels: {singular: true, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
+
+  let callCount = 0;
+  let data: unknown;
+  view.addListener(entries => {
+    ++callCount;
+    data = entries;
+  });
+  expect(callCount).toBe(1);
+  expect(data).toEqual([
+    {
+      id: 1,
+      name: 'issue',
+      labels: {id: 1, name: 'label', [refCountSymbol]: 1},
+      [refCountSymbol]: 1,
+    },
+  ]);
+  const snapshot = data;
+
+  consume(view.push(hiddenJunctionEditChange()));
+  view.flush();
+  expect(callCount).toBe(1);
+  expect(view.data).toBe(snapshot);
+});
