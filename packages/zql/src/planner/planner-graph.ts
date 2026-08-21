@@ -379,6 +379,60 @@ export class PlannerGraph {
         'no plan was found but flippable joins did exist!',
       );
     }
+
+    if (lc) {
+      this.#warnCostlyManualFlips(fofiCache, lc, planDebugger);
+    }
+  }
+
+  /**
+   * Costs the chosen plan against the same plan with each `{flip: true}` join
+   * undone. A manual flip is pinned, so the enumeration above never tests the
+   * alternative; a flip whose subquery isn't selective drives a full scan on
+   * every hydration and nothing else will report it.
+   */
+  #warnCostlyManualFlips(
+    fofiCache: Map<PlannerFanOut, FOFIInfo>,
+    lc: LogContext,
+    planDebugger?: PlanDebugger,
+  ): void {
+    const manual = this.joins.filter(j => j.isManuallyFlipped());
+    if (manual.length === 0) {
+      return;
+    }
+
+    const chosen = this.capturePlanningSnapshot();
+    const chosenFlips = this.joins.filter(
+      j => j.isFlippable() && j.type === 'flipped',
+    );
+    const evaluate = (asSemi?: PlannerJoin): number => {
+      this.resetPlanningState();
+      for (const j of chosenFlips) j.flip();
+      asSemi?.evaluateAsSemi();
+      checkAndConvertFOFI(fofiCache);
+      propagateUnlimitForFlippedJoins(this);
+      this.propagateConstraints(planDebugger);
+      return this.getTotalCost(planDebugger);
+    };
+
+    const chosenCost = evaluate();
+    for (const join of manual) {
+      const semiCost = evaluate(join);
+      if (semiCost < chosenCost) {
+        lc.warn?.(
+          `{flip: true} on ${join.getName()} costs ~${Math.round(chosenCost)} ` +
+            `but ~${Math.round(semiCost)} without it. The flip makes the ` +
+            `subquery the driving side and pins the join out of planning, so ` +
+            `the planner cannot correct it: it will scan the subquery on ` +
+            `every hydration. Drop the flip to let the planner decide.`,
+        );
+      }
+    }
+
+    // restorePlanningSnapshot converts FO->UFO but not back; reset first.
+    this.resetPlanningState();
+    this.restorePlanningSnapshot(chosen);
+    this.propagateConstraints(planDebugger);
   }
 }
 

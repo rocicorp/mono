@@ -168,6 +168,24 @@ export class PlannerJoin {
     return this.#flippable;
   }
 
+  /** True for a `{flip: true}` join: pinned flipped, excluded from planning. */
+  isManuallyFlipped(): boolean {
+    return !this.#flippable && this.#initialType === 'flipped';
+  }
+
+  /**
+   * Costs a manually flipped join as a semi-join. Only valid between a
+   * resetPlanningState() and the next reset; never capture a snapshot while
+   * this is in effect.
+   */
+  evaluateAsSemi(): void {
+    assert(
+      this.isManuallyFlipped(),
+      'Only manual flips can be evaluated as semi',
+    );
+    this.#type = 'semi';
+  }
+
   /**
    * Propagate unlimiting when this join is flipped.
    * When a join is flipped:
