@@ -499,6 +499,8 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_NUM_SYNC_WORKERS']: '1',
       ['ZERO_ADMIN_PASSWORD']: '2p49fqnaivnepr',
+      // These tests exercise the legacy (client-supplied AST) query path.
+      ['ZERO_ALLOW_LEGACY_QUERIES']: 'true',
     };
 
     return async () => {
