@@ -3,6 +3,7 @@ import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
@@ -17,7 +18,7 @@ import {
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
-import {HttpService} from '../http-service.ts';
+import {HttpService, type Options as HttpOptions} from '../http-service.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
@@ -38,9 +39,7 @@ const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
-type Options = {
-  port: number;
-  keepaliveTimeoutMs: number | undefined;
+type Options = HttpOptions & {
   startupDelayMs: number;
 };
 
@@ -151,14 +150,32 @@ export class ChangeStreamerHttpServer extends HttpService {
   }
 
   protected override _onStart(): void {
-    const {startupDelayMs} = this.#opts;
-    this._state.setTimeout(
-      () =>
-        this.#ensureChangeStreamerStarted(
-          `startup delay elapsed (${startupDelayMs} ms)`,
-        ),
-      startupDelayMs,
-    );
+    const {startupDelayMs, readinessGate = promiseVoid} = this.#opts;
+    void readinessGate.then(() => {
+      if (startupDelayMs > 0) {
+        // In RMv1, starting the change-streamer forcibly shuts down the
+        // previous change-streamer, causing view-syncers to reconnect.
+        // If this replication-manager has just started, the routing layer may
+        // not have registered it with DNS, as that only happens after it
+        // confirms health checks. To minimize downtime, the takeover is
+        // delayed for the configured startupDelayMs _after_ beginning to
+        // advertise readiness.
+        this.#lc.info?.(
+          `waiting ${startupDelayMs}ms before taking over the change log`,
+        );
+        this._state.setTimeout(
+          () =>
+            this.#ensureChangeStreamerStarted(
+              `startup delay elapsed (${startupDelayMs} ms)`,
+            ),
+          startupDelayMs,
+        );
+      } else {
+        // In RMv2, this is not necessary because a new RM does not kill the
+        // old one; it is started as soon as possible.
+        this.#ensureChangeStreamerStarted('no startup delay configured');
+      }
+    });
   }
 
   protected override async _onStop(): Promise<void> {
