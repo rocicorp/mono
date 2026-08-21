@@ -210,7 +210,9 @@ export class VfsWatermarkPoller {
     this.#remotePoller = child;
 
     child.on('error', err => {
-      this.#lc.error?.(`received error from vfs-query process`, err);
+      const log =
+        err instanceof Error && err.name === 'AbortError' ? 'info' : 'error';
+      this.#lc[log]?.(`received error from vfs-query process`, err);
     });
     child.on('close', (code, signal) => {
       this.#remotePoller = undefined;
