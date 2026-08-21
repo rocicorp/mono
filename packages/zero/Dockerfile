@@ -28,8 +28,18 @@ FROM litestream/litestream:0.5.16 AS litestream-v5
 # via cgo, and it runs directly in the musl final stage below (no dlopen, so
 # the TLS bug that motivated vfs-query doesn't apply). A glibc-built cgo
 # binary would still fail to *run* on musl, so the builder's libc has to match.
-FROM golang:1.25-alpine AS vfs-query
-RUN apk add --no-cache build-base
+#
+# Pinned to $BUILDPLATFORM (not the implicit per-target-platform default) so
+# the Go toolchain itself runs natively on the build host — Go already
+# cross-compiles by GOARCH alone. Only cgo's C compile/link step needs an
+# actual cross toolchain for the non-native arch, supplied by zig cc (bundled
+# musl sysroots for both architectures). Without this, buildx would run this
+# entire stage under QEMU for the non-native platform, and QEMU-emulated cgo
+# compilation of this module's dependency tree (aws-sdk-go-v2 et al.) takes
+# ~30 minutes instead of under a minute natively.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS vfs-query
+RUN apk add --no-cache zig
+ARG TARGETARCH
 
 WORKDIR /src/go
 # Source lives in mono/go, outside this Dockerfile's build context
@@ -37,7 +47,14 @@ WORKDIR /src/go
 COPY --from=monogo . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
-	CGO_ENABLED=1 go build -tags vfs -o /usr/local/bin/vfs-query ./cmd/vfs-query
+	case "$TARGETARCH" in \
+		amd64) ZIG_ARCH=x86_64 ;; \
+		arm64) ZIG_ARCH=aarch64 ;; \
+		*) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+	esac && \
+	GOOS=linux GOARCH="$TARGETARCH" CGO_ENABLED=1 \
+	CC="zig cc -target ${ZIG_ARCH}-linux-musl" \
+	go build -tags vfs -o /usr/local/bin/vfs-query ./cmd/vfs-query
 
 FROM node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e
 
