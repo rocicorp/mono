@@ -103,30 +103,13 @@ func TestRunQuery_BlobRenderedAsString(t *testing.T) {
 	}
 }
 
-func TestBackupTime_NonInitialIsWallClockNow(t *testing.T) {
-	db := openMemDB(t)
-	logger := slog.New(slog.NewTextHandler(discard{}, nil))
-
-	before := time.Now().UTC()
-	got := backupTime(context.Background(), db, false /* first */, 5*time.Second, logger)
-	after := time.Now().UTC()
-
-	ts, err := time.Parse(time.RFC3339Nano, got)
-	if err != nil {
-		t.Fatalf("backupTime returned unparseable time %q: %v", got, err)
-	}
-	if ts.Before(before) || ts.After(after) {
-		t.Errorf("backupTime = %s, want between %s and %s", ts, before, after)
-	}
-}
-
-func TestBackupTime_FirstQueryFailureReturnsEmpty(t *testing.T) {
+func TestBackupTime_UnsupportedPragmaReturnsEmpty(t *testing.T) {
 	db := openMemDB(t)
 	logger := slog.New(slog.NewTextHandler(discard{}, nil))
 
 	// A plain (non-VFS) connection doesn't understand `PRAGMA litestream_time`;
 	// backupTime should degrade to "" rather than panicking or blocking.
-	got := backupTime(context.Background(), db, true /* first */, 5*time.Second, logger)
+	got := backupTime(context.Background(), db, 5*time.Second, logger)
 	if got != "" {
 		t.Errorf("backupTime on non-VFS connection = %q, want \"\"", got)
 	}

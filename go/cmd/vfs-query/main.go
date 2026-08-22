@@ -155,7 +155,6 @@ func run(replicaURL, query string, remotePollInterval, localPollInterval, queryT
 	logger.Info("vfs-query started", "replica", replicaURL, "remotePollInterval", remotePollInterval)
 
 	var last string // last emitted query result (dedup key: the query result only)
-	var emitted bool
 	var pollInterval = localPollInterval
 	for {
 		if err := ctx.Err(); err != nil {
@@ -177,8 +176,7 @@ func run(replicaURL, query string, remotePollInterval, localPollInterval, queryT
 			key, _ := json.Marshal(qr)
 			if string(key) != last {
 				last = string(key)
-				emit(ctx, db, qr, emitMetadata, !emitted, queryTimeout, logger)
-				emitted = true
+				emit(ctx, db, qr, emitMetadata, queryTimeout, logger)
 			}
 		}
 
@@ -214,11 +212,11 @@ type metadata struct {
 	LitestreamTime string `json:"litestream_time,omitempty"`
 }
 
-func emit(ctx context.Context, db *sql.DB, qr queryResult, emitMetadata, first bool, timeout time.Duration, logger *slog.Logger) {
+func emit(ctx context.Context, db *sql.DB, qr queryResult, emitMetadata bool, timeout time.Duration, logger *slog.Logger) {
 	out := output{QueryResult: qr}
 
 	if emitMetadata {
-		out.Metadata.LitestreamTime = backupTime(ctx, db, first, timeout, logger)
+		out.Metadata.LitestreamTime = backupTime(ctx, db, timeout, logger)
 	}
 
 	line, err := json.Marshal(out)
@@ -230,24 +228,7 @@ func emit(ctx context.Context, db *sql.DB, qr queryResult, emitMetadata, first b
 }
 
 // backupTime returns the value for metadata.litestream_time.
-//
-// On the FIRST emission it reads the real `PRAGMA litestream_time` — which is
-// accurate at connection open and matters because the backup may be genuinely
-// behind when this process is spawned (that's why it was spawned).
-//
-// On every subsequent emission it returns wall-clock now. This is a deliberate
-// STOPGAP: a non-initial emission only fires because the backup just advanced,
-// so the freshest backup time is ~now (within a poll interval). It avoids
-// `PRAGMA litestream_time = LATEST`, which would force a page-index rebuild +
-// cache purge (real S3 cost) on every emission. Remove once the litestream VFS
-// advances latestLTXTime on poll (branch fix-vfs-litestream-time); then read
-// the real value every time.
-//
-// TODO: Remove when https://github.com/benbjohnson/litestream/pull/1455 is in.
-func backupTime(ctx context.Context, db *sql.DB, first bool, timeout time.Duration, logger *slog.Logger) string {
-	if !first {
-		return time.Now().UTC().Format(time.RFC3339Nano)
-	}
+func backupTime(ctx context.Context, db *sql.DB, timeout time.Duration, logger *slog.Logger) string {
 	qctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var t string
