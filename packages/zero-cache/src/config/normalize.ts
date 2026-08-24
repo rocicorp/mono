@@ -114,7 +114,7 @@ export function assertNormalized(
   assert(
     !config.litestream.backupURL ||
       !config.litestream.backupUsingV5 ||
-      config.litestream.vfsPollIntervalMs,
+      config.litestream.vfsQueryExecutable,
     '--litestream-backup-using-v5 requires --litestream-vfs-query-executable to be specified',
   );
   assert(config.change.db, 'missing --change-db');
