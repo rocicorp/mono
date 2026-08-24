@@ -778,6 +778,18 @@ describe('integration', {timeout: 30000}, () => {
 
   test.for([
     ['single-node', 'pg', () => [env], undefined],
+    [
+      'single-node with bundled Litestream executables and no backup',
+      'pg',
+      () => [
+        {
+          ...env,
+          ['ZERO_LITESTREAM_EXECUTABLE']: '/not-used/litestream',
+          ['ZERO_LITESTREAM_EXECUTABLE_V5']: '/not-used/litestream-v5',
+        },
+      ],
+      undefined,
+    ],
     ['replica identity full', 'pg', () => [env], 'FULL'],
     [
       'lazy single-node standalone',
