@@ -15,17 +15,14 @@ on:
         required: true
         type: string
         default: main
-  # Every commit to main publishes a head release (npm dist-tag `head` +
-  # ghcr.io/rocicorp/zero, no Docker Hub, no git tag).
+  # Pushes to main publish head npm and Docker releases without a git tag.
   push:
     branches: [main]
 
 permissions: {}
 
 concurrency:
-  # Push events have no inputs, so fall back to the head-release group. Bursts
-  # of merges coalesce: GitHub keeps only the newest queued run per group and
-  # cancel-in-progress: false protects the in-flight publish.
+  # Keep the active release and only the newest queued release per mode.
   group: zero-release-${{ inputs.release_branch || 'main' }}-${{ inputs.mode || 'head' }}
   cancel-in-progress: false
 
@@ -61,9 +58,7 @@ jobs:
           MODE: ${{ github.event_name == 'push' && 'head' || inputs.mode }}
           RELEASE_BRANCH: ${{ github.event_name == 'push' && 'main' || inputs.release_branch }}
           WORKFLOW_REF_NAME: ${{ github.ref_name }}
-          # Pin push-triggered runs to the commit that triggered them so a
-          # queued run does not re-release a newer commit under a second
-          # version.
+          # Release the commit that triggered the push, even if the run was queued.
           SOURCE_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
         run: node scripts/src/release-plan.ts
 
@@ -82,7 +77,7 @@ jobs:
             account_id: '360831509486'
     permissions:
       contents: read
-      id-token: write # Required for OIDC authentication to AWS.
+      id-token: write # For AWS OIDC.
     steps:
       - name: Checkout release source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -139,8 +134,7 @@ jobs:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - name: Checkout workflow scripts
-        # Trusted release tooling from the workflow ref (`main`), not the release
-        # source branch. This job has no secrets and runs all install/build code.
+        # Run release tooling from main, not the selected release branch.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: main
@@ -240,7 +234,7 @@ jobs:
       name: zero-release-npm
     permissions:
       contents: read
-      id-token: write # Required for npm provenance / trusted publishing.
+      id-token: write # For npm trusted publishing.
     env:
       MODE: ${{ needs.plan.outputs.mode }}
       SCRIPTS: ${{ github.workspace }}/ci/scripts/src
@@ -248,8 +242,7 @@ jobs:
       TARBALL_NAME: ${{ needs.build.outputs.tarball_name }}
     steps:
       - name: Checkout workflow scripts
-        # Trusted release tooling from `main` only. Do not checkout the release
-        # source branch in this credentialed npm publishing job.
+        # Only load release tooling from main in this credentialed job.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: main
@@ -283,7 +276,7 @@ jobs:
           if [ "$MODE" = 'stable' ]; then
             pnpm stage publish "dist/npm/$TARBALL_NAME" --provenance --tag staging --access public --no-git-checks --json
           else
-            # canary and head publish directly under their mode's dist-tag.
+            # Canary and head publish directly to their matching dist-tags.
             pnpm publish "dist/npm/$TARBALL_NAME" --provenance --tag "$MODE" --access public --no-git-checks
           fi
 
@@ -306,8 +299,8 @@ jobs:
     environment:
       name: zero-release-docker
     permissions:
-      id-token: write # Required for cosign keyless signing.
-      packages: write # Required to push the image to GHCR.
+      id-token: write # For Docker Hub OIDC and cosign.
+      packages: write # For GHCR pushes.
     env:
       MODE: ${{ needs.plan.outputs.mode }}
       VERSION: ${{ needs.plan.outputs.version }}
@@ -328,8 +321,7 @@ jobs:
             docker://ghcr.io/rocicorp/zero:${{ needs.plan.outputs.version }}
 
       - name: Push GHCR head tag
-        # Moving tag tracking the newest head release. The cosign signature
-        # below covers it because signatures attach to the digest.
+        # The version signature covers this tag because both resolve to one digest.
         if: needs.plan.outputs.mode == 'head'
         uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
         with:
@@ -339,50 +331,65 @@ jobs:
             oci-archive:dist/docker/zero-image.tar
             docker://ghcr.io/rocicorp/zero:head
 
-      - name: Push Docker Hub image
-        if: needs.plan.outputs.mode != 'head'
-        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
-        with:
-          args: >-
-            copy --all
-            --dest-creds ${{ vars.DOCKERHUB_USERNAME }}:${{ secrets.DOCKERHUB_TOKEN }}
-            oci-archive:dist/docker/zero-image.tar
-            docker://docker.io/rocicorp/zero:${{ needs.plan.outputs.version }}
-
-      - name: Login to Docker Hub
-        if: needs.plan.outputs.mode != 'head'
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Login to GHCR
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        # Share both registry logins with Skopeo and cosign.
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Login to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+          DOCKERHUB_OIDC_CONNECTIONID: 2b3442aa-9cf7-4a13-afce-535dece25f7a
+        with:
+          username: rocicorp
+
+      - name: Push Docker Hub image
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        env:
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
+        with:
+          args: >-
+            copy --all
+            oci-archive:dist/docker/zero-image.tar
+            docker://docker.io/rocicorp/zero:${{ needs.plan.outputs.version }}
+
+      - name: Push Docker Hub head tag
+        # The version signature covers this tag because both resolve to one digest.
+        if: needs.plan.outputs.mode == 'head'
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        env:
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
+        with:
+          args: >-
+            copy --all
+            oci-archive:dist/docker/zero-image.tar
+            docker://docker.io/rocicorp/zero:head
 
       - name: Sign Docker images
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
         run: |
           cosign sign --yes "ghcr.io/rocicorp/zero:$VERSION"
-          if [ "$MODE" != 'head' ]; then
-            cosign sign --yes "docker.io/rocicorp/zero:$VERSION"
-          fi
+          cosign sign --yes "docker.io/rocicorp/zero:$VERSION"
 
       - name: Summarize Docker release
         run: |
           {
             printf '## Docker\n\n'
-            if [ "$MODE" != 'head' ]; then
-              printf 'Docker Hub: `%s`\n\n' "rocicorp/zero:$VERSION"
-            fi
+            printf 'Docker Hub: `%s`\n\n' "rocicorp/zero:$VERSION"
             printf 'GHCR: `%s`\n' "ghcr.io/rocicorp/zero:$VERSION"
             if [ "$MODE" = 'head' ]; then
-              printf 'GHCR moving tag: `%s`\n' "ghcr.io/rocicorp/zero:head"
+              printf 'Docker Hub tag: `%s`\n\n' "rocicorp/zero:head"
+              printf 'GHCR tag: `%s`\n' "ghcr.io/rocicorp/zero:head"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -390,11 +397,10 @@ jobs:
     name: Push git tag
     runs-on: ubuntu-latest
     needs: [plan, publish-npm, publish-docker]
-    # Head releases are not tagged; the version itself (source-sha prefix +
-    # date) and the OCI revision label carry the version <-> commit mapping.
+    # Head versions and OCI labels identify commits without git tags.
     if: needs.plan.outputs.mode != 'head'
     permissions:
-      contents: write # Required to push the Zero release tag.
+      contents: write # To push the release tag.
     env:
       MODE: ${{ needs.plan.outputs.mode }}
       SCRIPTS: ${{ github.workspace }}/ci/scripts/src
@@ -403,8 +409,7 @@ jobs:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - name: Checkout workflow scripts
-        # Trusted release tooling from `main`; the release source checkout below
-        # is used only as git object input for tag creation.
+        # Use release tooling from main; the source checkout only supplies git objects.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: main
@@ -413,7 +418,7 @@ jobs:
           sparse-checkout: scripts
 
       - name: Checkout release source
-        # zizmor: ignore[artipacked] Tag push intentionally uses the scoped GITHUB_TOKEN from this checkout.
+        # zizmor: ignore[artipacked] Keep the token needed to push the tag.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
