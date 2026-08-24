@@ -27,6 +27,7 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
       restoreUsingV5: false,
       executable: undefined,
       executableV5: undefined,
+      vfsPollIntervalMs: 15_000,
       ...litestream,
     },
   } as unknown as ZeroConfig;
