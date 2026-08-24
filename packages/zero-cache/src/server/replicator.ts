@@ -78,8 +78,12 @@ export default async function runWorker(
     );
   initEventSink(lc, config);
 
+  // Remote view-syncers restore from the replication-manager, which supplies
+  // the backup URL. A local change-streamer owns the canonical replica and
+  // must not infer backup configuration from bundled executable paths.
   if (
     fileMode === 'serving' &&
+    !runningLocalChangeStreamer &&
     (config.litestream.executable || config.litestream.executableV5)
   ) {
     await restoreReplica(lc, config);
