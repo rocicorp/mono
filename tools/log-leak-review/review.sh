@@ -50,7 +50,12 @@ if [ "${#diff_text}" -gt "$max_bytes" ]; then
 fi
 
 command -v claude >/dev/null || {
-  echo "log-leak-review: claude CLI not found" >&2
+  echo "WARNING: Claude CLI not found; install it to enable log leak review." >&2
+  exit 2
+}
+
+claude auth status >/dev/null 2>&1 || {
+  echo "WARNING: Claude is not logged in; run 'claude auth login'." >&2
   exit 2
 }
 
@@ -71,8 +76,12 @@ out=$(printf '%s\n' "$diff_text" | run_claude claude -p \
   2>/dev/null)
 rc=$?
 
-if [ $rc -ne 0 ] || [ -z "$out" ]; then
-  echo "log-leak-review: review did not complete (rc=$rc)" >&2
+if [ $rc -ne 0 ]; then
+  echo "WARNING: Claude log leak review failed (rc=$rc)." >&2
+  exit 2
+fi
+if [ -z "$out" ]; then
+  echo "WARNING: Claude log leak review returned no output." >&2
   exit 2
 fi
 

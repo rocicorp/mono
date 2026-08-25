@@ -34,7 +34,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
   case $rc in
     0) ;;
     1) [ "$mode" = warn ] || blocked=1 ;;
-    *) echo "log-leak-review: skipped, pushing anyway." >&2 ;;
+    *) echo "WARNING: pushing without log leak review." >&2 ;;
   esac
 done
 
