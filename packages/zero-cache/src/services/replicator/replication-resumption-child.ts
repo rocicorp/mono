@@ -103,7 +103,7 @@ export class IPCDownstreamSource implements Source<SerializedDownstream> {
       case 'replication-resumption:source-error':
         this.#error = new Error(msg[1].message);
         this.#queue.enqueueRejection(this.#error);
-        this.#abortController.abort();
+        this.#abortController.abort(this.#error);
         break;
       case 'replication-resumption:source-end':
         this.#queue.enqueue({type: 'end'});
@@ -123,22 +123,8 @@ export class IPCDownstreamSource implements Source<SerializedDownstream> {
     this.#abortController.abort();
   }
 
-  async doneOr<R>(other: Promise<R>) {
-    const result = resolver();
-    const {signal} = this.#abortController;
-    const handler = () =>
-      this.#error ? result.reject(this.#error) : result.resolve();
-    if (signal.aborted) {
-      handler();
-    } else {
-      signal.addEventListener('abort', handler);
-    }
-
-    try {
-      return await Promise.race([other, result.promise]);
-    } finally {
-      signal.removeEventListener('abort', handler);
-    }
+  get signal() {
+    return this.#abortController.signal;
   }
 
   [Symbol.asyncIterator](): AsyncIterator<SerializedDownstream> {

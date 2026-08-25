@@ -1,6 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
+import {promiseOrAbort} from '../../../shared/src/promise-race.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import {type Result, Subscription} from './subscription.ts';
 
@@ -630,12 +631,12 @@ describe('types/subscription', () => {
     expect(subWithCoalesceAndPipeline.pipeline).not.toBeUndefined();
   });
 
-  describe('doneOr', () => {
+  describe('signal', () => {
     test('other resolves first, subscription remains active', async () => {
       const sub = Subscription.create<number>();
       const other = resolver<string>();
 
-      const raced = sub.doneOr(other.promise);
+      const raced = promiseOrAbort(other.promise, sub.signal);
       other.resolve('foo');
 
       expect(await raced).toBe('foo');
@@ -646,7 +647,7 @@ describe('types/subscription', () => {
       const sub = Subscription.create<number>();
       const other = resolver<string>();
 
-      const raced = sub.doneOr(other.promise);
+      const raced = promiseOrAbort(other.promise, sub.signal);
       other.reject(new Error('other-boom'));
 
       await expect(raced).rejects.toThrow('other-boom');
@@ -657,17 +658,17 @@ describe('types/subscription', () => {
       const sub = Subscription.create<number>();
       const never = new Promise<string>(() => {});
 
-      const raced = sub.doneOr(never);
+      const raced = promiseOrAbort(never, sub.signal);
       sub.cancel();
 
-      expect(await raced).toBeUndefined();
+      await expect(raced).rejects.toThrow('canceled');
     });
 
     test('fail wins over a never-settling other, rejecting with the error', async () => {
       const sub = Subscription.create<number>();
       const never = new Promise<string>(() => {});
 
-      const raced = sub.doneOr(never);
+      const raced = promiseOrAbort(never, sub.signal);
       sub.fail(new Error('sub-boom'));
 
       await expect(raced).rejects.toThrow('sub-boom');
@@ -677,10 +678,10 @@ describe('types/subscription', () => {
       const sub = Subscription.create<number>();
       const never = new Promise<string>(() => {});
 
-      const raced = sub.doneOr(never);
+      const raced = promiseOrAbort(never, sub.signal);
       sub.end(); // no queued messages => immediate cancel
 
-      expect(await raced).toBeUndefined();
+      await expect(raced).rejects.toThrow('canceled');
     });
 
     test('already-canceled subscription resolves immediately', async () => {
@@ -688,7 +689,9 @@ describe('types/subscription', () => {
       sub.cancel();
 
       const never = new Promise<string>(() => {});
-      expect(await sub.doneOr(never)).toBeUndefined();
+      await expect(promiseOrAbort(never, sub.signal)).rejects.toThrow(
+        'canceled',
+      );
     });
 
     test('already-failed subscription rejects immediately', async () => {
@@ -696,7 +699,9 @@ describe('types/subscription', () => {
       sub.fail(new Error('already-boom'));
 
       const never = new Promise<string>(() => {});
-      await expect(sub.doneOr(never)).rejects.toThrow('already-boom');
+      await expect(promiseOrAbort(never, sub.signal)).rejects.toThrow(
+        'already-boom',
+      );
     });
 
     test('repeated races do not accumulate abort listeners', async () => {
@@ -708,15 +713,15 @@ describe('types/subscription', () => {
       // promise, see https://github.com/nodejs/node/issues/17469).
       for (let i = 0; i < 100; i++) {
         const other = resolver<number>();
-        const raced = sub.doneOr(other.promise);
+        const raced = promiseOrAbort(other.promise, sub.signal);
         other.resolve(i);
         expect(await raced).toBe(i);
       }
 
       // The subscription still terminates cleanly afterwards.
-      const raced = sub.doneOr(new Promise<number>(() => {}));
+      const raced = promiseOrAbort(new Promise<number>(() => {}), sub.signal);
       sub.cancel();
-      expect(await raced).toBeUndefined();
+      await expect(raced).rejects.toThrow('canceled');
     });
   });
 });

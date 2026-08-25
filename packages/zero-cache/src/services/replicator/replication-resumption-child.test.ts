@@ -1,5 +1,6 @@
 import {EventEmitter} from 'node:events';
 import {describe, expect, test, vi} from 'vitest';
+import {promiseOrAbort} from '../../../../shared/src/promise-race.ts';
 import type * as processes from '../../types/processes.ts';
 import type {Worker} from '../../types/processes.ts';
 
@@ -27,33 +28,39 @@ function fakeWorker(): Worker & {sent: unknown[]} {
   return ee as unknown as Worker & {sent: unknown[]};
 }
 
-describe('replication-resumption-child/doneOr', () => {
+describe('replication-resumption-child/signal', () => {
   const never = () => new Promise<string>(() => {});
 
   test('other resolves first', async () => {
     const source = new IPCDownstreamSource(fakeWorker());
-    expect(await source.doneOr(Promise.resolve('foo'))).toBe('foo');
+    expect(await promiseOrAbort(Promise.resolve('foo'), source.signal)).toBe(
+      'foo',
+    );
   });
 
-  test('local cancel() resolves doneOr', async () => {
+  test('local cancel() resolves signal', async () => {
     const source = new IPCDownstreamSource(fakeWorker());
-    const raced = source.doneOr(never());
+    const raced = promiseOrAbort(never(), source.signal);
     source.cancel();
-    expect(await raced).toBeUndefined();
+    await expect(raced).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[AbortError: This operation was aborted]`,
+    );
   });
 
-  test('producer source-end resolves doneOr', async () => {
+  test('producer source-end resolves signal', async () => {
     const worker = fakeWorker();
     const source = new IPCDownstreamSource(worker);
-    const raced = source.doneOr(never());
+    const raced = promiseOrAbort(never(), source.signal);
     worker.emit('message', ['replication-resumption:source-end', {}]);
-    expect(await raced).toBeUndefined();
+    await expect(raced).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[AbortError: This operation was aborted]`,
+    );
   });
 
-  test('producer source-error rejects doneOr with the error', async () => {
+  test('producer source-error rejects sigal with the error', async () => {
     const worker = fakeWorker();
     const source = new IPCDownstreamSource(worker);
-    const raced = source.doneOr(never());
+    const raced = promiseOrAbort(never(), source.signal);
     worker.emit('message', [
       'replication-resumption:source-error',
       {message: 'upstream-boom'},
@@ -61,33 +68,26 @@ describe('replication-resumption-child/doneOr', () => {
     await expect(raced).rejects.toThrow('upstream-boom');
   });
 
-  test('doneOr after source-error rejects immediately', async () => {
+  test('signal after source-error rejects immediately', async () => {
     const worker = fakeWorker();
     const source = new IPCDownstreamSource(worker);
     worker.emit('message', [
       'replication-resumption:source-error',
       {message: 'upstream-boom'},
     ]);
-    await expect(source.doneOr(never())).rejects.toThrow('upstream-boom');
+    await expect(promiseOrAbort(never(), source.signal)).rejects.toThrow(
+      'upstream-boom',
+    );
   });
 
-  test('doneOr after source-end resolves immediately', async () => {
+  test('signal after source-end resolves immediately', async () => {
     const worker = fakeWorker();
     const source = new IPCDownstreamSource(worker);
     worker.emit('message', ['replication-resumption:source-end', {}]);
-    expect(await source.doneOr(never())).toBeUndefined();
-  });
-
-  test('unrecognized messages do not terminate doneOr', async () => {
-    const worker = fakeWorker();
-    const source = new IPCDownstreamSource(worker);
-    const resolveWith = vi.fn();
-    const raced = source.doneOr(never()).then(resolveWith);
-    worker.emit('message', ['some-other-message', {}]);
-    worker.emit('message', 'not-even-an-array');
-    await Promise.resolve();
-    expect(resolveWith).not.toHaveBeenCalled();
-    source.cancel(); // settle the outstanding race so the test ends cleanly.
-    await raced;
+    await expect(
+      promiseOrAbort(never(), source.signal),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[AbortError: This operation was aborted]`,
+    );
   });
 });
