@@ -253,7 +253,7 @@ function parseStringifiedSource(
 ): Source<SerializedDownstream> {
   return {
     cancel: err => source.cancel(err),
-    doneOr: other => source.doneOr(other),
+    signal: source.signal,
     async *[Symbol.asyncIterator]() {
       for await (const json of source) {
         yield {data: BigIntJSON.parse(json) as Downstream, json};
