@@ -184,8 +184,16 @@ export async function tryRestore(
     let stderr = '';
     proc.stdout.setEncoding('utf-8');
     proc.stderr.setEncoding('utf-8');
-    proc.stdout.on('data', chunk => (stdout += chunk));
-    proc.stderr.on('data', chunk => (stderr += chunk));
+    // Output AND capture the stdout and stderr, the former for observability
+    // and the latter for error handling.
+    proc.stdout.on('data', chunk => {
+      process.stdout.write(chunk);
+      stdout += chunk;
+    });
+    proc.stderr.on('data', chunk => {
+      process.stderr.write(chunk);
+      stderr += chunk;
+    });
     const {promise, resolve, reject} = resolver();
     proc.on('error', reject);
     proc.on('close', (code, signal) => {
@@ -204,15 +212,6 @@ export async function tryRestore(
         performance.now() - processStart,
         {...attrs, result: 'success'},
       );
-      // A successful restore does not emit ERROR-level output; forward
-      // litestream's own (minimal, debug-level) restore logging to the pod's
-      // stdout/stderr, matching the previous `stdio: 'inherit'` behavior.
-      if (stdout) {
-        process.stdout.write(stdout);
-      }
-      if (stderr) {
-        process.stderr.write(stderr);
-      }
     } catch (e) {
       litestreamRestoreProcessDuration().recordMs(
         performance.now() - processStart,
