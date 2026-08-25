@@ -33,8 +33,8 @@ import {
   type TransformFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
 import type {
-  InspectUpBody,
-  InspectUpMessage,
+  UnparsedInspectUpBody,
+  UnparsedInspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {UpdateAuthMessage} from '../../../../zero-protocol/src/update-auth.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
@@ -151,7 +151,10 @@ export interface ViewSyncer {
     msg: DeleteClientsMessage,
   ): Promise<string[]>;
 
-  inspect(selector: ConnectionSelector, msg: InspectUpMessage): Promise<void>;
+  inspect(
+    selector: ConnectionSelector,
+    msg: UnparsedInspectUpMessage,
+  ): Promise<void>;
   updateAuth(
     selector: ConnectionSelector,
     msg: UpdateAuthMessage,
@@ -2737,7 +2740,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   async inspect(
     selector: ConnectionSelector,
-    msg: InspectUpMessage,
+    msg: UnparsedInspectUpMessage,
   ): Promise<void> {
     await this.#runInLockForClient(selector, msg, this.#handleInspect);
   }
@@ -2746,7 +2749,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #handleInspect = async (
     lc: LogContext,
     clientID: string,
-    body: InspectUpBody,
+    body: UnparsedInspectUpBody,
     cvr: CVRSnapshot,
   ): Promise<void> => {
     const client = must(this.#clients.get(clientID));

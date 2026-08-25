@@ -23,7 +23,10 @@ import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
-import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
+import {
+  upstreamSchemaWithUnparsedAnalyzeQuery,
+  type UpstreamWithUnparsedAnalyzeQuery,
+} from '../../../zero-protocol/src/up.ts';
 import {getOrCreateCounter} from '../observability/metrics.ts';
 import type {ViewSyncerDownstream} from '../types/downstream.ts';
 import {
@@ -62,7 +65,54 @@ export type StreamResult =
     };
 
 export interface MessageHandler {
-  handleMessage(msg: Upstream): Promise<HandlerResult[]>;
+  handleMessage(
+    msg: UpstreamWithUnparsedAnalyzeQuery,
+  ): Promise<HandlerResult[]>;
+}
+
+function hasOwn(value: unknown, property: string): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.hasOwn(value, property)
+  );
+}
+
+function containsLegacyQuery(message: unknown): boolean {
+  if (!Array.isArray(message)) {
+    return false;
+  }
+
+  const body = message[1];
+  if (typeof body !== 'object' || body === null) {
+    return false;
+  }
+
+  if (
+    message[0] !== 'initConnection' &&
+    message[0] !== 'changeDesiredQueries'
+  ) {
+    return false;
+  }
+
+  const patch = body['desiredQueriesPatch'];
+  return (
+    Array.isArray(patch) && patch.some(operation => hasOwn(operation, 'ast'))
+  );
+}
+
+const LEGACY_QUERIES_DISABLED_MESSAGE =
+  'Legacy queries are disabled by this Zero server. This client must use custom queries instead of sending query ASTs directly. To temporarily restore compatibility, set ZERO_ALLOW_LEGACY_QUERIES=true on zero-cache.';
+
+// Exported for testing purposes.
+export function parseUpstreamMessage(
+  value: unknown,
+  allowLegacyQueries: boolean,
+): UpstreamWithUnparsedAnalyzeQuery {
+  if (!allowLegacyQueries && containsLegacyQuery(value)) {
+    throw new Error(LEGACY_QUERIES_DISABLED_MESSAGE);
+  }
+  return valita.parse(value, upstreamSchemaWithUnparsedAnalyzeQuery);
 }
 
 // Ensures that a downstream message is sent at least every interval, sending a
@@ -96,6 +146,7 @@ export class Connection {
   readonly #lc: LogContext;
   readonly #onClose: () => void;
   readonly #messageHandler: MessageHandler;
+  readonly #allowLegacyQueries: boolean;
   readonly #downstreamSender: DownstreamSender;
   readonly #downstreamMsgTimer: NodeJS.Timeout | undefined;
   readonly #webSocketErrors = getOrCreateCounter(
@@ -112,11 +163,13 @@ export class Connection {
     lc: LogContext,
     connectParams: ConnectParams,
     ws: WebSocket,
+    allowLegacyQueries: boolean,
     messageHandler: MessageHandler,
     onClose: () => void,
   ) {
     const {clientGroupID, clientID, wsID, protocolVersion} = connectParams;
     this.#messageHandler = messageHandler;
+    this.#allowLegacyQueries = allowLegacyQueries;
 
     this.#ws = ws;
     this.#wsID = wsID;
@@ -213,7 +266,7 @@ export class Connection {
     let msg;
     try {
       const value = JSON.parse(data);
-      msg = valita.parse(value, upstreamSchema);
+      msg = parseUpstreamMessage(value, this.#allowLegacyQueries);
     } catch (e) {
       const errorBody = {
         kind: ErrorKind.InvalidMessage,

@@ -800,6 +800,7 @@ export class Syncer implements SingletonService {
         this.#lc,
         params,
         ws,
+        this.#config.allowLegacyQueries,
         new SyncerWsMessageHandler(
           this.#lc,
           params,

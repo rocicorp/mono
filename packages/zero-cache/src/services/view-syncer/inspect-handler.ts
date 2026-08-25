@@ -2,11 +2,15 @@ import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {TDigest} from '../../../../shared/src/tdigest.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import type {
   QueryServerMetrics,
   ServerMetrics,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
+import {
+  inspectAnalyzeQueryUpSchema,
+  type UnparsedInspectUpBody,
+} from '../../../../zero-protocol/src/inspect-up.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
@@ -24,7 +28,7 @@ import type {CVRSnapshot} from './cvr.ts';
 
 export async function handleInspect(
   lc: LogContext,
-  body: InspectUpBody,
+  body: UnparsedInspectUpBody,
   cvr: CVRSnapshot,
   client: ClientHandler,
   inspectorDelegate: InspectorDelegate,
@@ -113,14 +117,15 @@ export async function handleInspect(
       }
 
       case 'analyze-query': {
-        let ast = body.ast ?? body.value;
+        const parsedBody = v.parse(body, inspectAnalyzeQueryUpSchema);
+        let ast = parsedBody.ast ?? parsedBody.value;
         let legacyQuery = true;
 
-        if (body.name && body.args) {
+        if (parsedBody.name && parsedBody.args) {
           // Get the AST from the API server by transforming the named query
           ast = await inspectorDelegate.transformCustomQuery(
-            body.name,
-            body.args,
+            parsedBody.name,
+            parsedBody.args,
             ctx,
           );
           legacyQuery = false;
@@ -151,11 +156,11 @@ export async function handleInspect(
           config,
           must(cvr.clientSchema),
           ast,
-          body.options?.syncedRows,
-          body.options?.vendedRows,
+          parsedBody.options?.syncedRows,
+          parsedBody.options?.vendedRows,
           permissions,
           ctx.auth?.type === 'jwt' ? ctx.auth : undefined,
-          body.options?.joinPlans,
+          parsedBody.options?.joinPlans,
         );
         client.sendInspectResponse(lc, {
           op: 'analyze-query',
