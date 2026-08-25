@@ -7,6 +7,7 @@ set -uo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 rules="$here/rules.md"
 model=${LOG_LEAK_REVIEW_MODEL:-claude-sonnet-5}
+effort=${LOG_LEAK_REVIEW_EFFORT:-medium}
 max_bytes=${LOG_LEAK_REVIEW_MAX_BYTES:-200000}
 deadline=${LOG_LEAK_REVIEW_TIMEOUT:-180}
 
@@ -67,14 +68,35 @@ run_claude() {
   fi
 }
 
-out=$(printf '%s\n' "$diff_text" | run_claude claude -p \
+wait_with_spinner() {
+  local pid=$1 i=0
+  local frames=('|' '/' '-' '\')
+  if [ -t 2 ]; then
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\rlog-leak-review: reviewing %s' "${frames[$((i % 4))]}" >&2
+      i=$((i + 1))
+      sleep 0.1
+    done
+    printf '\r\033[K' >&2
+  fi
+  wait "$pid"
+}
+
+out_file=$(mktemp "${TMPDIR:-/tmp}/log-leak-review.XXXXXX") || exit 2
+trap 'rm -f "$out_file"' EXIT
+
+printf '%s\n' "$diff_text" | run_claude claude -p \
   --model "$model" \
+  --effort "$effort" \
   --tools "Read,Grep,Glob" \
   --permission-mode dontAsk \
   --append-system-prompt "$(cat "$rules")" \
   "The unified diff on stdin is about to be pushed. Apply the rules and emit the verdict." \
-  2>/dev/null)
+  >"$out_file" 2>/dev/null &
+pid=$!
+wait_with_spinner "$pid"
 rc=$?
+out=$(<"$out_file")
 
 if [ $rc -ne 0 ]; then
   echo "WARNING: Claude log leak review failed (rc=$rc)." >&2
