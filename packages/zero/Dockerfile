@@ -16,7 +16,18 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
 	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
 
-FROM litestream/litestream:0.5.16 AS litestream-v5
+FROM golang:1.25.10@sha256:cd05a378aaf011e8056745363e5c40f4f2bef0fa4d9bf19b9c38316079c332ff AS litestream-v5
+
+ARG LITESTREAM_V5_VERSION=0.5.17-zero.1
+
+WORKDIR /src/
+RUN git clone --depth 1 --branch v${LITESTREAM_V5_VERSION} https://github.com/rocicorp/litestream.git
+WORKDIR /src/litestream
+
+# Build litestream binary
+RUN --mount=type=cache,target=/root/.cache/go-build \
+	--mount=type=cache,target=/go/pkg \
+	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_V5_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
 
 # Build vfs-query: a Go binary that polls a Litestream backup through VFS
 # and streams query results to stdout. The alternative of loading
