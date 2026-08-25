@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Block pushes that put customer app data into the logs.
 #
-#   LOG_LEAK_REVIEW=0     skip entirely
-#   LOG_LEAK_REVIEW=warn  report findings but never block
-#   git push --no-verify  skip entirely
+# LOG_LEAK_REVIEW=0 disables the review; "warn" makes it advisory.
 set -uo pipefail
 
-[ "${LOG_LEAK_REVIEW:-1}" = "0" ] && exit 0
+mode=${LOG_LEAK_REVIEW:-block}
+[ "$mode" = 0 ] && exit 0
 
 remote=${1:-origin}
 root=$(git rev-parse --show-toplevel)
@@ -14,45 +13,35 @@ review="$root/tools/log-leak-review/review.sh"
 [ -x "$review" ] || exit 0
 
 zero=0000000000000000000000000000000000000000
-status=0
+blocked=0
 
-# git feeds us "<local_ref> <local_sha> <remote_ref> <remote_sha>" per ref.
 while read -r _local_ref local_sha _remote_ref remote_sha; do
-  [ "$local_sha" = "$zero" ] && continue          # branch deletion
+  [ "$local_sha" = "$zero" ] && continue
 
-  if [ "$remote_sha" = "$zero" ]; then            # new branch: diff from its base
+  base=$remote_sha
+  if [ "$base" = "$zero" ]; then
     base=$(git merge-base "$remote/HEAD" "$local_sha" 2>/dev/null) \
       || base=$(git merge-base "$remote/main" "$local_sha" 2>/dev/null) \
       || continue
-  else
-    base=$remote_sha
   fi
   [ "$base" = "$local_sha" ] && continue
 
-  echo "log-leak-review: checking $base..$local_sha for app data in logs..." >&2
+  echo "log-leak-review: checking $base..$local_sha" >&2
   out=$("$review" "$base..$local_sha")
   rc=$?
+  [ -z "$out" ] || printf '%s\n' "$out" >&2
 
   case $rc in
-    0) [ -n "$out" ] && printf '%s\n' "$out" >&2 ;;
-    1)
-      printf '%s\n' "$out" >&2
-      if [ "${LOG_LEAK_REVIEW:-1}" = "warn" ]; then
-        echo "log-leak-review: advisory mode, not blocking." >&2
-      else
-        status=1
-      fi
-      ;;
+    0) ;;
+    1) [ "$mode" = warn ] || blocked=1 ;;
     *) echo "log-leak-review: skipped, pushing anyway." >&2 ;;
   esac
 done
 
-if [ $status -ne 0 ]; then
-  cat >&2 <<'MSG'
+[ "$blocked" = 0 ] && exit 0
 
+cat >&2 <<'MSG'
 Push blocked: the diff appears to log customer application data.
-Fix the sites above, or push with --no-verify if this is a false positive
-(and tell tools/log-leak-review/rules.md about it so it stops happening).
+Fix the findings or use git push --no-verify for a false positive.
 MSG
-fi
-exit $status
+exit 1
