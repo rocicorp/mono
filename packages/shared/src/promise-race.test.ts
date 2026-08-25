@@ -1,9 +1,43 @@
-import {getEventListeners} from 'node:events';
 import {resolver} from '@rocicorp/resolver';
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import {assert} from './asserts.ts';
 import {promiseOrAbort, promiseRace} from './promise-race.ts';
 import {sleep} from './sleep.ts';
+
+/**
+ * Wraps `signal`'s addEventListener/removeEventListener to track the number
+ * of 'abort' listeners currently registered, without relying on Node's
+ * `node:events.getEventListeners` (which isn't available in browser tests).
+ */
+function trackAbortListenerCount(signal: AbortSignal): () => number {
+  let count = 0;
+  const nativeAdd = signal.addEventListener.bind(signal);
+  const nativeRemove = signal.removeEventListener.bind(signal);
+
+  signal.addEventListener = ((
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ) => {
+    if (type === 'abort') {
+      count++;
+    }
+    nativeAdd(type, listener, options);
+  }) as AbortSignal['addEventListener'];
+
+  signal.removeEventListener = ((
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | EventListenerOptions,
+  ) => {
+    if (type === 'abort') {
+      count--;
+    }
+    nativeRemove(type, listener, options);
+  }) as AbortSignal['removeEventListener'];
+
+  return () => count;
+}
 
 describe('promiseRace with record', () => {
   test('returns key of first settled promise', async () => {
@@ -189,32 +223,37 @@ describe('promiseOrAbort', () => {
 
   test('removes the abort listener once the short-lived promise wins', async () => {
     const controller = new AbortController();
+    const abortListenerCount = trackAbortListenerCount(controller.signal);
     const {promise, resolve} = resolver<string>();
 
     const raced = promiseOrAbort(promise, controller.signal);
     resolve('value');
     await raced;
 
-    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+    expect(abortListenerCount()).toBe(0);
   });
 
   test('removes abort listeners on all signals once one wins', async () => {
     const a = new AbortController();
     const b = new AbortController();
     const c = new AbortController();
+    const aCount = trackAbortListenerCount(a.signal);
+    const bCount = trackAbortListenerCount(b.signal);
+    const cCount = trackAbortListenerCount(c.signal);
     const never = new Promise<string>(() => {});
 
     const raced = promiseOrAbort(never, a.signal, b.signal, c.signal);
     b.abort(new Error('boom'));
     await raced.catch(() => {});
 
-    expect(getEventListeners(a.signal, 'abort')).toHaveLength(0);
-    expect(getEventListeners(b.signal, 'abort')).toHaveLength(0);
-    expect(getEventListeners(c.signal, 'abort')).toHaveLength(0);
+    expect(aCount()).toBe(0);
+    expect(bCount()).toBe(0);
+    expect(cCount()).toBe(0);
   });
 
   test('repeated races do not accumulate abort listeners on the shared signal', async () => {
     const controller = new AbortController();
+    const abortListenerCount = trackAbortListenerCount(controller.signal);
 
     // Each race resolves via the short-lived promise; the abort listener
     // must be removed in the `finally` so listeners don't accumulate on
@@ -228,7 +267,7 @@ describe('promiseOrAbort', () => {
       expect(await raced).toBe(i);
     }
 
-    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+    expect(abortListenerCount()).toBe(0);
 
     // The signal still terminates the race cleanly afterwards.
     const never = new Promise<number>(() => {});
