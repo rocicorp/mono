@@ -2,6 +2,7 @@ import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.ts';
+import {promiseOrAbort} from '../../../../shared/src/promise-race.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {publishCriticalEvent} from '../../observability/events.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
@@ -458,7 +459,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             //     arrive, instead getting them in a large batch after being
             //     idle while they were queued (causing further delays).
             const forwarded = this.#forwarder.forwardWithFlowControl(entry);
-            await stream.changes.doneOr(forwarded);
+            await promiseOrAbort(
+              forwarded,
+              stream.changes.signal,
+              this.#state.signal,
+            );
             unflushedBytes = 0;
           }
 
@@ -469,7 +474,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // Allow the storer to exert back pressure.
           const readyForMore = this.#storer.readyForMore();
           if (readyForMore) {
-            await stream.changes.doneOr(readyForMore);
+            await promiseOrAbort(
+              readyForMore,
+              stream.changes.signal,
+              this.#state.signal,
+            );
           }
         }
       } catch (e) {
