@@ -3,6 +3,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
+import {promiseOrAbort} from '../../../../shared/src/promise-race.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {publishCriticalEvent} from '../../observability/events.ts';
 import {
@@ -784,7 +785,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             // control promise. Record the boundary before awaiting that promise
             // so registrations during the wait observe the forwarded state.
             this.#recordForwardedTransactionBoundary(type, entry[0]);
-            await stream.changes.doneOr(forwarded);
+            await promiseOrAbort(
+              forwarded,
+              stream.changes.signal,
+              this.#state.signal,
+            );
             unflushedBytes = 0;
           }
 
@@ -795,7 +800,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // Allow the storer to exert back pressure.
           const readyForMore = this.#storer.readyForMore();
           if (readyForMore) {
-            await stream.changes.doneOr(readyForMore);
+            await promiseOrAbort(
+              readyForMore,
+              stream.changes.signal,
+              this.#state.signal,
+            );
           }
         }
       } catch (e) {
