@@ -44,8 +44,8 @@ export async function promiseRace<
 }
 
 /**
- * A memory-safe way to race a short lived `Promise` with one or more
- * long-leved `AbortSignal`s. This works around the deceptively unsafe practice
+ * A memory-safe way to race a short-lived `Promise` with one or more
+ * long-leved `AbortSignal`s. This works around the unsafe practice
  * of racing a short-lived promise (e.g. in a loop) with a long-lived one,
  * which results in accumulating memory via `then` callbacks on the latter:
  *
@@ -53,7 +53,7 @@ export async function promiseRace<
  *
  * The safe way to race a short-lived, expected-to-complete Promise against a
  * long-lived termination signal is to control the latter via an
- * {@link AbortController} and race the former against the signals of the
+ * {@link AbortController} and race the former against the signal of the
  * latter.
  */
 export async function promiseOrAbort<T>(
