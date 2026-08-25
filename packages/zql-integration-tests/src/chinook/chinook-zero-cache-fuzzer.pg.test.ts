@@ -249,7 +249,7 @@ function selectWriteFuzzSkeletons(
 function parseStringifiedSource(source: Source<string>): Source<Downstream> {
   return {
     cancel: err => source.cancel(err),
-    doneOr: other => source.doneOr(other),
+    signal: source.signal,
     async *[Symbol.asyncIterator]() {
       for await (const msg of source) {
         yield BigIntJSON.parse(msg) as Downstream;
