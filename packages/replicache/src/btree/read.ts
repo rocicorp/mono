@@ -30,16 +30,6 @@ import {
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
-export type BTreeScanOptions = {
-  /**
-   * Read sibling nodes in parallel before traversing them so stores can batch
-   * the reads. This can read nodes that the caller never visits. Enable it
-   * only when the caller expects to consume most of the scan or explicitly
-   * accepts that extra work.
-   */
-  prefetch?: boolean | undefined;
-};
-
 /**
  * The size of the header of a node. (If we had compile time
  * constants we would have used that).
@@ -123,13 +113,20 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
     return node.entries.length === 0;
   }
 
-  // We don't do any encoding of the key in the map, so we have no way of
-  // determining from an entry.key alone whether it is a regular key or an
-  // encoded IndexKey in an index map. Without encoding regular map keys the
-  // caller has to deal with encoding and decoding the keys for the index map.
+  /**
+   * We don't do any encoding of the key in the map, so we have no way of
+   * determining from an entry.key alone whether it is a regular key or an
+   * encoded IndexKey in an index map. Without encoding regular map keys the
+   * caller has to deal with encoding and decoding the keys for the index map.
+   *
+   * @param prefetch Read sibling nodes in parallel before traversing them so
+   * stores can batch the reads. This can read nodes that the caller never
+   * visits. Enable it only when the caller expects to consume most of the scan
+   * or explicitly accepts that extra work.
+   */
   scan(
     fromKey: string,
-    {prefetch = false}: BTreeScanOptions = {},
+    prefetch: boolean,
   ): AsyncIterableIterator<Entry<FrozenJSONValue>> {
     return scanForHash(
       this.rootHash,

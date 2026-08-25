@@ -58,14 +58,14 @@ test('scan over a multi-level btree yields all entries in order', async () => {
 
     const sorted = keys.toSorted();
 
-    expect(await drainKeys(map.scan('', {prefetch: true}))).toEqual(sorted);
-    expect(await drainKeys(map.scan('0100', {prefetch: true}))).toEqual(
+    expect(await drainKeys(map.scan('', true))).toEqual(sorted);
+    expect(await drainKeys(map.scan('0100', true))).toEqual(
       sorted.filter(k => k >= '0100'),
     );
-    expect(await drainKeys(map.scan('01005', {prefetch: true}))).toEqual(
+    expect(await drainKeys(map.scan('01005', true))).toEqual(
       sorted.filter(k => k >= '01005'),
     );
-    expect(await drainKeys(map.scan('9999', {prefetch: true}))).toEqual([]);
+    expect(await drainKeys(map.scan('9999', true))).toEqual([]);
   });
 });
 
@@ -109,7 +109,7 @@ test('prefetch error on a node the scan reaches is not masked by the catch', asy
     // Child 0 is reached first when scanning from the start. The prefetch
     // swallows its own read error, but the serial recursion must still throw.
     map.poisonHash = (root.entries[0] as Entry<Hash>)[1];
-    await expect(drainKeys(map.scan('', {prefetch: true}))).rejects.toThrow(
+    await expect(drainKeys(map.scan('', true))).rejects.toThrow(
       'poisoned chunk',
     );
   });
@@ -147,7 +147,7 @@ test('prefetch respects fromKey and does not read children before the search ind
     expect(fromKey > firstChildMaxKey).toBe(true);
 
     const sorted = keys.toSorted();
-    expect(await drainKeys(map.scan(fromKey, {prefetch: true}))).toEqual(
+    expect(await drainKeys(map.scan(fromKey, true))).toEqual(
       sorted.filter(k => k >= fromKey),
     );
   });
@@ -178,12 +178,12 @@ test('prefetch is opt-in', async () => {
 
     map.poisonHash = (root.entries.at(-1) as Entry<Hash>)[1];
 
-    const lazyScan = map.scan('');
+    const lazyScan = map.scan('', false);
     expect((await lazyScan.next()).done).toBe(false);
     expect(map.poisonReads).toBe(0);
     await lazyScan.return?.();
 
-    const prefetchScan = map.scan('', {prefetch: true});
+    const prefetchScan = map.scan('', true);
     expect((await prefetchScan.next()).done).toBe(false);
     expect(map.poisonReads).toBeGreaterThan(0);
     await prefetchScan.return?.();

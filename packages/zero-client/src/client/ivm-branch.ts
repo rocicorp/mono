@@ -160,9 +160,7 @@ export async function initFromStore(
   const diffs: InternalDiffOperation[] = [];
   await withRead(store, async dagRead => {
     const read = await readFromHash(hash, dagRead, FormatVersion.Latest);
-    for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX, {
-      prefetch: true,
-    })) {
+    for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX, true)) {
       if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
         break;
       }
