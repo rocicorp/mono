@@ -33,9 +33,13 @@ private predicate isSensitiveZeroTypeName(string name) {
 }
 
 /**
- * Restricts the short type names above to modules owned by Zero. CodeQL module
- * names for relative imports include the resolved source path.
+ * Restricts the short type names above to modules owned by Zero.
+ *
+ * `bindingset` is required: a bare `regexpMatch` over an unconstrained string
+ * has no finite domain, so the compiler cannot enumerate `moduleName` on its
+ * own. The caller binds it via `hasUnderlyingType`.
  */
+bindingset[moduleName]
 private predicate isZeroSourceModule(string moduleName) {
   moduleName.regexpMatch(".*(zero-protocol|zero-cache|zql)/src/.*")
 }
@@ -138,6 +142,20 @@ private predicate isApprovedSanitizer(DataFlow::Node node) {
   )
 }
 
+/**
+ * A count read off a container.
+ *
+ * `xs.length` and `set.size` are numbers derived from a value rather than the
+ * value itself, so they cannot carry row data -- the same reasoning that makes
+ * `safe.count()` a sanitizer. Without this, logging the number of bound
+ * parameters in a statement reads as logging the parameters.
+ */
+private predicate isCountRead(DataFlow::Node node) {
+  exists(DataFlow::PropRead read |
+    node = read and read.getPropertyName() = ["length", "size"]
+  )
+}
+
 /** A safe field selected from an otherwise-sensitive object. */
 private predicate isSafePropertyRead(DataFlow::Node node) {
   exists(DataFlow::PropRead read, DataFlow::Node base, string propertyName |
@@ -159,6 +177,25 @@ private predicate isWrapperCall(DataFlow::InvokeNode call) {
     ]
 }
 
+/**
+ * Holds if `node` is marked with a `// log-leak-ignore` comment, either at the
+ * end of its own line or on the line directly above it.
+ *
+ * Suppression is deliberately line-based rather than scope-based: it should
+ * cover exactly the log call it sits on, so that a later edit adding a second
+ * value to the same call does not inherit the exemption.
+ */
+private predicate isSuppressed(DataFlow::Node node) {
+  exists(Comment comment, Location commentLocation, Location nodeLocation |
+    comment.getText().matches("%log-leak-ignore%") and
+    commentLocation = comment.getLocation() and
+    nodeLocation = node.getLocation() and
+    commentLocation.getFile() = nodeLocation.getFile() and
+    nodeLocation.getStartLine() =
+      [commentLocation.getStartLine(), commentLocation.getStartLine() + 1]
+  )
+}
+
 module LogLeakConfig implements DataFlow::ConfigSig {
   predicate isSource(DataFlow::Node source) {
     hasSensitiveType(source) or isSensitivePropertyRead(source)
@@ -166,6 +203,7 @@ module LogLeakConfig implements DataFlow::ConfigSig {
 
   predicate isSink(DataFlow::Node sink) {
     isProductionNode(sink) and
+    not isSuppressed(sink) and
     (
       exists(DataFlow::MethodCallNode call |
         sink = call.getAnArgument() and
@@ -192,7 +230,7 @@ module LogLeakConfig implements DataFlow::ConfigSig {
   }
 
   predicate isBarrier(DataFlow::Node node) {
-    isApprovedSanitizer(node) or isSafePropertyRead(node)
+    isApprovedSanitizer(node) or isSafePropertyRead(node) or isCountRead(node)
   }
 
   predicate isAdditionalFlowStep(DataFlow::Node predecessor, DataFlow::Node successor) {

@@ -34,6 +34,21 @@ a blocking check, run it against known leaking and allowed examples and adjust:
 3. Project-specific logging wrappers.
 4. The `safe` helper model after that helper has a permanent module path.
 
+## Suppressing an alert
+
+Mark the log call with `log-leak-ignore`, either at the end of its own line or
+on the line directly above it:
+
+```ts
+// log-leak-ignore
+lc.debug?.(`${q.string} (${q.parameters.length} params)`);
+```
+
+Suppression is line-based, not scope-based, so a later edit that adds another
+value to the same call does not silently inherit the exemption. Reach for it
+when a value is safe for a reason the query cannot see; when the reason
+generalizes -- a count, a hash, a shape -- teach the query a barrier instead.
+
 CodeQL should analyze the complete checkout in CI. A PR check can then filter
 the SARIF results to alerts whose sink is on a changed line. This still detects
 a changed source or propagator that reaches an existing sink.
