@@ -38,6 +38,9 @@ export type SoakEventKind =
   | 'subscriber-rejected'
   | 'restore-started'
   | 'restore-finished'
+  // A view-syncer discarded its own replica because the snapshot
+  // reservation's `minWatermark` was above it, and restored instead.
+  | 'replica-discarded'
   | 'barrier-timeout'
   | 'registration-failed';
 
@@ -390,6 +393,11 @@ export class SoakLog {
     if (message.startsWith('rejecting subscriber at replica version')) {
       this.#emit('subscriber-rejected', record, {});
       this.#trip('wrong-replica-version', record, {});
+      return;
+    }
+
+    if (message.startsWith('Deleting local replica and retrying restore')) {
+      this.#emit('replica-discarded', record, {});
       return;
     }
 
