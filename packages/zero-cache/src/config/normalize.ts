@@ -37,6 +37,15 @@ function isRunningInECS(): boolean {
 
 const DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS = 20_000;
 
+/**
+ * Whether this process tree runs the change-streamer, as opposed to connecting
+ * to one that another task runs.
+ */
+export function runsChangeStreamer(config: ZeroConfig): boolean {
+  const {mode, uri} = config.changeStreamer;
+  return mode === 'dedicated' && uri === undefined;
+}
+
 export function assertNormalized(
   config: ZeroConfig,
 ): asserts config is NormalizedZeroConfig {
