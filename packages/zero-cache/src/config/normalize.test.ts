@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {assertNormalized} from './normalize.ts';
+import {assertNormalized, runsChangeStreamer} from './normalize.ts';
 import type {ZeroConfig} from './zero-config.ts';
 
 function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
@@ -209,4 +209,48 @@ describe('config/normalize SQLite change log', () => {
 
     expect(() => assertNormalized(config)).not.toThrow();
   });
+});
+
+describe('config/normalize change-streamer role', () => {
+  function configFor(
+    changeStreamer: Partial<ZeroConfig['changeStreamer']>,
+  ): ZeroConfig {
+    const config = configWith({});
+    Object.assign(config.changeStreamer, {mode: 'dedicated'}, changeStreamer);
+    return config;
+  }
+
+  test('a task that runs its own change-streamer', () => {
+    expect(runsChangeStreamer(configFor({}))).toBe(true);
+  });
+
+  test('a task pointed at another change-streamer does not run one', () => {
+    expect(
+      runsChangeStreamer(configFor({uri: 'ws://replication-manager:4849/'})),
+    ).toBe(false);
+    expect(runsChangeStreamer(configFor({mode: 'discover'}))).toBe(false);
+  });
+
+  // A multi-node deployment configures every task from one environment, so the
+  // change log's options reach the view-syncers too. They are unread there,
+  // and the change-log invariant in `main.ts` warns rather than refusing to
+  // start, so nothing here may reject the configuration either.
+  test.each(['write', 'compare', 'serve'] as const)(
+    'a fleet-wide mode=%s is accepted by both roles',
+    mode => {
+      for (const uri of [undefined, 'ws://replication-manager:4849/']) {
+        const serving = mode === 'serve';
+        expect(() =>
+          assertNormalized(
+            configFor({
+              uri,
+              sqliteChangeLogMode: mode,
+              sqliteChangeLogReadPercent: serving ? 100 : 0,
+              sqliteChangeLogColdReadPercent: serving ? 25 : 0,
+            }),
+          ),
+        ).not.toThrow();
+      }
+    },
+  );
 });
