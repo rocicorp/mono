@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 FROM golang:1.25.10@sha256:cd05a378aaf011e8056745363e5c40f4f2bef0fa4d9bf19b9c38316079c332ff AS litestream-v5
 
-ARG LITESTREAM_V5_VERSION=0.5.17-zero.1
+ARG LITESTREAM_V5_VERSION=0.5.17-zero.2
 
 WORKDIR /src/
 RUN git clone --depth 1 --branch v${LITESTREAM_V5_VERSION} https://github.com/rocicorp/litestream.git
