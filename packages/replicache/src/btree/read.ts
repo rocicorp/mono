@@ -134,19 +134,8 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
       this.rootHash,
       fromKey,
       async hash => {
-        const cached = await this.getNode(hash);
-        if (cached) {
-          return [
-            cached.level,
-            cached.isMutable ? cached.entries.slice() : cached.entries,
-          ];
-        }
-        const chunk = await this._dagRead.mustGetChunk(hash);
-        return parseBTreeNode(
-          chunk.data,
-          this._formatVersion,
-          this.getEntrySize,
-        );
+        const {level, isMutable, entries} = await this.getNode(hash);
+        return [level, isMutable ? entries.slice() : entries];
       },
       prefetch,
     );
