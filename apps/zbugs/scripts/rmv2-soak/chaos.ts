@@ -3,7 +3,7 @@ import type postgres from 'postgres';
 import type {TrafficDriver} from '../change-log-traffic.ts';
 import type {SoakCluster} from './cluster.ts';
 import type {SoakConfig} from './config.ts';
-import {sleep, startMinio, stopMinio} from './infra.ts';
+import {backupGenerations, sleep, startMinio, stopMinio} from './infra.ts';
 import type {SoakEvent, SoakLog} from './logs.ts';
 import type {MetricStore} from './otlp.ts';
 import type {ResourceSampler} from './resources.ts';
@@ -184,6 +184,35 @@ function recordConfirmationEvidence(
   if (relevant.length > 0) {
     out.measurements['confirmationHolds'] = relevant.length;
     out.measurements['confirmationHoldsCoveredBySeedWatermark'] = coveredBySeed;
+  }
+}
+
+/**
+ * Asserts that no follower was demoted to PG in this window.
+ *
+ * A warm restart leaves the local LTX chain in place, so litestream re-uploads
+ * it into the freshly minted generation one file per transaction. While that
+ * runs the backup genuinely trails the replica, and `BackupMonitor` holds
+ * `firstBackupReceived` until a watermark actually covers it. If that gate
+ * regresses to releasing on the first watermark of any value, the RM serves
+ * against a backup that does not cover it and demotes the follower.
+ */
+function expectNoDemotions(
+  ctx: ChaosContext,
+  sinceMs: number,
+  id: string,
+  out: MutableOutcome,
+): void {
+  const demotions = ctx.log.events.filter(
+    e => e.tsMs >= sinceMs && e.kind === 'reservation-demoted',
+  );
+  out.measurements['demotions'] = demotions.length;
+  if (demotions.length > 0) {
+    out.findings.push(
+      `${id} demoted ${demotions.length} follower(s) to PG while the new ` +
+        'backup generation was still backfilling; the initial-backup gate ' +
+        'released before the backup covered the replica',
+    );
   }
 }
 
@@ -482,7 +511,9 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       // while the newest backup still sits behind it, so the log alone cannot
       // bridge the gap. Today this ends in a free demotion to PG; after PG is
       // retired it becomes a wait.
+      const backSince = Date.now();
       await restartViewSyncer(ctx, 2, 'SIGQUIT', out, {deleteReplica: true});
+      expectNoDemotions(ctx, backSince, 'C6', out);
     },
   },
   {
@@ -717,6 +748,95 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       await vs.start();
       measureReservationHold(ctx.log, backSince, vs.name, out);
       recordConfirmationEvidence(ctx.log, backSince, out);
+      expectNoDemotions(ctx, backSince, 'C13', out);
+      await load;
+    },
+  },
+  {
+    id: 'C14',
+    title: 'Kill the replication-manager and wipe its whole volume, restart',
+    expected:
+      'restore from the backup into a fresh generation, and no follower demoted while it backfills',
+    async run(ctx, out) {
+      // Every other action leaves the RM's disk intact, so the local LTX chain
+      // is always there to be re-uploaded. This is the other case: the RM comes
+      // back on an empty volume and has to restore from S3, which is what a
+      // node replacement looks like in production.
+      const load = ctx.traffic.runStage({
+        rate: 50,
+        durationSeconds: Math.max(30, Math.round(60 * ctx.config.scale)),
+        label: 'C14-load',
+      });
+      await sleep(2_000);
+
+      const before = await backupGenerations(ctx.config);
+      out.measurements['generationsBefore'] = before.length;
+
+      const since = Date.now();
+      await ctx.cluster.rm.stop('SIGTERM');
+      // A lost volume loses everything beside the replica too. `deleteReplica`
+      // takes the `.replica.db-litestream` directory but not the change log,
+      // which lives at `${replicaFile}-change-log`.
+      await ctx.cluster.rm.deleteReplica();
+      await ctx.cluster.rm.deleteChangeLog();
+      out.notes.push("wiped rm's replica, litestream state and change log");
+
+      await ctx.cluster.startReplicationManager();
+      out.measurements['rmRestartMs'] = Date.now() - since;
+
+      // Did it come back from the backup, or fall all the way back to a fresh
+      // initial sync from Postgres? The difference is minutes of downtime in
+      // production, so it is worth naming rather than inferring from timing.
+      const restore = firstAfter(ctx.log, since, 'restore-started');
+      out.measurements['restoreObserved'] = restore ? 'yes' : 'no';
+      if (!restore) {
+        out.findings.push(
+          'C14 wiped the RM volume but no litestream restore was observed; ' +
+            'the RM likely fell back to a full initial sync from Postgres',
+        );
+      }
+
+      // The change log went with the volume, so this must be a `created`
+      // reseed rather than a resume.
+      const reseed = firstAfter(ctx.log, since, 'change-log-reseed');
+      out.measurements['reseedReason'] = str(
+        reseed?.detail.reason,
+        'none-observed',
+      );
+
+      const after = await backupGenerations(ctx.config);
+      out.measurements['generationsAfter'] = after.length;
+      const minted = after.filter(g => !before.includes(g));
+      out.measurements['generationsMinted'] = minted.length;
+      if (minted.length === 0) {
+        out.findings.push(
+          'C14 expected the restarted RM to mint a new backup generation, ' +
+            'but the bucket gained no new top-level prefix',
+        );
+      }
+
+      // Losing the volume is *cheaper* than keeping it, which is worth
+      // measuring rather than assuming. A warm restart still has the local LTX
+      // chain, so litestream re-uploads it into the new generation one file per
+      // transaction and the backup trails the replica while that runs. A
+      // restored volume has no chain, so litestream starts a fresh one at the
+      // restored state and the new generation is covered almost immediately.
+      // The demotion assertion therefore lives on C6/C13, not here; this one
+      // only records that the cheap path stayed cheap.
+      const backSince = Date.now();
+      await restartViewSyncer(ctx, 0, 'SIGTERM', out);
+      const demotions = ctx.log.events.filter(
+        e => e.tsMs >= backSince && e.kind === 'reservation-demoted',
+      );
+      out.measurements['demotionsAfterVolumeLoss'] = demotions.length;
+      if (demotions.length > 0) {
+        out.findings.push(
+          `C14 demoted ${demotions.length} follower(s) to PG after the RM ` +
+            'restored onto a fresh volume, which should be the cheap path: ' +
+            'a restored replica has no local LTX chain to re-upload, so its ' +
+            'new generation is covered almost immediately',
+        );
+      }
       await load;
     },
   },

@@ -164,6 +164,45 @@ export async function resetBackup(config: SoakConfig): Promise<number> {
   return deleted;
 }
 
+/** Trailing slash on an S3 common prefix. */
+const TRAILING_SLASH = /\/$/;
+
+/**
+ * The backup generations currently in the bucket, oldest first.
+ *
+ * `initializePostgresChangeSource` mints `String(Date.now())` as the backup
+ * path for every non-initial-sync startup under litestream v5, so each
+ * replication-manager incarnation gets its own top-level prefix here. Counting
+ * them is how a chaos action asserts that a restart forked the backup rather
+ * than resuming it.
+ */
+export async function backupGenerations(config: SoakConfig): Promise<string[]> {
+  const client = s3Client(config);
+  const bucket = backupBucket(config.backupURL);
+  const generations = new Set<string>();
+  let token: string | undefined;
+  try {
+    do {
+      const page = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Delimiter: '/',
+          ContinuationToken: token,
+        }),
+      );
+      for (const prefix of page.CommonPrefixes ?? []) {
+        if (prefix.Prefix) {
+          generations.add(prefix.Prefix.replace(TRAILING_SLASH, ''));
+        }
+      }
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token);
+  } finally {
+    client.destroy();
+  }
+  return [...generations].toSorted();
+}
+
 /** Total bytes and object count currently held in the backup bucket. */
 export async function backupSize(
   config: SoakConfig,

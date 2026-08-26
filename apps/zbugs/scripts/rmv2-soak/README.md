@@ -64,12 +64,16 @@ The zbugs database must be migrated and seeded; pass `--seed` to do it.
 ```bash
 cd apps/zbugs
 
-pnpm run rmv2-soak                               # the full run
-pnpm run rmv2-soak -- --scale 0.05 --chaos none  # a two-minute smoke test
-pnpm run rmv2-soak -- --chaos all                # adds C9 and the rollback drills
-pnpm run rmv2-soak -- --baseline                 # adds the phase-0 A/B control
-pnpm run rmv2-soak -- --help
+node scripts/rmv2-soak.ts                               # the full run
+node scripts/rmv2-soak.ts --scale 0.05 --chaos none     # a two-minute smoke test
+node scripts/rmv2-soak.ts --chaos all                   # adds C9 and the rollback drills
+node scripts/rmv2-soak.ts --baseline                    # adds the phase-0 A/B control
+node scripts/rmv2-soak.ts --help
 ```
+
+Call `scripts/rmv2-soak.ts` directly rather than through `pnpm run rmv2-soak --`.
+pnpm forwards the `--` itself as an argument, and `parseArgs` runs `strict`, so
+the pnpm form dies with `ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL`.
 
 Everything lands in `.soak/<run-id>/`: per-incarnation JSON logs under `logs/`,
 each replica under its node's directory, and `report.json`. The summary is also
@@ -161,23 +165,24 @@ consistently held is the evidence that the check can be tightened.
 
 ## Chaos matrix
 
-`--chaos` takes ids, `none`, or `all`. The default is C1-C8 and C13.
+`--chaos` takes ids, `none`, or `all`. The default is C1-C8, C13 and C14.
 
-| #   | Action                                                               | Expected route                                   |
-| --- | -------------------------------------------------------------------- | ------------------------------------------------ |
-| C1  | SIGTERM a view-syncer (graceful drain), restart                      | `sqlite/selected`                                |
-| C2  | SIGQUIT a view-syncer (abrupt), restart                              | `sqlite/selected`                                |
-| C3  | Kill a view-syncer, delete its replica, restart                      | restore, then `sqlite`; **must not demote**      |
-| C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`, then `pg/watermark-uncovered` |
-| C5  | SIGTERM the replication-manager, restart                             | a valid log resumes from its own head            |
-| C6  | Delete only the change log, restart, then wipe a view-syncer replica | forced `created` reseed; the 1.4 measurement     |
-| C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap            |
-| C8  | SIGKILL the replication-manager mid-burst, restart                   | reconcile by _truncation_, not reseed            |
-| C9  | Stop minio under sustained writes, then restart it                   | log bytes and slot WAL bounded, and both recover |
-| C10 | `readPercent` 100 -> 0, restart                                      | every route becomes `pg/percentage`              |
-| C11 | `serve` -> `compare` -> `write`, restart each time                   | the writer stays, reads stop, comparison stops   |
-| C12 | `write` -> `off`, restart                                            | does turning it off actually free the disk       |
-| C13 | C4 and C6 together                                                   | a follower already behind, meeting a reseed      |
+| #   | Action                                                               | Expected route                                                   |
+| --- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| C1  | SIGTERM a view-syncer (graceful drain), restart                      | `sqlite/selected`                                                |
+| C2  | SIGQUIT a view-syncer (abrupt), restart                              | `sqlite/selected`                                                |
+| C3  | Kill a view-syncer, delete its replica, restart                      | restore, then `sqlite`; **must not demote**                      |
+| C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`, then `pg/watermark-uncovered`                 |
+| C5  | SIGTERM the replication-manager, restart                             | a valid log resumes from its own head                            |
+| C6  | Delete only the change log, restart, then wipe a view-syncer replica | forced `created` reseed; the 1.4 measurement                     |
+| C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap                            |
+| C8  | SIGKILL the replication-manager mid-burst, restart                   | reconcile by _truncation_, not reseed                            |
+| C9  | Stop minio under sustained writes, then restart it                   | log bytes and slot WAL bounded, and both recover                 |
+| C10 | `readPercent` 100 -> 0, restart                                      | every route becomes `pg/percentage`                              |
+| C11 | `serve` -> `compare` -> `write`, restart each time                   | the writer stays, reads stop, comparison stops                   |
+| C12 | `write` -> `off`, restart                                            | does turning it off actually free the disk                       |
+| C13 | C4 and C6 together                                                   | a follower already behind, meeting a reseed                      |
+| C14 | Wipe the RM's whole volume (replica, litestream state, change log)   | restore from backup into a fresh generation; no follower demoted |
 
 `GRACEFUL_SHUTDOWN = ['SIGTERM','SIGINT']` and `FORCEFUL_SHUTDOWN =
 ['SIGQUIT','SIGABRT']` are genuinely different paths in `life-cycle.ts`, which
