@@ -239,21 +239,14 @@ function measureReservationHold(
       confirmed.tsMs - opened.tsMs;
   }
   if (confirmed) {
-    // The section 1.4 headline: log seed -> the first restore the log could
-    // serve. Today the same window ends in a demotion to PG and costs
-    // nothing; post-retirement it converts to a view-syncer hold.
-    //
-    // The reseed is the *latest one at or before* the confirmation, not one
-    // after `sinceMs`: in C6 and C13 the log is reseeded by the
-    // replication-manager restart, which happens before the follower is even
-    // brought back.
-    // Bounded by the action's own window on both sides: a reseed from
-    // *before* this action is not this action's window, and reporting the
-    // run's initial seed here would make every ordinary reconnect look like
-    // it had waited out a reseed.
+    // Reseed -> confirm, for reference only. It is *not* the stall: it also
+    // contains the replication-manager's own restart and however long the
+    // harness took to bring a follower back to the door. The follower-visible
+    // wait is `reservationHoldMs` above; the product-intrinsic window is
+    // `reseedToCoveringBackupMs` (see `measureReseedWindow`).
     const reseed = lastBefore(log, confirmed.tsMs, 'change-log-reseed');
     if (reseed && reseed.tsMs >= out.startedMs) {
-      out.measurements['reseedWindowMs'] = confirmed.tsMs - reseed.tsMs;
+      out.measurements['reseedToConfirmMs'] = confirmed.tsMs - reseed.tsMs;
     }
   }
 }
@@ -266,6 +259,45 @@ function measureReservationHold(
 function viewSyncerAt(ctx: ChaosContext, index: number) {
   const {viewSyncers} = ctx.cluster;
   return viewSyncers[index % viewSyncers.length];
+}
+
+/**
+ * Section 1.4's window, measured without a follower in it: from the reseed to
+ * the first backup the vfs poller observes at or above the seed point.
+ *
+ * That is the interval during which a restoring follower *would* be held,
+ * because until such a backup exists the log cannot cover any backup the
+ * follower could restore from. A follower that arrives after it waits zero,
+ * which is why the reservation hold alone understates the exposure while
+ * reseed-to-confirm overstates it -- the latter is mostly restart latency.
+ *
+ * Its floor is one litestream `monitor-interval` plus one vfs poll interval,
+ * so it scales with those settings rather than being a fixed cost.
+ */
+function measureReseedWindow(log: SoakLog, out: MutableOutcome): void {
+  const reseed = log.events.find(
+    e => e.kind === 'change-log-reseed' && e.tsMs >= out.startedMs,
+  );
+  const seed = reseed?.detail.head;
+  if (!reseed || typeof seed !== 'string') {
+    return;
+  }
+  const covering = log.events.find(
+    e =>
+      e.kind === 'backup-watermark' &&
+      e.tsMs >= reseed.tsMs &&
+      typeof e.detail.watermark === 'string' &&
+      e.detail.watermark >= seed,
+  );
+  out.measurements['reseedSeedWatermark'] = seed;
+  out.measurements['reseedToCoveringBackupMs'] = covering
+    ? covering.tsMs - reseed.tsMs
+    : -1;
+  if (covering) {
+    out.measurements['reseedCoveringBackupWatermark'] = str(
+      covering.detail.watermark,
+    );
+  }
 }
 
 async function restartViewSyncer(
@@ -341,7 +373,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
     title:
       'Kill a view-syncer mid-burst, leave it down past a backup interval, restart',
     expected:
-      'sqlite / selected over a long gap, then pg / watermark-uncovered once the gap outruns the log',
+      'sqlite / selected over a short gap; over a long one, the snapshot gate discards the stale replica and restores',
     async run(ctx, out) {
       const burst = ctx.traffic.runStage({
         rate: 250,
@@ -358,23 +390,39 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       const result = await burst;
       out.measurements['burstTransactions'] = result.transactions;
 
-      // Outage B: comfortably longer than the retention window, so the gap
-      // outruns the log. This is the other half of what the coverage table
-      // attributes to C4 -- `pg / watermark-uncovered` -- and it is not
-      // reachable from an outage the purge floor can still cover. Twice the
-      // retention window rather than one plus slack: the purger removes only
-      // history that is both below the floor *and* older than retentionMs, so
-      // an outage of about one window leaves the follower's watermark on the
-      // retained side of it.
+      // Outage B: comfortably longer than the retention window, so the purge
+      // floor outruns the follower's ack.
+      //
+      // What this asserts is *not* `pg / watermark-uncovered`. A restarting
+      // view-syncer can never take that route, however long the gap:
+      // `restoreReplica` runs on every start and `reserveAndGetSnapshotStatus`
+      // hands it the log's `minWatermark` first, so a replica below the
+      // minimum is discarded and re-restored from the backup and the
+      // subscriber always reaches `/changes` at or above the minimum. The
+      // snapshot gate converts the uncovered case into a restore before the
+      // route exists.
+      //
+      // So the assertion is that conversion: the follower comes back, throws
+      // its stale replica away, and is then served from SQLite.
       const downMs = ctx.config.changeLog.retentionMs * 2 + 15_000;
       const load = ctx.traffic.runStage({
         rate: 25,
-        durationSeconds: Math.ceil(downMs / 1000) + 20,
+        durationSeconds: Math.ceil(downMs / 1000) + 25,
         label: 'C4-long-gap',
       });
       const since = Date.now();
+      const target = viewSyncerAt(ctx, 0);
       await restartViewSyncer(ctx, 0, 'SIGQUIT', out, {downMs});
       await load;
+      const discarded = ctx.log.events.some(
+        e =>
+          e.tsMs >= since &&
+          e.kind === 'replica-discarded' &&
+          e.node === target.name,
+      );
+      out.measurements['longGapOutcome'] = discarded
+        ? 'stale-replica-discarded-and-restored'
+        : 'replica-still-covered';
       const uncovered = ctx.log.events.some(
         e =>
           e.tsMs >= since &&
@@ -689,6 +737,7 @@ export async function runChaosAction(
   ctx.note(`${action.id}: ${action.title}`);
   try {
     await action.run(ctx, out);
+    measureReseedWindow(ctx.log, out);
   } catch (e) {
     out.findings.push(
       `${action.id} threw: ${e instanceof Error ? e.message : String(e)}`,

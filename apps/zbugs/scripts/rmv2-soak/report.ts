@@ -27,13 +27,18 @@ export const REQUIRED_ROUTES: readonly {
   },
   {route: 'pg/backup-uncovered', triggeredBy: 'C6 inside the reseed window'},
   {
-    // C4's second outage aims at this deliberately, but reaching it needs the
-    // purger to have advanced the floor past the absent follower's ack, and
-    // the purger removes only history that is both below the floor and older
-    // than retentionMs. A run where the floor never got that far reports the
-    // route as not exercised rather than pretending otherwise.
+    // Structurally hard to reach, and measured to be so. A *restarting*
+    // follower cannot take it at any gap length: `restoreReplica` runs on
+    // every view-syncer start and the snapshot reservation hands it the log's
+    // `minWatermark`, so a replica below the minimum is discarded and
+    // re-restored before the subscriber reaches `/changes` (C4's long gap
+    // asserts exactly that conversion). It belongs instead to a follower that
+    // survives a *stream* disconnect long enough for the purge floor to pass
+    // its ack -- and SIGSTOP does not produce one, because the change-streamer
+    // keeps a frozen subscriber registered and lets it drain on resume.
     route: 'pg/watermark-uncovered',
-    triggeredBy: "C4's long-gap outage, when the purger outruns the follower",
+    triggeredBy:
+      'a stream disconnect outliving the purge floor; not reachable from a restart',
   },
 ];
 
@@ -142,14 +147,20 @@ export function buildReport(args: {
     .map(e => e.detail.lagMs)
     .filter((v): v is number => typeof v === 'number');
 
-  const reseedWindows = numbersFromChaos(chaos, 'reseedWindowMs');
+  const reseedWindows = numbersFromChaos(chaos, 'reseedToCoveringBackupMs');
   const holds = numbersFromChaos(chaos, 'reservationHoldMs');
 
   const measurements: Record<string, unknown> = {
-    // Section 8's headline. C3 -- a restore against a live log -- should
-    // measure ~0; C6 -- a restore against a log that just reseeded -- is the
-    // window that becomes a view-syncer hold once PG is retired.
-    reseedWindowMs: stats(reseedWindows),
+    // Section 8's headline, in the only two forms that mean anything.
+    //
+    // `reseedToCoveringBackupMs` is the window itself: reseed -> the first
+    // backup observed at or above the seed. Nothing can be served from the
+    // log before it, so it is the exposure, and it holds whether or not a
+    // follower happens to be waiting on it.
+    //
+    // `reservationHoldMs` is what a follower actually waited, which is ~0
+    // whenever it arrived after that backup had already landed.
+    reseedToCoveringBackupMs: stats(reseedWindows),
     reservationHoldMs: stats(holds),
     // C3 restores against a *live* log, which invariant 14 says is covered
     // by construction; this is the number that should read ~0.
@@ -158,8 +169,8 @@ export function buildReport(args: {
     ),
     // C6 and C13 restore against a log that just reseeded, which is the
     // window section 1.4 is about.
-    reseedWindowMsC6C13: stats(
-      numbersFromChaos(chaos, 'reseedWindowMs', ['C6', 'C13']),
+    reseedToCoveringBackupMsC6C13: stats(
+      numbersFromChaos(chaos, 'reseedToCoveringBackupMs', ['C6', 'C13']),
     ),
     backupLagMs: stats(backupLags),
     reservationConfirmDelays: metrics.total(

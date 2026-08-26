@@ -136,11 +136,22 @@ covered by construction. Only a log that _just reseeded_ sits above the backup
 watermark. Today that ends in a free demotion to PG; after PG is retired it
 becomes a hold.
 
-So the report separates the two populations:
+The report gives that window two numbers, because one number would lie:
 
-- `reservationHoldMsC3` -- C3 restores against a live log, and should read ~0.
-- `reseedWindowMsC6C13` -- C6 and C13 restore against a log that just reseeded.
-  This is the number that converts to a view-syncer hold at the cutover.
+- **`reseedToCoveringBackupMs`** -- reseed to the first backup the vfs poller
+  observes at or above the seed point. This is the window itself. Nothing can
+  be served from the log before it, so it is the exposure whether or not a
+  follower happens to be waiting on it. Its floor is one litestream
+  `monitor-interval` plus one vfs poll interval, so it scales with those
+  settings rather than being a fixed cost.
+- **`reservationHoldMs`** -- what a follower actually waited, from
+  `created snasphot reservation` to `reserving change-log entries since`. It is
+  ~0 whenever the follower arrived after the covering backup had landed.
+
+`reseedToConfirmMs` is also recorded, but only for reference: it spans the
+replication-manager's own restart as well, so it overstates the stall by
+seconds. `reservationHoldMsC3` is the control -- C3 restores against a _live_
+log, and reads ~1 ms.
 
 Every demotion and delayed confirmation is also reported with both
 `minWatermark` and `seedWatermark` against the backup watermark, because
@@ -224,6 +235,17 @@ to the process's cwd (`./src/services/litestream/...`), which only resolves from
 - `initFromPgChangeLog` is hardcoded `true`. The most direct answer to "what
   does the cutover feel like" is a run with it flipped to `false` behind a local
   patch; the harness is what makes that observable.
+- **`pg/watermark-uncovered` is not reachable from a restart**, so a run that
+  reports it as `NOT EXERCISED` is describing the system rather than a gap in
+  the harness. `restoreReplica` runs on every view-syncer start and
+  `reserveAndGetSnapshotStatus` hands it the log's `minWatermark` before it
+  subscribes, so a replica below the minimum is discarded and re-restored and
+  the subscriber always reaches `/changes` at or above the minimum -- C4's long
+  gap asserts exactly that conversion (`longGapOutcome`). The route belongs to
+  a follower that survives a _stream_ disconnect long enough for the purge
+  floor to pass its ack. SIGSTOP does not produce one: the change-streamer
+  keeps a frozen subscriber registered (`continuing with N subscriber(s) still
+pending`) and lets it drain on resume.
 - The oracle is an end-state comparison. It cannot see a transient wrong state
   that heals -- changes served out of order, or an idempotent duplicate. The
   dark comparator and `Subscriber` dedup cover those today; post-retirement
