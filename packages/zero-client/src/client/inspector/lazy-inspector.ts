@@ -337,7 +337,7 @@ export function clientRows(
     const prefix = ENTITIES_KEY_PREFIX + tableName + '/';
     const tree = await getBTree(dagRead, clientID);
     const rows: Row[] = [];
-    for await (const [key, value] of tree.scan(prefix, true)) {
+    for await (const [key, value] of tree.scan(prefix, false)) {
       if (!key.startsWith(prefix)) {
         break;
       }
