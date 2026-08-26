@@ -52,10 +52,6 @@ export function createZbugsLoadGenerator(
       Math.max(1, Math.min(10, Math.ceil(txRatePerSec / 200)));
     const workerTxRate = txRatePerSec / numWorkers;
 
-    let totalAttempted = 0;
-    let totalSucceeded = 0;
-    let totalFailed = 0;
-
     const startTime = performance.now();
     const endTime = startTime + durationSec * 1000;
 
@@ -177,15 +173,20 @@ export function createZbugsLoadGenerator(
         }
       }
 
-      totalAttempted += localAttempted;
-      totalSucceeded += localSucceeded;
-      totalFailed += localFailed;
+      return {
+        attempted: localAttempted,
+        succeeded: localSucceeded,
+        failed: localFailed,
+      };
     };
 
-    const workerPromises = Array.from({length: numWorkers}, (_, i) =>
-      runWorker(i),
+    const workerResults = await Promise.all(
+      Array.from({length: numWorkers}, (_, i) => runWorker(i)),
     );
-    await Promise.all(workerPromises);
+
+    const totalAttempted = workerResults.reduce((s, r) => s + r.attempted, 0);
+    const totalSucceeded = workerResults.reduce((s, r) => s + r.succeeded, 0);
+    const totalFailed = workerResults.reduce((s, r) => s + r.failed, 0);
 
     const durationMs = performance.now() - startTime;
     const actualRate =

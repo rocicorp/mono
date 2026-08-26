@@ -235,8 +235,6 @@ export async function runPipelineBenchmark(
     };
 
     return result;
-  } catch (err) {
-    throw err;
   } finally {
     // 11. Teardown
     await metricsCollector.stop();

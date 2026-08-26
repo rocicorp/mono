@@ -161,8 +161,8 @@ export class SimulatedClient {
 
       case 'pokeStart': {
         const payload = (msg[1] ?? {}) as {
-          cookie?: string;
-          watermark?: string;
+          cookie?: string | undefined;
+          watermark?: string | undefined;
         };
         if (payload.cookie) {
           this.#lastPokeCookie = payload.cookie;
@@ -178,8 +178,8 @@ export class SimulatedClient {
         this.#lastPokeTimestamp = performance.now();
 
         const payload = (msg[1] ?? {}) as {
-          cookie?: string;
-          watermark?: string;
+          cookie?: string | undefined;
+          watermark?: string | undefined;
         };
         if (payload.cookie) {
           this.#lastPokeCookie = payload.cookie;
