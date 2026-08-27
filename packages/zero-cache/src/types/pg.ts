@@ -333,8 +333,7 @@ export type PostgresTransaction = postgres.TransactionSql<{
 // Guards against half-open TCP connections, which otherwise hang the pool
 // indefinitely: a proxy can keep the client-facing socket alive (ACKing TCP
 // keepalives) after its backend is gone, so no 'close' or 'error' event ever
-// fires and statements like BEGIN / COMMIT — which are not covered by the
-// TransactionPool's statementResponseTimeout — await forever.
+// fires and statements like BEGIN / COMMIT await forever.
 // See https://github.com/porsager/postgres/issues/1089.
 //
 // If no bytes are read or written for this long, the socket is reset, which
