@@ -1,6 +1,8 @@
+import {existsSync, statSync} from 'node:fs';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
+import {deleteLiteDB} from '../../../db/delete-lite-db.ts';
 import {runSchemaMigrations} from '../../../db/migration-lite.ts';
 import {
   DbFile,
@@ -667,10 +669,33 @@ describe('replica-schema-migrations', () => {
 
   beforeEach(() => {
     replicaFile = new DbFile('replica_schema_test');
-    return () => replicaFile.delete();
+    return () => {
+      replicaFile.delete();
+      deleteLiteDB(`${replicaFile.path}.tmp`);
+    };
   });
 
   const lc = createSilentLogContext();
+
+  test('publishes a new replica only after initial sync succeeds', async () => {
+    const temporaryReplica = `${replicaFile.path}.tmp`;
+    await expect(
+      initReplica(lc, 'test', replicaFile.path, () => {
+        throw new Error('initial sync failed');
+      }),
+    ).rejects.toThrow('initial sync failed');
+
+    expect(existsSync(replicaFile.path)).toBe(false);
+    expect(statSync(temporaryReplica).size).toBe(8192);
+
+    await initReplica(lc, 'test', replicaFile.path, (_, db) => {
+      initReplicationState(db, ['foo_publication'], '123');
+      return promiseVoid;
+    });
+
+    expect(existsSync(replicaFile.path)).toBe(true);
+    expect(existsSync(temporaryReplica)).toBe(false);
+  });
 
   for (const c of cases) {
     test(`from v${c.fromSchemaVersion}: ${c.desc}`, async () => {
