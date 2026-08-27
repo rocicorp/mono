@@ -28,6 +28,21 @@ minimumReleaseAgeExclude:
   - '@rocicorp/logger@6.1.0'
   - '@rocicorp/zero-virtual@0.6.3'
 
+# docusaurus-plugin-typedoc and typedoc-docusaurus-theme both import typedoc
+# without declaring it, so they can only resolve it through pnpm's hoisted
+# virtual store. There is more than one typedoc peer variant in the graph
+# (replicache-doc is on TypeScript 6, packages/zero is on 7), so which one gets
+# hoisted is arbitrary — and typedoc 0.28 throws on import under TypeScript 7,
+# which is what broke the replicache-doc build on Vercel. Declaring the peer
+# makes pnpm link the importer's own typedoc instead of relying on hoisting.
+packageExtensions:
+  docusaurus-plugin-typedoc:
+    peerDependencies:
+      typedoc: 0.28.x
+  typedoc-docusaurus-theme:
+    peerDependencies:
+      typedoc: 0.28.x
+
 overrides:
   '@hono/node-server@<1.19.13': ^1.19.13
   '@types/node': '^22.10.5'
