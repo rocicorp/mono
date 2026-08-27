@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787824803522,
+  "lastUpdate": 1787835598540,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57193,6 +57193,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/af3dad4fb13500b91fda8ab745cade3dc7c3da7c"
         },
         "date": 1787824789032,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317629,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57073,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117348,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33538,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7fb2c78bb506e5e9875ae4769f4342a49cbf20c3",
+          "message": "chore(deps): update oxfmt to 0.65.0 (#6423)\n\nBumps `oxfmt` from `^0.45.0` to `^0.65.0` across all 37 workspace\n`package.json` files.\n\n## What changed\n\n**The version bump + lockfile.** CI runs `pnpm exec oxfmt --check`, so\nit picks up the new version from the lockfile — no workflow change\nneeded. No config keys were removed in 0.65 either, so `.oxfmtrc.json`\nneeded no schema changes. (0.65 adds `experimentalOperatorPosition` and\n`svelte`; both left unset.)\n\n**Reformatting of 8 files.** The style drift between 0.45 and 0.65 is\nsmall:\n\n- mapped-type keys now break as `[\\n K in ... \\n]: Value` instead of\nbreaking inside the `Extract<>`/conditional — `zql/src/mutate/crud.ts`,\n`zql/src/query/query.ts`, `shared/src/options-types.ts`\n- empty `for` update clause loses its space: `; )` → `;)` —\n`replicache/src/deleted-clients.ts`, `shared/src/btree-set.ts`\n- comment-only object bodies collapse to `{/* ignored */}` —\n`zero-cache/src/services/view-syncer/cvr.pg.test.ts`\n- a callback arg with a return-type annotation now hugs —\n`zero-cache/src/services/change-streamer/change-log-compare-digest.test.ts`\n- a union type that now fits on one line collapses —\n`replicache-doc/docs/reference/server-pull.md`\n\n**Two files added to `ignorePatterns`** — see below.\n\n## Reviewer note: an upstream oxfmt perf regression\n\n`oxfmt --check` on the repo ran for 10+ minutes without finishing. Two\nfiles are responsible:\n\n- `packages/zero-client/src/client/zero-stress-queries-test.ts` — a\n19-level nested `.related(q => …)` chain\n- `packages/zql-benchmarks/src/planner-cost.bench.ts` — a 12-level\nnested `.whereExists(q => …)` chain\n\nFormatting cost grows ~8× per nesting level on chains of arrow-callback\nlast args:\n\n| depth | 0.45.0 | 0.65.0 |\n|---|---|---|\n| 8 | 0.13s | 0.56s |\n| 9 | 0.13s | 3.7s |\n| 10 | 0.13s | 28.3s |\n| 11+ | 0.13s | effectively hangs |\n\nBisecting by version shows **0.46.0 is already affected**, so there is\nno version newer than the current pin that avoids this — it isn't a\nmatter of picking a different target. The deep nesting in both files\n*is* the thing under test, so restructuring them would defeat their\npurpose; excluding them from formatting is the lesser evil. The two\n`ignorePatterns` entries can come out once the regression is fixed\nupstream.\n\nI found no matching issue in `oxc-project/oxc` (closest are #19929 and\n#22225, both different). I have a minimal repro and the bisect table\nready to file if we want to.\n\n## Verification\n\n- `pnpm run lint` — 0 errors (1629 pre-existing warnings, unchanged)\n- `pnpm run check-types` — 42/42 packages pass\n- `pnpm exec oxfmt --check` — clean, 1845 files in 314ms\n- Package-level scripts respect the root `ignorePatterns`; verified\n`oxfmt --check .` from inside both `zero-client` and `zql-benchmarks`",
+          "timestamp": "2026-08-27T12:49:34Z",
+          "tree_id": "978f232d03827041e87a7c207c44f68781564bb5",
+          "url": "https://github.com/rocicorp/mono/commit/7fb2c78bb506e5e9875ae4769f4342a49cbf20c3"
+        },
+        "date": 1787835585886,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
