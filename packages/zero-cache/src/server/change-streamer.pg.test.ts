@@ -1,4 +1,5 @@
-import {existsSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {basename, dirname, join} from 'node:path';
 import {gunzipSync} from 'node:zlib';
 import {getLocal, type Mockttp} from 'mockttp';
 import {expect, vi} from 'vitest';
@@ -177,6 +178,10 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
   );
   const upstreamURI = getConnectionURI(upstream);
   const replicaFile = new DbFile('change-streamer-worker-autoreset-deadlock');
+  const litestreamState = join(
+    dirname(replicaFile.path),
+    `.${basename(replicaFile.path)}-litestream`,
+  );
 
   let initialSource:
     | Awaited<ReturnType<typeof initializePostgresChangeSource>>['changeSource']
@@ -226,6 +231,12 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
     const changeLog = changeLogFileName(replicaFile.path);
     writeFileSync(changeLog, '');
     writeFileSync(`${changeLog}-wal2`, '');
+    const ltxDirectory = join(litestreamState, 'ltx', '0');
+    mkdirSync(ltxDirectory, {recursive: true});
+    writeFileSync(
+      join(ltxDirectory, '0000000000000001-0000000000000001.ltx'),
+      '',
+    );
 
     const [worker, parent] = inProcChannel();
     const ready = new Promise<void>(resolve => {
@@ -286,8 +297,10 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
 
     expect(existsSync(changeLog)).toBe(false);
     expect(existsSync(`${changeLog}-wal2`)).toBe(false);
+    expect(existsSync(litestreamState)).toBe(false);
   } finally {
     await initialSource?.stop().catch(() => {});
+    rmSync(litestreamState, {recursive: true, force: true});
     deleteChangeLogDB(replicaFile.path);
     replicaFile.delete();
     await testDBs.drop(upstream);

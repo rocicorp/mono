@@ -57,6 +57,14 @@ export class BackupNotFoundException extends Error {
   }
 }
 
+export function deleteReplicaAndLitestreamState(replicaFile: string) {
+  rmSync(join(dirname(replicaFile), `.${basename(replicaFile)}-litestream`), {
+    recursive: true,
+    force: true,
+  });
+  deleteLiteDB(replicaFile);
+}
+
 function getLitestream(
   mode: 'restore' | 'replicate',
   config: LitestreamConfig,
