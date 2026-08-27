@@ -9,7 +9,12 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
+
+# SARIF messages embed `[label](n)`, where n indexes the result's
+# relatedLocations. Left alone it renders as a link to nowhere.
+EMBEDDED_LINK = re.compile(r'\[([^\]]+)\]\((\d+)\)')
 
 
 def location(result):
@@ -17,6 +22,46 @@ def location(result):
     uri = physical.get('artifactLocation', {}).get('uri', '?')
     line = physical.get('region', {}).get('startLine', '?')
     return uri, line
+
+
+def blob_url():
+    """Base URL for linking a path into the tree, when running under Actions."""
+    server = os.environ.get('GITHUB_SERVER_URL')
+    repository = os.environ.get('GITHUB_REPOSITORY')
+    sha = os.environ.get('GITHUB_SHA')
+    if server and repository and sha:
+        return f'{server}/{repository}/blob/{sha}'
+    return None
+
+
+def related_locations(result):
+    """Maps each relatedLocation id to the place it points at."""
+    locations = {}
+    for location in result.get('relatedLocations') or []:
+        identifier = location.get('id')
+        physical = location.get('physicalLocation', {})
+        uri = physical.get('artifactLocation', {}).get('uri')
+        if identifier is not None and uri:
+            line = physical.get('region', {}).get('startLine')
+            locations[str(identifier)] = (uri, line)
+    return locations
+
+
+def resolve_links(text, locations, base):
+    """Rewrites the embedded links to point at the source of the value."""
+
+    def replace(match):
+        label, identifier = match.group(1), match.group(2)
+        target = locations.get(identifier)
+        if not target:
+            return label
+        uri, line = target
+        anchor = f'#L{line}' if line else ''
+        if base:
+            return f'[{label} ({uri}:{line})]({base}/{uri}{anchor})'
+        return f'{label} ({uri}:{line})'
+
+    return EMBEDDED_LINK.sub(replace, text)
 
 
 def flow_count(result):
@@ -32,6 +77,7 @@ def flow_count(result):
 
 def main(directory):
     alerts = []
+    base = blob_url()
     for path in sorted(glob.glob(os.path.join(directory, '*.sarif'))):
         with open(path) as handle:
             sarif = json.load(handle)
@@ -41,6 +87,7 @@ def main(directory):
                 # A combined message holds one sentence per path; keep the table
                 # to one line per alert and let the Flows column carry the rest.
                 message = result.get('message', {}).get('text', '').splitlines()[0]
+                message = resolve_links(message, related_locations(result), base)
                 alerts.append((uri, line, flow_count(result), message.replace('|', r'\|')))
 
     flows = sum(alert[2] for alert in alerts)
@@ -55,7 +102,11 @@ def main(directory):
     ]
     if alerts:
         lines += ['| Location | Flows | Message |', '| --- | --- | --- |']
-        lines += [f'| {uri}:{line} | {count} | {message} |' for uri, line, count, message in alerts]
+        for uri, line, count, message in alerts:
+            cell = f'{uri}:{line}'
+            if base:
+                cell = f'[{cell}]({base}/{uri}#L{line})'
+            lines.append(f'| {cell} | {count} | {message} |')
         lines += ['', f'**FAILED**: {len(alerts)} leak(s) found across {flows} flow(s).']
     else:
         lines.append('No customer data reaching a log or error message.')
