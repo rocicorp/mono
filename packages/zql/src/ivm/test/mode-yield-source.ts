@@ -8,6 +8,7 @@
  * branches -> UnionFanIn's accumulate/collapse.
  */
 import type {Condition, Ordering} from '../../../../zero-protocol/src/ast.ts';
+import type {TableSchema} from '../../../../zero-types/src/schema.ts';
 import type {DebugDelegate} from '../../builder/debug-delegate.ts';
 import type {Node} from '../data.ts';
 import type {FetchRequest} from '../operator.ts';
@@ -34,7 +35,7 @@ export class ModeYieldSource implements Source {
     this.#p = yieldProbability;
   }
 
-  get tableSchema() {
+  get tableSchema(): TableSchema {
     return this.#source.tableSchema;
   }
 

@@ -28,7 +28,7 @@
     "playwright-core": "1.53.2",
     "replicache": "workspace:*",
     "shared": "workspace:*",
-    "typescript": "~6.0.2",
+    "typescript": "~7.0.2",
     "vite": "^8.0.13",
     "xbytes": "^1.7.0"
   },

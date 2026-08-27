@@ -159,7 +159,6 @@ test.each(
         createQuery: q =>
           q.event
             .where('rootPostId', '=', 'post2')
-            // @ts-expect-error deliberately unpinned
             .whereExists(
               'rootPost',
               p =>
@@ -168,7 +167,10 @@ test.each(
                     m.where('memberId', '=', MEMBER_ID),
                   ),
                 ),
-              {scalar: true},
+              {
+                // @ts-expect-error deliberately unpinned
+                scalar: true,
+              },
             )
             .orderBy('sortPath', 'asc')
             .limit(20),
@@ -250,8 +252,8 @@ test.each(
         createQuery: q =>
           q.event
             .where('rootPostId', '=', 'post2')
-            // @ts-expect-error deliberately unpinned — `title` pins no unique key
             .whereExists('rootPost', p => p.where('title', 'LIKE', 'Post%'), {
+              // @ts-expect-error deliberately unpinned — `title` pins no unique key
               scalar: true,
             })
             .orderBy('sortPath', 'asc'),

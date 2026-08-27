@@ -1,5 +1,6 @@
 import {expect} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
+import type {JSONObject} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -84,10 +85,13 @@ export function runPushTest(t: PushTest) {
       consume(must(builderDelegate.getSource(name)).push(change));
     }
 
+    const actualStorage: Record<string, JSONObject> =
+      builderDelegate.clonedStorage;
+
     return {
       log: builderDelegate.log,
       finalOutput,
-      actualStorage: builderDelegate.clonedStorage,
+      actualStorage,
     };
   }
 
@@ -172,10 +176,13 @@ export function runFetchTest(t: FetchTest) {
 
     const finalOutput = makeFinalOutput(pipeline);
 
+    const actualStorage: Record<string, JSONObject> =
+      builderDelegate.clonedStorage;
+
     return {
       log: builderDelegate.log,
       finalOutput,
-      actualStorage: builderDelegate.clonedStorage,
+      actualStorage,
     };
   }
 

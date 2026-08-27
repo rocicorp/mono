@@ -1,4 +1,16 @@
 {
+  "versionGroups": [
+    {
+      "label": "replicache-doc stays on TypeScript 6 because typedoc does not support TypeScript 7",
+      "dependencies": [
+        "typescript"
+      ],
+      "packages": [
+        "replicache-doc"
+      ],
+      "pinVersion": "~6.0.2"
+    }
+  ],
   "semverGroups": [
     {
       "range": "~",

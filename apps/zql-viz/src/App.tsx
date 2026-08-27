@@ -3,7 +3,9 @@
 
 import {useCallback, useEffect, useState} from 'react';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
-import * as ts from 'typescript';
+// TypeScript 7 dropped the in-process transpile API, so the browser-side
+// transpiler pins the TypeScript 6 compiler via an aliased dependency.
+import * as ts from 'typescript-6';
 import './App.css';
 // oxlint-disable-next-line no-restricted-imports
 import * as zero from '../../../packages/zero-client/src/mod.ts';
