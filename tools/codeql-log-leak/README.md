@@ -5,11 +5,18 @@ with deterministic global taint analysis. It models:
 
 - Zero rows, query ASTs, mutation data, authentication data, and PostgreSQL
   diagnostics as sources.
-- `LogContext`, `LogSink`, `console`, `Error` construction, and `throw` as
-  sinks.
+- `LogContext`, `LogSink`, `console`, `Error` construction, and calls to the
+  assertion helpers in `shared/asserts.ts` as sinks. A bare `throw` is not a
+  sink: rethrowing an error discloses nothing the construction site did not
+  already, and treating it as one reported every `throw e` in the tree.
 - Stringification and error wrappers as taint-preserving operations.
-- Safe metadata fields and `safe()`, `safe.count()`, `safe.hash()`, and
-  `safe.shape()` as barriers.
+- Safe metadata fields, counts (`.length`, `.size`), caught exceptions, and
+  `safe()`, `safe.count()`, `safe.hash()`, and `safe.shape()` as barriers.
+  Safe fields match on the property name alone: requiring a sensitive base
+  type would switch the exemption off as soon as a value had passed through a
+  loop or a call.
+- Tests, benchmarks, CLI entry points, and the throughput harness as
+  non-production code, since printing queries is what those exist to do.
 
 ## Run the query
 

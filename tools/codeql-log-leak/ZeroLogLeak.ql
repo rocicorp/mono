@@ -145,10 +145,58 @@ private predicate isConsoleCall(DataFlow::MethodCallNode call) {
   call.getReceiver().accessesGlobal("console") and isLogMethod(call.getMethodName())
 }
 
+/**
+ * Code that ships, as opposed to tests, benchmarks, and developer tools.
+ *
+ * CLI entry points and the throughput harness print queries and ASTs as their
+ * whole purpose, so a leak there is not a leak.
+ */
 private predicate isProductionNode(DataFlow::Node node) {
-  not node.getFile().getRelativePath().matches("%.test.%") and
-  not node.getFile().getRelativePath().matches("%.bench.%") and
-  not node.getFile().getRelativePath().matches("%/test/%")
+  exists(string path | path = node.getFile().getRelativePath() |
+    not path.matches("%.test.%") and
+    not path.matches("%.bench.%") and
+    not path.matches("%/test/%") and
+    not path.matches("%/bin.ts") and
+    not path.matches("%/bin-%.ts") and
+    not path.matches("apps/zero-throughput/%")
+  )
+}
+
+/**
+ * Generic helpers that throw whatever they are handed.
+ *
+ * Reporting the `throw` inside one collapses every caller onto a single line:
+ * `assert` alone accounted for 128 paths. They are modelled as sinks at the
+ * call site instead, by `isThrowingHelperCall`, so an alert names the code
+ * that supplied the value.
+ */
+private predicate isGenericThrowHelperFile(File file) {
+  file.getRelativePath() =
+    ["packages/shared/src/asserts.ts", "packages/shared/src/valita.ts"]
+}
+
+/** A call to one of those helpers, which throws the value it is given. */
+private predicate isThrowingHelperCall(DataFlow::InvokeNode call) {
+  call.getCalleeName() =
+    [
+      "assert", "assertArray", "assertBoolean", "assertNotNull", "assertNumber",
+      "assertObject", "assertString", "invalidType", "throwInvalidType",
+      "unreachable"
+    ]
+}
+
+/**
+ * A caught exception.
+ *
+ * Taint stops at a `catch`. Where an error was built out of a value, the
+ * error-construction sink already reports the place it was built; letting the
+ * taint continue would report every `catch (e) { lc.warn(..., e) }` in the
+ * tree a second time, which is where the largest path counts came from.
+ */
+private predicate isCaughtError(DataFlow::Node node) {
+  exists(CatchClause clause |
+    node.asExpr() = clause.getAParameter().getAVariable().getAnAccess()
+  )
 }
 
 /** Calls whose return value is an explicitly approved safe representation. */
@@ -180,13 +228,18 @@ private predicate isCountRead(DataFlow::Node node) {
   )
 }
 
-/** A safe field selected from an otherwise-sensitive object. */
+/**
+ * A safe field selected off any value.
+ *
+ * The base is deliberately unconstrained. Requiring it to have a sensitive
+ * type would switch the exemption off the moment a value has been through a
+ * loop, a destructuring, or a call, since it is then merely tainted rather
+ * than annotated -- which is how `op.tableName` came to be reported despite
+ * `tableName` being on the safe list.
+ */
 private predicate isSafePropertyRead(DataFlow::Node node) {
-  exists(DataFlow::PropRead read, DataFlow::Node base, string propertyName |
-    node = read and
-    read.accesses(base, propertyName) and
-    hasSensitiveType(base) and
-    isSafeMetadataProperty(propertyName)
+  exists(DataFlow::PropRead read |
+    node = read and isSafeMetadataProperty(read.getPropertyName())
   )
 }
 
@@ -228,6 +281,7 @@ module LogLeakConfig implements DataFlow::ConfigSig {
   predicate isSink(DataFlow::Node sink) {
     isProductionNode(sink) and
     not isSuppressed(sink) and
+    not isGenericThrowHelperFile(sink.getFile()) and
     (
       exists(DataFlow::MethodCallNode call |
         sink = call.getAnArgument() and
@@ -249,12 +303,17 @@ module LogLeakConfig implements DataFlow::ConfigSig {
           ]
       )
       or
-      exists(ThrowStmt statement | sink.asExpr() = statement.getExpr())
+      exists(DataFlow::InvokeNode call |
+        sink = call.getAnArgument() and isThrowingHelperCall(call)
+      )
     )
   }
 
   predicate isBarrier(DataFlow::Node node) {
-    isApprovedSanitizer(node) or isSafePropertyRead(node) or isCountRead(node)
+    isApprovedSanitizer(node) or
+    isSafePropertyRead(node) or
+    isCountRead(node) or
+    isCaughtError(node)
   }
 
   predicate isAdditionalFlowStep(DataFlow::Node predecessor, DataFlow::Node successor) {
