@@ -48,7 +48,7 @@ export class Forwarder {
       flowControlConsensusTimeoutProportion: 2.0,
     },
   ) {
-    this.#lc = lc.withContext('component', 'progress-monitor');
+    this.#lc = lc.withContext('component', 'subscriber-progress-monitor');
     this.#setTimeout = opts.setTimeoutFn ?? setTimeout;
     this.#clearTimeout = opts.clearTimeoutFn ?? clearTimeout;
 
