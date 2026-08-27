@@ -572,10 +572,10 @@ export const zeroOptions = {
     statementTimeoutMs: {
       type: v.number().default(30_000),
       desc: [
-        `Fail change-log transactions if a statement response from postgres is not received within`,
-        `the specified timeout. This differs from a postgres {bold statement_timeout} in that`,
-        `it is implemented to handle a pathological case in which Postgres does not return a`,
-        `response but otherwise believes the transaction to be idle.`,
+        `Fail change-log db operations that make no progress within the specified timeout. This`,
+        `differs from a postgres {bold statement_timeout} in that it is implemented to handle a`,
+        `pathological case in which Postgres does not return a response but otherwise believes the`,
+        `connection to be idle (e.g. a half-open connection).`,
       ],
       hidden: true, // make visible if proven to be effective/necessary
     },
