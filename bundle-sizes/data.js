@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786608059515,
+  "lastUpdate": 1787824803522,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57149,6 +57149,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/cad1d2f3958a87f8ca9c5ee96c5068746cab7a4c"
         },
         "date": 1786608047204,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317629,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57073,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117348,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33538,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "af3dad4fb13500b91fda8ab745cade3dc7c3da7c",
+          "message": "chore(deps): migrate to TypeScript 7 (#6421)\n\nBumps `typescript` to `~7.0.2` across the monorepo.\n\n## TS6 holdouts\n\nTwo places deliberately stay on TypeScript 6:\n\n- **`replicache-doc`** — typedoc does not support TS7.\n- **`zql-viz`** — TS7's npm package has no in-process transpile API at\nall. Its main entry is `lib/version.cjs`; `transpileModule`,\n`ScriptTarget` and `ModuleKind` are gone. `App.tsx` uses\n`ts.transpileModule` in the browser to compile user queries, so the app\npins the TS6 compiler via an aliased dependency (`\"typescript-6\":\n\"npm:typescript@~6.0.2\"`). Its `typescript` devDependency is 7.x for\n`tsc`.\n\n## Fallout\n\n**`@ts-expect-error` placement.** TS7 reports overload mismatches at the\noffending *argument* rather than at the call expression, so directives\nguarding `{scalar: true}` move onto the `scalar` property. 11 sites\nacross `scalar-typing.test.ts` and three zql-integration-tests files.\n\n**TS2883 false positives (~144).** TS7 (typescript-go) has a regression\nwhere, in large multi-package programs, it names a type through a\nsibling package's pnpm symlink —\n`../../zero-permissions/node_modules/shared/src/json.ts` — instead of\nthe plain relative path, firing bogus \"not portable\" errors. See\n[typescript-go#3027](https://github.com/microsoft/typescript-go/issues/3027)\nand [#3596](https://github.com/microsoft/typescript-go/issues/3596).\n\nMost collapse at the root:\n\n- `shared/src/json-schema.ts` re-exports the JSON types it already\nbuilds on.\n- `zero-protocol/src/data.ts` annotates `valueSchema`/`rowSchema`\nexplicitly. `Value` and `Row` are unchanged — just written out instead\nof derived via `v.Infer`.\n- Small annotations in three zql test helpers.\n\nFor the rest, `declaration`/`declarationMap` move out of the root\n`tsconfig.json` — which is check-only (`noEmit: true`) — and into the\nfour configs that actually emit `.d.ts` (`zero`, `zero-client`,\n`zero-events`, `replicache`). Portability is still checked where\ndeclarations are really emitted: the `@rocicorp/zero` build emits\n`.d.ts` for zero-protocol, zero-cache and zql, and passes clean.\n\nTwo alternatives were tried and rejected: `preserveSymlinks: true`\nsilences TS2883 but breaks type identity (86 new errors in zero-cache),\nand a `paths` mapping silences it but leaks bare\n`import(\"shared/src/json.ts\")` into the published `.d.ts`.\n\n**One real emit bug, not just a check bug.** TS7 was writing a bare\n`import(\"zero-protocol/src/ast.ts\")` into\n`packages/zero/out/.../pusher.d.ts`, which does not resolve for\nconsumers of the published package; TS6 emits the correct relative path.\nBoth `initConnection` methods in `pusher.ts` now declare their return\ntype. All emitted declarations were then grepped for bare workspace\nspecifiers — clean.\n\n**API snapshots.** Updated for TS7's different union-member and\noptional-property ordering. The token multisets are identical to before;\nthere is no API drift.\n\n## Verification\n\n- `check-types` 42/42, `lint` 0 errors, `check-format` clean, `build`\n6/6, `verify-deps` clean.\n- Full test suite: 6,863 non-pg + 4,431 pg tests pass.\n\nUnrelated pre-existing issue, confirmed not caused by this change: `npx\napi-extractor run --local` in zql-viz fails with `Internal Error: Unable\nto follow symbol for \"ErrorOptions\"`. It fails identically against\nTS6-emitted declarations.",
+          "timestamp": "2026-08-27T09:49:54Z",
+          "tree_id": "be1224fc22465dce58699f1f31a38fd509afdb37",
+          "url": "https://github.com/rocicorp/mono/commit/af3dad4fb13500b91fda8ab745cade3dc7c3da7c"
+        },
+        "date": 1787824789032,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
