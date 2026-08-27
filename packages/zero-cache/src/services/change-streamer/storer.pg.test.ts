@@ -1,4 +1,5 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
+import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
@@ -1801,6 +1802,229 @@ describe('change-streamer/storer', () => {
       // A stale, already-rejected resolver must not be reused: with nothing
       // queued, back pressure should no longer be in effect.
       expect(storer.readyForMore()).toBeUndefined();
+    });
+  });
+
+  // The ProgressMonitor is the storer's watchdog for a db operation that hangs
+  // without ever returning (e.g. a half-open connection). These tests exercise
+  // real #processQueue / catchup code paths and assert that a hang surfaces as
+  // a *fatal* error (via onFatal), which is what the ProgressMonitor -- and
+  // *only* the ProgressMonitor -- produces.
+  //
+  // Both wedges are deliberately chosen to be invisible to the write pool's
+  // statementResponseTimeout, so the fatal error is unambiguously the
+  // ProgressMonitor's doing even while that (soon-to-be-removed) watchdog is
+  // still wired up:
+  //  * The write-path test wedges *before any statement is dispatched* (the
+  //    sole connection is reserved), so the pool's #pending set is empty and
+  //    statementResponseTimeout has nothing to time out.
+  //  * The catchup reader pool is constructed without a statementResponseTimeout
+  //    at all, so a hung catchup read can only be caught by the ProgressMonitor.
+  describe('ProgressMonitor hang detection', () => {
+    const TIMEOUT_MS = 100;
+
+    function newRawConnection() {
+      const {host, port, database, user: username, pass} = db.options;
+      return postgres({
+        host: host[0],
+        port: port[0],
+        username,
+        password: pass ?? undefined,
+        database,
+        ...postgresTypeConfig({sendStringAsJson: true}),
+      });
+    }
+
+    test('a hung write transaction (begin/commit) triggers a fatal error', async () => {
+      // Single-connection pool: reserving its one connection means the storer's
+      // write TransactionPool can never even open its `BEGIN`, so the commit's
+      // `await tx.startingReplicationState` (the begin-time SELECT ... FOR
+      // UPDATE) never resolves -- a hang *before* any statement reaches PG.
+      const {host, port, database, user: username, pass} = db.options;
+      const singleConnDb = postgres({
+        host: host[0],
+        port: port[0],
+        username,
+        password: pass ?? undefined,
+        database,
+        max: 1,
+        ...postgresTypeConfig({sendStringAsJson: true}),
+      });
+
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        singleConnDb,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {...opts, statementTimeoutMs: TIMEOUT_MS, drainTimeoutMs: 5_000},
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+
+      const reserved = await singleConnDb.reserve();
+      try {
+        storer.store('08', [
+          'begin',
+          messages.begin(),
+          {commitWatermark: '08'},
+        ]);
+        storer.store('08', ['data', messages.insert('issues', {id: 'a'})]);
+        storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+
+        const err = await fatalErrors.dequeue();
+        // The commit's queue-entry task is the one that fails to progress.
+        expect(err.message).toContain('failed to progress');
+        expect(err.message).toContain('queue-entry');
+      } finally {
+        // Release so #processQueue unwedges and stop() can drain in afterEach.
+        reserved.release();
+        await storer.stop().catch(() => {});
+        await singleConnDb.end();
+      }
+    });
+
+    test('a hung catchup read triggers a fatal error', async () => {
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        db,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {...opts, statementTimeoutMs: TIMEOUT_MS, drainTimeoutMs: 5_000},
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+
+      // Hold an ACCESS EXCLUSIVE lock on the changeLog so the catchup cursor
+      // read blocks indefinitely. (The lastWatermark read in #startCatchup is
+      // against replicationState, so it still completes; the hang is in the
+      // background #catchup cursor.) The lock is held until `release` resolves,
+      // so cleanup can let the transaction commit and end the connection
+      // cleanly rather than tearing down an in-flight query.
+      const lockConn = newRawConnection();
+      const acquired = resolver<void>();
+      const release = resolver<void>();
+      void lockConn
+        .begin(async tx => {
+          await tx`LOCK TABLE "xero_5/cdc"."changeLog" IN ACCESS EXCLUSIVE MODE`;
+          acquired.resolve();
+          await release.promise;
+        })
+        .catch(() => {});
+      await acquired.promise;
+
+      // A subscriber behind the durable watermark forces a catchup read.
+      // Consume its stream in the background so that, once the lock is
+      // released during cleanup, the catchup can send its buffered entries,
+      // complete, and close its reader connection (otherwise the orphaned
+      // reader keeps the worker alive after the test).
+      const [sub, , subStream] = createSubscriber('03');
+      const draining = drain(subStream, '06');
+
+      try {
+        storer.catchup(sub, 'serving');
+
+        const err = await fatalErrors.dequeue();
+        expect(err.message).toContain('failed to progress');
+        expect(err.message).toContain('catchup');
+      } finally {
+        release.resolve(); // let the held tx commit, releasing the lock
+        await draining; // catchup drains to the subscriber and completes
+        await lockConn.end();
+        await storer.stop().catch(() => {});
+      }
+    });
+  });
+
+  // assumeOwnership(), getStartStreamInitializationParameters(),
+  // getMinWatermarkForCatchup(), and getCatchupBounds() are one-off db calls,
+  // not part of the main storer loop or the background catchup read, so they
+  // are bounded by a plain #withTimeout() race instead of the ProgressMonitor.
+  // This matters concretely for assumeOwnership() and
+  // getStartStreamInitializationParameters(): both are called by
+  // ChangeStreamerImpl.run() *before* Storer.run() (see
+  // change-streamer-service.ts), i.e. before the ProgressMonitor's polling
+  // has started -- so a hang in either must be caught without relying on it.
+  // These tests call the methods directly, without ever calling
+  // `storer.run()`, to prove that.
+  describe('one-off db call timeout', () => {
+    const TIMEOUT_MS = 100;
+    let singleConnDb: PostgresDB;
+
+    beforeEach(() => {
+      const {host, port, database, user: username, pass} = db.options;
+      singleConnDb = postgres({
+        host: host[0],
+        port: port[0],
+        username,
+        password: pass ?? undefined,
+        database,
+        max: 1,
+        ...postgresTypeConfig({sendStringAsJson: true}),
+      });
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        singleConnDb,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {...opts, statementTimeoutMs: TIMEOUT_MS},
+      );
+    });
+
+    afterEach(async () => {
+      await singleConnDb.end();
+    });
+
+    // Reserving the sole connection means the call can never even dispatch
+    // its statement, so its own #withTimeout is the only thing that can
+    // possibly reject it (there is no in-flight statement for anything else
+    // to time out).
+    async function withReservedConnection(fn: () => Promise<unknown>) {
+      const reserved = await singleConnDb.reserve();
+      try {
+        const start = Date.now();
+        await expect(fn()).rejects.toThrow(
+          `did not complete within ${TIMEOUT_MS}ms`,
+        );
+        expect(Date.now() - start).toBeLessThan(TIMEOUT_MS * 5);
+        // Not the ProgressMonitor's doing: run() (and thus its polling) was
+        // never called.
+        expect(fatalErrors.size()).toBe(0);
+      } finally {
+        reserved.release();
+      }
+    }
+
+    test('assumeOwnership rejects on a hang, without run() ever having started the ProgressMonitor', async () => {
+      await withReservedConnection(() => storer.assumeOwnership());
+    });
+
+    test('getStartStreamInitializationParameters rejects on a hang', async () => {
+      await withReservedConnection(() =>
+        storer.getStartStreamInitializationParameters(),
+      );
+    });
+
+    test('getMinWatermarkForCatchup rejects on a hang', async () => {
+      await withReservedConnection(() => storer.getMinWatermarkForCatchup());
+    });
+
+    test('getCatchupBounds rejects on a hang', async () => {
+      await withReservedConnection(() => storer.getCatchupBounds());
     });
   });
 
