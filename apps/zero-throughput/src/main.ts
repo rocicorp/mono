@@ -83,7 +83,10 @@ async function main(): Promise<void> {
       log(
         `Starting zero topology (${config.topology}, ${config.numViewSyncers} VS, ${config.numReplicationManagers} RM)...`,
       );
-      const topology = startZeroTopology(config, metricsCollector.endpoint);
+      const topology = await startZeroTopology(
+        config,
+        metricsCollector.endpoint,
+      );
       processes.push(...topology.processes);
       cleanup.push(() => topology.stop());
       for (const p of topology.processes) {
@@ -145,8 +148,20 @@ async function main(): Promise<void> {
     }
 
     if (config.settleMs > 0) {
-      log(`Waiting ${config.settleMs}ms for final client observations...`);
-      await sleep(config.settleMs);
+      log(
+        `Draining pipeline (waiting up to ${config.settleMs}ms for clients to observe seq ${writer.highestCommittedSeq})...`,
+      );
+      const settleDeadline = Date.now() + config.settleMs;
+      while (Date.now() < settleDeadline) {
+        const minObserved =
+          clients.length === 0
+            ? 0
+            : Math.min(...clients.map(c => c.minObservedSeq()));
+        if (minObserved >= writer.highestCommittedSeq) {
+          break;
+        }
+        await sleep(100);
+      }
       samples.push(
         sampleMetrics(sampleStartedAtMs, writer.highestCommittedSeq, clients),
       );

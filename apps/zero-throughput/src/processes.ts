@@ -1,6 +1,12 @@
 import {spawn, type ChildProcess} from 'node:child_process';
 import {once} from 'node:events';
-import {createWriteStream, mkdirSync, type WriteStream} from 'node:fs';
+import {
+  copyFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  type WriteStream,
+} from 'node:fs';
 import {rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -11,6 +17,8 @@ import {
   profileQueryName,
 } from './profile-queries.ts';
 import {sleep} from './util.ts';
+
+const OTLP_METRICS_PATH_REGEX = /\/v1\/metrics$/;
 
 export type ProcessCommand = {
   readonly name: string;
@@ -183,10 +191,10 @@ export type StartedTopology = {
   stop(): Promise<void>;
 };
 
-export function startZeroTopology(
+export async function startZeroTopology(
   config: BenchmarkConfig,
   metricsEndpoint?: string | undefined,
-): StartedTopology {
+): Promise<StartedTopology> {
   if (config.profileRM || config.profileVS) {
     mkdirSync(appPath(config.profileDir), {recursive: true});
   }
@@ -221,7 +229,7 @@ export function startZeroTopology(
     name: 'rm-1',
     role: 'rm',
     port: rm1Port,
-    changeStreamerAddress: `127.0.0.1:${rm1ChangeStreamerPort}`,
+    changeStreamerPort: rm1ChangeStreamerPort,
     changeStreamerMode: 'dedicated',
     numSyncWorkers: 0,
     replicaFile: `${config.zero.replicaFile}-rm1`,
@@ -230,16 +238,27 @@ export function startZeroTopology(
   });
   processes.push(rm1);
 
+  // The RM must finish initial sync before copying its replica to standby RM / View-Syncers
+  await waitForZeroCache(
+    `http://127.0.0.1:${rm1Port}`,
+    config.zero.readyTimeoutMs,
+    rm1,
+  );
+
   // 2. Replication Manager 2 (HA Standby)
   if (config.numReplicationManagers === 2) {
     const rm2Port = basePort + 2;
     const rm2ChangeStreamerPort = basePort + 3;
+    copyReplicaFile(
+      `${config.zero.replicaFile}-rm1`,
+      `${config.zero.replicaFile}-rm2`,
+    );
     const rm2 = spawnZeroProcess({
       config,
       name: 'rm-2',
       role: 'rm',
       port: rm2Port,
-      changeStreamerAddress: `127.0.0.1:${rm2ChangeStreamerPort}`,
+      changeStreamerPort: rm2ChangeStreamerPort,
       changeStreamerMode: 'dedicated',
       changeStreamerStartupDelayMs: 5000,
       numSyncWorkers: 0,
@@ -257,12 +276,17 @@ export function startZeroTopology(
     const vsURL = `http://127.0.0.1:${vsPort}`;
     readyURLs.push(vsURL);
 
+    copyReplicaFile(
+      `${config.zero.replicaFile}-rm1`,
+      `${config.zero.replicaFile}-vs${i}`,
+    );
+
     const vs = spawnZeroProcess({
       config,
       name: `vs-${i}`,
       role: 'vs',
       port: vsPort,
-      changeStreamerMode: 'discover',
+      changeStreamerURI: `http://127.0.0.1:${rm1ChangeStreamerPort}`,
       numSyncWorkers: config.zero.numSyncWorkers,
       replicaFile: `${config.zero.replicaFile}-vs${i}`,
       metricsEndpoint,
@@ -280,6 +304,16 @@ export function startZeroTopology(
   };
 }
 
+function copyReplicaFile(src: string, dst: string): void {
+  copyFileSync(src, dst);
+  if (existsSync(`${src}-wal`)) {
+    copyFileSync(`${src}-wal`, `${dst}-wal`);
+  }
+  if (existsSync(`${src}-shm`)) {
+    copyFileSync(`${src}-shm`, `${dst}-shm`);
+  }
+}
+
 function spawnZeroProcess(args: {
   readonly config: BenchmarkConfig;
   readonly name: string;
@@ -287,6 +321,8 @@ function spawnZeroProcess(args: {
   readonly port: number;
   readonly numSyncWorkers: number;
   readonly replicaFile: string;
+  readonly changeStreamerURI?: string | undefined;
+  readonly changeStreamerPort?: number | undefined;
   readonly changeStreamerAddress?: string | undefined;
   readonly changeStreamerMode?: string | undefined;
   readonly changeStreamerStartupDelayMs?: number | undefined;
@@ -321,6 +357,12 @@ function spawnZeroProcess(args: {
     ZERO_LOG_FORMAT: 'text',
   };
 
+  if (args.changeStreamerURI) {
+    env.ZERO_CHANGE_STREAMER_URI = args.changeStreamerURI;
+  }
+  if (args.changeStreamerPort !== undefined) {
+    env.ZERO_CHANGE_STREAMER_PORT = String(args.changeStreamerPort);
+  }
   if (args.changeStreamerAddress) {
     env.ZERO_CHANGE_STREAMER_ADDRESS = args.changeStreamerAddress;
   }
@@ -334,7 +376,8 @@ function spawnZeroProcess(args: {
   }
 
   if (args.metricsEndpoint) {
-    env.OTEL_EXPORTER_OTLP_ENDPOINT = args.metricsEndpoint;
+    const baseURL = args.metricsEndpoint.replace(OTLP_METRICS_PATH_REGEX, '');
+    env.OTEL_EXPORTER_OTLP_ENDPOINT = baseURL;
     env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = args.metricsEndpoint;
     env.OTEL_METRICS_EXPORTER = 'otlp';
     env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';

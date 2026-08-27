@@ -1,4 +1,5 @@
 import {createServer, type Server} from 'node:http';
+import {gunzipSync} from 'node:zlib';
 
 export interface PercentileStats {
   readonly count: number;
@@ -49,7 +50,11 @@ export class OTelMetricsCollector {
         req.on('data', chunk => chunks.push(chunk));
         req.on('end', () => {
           try {
-            const raw = Buffer.concat(chunks).toString('utf-8');
+            let buffer = Buffer.concat(chunks);
+            if (req.headers['content-encoding'] === 'gzip') {
+              buffer = gunzipSync(buffer);
+            }
+            const raw = buffer.toString('utf-8');
             const json = JSON.parse(raw);
             this.#ingestOTLP(json);
             res.writeHead(200, {'Content-Type': 'application/json'});
