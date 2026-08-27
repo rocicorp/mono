@@ -93,6 +93,7 @@ private predicate isSafeMetadataProperty(string name) {
       "clientSchema",
       "code",
       "constraint_name",
+      "constructor",
       "op",
       "primaryKey",
       "routine",
