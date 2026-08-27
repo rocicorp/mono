@@ -26,10 +26,25 @@ codeql database analyze /tmp/zero-codeql-db \
   --output=/tmp/zero-log-leak.sarif
 ```
 
+## How types are matched
+
+CodeQL records a module name only for bare package specifiers such as
+`postgres` or `@rocicorp/logger`; an import whose path starts with `.` or `/`
+gets none at all. Since the Zero types are imported by relative path, they are
+invisible to `hasUnderlyingType(module, type)`, and are matched on their type
+annotation instead: the annotation names one of the listed types and its
+declaration resolves to a file in this repository. Package types such as
+`jose.JWTPayload` still go through `hasUnderlyingType`.
+
+That trades away what the type checker knows. A value the annotation route
+misses is one that was never annotated -- an inferred call result, for
+instance. Unions, aliases, optionals, and arrays are unwrapped, so
+`Row | undefined` and `RowValue[]` do match.
+
 The query intentionally starts with a small, explicit model. Before making it
 a blocking check, run it against known leaking and allowed examples and adjust:
 
-1. The module-name patterns used to resolve local TypeScript types.
+1. The list of sensitive type names.
 2. The safe metadata property list.
 3. Project-specific logging wrappers.
 4. The `safe` helper model after that helper has a permanent module path.
@@ -49,6 +64,8 @@ value to the same call does not silently inherit the exemption. Reach for it
 when a value is safe for a reason the query cannot see; when the reason
 generalizes -- a count, a hash, a shape -- teach the query a barrier instead.
 
-CodeQL should analyze the complete checkout in CI. A PR check can then filter
-the SARIF results to alerts whose sink is on a changed line. This still detects
-a changed source or propagator that reaches an existing sink.
+CodeQL analyzes the complete checkout in CI, via `.github/workflows/codeql.yml`.
+Two checks report on it, and they are not redundant: GitHub's own code scanning
+check reports only alerts in code a pull request changed, while the workflow's
+`Check alerts` step reads the whole SARIF and fails on any alert, so a
+pre-existing leak cannot pass unnoticed.

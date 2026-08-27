@@ -32,25 +32,49 @@ private predicate isSensitiveZeroTypeName(string name) {
     ]
 }
 
-/**
- * Restricts the short type names above to modules owned by Zero.
- *
- * `bindingset` is required: a bare `regexpMatch` over an unconstrained string
- * has no finite domain, so the compiler cannot enumerate `moduleName` on its
- * own. The caller binds it via `hasUnderlyingType`.
- */
-bindingset[moduleName]
-private predicate isZeroSourceModule(string moduleName) {
-  moduleName.regexpMatch(".*(zero-protocol|zero-cache|zql)/src/.*")
+/** A file in this repository, as opposed to one in a dependency. */
+private predicate isRepositoryFile(File file) {
+  file.getRelativePath().regexpMatch("^(packages|apps|tools)/.*")
 }
 
-/** A value whose resolved TypeScript type is known to contain customer data. */
-private predicate hasSensitiveType(DataFlow::Node node) {
-  exists(string moduleName, string typeName |
-    isZeroSourceModule(moduleName) and
-    isSensitiveZeroTypeName(typeName) and
-    node.hasUnderlyingType(moduleName, typeName)
+/**
+ * A type annotation naming one of the types above, resolving to a declaration
+ * in this repository.
+ *
+ * Matching is on the annotation rather than through `hasUnderlyingType`,
+ * because CodeQL records a module name only for bare package specifiers: the
+ * Zero types are imported by relative path, so no module-based match can ever
+ * see one. Requiring the declaration to live in the repository keeps
+ * same-named types from third-party packages out.
+ *
+ * `getAnUnderlyingType` unwraps unions, aliases, optionals and arrays, so
+ * `Row | undefined` and `RowValue[]` match as well.
+ */
+private predicate isSensitiveTypeAnnotation(TypeAnnotation annotation) {
+  exists(LocalTypeAccess access |
+    access = annotation.getAnUnderlyingType() and
+    isSensitiveZeroTypeName(access.getName()) and
+    isRepositoryFile(access.getLocalTypeName().getADeclaration().getFile())
   )
+}
+
+/**
+ * A value declared with one of the Zero types, at every reference to it.
+ *
+ * Covers parameters and variable declarations, which is where these types are
+ * introduced. A value whose type is only inferred -- a call result that was
+ * never annotated -- is not matched.
+ */
+private predicate hasSensitiveZeroType(DataFlow::Node node) {
+  exists(BindingPattern pattern |
+    isSensitiveTypeAnnotation(pattern.getTypeAnnotation()) and
+    node.asExpr() = pattern.getAVariable().getAnAccess()
+  )
+}
+
+/** A value whose type is known to contain customer data. */
+private predicate hasSensitiveType(DataFlow::Node node) {
+  hasSensitiveZeroType(node)
   or
   node.hasUnderlyingType("jose", "JWTPayload")
   or
