@@ -175,14 +175,31 @@ private predicate isGenericThrowHelperFile(File file) {
     ["packages/shared/src/asserts.ts", "packages/shared/src/valita.ts"]
 }
 
-/** A call to one of those helpers, which throws the value it is given. */
-private predicate isThrowingHelperCall(DataFlow::InvokeNode call) {
-  call.getCalleeName() =
-    [
-      "assert", "assertArray", "assertBoolean", "assertNotNull", "assertNumber",
-      "assertObject", "assertString", "invalidType", "throwInvalidType",
-      "unreachable"
-    ]
+/**
+ * An argument that one of those helpers puts into the message it throws.
+ *
+ * Which argument matters. `assert(cond, msg)` throws only its message, so its
+ * condition -- usually an AST-derived boolean -- discloses nothing. The
+ * `assertX` family routes through `invalidType`, which interpolates the value
+ * itself, so there the value is the sink. `unreachable`, `notImplemented`,
+ * and `assertNotNull` throw fixed strings and are not sinks at all.
+ */
+private predicate isThrowingHelperArgument(DataFlow::Node node) {
+  exists(DataFlow::InvokeNode call |
+    (
+      call.getCalleeName() = "assert" and
+      node = call.getArgument(1)
+    )
+    or
+    (
+      call.getCalleeName() =
+        [
+          "assertArray", "assertBoolean", "assertNumber", "assertObject",
+          "assertString", "assertType", "throwInvalidType"
+        ] and
+      node = call.getArgument(0)
+    )
+  )
 }
 
 /**
@@ -248,6 +265,7 @@ private predicate isWrapperCall(DataFlow::InvokeNode call) {
   call.getCalleeName() = [
       "String",
       "inspect",
+      "invalidType",
       "stringify",
       "toErrorLogObject",
       "toString"
@@ -303,9 +321,7 @@ module LogLeakConfig implements DataFlow::ConfigSig {
           ]
       )
       or
-      exists(DataFlow::InvokeNode call |
-        sink = call.getAnArgument() and isThrowingHelperCall(call)
-      )
+      isThrowingHelperArgument(sink)
     )
   }
 

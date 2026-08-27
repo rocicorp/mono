@@ -5,8 +5,11 @@ with deterministic global taint analysis. It models:
 
 - Zero rows, query ASTs, mutation data, authentication data, and PostgreSQL
   diagnostics as sources.
-- `LogContext`, `LogSink`, `console`, `Error` construction, and calls to the
-  assertion helpers in `shared/asserts.ts` as sinks. A bare `throw` is not a
+- `LogContext`, `LogSink`, `console`, `Error` construction, and the arguments
+  the assertion helpers in `shared/asserts.ts` actually throw as sinks: the
+  message of `assert`, and the value handed to the `assertX` family, which
+  interpolates it. `unreachable` and `assertNotNull` throw fixed strings and
+  are not sinks. A bare `throw` is not a
   sink: rethrowing an error discloses nothing the construction site did not
   already, and treating it as one reported every `throw e` in the tree.
 - Stringification and error wrappers as taint-preserving operations.
