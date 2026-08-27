@@ -42,7 +42,7 @@
     "syncpack": "^14.3.0",
     "tsnapi": "^0.3.2",
     "turbo": "^2.4.4",
-    "typescript": "~6.0.2",
+    "typescript": "~7.0.2",
     "vitest": "^4.1.6",
     "zx": "^8.8.5"
   },

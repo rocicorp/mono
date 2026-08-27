@@ -40,7 +40,7 @@
     "playwright": "^1.60.0",
     "replicache": "workspace:*",
     "shared": "workspace:*",
-    "typescript": "~6.0.2",
+    "typescript": "~7.0.2",
     "vitest": "^4.1.6",
     "zero-permissions": "workspace:*",
     "zero-protocol": "workspace:*",

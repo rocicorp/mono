@@ -1,9 +1,6 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import * as v from '../../shared/src/valita.ts';
-
-export const valueSchema = v.union(jsonSchema, v.undefined());
-
-export const rowSchema = v.readonlyRecord(valueSchema);
 
 /**
  * The data types that Zero can represent are limited by two things:
@@ -25,7 +22,9 @@ export const rowSchema = v.readonlyRecord(valueSchema);
  * For developer convenience we also allow `undefined`, which we treat
  * equivalently to `null`.
  */
-export type Value = v.Infer<typeof valueSchema>;
+export type Value = ReadonlyJSONValue | undefined;
+
+export const valueSchema: v.Type<Value> = v.union(jsonSchema, v.undefined());
 
 /**
  * A Row is represented as a JS Object.
@@ -37,4 +36,6 @@ export type Value = v.Infer<typeof valueSchema>;
  * Also since the calling code on the client ultimately wants objects to work
  * with we end up with a lot less copies by using objects throughout.
  */
-export type Row = v.Infer<typeof rowSchema>;
+export type Row = Readonly<Record<string, Value>>;
+
+export const rowSchema: v.Type<Row> = v.readonlyRecord(valueSchema);
