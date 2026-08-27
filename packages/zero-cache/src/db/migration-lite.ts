@@ -158,7 +158,7 @@ export async function runSchemaMigrations(
       const start = performance.now();
       db.pragma('optimize');
       const elapsed = performance.now() - start;
-      log.info?.(`OPTIMIZE completed ${elapsed.toFixed(2)}ms`);
+      log.info?.(`OPTIMIZE completed (${elapsed.toFixed(2)}ms)`);
     }
 
     // Do not run `quick_check` here. It scans the full database and can
