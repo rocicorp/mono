@@ -182,6 +182,7 @@ export async function processMutation(
     mutation.type === MutationType.CRUD,
     'Only CRUD mutations are supported',
   );
+  // log-leak-ignore -- the mutation id, not row data
   lc = lc.withContext('mutationID', mutation.id);
   lc = lc.withContext('processMutation');
   lc.debug?.('Process mutation start', mutation);

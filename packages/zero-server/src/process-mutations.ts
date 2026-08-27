@@ -530,6 +530,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
         const ret = await this.#transactImpl(mutation, cb, appError);
         if (appError !== undefined) {
           this.#lc.warn?.(
+            // log-leak-ignore -- mutation and client ids, not row data
             `Mutation ${mutation.id} for client ${mutation.clientID} was retried after an error`,
             appError,
           );
@@ -560,6 +561,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
         if (appError !== undefined) {
           // Retry also failed → internal error, cannot skip mutation
           this.#lc.error?.(
+            // log-leak-ignore -- mutation and client ids, not row data
             `Retry also failed for mutation ${mutation.id} for client ${mutation.clientID}`,
             error,
           );
@@ -573,6 +575,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             : error;
         appError = wrapWithApplicationError(originalError);
         this.#lc.warn?.(
+          // log-leak-ignore -- mutation and client ids, not row data
           `Error processing mutation ${mutation.id} for client ${mutation.clientID}, retrying without mutator`,
           appError,
         );
@@ -617,6 +620,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
 
           if (appError === undefined) {
             this.#lc.debug?.(
+              // log-leak-ignore -- mutator name and mutation id, not row data
               `Executing mutator '${mutation.name}' (id=${mutation.id})`,
             );
             await cb(dbTx, mutation.name, mutation.args[0]);
@@ -761,6 +765,7 @@ async function processCleanupResultsMutation<
 ): Promise<void> {
   const parseResult = v.test(mutation.args[0], cleanupResultsArgSchema);
   if (!parseResult.ok) {
+    // log-leak-ignore -- valita reports the failing type, not the value
     lc.warn?.('Cleanup mutation has invalid args', parseResult.error);
     return;
   }
