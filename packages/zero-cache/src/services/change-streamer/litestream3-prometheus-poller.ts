@@ -4,6 +4,7 @@ import parsePrometheusTextFormat from 'parse-prometheus-text-format';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
+import {versionFromLexi} from '../../types/lexi-version.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
@@ -244,9 +245,17 @@ export class Litestream3PrometheusPoller {
           const watermark = metric.labels?.watermark;
           const name = metric.labels?.name;
           const time = new Date(parseFloat(metric.value) * 1000);
-
           if (watermark) {
-            yield {watermark, time, name};
+            try {
+              versionFromLexi(watermark); // Sanity check: Ensure that it is valid.
+              yield {watermark, time, name};
+            } catch (e) {
+              this.#lc.warn?.(
+                `ignoring invalid watermark ${watermark}`,
+                {metric},
+                e,
+              );
+            }
           }
         }
       }
