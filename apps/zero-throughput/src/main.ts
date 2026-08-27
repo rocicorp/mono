@@ -6,16 +6,16 @@ import {
   resetBenchmarkDatabase,
   waitForPostgres,
 } from './db.ts';
+import {OTelMetricsCollector} from './metrics.ts';
 import {
   analyzeProfileQueries,
   deployPermissions,
   queryPlanAnalysisLogPath,
   removeReplicaFiles,
   startPostgres,
-  startZeroCache,
+  startZeroTopology,
   stopPostgres,
   waitForZeroCache,
-  type ManagedProcess,
   type ProcessCommand,
 } from './processes.ts';
 import {
@@ -33,7 +33,6 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const cleanup = new CleanupStack();
   const processes: ProcessCommand[] = [];
-  let zeroCache: ManagedProcess | undefined;
   let clients: SyntheticClient[] = [];
   let result: BenchmarkResult | undefined;
   let outputPath: string | undefined;
@@ -51,6 +50,10 @@ async function main(): Promise<void> {
     );
     log(`Results will be written to ${resultOutputPath(config)}`);
 
+    const metricsCollector = new OTelMetricsCollector();
+    await metricsCollector.start();
+    cleanup.push(() => metricsCollector.stop());
+
     if (config.pg.start) {
       log('Starting PostgreSQL...');
       processes.push(await startPostgres());
@@ -61,7 +64,10 @@ async function main(): Promise<void> {
 
     log('Waiting for PostgreSQL...');
     await waitForPostgres(config.pg.url, config.pg.readyTimeoutMs);
-    const sql = connectBenchmarkDB(config.pg.url);
+    const sql = connectBenchmarkDB(
+      config.pg.url,
+      Math.max(20, config.writeConcurrency * 2),
+    );
     cleanup.push(() => sql.end());
 
     if (config.reset) {
@@ -74,26 +80,34 @@ async function main(): Promise<void> {
     processes.push(await deployPermissions(config));
 
     if (config.zero.start) {
-      log('Starting zero-cache...');
-      zeroCache = startZeroCache(config);
-      processes.push(zeroCache);
-      cleanup.push(() => zeroCache?.stop() ?? Promise.resolve());
-      if (zeroCache.logPath !== undefined) {
-        log(`zero-cache logs: ${zeroCache.logPath}`);
+      log(
+        `Starting zero topology (${config.topology}, ${config.numViewSyncers} VS, ${config.numReplicationManagers} RM)...`,
+      );
+      const topology = startZeroTopology(config, metricsCollector.endpoint);
+      processes.push(...topology.processes);
+      cleanup.push(() => topology.stop());
+      for (const p of topology.processes) {
+        if (p.logPath !== undefined) {
+          log(`${p.name} logs: ${p.logPath}`);
+        }
+      }
+
+      log('Waiting for zero-cache instances...');
+      for (let i = 0; i < topology.readyURLs.length; i++) {
+        const url = topology.readyURLs[i];
+        const proc =
+          topology.processes.find(p => p.name === `vs-${i}`) ??
+          topology.processes[0];
+        await waitForZeroCache(url, config.zero.readyTimeoutMs, proc);
       }
     }
 
-    log('Waiting for zero-cache...');
-    await waitForZeroCache(
-      config.cacheURL,
-      config.zero.readyTimeoutMs,
-      zeroCache,
-    );
-
-    log('Analyzing profile query plans...');
-    log(`query-plan logs: ${queryPlanAnalysisLogPath(config)}`);
-    const queryPlanAnalysis = await analyzeProfileQueries(config);
-    processes.push(queryPlanAnalysis);
+    if (config.topology === 'single') {
+      log('Analyzing profile query plans...');
+      log(`query-plan logs: ${queryPlanAnalysisLogPath(config)}`);
+      const queryPlanAnalysis = await analyzeProfileQueries(config);
+      processes.push(queryPlanAnalysis);
+    }
 
     log(`Starting ${config.users} synthetic clients...`);
     clients = await startSyntheticClients(config);
@@ -102,7 +116,7 @@ async function main(): Promise<void> {
     });
 
     log(
-      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s...`,
+      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s (concurrency=${config.writeConcurrency}, batch=${config.batchSize})...`,
     );
     const writer = new FixedRateWriter(sql, config);
     const samples: MetricSample[] = [];
@@ -138,12 +152,14 @@ async function main(): Promise<void> {
       );
     }
 
+    const metricsSummary = metricsCollector.getSummary();
     result = buildResult({
       config,
       processes,
       writerStats,
       samples,
       clients,
+      metricsSummary,
     });
     outputPath = await writeResult(config, result);
   } catch (caught) {
@@ -205,6 +221,24 @@ function printSummary(
   log(`p99 client-visible lag: ${summary.p99ClientVisibleLagMs.toFixed(2)}ms`);
   log(`max seq lag: ${summary.maxSeqLag}`);
   log(`lag slope: ${summary.lagSlopeSeqPerSec.toFixed(2)} seq/s`);
+  if (summary.replicationLagMs) {
+    log(
+      `RM replication lag: p50=${summary.replicationLagMs.p50.toFixed(1)}ms, p95=${summary.replicationLagMs.p95.toFixed(1)}ms, max=${summary.replicationLagMs.max.toFixed(1)}ms`,
+    );
+  }
+  if (summary.advancementLatencyMs) {
+    log(
+      `IVM advance duration: p50=${summary.advancementLatencyMs.p50.toFixed(1)}ms, p95=${summary.advancementLatencyMs.p95.toFixed(1)}ms, max=${summary.advancementLatencyMs.max.toFixed(1)}ms`,
+    );
+  }
+  if (summary.e2eServingLagMs) {
+    log(
+      `E2E serving lag: avg=${summary.e2eServingLagMs.avg.toFixed(1)}ms, p50=${summary.e2eServingLagMs.p50.toFixed(1)}ms, p95=${summary.e2eServingLagMs.p95.toFixed(1)}ms`,
+    );
+  }
+  if (summary.pipelineResets !== undefined && summary.pipelineResets > 0) {
+    log(`Pipeline resets: ${summary.pipelineResets}`);
+  }
   if (summary.failureReasons.length > 0) {
     log(`failure reasons: ${summary.failureReasons.join('; ')}`);
   }

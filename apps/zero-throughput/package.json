@@ -7,6 +7,8 @@
     "start": "node src/main.ts",
     "analyze": "node src/analyze.ts",
     "sweep": "node src/sweep.ts",
+    "sweep:capacity": "node src/sweep.ts --mode linear --write-rates 500,1000,2000,3000,4000 --profile feed-append",
+    "sweep:fanout": "node src/sweep.ts --mode linear --users 5,10,20,50 --write-rates 200 --profile forum",
     "go": "node src/main.ts",
     "db-up": "cd docker && docker compose up",
     "db-down": "cd docker && docker compose down",

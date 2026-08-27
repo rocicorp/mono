@@ -22,6 +22,8 @@ const options = {
   rowsPerQuery: v.number().default(100),
   writeRate: v.number().default(100),
   batchSize: v.number().default(1),
+  rowsPerTx: v.number().default(1),
+  writeConcurrency: v.number().default(1),
   payloadBytes: v.number().default(256),
   durationMs: v.number().default(30_000),
   warmupMs: v.number().default(10_000),
@@ -31,9 +33,16 @@ const options = {
   sloP99LagMs: v.number().default(2_000),
   output: v.string().default('results/latest.json'),
   logsDir: v.string().default('results/logs'),
+  profileDir: v.string().default('results/profiles'),
   processLogMode: v.literalUnion('file', 'inherit', 'ignore').default('file'),
   reset: v.boolean().default(true),
   cacheURL: v.string().optional(),
+
+  topology: v.literalUnion('single', 'distributed').default('single'),
+  numViewSyncers: v.number().default(1),
+  numReplicationManagers: v.literalUnion(1, 2).default(1),
+  profileRM: v.boolean().default(false),
+  profileVS: v.boolean().default(false),
 
   pg: {
     url: v.string().default(DEFAULT_PG_URL),
@@ -58,16 +67,22 @@ const options = {
 
 export type BenchmarkProfile = 'feed-append' | 'email' | 'forum' | 'relational';
 export type BenchmarkModel = 'hot' | 'realistic';
+export type BenchmarkTopology = 'single' | 'distributed';
 
 export type BenchmarkConfig = {
   readonly runID: string;
   readonly profile: BenchmarkProfile;
   readonly model: BenchmarkModel;
+  readonly topology: BenchmarkTopology;
+  readonly numViewSyncers: number;
+  readonly numReplicationManagers: 1 | 2;
   readonly users: number;
   readonly queriesPerUser: number;
   readonly rowsPerQuery: number;
   readonly writeRate: number;
   readonly batchSize: number;
+  readonly rowsPerTx: number;
+  readonly writeConcurrency: number;
   readonly payloadBytes: number;
   readonly durationMs: number;
   readonly warmupMs: number;
@@ -77,9 +92,13 @@ export type BenchmarkConfig = {
   readonly sloP99LagMs: number;
   readonly outputPath: string;
   readonly logsDir: string;
+  readonly profileDir: string;
+  readonly profileRM: boolean;
+  readonly profileVS: boolean;
   readonly processLogMode: 'file' | 'inherit' | 'ignore';
   readonly reset: boolean;
   readonly cacheURL: string;
+  readonly cacheURLs: readonly string[];
   readonly pg: {
     readonly url: string;
     readonly start: boolean;
@@ -111,6 +130,9 @@ export function loadConfig(): BenchmarkConfig {
   assertPositiveInteger('rowsPerQuery', parsed.rowsPerQuery);
   assertPositiveNumber('writeRate', parsed.writeRate);
   assertPositiveInteger('batchSize', parsed.batchSize);
+  assertPositiveInteger('rowsPerTx', parsed.rowsPerTx);
+  assertPositiveInteger('writeConcurrency', parsed.writeConcurrency);
+  assertPositiveInteger('numViewSyncers', parsed.numViewSyncers);
   assertNonNegativeInteger('payloadBytes', parsed.payloadBytes);
   assertPositiveInteger('durationMs', parsed.durationMs);
   assertNonNegativeInteger('warmupMs', parsed.warmupMs);
@@ -120,15 +142,30 @@ export function loadConfig(): BenchmarkConfig {
   assertPositiveInteger('sloP99LagMs', parsed.sloP99LagMs);
   assertValidAppID(parsed.zero.appID);
 
+  const effectiveBatchSize = Math.max(parsed.batchSize, parsed.rowsPerTx);
+  const basePort = parsed.zero.port;
+  const cacheURLs =
+    parsed.topology === 'distributed'
+      ? Array.from(
+          {length: parsed.numViewSyncers},
+          (_, i) => `http://127.0.0.1:${basePort + 10 + i}`,
+        )
+      : [parsed.cacheURL ?? `http://127.0.0.1:${basePort}`];
+
   return {
     runID: new Date().toISOString().replace(/[:.]/g, '-'),
     profile: parsed.profile,
     model: parsed.model,
+    topology: parsed.topology,
+    numViewSyncers: parsed.numViewSyncers,
+    numReplicationManagers: parsed.numReplicationManagers,
     users: parsed.users,
     queriesPerUser: parsed.queriesPerUser,
     rowsPerQuery: parsed.rowsPerQuery,
     writeRate: parsed.writeRate,
-    batchSize: parsed.batchSize,
+    batchSize: effectiveBatchSize,
+    rowsPerTx: effectiveBatchSize,
+    writeConcurrency: parsed.writeConcurrency,
     payloadBytes: parsed.payloadBytes,
     durationMs: parsed.durationMs,
     warmupMs: parsed.warmupMs,
@@ -138,9 +175,13 @@ export function loadConfig(): BenchmarkConfig {
     sloP99LagMs: parsed.sloP99LagMs,
     outputPath: parsed.output,
     logsDir: parsed.logsDir,
+    profileDir: parsed.profileDir,
+    profileRM: parsed.profileRM,
+    profileVS: parsed.profileVS,
     processLogMode: parsed.processLogMode,
     reset: parsed.reset,
-    cacheURL: parsed.cacheURL ?? `http://127.0.0.1:${parsed.zero.port}`,
+    cacheURL: cacheURLs[0],
+    cacheURLs,
     pg: parsed.pg,
     zero: parsed.zero,
   };

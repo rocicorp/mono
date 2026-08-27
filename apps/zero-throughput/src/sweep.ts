@@ -4,7 +4,11 @@ import {createWriteStream, type WriteStream} from 'node:fs';
 import {access, appendFile, mkdir, readFile, writeFile} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import type {BenchmarkModel, BenchmarkProfile} from './config.ts';
+import type {
+  BenchmarkModel,
+  BenchmarkProfile,
+  BenchmarkTopology,
+} from './config.ts';
 import {appPath, appRoot, repoRoot} from './config.ts';
 import {startPostgres, stopPostgres} from './processes.ts';
 import type {BenchmarkResult} from './results.ts';
@@ -28,6 +32,14 @@ const MODEL_VALUES = new Set<BenchmarkModel>(['hot', 'realistic']);
 
 type SweepConfig = {
   readonly runID: string;
+  readonly mode: 'binary' | 'linear';
+  readonly writeRates?: readonly number[] | undefined;
+  readonly topology?: BenchmarkTopology | undefined;
+  readonly numViewSyncers?: number | undefined;
+  readonly numReplicationManagers?: (1 | 2) | undefined;
+  readonly writeConcurrency?: number | undefined;
+  readonly profileRM?: boolean | undefined;
+  readonly profileVS?: boolean | undefined;
   readonly profiles: readonly BenchmarkProfile[];
   readonly models: readonly BenchmarkModel[];
   readonly users: readonly number[];
@@ -95,6 +107,8 @@ const config = parseArgs(argv[0] === '--' ? argv.slice(1) : argv);
 
 if (config.dryRun) {
   printDryRun(config);
+} else if (config.mode === 'linear') {
+  await runLinearSweep(config);
 } else {
   await runSweep(config);
 }
@@ -203,6 +217,133 @@ async function runSweep(config: SweepConfig): Promise<void> {
       await stopPostgres();
     }
   }
+}
+
+async function runLinearSweep(config: SweepConfig): Promise<void> {
+  const outputDir = appPath(config.outputDir);
+  const runsDir = join(outputDir, 'runs');
+  const childLogsDir = join(outputDir, 'child-logs');
+  const attemptsPath = join(outputDir, 'attempts.jsonl');
+  const points = sweepPoints(config);
+  const writeRates =
+    config.writeRates && config.writeRates.length > 0
+      ? config.writeRates
+      : [100, 250, 500, 1000, 2000];
+
+  await mkdir(runsDir, {recursive: true});
+  await mkdir(childLogsDir, {recursive: true});
+  await writeFile(attemptsPath, '');
+
+  let postgresStarted = false;
+  const onSigint = () => {
+    stderr('\nInterrupted. Cleaning up sweep PostgreSQL if needed...\n');
+    void (async () => {
+      if (postgresStarted) {
+        await stopPostgres();
+      }
+      process.exit(130);
+    })();
+  };
+  process.once('SIGINT', onSigint);
+
+  const attempts: SweepAttempt[] = [];
+
+  try {
+    stdout(`zero-throughput linear sweep ${config.runID}\n`);
+    stdout(`output: ${outputDir}\n`);
+
+    if (config.pgStart) {
+      stdout('Starting sweep PostgreSQL...\n');
+      await startPostgres();
+      postgresStarted = true;
+    }
+
+    for (const point of points) {
+      for (const rate of writeRates) {
+        stdout(`\n--> Running ${pointLabel(point)} @ ${rate} writes/s...\n`);
+        const attempt = await runAttempt({
+          config,
+          point,
+          writeRate: rate,
+          repetition: 0,
+          runsDir,
+          childLogsDir,
+        });
+        attempts.push(attempt);
+        await appendFile(attemptsPath, `${JSON.stringify(attempt)}\n`);
+
+        const s = attempt.summary;
+        const status = attempt.status === 'pass' ? 'PASS' : 'FAIL';
+        stdout(
+          `    Result: ${status} | achieved=${s?.achievedWriteRate.toFixed(1) ?? '0'} w/s | p95Lag=${s?.p95ClientVisibleLagMs.toFixed(1) ?? 'N/A'}ms\n`,
+        );
+
+        if (attempt.status === 'error' && !config.continueOnError) {
+          throw new Error(
+            `Benchmark attempt failed for ${pointLabel(point)} at ${rate} writes/s. See ${attempt.logPath}`,
+          );
+        }
+      }
+    }
+  } finally {
+    process.off('SIGINT', onSigint);
+    if (postgresStarted) {
+      stdout('\nStopping sweep PostgreSQL...\n');
+      await stopPostgres();
+    }
+  }
+
+  printLinearSweepSummaryTable(attempts);
+}
+
+function printLinearSweepSummaryTable(attempts: readonly SweepAttempt[]): void {
+  stdout(
+    '\n========================================================================================================================\n',
+  );
+  stdout(
+    '                                LINEAR THROUGHPUT SWEEP RESULTS                                                         \n',
+  );
+  stdout(
+    '========================================================================================================================\n',
+  );
+  stdout(
+    ' Profile     | Model     | Users | Rate  | Actual | E2E Lag (p50/p95) | IVM Adv (p50/p95) | RM Lag (p50/p95) | Status   \n',
+  );
+  stdout(
+    '-------------+-----------+-------+-------+--------+-------------------+-------------------+------------------+----------\n',
+  );
+
+  for (const a of attempts) {
+    const s = a.summary;
+    const p = a.point;
+    const e2eStr = s?.e2eServingLagMs
+      ? `${s.e2eServingLagMs.p50.toFixed(1)} / ${s.e2eServingLagMs.p95.toFixed(1)}ms`
+      : s?.p95ClientVisibleLagMs !== undefined
+        ? `${s.p50ClientVisibleLagMs.toFixed(1)} / ${s.p95ClientVisibleLagMs.toFixed(1)}ms`
+        : 'N/A';
+    const ivmStr = s?.advancementLatencyMs
+      ? `${s.advancementLatencyMs.p50.toFixed(1)} / ${s.advancementLatencyMs.p95.toFixed(1)}ms`
+      : 'N/A';
+    const rmStr = s?.replicationLagMs
+      ? `${s.replicationLagMs.p50.toFixed(1)} / ${s.replicationLagMs.p95.toFixed(1)}ms`
+      : 'N/A';
+    const status = a.status === 'pass' ? 'HEALTHY' : 'COLLAPSED';
+
+    stdout(
+      ` ${p.profile.padEnd(11)} | ` +
+        `${p.model.padEnd(9)} | ` +
+        `${String(p.users).padEnd(5)} | ` +
+        `${String(a.writeRate).padEnd(5)} | ` +
+        `${String(s?.achievedWriteRate.toFixed(1) ?? '0').padEnd(6)} | ` +
+        `${e2eStr.padEnd(17)} | ` +
+        `${ivmStr.padEnd(17)} | ` +
+        `${rmStr.padEnd(16)} | ` +
+        `${status}\n`,
+    );
+  }
+  stdout(
+    '========================================================================================================================\n\n',
+  );
 }
 
 async function runPointSearch(args: {
@@ -420,6 +561,27 @@ function benchmarkCommand(
   if (config.pgURL !== undefined) {
     command.push('--pg-url', config.pgURL);
   }
+  if (config.topology !== undefined) {
+    command.push('--topology', config.topology);
+  }
+  if (config.numViewSyncers !== undefined) {
+    command.push('--num-view-syncers', String(config.numViewSyncers));
+  }
+  if (config.numReplicationManagers !== undefined) {
+    command.push(
+      '--num-replication-managers',
+      String(config.numReplicationManagers),
+    );
+  }
+  if (config.writeConcurrency !== undefined) {
+    command.push('--write-concurrency', String(config.writeConcurrency));
+  }
+  if (config.profileRM) {
+    command.push('--profile-rm');
+  }
+  if (config.profileVS) {
+    command.push('--profile-vs');
+  }
   return command;
 }
 
@@ -489,6 +651,14 @@ function sweepPoints(config: SweepConfig): readonly SweepPoint[] {
 
 function parseArgs(argv: readonly string[]): SweepConfig {
   const runID = new Date().toISOString().replace(/[:.]/g, '-');
+  let mode: 'binary' | 'linear' = 'binary';
+  let writeRates: readonly number[] | undefined;
+  let topology: BenchmarkTopology | undefined;
+  let numViewSyncers: number | undefined;
+  let numReplicationManagers: (1 | 2) | undefined;
+  let writeConcurrency: number | undefined;
+  let profileRM = false;
+  let profileVS = false;
   let profiles: readonly BenchmarkProfile[] = DEFAULT_PROFILES;
   let models: readonly BenchmarkModel[] = DEFAULT_MODELS;
   let users: readonly number[] = DEFAULT_USERS;
@@ -519,6 +689,9 @@ function parseArgs(argv: readonly string[]): SweepConfig {
   let help = false;
 
   for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--') {
+      continue;
+    }
     const option = parseOption(argv[i]);
     switch (option.name) {
       case '--help':
@@ -526,14 +699,17 @@ function parseArgs(argv: readonly string[]): SweepConfig {
         help = true;
         break;
       case '--profiles':
+      case '--profile':
         profiles = parseProfiles(readOptionValue(argv, option, i));
         i += option.value === undefined ? 1 : 0;
         break;
       case '--models':
+      case '--model':
         models = parseModels(readOptionValue(argv, option, i));
         i += option.value === undefined ? 1 : 0;
         break;
       case '--users':
+      case '--user':
         users = parsePositiveIntegerList(
           option.name,
           readOptionValue(argv, option, i),
@@ -699,6 +875,81 @@ function parseArgs(argv: readonly string[]): SweepConfig {
         i += parsed.consumed;
         break;
       }
+      case '--mode': {
+        const val = readOptionValue(argv, option, i);
+        if (val !== 'binary' && val !== 'linear') {
+          throw new Error('--mode must be binary or linear');
+        }
+        mode = val;
+        i += option.value === undefined ? 1 : 0;
+        break;
+      }
+      case '--write-rates': {
+        writeRates = parsePositiveIntegerList(
+          option.name,
+          readOptionValue(argv, option, i),
+        );
+        mode = 'linear';
+        i += option.value === undefined ? 1 : 0;
+        break;
+      }
+      case '--topology': {
+        const val = readOptionValue(argv, option, i);
+        if (val !== 'single' && val !== 'distributed') {
+          throw new Error('--topology must be single or distributed');
+        }
+        topology = val;
+        i += option.value === undefined ? 1 : 0;
+        break;
+      }
+      case '--num-view-syncers': {
+        numViewSyncers = parsePositiveInteger(
+          option.name,
+          readOptionValue(argv, option, i),
+        );
+        i += option.value === undefined ? 1 : 0;
+        break;
+      }
+      case '--num-replication-managers': {
+        const val = parsePositiveInteger(
+          option.name,
+          readOptionValue(argv, option, i),
+        );
+        if (val !== 1 && val !== 2) {
+          throw new Error('--num-replication-managers must be 1 or 2');
+        }
+        numReplicationManagers = val;
+        i += option.value === undefined ? 1 : 0;
+        break;
+      }
+      case '--write-concurrency': {
+        writeConcurrency = parsePositiveInteger(
+          option.name,
+          readOptionValue(argv, option, i),
+        );
+        i += option.value === undefined ? 1 : 0;
+        break;
+      }
+      case '--rows-per-tx': {
+        batchSize = parsePositiveInteger(
+          option.name,
+          readOptionValue(argv, option, i),
+        );
+        i += option.value === undefined ? 1 : 0;
+        break;
+      }
+      case '--profile-rm': {
+        const parsed = readBooleanOption(argv, option, i, true);
+        profileRM = parsed.value;
+        i += parsed.consumed;
+        break;
+      }
+      case '--profile-vs': {
+        const parsed = readBooleanOption(argv, option, i, true);
+        profileVS = parsed.value;
+        i += parsed.consumed;
+        break;
+      }
       default:
         throw new Error(`Unknown sweep option ${option.name}`);
     }
@@ -714,6 +965,14 @@ function parseArgs(argv: readonly string[]): SweepConfig {
 
   return {
     runID,
+    mode,
+    writeRates,
+    topology,
+    numViewSyncers,
+    numReplicationManagers,
+    writeConcurrency,
+    profileRM,
+    profileVS,
     profiles,
     models,
     users,
@@ -856,6 +1115,19 @@ function parseBoolean(value: string): boolean {
 
 function printDryRun(config: SweepConfig): void {
   const points = sweepPoints(config);
+  if (config.mode === 'linear') {
+    const rates = config.writeRates ?? [100, 250, 500, 1000, 2000];
+    stdout(`zero-throughput linear sweep dry run\n`);
+    stdout(`points: ${points.length}, write rates: ${rates.join(', ')}\n`);
+    stdout(`total benchmark runs: ${points.length * rates.length}\n`);
+    stdout(`duration per benchmark: ${formatDuration(config.durationMs)}\n\n`);
+    for (const point of points) {
+      for (const rate of rates) {
+        stdout(`${pointLabel(point)} @ ${rate} writes/s\n`);
+      }
+    }
+    return;
+  }
   stdout(`zero-throughput recommended sweep dry run\n`);
   stdout(`points: ${points.length}\n`);
   stdout(

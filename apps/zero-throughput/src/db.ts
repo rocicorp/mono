@@ -37,8 +37,12 @@ import {
 
 export type BenchmarkDB = postgres.Sql;
 
-export function connectBenchmarkDB(url: string): BenchmarkDB {
+export function connectBenchmarkDB(
+  url: string,
+  maxConnections = 20,
+): BenchmarkDB {
   return postgres(url, {
+    max: maxConnections,
     idle_timeout: 0,
     connect_timeout: 30,
     max_lifetime: null,

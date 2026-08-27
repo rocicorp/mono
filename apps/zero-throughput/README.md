@@ -144,6 +144,42 @@ To stream zero-cache logs directly in the terminal:
 pnpm --filter zero-throughput start -- --process-log-mode inherit
 ```
 
+## Distributed Topology & Multi-Process Scaling
+
+To benchmark the full multi-process replication architecture:
+
+$$\text{PostgreSQL} \xrightarrow{\text{WAL}} \text{Replication Manager (1 or 2 HA)} \xrightarrow{\text{WS}} \text{View-Syncer Pods (1 to } N\text{)} \xrightarrow{\text{IVM}} \text{Clients}$$
+
+```bash
+# 1. Distributed topology with 2 View-Syncer pods, 2 sync workers each, and RM HA standby
+pnpm --filter zero-throughput start -- \
+  --topology distributed \
+  --num-view-syncers 2 \
+  --zero-num-sync-workers 2 \
+  --num-replication-managers 2 \
+  --profile forum \
+  --users 20 \
+  --write-rate 200
+
+# 2. Capture V8 CPU profiles across all child worker processes (change-streamer, syncer, etc.)
+pnpm --filter zero-throughput start -- \
+  --profile-rm \
+  --profile-vs \
+  --profile-dir results/profiles
+
+# 3. High-throughput multi-worker concurrent database writes with batching (e.g. 2,000 w/s)
+pnpm --filter zero-throughput start -- \
+  --profile feed-append \
+  --write-rate 2000 \
+  --write-concurrency 5 \
+  --batch-size 10 \
+  --duration-ms 10000
+
+# 4. Linear throughput parameter sweep (prints side-by-side comparison table)
+pnpm --filter zero-throughput run sweep:capacity
+pnpm --filter zero-throughput run sweep:fanout
+```
+
 Use an already-running PostgreSQL or Zero:
 
 ```bash

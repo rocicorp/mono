@@ -156,14 +156,144 @@ export function queryPlanAnalysisLogPath(config: BenchmarkConfig): string {
 }
 
 export async function removeReplicaFiles(replicaFile: string): Promise<void> {
-  await Promise.all(
-    [replicaFile, `${replicaFile}-shm`, `${replicaFile}-wal`].map(file =>
-      rm(file, {force: true}),
-    ),
-  );
+  const files: string[] = [
+    replicaFile,
+    `${replicaFile}-shm`,
+    `${replicaFile}-wal`,
+    `${replicaFile}-rm1`,
+    `${replicaFile}-rm1-shm`,
+    `${replicaFile}-rm1-wal`,
+    `${replicaFile}-rm2`,
+    `${replicaFile}-rm2-shm`,
+    `${replicaFile}-rm2-wal`,
+  ];
+  for (let i = 0; i < 20; i++) {
+    files.push(
+      `${replicaFile}-vs${i}`,
+      `${replicaFile}-vs${i}-shm`,
+      `${replicaFile}-vs${i}-wal`,
+    );
+  }
+  await Promise.all(files.map(file => rm(file, {force: true})));
 }
 
-export function startZeroCache(config: BenchmarkConfig): ManagedProcess {
+export type StartedTopology = {
+  readonly processes: readonly ManagedProcess[];
+  readonly readyURLs: readonly string[];
+  stop(): Promise<void>;
+};
+
+export function startZeroTopology(
+  config: BenchmarkConfig,
+  metricsEndpoint?: string | undefined,
+): StartedTopology {
+  if (config.profileRM || config.profileVS) {
+    mkdirSync(appPath(config.profileDir), {recursive: true});
+  }
+
+  if (config.topology === 'single') {
+    const singleProc = spawnZeroProcess({
+      config,
+      name: 'zero-cache',
+      role: 'single',
+      port: config.zero.port,
+      numSyncWorkers: config.zero.numSyncWorkers,
+      replicaFile: config.zero.replicaFile,
+      metricsEndpoint,
+      profile: config.profileVS,
+    });
+    return {
+      processes: [singleProc],
+      readyURLs: [config.cacheURL],
+      stop: () => singleProc.stop(),
+    };
+  }
+
+  // Distributed topology: 1-2 RMs + N View-Syncers
+  const processes: ManagedProcess[] = [];
+  const basePort = config.zero.port;
+  const rm1Port = basePort;
+  const rm1ChangeStreamerPort = basePort + 1;
+
+  // 1. Replication Manager 1
+  const rm1 = spawnZeroProcess({
+    config,
+    name: 'rm-1',
+    role: 'rm',
+    port: rm1Port,
+    changeStreamerAddress: `127.0.0.1:${rm1ChangeStreamerPort}`,
+    changeStreamerMode: 'dedicated',
+    numSyncWorkers: 0,
+    replicaFile: `${config.zero.replicaFile}-rm1`,
+    metricsEndpoint,
+    profile: config.profileRM,
+  });
+  processes.push(rm1);
+
+  // 2. Replication Manager 2 (HA Standby)
+  if (config.numReplicationManagers === 2) {
+    const rm2Port = basePort + 2;
+    const rm2ChangeStreamerPort = basePort + 3;
+    const rm2 = spawnZeroProcess({
+      config,
+      name: 'rm-2',
+      role: 'rm',
+      port: rm2Port,
+      changeStreamerAddress: `127.0.0.1:${rm2ChangeStreamerPort}`,
+      changeStreamerMode: 'dedicated',
+      changeStreamerStartupDelayMs: 5000,
+      numSyncWorkers: 0,
+      replicaFile: `${config.zero.replicaFile}-rm2`,
+      metricsEndpoint,
+      profile: config.profileRM,
+    });
+    processes.push(rm2);
+  }
+
+  // 3. View-Syncers (1 to N)
+  const readyURLs: string[] = [];
+  for (let i = 0; i < config.numViewSyncers; i++) {
+    const vsPort = basePort + 10 + i;
+    const vsURL = `http://127.0.0.1:${vsPort}`;
+    readyURLs.push(vsURL);
+
+    const vs = spawnZeroProcess({
+      config,
+      name: `vs-${i}`,
+      role: 'vs',
+      port: vsPort,
+      changeStreamerMode: 'discover',
+      numSyncWorkers: config.zero.numSyncWorkers,
+      replicaFile: `${config.zero.replicaFile}-vs${i}`,
+      metricsEndpoint,
+      profile: config.profileVS,
+    });
+    processes.push(vs);
+  }
+
+  return {
+    processes,
+    readyURLs,
+    stop: async () => {
+      await Promise.all(processes.map(p => p.stop()));
+    },
+  };
+}
+
+function spawnZeroProcess(args: {
+  readonly config: BenchmarkConfig;
+  readonly name: string;
+  readonly role: 'single' | 'rm' | 'vs';
+  readonly port: number;
+  readonly numSyncWorkers: number;
+  readonly replicaFile: string;
+  readonly changeStreamerAddress?: string | undefined;
+  readonly changeStreamerMode?: string | undefined;
+  readonly changeStreamerStartupDelayMs?: number | undefined;
+  readonly metricsEndpoint?: string | undefined;
+  readonly profile?: boolean | undefined;
+}): ManagedProcess {
+  const {config, name, port, numSyncWorkers, replicaFile} = args;
   const zeroCacheMain = fileURLToPath(
     new URL(
       '../../../packages/zero-cache/src/server/runner/main.ts',
@@ -171,10 +301,55 @@ export function startZeroCache(config: BenchmarkConfig): ManagedProcess {
     ),
   );
   const command = [process.execPath, '--trace-warnings', zeroCacheMain];
-  const env = zeroCacheEnv(config);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: 'development',
+    DO_NOT_TRACK: '1',
+    ZERO_ENABLE_TELEMETRY: 'false',
+    ZERO_UPSTREAM_DB: config.pg.url,
+    ZERO_CVR_DB: config.pg.url,
+    ZERO_CHANGE_DB: config.pg.url,
+    ZERO_REPLICA_FILE: replicaFile,
+    ZERO_APP_ID: config.zero.appID,
+    ZERO_TASK_ID: `zero-throughput-${name}-${config.runID}`,
+    ZERO_PORT: String(port),
+    ZERO_NUM_SYNC_WORKERS: String(numSyncWorkers),
+    ZERO_UPSTREAM_MAX_CONNS: String(config.zero.upstreamMaxConns),
+    ZERO_CVR_MAX_CONNS: String(config.zero.cvrMaxConns),
+    ZERO_CHANGE_MAX_CONNS: String(config.zero.changeMaxConns),
+    ZERO_LOG_LEVEL: config.zero.logLevel,
+    ZERO_LOG_FORMAT: 'text',
+  };
+
+  if (args.changeStreamerAddress) {
+    env.ZERO_CHANGE_STREAMER_ADDRESS = args.changeStreamerAddress;
+  }
+  if (args.changeStreamerMode) {
+    env.ZERO_CHANGE_STREAMER_MODE = args.changeStreamerMode;
+  }
+  if (args.changeStreamerStartupDelayMs !== undefined) {
+    env.ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS = String(
+      args.changeStreamerStartupDelayMs,
+    );
+  }
+
+  if (args.metricsEndpoint) {
+    env.OTEL_EXPORTER_OTLP_ENDPOINT = args.metricsEndpoint;
+    env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = args.metricsEndpoint;
+    env.OTEL_METRICS_EXPORTER = 'otlp';
+    env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+    env.OTEL_METRIC_EXPORT_INTERVAL = '500';
+    env.OTEL_METRIC_EXPORT_TIMEOUT = '500';
+  }
+
+  if (args.profile) {
+    const profDir = appPath(config.profileDir);
+    env.NODE_OPTIONS = `--cpu-prof --cpu-prof-dir="${profDir}" ${process.env.NODE_OPTIONS ?? ''}`;
+  }
+
   const logPath =
     config.processLogMode === 'file'
-      ? join(processLogsDir(config), `${config.runID}-zero-cache.log`)
+      ? join(processLogsDir(config), `${config.runID}-${name}.log`)
       : undefined;
   const logStream =
     logPath === undefined ? undefined : createWriteStream(logPath);
@@ -193,7 +368,7 @@ export function startZeroCache(config: BenchmarkConfig): ManagedProcess {
   pipeProcessLogs(child, logStream);
 
   return {
-    name: 'zero-cache',
+    name,
     command,
     cwd: repoRoot,
     logPath,
@@ -236,30 +411,6 @@ export async function waitForZeroCache(
   throw new Error(
     `Timed out waiting for zero-cache after ${timeoutMs}ms: ${String(lastError)}`,
   );
-}
-
-function zeroCacheEnv(config: BenchmarkConfig): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    NODE_ENV: 'development',
-    DO_NOT_TRACK: '1',
-    ZERO_ENABLE_TELEMETRY: 'false',
-    ZERO_UPSTREAM_DB: config.pg.url,
-    ZERO_CVR_DB: config.pg.url,
-    ZERO_CHANGE_DB: config.pg.url,
-    ZERO_REPLICA_FILE: config.zero.replicaFile,
-    ZERO_APP_ID: config.zero.appID,
-    ZERO_TASK_ID: `zero-throughput-${config.runID}`,
-    ZERO_PORT: String(config.zero.port),
-    ZERO_NUM_SYNC_WORKERS: String(config.zero.numSyncWorkers),
-    ZERO_UPSTREAM_MAX_CONNS: String(config.zero.upstreamMaxConns),
-    ZERO_CVR_MAX_CONNS: String(config.zero.cvrMaxConns),
-    ZERO_CHANGE_MAX_CONNS: String(config.zero.changeMaxConns),
-    ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS: '0',
-    ZERO_REPLICATION_LAG_REPORT_INTERVAL_MS: '1000',
-    ZERO_LOG_LEVEL: config.zero.logLevel,
-    ZERO_LOG_FORMAT: 'text',
-  };
 }
 
 async function runCommand(
