@@ -495,7 +495,6 @@ export class Storer implements Service {
   }
 
   #readyForMore: Resolver<void> | null = null;
-  #backpressureTimeout: NodeJS.Timeout | undefined;
 
   readyForMore(): Promise<void> | undefined {
     if (!this.#running) {
@@ -519,23 +518,8 @@ export class Storer implements Service {
           `  LIMIT 20;`,
       );
       this.#readyForMore = resolver();
-      this.#resetBackpressureTimeout(true);
     }
     return this.#readyForMore?.promise;
-  }
-
-  #resetBackpressureTimeout(reschedule: boolean) {
-    clearTimeout(this.#backpressureTimeout);
-    this.#backpressureTimeout = reschedule
-      ? setTimeout(() => {
-          this.#readyForMore?.reject(
-            new AbortError(
-              `No statement processed within the last ${this.#statementTimeoutMs}ms. Considering the change-log to be wedged.`,
-            ),
-          );
-          this.#readyForMore = null;
-        }, this.#statementTimeoutMs)
-      : undefined;
   }
 
   #maybeReleaseBackPressure() {
@@ -550,9 +534,6 @@ export class Storer implements Service {
         );
         this.#readyForMore.resolve();
         this.#readyForMore = null;
-        this.#resetBackpressureTimeout(false);
-      } else {
-        this.#resetBackpressureTimeout(true);
       }
     }
   }
@@ -615,7 +596,6 @@ export class Storer implements Service {
         this.#readyForMore.resolve();
         this.#readyForMore = null;
       }
-      this.#resetBackpressureTimeout(false);
       this.#cancelQueueEntries(
         this.#queue.drain().filter(entry => entry !== undefined),
         err,
@@ -714,10 +694,7 @@ export class Storer implements Service {
           tx = {
             pool: new TransactionPool(
               this.#lc.withContext('watermark', watermark),
-              {
-                mode: Mode.READ_COMMITTED,
-                statementResponseTimeout: this.#statementTimeoutMs,
-              },
+              {mode: Mode.READ_COMMITTED},
             ),
             preCommitWatermark: watermark,
             pos: 0,
