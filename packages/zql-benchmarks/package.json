@@ -27,7 +27,7 @@
     "@types/tmp": "^0.2.6",
     "mitata": "^1.0.34",
     "otel": "workspace:*",
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.65.0",
     "shared": "workspace:*",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",

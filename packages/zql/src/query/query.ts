@@ -158,11 +158,10 @@ export type GetFilterType<
   TColumn extends keyof TSchema['columns'],
   TOperator extends SimpleOperator,
 > = TOperator extends 'IS' | 'IS NOT'
-  ?
-      // SchemaValueToTSType adds null if the type is optional, but we add null
-      // no matter what for dx reasons. See:
-      // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
-      SchemaValueToTSType<TSchema['columns'][TColumn]> | null | undefined
+  ? // SchemaValueToTSType adds null if the type is optional, but we add null
+    // no matter what for dx reasons. See:
+    // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
+    SchemaValueToTSType<TSchema['columns'][TColumn]> | null | undefined
   : TOperator extends 'IN' | 'NOT IN'
     ? // We don't want to compare to null in where clauses because it causes
       // confusing results:
@@ -210,18 +209,16 @@ export type PullRow<
   TTable extends keyof ZeroSchema['tables'] & string,
   TSchema extends ZeroSchema = DefaultSchema,
 > = {
-  readonly [K in keyof PullTableSchema<
-    TTable,
-    TSchema
-  >['columns']]: SchemaValueToTSType<
-    PullTableSchema<TTable, TSchema>['columns'][K]
-  >;
+  readonly [
+    K in keyof PullTableSchema<TTable, TSchema>['columns']
+  ]: SchemaValueToTSType<PullTableSchema<TTable, TSchema>['columns'][K]>;
 } & {};
 
 type RowNamespace<S extends ZeroSchema | TypeError> = S extends ZeroSchema
   ? {
-      readonly [K in keyof S['tables'] &
-        string]: S['tables'][K] extends TableSchema
+      readonly [
+        K in keyof S['tables'] & string
+      ]: S['tables'][K] extends TableSchema
         ? Row<S['tables'][K]>
         : {
             error: `The table schema for table ${K & string} you have registered with \`declare module '@rocicorp/zero'\` is incorrect.`;

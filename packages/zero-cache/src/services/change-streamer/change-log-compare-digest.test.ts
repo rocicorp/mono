@@ -157,13 +157,11 @@ describe('change-streamer/change-log-compare-digest', () => {
     // formatting difference is therefore a real difference, not a rendering
     // artifact, and hashing the stored text keeps it visible.
     const rows = buildRows([{width: 3, kind: 'complete'}]);
-    const reformatted = rows.map(
-      ([w, tag, json]): WatermarkedChange => [
-        w,
-        tag,
-        json.replaceAll(':', ': '),
-      ],
-    );
+    const reformatted = rows.map(([w, tag, json]): WatermarkedChange => [
+      w,
+      tag,
+      json.replaceAll(':', ': '),
+    ]);
     expect(reformatted).not.toEqual(rows);
     expect((await digest(reformatted)).digest).not.toBe(
       (await digest(rows)).digest,
@@ -266,13 +264,11 @@ describe('change-streamer/change-log-compare-digest', () => {
       ['w01', 'insert' as ChangeTag, `["data",{"tag":"insert","v":${big}}]`],
       ['w01', 'commit', `["commit",{"tag":"commit"},{"watermark":"w01"}]`],
     ];
-    const nudged = rows.map(
-      ([w, tag, json]): WatermarkedChange => [
-        w,
-        tag,
-        json.replace(big, '9007199254740992'),
-      ],
-    );
+    const nudged = rows.map(([w, tag, json]): WatermarkedChange => [
+      w,
+      tag,
+      json.replace(big, '9007199254740992'),
+    ]);
     expect((await digest(nudged)).digest).not.toBe((await digest(rows)).digest);
   });
 });

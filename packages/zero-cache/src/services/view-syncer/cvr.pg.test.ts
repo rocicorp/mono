@@ -3194,9 +3194,7 @@ describe('view-syncer/cvr', () => {
           {
             version: '09',
             refCounts: {oneHash: 1},
-            contents: {
-              /* ignored */
-            },
+            contents: {/* ignored */},
           },
         ],
       ]),
@@ -3209,9 +3207,7 @@ describe('view-syncer/cvr', () => {
           {
             version: '09',
             refCounts: {twoHash: 1},
-            contents: {
-              /* ignored */
-            },
+            contents: {/* ignored */},
           },
         ],
       ]),
@@ -4194,9 +4190,7 @@ describe('view-syncer/cvr', () => {
           {
             version: '09',
             refCounts: {oneHash: 1},
-            contents: {
-              /* ignored */
-            },
+            contents: {/* ignored */},
           },
         ],
       ]),
@@ -4209,9 +4203,7 @@ describe('view-syncer/cvr', () => {
           {
             version: '03',
             refCounts: {twoHash: 1},
-            contents: {
-              /* ignored */
-            },
+            contents: {/* ignored */},
           },
         ],
       ]),

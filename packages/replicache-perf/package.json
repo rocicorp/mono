@@ -33,7 +33,7 @@
     "xbytes": "^1.7.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.45.0"
+    "oxfmt": "^0.65.0"
   },
   "packageManager": "pnpm@11.11.0"
 }
