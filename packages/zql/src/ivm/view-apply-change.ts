@@ -1,9 +1,4 @@
-import {
-  assert,
-  assertArray,
-  assertNumber,
-  unreachable,
-} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
@@ -790,7 +785,10 @@ function binarySearch(
 function assertMetaEntry<M extends Mutate>(
   v: unknown,
 ): asserts v is MetaEntry<M> {
-  assertNumber((v as Partial<MetaEntry<M>>)[refCountSymbol]);
+  assert(
+    typeof (v as Partial<MetaEntry<M>>)[refCountSymbol] === 'number',
+    'expected MetaEntry',
+  );
 }
 
 /** Get singular MetaEntry, throws if missing. */
@@ -823,7 +821,9 @@ function getChildEntryList<M extends Mutate>(
   relationship: string,
 ): MetaEntryList<M> {
   const view = parentEntry[relationship];
-  assertArray(view);
+  // `relationship` is a string key, so a name colliding with a column would
+  // put a row value here; the message must not repeat it back.
+  assert(Array.isArray(view), 'expected relationship array');
   return view as MetaEntryList<M>;
 }
 
