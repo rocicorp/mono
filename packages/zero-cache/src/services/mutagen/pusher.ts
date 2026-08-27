@@ -95,7 +95,7 @@ export class PusherService implements Service, Pusher {
     this.id = clientGroupID;
   }
 
-  initConnection(selector: ConnectionSelector) {
+  initConnection(selector: ConnectionSelector): Source<Downstream> {
     return this.#pusher.initConnection(selector);
   }
 
@@ -304,7 +304,7 @@ class PushWorker {
    * Returns a new downstream stream if the clientID,wsID pair has not been seen before.
    * If a clientID already exists with a different wsID, that client's downstream is cancelled.
    */
-  initConnection(selector: ConnectionSelector) {
+  initConnection(selector: ConnectionSelector): Subscription<Downstream> {
     const existing = this.#clients.get(selector.clientID);
     if (existing && existing.wsID === selector.wsID) {
       // already initialized for this socket

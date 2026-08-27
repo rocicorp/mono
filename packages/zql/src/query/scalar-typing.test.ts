@@ -150,14 +150,16 @@ test('an inner scalar gate completes an outer compound key', () => {
 test('a non-scalar inner gate does not complete the key', () => {
   // Same shape without the inner hint: nothing supplies `projectID`, so the
   // outer gate is genuinely unpinned.
-  // @ts-expect-error `name` alone does not cover (projectID, name)
   const q = newQuery(schema, 'issueLabel').whereExists(
     'label',
     l =>
       l
         .where('name', '=', 'bug')
         .whereExists('project', p => p.where('lowerCaseName', '=', 'zero')),
-    {scalar: true},
+    {
+      // @ts-expect-error `name` alone does not cover (projectID, name)
+      scalar: true,
+    },
   );
   expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});
 });
@@ -177,37 +179,43 @@ test('flip is unaffected by pinning', () => {
 });
 
 test('rejected shapes are type errors but still build at runtime', () => {
-  // The directive sits on the statement because the overload mismatch is
-  // reported at the call expression, not at the argument that caused it.
+  // The directive sits on the `scalar` property because that is where the
+  // overload mismatch is reported.
   // Runtime behavior is unchanged — the server simply ignores the hint.
 
-  // @ts-expect-error the subquery pins nothing
   const unpinned = newQuery(schema, 'issue').whereExists('project', p => p, {
+    // @ts-expect-error the subquery pins nothing
     scalar: true,
   });
   expect(asQueryInternals(unpinned).ast.where).toMatchObject({scalar: true});
 
-  // @ts-expect-error `name` is not unique on `project`
   const nonUnique = newQuery(schema, 'issue').whereExists(
     'project',
     p => p.where('name', '=', 'Zero'),
-    {scalar: true},
+    {
+      // @ts-expect-error `name` is not unique on `project`
+      scalar: true,
+    },
   );
   expect(asQueryInternals(nonUnique).ast.where).toMatchObject({scalar: true});
 
-  // @ts-expect-error LIKE does not pin `id` to a literal
   const nonEquality = newQuery(schema, 'issue').whereExists(
     'project',
     p => p.where('id', 'LIKE', 'p%'),
-    {scalar: true},
+    {
+      // @ts-expect-error LIKE does not pin `id` to a literal
+      scalar: true,
+    },
   );
   expect(asQueryInternals(nonEquality).ast.where).toMatchObject({scalar: true});
 
-  // @ts-expect-error `name` covers no unique key of `project`
   const partial = newQuery(schema, 'label').whereExists(
     'project',
     p => p.where('name', '=', 'zero'),
-    {scalar: true},
+    {
+      // @ts-expect-error `name` covers no unique key of `project`
+      scalar: true,
+    },
   );
   expect(asQueryInternals(partial).ast.where).toMatchObject({scalar: true});
 

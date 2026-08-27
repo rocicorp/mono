@@ -49,8 +49,8 @@ export declare const addColumnSchema: v.ObjectType<{
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -69,15 +69,15 @@ export declare const backfillCompletedSchema: v.ObjectType<{
         name: v.Type<string>;
         rowKey: v.ObjectType<{
             columns: v.ArrayType<v.Type<string>>;
-            type: v.Optional<"default" | "nothing" | "full" | "index">;
+            type: v.Optional<"default" | "full" | "index" | "nothing">;
         }, undefined>;
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     status: v.Optional<{
-        totalBytes?: number | undefined;
         rows: number;
         totalRows: number;
+        totalBytes?: number | undefined;
     }>;
 }, undefined>;
 export declare const backfillIDSchema: v.Type<Record<string, import("./json.ts").JSONValue | undefined>>;
@@ -88,21 +88,21 @@ export declare const backfillSchema: v.ObjectType<{
         name: v.Type<string>;
         rowKey: v.ObjectType<{
             columns: v.ArrayType<v.Type<string>>;
-            type: v.Optional<"default" | "nothing" | "full" | "index">;
+            type: v.Optional<"default" | "full" | "index" | "nothing">;
         }, undefined>;
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     rowValues: v.ArrayType<v.ArrayType<v.Type<import("../../../../../../shared/src/bigint-json.ts").JSONValue>>>;
     status: v.Optional<{
-        totalBytes?: number | undefined;
         rows: number;
         totalRows: number;
+        totalBytes?: number | undefined;
     }>;
 }, undefined>;
 export declare const beginSchema: v.ObjectType<{
     tag: v.Type<"begin">;
-    json: v.Optional<"s" | "p">;
+    json: v.Optional<"p" | "s">;
     skipAck: v.Optional<boolean>;
 }, undefined>;
 export declare const commitSchema: v.ObjectType<{
@@ -125,13 +125,13 @@ export declare const createTableSchema: v.ObjectType<{
     spec: v.ObjectType<Omit<{
         name: v.Type<string>;
         columns: v.Type<Record<string, {
-            pgTypeClass?: "e" | "d" | "b" | "c" | "p" | "r" | "m" | undefined;
-            elemPgTypeClass?: "e" | "d" | "b" | "c" | "p" | "r" | "m" | null | undefined;
+            pos: number;
+            dataType: string;
+            pgTypeClass?: "b" | "c" | "d" | "e" | "m" | "p" | "r" | undefined;
+            elemPgTypeClass?: "b" | "c" | "d" | "e" | "m" | "p" | "r" | null | undefined;
             characterMaximumLength?: number | null | undefined;
             notNull?: boolean | null | undefined;
             dflt?: string | null | undefined;
-            pos: number;
-            dataType: string;
         }>>;
         primaryKey: v.Optional<string[]>;
     }, "schema"> & {
@@ -146,54 +146,54 @@ export declare const createTableSchema: v.ObjectType<{
 export declare const dataChangeSchema: v.UnionType<[v.ObjectType<{
     tag: v.Type<"insert">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     new: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"update">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     key: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue> | null>;
     new: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"delete">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     key: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"truncate">;
     relations: v.ArrayType<v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"backfill">;
@@ -202,29 +202,29 @@ export declare const dataChangeSchema: v.UnionType<[v.ObjectType<{
         name: v.Type<string>;
         rowKey: v.ObjectType<{
             columns: v.ArrayType<v.Type<string>>;
-            type: v.Optional<"default" | "nothing" | "full" | "index">;
+            type: v.Optional<"default" | "full" | "index" | "nothing">;
         }, undefined>;
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     rowValues: v.ArrayType<v.ArrayType<v.Type<import("../../../../../../shared/src/bigint-json.ts").JSONValue>>>;
     status: v.Optional<{
-        totalBytes?: number | undefined;
         rows: number;
         totalRows: number;
+        totalBytes?: number | undefined;
     }>;
 }, undefined>]>;
 export declare const deleteSchema: v.ObjectType<{
     tag: v.Type<"delete">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     key: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>;
@@ -262,14 +262,14 @@ export declare const identifierSchema: v.ObjectType<{
 export declare const insertSchema: v.ObjectType<{
     tag: v.Type<"insert">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     new: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>;
@@ -278,18 +278,18 @@ export declare const newRelationSchema: v.ObjectType<{
     name: v.Type<string>;
     rowKey: v.ObjectType<{
         columns: v.ArrayType<v.Type<string>>;
-        type: v.Optional<"default" | "nothing" | "full" | "index">;
+        type: v.Optional<"default" | "full" | "index" | "nothing">;
     }, undefined>;
 }, undefined>;
 export declare const relationSchema: v.Type<{
-    rowKey: {
-        type?: "default" | "nothing" | "full" | "index" | undefined;
-        columns: string[];
-    };
-    keyColumns?: string[] | undefined;
-    replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
     schema: string;
     name: string;
+    keyColumns?: string[] | undefined;
+    replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+    rowKey: {
+        columns: string[];
+        type?: "default" | "full" | "index" | "nothing" | undefined;
+    };
 }>;
 export declare const renameTableSchema: v.ObjectType<{
     tag: v.Type<"rename-table">;
@@ -311,13 +311,13 @@ export declare const schemaChangeSchema: v.UnionType<[v.ObjectType<{
     spec: v.ObjectType<Omit<{
         name: v.Type<string>;
         columns: v.Type<Record<string, {
-            pgTypeClass?: "e" | "d" | "b" | "c" | "p" | "r" | "m" | undefined;
-            elemPgTypeClass?: "e" | "d" | "b" | "c" | "p" | "r" | "m" | null | undefined;
+            pos: number;
+            dataType: string;
+            pgTypeClass?: "b" | "c" | "d" | "e" | "m" | "p" | "r" | undefined;
+            elemPgTypeClass?: "b" | "c" | "d" | "e" | "m" | "p" | "r" | null | undefined;
             characterMaximumLength?: number | null | undefined;
             notNull?: boolean | null | undefined;
             dflt?: string | null | undefined;
-            pos: number;
-            dataType: string;
         }>>;
         primaryKey: v.Optional<string[]>;
     }, "schema"> & {
@@ -361,8 +361,8 @@ export declare const schemaChangeSchema: v.UnionType<[v.ObjectType<{
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -384,8 +384,8 @@ export declare const schemaChangeSchema: v.UnionType<[v.ObjectType<{
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -396,8 +396,8 @@ export declare const schemaChangeSchema: v.UnionType<[v.ObjectType<{
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -439,15 +439,15 @@ export declare const schemaChangeSchema: v.UnionType<[v.ObjectType<{
         name: v.Type<string>;
         rowKey: v.ObjectType<{
             columns: v.ArrayType<v.Type<string>>;
-            type: v.Optional<"default" | "nothing" | "full" | "index">;
+            type: v.Optional<"default" | "full" | "index" | "nothing">;
         }, undefined>;
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     status: v.Optional<{
-        totalBytes?: number | undefined;
         rows: number;
         totalRows: number;
+        totalBytes?: number | undefined;
     }>;
 }, undefined>]>;
 export declare const tableMetadataSchema: v.ObjectType<{
@@ -456,14 +456,14 @@ export declare const tableMetadataSchema: v.ObjectType<{
 export declare const truncateSchema: v.ObjectType<{
     tag: v.Type<"truncate">;
     relations: v.ArrayType<v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>>;
 }, undefined>;
 export declare const updateColumnSchema: v.ObjectType<{
@@ -477,8 +477,8 @@ export declare const updateColumnSchema: v.ObjectType<{
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -489,8 +489,8 @@ export declare const updateColumnSchema: v.ObjectType<{
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -500,14 +500,14 @@ export declare const updateColumnSchema: v.ObjectType<{
 export declare const updateSchema: v.ObjectType<{
     tag: v.Type<"update">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     key: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue> | null>;
     new: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;

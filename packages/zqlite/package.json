@@ -34,7 +34,7 @@
     "otel": "workspace:*",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
-    "typescript": "~6.0.2",
+    "typescript": "~7.0.2",
     "vitest": "^4.1.6",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",

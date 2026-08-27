@@ -4,6 +4,10 @@ import type {ReadonlyJSONObject, ReadonlyJSONValue} from './json.ts';
 import {isJSONObject, isJSONValue} from './json.ts';
 import * as v from './valita.ts';
 
+// Re-exported so that inferred schema types stay nameable from modules that
+// import `jsonSchema` without also importing `./json.ts`.
+export type {ReadonlyJSONObject, ReadonlyJSONValue} from './json.ts';
+
 const path: (string | number)[] = [];
 
 export const jsonSchema: valita.Type<ReadonlyJSONValue> = v
