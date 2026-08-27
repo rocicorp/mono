@@ -570,7 +570,7 @@ export const zeroOptions = {
     },
 
     statementTimeoutMs: {
-      type: v.number().default(20_000),
+      type: v.number().default(30_000),
       desc: [
         `Fail change-log transactions if a statement response from postgres is not received within`,
         `the specified timeout. This differs from a postgres {bold statement_timeout} in that`,
