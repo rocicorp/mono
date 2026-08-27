@@ -1,6 +1,8 @@
+import {existsSync, renameSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
+import {deleteLiteDB} from '../../../db/delete-lite-db.ts';
 import {listTables} from '../../../db/lite-tables.ts';
 import {
   runSchemaMigrations,
@@ -28,6 +30,12 @@ export async function initReplica(
   dbPath: string,
   initialSync: (lc: LogContext, tx: Database) => Promise<void>,
 ): Promise<void> {
+  const isInitialSync = !existsSync(dbPath);
+  const migrationPath = isInitialSync ? `${dbPath}.tmp` : dbPath;
+  if (isInitialSync) {
+    deleteLiteDB(migrationPath);
+  }
+
   const setupMigration: Migration = {
     migrateSchema: (log, tx) => initialSync(log, tx),
     minSafeVersion: 1,
@@ -37,12 +45,15 @@ export async function initReplica(
     await runSchemaMigrations(
       log,
       debugName,
-      dbPath,
+      migrationPath,
       setupMigration,
       schemaVersionMigrationMap,
     );
+    if (isInitialSync) {
+      renameSync(migrationPath, dbPath);
+    }
   } catch (e) {
-    throwAutoResetForCorruption(log, debugName, dbPath, e);
+    throwAutoResetForCorruption(log, debugName, migrationPath, e);
   }
 }
 
