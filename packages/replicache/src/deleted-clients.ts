@@ -55,7 +55,7 @@ export function mergeDeletedClients(
   const merged: WritableDeletedClients = [];
   a = normalizeDeletedClients(a);
   b = normalizeDeletedClients(b);
-  for (let i = 0, j = 0; i < a.length || j < b.length; ) {
+  for (let i = 0, j = 0; i < a.length || j < b.length;) {
     if (i < a.length && (j >= b.length || compare(a[i], b[j]) < 0)) {
       merged.push(a[i]);
       i++;
@@ -79,7 +79,7 @@ export function removeFromDeletedClients(
   old = normalizeDeletedClients(old);
   toRemove = normalizeDeletedClients(toRemove);
   const result: WritableDeletedClients = [];
-  for (let i = 0, j = 0; i < old.length; ) {
+  for (let i = 0, j = 0; i < old.length;) {
     if (j >= toRemove.length || compare(old[i], toRemove[j]) < 0) {
       result.push(old[i]);
       i++;

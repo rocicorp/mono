@@ -19,7 +19,7 @@
     "@rocicorp/logger": "^6.1.0",
     "@rocicorp/resolver": "^1.0.2",
     "@vitest/runner": "^4.1.6",
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.65.0",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
     "vitest": "^4.1.6"

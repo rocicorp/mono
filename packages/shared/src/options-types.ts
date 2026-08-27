@@ -142,9 +142,9 @@ type ConfigGroup<G extends Group> = {
  * ```
  */
 export type Config<O extends Options> = {
-  [P in keyof O as O[P] extends Required | Group
-    ? P
-    : never]: O[P] extends Required
+  [
+    P in keyof O as O[P] extends Required | Group ? P : never
+  ]: O[P] extends Required
     ? ValueOf<O[P]>
     : O[P] extends Group
       ? ConfigGroup<O[P]>

@@ -30,6 +30,8 @@
     "prod/sst/sst-env.d.ts",
     "apps/zbugs/public/um.js",
     "apps/zbugs/db/migrations/",
-    "**/__snapshots__/**"
+    "**/__snapshots__/**",
+    "packages/zero-client/src/client/zero-stress-queries-test.ts",
+    "packages/zql-benchmarks/src/planner-cost.bench.ts"
   ]
 }

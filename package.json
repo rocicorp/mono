@@ -35,7 +35,7 @@
     "@vitest/coverage-v8": "^4.1.6",
     "@vitest/runner": "^4.1.6",
     "baseline-browser-mapping": "^2.10.16",
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.65.0",
     "oxlint": "^1.63.0",
     "oxlint-tsgolint": "^0.22.1",
     "playwright": "^1.60.0",

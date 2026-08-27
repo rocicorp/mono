@@ -93,7 +93,7 @@
     "mockttp": "^4.2.1",
     "nock": "^14.0.4",
     "otel": "workspace:*",
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.65.0",
     "shared": "workspace:*",
     "testcontainers": "^10.28.0",
     "typescript": "~7.0.2",
