@@ -143,21 +143,26 @@ export async function runSchemaMigrations(
         }
       }
 
-      db.exec('ANALYZE main');
-      log.info?.('ANALYZE completed');
-    } else {
-      // Run optimize whenever opening an sqlite db file as recommended in
-      // https://www.sqlite.org/pragma.html#pragma_optimize
-      // It is important to run the same initialization steps as is done
-      // in the view-syncer (i.e. when preparing database for serving
-      // replication) so that any corruption detected in the view-syncer is
-      // similarly detected in the change-streamer, facilitating an eventual
-      // recovery by resyncing the replica anew.
-      db.pragma('optimize = 0x10002');
-      // Do not run `quick_check` here. It scans the full database and can
-      // dominate startup time for large replicas or slower disks.
+      // Note: This used to be ANALYZE but that takes a long time for large
+      // dbs. The SQLite docs generally recommend optimize instead.
+      //
+      // https://sqlite.org/pragma.html#pragma_analysis_limit
+      //
+      // Beginning with SQLite version 3.46.0 (2024-05-23), the recommended
+      // way of running ANALYZE is with the PRAGMA optimize command.
+      // The PRAGMA optimize will automatically set a reasonable, temporary
+      // analysis limit that ensures that the PRAGMA optimize command will
+      // finish quickly even on enormous databases. Applications that use
+      // the PRAGMA optimize instead of running ANALYZE directly do not need
+      // to set an analysis limit.
+      const start = performance.now();
+      db.pragma('optimize');
+      const elapsed = performance.now() - start;
+      log.info?.(`OPTIMIZE completed (${elapsed.toFixed(2)}ms)`);
     }
 
+    // Do not run `quick_check` here. It scans the full database and can
+    // dominate startup time for large replicas or slower disks.
     db.pragma('synchronous = NORMAL');
     db.unsafeMode(false);
 
