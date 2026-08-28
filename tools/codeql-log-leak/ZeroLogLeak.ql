@@ -20,8 +20,6 @@ private predicate isSensitiveZeroTypeName(string name) {
       "LiteRow",
       "LiteRowKey",
       "Row",
-      "RowID",
-      "RowKey",
       "RowList",
       "RowValue",
       "InsertOp",
