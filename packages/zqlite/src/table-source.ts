@@ -19,6 +19,7 @@ import {
   transformFilters,
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
+import type {Constraint} from '../../zql/src/ivm/constraint.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
@@ -661,8 +662,22 @@ export class TableSource implements Source {
     if (multiConstraints) {
       for (const multiConstraint of multiConstraints) {
         const columns = multiConstraint[0];
+        let columnCount = 0;
+        for (const _ in columns) {
+          columnCount++;
+        }
         for (const entry of multiConstraint) {
+          // `multiConstraintToSQL` emits one binding per column of the first
+          // entry, so an entry carrying different columns would bind the wrong
+          // values. The builder asserts this whenever it runs, and a fetch
+          // served from a template never reaches it.
+          let entryColumnCount = 0;
+          for (const _ in entry) {
+            entryColumnCount++;
+          }
+          assertSameColumns(entryColumnCount === columnCount, columns, entry);
           for (const key in columns) {
+            assertSameColumns(key in entry, columns, entry);
             values.push(toSQLiteType(entry[key], this.#columns[key].type));
           }
         }
@@ -671,6 +686,20 @@ export class TableSource implements Source {
     values.push(...template.filterValues);
     return values;
   }
+}
+
+function assertSameColumns(
+  sameColumns: boolean,
+  columns: Constraint,
+  entry: Constraint,
+) {
+  assert(
+    sameColumns,
+    () =>
+      `multiConstraint entries must share the same keys (entry 0: [${Object.keys(
+        columns,
+      ).join(',')}], entry: [${Object.keys(entry).join(',')}])`,
+  );
 }
 
 type FetchTemplate = {

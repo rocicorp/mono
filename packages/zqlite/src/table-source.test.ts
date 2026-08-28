@@ -1483,6 +1483,62 @@ describe('reusing a fetch template across fetches', () => {
     });
   }
 
+  test('a heterogeneous multi-constraint throws on both paths', () => {
+    const {db, source} = setup();
+    const input = source.connect(byId);
+    const heterogeneous: FetchRequest = {
+      multiConstraints: [[{id: 'a', group: 'g1'}, {id: 'c'}]],
+    };
+
+    // Fresh: `multiConstraintToSQL` rejects it while building the query.
+    expect(() => fetchRows(input, heterogeneous)).toThrow(
+      'multiConstraint entries must share the same keys',
+    );
+
+    // Cached: a well-formed request of the same shape leaves a template
+    // behind, so the mismatched entry never reaches the builder. It must
+    // still throw rather than bind `undefined` for the missing column.
+    fetchRows(input, {
+      multiConstraints: [
+        [
+          {id: 'a', group: 'g1'},
+          {id: 'c', group: 'g2'},
+        ],
+      ],
+    });
+    expect(() => fetchRows(input, heterogeneous)).toThrow(
+      'multiConstraint entries must share the same keys',
+    );
+
+    // An entry with the same number of columns but a different one: the
+    // count matches, so only checking each expected column catches it.
+    expect(() =>
+      fetchRows(input, {
+        multiConstraints: [
+          [
+            {id: 'a', group: 'g1'},
+            {id: 'c', n: 3},
+          ],
+        ],
+      }),
+    ).toThrow('multiConstraint entries must share the same keys');
+
+    // An entry with an extra column: every expected column is present, so
+    // only the count catches it.
+    expect(() =>
+      fetchRows(input, {
+        multiConstraints: [
+          [
+            {id: 'a', group: 'g1'},
+            {id: 'c', group: 'g2', n: 3},
+          ],
+        ],
+      }),
+    ).toThrow('multiConstraint entries must share the same keys');
+
+    db.close();
+  });
+
   test('filter values survive template reuse', () => {
     const {db, source} = setup();
     const input = source.connect(byId, {
