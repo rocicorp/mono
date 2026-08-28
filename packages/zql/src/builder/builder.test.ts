@@ -11,6 +11,7 @@ import type {
 import {Catch} from '../ivm/catch.ts';
 import {consume} from '../ivm/stream.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
+import {AccumulatorDebugger} from '../planner/planner-debug.ts';
 import {simpleCostModel} from '../planner/test/helpers.ts';
 import {
   bindStaticParameters,
@@ -19,6 +20,7 @@ import {
   groupSubqueryConditions,
   partitionBranches,
 } from './builder.ts';
+import {BoundedPlanCache} from './plan-cache.ts';
 import {TestBuilderDelegate} from './test-builder-delegate.ts';
 
 import {
@@ -2954,4 +2956,70 @@ test('duplicate relationship alias uses last-writer-wins', () => {
   );
   expect(sink.pushes.length).toBe(1);
   expect(sink.pushes[0].type).toBe('child');
+});
+
+const existsUserStatesAST: AST = {
+  table: 'users',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      correlation: {parentField: ['id'], childField: ['userID']},
+      subquery: {
+        table: 'userStates',
+        alias: 'zsubq_userStates',
+        orderBy: [
+          ['userID', 'asc'],
+          ['stateCode', 'asc'],
+        ],
+      },
+    },
+  },
+};
+
+test('plan cache hit builds the same pipeline as a miss', () => {
+  const ast = existsUserStatesAST;
+
+  const uncached = new Catch(
+    buildPipeline(
+      ast,
+      testBuilderDelegate().delegate,
+      'query-id',
+      simpleCostModel,
+    ),
+  ).fetch();
+
+  const store = new BoundedPlanCache(8, 1 << 20);
+  const rows = [0, 1, 2].map(i => {
+    const {delegate} = testBuilderDelegate();
+    delegate.planCache = {store, epoch: 'v1'};
+    return new Catch(
+      buildPipeline(ast, delegate, `query-id-${i}`, simpleCostModel),
+    ).fetch();
+  });
+
+  expect(store.stats()).toMatchObject({hits: 2, misses: 1, entries: 1});
+  for (const cached of rows) {
+    expect(cached).toEqual(uncached);
+  }
+});
+
+test('plan cache is bypassed while a PlanDebugger is collecting', () => {
+  const {delegate} = testBuilderDelegate();
+  const store = new BoundedPlanCache(8, 1 << 20);
+  delegate.planCache = {store, epoch: 'v1'};
+
+  const planDebugger = new AccumulatorDebugger();
+  buildPipeline(
+    existsUserStatesAST,
+    delegate,
+    'query-id',
+    simpleCostModel,
+    lc,
+    planDebugger,
+  );
+
+  expect(planDebugger.getEvents('plan-complete').length).toBeGreaterThan(0);
+  expect(store.stats()).toMatchObject({hits: 0, misses: 0, entries: 0});
 });

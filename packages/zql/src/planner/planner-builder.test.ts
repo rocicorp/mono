@@ -645,17 +645,23 @@ suite('planQuery purity', () => {
 
     const planned = planQuery(ast, simpleCostModel);
     const where = must(planned.where);
-    assert(where.type === 'and');
+    assert(where.type === 'and', 'expected a conjunction');
 
     // The planner numbers a correlated subquery after the conditions of its
     // own subquery, so `posts.user` is join 0, `posts` is join 1, and
     // `comments` is join 2.
     const posts = where.conditions[0];
-    assert(posts.type === 'correlatedSubquery');
+    assert(posts.type === 'correlatedSubquery', 'expected the posts EXISTS');
     const postsUser = must(posts.related.subquery.where);
-    assert(postsUser.type === 'correlatedSubquery');
+    assert(
+      postsUser.type === 'correlatedSubquery',
+      'expected the posts.user EXISTS',
+    );
     const comments = where.conditions[1];
-    assert(comments.type === 'correlatedSubquery');
+    assert(
+      comments.type === 'correlatedSubquery',
+      'expected the comments EXISTS',
+    );
 
     expect([postsUser.flip, posts.flip, comments.flip]).toEqual(
       plans.plan.joins.map(j => j.type === 'flipped'),
