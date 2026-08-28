@@ -77,6 +77,8 @@ export class TableSource implements Source {
   readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
+  readonly #columnNames: readonly string[];
+  readonly #columnTypes: readonly ValueType[];
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
   readonly #uniqueIndexes: Map<string, Set<string>>;
   readonly #primaryKey: PrimaryKey;
@@ -106,6 +108,8 @@ export class TableSource implements Source {
     this.#logConfig = logConfig;
     this.#table = tableName;
     this.#columns = columns;
+    this.#columnNames = Object.keys(columns);
+    this.#columnTypes = this.#columnNames.map(name => columns[name].type);
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
@@ -300,12 +304,7 @@ export class TableSource implements Source {
           generateWithYields(
             generateWithOverlay(
               req.start?.row,
-              this.#mapFromSQLiteTypes(
-                this.#columns,
-                rowIterator,
-                sqlAndBindings.text,
-                debug,
-              ),
+              this.#mapFromSQLiteTypes(rowIterator, sqlAndBindings.text, debug),
               req.constraint,
               this.#overlay,
               connection.lastPushedEpoch,
@@ -325,12 +324,7 @@ export class TableSource implements Source {
       } else {
         yield* generateWithYields(
           generateWithOverlayUnordered(
-            this.#mapFromSQLiteTypes(
-              this.#columns,
-              rowIterator,
-              sqlAndBindings.text,
-              debug,
-            ),
+            this.#mapFromSQLiteTypes(rowIterator, sqlAndBindings.text, debug),
             req.constraint,
             this.#overlay,
             connection.lastPushedEpoch,
@@ -379,7 +373,6 @@ export class TableSource implements Source {
   }
 
   *#mapFromSQLiteTypes(
-    valueTypes: Record<string, SchemaValue>,
     rowIterator: IterableIterator<Row>,
     query: string,
     debug: DebugDelegate | undefined,
@@ -398,10 +391,27 @@ export class TableSource implements Source {
       if (result.done) {
         break;
       }
-      const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
+      const row = this.#rowFromSQLiteTypes(result.value);
       debug?.rowVended(this.#table, query, row);
       yield row;
     } while (!result.done);
+  }
+
+  /**
+   * `#fetch` selects exactly `Object.keys(this.#columns)`, so every returned
+   * row has those keys in that order. Walking the precomputed name and type
+   * arrays therefore produces the same row as {@linkcode fromSQLiteTypes}
+   * without its per-row `Object.keys()` allocation and schema lookups.
+   */
+  #rowFromSQLiteTypes(row: Row): Row {
+    const names = this.#columnNames;
+    const types = this.#columnTypes;
+    const newRow: Writable<Row> = {};
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
+      newRow[name] = fromSQLiteType(types[i], row[name], name, this.#table);
+    }
+    return newRow;
   }
 
   *push(change: SourceChange): Stream<'yield'> {
