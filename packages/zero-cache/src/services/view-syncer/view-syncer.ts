@@ -2970,7 +2970,7 @@ function yieldProcess(_lc: LogContext) {
 function contentsAndVersion(row: Row) {
   const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
   if (typeof version !== 'string' || version.length === 0) {
-    throw new Error(`Invalid _0_version in ${stringify(row)}`);
+    throw new Error(`Invalid _0_version: ${String(version)}`);
   }
   return {contents, version};
 }

@@ -185,7 +185,9 @@ export async function processMutation(
   // log-leak-ignore -- the mutation id, not row data
   lc = lc.withContext('mutationID', mutation.id);
   lc = lc.withContext('processMutation');
-  lc.debug?.('Process mutation start', mutation);
+  // The mutationID context set above identifies it; the mutation itself
+  // carries the row values being written.
+  lc.debug?.('Process mutation start');
 
   // Record mutation processing attempt for telemetry (regardless of success/failure)
   recordMutation('crud');
