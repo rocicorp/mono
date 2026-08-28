@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787835598540,
+  "lastUpdate": 1787906192918,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57237,6 +57237,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/7fb2c78bb506e5e9875ae4769f4342a49cbf20c3"
         },
         "date": 1787835585886,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317629,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57073,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117348,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33538,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c5f78d65c7daaaa5ac934bb45a2b160f75ac93f",
+          "message": "chore(deps): update oxlint to 1.80.0 (#6422)\n\nBumps oxlint from 1.63.0 to 1.80.0.\n\n## What changed\n\n- **`oxlint`** `^1.63.0` → `^1.80.0`\n- **`oxlint-tsgolint`** `^0.22.1` → `^7.0.2001`\n- `pnpm-lock.yaml` regenerated — the diff is oxlint/tsgolint bindings\nonly\n- Removed two now-obsolete suppression comments (see below)\n\n## Why the tsgolint bump is required\n\nIt isn't an incidental \"while I'm here\" update. oxlint 1.80 declares\n`oxlint-tsgolint: \">=7.0.2001\"` as a peer, and tsgolint jumped from\n`0.25.0` straight to the `7.0.x` line (it now tracks the TypeScript\nversion it embeds rather than versioning independently). The root `lint`\nscript runs with `--type-aware`, so leaving tsgolint at 0.22.1 would\nhave broken type-aware linting.\n\noxlint 1.80 also adds an optional `vite-plus` peer. pnpm correctly skips\nit — nothing new is pulled into the lockfile.\n\n## Removed disable directives\n\n`reportUnusedDisableDirectives: 'error'` started flagging two\nsuppressions under 1.80 because the underlying rules no longer fire:\n\n- `packages/zql/src/ivm/source.test.ts` —\n`eslint-plugin-jest/expect-expect`\n- `packages/replicache/src/persist/refresh.test.ts` — `no-unused-vars`\non `timestampCounter`, which is used in a parameter default (`timestamp\n= timestampCounter++`) and is now resolved correctly\n\nI confirmed both were genuinely stale by linting those two files\n**without** `--quiet` after removing the comments — neither rule reports\nanything. (Pre-existing `unbound-method` warnings in `refresh.test.ts`\nare unrelated and untouched.)\n\n## Config\n\nNo changes were needed to `oxlint.config.ts` or `oxlint.base.ts`. I\nreviewed the 1.64 → 1.80 changelog for breaking changes: they are all\ninternal AST-shape changes plus the react/react-compiler per-category\nrule split, which this repo doesn't use. The custom\n`tools/oxlint-plugin-zero` plugin only visits `Literal` /\n`TemplateLiteral`, both unaffected.\n\n## Verification\n\n- `pnpm run lint` (root, type-aware, whole repo) — clean\n- `pnpm exec syncpack lint` — no issues\n- `pnpm run check-fmt` — 1847 files correct\n- `pnpm --filter zql --filter replicache run check-types` — passes\n- `pnpm --filter zql run lint` — confirms the per-package `--config\n../../oxlint.config.ts` invocation still resolves",
+          "timestamp": "2026-08-28T08:26:02Z",
+          "tree_id": "a632da6611b219c2ece891687d095721d8c8a69c",
+          "url": "https://github.com/rocicorp/mono/commit/8c5f78d65c7daaaa5ac934bb45a2b160f75ac93f"
+        },
+        "date": 1787906179489,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
