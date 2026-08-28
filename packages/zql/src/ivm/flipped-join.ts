@@ -590,11 +590,13 @@ type CanonicalKey = Value | bigint;
  * returned parent row back to the children that referenced its parent-key
  * tuple (record = Row).
  *
- * Single keys — the common case — use the value itself, because `Map`
- * already keys `1`, `'1'`, `1n` and `true` apart, so no per-row tag string
- * has to be built. `null` and `undefined` share a bucket, matching the
- * compound path. JSON values still go through the tagged string form since
- * `Map` would otherwise key them by identity.
+ * Single keys — the common case — skip the tag string wherever `Map` already
+ * discriminates: `1`, `1n` and `true` cannot collide with each other or with
+ * any string, so they key as themselves and no per-row string is built.
+ * `null` and `undefined` share a bucket, matching the compound path. JSON
+ * values go through the tagged string form since `Map` would otherwise key
+ * them by identity, and strings keep their tag so that a plain `'j{"a":1}'`
+ * cannot land in the bucket the object `{a: 1}` renders into.
  */
 function canonicalKey(
   record: Record<string, Value | undefined>,
@@ -603,6 +605,7 @@ function canonicalKey(
   if (keys.length === 1) {
     const v = record[keys[0]];
     if (v === null || v === undefined) return null;
+    if (typeof v === 'string') return 's' + v;
     return typeof v === 'object' ? canonicalValue(v) : v;
   }
   let s = '';
