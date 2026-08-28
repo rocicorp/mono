@@ -290,7 +290,7 @@ export async function startZeroTopology(
       numSyncWorkers: config.zero.numSyncWorkers,
       replicaFile: `${config.zero.replicaFile}-vs${i}`,
       metricsEndpoint,
-      profile: config.profileVS,
+      profile: config.profileVS && i === 0,
     });
     processes.push(vs);
   }
