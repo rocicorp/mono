@@ -40,7 +40,9 @@ const options = {
 
   topology: v.literalUnion('single', 'distributed').default('single'),
   numViewSyncers: v.number().default(1),
-  numReplicationManagers: v.literalUnion(1, 2).default(1),
+  numSyncWorkers: v.number().optional(),
+  highAvailabilityRM: v.boolean().default(false),
+  numReplicationManagers: v.literalUnion(1, 2).optional(),
   profileRM: v.boolean().default(false),
   profileVS: v.boolean().default(false),
 
@@ -75,6 +77,8 @@ export type BenchmarkConfig = {
   readonly model: BenchmarkModel;
   readonly topology: BenchmarkTopology;
   readonly numViewSyncers: number;
+  readonly numSyncWorkers: number;
+  readonly highAvailabilityRM: boolean;
   readonly numReplicationManagers: 1 | 2;
   readonly users: number;
   readonly queriesPerUser: number;
@@ -133,6 +137,11 @@ export function loadConfig(): BenchmarkConfig {
   assertPositiveInteger('rowsPerTx', parsed.rowsPerTx);
   assertPositiveInteger('writeConcurrency', parsed.writeConcurrency);
   assertPositiveInteger('numViewSyncers', parsed.numViewSyncers);
+  const numSyncWorkers = parsed.numSyncWorkers ?? parsed.zero.numSyncWorkers;
+  assertPositiveInteger('numSyncWorkers', numSyncWorkers);
+  const highAvailabilityRM =
+    parsed.highAvailabilityRM || parsed.numReplicationManagers === 2;
+  const numReplicationManagers: 1 | 2 = highAvailabilityRM ? 2 : 1;
   assertNonNegativeInteger('payloadBytes', parsed.payloadBytes);
   assertPositiveInteger('durationMs', parsed.durationMs);
   assertNonNegativeInteger('warmupMs', parsed.warmupMs);
@@ -158,7 +167,9 @@ export function loadConfig(): BenchmarkConfig {
     model: parsed.model,
     topology: parsed.topology,
     numViewSyncers: parsed.numViewSyncers,
-    numReplicationManagers: parsed.numReplicationManagers,
+    numSyncWorkers,
+    highAvailabilityRM,
+    numReplicationManagers,
     users: parsed.users,
     queriesPerUser: parsed.queriesPerUser,
     rowsPerQuery: parsed.rowsPerQuery,
@@ -183,7 +194,10 @@ export function loadConfig(): BenchmarkConfig {
     cacheURL: cacheURLs[0],
     cacheURLs,
     pg: parsed.pg,
-    zero: parsed.zero,
+    zero: {
+      ...parsed.zero,
+      numSyncWorkers,
+    },
   };
 }
 

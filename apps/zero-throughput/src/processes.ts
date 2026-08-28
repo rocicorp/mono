@@ -264,7 +264,7 @@ export async function startZeroTopology(
       numSyncWorkers: 0,
       replicaFile: `${config.zero.replicaFile}-rm2`,
       metricsEndpoint,
-      profile: config.profileRM,
+      profile: false,
     });
     processes.push(rm2);
   }

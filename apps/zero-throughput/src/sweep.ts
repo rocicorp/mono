@@ -36,6 +36,8 @@ type SweepConfig = {
   readonly writeRates?: readonly number[] | undefined;
   readonly topology?: BenchmarkTopology | undefined;
   readonly numViewSyncers?: number | undefined;
+  readonly numSyncWorkers?: number | undefined;
+  readonly highAvailabilityRM?: boolean | undefined;
   readonly numReplicationManagers?: (1 | 2) | undefined;
   readonly writeConcurrency?: number | undefined;
   readonly profileRM?: boolean | undefined;
@@ -567,7 +569,12 @@ function benchmarkCommand(
   if (config.numViewSyncers !== undefined) {
     command.push('--num-view-syncers', String(config.numViewSyncers));
   }
-  if (config.numReplicationManagers !== undefined) {
+  if (config.numSyncWorkers !== undefined) {
+    command.push('--num-sync-workers', String(config.numSyncWorkers));
+  }
+  if (config.highAvailabilityRM) {
+    command.push('--high-availability-rm');
+  } else if (config.numReplicationManagers !== undefined) {
     command.push(
       '--num-replication-managers',
       String(config.numReplicationManagers),
@@ -655,6 +662,8 @@ function parseArgs(argv: readonly string[]): SweepConfig {
   let writeRates: readonly number[] | undefined;
   let topology: BenchmarkTopology | undefined;
   let numViewSyncers: number | undefined;
+  let numSyncWorkers: number | undefined;
+  let highAvailabilityRM: boolean | undefined;
   let numReplicationManagers: (1 | 2) | undefined;
   let writeConcurrency: number | undefined;
   let profileRM = false;
@@ -910,6 +919,20 @@ function parseArgs(argv: readonly string[]): SweepConfig {
         i += option.value === undefined ? 1 : 0;
         break;
       }
+      case '--high-availability-rm': {
+        const parsed = readBooleanOption(argv, option, i, true);
+        highAvailabilityRM = parsed.value;
+        i += parsed.consumed;
+        break;
+      }
+      case '--num-sync-workers': {
+        numSyncWorkers = parsePositiveInteger(
+          option.name,
+          readOptionValue(argv, option, i),
+        );
+        i += option.value === undefined ? 1 : 0;
+        break;
+      }
       case '--num-replication-managers': {
         const val = parsePositiveInteger(
           option.name,
@@ -969,6 +992,8 @@ function parseArgs(argv: readonly string[]): SweepConfig {
     writeRates,
     topology,
     numViewSyncers,
+    numSyncWorkers,
+    highAvailabilityRM,
     numReplicationManagers,
     writeConcurrency,
     profileRM,

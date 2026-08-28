@@ -155,8 +155,8 @@ $$\text{PostgreSQL} \xrightarrow{\text{WAL}} \text{Replication Manager (1 or 2 H
 pnpm --filter zero-throughput start -- \
   --topology distributed \
   --num-view-syncers 2 \
-  --zero-num-sync-workers 2 \
-  --num-replication-managers 2 \
+  --num-sync-workers 2 \
+  --high-availability-rm \
   --profile forum \
   --users 20 \
   --write-rate 200
