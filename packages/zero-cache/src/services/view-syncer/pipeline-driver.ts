@@ -3,6 +3,7 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
+import type {Writable} from '../../../../shared/src/writable.ts';
 import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
@@ -1301,7 +1302,7 @@ class Streamer {
   readonly #changes: [
     queryID: string,
     schema: SourceSchema,
-    changes: Iterable<Change | 'yield'>,
+    changes: Iterable<Change | 'yield'> | (() => Iterable<Node | 'yield'>),
   ][] = [];
 
   accumulate(
@@ -1313,10 +1314,27 @@ class Streamer {
     return this;
   }
 
+  /**
+   * Equivalent to {@link accumulate} with an ADD `Change` per node, but the
+   * nodes go straight to `#streamNodes`. Initial hydration is entirely ADDs, so
+   * wrapping each node in a `Change` tuple only to unwrap it back into a
+   * one-element node iterable is pure per-row allocation.
+   */
+  accumulateAdds(
+    queryID: string,
+    schema: SourceSchema,
+    nodes: Iterable<Node | 'yield'>,
+  ): this {
+    this.#changes.push([queryID, schema, () => nodes]);
+    return this;
+  }
+
   *stream(): Iterable<RowChange | 'yield'> {
     for (const [queryID, schema, changes] of this.#changes) {
       try {
-        yield* this.#streamChanges(queryID, schema, changes);
+        yield* typeof changes === 'function'
+          ? this.#streamNodes(queryID, schema, ChangeType.ADD, changes)
+          : this.#streamChanges(queryID, schema, changes);
       } catch (e) {
         this.#logQueryFailure?.(queryID, e);
         throw e;
@@ -1378,14 +1396,14 @@ class Streamer {
   ): Iterable<RowChange | 'yield'> {
     const {tableName: table, system} = schema;
 
-    const primaryKey = must(this.#primaryKeys.get(table));
-    const spec = must(this.#tableSpecs.get(table)).tableSpec;
-
     // We do not sync rows gathered by the permissions
     // system to the client.
     if (system === 'permissions') {
       return;
     }
+
+    const primaryKey = must(this.#primaryKeys.get(table));
+    const spec = must(this.#tableSpecs.get(table)).tableSpec;
 
     for (const node of nodes()) {
       if (node === 'yield') {
@@ -1413,9 +1431,14 @@ class Streamer {
         row: op === ChangeType.REMOVE ? undefined : row,
       } as RowChange;
 
-      for (const [relationship, children] of Object.entries(relationships)) {
+      for (const relationship of Object.keys(relationships)) {
         const childSchema = must(schema.relationships[relationship]);
-        yield* this.#streamNodes(queryID, childSchema, op, children);
+        yield* this.#streamNodes(
+          queryID,
+          childSchema,
+          op,
+          relationships[relationship],
+        );
       }
     }
   }
@@ -1500,18 +1523,12 @@ function logQueryFailure(
   queryLC.error?.(message, error);
 }
 
-function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
-  for (const node of nodes) {
-    if (node === 'yield') {
-      yield node;
-      continue;
-    }
-    yield [ChangeType.ADD, node, null];
-  }
-}
-
 function getRowKey(cols: PrimaryKey, row: Row): RowKey {
-  return Object.fromEntries(cols.map(col => [col, must(row[col])]));
+  const rowKey: Writable<RowKey> = {};
+  for (const col of cols) {
+    rowKey[col] = must(row[col]);
+  }
+  return rowKey;
 }
 
 /**
@@ -1529,7 +1546,7 @@ export function* hydrate(
   const streamer = new Streamer(
     buildPrimaryKeys(clientSchema),
     tableSpecs,
-  ).accumulate(hash, input.getSchema(), toAdds(res));
+  ).accumulateAdds(hash, input.getSchema(), res);
   yield* streamer.stream();
 }
 
@@ -1540,10 +1557,10 @@ export function* hydrateInternal(
   tableSpecs: Map<string, LiteAndZqlSpec>,
 ): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
-  const streamer = new Streamer(primaryKeys, tableSpecs).accumulate(
+  const streamer = new Streamer(primaryKeys, tableSpecs).accumulateAdds(
     hash,
     input.getSchema(),
-    toAdds(res),
+    res,
   );
   yield* streamer.stream();
 }
