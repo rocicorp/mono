@@ -10,6 +10,7 @@ import {
   isProtocolError,
   ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
+import type {BoundedPlanCache} from '../../../zql/src/builder/plan-cache.ts';
 import {resolveAuth, type Auth, type ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
@@ -406,6 +407,7 @@ export class Syncer implements SingletonService {
   #servingLagDistributionCacheClearQueued = false;
   #viewSyncerLagSampleInterval: ReturnType<typeof setInterval> | undefined;
   #eligibilityLogInterval: ReturnType<typeof setInterval> | undefined;
+  readonly #planCache: BoundedPlanCache;
 
   constructor(
     lc: LogContext,
@@ -424,9 +426,11 @@ export class Syncer implements SingletonService {
       | undefined,
     parent: Worker,
     validateLegacyJWT: ValidateLegacyJWT | undefined,
+    planCache: BoundedPlanCache,
   ) {
     this.#config = config;
     this.#validateLegacyJWT = validateLegacyJWT;
+    this.#planCache = planCache;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent, state =>
@@ -550,6 +554,45 @@ export class Syncer implements SingletonService {
       const stats = this.#computePipelineDedupStats();
       result.observe(stats.clientHashes.size, {type: 'client'});
       result.observe(stats.internalUnique, {type: 'internal'});
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'plan_cache_lookups',
+      'Planner decision cache lookups on this worker since startup, by ' +
+        'result. The ratio of hits to lookups is the fraction of query ' +
+        'additions that skipped planning.',
+    ).addCallback(result => {
+      const stats = this.#planCache.stats();
+      result.observe(stats.hits, {result: 'hit'});
+      result.observe(stats.misses, {result: 'miss'});
+      result.observe(stats.collisions, {result: 'collision'});
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'plan_cache_evictions',
+      "Planner decisions evicted from this worker's cache since startup. " +
+        'A high rate against sync.plan_cache_entries means the entry or byte ' +
+        "bound is too small for the worker's query mix.",
+    ).addCallback(result => {
+      result.observe(this.#planCache.stats().evictions);
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'plan_cache_entries',
+      'Planner decisions currently cached on this worker',
+    ).addCallback(result => {
+      result.observe(this.#planCache.stats().entries);
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'plan_cache_bytes',
+      "Estimated bytes retained by this worker's planner decision cache",
+    ).addCallback(result => {
+      result.observe(this.#planCache.stats().bytes);
     });
 
     getOrCreateGauge(
@@ -886,6 +929,7 @@ export class Syncer implements SingletonService {
   stop() {
     clearInterval(this.#viewSyncerLagSampleInterval);
     clearInterval(this.#eligibilityLogInterval);
+    this.#planCache.clear();
     this.#wss.close();
     this.#stopped.resolve();
     return promiseVoid;

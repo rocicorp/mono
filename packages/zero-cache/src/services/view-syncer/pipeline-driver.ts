@@ -12,6 +12,7 @@ import {
   Debug,
   runtimeDebugFlags,
 } from '../../../../zql/src/builder/debug-delegate.ts';
+import type {BoundedPlanCache} from '../../../../zql/src/builder/plan-cache.ts';
 import {ChangeIndex} from '../../../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
@@ -272,6 +273,7 @@ export class PipelineDriver {
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #allTableNames = new Set<string>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
+  readonly #planCache: BoundedPlanCache | undefined;
   readonly #yieldThresholdMs: () => number;
   #streamer: Streamer | null = null;
   #hydrateContext: HydrateContext | null = null;
@@ -305,6 +307,7 @@ export class PipelineDriver {
     yieldThresholdMs: () => number,
     enablePlanner?: boolean,
     config?: ZeroConfig,
+    planCache?: BoundedPlanCache,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
@@ -314,6 +317,7 @@ export class PipelineDriver {
     this.#config = config;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
+    this.#planCache = enablePlanner ? planCache : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
   }
 
@@ -349,6 +353,9 @@ export class PipelineDriver {
     this.#tables.clear();
     this.#allTableNames.clear();
     this.#rowSetSignatures.clear();
+    // A reset means the replica's schema changed, which can invalidate every
+    // cached planner decision on this worker, not just this client group's.
+    this.#planCache?.clear();
     this.#initAndResetCommon(clientSchema);
   }
 
@@ -693,6 +700,13 @@ export class PipelineDriver {
           decorateInput: input => input,
           addEdge() {},
           decorateFilterInput: input => input,
+          // The replica's stateVersion is the conservative epoch: a decision
+          // is only reused within the snapshot it was made against, so any
+          // replicated commit starts a new generation.
+          planCache: this.#planCache && {
+            store: this.#planCache,
+            epoch: this.currentVersion(),
+          },
         },
         queryID,
         costModel,

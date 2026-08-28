@@ -13,6 +13,7 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
+import {BoundedPlanCache} from '../../../../zql/src/builder/plan-cache.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import {
   CREATE_STORAGE_TABLE,
@@ -2792,5 +2793,130 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     expect(() => changes()).toThrowError(ResetPipelinesSignal);
+  });
+  describe('plan cache', () => {
+    // The cost model reads sqlite_stat1/sqlite_stat4, which only exist once
+    // the replica has been analyzed. Lite migration does this in production.
+    beforeEach(() => db.exec('ANALYZE'));
+
+    function driverWith(clientGroupID: string, planCache: BoundedPlanCache) {
+      const storage = new Database(lc, ':memory:');
+      storage.prepare(CREATE_STORAGE_TABLE).run();
+      const driver = new PipelineDriver(
+        lc,
+        testLogConfig,
+        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        new DatabaseStorage(storage).createClientGroupStorage(clientGroupID),
+        clientGroupID,
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+        true /** enablePlanner */,
+        undefined,
+        planCache,
+      );
+      driver.init(clientSchema);
+      return driver;
+    }
+
+    function hydrate(driver: PipelineDriver) {
+      return [
+        ...driver.addQuery(
+          'hash-exists',
+          'queryExists',
+          ISSUES_QUERY_WITH_EXISTS,
+          startTimer(),
+        ),
+      ];
+    }
+
+    test("a second client group reuses the first one's decisions", () => {
+      const planCache = new BoundedPlanCache(1024, 1 << 20);
+      const first = driverWith('group-a', planCache);
+      const second = driverWith('group-b', planCache);
+
+      const firstRows = hydrate(first);
+      expect(planCache.stats()).toMatchObject({hits: 0, misses: 1, entries: 1});
+
+      const secondRows = hydrate(second);
+      expect(planCache.stats()).toMatchObject({hits: 1, misses: 1, entries: 1});
+      expect(secondRows).toEqual(firstRows);
+
+      first.destroy();
+      second.destroy();
+    });
+
+    test('rows match a run with the cache turned off', () => {
+      const planCache = new BoundedPlanCache(1024, 1 << 20);
+      const cached = driverWith('group-a', planCache);
+      hydrate(cached);
+      const cachedRows = hydrate(cached);
+      cached.destroy();
+
+      const uncached = driverWith('group-b', new BoundedPlanCache(0, 0));
+      const uncachedRows = hydrate(uncached);
+      uncached.destroy();
+
+      expect(planCache.stats().hits).toBeGreaterThan(0);
+      expect(cachedRows).toEqual(uncachedRows);
+    });
+
+    test('a replica commit rotates the epoch', () => {
+      const planCache = new BoundedPlanCache(1024, 1 << 20);
+      const driver = driverWith('group-a', planCache);
+      hydrate(driver);
+      expect(planCache.stats()).toMatchObject({hits: 0, misses: 1});
+
+      replicator.processTransaction(
+        '134',
+        messages.insert('issues', {id: '5', closed: 0}),
+      );
+      [...driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes];
+
+      hydrate(driver);
+      expect(planCache.stats()).toMatchObject({hits: 0, misses: 2, entries: 2});
+
+      driver.destroy();
+    });
+
+    test('a schema-change reset clears every generation', () => {
+      const planCache = new BoundedPlanCache(1024, 1 << 20);
+      const driver = driverWith('group-a', planCache);
+      hydrate(driver);
+      expect(planCache.stats().entries).toBe(1);
+
+      driver.reset(clientSchema);
+      expect(planCache.stats()).toMatchObject({entries: 0, bytes: 0});
+
+      driver.destroy();
+    });
+
+    test('the cache is untouched when the planner is disabled', () => {
+      const planCache = new BoundedPlanCache(1024, 1 << 20);
+      const storage = new Database(lc, ':memory:');
+      storage.prepare(CREATE_STORAGE_TABLE).run();
+      const driver = new PipelineDriver(
+        lc,
+        testLogConfig,
+        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        new DatabaseStorage(storage).createClientGroupStorage('group-a'),
+        'group-a',
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+        false /** enablePlanner */,
+        undefined,
+        planCache,
+      );
+      driver.init(clientSchema);
+      hydrate(driver);
+
+      expect(planCache.stats()).toMatchObject({
+        hits: 0,
+        misses: 0,
+        entries: 0,
+      });
+      driver.destroy();
+    });
   });
 });

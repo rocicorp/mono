@@ -36,6 +36,7 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
+import {BoundedPlanCache} from '../../../zql/src/builder/plan-cache.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
@@ -199,6 +200,7 @@ function setupSyncer(lc: LogContext, config: ZeroConfig) {
     pusherFactory,
     TEST_PARENT,
     validateLegacyJWT,
+    new BoundedPlanCache(8, 1024),
   );
   return {syncer, mutagens, pushers, contextManagers};
 }
