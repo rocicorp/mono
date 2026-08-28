@@ -387,6 +387,7 @@ function spawnZeroProcess(args: {
 
   if (args.profile) {
     const profDir = appPath(config.profileDir);
+    mkdirSync(profDir, {recursive: true});
     env.NODE_OPTIONS = `--cpu-prof --cpu-prof-dir="${profDir}" ${process.env.NODE_OPTIONS ?? ''}`;
   }
 
