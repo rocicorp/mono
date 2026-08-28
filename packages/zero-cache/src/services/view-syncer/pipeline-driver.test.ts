@@ -2891,6 +2891,51 @@ describe('view-syncer/pipeline-driver', () => {
       driver.destroy();
     });
 
+    // PR #5423/#5429: keying pipelines by transformation hash let one query's
+    // removal tear down another query that happened to share that hash. A plan
+    // cache reuses decisions across identical ASTs too, so the same mistake is
+    // available to it. It must not be: a cached decision is a value, and two
+    // queries that share one still own separate pipelines.
+    test('two queries sharing a cached decision keep separate pipelines', () => {
+      const planCache = new BoundedPlanCache(1024, 1 << 20);
+      const driver = driverWith('group-a', planCache);
+
+      const first = [
+        ...driver.addQuery(
+          'hash-exists',
+          'queryA',
+          ISSUES_QUERY_WITH_EXISTS,
+          startTimer(),
+        ),
+      ];
+      const second = [
+        ...driver.addQuery(
+          'hash-exists',
+          'queryB',
+          ISSUES_QUERY_WITH_EXISTS,
+          startTimer(),
+        ),
+      ];
+      expect(planCache.stats()).toMatchObject({hits: 1, misses: 1});
+      expect(
+        second.map(c => (c === 'yield' ? c : {...c, queryID: 'queryA'})),
+      ).toEqual(first);
+
+      driver.removeQuery('queryA');
+      expect([...driver.queries().keys()]).toEqual(['queryB']);
+
+      // queryB still advances on its own pipeline after its twin is gone.
+      replicator.processTransaction(
+        '134',
+        messages.insert('issues', {id: '6', closed: 0}),
+      );
+      expect(() => [
+        ...driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+      ]).not.toThrow();
+
+      driver.destroy();
+    });
+
     test('the cache is untouched when the planner is disabled', () => {
       const planCache = new BoundedPlanCache(1024, 1 << 20);
       const storage = new Database(lc, ':memory:');
