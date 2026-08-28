@@ -249,6 +249,26 @@ private predicate isCountRead(DataFlow::Node node) {
 }
 
 /**
+ * A read through a unique symbol key.
+ *
+ * Rows arrive from SQLite and JSON with string keys only, so nothing outside
+ * the module holding the symbol can put a value at one: what comes back is
+ * internal metadata such as a refcount. `assertNumber` and friends do
+ * interpolate what they are handed, but through a symbol key they can only
+ * ever see that metadata.
+ *
+ * Resolution is local, so this covers a symbol used in the file that declares
+ * it, which is how they are used here.
+ */
+private predicate isSymbolKeyedRead(DataFlow::Node node) {
+  exists(DataFlow::PropRead read, DataFlow::CallNode symbol |
+    node = read and
+    symbol = read.getPropertyNameExpr().flow().getALocalSource() and
+    symbol.getCalleeName() = "Symbol"
+  )
+}
+
+/**
  * A safe field selected off any value.
  *
  * The base is deliberately unconstrained. Requiring it to have a sensitive
@@ -332,7 +352,8 @@ module LogLeakConfig implements DataFlow::ConfigSig {
     isApprovedSanitizer(node) or
     isSafePropertyRead(node) or
     isCountRead(node) or
-    isCaughtError(node)
+    isCaughtError(node) or
+    isSymbolKeyedRead(node)
   }
 
   predicate isAdditionalFlowStep(DataFlow::Node predecessor, DataFlow::Node successor) {

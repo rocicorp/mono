@@ -1,4 +1,8 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {
+  assert,
+  assertNumber,
+  unreachable,
+} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
@@ -785,10 +789,7 @@ function binarySearch(
 function assertMetaEntry<M extends Mutate>(
   v: unknown,
 ): asserts v is MetaEntry<M> {
-  assert(
-    typeof (v as Partial<MetaEntry<M>>)[refCountSymbol] === 'number',
-    'expected MetaEntry',
-  );
+  assertNumber((v as Partial<MetaEntry<M>>)[refCountSymbol]);
 }
 
 /** Get singular MetaEntry, throws if missing. */
