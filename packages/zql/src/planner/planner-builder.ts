@@ -8,7 +8,6 @@ import type {
   CorrelatedSubqueryCondition,
   Disjunction,
 } from '../../../zero-protocol/src/ast.ts';
-import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
@@ -235,7 +234,6 @@ function processCorrelatedSubquery(
   );
 
   const planId = getPlanId();
-  condition[planIdSymbol] = planId;
 
   // Determine flippability and initial type based on flip flag and operator
   const isNotExists = condition.op === 'NOT EXISTS';
@@ -319,30 +317,38 @@ export function planQuery(
   return applyPlansToAST(ast, plans);
 }
 
+/**
+ * Rebuilds `condition` with the planner's flip choices applied.
+ *
+ * Plan IDs are not stored on the AST. They are re-derived by walking the
+ * condition tree in the same order {@link buildPlanGraph} assigns them, i.e.
+ * depth first, with a correlated subquery numbered after the conditions of its
+ * own subquery. Conditions that {@link processOr} filters out contain no
+ * correlated subquery and so consume no IDs, which keeps both walks in step.
+ */
 function applyToCondition(
   condition: Condition,
   flippedIds: Set<number>,
+  getPlanId: () => number,
 ): Condition {
   if (condition.type === 'simple') {
     return condition;
   }
 
   if (condition.type === 'correlatedSubquery') {
-    const planId = (condition as unknown as Record<symbol, number>)[
-      planIdSymbol
-    ];
-    const shouldFlip = planId !== undefined && flippedIds.has(planId);
+    const {subquery} = condition.related;
+    const where = subquery.where
+      ? applyToCondition(subquery.where, flippedIds, getPlanId)
+      : undefined;
 
     return {
       ...condition,
-      flip: shouldFlip,
+      flip: flippedIds.has(getPlanId()),
       related: {
         ...condition.related,
         subquery: {
-          ...condition.related.subquery,
-          where: condition.related.subquery.where
-            ? applyToCondition(condition.related.subquery.where, flippedIds)
-            : undefined,
+          ...subquery,
+          where,
         },
       },
     };
@@ -350,7 +356,9 @@ function applyToCondition(
 
   return {
     ...condition,
-    conditions: condition.conditions.map(c => applyToCondition(c, flippedIds)),
+    conditions: condition.conditions.map(c =>
+      applyToCondition(c, flippedIds, getPlanId),
+    ),
   };
 }
 
@@ -362,9 +370,12 @@ export function applyPlansToAST(ast: AST, plans: Plans): AST {
     }
   }
 
+  let nextPlanId = 0;
   return {
     ...ast,
-    where: ast.where ? applyToCondition(ast.where, flippedIds) : undefined,
+    where: ast.where
+      ? applyToCondition(ast.where, flippedIds, () => nextPlanId++)
+      : undefined,
     related: ast.related?.map(csq => {
       const alias = must(
         csq.subquery.alias,
