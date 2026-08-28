@@ -194,9 +194,7 @@ export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
   const plan = buildQueryPlan(config);
 
   const handshakeHeaders = resolveHandshakeHeaders(config);
-  if (Object.keys(handshakeHeaders).length > 0) {
-    installWebSocketHeaderShim(handshakeHeaders);
-  }
+  installWebSocketHeaderShim(handshakeHeaders);
 
   // zero-client and replicache reference a build-time `TESTING` global that
   // bundlers replace with a boolean literal; under node there's no replacement,
@@ -339,9 +337,10 @@ function resolveHandshakeHeaders(config: {
 }
 
 function installWebSocketHeaderShim(headers: Record<string, string>): void {
+  const options = Object.keys(headers).length > 0 ? {headers} : undefined;
   class HeaderInjectingWebSocket extends NodeWebSocket {
     constructor(url: string | URL, protocols?: string | string[]) {
-      super(url, protocols, {headers});
+      super(url, protocols, options);
     }
   }
   (globalThis as {WebSocket?: unknown}).WebSocket = HeaderInjectingWebSocket;

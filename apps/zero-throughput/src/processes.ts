@@ -238,38 +238,14 @@ export async function startZeroTopology(
   });
   processes.push(rm1);
 
-  // The RM must finish initial sync before copying its replica to standby RM / View-Syncers
+  // The RM must finish initial sync before copying its replica to View-Syncers
   await waitForZeroCache(
     `http://127.0.0.1:${rm1Port}`,
     config.zero.readyTimeoutMs,
     rm1,
   );
 
-  // 2. Replication Manager 2 (HA Standby)
-  if (config.numReplicationManagers === 2) {
-    const rm2Port = basePort + 2;
-    const rm2ChangeStreamerPort = basePort + 3;
-    copyReplicaFile(
-      `${config.zero.replicaFile}-rm1`,
-      `${config.zero.replicaFile}-rm2`,
-    );
-    const rm2 = spawnZeroProcess({
-      config,
-      name: 'rm-2',
-      role: 'rm',
-      port: rm2Port,
-      changeStreamerPort: rm2ChangeStreamerPort,
-      changeStreamerMode: 'dedicated',
-      changeStreamerStartupDelayMs: 5000,
-      numSyncWorkers: 0,
-      replicaFile: `${config.zero.replicaFile}-rm2`,
-      metricsEndpoint,
-      profile: false,
-    });
-    processes.push(rm2);
-  }
-
-  // 3. View-Syncers (1 to N)
+  // 2. View-Syncers (1 to N)
   const readyURLs: string[] = [];
   for (let i = 0; i < config.numViewSyncers; i++) {
     const vsPort = basePort + 10 + i;
@@ -355,6 +331,7 @@ function spawnZeroProcess(args: {
     ZERO_CHANGE_MAX_CONNS: String(config.zero.changeMaxConns),
     ZERO_LOG_LEVEL: config.zero.logLevel,
     ZERO_LOG_FORMAT: 'text',
+    ZERO_ALLOW_LEGACY_QUERIES: 'true',
   };
 
   if (args.changeStreamerURI) {

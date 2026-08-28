@@ -148,15 +148,14 @@ pnpm --filter zero-throughput start -- --process-log-mode inherit
 
 To benchmark the full multi-process replication architecture:
 
-$$\text{PostgreSQL} \xrightarrow{\text{WAL}} \text{Replication Manager (1 or 2 HA)} \xrightarrow{\text{WS}} \text{View-Syncer Pods (1 to } N\text{)} \xrightarrow{\text{IVM}} \text{Clients}$$
+$$\text{PostgreSQL} \xrightarrow{\text{WAL}} \text{Replication Manager (RM)} \xrightarrow{\text{WS}} \text{View-Syncer Pods (1 to } N\text{)} \xrightarrow{\text{IVM}} \text{Clients}$$
 
 ```bash
-# 1. Distributed topology with 2 View-Syncer pods, 2 sync workers each, and RM HA standby
+# 1. Distributed topology with 2 View-Syncer pods and 2 sync workers each
 pnpm --filter zero-throughput start -- \
   --topology distributed \
   --num-view-syncers 2 \
   --num-sync-workers 2 \
-  --high-availability-rm \
   --profile forum \
   --users 20 \
   --write-rate 200

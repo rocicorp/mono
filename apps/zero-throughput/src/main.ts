@@ -81,7 +81,7 @@ async function main(): Promise<void> {
 
     if (config.zero.start) {
       log(
-        `Starting zero topology (${config.topology}, ${config.numViewSyncers} VS, ${config.numReplicationManagers} RM)...`,
+        `Starting zero topology (${config.topology}${config.topology === 'distributed' ? `, ${config.numViewSyncers} VS, 1 RM` : ''})...`,
       );
       const topology = await startZeroTopology(
         config,
