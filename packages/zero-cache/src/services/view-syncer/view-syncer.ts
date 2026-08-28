@@ -8,7 +8,6 @@ import {
   startSpan,
 } from '../../../../otel/src/span.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
-import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {h64} from '../../../../shared/src/hash.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -2544,7 +2543,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           } else {
             const row = must(
               this.#pipelines.getRow(table, rowKey),
-              `Missing row ${table}:${stringify(rowKey)}`,
+              `Missing row in ${table} keyed by ${Object.keys(rowKey).join()}`,
             );
             const {contents} = contentsAndVersion(row);
             patch = {type: 'row', op: 'put', id, contents};
