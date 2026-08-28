@@ -2969,6 +2969,7 @@ function yieldProcess(_lc: LogContext) {
 function contentsAndVersion(row: Row) {
   const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
   if (typeof version !== 'string' || version.length === 0) {
+    // log-leak-ignore -- _0_version is Zero's own column, not customer data
     throw new Error(`Invalid _0_version: ${String(version)}`);
   }
   return {contents, version};
