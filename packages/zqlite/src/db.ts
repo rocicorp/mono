@@ -256,6 +256,7 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   readonly #attrs: Attributes;
   #start: number;
   #sqliteRowTimeSum: number;
+  #logged = false;
 
   constructor(
     lc: LogContext,
@@ -282,7 +283,17 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
     return ret;
   }
 
+  /**
+   * Callers that exhaust an iterator still close it afterwards -- `#fetch`
+   * closes in a `finally` -- so an ordinary completion reaches here through
+   * `next()` and then again through `return()`. Only the first one describes
+   * the query, so the epilogue runs once per iterator.
+   */
   #log() {
+    if (this.#logged) {
+      return;
+    }
+    this.#logged = true;
     logIfSlow(
       this.#lc.withContext('type', 'total'),
       performance.now() - this.#start,
