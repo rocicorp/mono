@@ -125,7 +125,7 @@ test('isJSONValue', () => {
   t({x: [undefined]}, ['x', 0]);
 });
 
-test('xxx', () => {
+test('undefined property values', () => {
   const t = (
     a: JSONValue | undefined,
     b: JSONValue | undefined,
