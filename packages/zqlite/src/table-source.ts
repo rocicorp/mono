@@ -40,7 +40,10 @@ import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 import type {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
-import {StatementCache} from './internal/statement-cache.ts';
+import {
+  normalizeWhitespace,
+  StatementCache,
+} from './internal/statement-cache.ts';
 import {
   buildSelectQuery,
   toSQLiteType,
@@ -74,6 +77,10 @@ let eventCount = 0;
  */
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
+  readonly #fetchTemplates = new WeakMap<
+    Connection,
+    Map<string, FetchTemplate>
+  >();
   readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
@@ -287,10 +294,11 @@ export class TableSource implements Source {
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
-    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
-    const sqlAndBindings = format(query);
+    const sqlAndBindings = this.#requestToSQLAndBindings(req, connection);
 
-    const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
+    const cachedStatement = this.#stmts.cache.getNormalized(
+      sqlAndBindings.normalizedText,
+    );
     cachedStatement.statement.safeIntegers(true);
     const rowIterator = cachedStatement.statement.iterate<Row>(
       ...sqlAndBindings.values,
@@ -561,6 +569,152 @@ export class TableSource implements Source {
       request.multiConstraints,
     );
   }
+
+  /**
+   * A hydration issues thousands of fetches that differ only in their bound
+   * values: one warm tracker hydration ran 7,795 fetches over 12 distinct SQL
+   * texts. Rebuilding the `@databases/sql` object tree and re-serializing it
+   * every time is the cost this avoids.
+   *
+   * The template is keyed by everything about the request that changes the
+   * SQL text. The connection already fixes the table, the columns, the
+   * filters and the ordering, so what is left is the constrained columns, the
+   * shape of each multi-constraint, and `reverse`. Values never change the
+   * text: `constraintsToSQL` emits `col = ?` even for a null.
+   *
+   * Requests with a `start` are excluded. `gatherStartConstraints` chooses
+   * comparisons from the cursor row's values -- a null bound emits
+   * `IS NOT NULL`, or `FALSE`, or nothing at all -- so the text depends on the
+   * values, and paging fetches do not repeat a shape often enough to pay for
+   * the extra key.
+   */
+  #requestToSQLAndBindings(
+    request: FetchRequest,
+    connection: Connection,
+  ): {text: string; normalizedText: string; values: unknown[]} {
+    if (request.start !== undefined) {
+      const {text, values} = format(
+        this.#requestToSQL(
+          request,
+          connection.filters?.condition,
+          connection.sort,
+        ),
+      );
+      return {text, normalizedText: normalizeWhitespace(text), values};
+    }
+
+    let templates = this.#fetchTemplates.get(connection);
+    if (templates === undefined) {
+      templates = new Map();
+      this.#fetchTemplates.set(connection, templates);
+    }
+
+    const key = fetchTemplateKey(request);
+    let template = templates.get(key);
+    if (template === undefined) {
+      const {text, values} = format(
+        this.#requestToSQL(
+          request,
+          connection.filters?.condition,
+          connection.sort,
+        ),
+      );
+      template = {
+        text,
+        normalizedText: normalizeWhitespace(text),
+        // The filter conditions are fixed for the life of the connection, and
+        // `buildSelectQuery` appends them after the constraints, so whatever
+        // bindings follow the constrained ones are the same on every fetch.
+        filterValues: values.slice(countConstraintBindings(request)),
+      };
+      if (templates.size >= MAX_CACHED_FETCH_TEMPLATES) {
+        templates.clear();
+      }
+      templates.set(key, template);
+    }
+
+    return {
+      text: template.text,
+      normalizedText: template.normalizedText,
+      values: this.#bindFetchTemplate(request, template),
+    };
+  }
+
+  /**
+   * Reproduces the binding order of `buildSelectQuery`: the constrained
+   * columns in insertion order, then each multi-constraint entry by entry,
+   * then the connection's fixed filter values. Like `multiConstraintToSQL`,
+   * the columns of a multi-constraint come from its first entry, which is
+   * what puts the bindings in the order the emitted `IN` clause expects.
+   */
+  #bindFetchTemplate(
+    request: FetchRequest,
+    template: FetchTemplate,
+  ): unknown[] {
+    const values: unknown[] = [];
+    const {constraint, multiConstraints} = request;
+    if (constraint) {
+      for (const key in constraint) {
+        values.push(toSQLiteType(constraint[key], this.#columns[key].type));
+      }
+    }
+    if (multiConstraints) {
+      for (const multiConstraint of multiConstraints) {
+        const columns = multiConstraint[0];
+        for (const entry of multiConstraint) {
+          for (const key in columns) {
+            values.push(toSQLiteType(entry[key], this.#columns[key].type));
+          }
+        }
+      }
+    }
+    values.push(...template.filterValues);
+    return values;
+  }
+}
+
+type FetchTemplate = {
+  readonly text: string;
+  readonly normalizedText: string;
+  readonly filterValues: readonly unknown[];
+};
+
+/**
+ * The distinct shapes per connection are bounded by the query graph, but
+ * multi-constraint arity comes from chunk sizes the caller picks, so the map
+ * is capped the way {@linkcode StatementCache} is.
+ */
+const MAX_CACHED_FETCH_TEMPLATES = 100;
+
+function fetchTemplateKey(request: FetchRequest): string {
+  let key = request.reverse ? 'r' : '';
+  for (const column in request.constraint) {
+    key += `|${column}`;
+  }
+  if (request.multiConstraints) {
+    for (const multiConstraint of request.multiConstraints) {
+      key += `;${multiConstraint.length}`;
+      for (const column in multiConstraint[0]) {
+        key += `|${column}`;
+      }
+    }
+  }
+  return key;
+}
+
+function countConstraintBindings(request: FetchRequest): number {
+  let count = 0;
+  for (const _ in request.constraint) {
+    count++;
+  }
+  if (request.multiConstraints) {
+    for (const multiConstraint of request.multiConstraints) {
+      for (const _ in multiConstraint[0]) {
+        count += multiConstraint.length;
+      }
+    }
+  }
+  return count;
 }
 
 function getUniqueIndexes(
