@@ -660,7 +660,6 @@ describe('refresh', () => {
       });
     }
 
-    // oxlint-disable-next-line no-unused-vars -- Used in function parameter default
     let timestampCounter = 0;
 
     function makeLocalMutation({
