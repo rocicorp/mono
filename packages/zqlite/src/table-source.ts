@@ -715,16 +715,23 @@ type FetchTemplate = {
  */
 const MAX_CACHED_FETCH_TEMPLATES = 100;
 
+/**
+ * Injective in the request's shape. Each column name is framed by its own
+ * length, so a name that itself contains the `|` or `;` separators cannot
+ * make two different shapes hash to one key -- a shared key would serve one
+ * shape's SQL text for the other shape's bindings, and when the two bind the
+ * same number of values that is silently wrong rows rather than a bind error.
+ */
 function fetchTemplateKey(request: FetchRequest): string {
   let key = request.reverse ? 'r' : '';
   for (const column in request.constraint) {
-    key += `|${column}`;
+    key += `|${column.length}:${column}`;
   }
   if (request.multiConstraints) {
     for (const multiConstraint of request.multiConstraints) {
       key += `;${multiConstraint.length}`;
       for (const column in multiConstraint[0]) {
-        key += `|${column}`;
+        key += `|${column.length}:${column}`;
       }
     }
   }

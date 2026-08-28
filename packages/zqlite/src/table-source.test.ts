@@ -1539,6 +1539,87 @@ describe('reusing a fetch template across fetches', () => {
     db.close();
   });
 
+  test('column names containing the key separators get their own template', () => {
+    // Two shapes that both constrain two columns, and whose column names
+    // concatenate to the same text: `a|b` + `c` against `a` + `b|c`. Sharing
+    // one template here binds the second shape's values into the first
+    // shape's SQL, and because the binding counts match, that returns
+    // plausible wrong rows instead of failing.
+    const weirdColumns = {
+      'id': {type: 'string'},
+      'a|b': {type: 'string'},
+      'c': {type: 'string'},
+      'a': {type: 'string'},
+      'b|c': {type: 'string'},
+      'b': {type: 'string'},
+      'a;1|b': {type: 'string'},
+    } as const;
+    const db = new Database(lc, ':memory:');
+    db.exec(/* sql */ `CREATE TABLE weird (
+        id TEXT PRIMARY KEY, "a|b" TEXT, "c" TEXT, "a" TEXT, "b|c" TEXT,
+        "b" TEXT, "a;1|b" TEXT);`);
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'weird',
+      weirdColumns,
+      ['id'],
+    );
+    const weirdRows: Row[] = [
+      {
+        'id': 'r1',
+        'a|b': 'x',
+        'c': 'y',
+        'a': 'p',
+        'b|c': 'q',
+        'b': 'm',
+        'a;1|b': 'u',
+      },
+      {
+        'id': 'r2',
+        'a|b': 'p',
+        'c': 'q',
+        'a': 'x',
+        'b|c': 'y',
+        'b': 'n',
+        'a;1|b': 'v',
+      },
+    ];
+    for (const row of weirdRows) {
+      consume(source.push(makeSourceChangeAdd(row)));
+    }
+    const input = source.connect(byId);
+
+    expect(fetchRows(input, {constraint: {'a|b': 'x', 'c': 'y'}}).rows).toEqual(
+      [weirdRows[0]],
+    );
+    expect(fetchRows(input, {constraint: {'a': 'x', 'b|c': 'y'}}).rows).toEqual(
+      [weirdRows[1]],
+    );
+    // And again, now that both shapes have templates cached.
+    expect(fetchRows(input, {constraint: {'a|b': 'x', 'c': 'y'}}).rows).toEqual(
+      [weirdRows[0]],
+    );
+    expect(fetchRows(input, {constraint: {'a': 'x', 'b|c': 'y'}}).rows).toEqual(
+      [weirdRows[1]],
+    );
+
+    // The arity separator is ambiguous the same way: a name spelling `;1|b`
+    // reads as "then one multi-constraint over column b".
+    expect(fetchRows(input, {constraint: {'a;1|b': 'u'}}).rows).toEqual([
+      weirdRows[0],
+    ]);
+    expect(
+      fetchRows(input, {
+        constraint: {a: 'x'},
+        multiConstraints: [[{b: 'n'}]],
+      }).rows,
+    ).toEqual([weirdRows[1]]);
+
+    db.close();
+  });
+
   test('filter values survive template reuse', () => {
     const {db, source} = setup();
     const input = source.connect(byId, {
