@@ -62,4 +62,4 @@ jobs:
       # log and the job summary; analyze has already sent it to code scanning.
       - name: Check alerts
         if: always()
-        run: python3 tools/codeql-log-leak/summarize-sarif.py sarif-results
+        run: node tools/codeql-log-leak/summarize-sarif.ts sarif-results

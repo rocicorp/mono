@@ -74,6 +74,9 @@ value to the same call does not silently inherit the exemption. Reach for it
 when a value is safe for a reason the query cannot see; when the reason
 generalizes -- a count, a hash, a shape -- teach the query a barrier instead.
 
+`summarize-sarif.ts` renders the results and decides whether the run passes;
+Node runs it directly, as elsewhere in the repo.
+
 CodeQL analyzes the complete checkout in CI, via `.github/workflows/codeql.yml`.
 Two checks report on it, and they are not redundant: GitHub's own code scanning
 check reports only alerts in code a pull request changed, while the workflow's
