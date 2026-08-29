@@ -92,18 +92,8 @@ function rpcNoAuthTry<T extends InspectDownBody>(
   return new Promise((resolve, reject) => {
     const id = nanoid();
     const f = (ev: MessageEvent) => {
-      let msg: unknown;
-      try {
-        const text =
-          typeof ev.data === 'string'
-            ? ev.data
-            : new TextDecoder().decode(ev.data as ArrayBuffer);
-        msg = JSON.parse(text);
-      } catch {
-        // Non-JSON frame (e.g. binary poke chunk on shared socket). Ignore.
-        return;
-      }
-      if (Array.isArray(msg) && msg[0] === 'inspect') {
+      const msg = JSON.parse(ev.data);
+      if (msg[0] === 'inspect') {
         const body = msg[1];
         if (body.id !== id) {
           return;
