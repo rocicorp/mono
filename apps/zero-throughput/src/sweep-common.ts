@@ -53,6 +53,8 @@ export type BaseSweepConfig = {
   readonly payloadBytes: number;
   readonly outputDir: string;
   readonly zeroPort: number;
+  readonly zeroStart?: boolean | undefined;
+  readonly cacheURL?: string | undefined;
   readonly pgStart: boolean;
   readonly pgURL: string | undefined;
   readonly resume: boolean;
@@ -332,6 +334,12 @@ export function benchmarkCommand(
   ];
   if (config.pgURL !== undefined) {
     command.push('--pg-url', config.pgURL);
+  }
+  if (config.zeroStart !== undefined) {
+    command.push('--zero-start', String(config.zeroStart));
+  }
+  if (config.cacheURL !== undefined) {
+    command.push('--cache-url', config.cacheURL);
   }
   const topology = override?.topology ?? config.topology;
   if (topology !== undefined) {

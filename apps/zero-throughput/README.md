@@ -149,6 +149,7 @@ pnpm --filter zero-throughput start -- --process-log-mode inherit
 ### 1. Default Topology (`--topology single`)
 
 By default, the benchmark runs in single-node mode:
+
 - A single `zero-cache` process tree is started on port `4848`.
 - The **Replication Manager** (WAL ingestion pipeline), the **Change Streamer**, and the **Syncer parent** all run in this single parent process, sharing a single local SQLite replica file (`replica.db`).
 - The syncer forks `--num-sync-workers N` (default: 1) child worker processes for parallel WebSocket client connection handling, but all workers read from the same shared local SQLite replica and receive in-process change notifications.
@@ -207,6 +208,7 @@ When benchmarking Zero at high target write rates (e.g. 1,000–5,000+ writes/s)
 ### The Problem: Single-Connection Serial Bottleneck
 
 By default, the benchmark writer uses a single PostgreSQL connection (`--write-concurrency 1`) inserting individual single rows (`--batch-size 1`):
+
 - Each write executes as a synchronous round-trip to PostgreSQL (`INSERT ... RETURNING seq`).
 - Network latency, SQL parsing, and PostgreSQL WAL fsync require $\sim 1\text{--}2\text{ms}$ per transaction.
 - Consequently, a single serial client connection maxes out around $\sim 500\text{--}800\text{ writes/s}$, causing the harness to fall behind the target write rate even when Zero's replication pipeline has ample headroom.

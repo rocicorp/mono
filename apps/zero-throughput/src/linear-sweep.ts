@@ -340,6 +340,8 @@ export function parseLinearSweepArgs(
   let payloadBytes = 256;
   let outputDir = join('results', 'sweeps', runID);
   let zeroPort = 4_848;
+  let zeroStart: boolean | undefined;
+  let cacheURL: string | undefined;
   let pgStart = true;
   let pgURL: string | undefined;
   let resume = true;
@@ -470,6 +472,16 @@ export function parseLinearSweepArgs(
         );
         i += option.value === undefined ? 1 : 0;
         break;
+      case '--zero-start': {
+        const parsed = readBooleanOption(argv, option, i, true);
+        zeroStart = parsed.value;
+        i += parsed.consumed;
+        break;
+      }
+      case '--cache-url':
+        cacheURL = readOptionValue(argv, option, i);
+        i += option.value === undefined ? 1 : 0;
+        break;
       case '--pg-start': {
         const parsed = readBooleanOption(argv, option, i, true);
         pgStart = parsed.value;
@@ -595,6 +607,8 @@ export function parseLinearSweepArgs(
     payloadBytes,
     outputDir,
     zeroPort,
+    zeroStart,
+    cacheURL,
     pgStart,
     pgURL,
     resume,
