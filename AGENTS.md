@@ -193,11 +193,15 @@ layers in `tools/package-graph/src/workspace.ts`, and writes three things:
   dependency inventory, and a **Layer inversions** table: every dependency that
   points up the layer stack, i.e. where an abstraction boundary is being broken.
   A new row here is worth a question in review.
-- `docs/graph/model.json` — gitignored. The extracted model. Read this rather
-  than re-walking pnpm.
+- `docs/METRICS.md` — committed. Every OpenTelemetry series `zero-cache` can
+  export (name, type, unit, attributes, description), extracted from the
+  `getOrCreate*` declaration sites in its source.
+- `docs/graph/model.json` — gitignored. The extracted model, metric catalog
+  included. Read this rather than re-walking pnpm or grepping for instruments.
 - `docs/graph/index.html` — gitignored. Interactive view: pan/zoom, per-package
   metrics (fan-in/out, cone, blast radius, instability), dependency and
-  dependent cones, layer filtering, and an inversions-only filter.
+  dependent cones, layer filtering, an inversions-only filter, and a sortable
+  table of every exported metric.
 
 ```bash
 pnpm graph          # regenerate all three
@@ -210,6 +214,21 @@ is placed in `LAYERS`. Internal dependencies here are usually `devDependencies`
 (packages import each other's TypeScript source over relative paths), so the
 graph includes them; `pnpm verify-deps` is what keeps those manifests honest
 against the actual imports.
+
+### Metric extraction
+
+The catalog is read from source, not from a running process, so adding a metric
+means re-running `pnpm graph` and committing `docs/METRICS.md` — `graph:check`
+fails otherwise. A declaration is recognised when its category and name are
+literals, directly or through a one-hop local wrapper. Anything the extractor
+recognises but cannot resolve is reported as a warning and listed in
+`docs/METRICS.md`, never dropped silently, so an incomplete catalog says so.
+
+**Attributes** are collected from record sites (`.add(1, {…})`,
+`.addCallback(r => r.observe(v, {…}))`) in the file that declares the
+instrument, so the reading is best-effort. Each series records whether the pass
+saw every record site (`none` is then a real answer), some (`…`), or none at all
+(`unknown` — not the same as "no attributes").
 
 ## Database
 

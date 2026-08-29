@@ -29,9 +29,10 @@ export const REPO_ROOT = resolve(
 
 /**
  * Bump when the emitted JSON changes shape, so a consumer can reject a stale
- * file it cannot read.
+ * file it cannot read. 2: packages gained `exports` and the model gained
+ * `metricsCatalog`.
  */
-export const MODEL_SCHEMA = 1;
+export const MODEL_SCHEMA = 2;
 
 /** How a workspace member is meant to be consumed. */
 export type TargetKind =
@@ -48,6 +49,57 @@ export type TargetKind =
  * dropping them would leave an empty graph, so they are first-class here.
  */
 export type EdgeKind = 'runtime' | 'dev' | 'peer';
+
+/**
+ * `complete` -- every record site for this series was readable.
+ * `partial`  -- at least one passed a bag this pass could not open (a spread, a
+ *               computed key from another module, a value built elsewhere).
+ * `unseen`   -- no record site in the declaring file; attributes unknown.
+ */
+export type AttributeConfidence = 'complete' | 'partial' | 'unseen';
+
+export type MetricType = 'counter' | 'updowncounter' | 'gauge' | 'histogram';
+
+/** One exported metric series, read off its declaration site. */
+export type MetricFamily = {
+  readonly name: string;
+  readonly type: MetricType;
+  /** zero's own taxonomy (replication/replica/sync/mutation/server), or null
+   * for an instrument created straight off the OTel meter. */
+  readonly category: string | null;
+  readonly unit: string | null;
+  readonly description: string | null;
+  /** Attribute keys seen at record sites in the declaring file. */
+  readonly attributes: readonly string[];
+  /** How much of the attribute story this pass could actually see. The three
+   * readings must never render the same way: `complete` with no keys means the
+   * series really is undimensioned, while `unseen` means nobody looked. */
+  readonly attributeConfidence: AttributeConfidence;
+  readonly file: string;
+  readonly line: number;
+};
+
+export type PackageExports = {
+  readonly families: readonly MetricFamily[];
+};
+
+export type MetricsCatalog = {
+  readonly totals: {
+    readonly families: number;
+    readonly emitters: number;
+    readonly withAttributes: number;
+  };
+  readonly emitters: readonly string[];
+  readonly byType: Readonly<Record<MetricType, number>>;
+  /** Declaration sites the extractor recognised but could not resolve. Empty is
+   * the healthy state; anything here means the catalog is incomplete and says
+   * so out loud. */
+  readonly unresolved: readonly {
+    readonly file: string;
+    readonly line: number;
+    readonly via: string;
+  }[];
+};
 
 export type Layer = {
   readonly id: string;
@@ -87,6 +139,9 @@ export type PackageMetrics = {
   readonly blastRadius: number;
   readonly depth: number;
   readonly instability: number;
+  /** Exported metric families. 0 is a true reading: most packages serve no
+   * scrape at all. */
+  readonly families: number;
 };
 
 export type ModelPackage = SourcePackage & {
@@ -94,6 +149,7 @@ export type ModelPackage = SourcePackage & {
   readonly dependsOn: readonly string[];
   readonly dependents: readonly string[];
   readonly metrics: PackageMetrics;
+  readonly exports: PackageExports | null;
 };
 
 export type LayerEdge = {
@@ -118,6 +174,7 @@ export type Meta = {
   readonly declaredIn: string;
   readonly externals: string;
   readonly docPath: string;
+  readonly metricsPath: string;
   readonly modelPath: string;
   readonly htmlPath: string;
 };
@@ -131,6 +188,7 @@ export type Model = {
   readonly edges: readonly Edge[];
   readonly layerEdges: readonly LayerEdge[];
   readonly layerViolations: readonly LayerViolation[];
+  readonly metricsCatalog: MetricsCatalog | null;
   readonly totals: {
     readonly packages: number;
     readonly edges: number;
@@ -144,6 +202,16 @@ export type ModelSource = {
   readonly layers: readonly Layer[];
   readonly packages: readonly SourcePackage[];
   readonly edges: readonly SourceEdge[];
+  /** Package dir -> its exported metric families, plus any declaration site the
+   * extractor could not resolve. Omit when metrics were not extracted. */
+  readonly metrics: {
+    readonly byDir: ReadonlyMap<string, readonly MetricFamily[]>;
+    readonly unresolved: readonly {
+      readonly file: string;
+      readonly line: number;
+      readonly via: string;
+    }[];
+  } | null;
 };
 
 export function compareText(a: string, b: string): number {
@@ -332,12 +400,16 @@ export function buildModel(source: ModelSource): Model {
   );
   const depths = depthsFor(names, dependsOn);
 
+  const exportsByDir = source.metrics?.byDir ?? new Map();
+
   const modelPackages: ModelPackage[] = packages.map(pkg => {
     const name = pkg.name;
     const fanOut = dependsOn.get(name)?.size ?? 0;
     const fanIn = dependents.get(name)?.size ?? 0;
+    const families = exportsByDir.get(pkg.dir) ?? null;
     return {
       ...pkg,
+      exports: families ? {families} : null,
       layer: packageToLayer.get(name)!,
       dependsOn: [...(dependsOn.get(name) ?? [])].toSorted(compareText),
       dependents: [...(dependents.get(name) ?? [])].toSorted(compareText),
@@ -355,6 +427,7 @@ export function buildModel(source: ModelSource): Model {
           fanIn + fanOut === 0
             ? 0
             : Number((fanOut / (fanIn + fanOut)).toFixed(3)),
+        families: families?.length ?? 0,
       },
     };
   });
@@ -391,6 +464,31 @@ export function buildModel(source: ModelSource): Model {
     )
     .map(({from, to}) => ({from, to}));
 
+  const emitters = modelPackages
+    .filter(pkg => pkg.exports)
+    .map(pkg => pkg.name);
+  const allFamilies = modelPackages.flatMap(pkg => pkg.exports?.families ?? []);
+  const byType: Record<MetricType, number> = {
+    counter: 0,
+    updowncounter: 0,
+    gauge: 0,
+    histogram: 0,
+  };
+  for (const family of allFamilies) byType[family.type]++;
+
+  const metricsCatalog: MetricsCatalog | null = source.metrics
+    ? {
+        totals: {
+          families: allFamilies.length,
+          emitters: emitters.length,
+          withAttributes: allFamilies.filter(f => f.attributes.length).length,
+        },
+        emitters,
+        byType,
+        unresolved: source.metrics.unresolved,
+      }
+    : null;
+
   return {
     schema: MODEL_SCHEMA,
     generator: meta.generator,
@@ -404,6 +502,7 @@ export function buildModel(source: ModelSource): Model {
     edges,
     layerEdges,
     layerViolations,
+    metricsCatalog,
     totals: {
       packages: modelPackages.length,
       edges: edges.length,

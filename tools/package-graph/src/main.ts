@@ -20,16 +20,19 @@ import {pathToFileURL} from 'node:url';
 import {REPO_ROOT, serializeModel} from './model.ts';
 import {renderHtml} from './render-html.ts';
 import {renderMarkdown} from './render-markdown.ts';
+import {renderMetrics} from './render-metrics.ts';
 import {META, workspaceModel} from './workspace.ts';
 
 const DEFAULTS = {
   output: resolve(REPO_ROOT, META.docPath),
+  metrics: resolve(REPO_ROOT, META.metricsPath),
   model: resolve(REPO_ROOT, META.modelPath),
   html: resolve(REPO_ROOT, META.htmlPath),
 };
 
 type Options = {
   output: string;
+  metrics: string;
   model: string;
   html: string;
   check: boolean;
@@ -41,11 +44,12 @@ type Options = {
 const USAGE = `Usage: node ${META.generator} [options]
 
 Generate the workspace package model, the deterministic Markdown + Mermaid view,
-and an interactive HTML view of the same model.
+the exported-metric catalog, and an interactive HTML view of the same model.
 
 Options:
-  --check            fail when the existing Markdown is stale (writes nothing)
-  --output <path>    write the Markdown somewhere else
+  --check            fail when either committed Markdown is stale (writes nothing)
+  --output <path>    write the package graph Markdown somewhere else
+  --metrics <path>   write the metric catalog Markdown somewhere else
   --model <path>     write the model JSON somewhere else
   --html <path>      write the interactive view somewhere else
   --open             open the interactive view once it is written
@@ -62,8 +66,9 @@ function parseArgs(argv: readonly string[]): Options {
     help: false,
   };
 
-  const pathOptions = new Map<string, 'output' | 'model' | 'html'>([
+  const pathOptions = new Map<string, 'output' | 'metrics' | 'model' | 'html'>([
     ['--output', 'output'],
+    ['--metrics', 'metrics'],
     ['--model', 'model'],
     ['--html', 'html'],
   ]);
@@ -135,6 +140,7 @@ function main(): void {
   try {
     const model = workspaceModel();
     const markdown = renderMarkdown(model, options.output);
+    const metrics = renderMetrics(model, options.metrics);
 
     if (options.stdout) {
       process.stdout.write(markdown);
@@ -142,33 +148,52 @@ function main(): void {
     }
 
     if (options.check) {
-      let current: string | null = null;
-      try {
-        current = readFileSync(options.output, 'utf8');
-      } catch {
-        // Report a missing output through the same actionable stale message.
-      }
-      if (current !== markdown) {
+      const stale = [
+        [options.output, markdown],
+        [options.metrics, metrics],
+      ].filter(([path, expected]) => {
+        let current: string | null = null;
+        try {
+          current = readFileSync(path, 'utf8');
+        } catch {
+          // A missing output is stale, reported the same actionable way.
+        }
+        return current !== expected;
+      });
+      if (stale.length) {
         console.error(
-          `${relative(REPO_ROOT, options.output)} is stale; run \`pnpm ${META.command}\` and commit the result.`,
+          `${stale
+            .map(([path]) => relative(REPO_ROOT, path))
+            .join(
+              ', ',
+            )} stale; run \`pnpm ${META.command}\` and commit the result.`,
         );
         process.exitCode = 1;
         return;
       }
       console.log(
-        `Package graph is current (${model.totals.packages} packages, ${model.totals.edges} direct edges).`,
+        `Package graph is current (${model.totals.packages} packages, ${model.totals.edges} direct edges, ${model.metricsCatalog?.totals.families ?? 0} metric series).`,
       );
       return;
     }
 
     const written = [
       writeGenerated(options.output, markdown),
+      writeGenerated(options.metrics, metrics),
       writeGenerated(options.model, serializeModel(model)),
       writeGenerated(options.html, renderHtml(model)),
     ];
     console.log(
-      `Wrote ${written.join(', ')} (${model.totals.packages} packages, ${model.totals.edges} direct edges).`,
+      `Wrote ${written.join(', ')} (${model.totals.packages} packages, ${model.totals.edges} direct edges, ${model.metricsCatalog?.totals.families ?? 0} metric series).`,
     );
+    const unresolved = model.metricsCatalog?.unresolved ?? [];
+    if (unresolved.length) {
+      console.warn(
+        `Unresolved metric declaration sites (catalog is incomplete): ${unresolved
+          .map(u => `${u.file}:${u.line}`)
+          .join(', ')}`,
+      );
+    }
     if (model.layerViolations.length) {
       const detail = model.layerViolations
         .map(({from, to}) => `${from} -> ${to}`)

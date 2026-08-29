@@ -20,6 +20,7 @@
 import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
+import {extractMetrics} from './metrics-catalog.ts';
 import {
   buildModel,
   REPO_ROOT,
@@ -125,6 +126,7 @@ export const META: Meta = {
   externals:
     'External npm packages are omitted; internal devDependencies are not.',
   docPath: 'docs/PACKAGE-GRAPH.md',
+  metricsPath: 'docs/METRICS.md',
   modelPath: 'docs/graph/model.json',
   htmlPath: 'docs/graph/index.html',
 };
@@ -203,7 +205,10 @@ const DEPENDENCY_SECTIONS: readonly (readonly [
 
 const KIND_RANK: Record<EdgeKind, number> = {runtime: 0, peer: 1, dev: 2};
 
-export function workspaceModel(members: Member[] = pnpmMembers()): Model {
+export function workspaceModel(
+  members: Member[] = pnpmMembers(),
+  withMetrics = true,
+): Model {
   const manifests = members.map(member => ({
     dir: repoRelative(member.path),
     manifest: JSON.parse(
@@ -244,5 +249,11 @@ export function workspaceModel(members: Member[] = pnpmMembers()): Model {
     edges.push(...byDependency.values());
   }
 
-  return buildModel({meta: META, layers: LAYERS, packages, edges});
+  // The metrics overlay is not optional-by-nature: it is derived from committed
+  // source, it is deterministic, and it costs one parse of the files that
+  // mention an instrument. So it is folded in before anything is rendered, and
+  // the committed views can carry it.
+  const metrics = withMetrics ? extractMetrics(packages.map(p => p.dir)) : null;
+
+  return buildModel({meta: META, layers: LAYERS, packages, edges, metrics});
 }

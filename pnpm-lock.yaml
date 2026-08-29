@@ -1891,6 +1891,10 @@ importers:
         version: link:../../packages/shared
 
   tools/package-graph:
+    dependencies:
+      oxc-parser:
+        specifier: ^0.129.0
+        version: 0.129.0
     devDependencies:
       '@types/node':
         specifier: ^22.10.5
