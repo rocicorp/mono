@@ -144,11 +144,25 @@ To stream zero-cache logs directly in the terminal:
 pnpm --filter zero-throughput start -- --process-log-mode inherit
 ```
 
-## Distributed Topology & Multi-Process Scaling
+## Process Topologies: Single-Node vs. Distributed
 
-To benchmark the full multi-process replication architecture:
+### 1. Default Topology (`--topology single`)
 
-$$\text{PostgreSQL} \xrightarrow{\text{WAL}} \text{Replication Manager (RM)} \xrightarrow{\text{WS}} \text{View-Syncer Pods (1 to } N\text{)} \xrightarrow{\text{IVM}} \text{Clients}$$
+By default, the benchmark runs in single-node mode:
+- A single `zero-cache` process tree is started on port `4848`.
+- The **Replication Manager** (WAL ingestion pipeline), the **Change Streamer**, and the **Syncer parent** all run in this single parent process, sharing a single local SQLite replica file (`replica.db`).
+- The syncer forks `--num-sync-workers N` (default: 1) child worker processes for parallel WebSocket client connection handling, but all workers read from the same shared local SQLite replica and receive in-process change notifications.
+
+### 2. Distributed Topology (`--topology distributed`)
+
+Decouples the architecture into independent processes matching production multi-pod clusters:
+
+$$\text{PostgreSQL} \xrightarrow{\text{WAL}} \text{Replication Manager (rm-1)} \xrightarrow{\text{WS}} \text{View-Syncer Pods (vs-0} \dots \text{vs-(N-1))} \xrightarrow{\text{IVM}} \text{Clients}$$
+
+- **Replication Manager (`rm-1`)**: Runs as a dedicated process on port `4848` (with dedicated change-streamer on `4849`) with `numSyncWorkers = 0`. It connects to PostgreSQL, ingests the WAL stream, writes to `replica.db-rm1`, and streams change events downstream. It serves no client queries directly.
+- **View-Syncers (`vs-0` ... `vs-(N-1)`)**: Run as independent server processes on ports `4858`, `4859`, etc., each maintaining its own SQLite replica (`replica.db-vs0`, `replica.db-vs1`). They connect to `rm-1`'s change streamer over WebSocket and run independent IVM pipelines. Synthetic clients are partitioned across these View-Syncer instances.
+
+### Examples
 
 ```bash
 # 1. Distributed topology with 2 View-Syncer pods and 2 sync workers each
@@ -160,8 +174,17 @@ pnpm --filter zero-throughput start -- \
   --users 20 \
   --write-rate 200
 
-# 2. Capture V8 CPU profiles across all child worker processes (change-streamer, syncer, etc.)
+# 2. Profile RM (rm-1) and primary View-Syncer (vs-0) under heavy write load
+#    --profile-rm profiles WAL ingestion & change-stream encoding on rm-1
+#    --profile-vs profiles IVM pipeline advancement & diff calculation on vs-0
 pnpm --filter zero-throughput start -- \
+  --topology distributed \
+  --num-view-syncers 2 \
+  --num-sync-workers 2 \
+  --profile forum \
+  --users 20 \
+  --write-rate 500 \
+  --duration-ms 15000 \
   --profile-rm \
   --profile-vs \
   --profile-dir results/profiles
@@ -174,7 +197,10 @@ pnpm --filter zero-throughput start -- \
   --batch-size 10 \
   --duration-ms 10000
 
-# 4. Linear throughput parameter sweep (prints side-by-side comparison table)
+# 4. Linear throughput parameter sweeps (prints side-by-side comparison tables)
+#    - sweep:write-rates      Single-pod write ingestion ceiling (500-4000 w/s)
+#    - sweep:num-view-syncers Multi-pod scaling across 1, 2, and 3 VS pods side-by-side
+#    - sweep:users            Active client subscription fanout (5-50 users)
 pnpm --filter zero-throughput run sweep:write-rates
 pnpm --filter zero-throughput run sweep:num-view-syncers
 pnpm --filter zero-throughput run sweep:users
