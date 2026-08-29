@@ -343,7 +343,7 @@ export function parseLinearSweepArgs(
   let zeroStart: boolean | undefined;
   let cacheURL: string | undefined;
   let cacheURLs: string | undefined;
-  let pgStart = true;
+  let pgStart: boolean | undefined;
   let pgURL: string | undefined;
   let resume = true;
   let continueOnError = false;
@@ -586,6 +586,10 @@ export function parseLinearSweepArgs(
     process.exit(0);
   }
 
+  const effectivePgStart = pgStart ?? pgURL === undefined;
+  const effectiveZeroStart =
+    zeroStart ?? (cacheURL === undefined && cacheURLs === undefined);
+
   return {
     runID,
     writeRates,
@@ -612,10 +616,10 @@ export function parseLinearSweepArgs(
     payloadBytes,
     outputDir,
     zeroPort,
-    zeroStart,
+    zeroStart: effectiveZeroStart,
     cacheURL,
     cacheURLs,
-    pgStart,
+    pgStart: effectivePgStart,
     pgURL,
     resume,
     continueOnError,

@@ -243,14 +243,12 @@ You can point the harness at any pre-existing environment—such as a local `pnp
 
 ### 1. Individual Benchmark Runs
 
-Pass `--zero-start false` and `--pg-start false` along with the target connection endpoints:
+Simply provide `--cache-url` (or `--cache-urls`) and `--pg-url`. Specifying external URLs automatically infers that the services are already running and disables local process orchestration:
 
 ```bash
 # Point synthetic clients at an existing Zero cache and PostgreSQL
 pnpm --filter zero-throughput start -- \
-  --zero-start false \
   --cache-url http://127.0.0.1:4848 \
-  --pg-start false \
   --pg-url postgresql://user:password@127.0.0.1:6436/postgres \
   --profile forum \
   --users 20 \
@@ -261,13 +259,13 @@ pnpm --filter zero-throughput start -- \
 Or configure via environment variables:
 
 ```bash
-ZERO_THROUGHPUT_ZERO_START=false \
 ZERO_THROUGHPUT_CACHE_URL=http://127.0.0.1:4848 \
-ZERO_THROUGHPUT_PG_START=false \
 ZERO_THROUGHPUT_PG_URL=postgresql://user:password@127.0.0.1:6436/postgres \
 pnpm --filter zero-throughput start -- --write-rate 300
 ```
 
+> **Automatic Process Inference**: When `--cache-url` or `--cache-urls` is supplied, `zero.start` automatically defaults to `false`. When `--pg-url` is supplied, `pg.start` automatically defaults to `false`. Explicit `--zero-start` and `--pg-start` overrides are available if needed.
+>
 > **Preserving Existing Data**: By default, the harness drops and recreates the benchmark table before each run. To preserve existing database tables and records, pass `--reset false` (or `ZERO_THROUGHPUT_RESET=false`).
 
 ### 2. Multi-Pod Addressing vs. Load Balancers
@@ -277,14 +275,12 @@ When benchmarking a multi-pod or distributed View-Syncer deployment:
 - **Behind a Load Balancer / Ingress**: Provide the single load balancer URL via `--cache-url`. All synthetic client WebSockets connect to that endpoint and let the load balancer distribute traffic across the backend pods.
   ```bash
   pnpm --filter zero-throughput start -- \
-    --zero-start false \
     --cache-url https://zero-lb.staging.internal \
     --users 50
   ```
 - **Direct Multi-Pod Addressing**: Provide a comma-separated list of URLs via `--cache-urls` (or `--cache-url`). Synthetic clients are evenly round-robin partitioned across the endpoints by client index:
   ```bash
   pnpm --filter zero-throughput start -- \
-    --zero-start false \
     --cache-urls http://10.0.1.10:4848,http://10.0.1.11:4848,http://10.0.1.12:4848 \
     --users 60
   ```
@@ -296,21 +292,19 @@ Both binary searches (`sweep`) and linear sweeps (`sweep:write-rates`, `sweep:us
 ```bash
 # Linear write-rate sweep against an existing cluster
 pnpm --filter zero-throughput run sweep:write-rates -- \
-  --zero-start false \
   --cache-url http://127.0.0.1:4848 \
-  --pg-start false \
   --pg-url postgresql://user:password@127.0.0.1:6436/postgres
 ```
 
 ### Options Reference
 
-| CLI Option | Environment Variable | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--zero-start <bool>` | `ZERO_THROUGHPUT_ZERO_START` | `true` | When `false`, skips starting local `zero-cache` |
-| `--cache-url <url>` | `ZERO_THROUGHPUT_CACHE_URL` | `http://127.0.0.1:4848` | Primary Zero cache endpoint or load balancer |
-| `--cache-urls <urls>` | `ZERO_THROUGHPUT_CACHE_URLS` | `undefined` | Comma-separated View-Syncer URLs for client partitioning |
-| `--pg-start <bool>` | `ZERO_THROUGHPUT_PG_START` | `true` | When `false`, skips starting local Docker PostgreSQL |
-| `--pg-url <url>` | `ZERO_THROUGHPUT_PG_URL` | `postgresql://...:6436` | Upstream database connection string |
-| `--reset <bool>` | `ZERO_THROUGHPUT_RESET` | `true` | When `false`, skips dropping/resetting the benchmark table |
+| CLI Option            | Environment Variable         | Default                 | Description                                                  |
+| :-------------------- | :--------------------------- | :---------------------- | :----------------------------------------------------------- |
+| `--cache-url <url>`   | `ZERO_THROUGHPUT_CACHE_URL`  | `http://127.0.0.1:4848` | Primary Zero cache endpoint or load balancer (disables local Zero) |
+| `--cache-urls <urls>` | `ZERO_THROUGHPUT_CACHE_URLS` | `undefined`             | Comma-separated View-Syncer URLs for client partitioning     |
+| `--pg-url <url>`      | `ZERO_THROUGHPUT_PG_URL`     | `postgresql://...:6436` | Upstream database connection string (disables local Postgres)|
+| `--reset <bool>`      | `ZERO_THROUGHPUT_RESET`      | `true`                  | When `false`, skips dropping/resetting the benchmark table   |
+| `--zero-start <bool>` | `ZERO_THROUGHPUT_ZERO_START` | `auto` (`false` if url) | Optional override to force starting/stopping local Zero      |
+| `--pg-start <bool>`   | `ZERO_THROUGHPUT_PG_START`   | `auto` (`false` if url) | Optional override to force starting/stopping local Postgres  |
 
 Run `pnpm --filter zero-throughput start -- --help` for all options.

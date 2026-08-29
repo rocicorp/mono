@@ -47,13 +47,13 @@ const options = {
 
   pg: {
     url: v.string().default(DEFAULT_PG_URL),
-    start: v.boolean().default(true),
+    start: v.boolean().optional(),
     stopAfterRun: v.boolean().default(true),
     readyTimeoutMs: v.number().default(60_000),
   },
 
   zero: {
-    start: v.boolean().default(true),
+    start: v.boolean().optional(),
     port: v.number().default(4_848),
     readyTimeoutMs: v.number().default(120_000),
     appID: v.string().default('zero_throughput'),
@@ -165,6 +165,11 @@ export function loadConfig(): BenchmarkConfig {
           )
         : [`http://127.0.0.1:${basePort}`];
 
+  const zeroStart =
+    parsed.zero.start ??
+    (explicitURLs === undefined || explicitURLs.length === 0);
+  const pgStart = parsed.pg.start ?? parsed.pg.url === DEFAULT_PG_URL;
+
   return {
     runID: new Date().toISOString().replace(/[:.]/g, '-'),
     profile: parsed.profile,
@@ -195,9 +200,13 @@ export function loadConfig(): BenchmarkConfig {
     reset: parsed.reset,
     cacheURL: cacheURLs[0],
     cacheURLs,
-    pg: parsed.pg,
+    pg: {
+      ...parsed.pg,
+      start: pgStart,
+    },
     zero: {
       ...parsed.zero,
+      start: zeroStart,
       numSyncWorkers,
     },
   };

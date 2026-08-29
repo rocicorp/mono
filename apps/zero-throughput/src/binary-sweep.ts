@@ -437,7 +437,7 @@ export function parseBinarySweepArgs(
   let zeroStart: boolean | undefined;
   let cacheURL: string | undefined;
   let cacheURLs: string | undefined;
-  let pgStart = true;
+  let pgStart: boolean | undefined;
   let pgURL: string | undefined;
   let resume = true;
   let continueOnError = false;
@@ -701,6 +701,10 @@ export function parseBinarySweepArgs(
     throw new Error('--write-rate-min must be <= --write-rate-max');
   }
 
+  const effectivePgStart = pgStart ?? pgURL === undefined;
+  const effectiveZeroStart =
+    zeroStart ?? (cacheURL === undefined && cacheURLs === undefined);
+
   return {
     runID,
     topology,
@@ -729,10 +733,10 @@ export function parseBinarySweepArgs(
     repetitions,
     outputDir,
     zeroPort,
-    zeroStart,
+    zeroStart: effectiveZeroStart,
     cacheURL,
     cacheURLs,
-    pgStart,
+    pgStart: effectivePgStart,
     pgURL,
     resume,
     continueOnError,
