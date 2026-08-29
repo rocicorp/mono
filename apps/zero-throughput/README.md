@@ -189,21 +189,48 @@ pnpm --filter zero-throughput start -- \
   --profile-vs \
   --profile-dir results/profiles
 
-# 3. High-throughput multi-worker concurrent database writes with batching (e.g. 2,000 w/s)
-pnpm --filter zero-throughput start -- \
-  --profile feed-append \
-  --write-rate 2000 \
-  --write-concurrency 5 \
-  --batch-size 10 \
-  --duration-ms 10000
+  --profile-dir results/profiles
 
-# 4. Linear throughput parameter sweeps (prints side-by-side comparison tables)
+# 3. Linear throughput parameter sweeps (prints side-by-side comparison tables)
 #    - sweep:write-rates      Single-pod write ingestion ceiling (500-4000 w/s)
 #    - sweep:num-view-syncers Multi-pod scaling across 1, 2, and 3 VS pods side-by-side
 #    - sweep:users            Active client subscription fanout (5-50 users)
 pnpm --filter zero-throughput run sweep:write-rates
 pnpm --filter zero-throughput run sweep:num-view-syncers
 pnpm --filter zero-throughput run sweep:users
+```
+
+## Load Generation: Write Concurrency & Batching
+
+When benchmarking Zero at high target write rates (e.g. 1,000–5,000+ writes/s), the test harness itself can bottleneck on sending writes to PostgreSQL if using default settings.
+
+### The Problem: Single-Connection Serial Bottleneck
+
+By default, the benchmark writer uses a single PostgreSQL connection (`--write-concurrency 1`) inserting individual single rows (`--batch-size 1`):
+- Each write executes as a synchronous round-trip to PostgreSQL (`INSERT ... RETURNING seq`).
+- Network latency, SQL parsing, and PostgreSQL WAL fsync require $\sim 1\text{--}2\text{ms}$ per transaction.
+- Consequently, a single serial client connection maxes out around $\sim 500\text{--}800\text{ writes/s}$, causing the harness to fall behind the target write rate even when Zero's replication pipeline has ample headroom.
+
+### The Solution: Concurrency & Multi-Row Batching
+
+To generate true high-throughput load without client-side starvation, two orthogonal controls are provided:
+
+1. **`--write-concurrency <N>`** (default: `1`):
+   Spawns a pool of $N$ concurrent database writer connections. Writes are distributed evenly across the worker pool, allowing the harness to saturate multiple PostgreSQL backend processes simultaneously.
+
+2. **`--batch-size <N>`** (default: `1`):
+   Bundles $N$ logical rows into a single multi-row `INSERT` statement or transaction. This amortizes network round-trip overhead, SQL parsing, and transaction commit fsyncs across all rows in the batch.
+
+### High-Throughput Example
+
+```bash
+# Push 2,000 logical writes/s using 5 concurrent writer connections in batches of 10 rows
+pnpm --filter zero-throughput start -- \
+  --profile feed-append \
+  --write-rate 2000 \
+  --write-concurrency 5 \
+  --batch-size 10 \
+  --duration-ms 30000
 ```
 
 Use an already-running PostgreSQL or Zero:
