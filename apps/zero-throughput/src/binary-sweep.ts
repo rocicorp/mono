@@ -436,6 +436,7 @@ export function parseBinarySweepArgs(
   let zeroPort = 4_848;
   let zeroStart: boolean | undefined;
   let cacheURL: string | undefined;
+  let cacheURLs: string | undefined;
   let pgStart = true;
   let pgURL: string | undefined;
   let resume = true;
@@ -596,6 +597,10 @@ export function parseBinarySweepArgs(
         cacheURL = readOptionValue(argv, option, i);
         i += option.value === undefined ? 1 : 0;
         break;
+      case '--cache-urls':
+        cacheURLs = readOptionValue(argv, option, i);
+        i += option.value === undefined ? 1 : 0;
+        break;
       case '--pg-start': {
         const parsed = readBooleanOption(argv, option, i, true);
         pgStart = parsed.value;
@@ -726,6 +731,7 @@ export function parseBinarySweepArgs(
     zeroPort,
     zeroStart,
     cacheURL,
+    cacheURLs,
     pgStart,
     pgURL,
     resume,

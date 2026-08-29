@@ -37,6 +37,7 @@ const options = {
   processLogMode: v.literalUnion('file', 'inherit', 'ignore').default('file'),
   reset: v.boolean().default(true),
   cacheURL: v.string().optional(),
+  cacheURLs: v.string().optional(),
 
   topology: v.literalUnion('single', 'distributed').default('single'),
   numViewSyncers: v.number().default(1),
@@ -146,13 +147,23 @@ export function loadConfig(): BenchmarkConfig {
 
   const effectiveBatchSize = Math.max(parsed.batchSize, parsed.rowsPerTx);
   const basePort = parsed.zero.port;
+  const rawCacheURLs = parsed.cacheURLs ?? parsed.cacheURL;
+  const explicitURLs = rawCacheURLs
+    ? rawCacheURLs
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+    : undefined;
+
   const cacheURLs =
-    parsed.topology === 'distributed'
-      ? Array.from(
-          {length: parsed.numViewSyncers},
-          (_, i) => `http://127.0.0.1:${basePort + 10 + i}`,
-        )
-      : [parsed.cacheURL ?? `http://127.0.0.1:${basePort}`];
+    explicitURLs && explicitURLs.length > 0
+      ? explicitURLs
+      : parsed.topology === 'distributed'
+        ? Array.from(
+            {length: parsed.numViewSyncers},
+            (_, i) => `http://127.0.0.1:${basePort + 10 + i}`,
+          )
+        : [`http://127.0.0.1:${basePort}`];
 
   return {
     runID: new Date().toISOString().replace(/[:.]/g, '-'),
