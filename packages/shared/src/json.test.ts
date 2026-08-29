@@ -124,3 +124,22 @@ test('isJSONValue', () => {
   t([undefined], [0]);
   t({x: [undefined]}, ['x', 0]);
 });
+
+test('undefined property values', () => {
+  const t = (
+    a: JSONValue | undefined,
+    b: JSONValue | undefined,
+    expected: boolean,
+  ) => {
+    expect(deepEqual(a, b)).toBe(expected);
+    expect(deepEqual(b, a)).toBe(expected);
+  };
+
+  t({a: 1}, {a: 1, b: 'x'}, false);
+  t({a: 1}, {a: 1, b: undefined}, true);
+  t({}, {a: undefined}, true);
+  t({a: undefined}, {b: undefined}, true);
+  t({a: undefined}, {b: 1}, false);
+  t({a: undefined, b: 1}, {b: 1}, true);
+  t({b: 1}, {a: undefined, b: 1}, true);
+});
