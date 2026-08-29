@@ -40,6 +40,7 @@ import {
 
 export type LinearSweepConfig = BaseSweepConfig & {
   readonly writeRates: readonly number[];
+  readonly viewSyncers?: readonly number[] | undefined;
 };
 
 export async function runLinearSweep(
@@ -54,6 +55,12 @@ export async function runLinearSweep(
     config.writeRates.length > 0
       ? config.writeRates
       : [100, 250, 500, 1000, 2000];
+  const vsCounts =
+    config.viewSyncers && config.viewSyncers.length > 0
+      ? config.viewSyncers
+      : config.numViewSyncers !== undefined
+        ? [config.numViewSyncers]
+        : [1];
 
   await mkdir(runsDir, {recursive: true});
   await mkdir(childLogsDir, {recursive: true});
@@ -84,28 +91,34 @@ export async function runLinearSweep(
     }
 
     for (const point of points) {
-      for (const rate of writeRates) {
-        stdout(`\n--> Running ${pointLabel(point)} @ ${rate} writes/s...\n`);
-        const attempt = await runAttempt({
-          config,
-          point,
-          writeRate: rate,
-          runsDir,
-          childLogsDir,
-        });
-        attempts.push(attempt);
-        await appendFile(attemptsPath, `${JSON.stringify(attempt)}\n`);
-
-        const s = attempt.summary;
-        const status = attempt.status === 'pass' ? 'PASS' : 'FAIL';
-        stdout(
-          `    Result: ${status} | achieved=${s?.achievedWriteRate.toFixed(1) ?? '0'} w/s | p95Lag=${s?.p95ClientVisibleLagMs.toFixed(1) ?? 'N/A'}ms\n`,
-        );
-
-        if (attempt.status === 'error' && !config.continueOnError) {
-          throw new Error(
-            `Benchmark attempt failed for ${pointLabel(point)} at ${rate} writes/s. See ${attempt.logPath}`,
+      for (const vs of vsCounts) {
+        for (const rate of writeRates) {
+          const vsTag = vs > 1 || vsCounts.length > 1 ? `[${vs} VS] ` : '';
+          stdout(
+            `\n--> Running ${pointLabel(point)} ${vsTag}@ ${rate} writes/s...\n`,
           );
+          const attempt = await runAttempt({
+            config,
+            point,
+            writeRate: rate,
+            numViewSyncers: vs,
+            runsDir,
+            childLogsDir,
+          });
+          attempts.push(attempt);
+          await appendFile(attemptsPath, `${JSON.stringify(attempt)}\n`);
+
+          const s = attempt.summary;
+          const status = attempt.status === 'pass' ? 'PASS' : 'FAIL';
+          stdout(
+            `    Result: ${status} | achieved=${s?.achievedWriteRate.toFixed(1) ?? '0'} w/s | p95Lag=${s?.p95ClientVisibleLagMs.toFixed(1) ?? 'N/A'}ms\n`,
+          );
+
+          if (attempt.status === 'error' && !config.continueOnError) {
+            throw new Error(
+              `Benchmark attempt failed for ${pointLabel(point)} at ${rate} writes/s. See ${attempt.logPath}`,
+            );
+          }
         }
       }
     }
@@ -124,6 +137,8 @@ export async function runLinearSweep(
 export function printLinearSweepSummaryTable(
   attempts: readonly SweepAttempt[],
 ): void {
+  const showVS = attempts.some(a => (a.numViewSyncers ?? 1) > 1);
+
   stdout(
     '\n========================================================================================================================\n',
   );
@@ -133,12 +148,21 @@ export function printLinearSweepSummaryTable(
   stdout(
     '========================================================================================================================\n',
   );
-  stdout(
-    ' Profile     | Model     | Users | Rate  | Actual | E2E Lag (p50/p95) | IVM Adv (p50/p95) | RM Lag (p50/p95) | Status   \n',
-  );
-  stdout(
-    '-------------+-----------+-------+-------+--------+-------------------+-------------------+------------------+----------\n',
-  );
+  if (showVS) {
+    stdout(
+      ' Profile     | Model     | Users | VS | Rate  | Actual | E2E Lag (p50/p95) | IVM Adv (p50/p95) | RM Lag (p50/p95) | Status   \n',
+    );
+    stdout(
+      '-------------+-----------+-------+----+-------+--------+-------------------+-------------------+------------------+----------\n',
+    );
+  } else {
+    stdout(
+      ' Profile     | Model     | Users | Rate  | Actual | E2E Lag (p50/p95) | IVM Adv (p50/p95) | RM Lag (p50/p95) | Status   \n',
+    );
+    stdout(
+      '-------------+-----------+-------+-------+--------+-------------------+-------------------+------------------+----------\n',
+    );
+  }
 
   for (const a of attempts) {
     const s = a.summary;
@@ -156,10 +180,12 @@ export function printLinearSweepSummaryTable(
       : 'N/A';
     const status = a.status === 'pass' ? 'HEALTHY' : 'COLLAPSED';
 
+    const vsCol = showVS ? `${String(a.numViewSyncers ?? 1).padEnd(2)} | ` : '';
     stdout(
       ` ${p.profile.padEnd(11)} | ` +
         `${p.model.padEnd(9)} | ` +
         `${String(p.users).padEnd(5)} | ` +
+        vsCol +
         `${String(a.writeRate).padEnd(5)} | ` +
         `${String(s?.achievedWriteRate.toFixed(1) ?? '0').padEnd(6)} | ` +
         `${e2eStr.padEnd(17)} | ` +
@@ -177,16 +203,21 @@ async function runAttempt(args: {
   readonly config: LinearSweepConfig;
   readonly point: SweepPoint;
   readonly writeRate: number;
+  readonly numViewSyncers: number;
   readonly runsDir: string;
   readonly childLogsDir: string;
 }): Promise<SweepAttempt> {
+  const suffix =
+    args.numViewSyncers > 1 || args.config.topology === 'distributed'
+      ? `-vs${args.numViewSyncers}`
+      : '';
   const outputPath = join(
     args.runsDir,
-    `${pointID(args.point)}-rate${args.writeRate}.json`,
+    `${pointID(args.point)}${suffix}-rate${args.writeRate}.json`,
   );
   const logPath = join(
     args.childLogsDir,
-    `${pointID(args.point)}-rate${args.writeRate}.log`,
+    `${pointID(args.point)}${suffix}-rate${args.writeRate}.log`,
   );
 
   if (args.config.resume && (await fileExists(outputPath))) {
@@ -199,13 +230,23 @@ async function runAttempt(args: {
       logPath,
       reused: true,
       result,
+      numViewSyncers: args.numViewSyncers,
     });
   }
 
-  const command = benchmarkCommand(args.config, args.point, args.writeRate, {
-    outputPath,
-    logsDir: join(args.config.outputDir, 'logs'),
-  });
+  const command = benchmarkCommand(
+    args.config,
+    args.point,
+    args.writeRate,
+    {
+      outputPath,
+      logsDir: join(args.config.outputDir, 'logs'),
+    },
+    {
+      numViewSyncers: args.numViewSyncers,
+      topology: args.numViewSyncers > 1 ? 'distributed' : args.config.topology,
+    },
+  );
   const exitCode = await runCommandToLog({
     command: command[0],
     args: command.slice(1),
@@ -226,6 +267,7 @@ async function runAttempt(args: {
       exitCode,
       error: `Benchmark exited ${exitCode} without writing ${outputPath}`,
       summary: undefined,
+      numViewSyncers: args.numViewSyncers,
     };
   }
 
@@ -239,19 +281,33 @@ async function runAttempt(args: {
     reused: false,
     result,
     exitCode,
+    numViewSyncers: args.numViewSyncers,
   });
 }
 
 function printDryRun(config: LinearSweepConfig): void {
   const points = sweepPoints(config);
   const rates = config.writeRates;
+  const vsCounts =
+    config.viewSyncers && config.viewSyncers.length > 0
+      ? config.viewSyncers
+      : config.numViewSyncers !== undefined
+        ? [config.numViewSyncers]
+        : [1];
   stdout(`zero-throughput linear sweep dry run\n`);
-  stdout(`points: ${points.length}, write rates: ${rates.join(', ')}\n`);
-  stdout(`total benchmark runs: ${points.length * rates.length}\n`);
+  stdout(
+    `points: ${points.length}, vs pods: ${vsCounts.join(', ')}, write rates: ${rates.join(', ')}\n`,
+  );
+  stdout(
+    `total benchmark runs: ${points.length * vsCounts.length * rates.length}\n`,
+  );
   stdout(`duration per benchmark: ${formatDuration(config.durationMs)}\n\n`);
   for (const point of points) {
-    for (const rate of rates) {
-      stdout(`${pointLabel(point)} @ ${rate} writes/s\n`);
+    for (const vs of vsCounts) {
+      for (const rate of rates) {
+        const vsTag = vs > 1 || vsCounts.length > 1 ? `[${vs} VS] ` : '';
+        stdout(`${pointLabel(point)} ${vsTag}@ ${rate} writes/s\n`);
+      }
     }
   }
 }
@@ -263,6 +319,7 @@ export function parseLinearSweepArgs(
   let writeRates: readonly number[] = [100, 250, 500, 1000, 2000];
   let topology: BenchmarkTopology | undefined;
   let numViewSyncers: number | undefined;
+  let viewSyncers: readonly number[] | undefined;
   let numSyncWorkers: number | undefined;
   let writeConcurrency: number | undefined;
   let profileRM = false;
@@ -463,11 +520,14 @@ export function parseLinearSweepArgs(
         i += option.value === undefined ? 1 : 0;
         break;
       }
-      case '--num-view-syncers': {
-        numViewSyncers = parsePositiveInteger(
-          option.name,
-          readOptionValue(argv, option, i),
-        );
+      case '--num-view-syncers':
+      case '--view-syncers': {
+        const raw = readOptionValue(argv, option, i);
+        viewSyncers = parsePositiveIntegerList(option.name, raw);
+        if (viewSyncers.length > 1 || viewSyncers[0] > 1) {
+          topology ??= 'distributed';
+        }
+        numViewSyncers = viewSyncers[0];
         i += option.value === undefined ? 1 : 0;
         break;
       }
@@ -512,6 +572,7 @@ export function parseLinearSweepArgs(
   return {
     runID,
     writeRates,
+    viewSyncers,
     topology,
     numViewSyncers,
     numSyncWorkers,
@@ -560,7 +621,7 @@ Options:
   --sync-workers <n1,...>       View-syncer worker processes (default: 1,2,4)
   --duration-ms <ms>            Benchmark duration per test point (default: 30000)
   --topology <single|distributed> Process architecture (default: single)
-  --num-view-syncers <N>        Number of View-Syncer pods when topology=distributed
+  --num-view-syncers <n1,...>   Number of View-Syncer pods (e.g. 1,2,3 sweeps across pod counts)
   --num-sync-workers <N>        Number of sync workers per View-Syncer
   --write-concurrency <N>       Concurrent writer database connections
   --batch-size <N>              Rows inserted per transaction
@@ -571,8 +632,9 @@ Options:
   --pg-start <true|false>       Whether to launch PostgreSQL Docker container (default: true)
 
 Examples:
-  pnpm --filter zero-throughput run sweep:capacity
-  pnpm --filter zero-throughput run sweep:fanout
+  pnpm --filter zero-throughput run sweep:write-rates
+  pnpm --filter zero-throughput run sweep:num-view-syncers
+  pnpm --filter zero-throughput run sweep:users
   pnpm --filter zero-throughput run sweep:linear -- --profiles feed-append --write-rates 500,1000,2000
 `);
 }

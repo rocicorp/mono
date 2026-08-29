@@ -175,8 +175,9 @@ pnpm --filter zero-throughput start -- \
   --duration-ms 10000
 
 # 4. Linear throughput parameter sweep (prints side-by-side comparison table)
-pnpm --filter zero-throughput run sweep:capacity
-pnpm --filter zero-throughput run sweep:fanout
+pnpm --filter zero-throughput run sweep:write-rates
+pnpm --filter zero-throughput run sweep:num-view-syncers
+pnpm --filter zero-throughput run sweep:users
 ```
 
 Use an already-running PostgreSQL or Zero:

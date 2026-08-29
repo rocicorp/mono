@@ -84,6 +84,7 @@ export type SweepAttempt = {
   readonly exitCode: number | undefined;
   readonly error: string | undefined;
   readonly summary: BenchmarkResult['summary'] | undefined;
+  readonly numViewSyncers?: number | undefined;
 };
 
 export type PointResult = {
@@ -279,6 +280,10 @@ export function benchmarkCommand(
   point: SweepPoint,
   writeRate: number,
   paths: {readonly outputPath: string; readonly logsDir: string},
+  override?: {
+    readonly numViewSyncers?: number | undefined;
+    readonly topology?: BenchmarkTopology | undefined;
+  },
 ): readonly string[] {
   const main = fileURLToPath(new URL('main.ts', import.meta.url));
   const command = [
@@ -328,11 +333,13 @@ export function benchmarkCommand(
   if (config.pgURL !== undefined) {
     command.push('--pg-url', config.pgURL);
   }
-  if (config.topology !== undefined) {
-    command.push('--topology', config.topology);
+  const topology = override?.topology ?? config.topology;
+  if (topology !== undefined) {
+    command.push('--topology', topology);
   }
-  if (config.numViewSyncers !== undefined) {
-    command.push('--num-view-syncers', String(config.numViewSyncers));
+  const numViewSyncers = override?.numViewSyncers ?? config.numViewSyncers;
+  if (numViewSyncers !== undefined) {
+    command.push('--num-view-syncers', String(numViewSyncers));
   }
   if (config.numSyncWorkers !== undefined) {
     command.push('--num-sync-workers', String(config.numSyncWorkers));
@@ -396,6 +403,7 @@ export function attemptFromResult(args: {
   readonly reused: boolean;
   readonly result: BenchmarkResult;
   readonly exitCode?: number | undefined;
+  readonly numViewSyncers?: number | undefined;
 }): SweepAttempt {
   const pass = args.result.summary.pass;
   return {
@@ -409,6 +417,7 @@ export function attemptFromResult(args: {
     exitCode: args.exitCode,
     error: undefined,
     summary: args.result.summary,
+    numViewSyncers: args.numViewSyncers,
   };
 }
 

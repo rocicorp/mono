@@ -26,9 +26,7 @@ export interface MetricSummary {
 }
 
 interface RawDataPoint {
-  readonly worker: string;
-  readonly workerIndex: number;
-  readonly timestamp: number;
+  readonly workerKey: string;
   readonly value?: number | undefined;
   readonly count?: number | undefined;
   readonly sum?: number | undefined;
@@ -45,28 +43,26 @@ export class OTelMetricsCollector {
 
   async start(port = 0): Promise<number> {
     const server = createServer((req, res) => {
-      if (req.method === 'POST') {
-        const chunks: Buffer[] = [];
-        req.on('data', chunk => chunks.push(chunk));
-        req.on('end', () => {
-          try {
-            let buffer = Buffer.concat(chunks);
-            if (req.headers['content-encoding'] === 'gzip') {
-              buffer = gunzipSync(buffer);
-            }
-            const raw = buffer.toString('utf-8');
-            const json = JSON.parse(raw);
-            this.#ingestOTLP(json);
-            res.writeHead(200, {'Content-Type': 'application/json'});
-            res.end(JSON.stringify({status: 'ok'}));
-          } catch {
-            res.writeHead(400, {'Content-Type': 'application/json'});
-            res.end(JSON.stringify({status: 'error'}));
-          }
-        });
-      } else {
+      if (req.method !== 'POST') {
         res.writeHead(404).end();
+        return;
       }
+      const chunks: Buffer[] = [];
+      req.on('data', chunk => chunks.push(chunk));
+      req.on('end', () => {
+        try {
+          let buffer = Buffer.concat(chunks);
+          if (req.headers['content-encoding'] === 'gzip') {
+            buffer = gunzipSync(buffer);
+          }
+          this.#ingestOTLP(JSON.parse(buffer.toString('utf-8')));
+          res.writeHead(200, {'Content-Type': 'application/json'});
+          res.end('{"status":"ok"}');
+        } catch {
+          res.writeHead(400, {'Content-Type': 'application/json'});
+          res.end('{"status":"error"}');
+        }
+      });
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -92,6 +88,15 @@ export class OTelMetricsCollector {
     this.#metrics.clear();
   }
 
+  async stop(): Promise<void> {
+    if (this.#server) {
+      await new Promise<void>(resolve => {
+        this.#server?.close(() => resolve());
+      });
+      this.#server = null;
+    }
+  }
+
   #ingestOTLP(body: Record<string, unknown>): void {
     const resourceMetrics = (body.resourceMetrics ?? []) as Record<
       string,
@@ -99,64 +104,48 @@ export class OTelMetricsCollector {
     >[];
 
     for (const rm of resourceMetrics) {
-      let worker = 'unknown';
-      let workerIndex = 0;
-
       const resource = (rm.resource ?? {}) as Record<string, unknown>;
       const attributes = (resource.attributes ?? []) as {
         key: string;
         value: {stringValue?: string; intValue?: number};
       }[];
 
-      for (const attr of attributes) {
-        if (attr.key === 'worker' && attr.value?.stringValue) {
-          worker = attr.value.stringValue;
-        }
-        if (attr.key === 'workerIndex' && attr.value?.intValue !== undefined) {
-          workerIndex = attr.value.intValue;
+      let worker = 'unknown';
+      let workerIndex = 0;
+      for (const a of attributes) {
+        if (a.key === 'worker' && a.value?.stringValue) {
+          worker = a.value.stringValue;
+        } else if (a.key === 'workerIndex' && a.value?.intValue !== undefined) {
+          workerIndex = a.value.intValue;
         }
       }
+      const workerKey = `${worker}-${workerIndex}`;
 
       const scopeMetrics = (rm.scopeMetrics ?? []) as Record<string, unknown>[];
       for (const sm of scopeMetrics) {
-        const metrics = (sm.metrics ?? []) as Record<string, unknown>[];
-        for (const metric of metrics) {
+        for (const metric of (sm.metrics ?? []) as Record<string, unknown>[]) {
           const name = String(metric.name ?? '');
 
           if (metric.gauge) {
             const gauge = metric.gauge as {
-              dataPoints?: {
-                timeUnixNano?: string;
-                asDouble?: number;
-                asInt?: number;
-              }[];
+              dataPoints?: {asDouble?: number; asInt?: number}[];
             };
             for (const dp of gauge.dataPoints ?? []) {
-              const val = dp.asDouble ?? dp.asInt ?? 0;
               this.#addPoint(name, {
-                worker,
-                workerIndex,
-                timestamp: Date.now(),
-                value: val,
+                workerKey,
+                value: dp.asDouble ?? dp.asInt ?? 0,
               });
             }
           }
 
           if (metric.sum) {
             const sum = metric.sum as {
-              dataPoints?: {
-                timeUnixNano?: string;
-                asDouble?: number;
-                asInt?: number;
-              }[];
+              dataPoints?: {asDouble?: number; asInt?: number}[];
             };
             for (const dp of sum.dataPoints ?? []) {
-              const val = dp.asDouble ?? dp.asInt ?? 0;
               this.#addPoint(name, {
-                worker,
-                workerIndex,
-                timestamp: Date.now(),
-                value: val,
+                workerKey,
+                value: dp.asDouble ?? dp.asInt ?? 0,
               });
             }
           }
@@ -173,18 +162,14 @@ export class OTelMetricsCollector {
               }[];
             };
             for (const dp of hist.dataPoints ?? []) {
-              const count = Number(dp.count ?? 0);
-              const bucketCounts = (dp.bucketCounts ?? []).map(Number);
               this.#addPoint(name, {
-                worker,
-                workerIndex,
-                timestamp: Date.now(),
-                count,
+                workerKey,
+                count: Number(dp.count ?? 0),
                 sum: dp.sum,
                 min: dp.min,
                 max: dp.max,
                 bounds: dp.explicitBounds,
-                bucketCounts,
+                bucketCounts: (dp.bucketCounts ?? []).map(Number),
               });
             }
           }
@@ -241,7 +226,7 @@ export class OTelMetricsCollector {
         totalSum += p.value;
         if (p.value < globalMin) globalMin = p.value;
         if (p.value > globalMax) globalMax = p.value;
-      } else if (p.bounds && p.bucketCounts && p.bucketCounts.length > 0) {
+      } else if (p.bounds && p.bucketCounts) {
         totalCount += p.count ?? 0;
         if (p.sum !== undefined) totalSum += p.sum;
         if (p.min !== undefined && p.min < globalMin) globalMin = p.min;
@@ -262,33 +247,13 @@ export class OTelMetricsCollector {
       }
     }
 
-    if (values.length === 0) {
-      return null;
-    }
-
-    values.sort((a, b) => a - b);
-
-    const percentileAt = (p: number) => {
-      const idx = Math.min(
-        Math.floor((p / 100) * values.length),
-        values.length - 1,
-      );
-      return values[idx] ?? 0;
-    };
-
-    return {
-      count: totalCount || values.length,
-      sum: totalSum || values.reduce((a, b) => a + b, 0),
-      avg:
-        (totalSum || values.reduce((a, b) => a + b, 0)) /
-        (totalCount || values.length),
-      min: globalMin !== Infinity ? globalMin : (values[0] ?? 0),
-      p50: percentileAt(50),
-      p90: percentileAt(90),
-      p95: percentileAt(95),
-      p99: percentileAt(99),
-      max: globalMax !== -Infinity ? globalMax : (values.at(-1) ?? 0),
-    };
+    return computePercentiles(
+      values,
+      totalCount,
+      totalSum,
+      globalMin,
+      globalMax,
+    );
   }
 
   #computeGaugeStats(metricName: string): PercentileStats | null {
@@ -301,32 +266,7 @@ export class OTelMetricsCollector {
       .map(p => p.value)
       .filter((v): v is number => v !== undefined);
 
-    if (values.length === 0) {
-      return null;
-    }
-
-    values.sort((a, b) => a - b);
-    const sum = values.reduce((a, b) => a + b, 0);
-
-    const percentileAt = (p: number) => {
-      const idx = Math.min(
-        Math.floor((p / 100) * values.length),
-        values.length - 1,
-      );
-      return values[idx] ?? 0;
-    };
-
-    return {
-      count: values.length,
-      sum,
-      avg: sum / values.length,
-      min: values[0] ?? 0,
-      p50: percentileAt(50),
-      p90: percentileAt(90),
-      p95: percentileAt(95),
-      p99: percentileAt(99),
-      max: values.at(-1) ?? 0,
-    };
+    return computePercentiles(values);
   }
 
   #computeCounterSum(metricName: string): number {
@@ -337,24 +277,57 @@ export class OTelMetricsCollector {
 
     const byWorker = new Map<string, number>();
     for (const p of points) {
-      const key = `${p.worker}-${p.workerIndex}`;
-      const val = p.value ?? p.count ?? 0;
-      byWorker.set(key, val);
+      byWorker.set(p.workerKey, p.value ?? p.count ?? 0);
     }
 
     let total = 0;
-    for (const val of byWorker.values()) {
-      total += val;
+    for (const v of byWorker.values()) {
+      total += v;
     }
     return total;
   }
+}
 
-  async stop(): Promise<void> {
-    if (this.#server) {
-      await new Promise<void>(resolve => {
-        this.#server?.close(() => resolve());
-      });
-      this.#server = null;
-    }
+function computePercentiles(
+  values: number[],
+  totalCount?: number,
+  totalSum?: number,
+  globalMin?: number,
+  globalMax?: number,
+): PercentileStats | null {
+  if (values.length === 0) {
+    return null;
   }
+
+  values.sort((a, b) => a - b);
+  const count = totalCount || values.length;
+  const sum = totalSum ?? values.reduce((a, b) => a + b, 0);
+  const min =
+    globalMin !== undefined && globalMin !== Infinity
+      ? globalMin
+      : (values[0] ?? 0);
+  const max =
+    globalMax !== undefined && globalMax !== -Infinity
+      ? globalMax
+      : (values.at(-1) ?? 0);
+
+  const percentileAt = (p: number) => {
+    const idx = Math.min(
+      Math.floor((p / 100) * values.length),
+      values.length - 1,
+    );
+    return values[idx] ?? 0;
+  };
+
+  return {
+    count,
+    sum,
+    avg: count > 0 ? sum / count : 0,
+    min,
+    p50: percentileAt(50),
+    p90: percentileAt(90),
+    p95: percentileAt(95),
+    p99: percentileAt(99),
+    max,
+  };
 }
