@@ -92,35 +92,45 @@ function rpcNoAuthTry<T extends InspectDownBody>(
   return new Promise((resolve, reject) => {
     const id = nanoid();
     const f = (ev: MessageEvent) => {
-      const msg = JSON.parse(ev.data);
-      if (msg[0] === 'inspect') {
-        const body = msg[1];
-        if (body.id !== id) {
-          return;
-        }
-        const res = valita.test(body, downSchema);
-        if (res.ok) {
-          if (res.value.op === 'error') {
-            reject(new Error(res.value.value));
-          } else {
-            resolve(res.value.value);
-          }
+      if (typeof ev.data !== 'string') {
+        // Binary messages (such as poke chunks) are not inspector messages.
+        return;
+      }
+      let msg: unknown;
+      try {
+        msg = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+      if (!Array.isArray(msg) || msg[0] !== 'inspect') {
+        return;
+      }
+      const body = msg[1];
+      if (body.id !== id) {
+        return;
+      }
+      const res = valita.test(body, downSchema);
+      if (res.ok) {
+        if (res.value.op === 'error') {
+          reject(new Error(res.value.value));
         } else {
-          // Check if we got un authenticated/false response
-          const authRes = valita.test(body, inspectAuthenticatedDownSchema);
-          if (authRes.ok) {
-            // Handle authenticated response
-            assert(
-              authRes.value.value === false,
-              'Expected unauthenticated response',
-            );
-            reject(new UnauthenticatedError());
-          }
-
+          resolve(res.value.value);
+        }
+      } else {
+        // Check if we got un authenticated/false response
+        const authRes = valita.test(body, inspectAuthenticatedDownSchema);
+        if (authRes.ok) {
+          // Handle authenticated response
+          assert(
+            authRes.value.value === false,
+            'Expected unauthenticated response',
+          );
+          reject(new UnauthenticatedError());
+        } else {
           reject(res.error);
         }
-        socket.removeEventListener('message', f);
       }
+      socket.removeEventListener('message', f);
     };
     socket.addEventListener('message', f);
     socket.send(JSON.stringify(['inspect', {...arg, id}]));
