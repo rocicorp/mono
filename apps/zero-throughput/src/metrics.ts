@@ -173,6 +173,26 @@ export class OTelMetricsCollector {
               });
             }
           }
+
+          if (metric.exponentialHistogram) {
+            const expHist = metric.exponentialHistogram as {
+              dataPoints?: {
+                count?: number | string;
+                sum?: number;
+                min?: number;
+                max?: number;
+              }[];
+            };
+            for (const dp of expHist.dataPoints ?? []) {
+              this.#addPoint(name, {
+                workerKey,
+                count: Number(dp.count ?? 0),
+                sum: dp.sum,
+                min: dp.min,
+                max: dp.max,
+              });
+            }
+          }
         }
       }
     }
@@ -189,27 +209,74 @@ export class OTelMetricsCollector {
 
   getSummary(): MetricSummary {
     return {
-      replicationLagMs: this.#computeHistogramStats('zero_replication_lag_ms'),
-      e2eServingLagMs: this.#computeHistogramStats('zero_e2e_serving_lag_ms'),
-      advancementLatencyMs: this.#computeHistogramStats(
-        'zero_advancement_latency_ms',
+      replicationLagMs: this.#computeStats(
+        [
+          'zero.replication.total_lag',
+          'zero.replication.last_total_lag',
+          'zero.replication.replica_lag',
+          'zero_replication_lag_ms',
+        ],
+        1,
       ),
-      viewSyncerLagMs: this.#computeGaugeStats('zero_view_syncer_lag_ms'),
-      pipelineResets: this.#computeCounterSum('zero_pipeline_resets'),
-      transactionsReplicated: this.#computeCounterSum(
+      e2eServingLagMs: this.#computeStats(
+        ['zero.sync.e2e_serving_lag', 'zero_e2e_serving_lag_ms'],
+        1000,
+      ),
+      advancementLatencyMs: this.#computeStats(
+        [
+          'zero.sync.advance-time',
+          'zero.sync.ivm.advance-time',
+          'zero_advancement_latency_ms',
+        ],
+        1000,
+      ),
+      viewSyncerLagMs: this.#computeStats(
+        ['zero.sync.view_syncer_lag', 'zero_view_syncer_lag_ms'],
+        1000,
+      ),
+      pipelineResets: this.#computeCounterSum([
+        'zero.sync.pipeline_resets',
+        'zero_pipeline_resets',
+      ]),
+      transactionsReplicated: this.#computeCounterSum([
+        'zero.change-streamer.tx_forwarded',
+        'zero.replication.transactions_replicated',
         'zero_transactions_replicated',
-      ),
-      changesReplicated: this.#computeCounterSum('zero_changes_replicated'),
-      flowControlWaits: this.#computeCounterSum('zero_flow_control_waits'),
-      flowControlWaitDurationMs: this.#computeHistogramStats(
-        'zero_flow_control_wait_ms',
+      ]),
+      changesReplicated: this.#computeCounterSum([
+        'zero.change-streamer.changes_forwarded',
+        'zero.replication.changes_replicated',
+        'zero_changes_replicated',
+      ]),
+      flowControlWaits: this.#computeCounterSum([
+        'zero.change-streamer.flow_control.waits',
+        'zero.replication.flow_control.waits',
+        'zero_flow_control_waits',
+      ]),
+      flowControlWaitDurationMs: this.#computeStats(
+        [
+          'zero.change-streamer.flow_control.wait_time',
+          'zero.replication.flow_control.wait_time',
+          'zero_flow_control_wait_ms',
+        ],
+        1000,
       ),
     };
   }
 
-  #computeHistogramStats(metricName: string): PercentileStats | null {
-    const points = this.#metrics.get(metricName);
-    if (!points || points.length === 0) {
+  #computeStats(
+    candidateNames: readonly string[],
+    multiplier = 1,
+  ): PercentileStats | null {
+    let points: RawDataPoint[] = [];
+    for (const name of candidateNames) {
+      const found = this.#metrics.get(name);
+      if (found && found.length > 0) {
+        points = found;
+        break;
+      }
+    }
+    if (points.length === 0) {
       return null;
     }
 
@@ -221,16 +288,21 @@ export class OTelMetricsCollector {
 
     for (const p of points) {
       if (p.value !== undefined) {
-        values.push(p.value);
+        const val = p.value * multiplier;
+        values.push(val);
         totalCount++;
-        totalSum += p.value;
-        if (p.value < globalMin) globalMin = p.value;
-        if (p.value > globalMax) globalMax = p.value;
+        totalSum += val;
+        if (val < globalMin) globalMin = val;
+        if (val > globalMax) globalMax = val;
       } else if (p.bounds && p.bucketCounts) {
         totalCount += p.count ?? 0;
-        if (p.sum !== undefined) totalSum += p.sum;
-        if (p.min !== undefined && p.min < globalMin) globalMin = p.min;
-        if (p.max !== undefined && p.max > globalMax) globalMax = p.max;
+        if (p.sum !== undefined) totalSum += p.sum * multiplier;
+        if (p.min !== undefined && p.min * multiplier < globalMin) {
+          globalMin = p.min * multiplier;
+        }
+        if (p.max !== undefined && p.max * multiplier > globalMax) {
+          globalMax = p.max * multiplier;
+        }
 
         for (let i = 0; i < p.bucketCounts.length; i++) {
           const bCount = p.bucketCounts[i];
@@ -240,10 +312,28 @@ export class OTelMetricsCollector {
               : i < p.bounds.length
                 ? ((p.bounds[i - 1] ?? 0) + (p.bounds[i] ?? 0)) / 2
                 : (p.bounds.at(-1) ?? 1) * 1.5;
+          const val = mid * multiplier;
           for (let j = 0; j < bCount; j++) {
-            values.push(mid);
+            values.push(val);
           }
         }
+      } else if (
+        p.count &&
+        (p.min !== undefined || p.max !== undefined || p.sum !== undefined)
+      ) {
+        totalCount += p.count;
+        if (p.sum !== undefined) totalSum += p.sum * multiplier;
+        if (p.min !== undefined && p.min * multiplier < globalMin) {
+          globalMin = p.min * multiplier;
+        }
+        if (p.max !== undefined && p.max * multiplier > globalMax) {
+          globalMax = p.max * multiplier;
+        }
+        const representative =
+          p.sum !== undefined && p.count > 0
+            ? (p.sum / p.count) * multiplier
+            : (p.max ?? p.min ?? 0) * multiplier;
+        values.push(representative);
       }
     }
 
@@ -256,22 +346,16 @@ export class OTelMetricsCollector {
     );
   }
 
-  #computeGaugeStats(metricName: string): PercentileStats | null {
-    const points = this.#metrics.get(metricName);
-    if (!points || points.length === 0) {
-      return null;
+  #computeCounterSum(candidateNames: readonly string[]): number {
+    let points: RawDataPoint[] = [];
+    for (const name of candidateNames) {
+      const found = this.#metrics.get(name);
+      if (found && found.length > 0) {
+        points = found;
+        break;
+      }
     }
-
-    const values = points
-      .map(p => p.value)
-      .filter((v): v is number => v !== undefined);
-
-    return computePercentiles(values);
-  }
-
-  #computeCounterSum(metricName: string): number {
-    const points = this.#metrics.get(metricName);
-    if (!points || points.length === 0) {
+    if (points.length === 0) {
       return 0;
     }
 
