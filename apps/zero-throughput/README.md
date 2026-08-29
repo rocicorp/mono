@@ -158,10 +158,10 @@ By default, the benchmark runs in single-node mode:
 
 Decouples the architecture into independent processes matching production multi-pod clusters:
 
-$$\text{PostgreSQL} \xrightarrow{\text{WAL}} \text{Replication Manager (rm-1)} \xrightarrow{\text{WS}} \text{View-Syncer Pods (vs-0} \dots \text{vs-(N-1))} \xrightarrow{\text{IVM}} \text{Clients}$$
+$$\text{PostgreSQL} \xrightarrow{\text{WAL}} \text{Replication Manager (rm)} \xrightarrow{\text{WS}} \text{View-Syncer Pods (vs-0} \dots \text{vs-(N-1))} \xrightarrow{\text{IVM}} \text{Clients}$$
 
-- **Replication Manager (`rm-1`)**: Runs as a dedicated process on port `4848` (with dedicated change-streamer on `4849`) with `numSyncWorkers = 0`. It connects to PostgreSQL, ingests the WAL stream, writes to `replica.db-rm1`, and streams change events downstream. It serves no client queries directly.
-- **View-Syncers (`vs-0` ... `vs-(N-1)`)**: Run as independent server processes on ports `4858`, `4859`, etc., each maintaining its own SQLite replica (`replica.db-vs0`, `replica.db-vs1`). They connect to `rm-1`'s change streamer over WebSocket and run independent IVM pipelines. Synthetic clients are partitioned across these View-Syncer instances.
+- **Replication Manager (`rm`)**: Runs as a dedicated process on port `4848` (with dedicated change-streamer on `4849`) with `numSyncWorkers = 0`. It connects to PostgreSQL, ingests the WAL stream, writes to `replica.db-rm`, and streams change events downstream. It serves no client queries directly.
+- **View-Syncers (`vs-0` ... `vs-(N-1)`)**: Run as independent server processes on ports `4858`, `4859`, etc., each maintaining its own SQLite replica (`replica.db-vs0`, `replica.db-vs1`). They connect to `rm`'s change streamer over WebSocket and run independent IVM pipelines. Synthetic clients are partitioned across these View-Syncer instances.
 
 ### Examples
 
@@ -175,8 +175,8 @@ pnpm --filter zero-throughput start -- \
   --users 20 \
   --write-rate 200
 
-# 2. Profile RM (rm-1) and primary View-Syncer (vs-0) under heavy write load
-#    --profile-rm profiles WAL ingestion & change-stream encoding on rm-1
+# 2. Profile RM (rm) and primary View-Syncer (vs-0) under heavy write load
+#    --profile-rm profiles WAL ingestion & change-stream encoding on rm
 #    --profile-vs profiles IVM pipeline advancement & diff calculation on vs-0
 pnpm --filter zero-throughput start -- \
   --topology distributed \
@@ -188,8 +188,6 @@ pnpm --filter zero-throughput start -- \
   --duration-ms 15000 \
   --profile-rm \
   --profile-vs \
-  --profile-dir results/profiles
-
   --profile-dir results/profiles
 
 # 3. Linear throughput parameter sweeps (prints side-by-side comparison tables)

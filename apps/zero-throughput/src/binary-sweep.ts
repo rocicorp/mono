@@ -754,7 +754,7 @@ Architecture & Tuning:
   --num-sync-workers <N>        Number of sync workers per View-Syncer
   --write-concurrency <N>       Concurrent writer database connections
   --batch-size <N>              Rows inserted per transaction
-  --profile-rm                  Collect V8 CPU profile on Replication Manager (rm-1)
+  --profile-rm                  Collect V8 CPU profile on Replication Manager (rm)
   --profile-vs                  Collect V8 CPU profile on View-Syncer (vs-0)
 
 Execution & Output:

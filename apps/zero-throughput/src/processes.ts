@@ -168,6 +168,9 @@ export async function removeReplicaFiles(replicaFile: string): Promise<void> {
     replicaFile,
     `${replicaFile}-shm`,
     `${replicaFile}-wal`,
+    `${replicaFile}-rm`,
+    `${replicaFile}-rm-shm`,
+    `${replicaFile}-rm-wal`,
     `${replicaFile}-rm1`,
     `${replicaFile}-rm1-shm`,
     `${replicaFile}-rm1-wal`,
@@ -217,32 +220,32 @@ export async function startZeroTopology(
     };
   }
 
-  // Distributed topology: 1-2 RMs + N View-Syncers
+  // Distributed topology: 1 RM + N View-Syncers
   const processes: ManagedProcess[] = [];
   const basePort = config.zero.port;
-  const rm1Port = basePort;
-  const rm1ChangeStreamerPort = basePort + 1;
+  const rmPort = basePort;
+  const rmChangeStreamerPort = basePort + 1;
 
-  // 1. Replication Manager 1
-  const rm1 = spawnZeroProcess({
+  // 1. Replication Manager
+  const rmProcess = spawnZeroProcess({
     config,
-    name: 'rm-1',
+    name: 'rm',
     role: 'rm',
-    port: rm1Port,
-    changeStreamerPort: rm1ChangeStreamerPort,
+    port: rmPort,
+    changeStreamerPort: rmChangeStreamerPort,
     changeStreamerMode: 'dedicated',
     numSyncWorkers: 0,
-    replicaFile: `${config.zero.replicaFile}-rm1`,
+    replicaFile: `${config.zero.replicaFile}-rm`,
     metricsEndpoint,
     profile: config.profileRM,
   });
-  processes.push(rm1);
+  processes.push(rmProcess);
 
   // The RM must finish initial sync before copying its replica to View-Syncers
   await waitForZeroCache(
-    `http://127.0.0.1:${rm1Port}`,
+    `http://127.0.0.1:${rmPort}`,
     config.zero.readyTimeoutMs,
-    rm1,
+    rmProcess,
   );
 
   // 2. View-Syncers (1 to N)
@@ -253,7 +256,7 @@ export async function startZeroTopology(
     readyURLs.push(vsURL);
 
     copyReplicaFile(
-      `${config.zero.replicaFile}-rm1`,
+      `${config.zero.replicaFile}-rm`,
       `${config.zero.replicaFile}-vs${i}`,
     );
 
@@ -262,7 +265,7 @@ export async function startZeroTopology(
       name: `vs-${i}`,
       role: 'vs',
       port: vsPort,
-      changeStreamerURI: `http://127.0.0.1:${rm1ChangeStreamerPort}`,
+      changeStreamerURI: `http://127.0.0.1:${rmChangeStreamerPort}`,
       numSyncWorkers: config.zero.numSyncWorkers,
       replicaFile: `${config.zero.replicaFile}-vs${i}`,
       metricsEndpoint,

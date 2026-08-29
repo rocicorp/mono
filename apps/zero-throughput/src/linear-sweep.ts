@@ -629,7 +629,7 @@ Options:
   --num-sync-workers <N>        Number of sync workers per View-Syncer
   --write-concurrency <N>       Concurrent writer database connections
   --batch-size <N>              Rows inserted per transaction
-  --profile-rm                  Collect V8 CPU profile on Replication Manager (rm-1)
+  --profile-rm                  Collect V8 CPU profile on Replication Manager (rm)
   --profile-vs                  Collect V8 CPU profile on View-Syncer (vs-0)
   --dry-run                     List test points without executing
   --output-dir <path>           Directory for benchmark artifacts
