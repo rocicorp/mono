@@ -8,7 +8,8 @@ import * as v from '../../../packages/shared/src/valita.ts';
 export const appRoot = fileURLToPath(new URL('..', import.meta.url));
 export const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
 
-const DEFAULT_PG_URL = 'postgresql://user:password@127.0.0.1:6436/postgres';
+export const DEFAULT_PG_URL =
+  'postgresql://user:password@127.0.0.1:6436/postgres';
 const APP_ID_PATTERN = /^[a-z0-9_]+$/;
 
 const options = {
@@ -46,14 +47,12 @@ const options = {
   profileVS: v.boolean().default(false),
 
   pg: {
-    url: v.string().default(DEFAULT_PG_URL),
-    start: v.boolean().optional(),
+    url: v.string().optional(),
     stopAfterRun: v.boolean().default(true),
     readyTimeoutMs: v.number().default(60_000),
   },
 
   zero: {
-    start: v.boolean().optional(),
     port: v.number().default(4_848),
     readyTimeoutMs: v.number().default(120_000),
     appID: v.string().default('zero_throughput'),
@@ -165,10 +164,9 @@ export function loadConfig(): BenchmarkConfig {
           )
         : [`http://127.0.0.1:${basePort}`];
 
-  const zeroStart =
-    parsed.zero.start ??
-    (explicitURLs === undefined || explicitURLs.length === 0);
-  const pgStart = parsed.pg.start ?? parsed.pg.url === DEFAULT_PG_URL;
+  const isZeroManaged = explicitURLs === undefined || explicitURLs.length === 0;
+  const isPgManaged = parsed.pg.url === undefined;
+  const pgURL = parsed.pg.url ?? DEFAULT_PG_URL;
 
   return {
     runID: new Date().toISOString().replace(/[:.]/g, '-'),
@@ -201,12 +199,14 @@ export function loadConfig(): BenchmarkConfig {
     cacheURL: cacheURLs[0],
     cacheURLs,
     pg: {
-      ...parsed.pg,
-      start: pgStart,
+      url: pgURL,
+      start: isPgManaged,
+      stopAfterRun: isPgManaged && parsed.pg.stopAfterRun,
+      readyTimeoutMs: parsed.pg.readyTimeoutMs,
     },
     zero: {
       ...parsed.zero,
-      start: zeroStart,
+      start: isZeroManaged,
       numSyncWorkers,
     },
   };

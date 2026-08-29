@@ -84,7 +84,7 @@ export async function runLinearSweep(
     stdout(`zero-throughput linear sweep ${config.runID}\n`);
     stdout(`output: ${outputDir}\n`);
 
-    if (config.pgStart) {
+    if (config.pgURL === undefined) {
       stdout('Starting sweep PostgreSQL...\n');
       await startPostgres();
       postgresStarted = true;
@@ -340,10 +340,8 @@ export function parseLinearSweepArgs(
   let payloadBytes = 256;
   let outputDir = join('results', 'sweeps', runID);
   let zeroPort = 4_848;
-  let zeroStart: boolean | undefined;
   let cacheURL: string | undefined;
   let cacheURLs: string | undefined;
-  let pgStart: boolean | undefined;
   let pgURL: string | undefined;
   let resume = true;
   let continueOnError = false;
@@ -473,12 +471,6 @@ export function parseLinearSweepArgs(
         );
         i += option.value === undefined ? 1 : 0;
         break;
-      case '--zero-start': {
-        const parsed = readBooleanOption(argv, option, i, true);
-        zeroStart = parsed.value;
-        i += parsed.consumed;
-        break;
-      }
       case '--cache-url':
         cacheURL = readOptionValue(argv, option, i);
         i += option.value === undefined ? 1 : 0;
@@ -487,12 +479,6 @@ export function parseLinearSweepArgs(
         cacheURLs = readOptionValue(argv, option, i);
         i += option.value === undefined ? 1 : 0;
         break;
-      case '--pg-start': {
-        const parsed = readBooleanOption(argv, option, i, true);
-        pgStart = parsed.value;
-        i += parsed.consumed;
-        break;
-      }
       case '--pg-url':
         pgURL = readOptionValue(argv, option, i);
         i += option.value === undefined ? 1 : 0;
@@ -586,10 +572,6 @@ export function parseLinearSweepArgs(
     process.exit(0);
   }
 
-  const effectivePgStart = pgStart ?? pgURL === undefined;
-  const effectiveZeroStart =
-    zeroStart ?? (cacheURL === undefined && cacheURLs === undefined);
-
   return {
     runID,
     writeRates,
@@ -616,10 +598,8 @@ export function parseLinearSweepArgs(
     payloadBytes,
     outputDir,
     zeroPort,
-    zeroStart: effectiveZeroStart,
     cacheURL,
     cacheURLs,
-    pgStart: effectivePgStart,
     pgURL,
     resume,
     continueOnError,
@@ -653,7 +633,9 @@ Options:
   --profile-vs                  Collect V8 CPU profile on View-Syncer (vs-0)
   --dry-run                     List test points without executing
   --output-dir <path>           Directory for benchmark artifacts
-  --pg-start <true|false>       Whether to launch PostgreSQL Docker container (default: true)
+  --cache-url <url>             Connect to existing Zero cache instead of launching locally
+  --cache-urls <u1,u2,...>      Comma-separated View-Syncer URLs for partitioned clients
+  --pg-url <url>                Connect to existing PostgreSQL instead of launching local Docker
 
 Examples:
   pnpm --filter zero-throughput run sweep:write-rates

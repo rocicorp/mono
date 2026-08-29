@@ -9,7 +9,7 @@ import type {
   BenchmarkProfile,
   BenchmarkTopology,
 } from './config.ts';
-import {appRoot} from './config.ts';
+import {appRoot, DEFAULT_PG_URL} from './config.ts';
 import type {BenchmarkResult} from './results.ts';
 export {formatDuration} from './util.ts';
 
@@ -53,10 +53,8 @@ export type BaseSweepConfig = {
   readonly payloadBytes: number;
   readonly outputDir: string;
   readonly zeroPort: number;
-  readonly zeroStart?: boolean | undefined;
   readonly cacheURL?: string | undefined;
   readonly cacheURLs?: string | undefined;
-  readonly pgStart: boolean;
   readonly pgURL: string | undefined;
   readonly resume: boolean;
   readonly continueOnError: boolean;
@@ -324,21 +322,13 @@ export function benchmarkCommand(
     String(point.zeroNumSyncWorkers),
     '--zero-port',
     String(config.zeroPort),
-    '--pg-start',
-    'false',
-    '--pg-stop-after-run',
-    'false',
     '--output',
     paths.outputPath,
     '--logs-dir',
     paths.logsDir,
+    '--pg-url',
+    config.pgURL ?? DEFAULT_PG_URL,
   ];
-  if (config.pgURL !== undefined) {
-    command.push('--pg-url', config.pgURL);
-  }
-  if (config.zeroStart !== undefined) {
-    command.push('--zero-start', String(config.zeroStart));
-  }
   if (config.cacheURLs !== undefined) {
     command.push('--cache-urls', config.cacheURLs);
   } else if (config.cacheURL !== undefined) {

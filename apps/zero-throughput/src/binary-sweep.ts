@@ -115,7 +115,7 @@ export async function runBinarySweep(config: BinarySweepConfig): Promise<void> {
     stdout(`output: ${outputDir}\n`);
     stdout(`total points: ${points.length}\n`);
 
-    if (config.pgStart) {
+    if (config.pgURL === undefined) {
       stdout('Starting sweep PostgreSQL...\n');
       await startPostgres();
       postgresStarted = true;
@@ -434,10 +434,8 @@ export function parseBinarySweepArgs(
   let repetitions = 1;
   let outputDir = join('results', 'sweeps', runID);
   let zeroPort = 4_848;
-  let zeroStart: boolean | undefined;
   let cacheURL: string | undefined;
   let cacheURLs: string | undefined;
-  let pgStart: boolean | undefined;
   let pgURL: string | undefined;
   let resume = true;
   let continueOnError = false;
@@ -587,12 +585,6 @@ export function parseBinarySweepArgs(
         );
         i += option.value === undefined ? 1 : 0;
         break;
-      case '--zero-start': {
-        const parsed = readBooleanOption(argv, option, i, true);
-        zeroStart = parsed.value;
-        i += parsed.consumed;
-        break;
-      }
       case '--cache-url':
         cacheURL = readOptionValue(argv, option, i);
         i += option.value === undefined ? 1 : 0;
@@ -601,12 +593,6 @@ export function parseBinarySweepArgs(
         cacheURLs = readOptionValue(argv, option, i);
         i += option.value === undefined ? 1 : 0;
         break;
-      case '--pg-start': {
-        const parsed = readBooleanOption(argv, option, i, true);
-        pgStart = parsed.value;
-        i += parsed.consumed;
-        break;
-      }
       case '--pg-url':
         pgURL = readOptionValue(argv, option, i);
         i += option.value === undefined ? 1 : 0;
@@ -701,10 +687,6 @@ export function parseBinarySweepArgs(
     throw new Error('--write-rate-min must be <= --write-rate-max');
   }
 
-  const effectivePgStart = pgStart ?? pgURL === undefined;
-  const effectiveZeroStart =
-    zeroStart ?? (cacheURL === undefined && cacheURLs === undefined);
-
   return {
     runID,
     topology,
@@ -733,10 +715,8 @@ export function parseBinarySweepArgs(
     repetitions,
     outputDir,
     zeroPort,
-    zeroStart: effectiveZeroStart,
     cacheURL,
     cacheURLs,
-    pgStart: effectivePgStart,
     pgURL,
     resume,
     continueOnError,
@@ -782,7 +762,9 @@ Execution & Output:
   --dry-run                     List matrix points without executing
   --limit <N>                   Limit execution to first N matrix points
   --resume <true|false>         Resume prior interrupted sweep (default: true)
-  --pg-start <true|false>       Whether to launch PostgreSQL Docker container (default: true)
+  --cache-url <url>             Connect to existing Zero cache instead of launching locally
+  --cache-urls <u1,u2,...>      Comma-separated View-Syncer URLs for partitioned clients
+  --pg-url <url>                Connect to existing PostgreSQL instead of launching local Docker
   --verbose-child-logs          Stream full child benchmark logs to stdout
 
 Examples:
