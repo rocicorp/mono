@@ -171,12 +171,6 @@ export async function removeReplicaFiles(replicaFile: string): Promise<void> {
     `${replicaFile}-rm`,
     `${replicaFile}-rm-shm`,
     `${replicaFile}-rm-wal`,
-    `${replicaFile}-rm1`,
-    `${replicaFile}-rm1-shm`,
-    `${replicaFile}-rm1-wal`,
-    `${replicaFile}-rm2`,
-    `${replicaFile}-rm2-shm`,
-    `${replicaFile}-rm2-wal`,
   ];
   for (let i = 0; i < 20; i++) {
     files.push(
@@ -206,7 +200,6 @@ export async function startZeroTopology(
     const singleProc = spawnZeroProcess({
       config,
       name: 'zero-cache',
-      role: 'single',
       port: config.zero.port,
       numSyncWorkers: config.zero.numSyncWorkers,
       replicaFile: config.zero.replicaFile,
@@ -230,7 +223,6 @@ export async function startZeroTopology(
   const rmProcess = spawnZeroProcess({
     config,
     name: 'rm',
-    role: 'rm',
     port: rmPort,
     changeStreamerPort: rmChangeStreamerPort,
     changeStreamerMode: 'dedicated',
@@ -263,7 +255,6 @@ export async function startZeroTopology(
     const vs = spawnZeroProcess({
       config,
       name: `vs-${i}`,
-      role: 'vs',
       port: vsPort,
       changeStreamerURI: `http://127.0.0.1:${rmChangeStreamerPort}`,
       numSyncWorkers: config.zero.numSyncWorkers,
@@ -296,15 +287,12 @@ function copyReplicaFile(src: string, dst: string): void {
 function spawnZeroProcess(args: {
   readonly config: BenchmarkConfig;
   readonly name: string;
-  readonly role: 'single' | 'rm' | 'vs';
   readonly port: number;
   readonly numSyncWorkers: number;
   readonly replicaFile: string;
   readonly changeStreamerURI?: string | undefined;
   readonly changeStreamerPort?: number | undefined;
-  readonly changeStreamerAddress?: string | undefined;
   readonly changeStreamerMode?: string | undefined;
-  readonly changeStreamerStartupDelayMs?: number | undefined;
   readonly metricsEndpoint?: string | undefined;
   readonly profile?: boolean | undefined;
 }): ManagedProcess {
@@ -343,16 +331,8 @@ function spawnZeroProcess(args: {
   if (args.changeStreamerPort !== undefined) {
     env.ZERO_CHANGE_STREAMER_PORT = String(args.changeStreamerPort);
   }
-  if (args.changeStreamerAddress) {
-    env.ZERO_CHANGE_STREAMER_ADDRESS = args.changeStreamerAddress;
-  }
   if (args.changeStreamerMode) {
     env.ZERO_CHANGE_STREAMER_MODE = args.changeStreamerMode;
-  }
-  if (args.changeStreamerStartupDelayMs !== undefined) {
-    env.ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS = String(
-      args.changeStreamerStartupDelayMs,
-    );
   }
 
   if (args.metricsEndpoint) {
