@@ -5,6 +5,7 @@ import {
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {assert} from '../../../../../shared/src/asserts.ts';
+import {Queue} from '../../../../../shared/src/queue.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {READONLY} from '../../../db/mode-enum.ts';
@@ -216,9 +217,27 @@ async function* stream<T>(
       status,
     },
   );
-  const copyStream = await tx.processReadTask(sql =>
-    sql.unsafe(copyCommand).readable(),
-  );
+
+  // Drain the COPY stream from *within* a single read task so that the
+  // TransactionPool worker holds the transaction for the entire duration of
+  // the COPY, rather than incorrectly considering the worker "idle" and
+  // attempting to send keepalives on it.
+  //
+  // Chunks are bridged out to this generator via a Queue, with a corresponding
+  // acks Queue providing strict one-chunk-at-a-time backpressure. This is
+  // necessary because it is not possible to "yield" from within the read task.
+  const chunks = new Queue<Buffer | 'done'>();
+  const acks = new Queue<void>();
+
+  const copyDone = tx.processReadTask(async sql => {
+    const readable = await sql.unsafe(copyCommand).readable();
+    for await (const chunk of readable) {
+      chunks.enqueue(chunk as Buffer);
+      await acks.dequeue(); // wait for this generator to consume the chunk
+    }
+    chunks.enqueue('done');
+  });
+  copyDone.catch(e => chunks.enqueueRejection(e));
 
   let totalBytes = 0;
   let totalMsgs = 0;
@@ -236,8 +255,11 @@ async function* stream<T>(
   let row: JSONValue[] = Array.from({length: decoders.length});
   let col = 0;
 
-  for await (const data of copyStream) {
-    const chunk = data as Buffer;
+  for (;;) {
+    const chunk = await chunks.dequeue();
+    if (chunk === 'done') {
+      break;
+    }
     for (const field of parser.parse(chunk)) {
       row[col] = field === null ? null : decoders[col](field);
 
@@ -258,7 +280,13 @@ async function* stream<T>(
       rowValues = [];
       bufferedBytes = 0;
     }
+
+    // Signal the read task to pull the next chunk (one-chunk backpressure).
+    acks.enqueue();
   }
+
+  // Surface any error from the COPY read task (and confirm clean completion).
+  await copyDone;
 
   // Flush the last batch of rows.
   if (rowValues.length > 0) {
