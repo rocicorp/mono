@@ -1205,6 +1205,18 @@ class ChangeMaker {
         }
 
       case 'commit':
+        // The DDL event that provides command-tag context for a subsequent
+        // event (see #handleDdlMessage) is only meaningful within a single
+        // (upstream) transaction, since related ddl events (e.g. the nested
+        // start->start->end->end sequence) are always emitted together. Clear
+        // it at the transaction boundary so that a lingering event (e.g. a
+        // `CREATE TABLE` ddlStart) is not misattributed as the context for an
+        // unrelated event in a later transaction. Note that this is safe for
+        // the one type of DDL event that spans multiple transactions,
+        // `CREATE INDEX CONCURRENTLY`, because that change is self declaring
+        // in the `ddlUpdate` and does not depend on the value of the preceding
+        // event.
+        this.#lastReplicationEvent = undefined;
         return [
           [
             'commit',
@@ -1302,12 +1314,24 @@ class ChangeMaker {
     // ddl_start (e.g. cases 1, 2, and 4), and from the current event
     // if it is a ddl_end (case 5), and 'UNKNOWN' otherwise (case 3 and
     // 'schemaSnapshot' workarounds).
+    //
+    // A 'schemaSnapshot' is special: it is a standalone hook (emitted by the
+    // COMMENT ON PUBLICATION workaround, or a MANUAL update_schemas() call)
+    // that substitutes for a missing ALTER PUBLICATION event on databases
+    // (e.g. supabase) that do not fire event triggers for it. It must never
+    // adopt the command tag of a preceding ddlStart (e.g. a `CREATE TABLE`
+    // in the same transaction), as that would cause a newly *published*
+    // table to be misclassified as a freshly *created* one and skip the
+    // backfill of its pre-existing rows. It therefore always falls back to
+    // 'UNKNOWN', which conservatively initiates a backfill.
     const effectiveTag =
-      prevEvent?.type === 'ddlStart'
-        ? prevEvent.event.tag
-        : event.type === 'ddlUpdate'
-          ? event.event.tag
-          : 'UNKNOWN';
+      event.type === 'schemaSnapshot'
+        ? 'UNKNOWN'
+        : prevEvent?.type === 'ddlStart'
+          ? prevEvent.event.tag
+          : event.type === 'ddlUpdate'
+            ? event.event.tag
+            : 'UNKNOWN';
     lc.info?.(`processing ${effectiveTag} command from ${msg.prefix}/${type}`, {
       event: summarizeReplicationEventForLog(event),
     });
