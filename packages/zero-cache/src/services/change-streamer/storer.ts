@@ -13,7 +13,7 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
-import {TransactionPool} from '../../db/transaction-pool.ts';
+import {sharedSnapshot, TransactionPool} from '../../db/transaction-pool.ts';
 import {type PostgresDB, type PostgresTransaction} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {orTimeout} from '../../types/timeout.ts';
@@ -57,6 +57,15 @@ import {
   type TableMetadataRow,
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
+
+/**
+ * Factory for creating dynamic connection pools used by the Storer to
+ * isolate concurrent transactions into separate pg clients.
+ */
+export type PostgresDBProvider = (
+  applicationName: string,
+  maxConns: number,
+) => PostgresDB;
 
 type SubscriberAndMode = {
   subscriber: Subscriber;
@@ -149,7 +158,15 @@ export class Storer implements Service {
   readonly #taskID: string;
   readonly #discoveryAddress: string;
   readonly #discoveryProtocol: string;
+  readonly #makeConnectionPool: PostgresDBProvider;
+
+  // Isolated connection pools for steady-state, potentially concurrent
+  // queries, in order to avoid a postgres.js connection-swapping bug:
+  // https://github.com/porsager/postgres/issues/1204
   readonly #db: PostgresDB;
+  readonly #inserter: PostgresDB;
+  readonly #purger: PostgresDB;
+
   readonly #replicaVersion: string;
   readonly #onCommitted: (c: Commit) => void;
   readonly #onFatal: (err: Error) => void;
@@ -169,7 +186,7 @@ export class Storer implements Service {
     taskID: string,
     discoveryAddress: string,
     discoveryProtocol: string,
-    db: PostgresDB,
+    dbProvider: PostgresDBProvider,
     replicaVersion: string,
     onCommitted: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
@@ -185,7 +202,10 @@ export class Storer implements Service {
     this.#taskID = taskID;
     this.#discoveryAddress = discoveryAddress;
     this.#discoveryProtocol = discoveryProtocol;
-    this.#db = db;
+    this.#makeConnectionPool = dbProvider;
+    this.#db = dbProvider('change-stream-init', 3);
+    this.#inserter = dbProvider('change-log-inserter', 1);
+    this.#purger = dbProvider('change-log-purger', 1);
     this.#replicaVersion = replicaVersion;
     this.#onCommitted = onCommitted;
     this.#onFatal = onFatal;
@@ -425,7 +445,7 @@ export class Storer implements Service {
   //       an arbitrary amount of time. Luckily, this is a background call and
   //       thus cannot cause the storer loop to hang.
   purgeRecordsBefore(watermark: string): Promise<number> {
-    return runTx(this.#db, async sql => {
+    return runTx(this.#purger, async sql => {
       // This NOWAIT pre-check is an optimization to abort the transaction
       // (and release associated resources) early.
       await sql<{watermark: string}[]>`
@@ -703,7 +723,7 @@ export class Storer implements Service {
             batch: [],
             lastFlush: undefined,
           };
-          tx.pool.run(this.#db);
+          tx.pool.run(this.#inserter);
           // Acquire a lock on the replicationState row to detect and/or prevent
           // a concurrent ownership change.
           void tx.pool.process(tx => {
@@ -810,16 +830,27 @@ export class Storer implements Service {
   }
 
   async #startCatchup(subs: SubscriberAndMode[]) {
-    if (subs.length === 0) {
+    const numCatchups = subs.length;
+    if (numCatchups === 0) {
       return;
     }
 
     const lc = this.#lc.withContext('pool', 'catchup');
-    // TODO: Consider setting initialWorkers to accomodate parallel
-    //       catchups of multiple subscribers. The tricky part is
-    //       staying within the db's max connections.
-    const reader = new TransactionPool(lc, {mode: Mode.READONLY});
-    reader.run(this.#db);
+    const {init, cleanup, snapshotID} = sharedSnapshot();
+    const reader = new TransactionPool(lc, {
+      mode: Mode.READONLY,
+      init,
+      cleanup,
+      initialWorkers: subs.length,
+    });
+
+    // A dynamic connection pool is created for catchup, sized to the number
+    // of subscribers being caught up.
+    const catchupConns = this.#makeConnectionPool(
+      'subscriber-catchup',
+      numCatchups,
+    );
+    reader.run(catchupConns);
 
     let lastWatermark: string | undefined;
     const catchupSnapshotted = this.#progressMonitor.trackTask({
@@ -836,6 +867,10 @@ export class Storer implements Service {
         SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}
       `,
       );
+      lc.info?.(
+        `snapshotted db at ${lastWatermark} (${await snapshotID}) ` +
+          `to catchup ${numCatchups} subscriber(s)`,
+      );
     } catch (e) {
       subs.map(({subscriber}) => subscriber.fail(e));
       throw e;
@@ -845,7 +880,7 @@ export class Storer implements Service {
 
     // Run the actual catchup queries in the background. Errors are handled in
     // #catchup() by disconnecting the associated subscriber.
-    void Promise.all(
+    void Promise.allSettled(
       subs.map(sub =>
         this.#catchup(
           lc.withContext('subscriber', sub.subscriber.id),
@@ -854,7 +889,10 @@ export class Storer implements Service {
           reader,
         ),
       ),
-    ).finally(() => reader.setDone());
+    ).finally(() => {
+      reader.setDone();
+      void catchupConns.end().catch(() => {});
+    });
   }
 
   async #catchup(

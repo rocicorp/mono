@@ -1,6 +1,8 @@
 import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import {defu} from 'defu';
+import postgres, {type Options, type PostgresType} from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseOrAbort} from '../../../../shared/src/promise-race.ts';
@@ -79,6 +81,7 @@ import {
   SQLiteChangeLogWriter,
   type SQLiteChangeLogWriterOptions,
 } from './sqlite-change-log-writer.ts';
+import type {PostgresDBProvider} from './storer.ts';
 import {
   Storer,
   type PurgeLock,
@@ -209,6 +212,26 @@ export async function initializeStreamer(
     setTimeoutFn,
   );
 
+  // Dynamically creates connection pools that the implementation uses to
+  // isolate concurrent, long-running transactions. This works around a bug in
+  // the postgres.js client where connections get swapped in certain conditions.
+  //
+  // https://github.com/porsager/postgres/issues/1204
+  const changeDBProvider: PostgresDBProvider = (
+    applicationName: string,
+    max: number,
+  ) =>
+    postgres(
+      defu(
+        {max, connection: {['application_name']: applicationName}},
+        // ParsedOptions are technically compatible with Options, but happen
+        // to not be typed that way. The postgres.js author does an equivalent
+        // merge of ParsedOptions and Options here:
+        // https://github.com/porsager/postgres/blob/089214e85c23c90cf142d47fb30bd03f42874984/src/subscribe.js#L13
+        changeDB.options as unknown as Options<Record<string, PostgresType>>,
+      ),
+    ) as PostgresDB;
+
   const {replicaVersion} = subscriptionState;
   return new ChangeStreamerImpl(
     lc,
@@ -216,7 +239,7 @@ export async function initializeStreamer(
     taskID,
     discoveryAddress,
     discoveryProtocol,
-    changeDB,
+    changeDBProvider,
     replicaVersion,
     changeSource,
     replicationStatusPublisher,
@@ -380,7 +403,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #shard: ShardID;
-  readonly #changeDB: PostgresDB;
+  readonly #changeDBProvider: PostgresDBProvider;
   readonly #replicaVersion: string;
   readonly #source: ChangeSource;
   readonly #storer: Storer;
@@ -482,7 +505,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     taskID: string,
     discoveryAddress: string,
     discoveryProtocol: string,
-    changeDB: PostgresDB,
+    changeDBProvider: PostgresDBProvider,
     replicaVersion: string,
     source: ChangeSource,
     replicationStatusPublisher: ReplicationStatusPublisher,
@@ -495,7 +518,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
     this.#shard = shard;
-    this.#changeDB = changeDB;
+    this.#changeDBProvider = changeDBProvider;
     this.#replicaVersion = replicaVersion;
     this.#source = source;
     this.#storer = new Storer(
@@ -504,7 +527,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       taskID,
       discoveryAddress,
       discoveryProtocol,
-      changeDB,
+      changeDBProvider,
       replicaVersion,
       consumed => this.#acker.trackPgChangeLog(consumed[2].watermark),
       err => this.stop(err),
@@ -852,7 +875,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     switch (tag) {
       case 'reset-required':
-        await markResetRequired(this.#changeDB, this.#shard);
+        await markResetRequired(
+          this.#changeDBProvider('change-streamer-reset', 1),
+          this.#shard,
+        );
         await publishReplicationError(
           this.#lc,
           'Replicating',
