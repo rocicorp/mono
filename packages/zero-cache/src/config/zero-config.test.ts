@@ -295,12 +295,6 @@ test('zero-cache --help', () => {
                                                                                    to sync multiple view-syncers without requiring multiple replication slots on                                              
                                                                                    the upstream database. If unspecified, the upstream-db will be used.                                                       
                                                                                                                                                                                                               
-     --change-max-conns number                                                     default: 5                                                                                                                 
-       ZERO_CHANGE_MAX_CONNS env                                                                                                                                                                              
-                                                                                   The maximum number of connections to open to the change database.                                                          
-                                                                                   This is used by the change-streamer for catching up                                                                        
-                                                                                   zero-cache replication subscriptions.                                                                                      
-                                                                                                                                                                                                              
      --replica-file string                                                         default: "zero.db"                                                                                                         
        ZERO_REPLICA_FILE env                                                                                                                                                                                  
                                                                                    File path to the SQLite replica that zero-cache maintains.                                                                 

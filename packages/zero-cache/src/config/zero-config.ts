@@ -560,13 +560,14 @@ export const zeroOptions = {
       ],
     },
 
+    /** @deprecated */
     maxConns: {
       type: v.number().default(5),
-      desc: [
-        `The maximum number of connections to open to the change database.`,
-        `This is used by the {bold change-streamer} for catching up`,
-        `{bold zero-cache} replication subscriptions.`,
+      deprecated: [
+        `Connections to the change db are created dynamically for subscriber catchup. Ensure`,
+        `that the database supports sufficient connections for at least 5 + numViewSyncers.`,
       ],
+      hidden: true,
     },
 
     statementTimeoutMs: {
