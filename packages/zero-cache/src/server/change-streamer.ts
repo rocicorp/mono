@@ -102,12 +102,14 @@ export default async function runWorker(
   );
   initEventSink(lc, config);
 
-  // Kick off DB connection warmup in the background.
+  // Startup-time client used for for change-streamer initialization
+  // and handoff / takeover. Steady-state clients are managed by the
+  // change-streamer (Storer) implementation.
   const changeDB = await connectPgClient(
     lc,
     change.db,
-    'change-streamer',
-    {max: change.maxConns},
+    'change-streamer-init',
+    {max: 5},
     {sendStringAsJson: true},
   );
   void warmupConnections(lc, changeDB, 'change').catch(() => {});

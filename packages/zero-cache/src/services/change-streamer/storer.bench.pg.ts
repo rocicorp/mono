@@ -4,7 +4,7 @@
 import {afterEach, describe, expect} from 'vitest';
 import {createManualBenchmarkRecorder} from '../../../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {type PgTest, test} from '../../test/db.ts';
+import {test, type PgTest} from '../../test/db.ts';
 import {
   BENCHMARK_FIXTURE_TABLE_KEYS,
   benchmarkFixturePayloadMB,
@@ -80,7 +80,7 @@ async function makeStorer(
     'task-id',
     'change-streamer:12345',
     'ws',
-    db,
+    () => db,
     REPLICA_VERSION,
     () => {},
     err => {

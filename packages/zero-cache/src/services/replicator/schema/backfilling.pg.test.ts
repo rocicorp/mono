@@ -81,7 +81,7 @@ describe('replicator/schema/backfill request parity', () => {
       'task-id',
       'change-streamer:12345',
       'ws',
-      db,
+      () => db,
       REPLICA_VERSION,
       (_: Commit | UpstreamStatusMessage) => {},
       () => {},

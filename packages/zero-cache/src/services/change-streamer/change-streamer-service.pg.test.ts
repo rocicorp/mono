@@ -137,13 +137,27 @@ describe('change-streamer/service', () => {
       opts,
       setTimeoutFn as unknown as typeof setTimeout,
     );
-    streamerDone = streamer.run();
+    await run(streamer);
 
     return async () => {
       await streamer.stop();
       await testDBs.drop(sql);
     };
   });
+
+  async function run(streamer: ChangeStreamerService) {
+    // Clear ownership
+    await sql`UPDATE "zoro_3/cdc"."replicationState" SET owner = NULL;`;
+
+    streamerDone = streamer.run();
+
+    // Await confirmation that the streamer has taken ownership
+    await vi.waitFor(async () => {
+      expect(
+        await sql`SELECT owner FROM "zoro_3/cdc"."replicationState"`,
+      ).toEqual([{owner: 'task-id'}]);
+    });
+  }
 
   function drainToQueue(sub: Source<string>): Queue<Downstream> {
     const queue = new Queue<Downstream>();
@@ -202,7 +216,7 @@ describe('change-streamer/service', () => {
       opts,
       setTimeoutFn as unknown as typeof setTimeout,
     );
-    void backupStreamer.run();
+    await run(backupStreamer);
     return backupStreamer;
   }
 
@@ -327,7 +341,7 @@ describe('change-streamer/service', () => {
       {...opts, sqliteCatchup},
       setTimeoutFn as unknown as typeof setTimeout,
     );
-    streamerDone = streamer.run();
+    await run(streamer);
   }
 
   /**
@@ -412,7 +426,7 @@ describe('change-streamer/service', () => {
       },
       setTimeoutFn as unknown as typeof setTimeout,
     );
-    streamerDone = streamer.run();
+    await run(streamer);
   }
 
   /** The oldest watermark retained in the SQLite change log beside `logFile`. */
@@ -1625,7 +1639,7 @@ describe('change-streamer/service', () => {
       // The real timer, because these tests depend on the reconnect backoff
       // actually firing.
     );
-    streamerDone = streamer.run();
+    await run(streamer);
 
     return {
       first,
@@ -1858,7 +1872,7 @@ describe('change-streamer/service', () => {
       },
       setTimeoutFn as unknown as typeof setTimeout,
     );
-    streamerDone = streamer.run();
+    await run(streamer);
 
     try {
       const liveSub = await streamer.subscribe({
@@ -2236,7 +2250,7 @@ describe('change-streamer/service', () => {
       },
       setTimeoutFn as unknown as typeof setTimeout,
     );
-    streamerDone = streamer.run();
+    await run(streamer);
 
     try {
       const observerSub = await streamer.subscribe({
@@ -3829,7 +3843,7 @@ describe('change-streamer/service', () => {
       true,
       opts,
     );
-    void streamer.run();
+    await run(streamer);
 
     expect(await hasRetried).toBe(true);
   });
@@ -3871,7 +3885,7 @@ describe('change-streamer/service', () => {
       true,
       opts,
     );
-    void streamer.run();
+    await run(streamer);
 
     expect(await requests.dequeue()).toBe(REPLICA_VERSION);
 
@@ -3896,7 +3910,7 @@ describe('change-streamer/service', () => {
       true,
       opts,
     );
-    void streamer.run();
+    await run(streamer);
 
     expect(await requests.dequeue()).toBe('04');
   });
@@ -3935,7 +3949,7 @@ describe('change-streamer/service', () => {
       true,
       opts,
     );
-    void streamer.run();
+    await run(streamer);
 
     // This should succeed once the purge lock is released.
     await sql`SELECT FROM "zoro_3/cdc"."changeLog" FOR UPDATE`;
@@ -3979,7 +3993,7 @@ describe('change-streamer/service', () => {
       true,
       opts,
     );
-    void streamer.run();
+    await run(streamer);
 
     changes.fail(new Error('doh'));
 
@@ -4202,7 +4216,7 @@ describe('change-streamer/service', () => {
       true,
       opts,
     );
-    void streamer.run();
+    await run(streamer);
 
     // Insert unexpected data simulating that the stream and store are not in the expected state.
     await sql`INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
@@ -4262,7 +4276,7 @@ describe('change-streamer/service', () => {
       true,
       opts,
     );
-    void streamer.run();
+    await run(streamer);
 
     // Stream down a big (1MB) transaction, which should take time to commit.
     const NEW_WATERMARK = '0g';
@@ -4339,7 +4353,7 @@ describe('change-streamer/service', () => {
       true,
       opts,
     );
-    void streamer.run();
+    await run(streamer);
 
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
@@ -4457,7 +4471,7 @@ describe('change-streamer/service', () => {
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
 
     // Let the next transaction begin, acquiring the lock.
-    await sleep(10);
+    await sleep(500);
 
     // Verify that the lock is held.
     let result;

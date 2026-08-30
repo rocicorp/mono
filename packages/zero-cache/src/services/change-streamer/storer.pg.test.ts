@@ -6,8 +6,8 @@ import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {test, type PgTest} from '../../test/db.ts';
-import {postgresTypeConfig, type PostgresDB} from '../../types/pg.ts';
+import {getConnectionURI, test, type PgTest} from '../../test/db.ts';
+import {pgClient, postgresTypeConfig, type PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
   type ChangeStreamData,
@@ -19,7 +19,12 @@ import {extractChangeSubstring} from './change-log-codec.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
-import {PurgeLocker, Storer, type TuningOptions} from './storer.ts';
+import {
+  PurgeLocker,
+  Storer,
+  type PostgresDBProvider,
+  type TuningOptions,
+} from './storer.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const opts: TuningOptions = {
@@ -69,6 +74,7 @@ function summarize({
 describe('change-streamer/storer', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
+  let dbProvider: PostgresDBProvider;
   let storer: Storer;
   let done: Promise<void>;
   let consumed: Queue<Commit | UpstreamStatusMessage>;
@@ -83,6 +89,14 @@ describe('change-streamer/storer', () => {
     db = await testDBs.create('change_streamer_storer', {
       typeOpts: {sendStringAsJson: true},
     });
+    dbProvider = (applicationName: string, maxConns: number) =>
+      pgClient(
+        lc,
+        getConnectionURI(db),
+        applicationName,
+        {max: maxConns},
+        {sendStringAsJson: true},
+      );
     shard = {appID: APP_ID, shardNum: SHARD_NUM};
     await db.begin(tx => setupCDCTables(lc, tx, shard));
     await ensureReplicationConfig(
@@ -152,7 +166,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -225,7 +239,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1680,7 +1694,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'wss',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1714,7 +1728,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1793,7 +1807,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        singleConnDb,
+        () => singleConnDb,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1831,7 +1845,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1913,7 +1927,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        singleConnDb,
+        () => singleConnDb,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
