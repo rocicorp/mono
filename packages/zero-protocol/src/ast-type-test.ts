@@ -7,6 +7,7 @@ import type {
   CorrelatedSubqueryConditionOperator,
   EqualityOps,
   LikeOps,
+  NormalizedAST,
   OrderOps,
   Ordering,
   SimpleOperator,
@@ -182,4 +183,18 @@ type MakeAllFieldsRequired<T> = {
 
   inferredTR satisfies MakeAllFieldsRequired<SimpleOperator>;
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof simpleOperatorSchema>>;
+};
+
+(normalized: NormalizedAST, ast: AST) => {
+  // A normalized AST is an AST...
+  normalized satisfies AST;
+
+  // ... but an AST is only normalized once one of the functions in ast.ts
+  // says it is.
+  // @ts-expect-error - not tagged as normalized
+  ast satisfies NormalizedAST;
+
+  // Replacing a field of a normalized AST keeps the tag, which is what lets a
+  // query builder derive one normalized AST from another.
+  ({...normalized, limit: 1}) satisfies NormalizedAST;
 };

@@ -5,6 +5,7 @@ import {
   type AST,
   type CompoundKey,
   type Condition,
+  type NormalizedAST,
   type Parameter,
   type SimpleOperator,
   type System,
@@ -51,7 +52,7 @@ type NewQueryFunction<TSchema extends Schema> = <
 >(
   this: unknown,
   tableName: TTable,
-  ast: Required<AST>,
+  ast: NormalizedAST,
   format: Format,
   customQueryID: CustomQueryID | undefined,
   currentJunction: string | undefined,
@@ -93,7 +94,7 @@ function newQueryInternal<
 >(
   schema: TSchema,
   tableName: TTable,
-  ast: Required<AST>,
+  ast: NormalizedAST,
   format: Format,
   system: System,
 ): QueryImpl<TTable, TSchema, TReturn> {
@@ -124,10 +125,8 @@ function newQueryInternal<
  * every field, so spreading one and replacing a field keeps the field order
  * intact, and only the field a step actually changes needs normalizing (the
  * conditions of a `where`, the position of a new `related`). The ASTs that
- * come in from the outside are normalized by {@link newQueryImpl}.
- *
- * Constructing one directly with an AST that is not normalized breaks that
- * invariant, and with it the query hash.
+ * come in from the outside are normalized by {@link newQueryImpl}, which is
+ * what the `NormalizedAST` of the AST it holds stands for.
  */
 export class QueryImpl<
   TTable extends keyof TSchema['tables'] & string,
@@ -142,7 +141,7 @@ export class QueryImpl<
 
   readonly #schema: TSchema;
   readonly #tableName: TTable;
-  readonly #ast: Required<AST>;
+  readonly #ast: NormalizedAST;
   readonly format: Format;
   #hash: string = '';
   #marked = false;
@@ -154,7 +153,7 @@ export class QueryImpl<
   constructor(
     schema: TSchema,
     tableName: TTable,
-    ast: Required<AST>,
+    ast: NormalizedAST,
     format: Format,
     system: System,
     customQueryID: CustomQueryID | undefined,
