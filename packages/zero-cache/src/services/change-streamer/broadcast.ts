@@ -109,6 +109,11 @@ export class Broadcast {
   readonly #clearTimeout: typeof clearTimeout;
   #earlyReleaseTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Tracks whether the backup-replicator responded. It is a required member
+  // of the consensus timeout since it cannot be dropped as a laggard (since
+  // that would shutdown the replication-manager itself).
+  #needsBackupResponse = false;
+
   /**
    * Broadcasts the `change` to the `subscribers` and tracks their
    * completion.
@@ -131,6 +136,11 @@ export class Broadcast {
 
     for (const sub of this.#pending) {
       const changes = sub.numPending + 1; // add one for this `change`
+      if (sub.mode === 'backup') {
+        // Only gate consensus on the backup-replicator after it has finished
+        // its initial catchup.
+        this.#needsBackupResponse ||= !sub.isBacklogged();
+      }
       void sub
         .send(change)
         .catch(() => {})
@@ -149,20 +159,24 @@ export class Broadcast {
     }
     const elapsed = performance.now() - this.#start;
     sub.trackResponseResult('on-time');
-
+    if (sub.mode === 'backup') {
+      this.#needsBackupResponse = false;
+    }
     this.#completed.push({sub, changes, elapsed});
     this.#pending.delete(sub);
     if (this.#pending.size === 0) {
       this.#setDone('all-subscribers');
       return;
     }
-    // Event-driven consensus-timeout: the moment a majority acks, arm a single
-    // release timer proportional to how long the majority took to ack. The
-    // broadcast resolves when it fires, unless all subscribers ack first.
+    // Event-driven consensus-timeout: the moment a majority acks, and it
+    // includes the backup-replicator, arm a single release timer
+    // proportional to how long the majority took to ack. The broadcast
+    // resolves when it fires, unless all subscribers ack first.
     if (
       this.#earlyReleaseTimeoutProportion !== undefined &&
       this.#earlyReleaseTimer === undefined &&
-      this.#completed.length === this.#majority
+      this.#completed.length >= this.#majority &&
+      !this.#needsBackupResponse
     ) {
       const timeoutMs = Math.ceil(
         elapsed * this.#earlyReleaseTimeoutProportion,
