@@ -20,6 +20,7 @@ import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
   inspectAnalyzeQueryDownSchema,
   inspectAuthenticatedDownSchema,
+  inspectErrorDownSchema,
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
   inspectVersionDownSchema,
@@ -92,19 +93,30 @@ function rpcNoAuthTry<T extends InspectDownBody>(
   return new Promise((resolve, reject) => {
     const id = nanoid();
     const f = (ev: MessageEvent) => {
-      const msg = JSON.parse(ev.data);
-      if (msg[0] === 'inspect') {
-        const body = msg[1];
-        if (body.id !== id) {
-          return;
-        }
+      if (typeof ev.data !== 'string') {
+        // Binary messages (such as poke chunks) are not inspector messages.
+        return;
+      }
+      let msg: unknown;
+      try {
+        msg = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+      if (!Array.isArray(msg) || msg[0] !== 'inspect') {
+        return;
+      }
+      const body = msg[1];
+      if (body.id !== id) {
+        return;
+      }
+      const errorRes = valita.test(body, inspectErrorDownSchema);
+      if (errorRes.ok) {
+        reject(new Error(errorRes.value.value));
+      } else {
         const res = valita.test(body, downSchema);
         if (res.ok) {
-          if (res.value.op === 'error') {
-            reject(new Error(res.value.value));
-          } else {
-            resolve(res.value.value);
-          }
+          resolve(res.value.value);
         } else {
           // Check if we got un authenticated/false response
           const authRes = valita.test(body, inspectAuthenticatedDownSchema);
@@ -115,9 +127,9 @@ function rpcNoAuthTry<T extends InspectDownBody>(
               'Expected unauthenticated response',
             );
             reject(new UnauthenticatedError());
+          } else {
+            reject(res.error);
           }
-
-          reject(res.error);
         }
         socket.removeEventListener('message', f);
       }

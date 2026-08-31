@@ -73,6 +73,7 @@ export async function analyzeQuery(
       planDebugger,
       host: {
         debug: new Debug(),
+        enableNotExists: true,
         getSource(tableName: string) {
           let source = tables.get(tableName);
           if (source) {
