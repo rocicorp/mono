@@ -134,12 +134,7 @@ export class Database implements Disposable {
       }
       throw e;
     } finally {
-      logIfSlow(
-        this.#lc.withContext('method', method),
-        performance.now() - start,
-        {method},
-        this.#threshold,
-      );
+      logIfSlow(this.#lc, performance.now() - start, this.#threshold, method);
     }
   }
 
@@ -207,10 +202,11 @@ export class Statement {
     const start = performance.now();
     const ret = this.#stmt.run(...params);
     logIfSlow(
-      this.#lc.withContext('method', 'run'),
+      this.#lc,
       performance.now() - start,
-      {...this.#attrs, method: 'run'},
       this.#threshold,
+      'run',
+      this.#attrs,
     );
     return ret;
   }
@@ -219,10 +215,11 @@ export class Statement {
     const start = performance.now();
     const ret = this.#stmt.get(...params);
     logIfSlow(
-      this.#lc.withContext('method', 'get'),
+      this.#lc,
       performance.now() - start,
-      {...this.#attrs, method: 'get'},
       this.#threshold,
+      'get',
+      this.#attrs,
     );
     return ret as T;
   }
@@ -231,17 +228,18 @@ export class Statement {
     const start = performance.now();
     const ret = this.#stmt.all(...params);
     logIfSlow(
-      this.#lc.withContext('method', 'all'),
+      this.#lc,
       performance.now() - start,
-      {...this.#attrs, method: 'all'},
       this.#threshold,
+      'all',
+      this.#attrs,
     );
     return ret as T[];
   }
 
   iterate<T>(...params: unknown[]): IterableIterator<T> {
     return new LoggingIterableIterator(
-      this.#lc.withContext('method', 'iterate'),
+      this.#lc,
       this.#attrs,
       this.#stmt.iterate(...params),
       this.#threshold,
@@ -256,6 +254,7 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   readonly #attrs: Attributes;
   #start: number;
   #sqliteRowTimeSum: number;
+  #logged = false;
 
   constructor(
     lc: LogContext,
@@ -282,18 +281,32 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
     return ret;
   }
 
+  /**
+   * Callers that exhaust an iterator still close it afterwards -- `#fetch`
+   * closes in a `finally` -- so an ordinary completion reaches here through
+   * `next()` and then again through `return()`. Only the first one describes
+   * the query, so the epilogue runs once per iterator.
+   */
   #log() {
+    if (this.#logged) {
+      return;
+    }
+    this.#logged = true;
     logIfSlow(
-      this.#lc.withContext('type', 'total'),
+      this.#lc,
       performance.now() - this.#start,
-      {...this.#attrs, type: 'total', method: 'iterate'},
       this.#threshold,
+      'iterate',
+      this.#attrs,
+      'total',
     );
     logIfSlow(
-      this.#lc.withContext('type', 'sqlite'),
+      this.#lc,
       this.#sqliteRowTimeSum,
-      {...this.#attrs, type: 'sqlite', method: 'iterate'},
       this.#threshold,
+      'iterate',
+      this.#attrs,
+      'sqlite',
     );
   }
 
@@ -314,19 +327,29 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   }
 }
 
+/**
+ * Building the LogContext and the attribute object is only worth it when the
+ * query is actually slow, which is the rare case: this runs on every statement
+ * execution, and twice more for every iterator that finishes.
+ */
 function logIfSlow(
   lc: LogContext,
   elapsed: number,
-  attrs: Attributes,
   threshold: number,
+  method: string,
+  attrs?: Attributes,
+  type?: string,
 ): void {
-  if (elapsed >= threshold) {
-    for (const [key, value] of Object.entries(attrs)) {
-      lc = lc.withContext(key, value);
-    }
-    lc.warn?.('Slow SQLite query', elapsed);
-    manualSpan(tracer, 'db.slow-query', elapsed, attrs);
+  if (elapsed < threshold) {
+    return;
   }
+  const allAttrs: Attributes =
+    type === undefined ? {...attrs, method} : {...attrs, method, type};
+  for (const [key, value] of Object.entries(allAttrs)) {
+    lc = lc.withContext(key, value);
+  }
+  lc.warn?.('Slow SQLite query', elapsed);
+  manualSpan(tracer, 'db.slow-query', elapsed, allAttrs);
 }
 
 /**

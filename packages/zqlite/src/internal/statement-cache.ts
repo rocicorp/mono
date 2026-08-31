@@ -107,7 +107,15 @@ export class StatementCache {
    * @returns
    */
   get(sql: string): CachedStatement {
-    sql = normalizeWhitespace(sql);
+    return this.getNormalized(normalizeWhitespace(sql));
+  }
+
+  /**
+   * {@linkcode get} for callers that already hold normalized sql, so that a
+   * caller reusing one canonical string across many lookups does not re-run
+   * the normalizing regex every time.
+   */
+  getNormalized(sql: string): CachedStatement {
     const statements = this.#cache.get(sql);
     if (statements && statements.length > 0) {
       const statement = statements.pop()!;
@@ -175,6 +183,6 @@ export class StatementCache {
   }
 }
 
-function normalizeWhitespace(sql: string) {
+export function normalizeWhitespace(sql: string) {
   return sql.replaceAll(/\s+/g, ' ');
 }

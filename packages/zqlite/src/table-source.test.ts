@@ -4,6 +4,7 @@ import {assert} from '../../shared/src/asserts.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
+import type {Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
 import {
   Debug,
@@ -17,16 +18,18 @@ import {
   type Change,
 } from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';
+import type {FetchRequest} from '../../zql/src/ivm/operator.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
+  type SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
 import {explainQueries} from './explain-queries.ts';
 import {format} from './internal/sql.ts';
-import {filtersToSQL} from './query-builder.ts';
+import {buildSelectQuery, filtersToSQL} from './query-builder.ts';
 import {
   fromSQLiteTypes,
   TableSource,
@@ -1305,4 +1308,329 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
   } finally {
     Statement.prototype.iterate = origIterate;
   }
+});
+
+describe('reusing a fetch template across fetches', () => {
+  // `#fetch` caches the SQL text per connection and rebinds values, so every
+  // shape has to keep producing exactly what building and formatting the
+  // query from scratch produces -- same text, same bindings, same rows.
+  const templateColumns = {
+    id: {type: 'string'},
+    n: {type: 'number', optional: true},
+    flag: {type: 'boolean'},
+    doc: {type: 'json'},
+    group: {type: 'string'},
+  } as const;
+
+  const rows: Row[] = [
+    {id: 'a', n: 1, flag: true, doc: {x: 1}, group: 'g1'},
+    {id: 'b', n: null, flag: false, doc: [1, 2], group: 'g1'},
+    {id: 'c', n: 3, flag: true, doc: 'plain', group: 'g2'},
+    {id: 'd', n: 4, flag: false, doc: null, group: 'g2'},
+  ];
+
+  function setup() {
+    const db = new Database(lc, ':memory:');
+    db.exec(
+      /* sql */ `CREATE TABLE t (id TEXT PRIMARY KEY, n, flag, doc, "group");`,
+    );
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      't',
+      templateColumns,
+      ['id'],
+    );
+    for (const row of rows) {
+      consume(source.push(makeSourceChangeAdd(row)));
+    }
+    return {db, source};
+  }
+
+  function referenceRows(db: Database, request: FetchRequest, sort: Ordering) {
+    const {text, values} = format(
+      buildSelectQuery(
+        't',
+        templateColumns,
+        request.constraint,
+        undefined,
+        sort,
+        request.reverse,
+        request.start,
+        request.multiConstraints,
+      ),
+    );
+    return db
+      .prepare(text)
+      .safeIntegers(true)
+      .all<Row>(...values)
+      .map(row => fromSQLiteTypes(templateColumns, row, 't'));
+  }
+
+  const byId: Ordering = [['id', 'asc']];
+  const byGroup: Ordering = [
+    ['group', 'asc'],
+    ['id', 'asc'],
+  ];
+
+  const cases: {name: string; sort: Ordering; requests: FetchRequest[]}[] = [
+    {
+      name: 'unconstrained, and reversed',
+      sort: byId,
+      requests: [{}, {reverse: true}, {}, {reverse: true}],
+    },
+    {
+      name: 'single constraint, including null and boolean values',
+      sort: byId,
+      requests: [
+        {constraint: {id: 'a'}},
+        {constraint: {id: 'c'}},
+        {constraint: {n: null}},
+        {constraint: {n: 3}},
+        {constraint: {flag: true}},
+        {constraint: {flag: false}},
+      ],
+    },
+    {
+      name: 'compound constraint, and the same columns in the other order',
+      sort: byId,
+      requests: [
+        {constraint: {group: 'g1', flag: true}},
+        {constraint: {group: 'g2', flag: false}},
+        {constraint: {flag: true, group: 'g1'}},
+        {constraint: {group: 'g1', flag: false}},
+      ],
+    },
+    {
+      name: 'multi-constraint of varying arity',
+      sort: byGroup,
+      requests: [
+        {constraint: {group: 'g1'}, multiConstraints: [[{id: 'a'}]]},
+        {
+          constraint: {group: 'g1'},
+          multiConstraints: [[{id: 'a'}, {id: 'b'}]],
+        },
+        {constraint: {group: 'g2'}, multiConstraints: [[{id: 'c'}]]},
+        {multiConstraints: [[{id: 'a'}, {id: 'c'}, {id: 'd'}]]},
+        {multiConstraints: [[]]},
+      ],
+    },
+    {
+      name: 'compound and chained multi-constraints',
+      sort: byId,
+      requests: [
+        {
+          multiConstraints: [
+            [
+              {id: 'a', group: 'g1'},
+              {id: 'c', group: 'g2'},
+            ],
+          ],
+        },
+        {multiConstraints: [[{id: 'a'}, {id: 'b'}], [{group: 'g1'}]]},
+        {multiConstraints: [[{id: 'c'}, {id: 'd'}], [{group: 'g2'}]]},
+        // Later entries listing the same columns in a different order: the
+        // emitted `IN` clause takes its column order from the first entry.
+        {
+          multiConstraints: [
+            [
+              {id: 'a', group: 'g1'},
+              {group: 'g2', id: 'c'},
+            ],
+          ],
+        },
+      ],
+    },
+    {
+      name: 'start requests, which bypass the template',
+      sort: byId,
+      requests: [
+        {start: {row: {id: 'b'}, basis: 'at'}},
+        {start: {row: {id: 'b'}, basis: 'after'}},
+        {start: {row: {id: 'b'}, basis: 'at'}, reverse: true},
+        {constraint: {group: 'g2'}, start: {row: {id: 'c'}, basis: 'after'}},
+      ],
+    },
+  ];
+
+  function fetchRows(input: SourceInput, request: FetchRequest) {
+    const fetched: Row[] = [];
+    for (const node of input.fetch(request)) {
+      assert(node !== 'yield', 'Expected row result, not yield');
+      fetched.push(node.row);
+    }
+    return {request, rows: fetched};
+  }
+
+  for (const {name, sort, requests} of cases) {
+    test(name, () => {
+      const {db, source} = setup();
+      const input = source.connect(sort);
+      const expected = requests.map(request => ({
+        request,
+        rows: referenceRows(db, request, sort),
+      }));
+      // Twice, so every request is served once by a fresh template and once
+      // by a cached one.
+      expect(requests.map(request => fetchRows(input, request))).toEqual(
+        expected,
+      );
+      expect(requests.map(request => fetchRows(input, request))).toEqual(
+        expected,
+      );
+      db.close();
+    });
+  }
+
+  test('a heterogeneous multi-constraint throws on both paths', () => {
+    const {db, source} = setup();
+    const input = source.connect(byId);
+    const heterogeneous: FetchRequest = {
+      multiConstraints: [[{id: 'a', group: 'g1'}, {id: 'c'}]],
+    };
+
+    // Fresh: `multiConstraintToSQL` rejects it while building the query.
+    expect(() => fetchRows(input, heterogeneous)).toThrow(
+      'multiConstraint entries must share the same keys',
+    );
+
+    // Cached: a well-formed request of the same shape leaves a template
+    // behind, so the mismatched entry never reaches the builder. It must
+    // still throw rather than bind `undefined` for the missing column.
+    fetchRows(input, {
+      multiConstraints: [
+        [
+          {id: 'a', group: 'g1'},
+          {id: 'c', group: 'g2'},
+        ],
+      ],
+    });
+    expect(() => fetchRows(input, heterogeneous)).toThrow(
+      'multiConstraint entries must share the same keys',
+    );
+
+    // An entry with the same number of columns but a different one: the
+    // count matches, so only checking each expected column catches it.
+    expect(() =>
+      fetchRows(input, {
+        multiConstraints: [
+          [
+            {id: 'a', group: 'g1'},
+            {id: 'c', n: 3},
+          ],
+        ],
+      }),
+    ).toThrow('multiConstraint entries must share the same keys');
+
+    // An entry with an extra column: every expected column is present, so
+    // only the count catches it.
+    expect(() =>
+      fetchRows(input, {
+        multiConstraints: [
+          [
+            {id: 'a', group: 'g1'},
+            {id: 'c', group: 'g2', n: 3},
+          ],
+        ],
+      }),
+    ).toThrow('multiConstraint entries must share the same keys');
+
+    db.close();
+  });
+
+  test('column names containing the key separators get their own template', () => {
+    // Two shapes that both constrain two columns, and whose column names
+    // concatenate to the same text: `a|b` + `c` against `a` + `b|c`. Sharing
+    // one template here binds the second shape's values into the first
+    // shape's SQL, and because the binding counts match, that returns
+    // plausible wrong rows instead of failing.
+    const weirdColumns = {
+      'id': {type: 'string'},
+      'a|b': {type: 'string'},
+      'c': {type: 'string'},
+      'a': {type: 'string'},
+      'b|c': {type: 'string'},
+      'b': {type: 'string'},
+      'a;1|b': {type: 'string'},
+    } as const;
+    const db = new Database(lc, ':memory:');
+    db.exec(/* sql */ `CREATE TABLE weird (
+        id TEXT PRIMARY KEY, "a|b" TEXT, "c" TEXT, "a" TEXT, "b|c" TEXT,
+        "b" TEXT, "a;1|b" TEXT);`);
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'weird',
+      weirdColumns,
+      ['id'],
+    );
+    const weirdRows: Row[] = [
+      {
+        'id': 'r1',
+        'a|b': 'x',
+        'c': 'y',
+        'a': 'p',
+        'b|c': 'q',
+        'b': 'm',
+        'a;1|b': 'u',
+      },
+      {
+        'id': 'r2',
+        'a|b': 'p',
+        'c': 'q',
+        'a': 'x',
+        'b|c': 'y',
+        'b': 'n',
+        'a;1|b': 'v',
+      },
+    ];
+    for (const row of weirdRows) {
+      consume(source.push(makeSourceChangeAdd(row)));
+    }
+    const input = source.connect(byId);
+
+    expect(fetchRows(input, {constraint: {'a|b': 'x', 'c': 'y'}}).rows).toEqual(
+      [weirdRows[0]],
+    );
+    expect(fetchRows(input, {constraint: {'a': 'x', 'b|c': 'y'}}).rows).toEqual(
+      [weirdRows[1]],
+    );
+    // And again, now that both shapes have templates cached.
+    expect(fetchRows(input, {constraint: {'a|b': 'x', 'c': 'y'}}).rows).toEqual(
+      [weirdRows[0]],
+    );
+    expect(fetchRows(input, {constraint: {'a': 'x', 'b|c': 'y'}}).rows).toEqual(
+      [weirdRows[1]],
+    );
+
+    // The arity separator is ambiguous the same way: a name spelling `;1|b`
+    // reads as "then one multi-constraint over column b".
+    expect(fetchRows(input, {constraint: {'a;1|b': 'u'}}).rows).toEqual([
+      weirdRows[0],
+    ]);
+    expect(
+      fetchRows(input, {
+        constraint: {a: 'x'},
+        multiConstraints: [[{b: 'n'}]],
+      }).rows,
+    ).toEqual([weirdRows[1]]);
+
+    db.close();
+  });
+
+  test('filter values survive template reuse', () => {
+    const {db, source} = setup();
+    const input = source.connect(byId, {
+      type: 'simple',
+      left: {type: 'column', name: 'group'},
+      op: '=',
+      right: {type: 'literal', value: 'g1'},
+    });
+    const request: FetchRequest = {constraint: {flag: true}};
+    expect(fetchRows(input, request).rows).toEqual([rows[0]]);
+    expect(fetchRows(input, request).rows).toEqual([rows[0]]);
+    db.close();
+  });
 });
