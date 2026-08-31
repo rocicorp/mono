@@ -94,7 +94,6 @@ export class ReplicatorService implements Replicator, Service {
     taskID: string,
     id: string,
     mode: ReplicatorMode,
-    replicaDbPath: string,
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
     statusPublisher: ReplicationStatusPublisher | null,
@@ -113,7 +112,6 @@ export class ReplicatorService implements Replicator, Service {
       changeStreamer,
       worker,
       mode,
-      replicaDbPath,
       statusPublisher,
     );
   }
