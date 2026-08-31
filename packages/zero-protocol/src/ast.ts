@@ -10,7 +10,6 @@ import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
-import type {Writable} from '../../shared/src/writable.ts';
 import type {NameMapper} from '../../zero-types/src/name-mapper.ts';
 import {rowSchema, type Row} from './data.ts';
 
@@ -481,8 +480,8 @@ function normalizeSubqueries(cond: Condition): Condition {
 /**
  * Normalizes a single level of an AST, assuming that the ASTs of its
  * subqueries (i.e. those in `related` and in correlated subquery conditions)
- * are already normalized and that the fields of its `related` entries are in
- * the canonical order (see {@link normalizedRelated}).
+ * are already normalized and that the `related` entries have the shape that
+ * {@link normalizedRelated} gives them.
  *
  * The fields in `overrides` replace those of `ast`, which saves the query
  * builder a copy of the AST it is deriving from. A field that is `undefined`
@@ -507,34 +506,20 @@ export function normalizedAST(
     limit = ast.limit,
     orderBy = ast.orderBy,
   } = overrides;
-  // The fields are assigned in the same order that transformAST() assigns
-  // them so that the JSON encoding (and thus the hash) of an AST does not
-  // depend on which of the two normalized it. Absent fields are left out
-  // rather than set to undefined, which JSON.stringify() drops anyway.
-  const normalized = {} as Writable<Required<AST>>;
-  if (schema !== undefined) {
-    normalized.schema = schema;
-  }
-  normalized.table = table;
-  if (alias !== undefined) {
-    normalized.alias = alias;
-  }
-  if (where !== undefined) {
-    normalized.where = normalizeCondition(where);
-  }
-  if (related !== undefined) {
-    normalized.related = normalizeRelated(related);
-  }
-  if (start !== undefined) {
-    normalized.start = start;
-  }
-  if (limit !== undefined) {
-    normalized.limit = limit;
-  }
-  if (orderBy !== undefined) {
-    normalized.orderBy = orderBy;
-  }
-  return normalized;
+  // Every field is written, in the same order, so that all normalized ASTs
+  // have the same shape (one hidden class) and the same JSON encoding (and
+  // thus the same hash) no matter how they were put together. The fields that
+  // are undefined are dropped by JSON.stringify() anyway.
+  return {
+    schema,
+    table,
+    alias,
+    where: where === undefined ? undefined : normalizeCondition(where),
+    related: related === undefined ? undefined : normalizeRelated(related),
+    start,
+    limit,
+    orderBy,
+  };
 }
 
 // Conjunctions and disjunctions that are known to be normalized. The query
@@ -554,28 +539,23 @@ function normalizeRelated(
 }
 
 /**
- * Puts the fields of a correlated subquery in the canonical order, which
- * {@link normalizedAST} relies on.
+ * Gives a correlated subquery the shape that a normalized AST has: every
+ * field, in a fixed order (see {@link normalizedAST}).
  */
 function normalizedRelated(
   related: CorrelatedSubquery,
   subquery: AST,
-): CorrelatedSubquery {
+): Required<CorrelatedSubquery> {
   const {correlation, hidden, system} = related;
-  const normalized = {
+  return {
     correlation: {
       parentField: correlation.parentField,
       childField: correlation.childField,
     },
-  } as Writable<CorrelatedSubquery>;
-  if (hidden !== undefined) {
-    normalized.hidden = hidden;
-  }
-  normalized.subquery = subquery;
-  if (system !== undefined) {
-    normalized.system = system;
-  }
-  return normalized;
+    hidden,
+    subquery,
+    system,
+  };
 }
 
 /**

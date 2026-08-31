@@ -28,6 +28,12 @@ describe('building the AST', () => {
     );
     expect(ast(notExists)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "op": "EXISTS",
@@ -42,6 +48,11 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "zsubq_labels",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "issueLabel",
               "where": {
                 "op": "EXISTS",
@@ -56,6 +67,11 @@ describe('building the AST', () => {
                   },
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
+                    "limit": undefined,
+                    "orderBy": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
                     "table": "label",
                     "where": {
                       "conditions": [
@@ -105,6 +121,12 @@ describe('building the AST', () => {
     const where = issueQuery.where('id', '=', '1');
     expect(ast(where)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "left": {
@@ -124,6 +146,12 @@ describe('building the AST', () => {
     const where2 = where.where('title', '=', 'foo');
     expect(ast(where2)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -167,6 +195,12 @@ describe('building the AST', () => {
       .where('ownerId', '2');
     expect(ast(where)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -230,6 +264,11 @@ describe('building the AST', () => {
     const start = issueQuery.start({id: '1'});
     expect(ast(start)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
         "start": {
           "exclusive": true,
           "row": {
@@ -237,11 +276,17 @@ describe('building the AST', () => {
           },
         },
         "table": "issue",
+        "where": undefined,
       }
     `);
     const start2 = issueQuery.start({id: '2', closed: true}, {inclusive: true});
     expect(ast(start2)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
         "start": {
           "exclusive": false,
           "row": {
@@ -250,6 +295,7 @@ describe('building the AST', () => {
           },
         },
         "table": "issue",
+        "where": undefined,
       }
     `);
   });
@@ -259,6 +305,9 @@ describe('building the AST', () => {
     const related = issueQuery.related('owner', q => q);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
         "related": [
           {
             "correlation": {
@@ -269,14 +318,24 @@ describe('building the AST', () => {
                 "ownerId",
               ],
             },
+            "hidden": undefined,
             "subquery": {
               "alias": "owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
+              "where": undefined,
             },
             "system": "client",
           },
         ],
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
+        "where": undefined,
       }
     `);
   });
@@ -286,6 +345,9 @@ describe('building the AST', () => {
     const related = issueQuery.related('labels', q => q);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
         "related": [
           {
             "correlation": {
@@ -299,6 +361,8 @@ describe('building the AST', () => {
             "hidden": true,
             "subquery": {
               "alias": "labels",
+              "limit": undefined,
+              "orderBy": undefined,
               "related": [
                 {
                   "correlation": {
@@ -309,19 +373,32 @@ describe('building the AST', () => {
                       "labelId",
                     ],
                   },
+                  "hidden": undefined,
                   "subquery": {
                     "alias": "labels",
+                    "limit": undefined,
+                    "orderBy": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
                     "table": "label",
+                    "where": undefined,
                   },
                   "system": "client",
                 },
               ],
+              "schema": undefined,
+              "start": undefined,
               "table": "issueLabel",
+              "where": undefined,
             },
             "system": "client",
           },
         ],
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
+        "where": undefined,
       }
     `);
   });
@@ -333,6 +410,9 @@ describe('building the AST', () => {
     );
     expect(ast(related)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
         "related": [
           {
             "correlation": {
@@ -343,8 +423,11 @@ describe('building the AST', () => {
                 "ownerId",
               ],
             },
+            "hidden": undefined,
             "subquery": {
               "alias": "owner",
+              "limit": undefined,
+              "orderBy": undefined,
               "related": [
                 {
                   "correlation": {
@@ -355,8 +438,11 @@ describe('building the AST', () => {
                       "id",
                     ],
                   },
+                  "hidden": undefined,
                   "subquery": {
                     "alias": "issues",
+                    "limit": undefined,
+                    "orderBy": undefined,
                     "related": [
                       {
                         "correlation": {
@@ -370,6 +456,8 @@ describe('building the AST', () => {
                         "hidden": true,
                         "subquery": {
                           "alias": "labels",
+                          "limit": undefined,
+                          "orderBy": undefined,
                           "related": [
                             {
                               "correlation": {
@@ -380,29 +468,48 @@ describe('building the AST', () => {
                                   "labelId",
                                 ],
                               },
+                              "hidden": undefined,
                               "subquery": {
                                 "alias": "labels",
+                                "limit": undefined,
+                                "orderBy": undefined,
+                                "related": undefined,
+                                "schema": undefined,
+                                "start": undefined,
                                 "table": "label",
+                                "where": undefined,
                               },
                               "system": "client",
                             },
                           ],
+                          "schema": undefined,
+                          "start": undefined,
                           "table": "issueLabel",
+                          "where": undefined,
                         },
                         "system": "client",
                       },
                     ],
+                    "schema": undefined,
+                    "start": undefined,
                     "table": "issue",
+                    "where": undefined,
                   },
                   "system": "client",
                 },
               ],
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
+              "where": undefined,
             },
             "system": "client",
           },
         ],
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
+        "where": undefined,
       }
     `);
   });
@@ -415,6 +522,9 @@ describe('building the AST', () => {
       .related('labels', lq => lq);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
         "related": [
           {
             "correlation": {
@@ -425,9 +535,16 @@ describe('building the AST', () => {
                 "id",
               ],
             },
+            "hidden": undefined,
             "subquery": {
               "alias": "comments",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "comment",
+              "where": undefined,
             },
             "system": "client",
           },
@@ -443,6 +560,8 @@ describe('building the AST', () => {
             "hidden": true,
             "subquery": {
               "alias": "labels",
+              "limit": undefined,
+              "orderBy": undefined,
               "related": [
                 {
                   "correlation": {
@@ -453,14 +572,24 @@ describe('building the AST', () => {
                       "labelId",
                     ],
                   },
+                  "hidden": undefined,
                   "subquery": {
                     "alias": "labels",
+                    "limit": undefined,
+                    "orderBy": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
                     "table": "label",
+                    "where": undefined,
                   },
                   "system": "client",
                 },
               ],
+              "schema": undefined,
+              "start": undefined,
               "table": "issueLabel",
+              "where": undefined,
             },
             "system": "client",
           },
@@ -473,14 +602,24 @@ describe('building the AST', () => {
                 "ownerId",
               ],
             },
+            "hidden": undefined,
             "subquery": {
               "alias": "owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
+              "where": undefined,
             },
             "system": "client",
           },
         ],
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
+        "where": undefined,
       }
     `);
   });
@@ -926,6 +1065,12 @@ describe('expression builder', () => {
     const expr = issueQuery.where(({cmp}) => cmp('id', '=', '1'));
     expect(ast(expr)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "left": {
@@ -947,6 +1092,12 @@ describe('expression builder', () => {
     const expr2 = issueQuery.where(f);
     expect(ast(expr2)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "left": {
@@ -975,6 +1126,12 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -1032,6 +1189,12 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -1080,6 +1243,12 @@ describe('expression builder', () => {
     expect(ast(issueQuery.where(({cmp, not}) => not(cmp('id', '=', '1')))))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "left": {
@@ -1108,6 +1277,12 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -1205,6 +1380,12 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -1243,6 +1424,12 @@ describe('expression builder', () => {
     expect(ast(issueQuery.where(({and, cmp}) => and(cmp('id', '=', '1')))))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "left": {
@@ -1264,6 +1451,12 @@ describe('expression builder', () => {
     expect(ast(issueQuery.where(({cmp, or}) => or(cmp('id', '=', '1')))))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "left": {
@@ -1290,6 +1483,12 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -1337,6 +1536,12 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [],
@@ -1360,6 +1565,12 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -1403,6 +1614,12 @@ describe('exists', () => {
     expect(ast(issueQuery.where(({exists}) => exists('owner'))))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "op": "EXISTS",
@@ -1417,7 +1634,13 @@ describe('exists', () => {
               },
               "subquery": {
                 "alias": "zsubq_owner",
+                "limit": undefined,
+                "orderBy": undefined,
+                "related": undefined,
+                "schema": undefined,
+                "start": undefined,
                 "table": "user",
+                "where": undefined,
               },
               "system": "client",
             },
@@ -1429,6 +1652,12 @@ describe('exists', () => {
     // shorthand
     expect(ast(issueQuery.whereExists('owner'))).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "op": "EXISTS",
@@ -1443,7 +1672,13 @@ describe('exists', () => {
             },
             "subquery": {
               "alias": "zsubq_owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
+              "where": undefined,
             },
             "system": "client",
           },
@@ -1459,6 +1694,12 @@ describe('exists', () => {
     expect(ast(issueQuery.whereExists('owner', q => q.where('id', '1'))))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "op": "EXISTS",
@@ -1473,6 +1714,11 @@ describe('exists', () => {
               },
               "subquery": {
                 "alias": "zsubq_owner",
+                "limit": undefined,
+                "orderBy": undefined,
+                "related": undefined,
+                "schema": undefined,
+                "start": undefined,
                 "table": "user",
                 "where": {
                   "left": {
@@ -1502,6 +1748,12 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "op": "EXISTS",
@@ -1516,6 +1768,11 @@ describe('exists', () => {
             },
             "subquery": {
               "alias": "zsubq_owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
               "where": {
                 "conditions": [
@@ -1560,6 +1817,12 @@ describe('exists', () => {
 
     expect(ast(issueQuery.whereExists('labels'))).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "op": "EXISTS",
@@ -1574,6 +1837,11 @@ describe('exists', () => {
             },
             "subquery": {
               "alias": "zsubq_labels",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "issueLabel",
               "where": {
                 "op": "EXISTS",
@@ -1588,7 +1856,13 @@ describe('exists', () => {
                   },
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
+                    "limit": undefined,
+                    "orderBy": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
                     "table": "label",
+                    "where": undefined,
                   },
                   "system": "client",
                 },
@@ -1614,6 +1888,12 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -1630,7 +1910,13 @@ describe('exists', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_comments",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
                   "table": "comment",
+                  "where": undefined,
                 },
                 "system": "client",
               },
@@ -1649,7 +1935,13 @@ describe('exists', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_owner",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
                   "table": "user",
+                  "where": undefined,
                 },
                 "system": "client",
               },
@@ -1668,6 +1960,12 @@ describe('exists', () => {
     expect(ast(issueQuery.where(({not, exists}) => not(exists('comments')))))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "op": "NOT EXISTS",
@@ -1682,7 +1980,13 @@ describe('exists', () => {
               },
               "subquery": {
                 "alias": "zsubq_comments",
+                "limit": undefined,
+                "orderBy": undefined,
+                "related": undefined,
+                "schema": undefined,
+                "start": undefined,
                 "table": "comment",
+                "where": undefined,
               },
               "system": "permissions",
             },
@@ -1700,6 +2004,12 @@ describe('exists', () => {
     ).toMatchInlineSnapshot(
       `
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "op": "NOT EXISTS",
@@ -1714,6 +2024,11 @@ describe('exists', () => {
             },
             "subquery": {
               "alias": "zsubq_labels",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "issueLabel",
               "where": {
                 "op": "EXISTS",
@@ -1728,7 +2043,13 @@ describe('exists', () => {
                   },
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
+                    "limit": undefined,
+                    "orderBy": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
                     "table": "label",
+                    "where": undefined,
                   },
                   "system": "permissions",
                 },
@@ -1755,6 +2076,12 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -1771,7 +2098,13 @@ describe('exists', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_comments",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
                   "table": "comment",
+                  "where": undefined,
                 },
                 "system": "client",
               },
@@ -1790,6 +2123,11 @@ describe('exists', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_labels",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
                   "table": "issueLabel",
                   "where": {
                     "op": "EXISTS",
@@ -1804,7 +2142,13 @@ describe('exists', () => {
                       },
                       "subquery": {
                         "alias": "zsubq_zhidden_labels",
+                        "limit": undefined,
+                        "orderBy": undefined,
+                        "related": undefined,
+                        "schema": undefined,
+                        "start": undefined,
                         "table": "label",
+                        "where": undefined,
                       },
                       "system": "client",
                     },
@@ -1828,7 +2172,13 @@ describe('exists', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_owner",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
                   "table": "user",
+                  "where": undefined,
                 },
                 "system": "client",
               },
@@ -1848,6 +2198,12 @@ describe('exists', () => {
     expect(ast(issueQuery.whereExists('owner', {flip: true})))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "flip": true,
@@ -1863,7 +2219,13 @@ describe('exists', () => {
               },
               "subquery": {
                 "alias": "zsubq_owner",
+                "limit": undefined,
+                "orderBy": undefined,
+                "related": undefined,
+                "schema": undefined,
+                "start": undefined,
                 "table": "user",
+                "where": undefined,
               },
               "system": "client",
             },
@@ -1881,6 +2243,12 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "flip": true,
@@ -1896,7 +2264,13 @@ describe('exists', () => {
             },
             "subquery": {
               "alias": "zsubq_owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
+              "where": undefined,
             },
             "system": "client",
           },
@@ -1912,6 +2286,12 @@ describe('exists', () => {
     expect(ast(issueQuery.whereExists('labels', {flip: true})))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "flip": true,
@@ -1927,6 +2307,11 @@ describe('exists', () => {
               },
               "subquery": {
                 "alias": "zsubq_labels",
+                "limit": undefined,
+                "orderBy": undefined,
+                "related": undefined,
+                "schema": undefined,
+                "start": undefined,
                 "table": "issueLabel",
                 "where": {
                   "flip": true,
@@ -1942,7 +2327,13 @@ describe('exists', () => {
                     },
                     "subquery": {
                       "alias": "zsubq_zhidden_labels",
+                      "limit": undefined,
+                      "orderBy": undefined,
+                      "related": undefined,
+                      "schema": undefined,
+                      "start": undefined,
                       "table": "label",
+                      "where": undefined,
                     },
                     "system": "client",
                   },
@@ -1966,6 +2357,12 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "flip": true,
@@ -1981,6 +2378,11 @@ describe('exists', () => {
             },
             "subquery": {
               "alias": "zsubq_owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
               "where": {
                 "left": {
@@ -2016,6 +2418,12 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -2032,6 +2440,11 @@ describe('exists', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_owner",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
                   "table": "user",
                   "where": {
                     "left": {
@@ -2063,6 +2476,11 @@ describe('exists', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_owner",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
                   "table": "user",
                   "where": {
                     "left": {
@@ -2106,7 +2524,7 @@ test('one in schema should not imply limit 1 in the ast -- the user needs to get
     table: 'issue',
     related: [
       {
-        subquery: expect.toSatisfy(sq => !('limit' in sq)),
+        subquery: expect.toSatisfy(sq => sq.limit === undefined),
       },
     ],
   });
@@ -2124,6 +2542,12 @@ test('scalar option on two-hop relationship applies to inner condition', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "alias": undefined,
+      "limit": undefined,
+      "orderBy": undefined,
+      "related": undefined,
+      "schema": undefined,
+      "start": undefined,
       "table": "issue",
       "where": {
         "flip": true,
@@ -2139,6 +2563,11 @@ test('scalar option on two-hop relationship applies to inner condition', () => {
           },
           "subquery": {
             "alias": "zsubq_labels",
+            "limit": undefined,
+            "orderBy": undefined,
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
             "table": "issueLabel",
             "where": {
               "flip": true,
@@ -2154,6 +2583,11 @@ test('scalar option on two-hop relationship applies to inner condition', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_zhidden_labels",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
                   "table": "label",
                   "where": {
                     "left": {
@@ -2194,6 +2628,12 @@ describe('whereExists with scalar option', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "op": "EXISTS",
@@ -2208,6 +2648,11 @@ describe('whereExists with scalar option', () => {
             },
             "subquery": {
               "alias": "zsubq_owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
               "where": {
                 "left": {
@@ -2242,6 +2687,12 @@ describe('whereExists with scalar option', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "op": "EXISTS",
@@ -2256,6 +2707,11 @@ describe('whereExists with scalar option', () => {
             },
             "subquery": {
               "alias": "zsubq_owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
               "where": {
                 "left": {
@@ -2316,6 +2772,12 @@ describe('whereExists with scalar option', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "op": "NOT EXISTS",
@@ -2330,6 +2792,11 @@ describe('whereExists with scalar option', () => {
             },
             "subquery": {
               "alias": "zsubq_owner",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
               "table": "user",
               "where": {
                 "left": {

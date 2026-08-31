@@ -42,7 +42,9 @@ test('stable generation', () => {
 
   expect(asQueryInternals(q).ast).toMatchInlineSnapshot(`
     {
+      "alias": undefined,
       "limit": 126,
+      "orderBy": undefined,
       "related": [
         {
           "correlation": {
@@ -53,6 +55,7 @@ test('stable generation', () => {
               "councilman",
             ],
           },
+          "hidden": undefined,
           "subquery": {
             "alias": "cleaner",
             "limit": 45,
@@ -62,6 +65,9 @@ test('stable generation', () => {
                 "asc",
               ],
             ],
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
             "table": "cleaner",
             "where": {
               "conditions": [
@@ -120,6 +126,8 @@ test('stable generation', () => {
           "system": "permissions",
         },
       ],
+      "schema": undefined,
+      "start": undefined,
       "table": "negotiation",
       "where": {
         "conditions": [
@@ -160,6 +168,11 @@ test('stable generation', () => {
               },
               "subquery": {
                 "alias": "zsubq_cleaner",
+                "limit": undefined,
+                "orderBy": undefined,
+                "related": undefined,
+                "schema": undefined,
+                "start": undefined,
                 "table": "cleaner",
                 "where": {
                   "conditions": [
@@ -188,6 +201,11 @@ test('stable generation', () => {
                         },
                         "subquery": {
                           "alias": "zsubq_cleaner",
+                          "limit": undefined,
+                          "orderBy": undefined,
+                          "related": undefined,
+                          "schema": undefined,
+                          "start": undefined,
                           "table": "cleaner",
                           "where": {
                             "conditions": [

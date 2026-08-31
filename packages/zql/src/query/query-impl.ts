@@ -300,12 +300,13 @@ export class QueryImpl<
         normalizedAST(this.#ast, {
           related: [
             ...(this.#ast.related ?? []),
-            // The fields are in the order that a normalized AST has them in.
+            // Every field, in the order that a normalized AST has them in.
             {
               correlation: {
                 parentField: sourceField,
                 childField: destField,
               },
+              hidden: undefined,
               subquery: subQuery.#ast,
               system: this.#system,
             },
@@ -355,7 +356,7 @@ export class QueryImpl<
         normalizedAST(this.#ast, {
           related: [
             ...(this.#ast.related ?? []),
-            // The fields are in the order that a normalized AST has them in.
+            // Every field, in the order that a normalized AST has them in.
             {
               correlation: {
                 parentField: firstRelation.sourceField,
@@ -371,6 +372,7 @@ export class QueryImpl<
                       parentField: secondRelation.sourceField,
                       childField: secondRelation.destField,
                     },
+                    hidden: undefined,
                     subquery: sq.#ast,
                     system: this.#system,
                   },
