@@ -1,6 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {NormalizedAST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import type {Format} from '../ivm/view.ts';
 import type {CustomQueryID} from './named.ts';
@@ -53,7 +53,7 @@ export interface QueryInternals<
    * The completed AST for this query, with any missing primary keys added to
    * orderBy and start.
    */
-  readonly ast: AST;
+  readonly ast: NormalizedAST;
 
   readonly customQueryID: CustomQueryID | undefined;
 
