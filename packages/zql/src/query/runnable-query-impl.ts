@@ -1,6 +1,6 @@
 import {
   tableAST,
-  type AST,
+  type NormalizedAST,
   type System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -52,7 +52,7 @@ export class RunnableQueryImpl<
     delegate: QueryDelegate,
     schema: TSchema,
     tableName: TTable,
-    ast: Required<AST> = tableAST(tableName),
+    ast: NormalizedAST = tableAST(tableName),
     format: Format = defaultFormat,
     system: System = 'client',
     customQueryID?: CustomQueryID,
