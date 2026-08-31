@@ -10,14 +10,13 @@ import {
   type SimpleOperator,
   type System,
   insertRelated,
-  markNormalized,
   normalizeAST,
   normalizeCondition,
   normalizedRelated,
   SUBQ_PREFIX,
   tableAST,
 } from '../../../zero-protocol/src/ast.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import {hashOfNormalizedAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {NotImplementedError} from '../error.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
@@ -144,7 +143,6 @@ export class QueryImpl<
   readonly #ast: NormalizedAST;
   readonly format: Format;
   #hash: string = '';
-  #marked = false;
   readonly #system: System;
   readonly #currentJunction: string | undefined;
   readonly customQueryID: CustomQueryID | undefined;
@@ -211,20 +209,9 @@ export class QueryImpl<
 
   hash(): string {
     if (!this.#hash) {
-      this.#hash = hashOfAST(this.#astToHandOut());
+      this.#hash = hashOfNormalizedAST(this.#ast);
     }
     return this.#hash;
-  }
-
-  // The AST is normalized by construction. Mark it as such the first time it
-  // leaves the query so that whoever normalizes it (e.g. to hash it or to
-  // send it to the server) gets it back as is.
-  #astToHandOut(): AST {
-    if (!this.#marked) {
-      markNormalized(this.#ast);
-      this.#marked = true;
-    }
-    return this.#ast;
   }
 
   one = (): Query<TTable, TSchema, TReturn | undefined> =>
@@ -590,8 +577,8 @@ export class QueryImpl<
     throw new Error(`Invalid relationship ${relationship}`);
   };
 
-  get ast(): AST {
-    return this.#astToHandOut();
+  get ast(): NormalizedAST {
+    return this.#ast;
   }
 
   expressionBuilder(): ExpressionBuilder<TTable, TSchema> {
