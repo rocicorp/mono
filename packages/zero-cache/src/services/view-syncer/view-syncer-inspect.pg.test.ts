@@ -27,6 +27,7 @@ import type {ConnectionValidation} from './connection-context-manager.ts';
 import {
   expectNoPokes,
   ISSUES_QUERY,
+  ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED,
   messages,
   nextPoke,
   permissions,
@@ -357,6 +358,39 @@ describe('view-syncer/service', () => {
         warnings: expect.any(Array),
       }),
     });
+  });
+
+  test('analyze-query with not exists', async () => {
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    await expectNoPokes(client);
+
+    const inspectId = 'test-analyze-query-not-exists';
+
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {
+        op: 'analyze-query',
+        id: inspectId,
+        ast: ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED,
+        options: {},
+      },
+    ]);
+
+    const msg = (await client.dequeue()) as InspectDownMessage;
+    expect(msg).toMatchObject([
+      'inspect',
+      {
+        id: inspectId,
+        op: 'analyze-query',
+        value: {
+          syncedRowCount: expect.any(Number),
+        },
+      },
+    ]);
   });
 
   test('analyze-query with options', async () => {

@@ -136,6 +136,7 @@ describe('analyzeQuery', () => {
         tableSpecs: expect.any(Map),
         host: expect.objectContaining({
           debug: expect.any(Object),
+          enableNotExists: true,
           getSource: expect.any(Function),
           createStorage: expect.any(Function),
           decorateSourceInput: expect.any(Function),
