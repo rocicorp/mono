@@ -8,6 +8,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {installProfileHandler} from '../types/profiler.ts';
 import {Mutator} from '../workers/mutator.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
@@ -20,6 +21,7 @@ function runWorker(
   env: NodeJS.ProcessEnv,
   ...args: string[]
 ): Promise<void> {
+  installProfileHandler(parent, 'mutator');
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   startOtelAuto(createLogContext(config, 'mutator', 0, false), 'mutator', 0);
   lc = createLogContext(config, 'mutator');
