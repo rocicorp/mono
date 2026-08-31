@@ -1,6 +1,11 @@
 import {describe, expect, test} from 'vitest';
 import {staticParam} from '../../../zero-permissions/src/permissions.ts';
-import {normalizeAST, toStaticParam} from '../../../zero-protocol/src/ast.ts';
+import {
+  normalizeAST,
+  toStaticParam,
+  type AST,
+  type Condition,
+} from '../../../zero-protocol/src/ast.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {newQuery} from './query-impl.ts';
@@ -2856,6 +2861,44 @@ describe('normalized by construction', () => {
   function expectNormalized(q: AnyQuery) {
     expect(JSON.stringify(ast(q))).toBe(JSON.stringify(normalizedCopyOf(q)));
     expect(asQueryInternals(q).hash()).toBe(hashOfAST(normalizedCopyOf(q)));
+    // The JSON encoding says nothing about the fields that are undefined, so
+    // check the shape (which V8 cares about) as well.
+    expectNormalizedShape(ast(q));
+  }
+
+  const AST_FIELDS = [
+    'schema',
+    'table',
+    'alias',
+    'where',
+    'related',
+    'start',
+    'limit',
+    'orderBy',
+  ];
+  const RELATED_FIELDS = ['correlation', 'hidden', 'subquery', 'system'];
+
+  function expectNormalizedShape(ast: AST) {
+    expect(Object.keys(ast)).toEqual(AST_FIELDS);
+    for (const related of ast.related ?? []) {
+      expect(Object.keys(related)).toEqual(RELATED_FIELDS);
+      expectNormalizedShape(related.subquery);
+    }
+    if (ast.where) {
+      expectNormalizedSubqueryShapes(ast.where);
+    }
+  }
+
+  function expectNormalizedSubqueryShapes(cond: Condition) {
+    switch (cond.type) {
+      case 'simple':
+        break;
+      case 'correlatedSubquery':
+        expectNormalizedShape(cond.related.subquery);
+        break;
+      default:
+        cond.conditions.forEach(expectNormalizedSubqueryShapes);
+    }
   }
 
   const issueQuery = newQuery(schema, 'issue');

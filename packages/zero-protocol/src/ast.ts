@@ -429,12 +429,10 @@ export function normalizeAST(ast: AST): Required<AST> {
     const {where, related} = ast;
     normalized = normalizedAST({
       ...ast,
-      ...(where !== undefined && {where: normalizeSubqueries(where)}),
-      ...(related !== undefined && {
-        related: related.map(r =>
-          normalizedRelated(r, normalizeAST(r.subquery)),
-        ),
-      }),
+      where: where && normalizeSubqueries(where),
+      related: related?.map(r =>
+        normalizedRelated({...r, subquery: normalizeAST(r.subquery)}),
+      ),
     });
     normalizeCache.set(ast, normalized);
   }
@@ -483,29 +481,15 @@ function normalizeSubqueries(cond: Condition): Condition {
  * are already normalized and that the `related` entries have the shape that
  * {@link normalizedRelated} gives them.
  *
- * The fields in `overrides` replace those of `ast`, which saves the query
- * builder a copy of the AST it is deriving from. A field that is `undefined`
- * in `overrides` keeps the value it has in `ast`.
- *
- * This lets a query builder keep its AST normalized as it builds it up, one
- * field at a time, instead of normalizing the whole tree afterwards. Pass the
- * result to {@link markNormalized} to have {@link normalizeAST} (e.g. when
- * hashing) return it as is.
+ * This lets a query builder keep its AST normalized as it builds it up
+ * instead of normalizing the whole tree afterwards. A builder that knows
+ * which of the rules a step can break at all is better off applying just
+ * those (see {@link tableAST}, {@link insertRelated} and
+ * {@link normalizeCondition}). Pass the result to {@link markNormalized} to
+ * have {@link normalizeAST} (e.g. when hashing) return it as is.
  */
-export function normalizedAST(
-  ast: AST,
-  overrides: Partial<AST> = ast,
-): Required<AST> {
-  const {
-    schema = ast.schema,
-    table = ast.table,
-    alias = ast.alias,
-    where = ast.where,
-    related = ast.related,
-    start = ast.start,
-    limit = ast.limit,
-    orderBy = ast.orderBy,
-  } = overrides;
+export function normalizedAST(ast: AST): Required<AST> {
+  const {schema, table, alias, where, related, start, limit, orderBy} = ast;
   // Every field is written, in the same order, so that all normalized ASTs
   // have the same shape (one hidden class) and the same JSON encoding (and
   // thus the same hash) no matter how they were put together. The fields that
@@ -520,6 +504,44 @@ export function normalizedAST(
     limit,
     orderBy,
   };
+}
+
+/**
+ * The normalized AST that selects a whole table. Spreading it (or any other
+ * normalized AST) and replacing a field keeps the field order, since a
+ * normalized AST has every field.
+ */
+export function tableAST(table: string, alias?: string | undefined) {
+  return {
+    schema: undefined,
+    table,
+    alias,
+    where: undefined,
+    related: undefined,
+    start: undefined,
+    limit: undefined,
+    orderBy: undefined,
+  } satisfies Required<AST>;
+}
+
+/**
+ * Adds `subquery` to the `related` of a normalized AST, at the position that
+ * keeps it sorted.
+ */
+export function insertRelated(
+  related: readonly CorrelatedSubquery[] | undefined,
+  subquery: CorrelatedSubquery,
+): readonly CorrelatedSubquery[] {
+  const normalized = normalizedRelated(subquery);
+  if (related === undefined) {
+    return [normalized];
+  }
+  // Sorting is stable, so an entry goes after the ones it compares equal to.
+  let i = related.length;
+  while (i > 0 && cmpRelated(related[i - 1], normalized) > 0) {
+    i--;
+  }
+  return related.toSpliced(i, 0, normalized);
 }
 
 // Conjunctions and disjunctions that are known to be normalized. The query
@@ -540,13 +562,13 @@ function normalizeRelated(
 
 /**
  * Gives a correlated subquery the shape that a normalized AST has: every
- * field, in a fixed order (see {@link normalizedAST}).
+ * field, in a fixed order (see {@link normalizedAST}). Its `subquery` must
+ * already be normalized.
  */
-function normalizedRelated(
+export function normalizedRelated(
   related: CorrelatedSubquery,
-  subquery: AST,
 ): Required<CorrelatedSubquery> {
-  const {correlation, hidden, system} = related;
+  const {correlation, hidden, subquery, system} = related;
   return {
     correlation: {
       parentField: correlation.parentField,
