@@ -138,7 +138,6 @@ export default async function runWorker(
     taskID,
     `${workerName}-${pid}`,
     mode,
-    dbPath,
     changeStreamer,
     workerClient,
     runningLocalChangeStreamer

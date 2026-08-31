@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
-import {deleteLiteDB} from '../../db/delete-lite-db.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
@@ -38,7 +37,6 @@ export class IncrementalSyncer {
   readonly #changeStreamer: ChangeStreamer;
   readonly #worker: WriteWorkerClient;
   readonly #mode: ReplicatorMode;
-  readonly #replicaDbPath: string;
   readonly #statusPublisher: ReplicationStatusPublisher | null;
   readonly #notifier: Notifier;
   readonly #reporter: ReplicationReportRecorder;
@@ -58,7 +56,6 @@ export class IncrementalSyncer {
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
     mode: ReplicatorMode,
-    replicaDbPath: string,
     statusPublisher: ReplicationStatusPublisher | null,
   ) {
     this.#lc = lc;
@@ -67,7 +64,6 @@ export class IncrementalSyncer {
     this.#changeStreamer = changeStreamer;
     this.#worker = worker;
     this.#mode = mode;
-    this.#replicaDbPath = replicaDbPath;
     this.#statusPublisher = statusPublisher;
     this.#notifier = new Notifier();
     this.#reporter = new ReplicationReportRecorder(lc);
@@ -148,16 +144,6 @@ export class IncrementalSyncer {
               // Signal from the replication-manager that the view-syncer must
               // shut down and restore a new backup from litestream.
               const {type, message: msg} = message[1];
-              // Explicit errors from the change-streamer (e.g. watermark too
-              // old) often indicate a problem with the replica. As a
-              // conservative measure, delete the replica before shutting down
-              // so that the process restarts from scratch even if reusing the
-              // same volume.
-              lc.warn?.(
-                `received error from change-streamer. deleting replica file`,
-                {error: message[1]},
-              );
-              deleteLiteDB(this.#replicaDbPath);
               this.stop(
                 lc,
                 // Note: The AbortError indicates a clean / intentional shutdown.
