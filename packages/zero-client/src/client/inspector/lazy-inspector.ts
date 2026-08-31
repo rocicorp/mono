@@ -20,6 +20,7 @@ import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
   inspectAnalyzeQueryDownSchema,
   inspectAuthenticatedDownSchema,
+  inspectErrorDownSchema,
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
   inspectVersionDownSchema,
@@ -109,25 +110,26 @@ function rpcNoAuthTry<T extends InspectDownBody>(
       if (body.id !== id) {
         return;
       }
-      const res = valita.test(body, downSchema);
-      if (res.ok) {
-        if (res.value.op === 'error') {
-          reject(new Error(res.value.value));
-        } else {
-          resolve(res.value.value);
-        }
+      const errorRes = valita.test(body, inspectErrorDownSchema);
+      if (errorRes.ok) {
+        reject(new Error(errorRes.value.value));
       } else {
-        // Check if we got un authenticated/false response
-        const authRes = valita.test(body, inspectAuthenticatedDownSchema);
-        if (authRes.ok) {
-          // Handle authenticated response
-          assert(
-            authRes.value.value === false,
-            'Expected unauthenticated response',
-          );
-          reject(new UnauthenticatedError());
+        const res = valita.test(body, downSchema);
+        if (res.ok) {
+          resolve(res.value.value);
         } else {
-          reject(res.error);
+          // Check if we got un authenticated/false response
+          const authRes = valita.test(body, inspectAuthenticatedDownSchema);
+          if (authRes.ok) {
+            // Handle authenticated response
+            assert(
+              authRes.value.value === false,
+              'Expected unauthenticated response',
+            );
+            reject(new UnauthenticatedError());
+          } else {
+            reject(res.error);
+          }
         }
       }
       socket.removeEventListener('message', f);
