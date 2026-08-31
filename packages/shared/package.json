@@ -32,7 +32,6 @@
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "defu": "^6.1.4",
-    "js-xxhash": "^4.0.0",
     "json-custom-numbers": "^3.1.1",
     "kasi": "^1.1.0",
     "semver": "^7.5.4"
@@ -48,6 +47,7 @@
     "@vitest/runner": "^4.1.6",
     "compare-utf8": "^0.2.0",
     "fast-check": "^3.18.0",
+    "js-xxhash": "^4.0.0",
     "mitata": "^1.0.34",
     "oxfmt": "^0.65.0",
     "package-up": "^5.0.0",

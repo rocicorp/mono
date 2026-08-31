@@ -720,9 +720,6 @@ importers:
       defu:
         specifier: ^6.1.4
         version: 6.1.7
-      js-xxhash:
-        specifier: ^4.0.0
-        version: 4.0.0
       json-custom-numbers:
         specifier: ^3.1.1
         version: 3.1.1
@@ -763,6 +760,9 @@ importers:
       fast-check:
         specifier: ^3.18.0
         version: 3.23.2
+      js-xxhash:
+        specifier: ^4.0.0
+        version: 4.0.0
       mitata:
         specifier: ^1.0.34
         version: 1.0.34
@@ -947,9 +947,6 @@ importers:
       jose:
         specifier: ^5.9.3
         version: 5.10.0
-      js-xxhash:
-        specifier: ^4.0.0
-        version: 4.0.0
       json-custom-numbers:
         specifier: ^3.1.1
         version: 3.1.1
@@ -1626,6 +1623,9 @@ importers:
       '@types/tmp':
         specifier: ^0.2.6
         version: 0.2.6
+      js-xxhash:
+        specifier: ^4.0.0
+        version: 4.0.0
       mitata:
         specifier: ^1.0.34
         version: 1.0.34
