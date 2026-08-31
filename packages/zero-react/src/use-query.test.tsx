@@ -764,6 +764,62 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('singularUndefined');
   });
 
+  test('suspendUntil defaults to partial when no options are passed', async () => {
+    const q = newMockQuery('query' + unique);
+    const zero = newMockZero('client' + unique);
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q);
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // A partial (non-complete) result must unsuspend the component.
+    view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
+    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
+  });
+
+  test('suspendUntil defaults to partial when options omit it', async () => {
+    const q = newMockQuery('query' + unique);
+    const zero = newMockZero('client' + unique);
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {ttl: '1m'});
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // A partial (non-complete) result must unsuspend the component.
+    view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
+    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
+  });
+
   describe('error handling', () => {
     const getErroredQuery = (
       message: string,
