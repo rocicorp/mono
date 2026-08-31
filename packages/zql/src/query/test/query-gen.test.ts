@@ -67,13 +67,13 @@ test('stable generation', () => {
               "conditions": [
                 {
                   "left": {
-                    "name": "petticoat",
+                    "name": "disk",
                     "type": "column",
                   },
-                  "op": ">",
+                  "op": "<=",
                   "right": {
                     "type": "literal",
-                    "value": 2928990975813516,
+                    "value": 283088937894669,
                   },
                   "type": "simple",
                 },
@@ -94,22 +94,22 @@ test('stable generation', () => {
                     "name": "petticoat",
                     "type": "column",
                   },
-                  "op": "IS",
+                  "op": ">",
                   "right": {
                     "type": "literal",
-                    "value": 0.49379559636439074,
+                    "value": 2928990975813516,
                   },
                   "type": "simple",
                 },
                 {
                   "left": {
-                    "name": "disk",
+                    "name": "petticoat",
                     "type": "column",
                   },
-                  "op": "<=",
+                  "op": "IS",
                   "right": {
                     "type": "literal",
-                    "value": 283088937894669,
+                    "value": 0.49379559636439074,
                   },
                   "type": "simple",
                 },
@@ -123,6 +123,30 @@ test('stable generation', () => {
       "table": "negotiation",
       "where": {
         "conditions": [
+          {
+            "left": {
+              "name": "archaeology",
+              "type": "column",
+            },
+            "op": "<",
+            "right": {
+              "type": "literal",
+              "value": 6559189752506948,
+            },
+            "type": "simple",
+          },
+          {
+            "left": {
+              "name": "schnitzel",
+              "type": "column",
+            },
+            "op": ">",
+            "right": {
+              "type": "literal",
+              "value": 4408598537602987,
+            },
+            "type": "simple",
+          },
           {
             "op": "NOT EXISTS",
             "related": {
@@ -140,6 +164,18 @@ test('stable generation', () => {
                 "where": {
                   "conditions": [
                     {
+                      "left": {
+                        "name": "disk",
+                        "type": "column",
+                      },
+                      "op": ">",
+                      "right": {
+                        "type": "literal",
+                        "value": 5490467414740416,
+                      },
+                      "type": "simple",
+                    },
+                    {
                       "op": "EXISTS",
                       "related": {
                         "correlation": {
@@ -155,6 +191,18 @@ test('stable generation', () => {
                           "table": "cleaner",
                           "where": {
                             "conditions": [
+                              {
+                                "left": {
+                                  "name": "disk",
+                                  "type": "column",
+                                },
+                                "op": "<",
+                                "right": {
+                                  "type": "literal",
+                                  "value": 8492975582368892,
+                                },
+                                "type": "simple",
+                              },
                               {
                                 "left": {
                                   "name": "disk",
@@ -181,18 +229,6 @@ test('stable generation', () => {
                               },
                               {
                                 "left": {
-                                  "name": "disk",
-                                  "type": "column",
-                                },
-                                "op": "<",
-                                "right": {
-                                  "type": "literal",
-                                  "value": 8492975582368892,
-                                },
-                                "type": "simple",
-                              },
-                              {
-                                "left": {
                                   "name": "thorn",
                                   "type": "column",
                                 },
@@ -211,18 +247,6 @@ test('stable generation', () => {
                       },
                       "type": "correlatedSubquery",
                     },
-                    {
-                      "left": {
-                        "name": "disk",
-                        "type": "column",
-                      },
-                      "op": ">",
-                      "right": {
-                        "type": "literal",
-                        "value": 5490467414740416,
-                      },
-                      "type": "simple",
-                    },
                   ],
                   "type": "and",
                 },
@@ -230,30 +254,6 @@ test('stable generation', () => {
               "system": "permissions",
             },
             "type": "correlatedSubquery",
-          },
-          {
-            "left": {
-              "name": "schnitzel",
-              "type": "column",
-            },
-            "op": ">",
-            "right": {
-              "type": "literal",
-              "value": 4408598537602987,
-            },
-            "type": "simple",
-          },
-          {
-            "left": {
-              "name": "archaeology",
-              "type": "column",
-            },
-            "op": "<",
-            "right": {
-              "type": "literal",
-              "value": 6559189752506948,
-            },
-            "type": "simple",
           },
         ],
         "type": "and",

@@ -1,4 +1,7 @@
 import {describe, expect, test} from 'vitest';
+import {staticParam} from '../../../zero-permissions/src/permissions.ts';
+import {normalizeAST, toStaticParam} from '../../../zero-protocol/src/ast.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
@@ -169,30 +172,6 @@ describe('building the AST', () => {
           "conditions": [
             {
               "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "1",
-              },
-              "type": "simple",
-            },
-            {
-              "left": {
-                "name": "title",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "foo",
-              },
-              "type": "simple",
-            },
-            {
-              "left": {
                 "name": "closed",
                 "type": "column",
               },
@@ -205,6 +184,18 @@ describe('building the AST', () => {
             },
             {
               "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
                 "name": "ownerId",
                 "type": "column",
               },
@@ -212,6 +203,18 @@ describe('building the AST', () => {
               "right": {
                 "type": "literal",
                 "value": "2",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "title",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "foo",
               },
               "type": "simple",
             },
@@ -416,21 +419,6 @@ describe('building the AST', () => {
           {
             "correlation": {
               "childField": [
-                "id",
-              ],
-              "parentField": [
-                "ownerId",
-              ],
-            },
-            "subquery": {
-              "alias": "owner",
-              "table": "user",
-            },
-            "system": "client",
-          },
-          {
-            "correlation": {
-              "childField": [
                 "issueId",
               ],
               "parentField": [
@@ -476,6 +464,21 @@ describe('building the AST', () => {
             },
             "system": "client",
           },
+          {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
+            },
+            "subquery": {
+              "alias": "owner",
+              "table": "user",
+            },
+            "system": "client",
+          },
         ],
         "table": "issue",
       }
@@ -501,36 +504,36 @@ test('where expressions', () => {
   `);
   expect(ast(issueQuery.where('id', '=', '1').where('closed', true)).where)
     .toMatchInlineSnapshot(`
-    {
-      "conditions": [
-        {
-          "left": {
-            "name": "id",
-            "type": "column",
+      {
+        "conditions": [
+          {
+            "left": {
+              "name": "closed",
+              "type": "column",
+            },
+            "op": "=",
+            "right": {
+              "type": "literal",
+              "value": true,
+            },
+            "type": "simple",
           },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": "1",
+          {
+            "left": {
+              "name": "id",
+              "type": "column",
+            },
+            "op": "=",
+            "right": {
+              "type": "literal",
+              "value": "1",
+            },
+            "type": "simple",
           },
-          "type": "simple",
-        },
-        {
-          "left": {
-            "name": "closed",
-            "type": "column",
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": true,
-          },
-          "type": "simple",
-        },
-      ],
-      "type": "and",
-    }
-  `);
+        ],
+        "type": "and",
+      }
+    `);
   expect(
     ast(
       issueQuery.where(({cmp, or}) =>
@@ -542,18 +545,6 @@ test('where expressions', () => {
       "conditions": [
         {
           "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": "1",
-          },
-          "type": "simple",
-        },
-        {
-          "left": {
             "name": "closed",
             "type": "column",
           },
@@ -561,6 +552,18 @@ test('where expressions', () => {
           "right": {
             "type": "literal",
             "value": true,
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
           },
           "type": "simple",
         },
@@ -633,18 +636,6 @@ test('where expressions', () => {
       "conditions": [
         {
           "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": "1",
-          },
-          "type": "simple",
-        },
-        {
-          "left": {
             "name": "closed",
             "type": "column",
           },
@@ -652,6 +643,18 @@ test('where expressions', () => {
           "right": {
             "type": "literal",
             "value": true,
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
           },
           "type": "simple",
         },
@@ -671,18 +674,6 @@ test('where expressions', () => {
       "conditions": [
         {
           "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "!=",
-          "right": {
-            "type": "literal",
-            "value": "1",
-          },
-          "type": "simple",
-        },
-        {
-          "left": {
             "name": "closed",
             "type": "column",
           },
@@ -690,6 +681,18 @@ test('where expressions', () => {
           "right": {
             "type": "literal",
             "value": true,
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "!=",
+          "right": {
+            "type": "literal",
+            "value": "1",
           },
           "type": "simple",
         },
@@ -709,18 +712,6 @@ test('where expressions', () => {
       "conditions": [
         {
           "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "!=",
-          "right": {
-            "type": "literal",
-            "value": "1",
-          },
-          "type": "simple",
-        },
-        {
-          "left": {
             "name": "closed",
             "type": "column",
           },
@@ -728,6 +719,18 @@ test('where expressions', () => {
           "right": {
             "type": "literal",
             "value": true,
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "!=",
+          "right": {
+            "type": "literal",
+            "value": "1",
           },
           "type": "simple",
         },
@@ -750,18 +753,6 @@ test('where to dnf', () => {
       "conditions": [
         {
           "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": "1",
-          },
-          "type": "simple",
-        },
-        {
-          "left": {
             "name": "closed",
             "type": "column",
           },
@@ -769,6 +760,18 @@ test('where to dnf', () => {
           "right": {
             "type": "literal",
             "value": true,
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
           },
           "type": "simple",
         },
@@ -801,18 +804,6 @@ test('where to dnf', () => {
       "conditions": [
         {
           "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": "1",
-          },
-          "type": "simple",
-        },
-        {
-          "left": {
             "name": "closed",
             "type": "column",
           },
@@ -820,6 +811,18 @@ test('where to dnf', () => {
           "right": {
             "type": "literal",
             "value": true,
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
           },
           "type": "simple",
         },
@@ -836,18 +839,6 @@ test('where to dnf', () => {
       "conditions": [
         {
           "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": "1",
-          },
-          "type": "simple",
-        },
-        {
-          "left": {
             "name": "closed",
             "type": "column",
           },
@@ -855,6 +846,18 @@ test('where to dnf', () => {
           "right": {
             "type": "literal",
             "value": true,
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
           },
           "type": "simple",
         },
@@ -977,18 +980,6 @@ describe('expression builder', () => {
           "conditions": [
             {
               "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "1",
-              },
-              "type": "simple",
-            },
-            {
-              "left": {
                 "name": "closed",
                 "type": "column",
               },
@@ -996,6 +987,18 @@ describe('expression builder', () => {
               "right": {
                 "type": "literal",
                 "value": true,
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
               },
               "type": "simple",
             },
@@ -1034,18 +1037,6 @@ describe('expression builder', () => {
           "conditions": [
             {
               "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "1",
-              },
-              "type": "simple",
-            },
-            {
-              "left": {
                 "name": "closed",
                 "type": "column",
               },
@@ -1053,6 +1044,18 @@ describe('expression builder', () => {
               "right": {
                 "type": "literal",
                 "value": true,
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
               },
               "type": "simple",
             },
@@ -1112,33 +1115,16 @@ describe('expression builder', () => {
               "conditions": [
                 {
                   "left": {
-                    "name": "id",
-                    "type": "column",
-                  },
-                  "op": "=",
-                  "right": {
-                    "type": "literal",
-                    "value": "1",
-                  },
-                  "type": "simple",
-                },
-                {
-                  "left": {
                     "name": "closed",
                     "type": "column",
                   },
-                  "op": "=",
+                  "op": "!=",
                   "right": {
                     "type": "literal",
                     "value": true,
                   },
                   "type": "simple",
                 },
-              ],
-              "type": "and",
-            },
-            {
-              "conditions": [
                 {
                   "left": {
                     "name": "id",
@@ -1151,15 +1137,32 @@ describe('expression builder', () => {
                   },
                   "type": "simple",
                 },
+              ],
+              "type": "and",
+            },
+            {
+              "conditions": [
                 {
                   "left": {
                     "name": "closed",
                     "type": "column",
                   },
-                  "op": "!=",
+                  "op": "=",
                   "right": {
                     "type": "literal",
                     "value": true,
+                  },
+                  "type": "simple",
+                },
+                {
+                  "left": {
+                    "name": "id",
+                    "type": "column",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": "1",
                   },
                   "type": "simple",
                 },
@@ -1207,18 +1210,6 @@ describe('expression builder', () => {
           "conditions": [
             {
               "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "1",
-              },
-              "type": "simple",
-            },
-            {
-              "left": {
                 "name": "closed",
                 "type": "column",
               },
@@ -1226,6 +1217,18 @@ describe('expression builder', () => {
               "right": {
                 "type": "literal",
                 "value": true,
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
               },
               "type": "simple",
             },
@@ -1292,18 +1295,6 @@ describe('expression builder', () => {
           "conditions": [
             {
               "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "1",
-              },
-              "type": "simple",
-            },
-            {
-              "left": {
                 "name": "closed",
                 "type": "column",
               },
@@ -1311,6 +1302,18 @@ describe('expression builder', () => {
               "right": {
                 "type": "literal",
                 "value": true,
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
               },
               "type": "simple",
             },
@@ -1619,15 +1622,15 @@ describe('exists', () => {
               "related": {
                 "correlation": {
                   "childField": [
-                    "id",
+                    "issueId",
                   ],
                   "parentField": [
-                    "ownerId",
+                    "id",
                   ],
                 },
                 "subquery": {
-                  "alias": "zsubq_owner",
-                  "table": "user",
+                  "alias": "zsubq_comments",
+                  "table": "comment",
                 },
                 "system": "client",
               },
@@ -1638,15 +1641,15 @@ describe('exists', () => {
               "related": {
                 "correlation": {
                   "childField": [
-                    "issueId",
+                    "id",
                   ],
                   "parentField": [
-                    "id",
+                    "ownerId",
                   ],
                 },
                 "subquery": {
-                  "alias": "zsubq_comments",
-                  "table": "comment",
+                  "alias": "zsubq_owner",
+                  "table": "user",
                 },
                 "system": "client",
               },
@@ -1760,25 +1763,6 @@ describe('exists', () => {
               "related": {
                 "correlation": {
                   "childField": [
-                    "id",
-                  ],
-                  "parentField": [
-                    "ownerId",
-                  ],
-                },
-                "subquery": {
-                  "alias": "zsubq_owner",
-                  "table": "user",
-                },
-                "system": "client",
-              },
-              "type": "correlatedSubquery",
-            },
-            {
-              "op": "EXISTS",
-              "related": {
-                "correlation": {
-                  "childField": [
                     "issueId",
                   ],
                   "parentField": [
@@ -1826,6 +1810,25 @@ describe('exists', () => {
                     },
                     "type": "correlatedSubquery",
                   },
+                },
+                "system": "client",
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "ownerId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_owner",
+                  "table": "user",
                 },
                 "system": "client",
               },
@@ -2287,15 +2290,16 @@ describe('whereExists with scalar option', () => {
       ).where,
     ).toMatchObject({
       type: 'and',
+      // Normalization sorts simple conditions before correlated subqueries.
       conditions: [
+        {
+          type: 'simple',
+          op: 'LIKE',
+        },
         {
           type: 'correlatedSubquery',
           op: 'EXISTS',
           scalar: true,
-        },
-        {
-          type: 'simple',
-          op: 'LIKE',
         },
       ],
     });
@@ -2358,17 +2362,101 @@ describe('whereExists with scalar option', () => {
 
     expect(ast(q).where).toMatchObject({
       type: 'and',
+      // Normalization sorts simple conditions before correlated subqueries.
       conditions: [
+        {
+          type: 'simple',
+          op: '=',
+        },
         {
           type: 'correlatedSubquery',
           op: 'EXISTS',
           scalar: true,
         },
-        {
-          type: 'simple',
-          op: '=',
-        },
       ],
     });
+  });
+});
+
+describe('normalized by construction', () => {
+  // `normalizeAST` caches its result on the AST it is given, so round trip
+  // through JSON to get an equivalent AST that it has not seen before and
+  // therefore actually normalizes.
+  function normalizedCopyOf(q: AnyQuery) {
+    return normalizeAST(JSON.parse(JSON.stringify(ast(q))));
+  }
+
+  function expectNormalized(q: AnyQuery) {
+    expect(JSON.stringify(ast(q))).toBe(JSON.stringify(normalizedCopyOf(q)));
+    expect(asQueryInternals(q).hash()).toBe(hashOfAST(normalizedCopyOf(q)));
+  }
+
+  const issueQuery = newQuery(schema, 'issue');
+
+  test('empty query', () => {
+    expectNormalized(issueQuery);
+  });
+
+  test('where conditions are sorted', () => {
+    expectNormalized(
+      issueQuery.where('title', 'foo').where('id', '1').where('closed', true),
+    );
+    expectNormalized(
+      issueQuery.where(({and, cmp, or}) =>
+        and(
+          or(cmp('title', 'b'), cmp('title', 'a')),
+          cmp('id', '2'),
+          cmp('id', '1'),
+        ),
+      ),
+    );
+  });
+
+  test('empty conjunctions are kept', () => {
+    expectNormalized(issueQuery.where(({and}) => and()));
+    expectNormalized(issueQuery.where(({or}) => or()));
+  });
+
+  test('related subqueries are sorted', () => {
+    expectNormalized(
+      issueQuery
+        .related('owner')
+        .related('comments', q => q.related('revisions').limit(10))
+        .related('labels'),
+    );
+  });
+
+  test('exists', () => {
+    expectNormalized(
+      issueQuery
+        .whereExists('labels', q => q.where('name', 'bug'))
+        .whereExists('comments')
+        .where('closed', false),
+    );
+  });
+
+  test('one, start, limit and orderBy', () => {
+    expectNormalized(
+      issueQuery
+        .orderBy('createdAt', 'desc')
+        .start({id: '1', createdAt: 1})
+        .limit(10)
+        .one(),
+    );
+  });
+
+  test('static query with parameters', () => {
+    const authParam = (field: string) => ({
+      [toStaticParam]: () => staticParam('authData', field),
+    });
+    const staticQuery = newStaticQuery(schema, 'issue') as AnyQuery;
+    expectNormalized(
+      staticQuery.where(({cmpLit, and}) =>
+        and(
+          cmpLit(authParam('role'), '=', 'admin'),
+          cmpLit(authParam('org'), '=', 'rocicorp'),
+        ),
+      ),
+    );
   });
 });

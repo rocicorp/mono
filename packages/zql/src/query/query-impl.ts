@@ -8,6 +8,9 @@ import {
   type Parameter,
   type SimpleOperator,
   type System,
+  markNormalized,
+  normalizeAST,
+  normalizedAST,
   SUBQ_PREFIX,
 } from '../../../zero-protocol/src/ast.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
@@ -55,7 +58,14 @@ export function newQuery<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
 >(schema: TSchema, table: TTable): Query<TTable, TSchema> {
-  return newQueryImpl(schema, table, {table}, defaultFormat, 'client');
+  // A table on its own is already normalized.
+  return newQueryInternal(
+    schema,
+    table,
+    normalizedAST({table}),
+    defaultFormat,
+    'client',
+  );
 }
 
 export function newQueryImpl<
@@ -66,6 +76,22 @@ export function newQueryImpl<
   schema: TSchema,
   tableName: TTable,
   ast: AST,
+  format: Format,
+  system: System,
+): QueryImpl<TTable, TSchema, TReturn> {
+  // This is the entry point for ASTs that were not built by QueryImpl, so
+  // normalize it here to establish the invariant that #ast is normalized.
+  return newQueryInternal(schema, tableName, normalizeAST(ast), format, system);
+}
+
+function newQueryInternal<
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
+  TReturn = PullRow<TTable, TSchema>,
+>(
+  schema: TSchema,
+  tableName: TTable,
+  ast: Required<AST>,
   format: Format,
   system: System,
 ): QueryImpl<TTable, TSchema, TReturn> {
@@ -90,6 +116,12 @@ export function newQueryImpl<
   return inner(tableName, ast, format, undefined, undefined);
 }
 
+/**
+ * The AST of a QueryImpl is always normalized: every AST it builds is built
+ * with `normalizedAST()` and the ASTs that come in from the outside are
+ * normalized by {@link newQueryImpl}. Constructing one directly with an AST
+ * that is not normalized breaks that invariant (and with it the query hash).
+ */
 export class QueryImpl<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
@@ -106,6 +138,7 @@ export class QueryImpl<
   readonly #ast: AST;
   readonly format: Format;
   #hash: string = '';
+  #marked = false;
   readonly #system: System;
   readonly #currentJunction: string | undefined;
   readonly customQueryID: CustomQueryID | undefined;
@@ -172,18 +205,26 @@ export class QueryImpl<
 
   hash(): string {
     if (!this.#hash) {
-      this.#hash = hashOfAST(this.#ast);
+      this.#hash = hashOfAST(this.#astToHandOut());
     }
     return this.#hash;
+  }
+
+  // The AST is normalized by construction. Mark it as such the first time it
+  // leaves the query so that whoever normalizes it (e.g. to hash it or to
+  // send it to the server) gets it back as is.
+  #astToHandOut(): AST {
+    if (!this.#marked) {
+      markNormalized(this.#ast);
+      this.#marked = true;
+    }
+    return this.#ast;
   }
 
   one = (): Query<TTable, TSchema, TReturn | undefined> =>
     this.#newQuery(
       this.#tableName,
-      {
-        ...this.#ast,
-        limit: 1,
-      },
+      normalizedAST(this.#ast, {limit: 1}),
       {
         ...this.format,
         singular: true,
@@ -223,10 +264,10 @@ export class QueryImpl<
       const {destSchema, destField, sourceField, cardinality} = related[0];
       const q: AnyQuery = this.#newQuery(
         destSchema,
-        {
+        normalizedAST({
           table: destSchema,
           alias: relationship,
-        },
+        }),
         {
           relationships: {},
           singular: cardinality === 'one',
@@ -256,20 +297,20 @@ export class QueryImpl<
 
       return this.#newQuery(
         this.#tableName,
-        {
-          ...this.#ast,
+        normalizedAST(this.#ast, {
           related: [
             ...(this.#ast.related ?? []),
+            // The fields are in the order that a normalized AST has them in.
             {
-              system: this.#system,
               correlation: {
                 parentField: sourceField,
                 childField: destField,
               },
               subquery: subQuery.#ast,
+              system: this.#system,
             },
           ],
-        },
+        }),
         {
           ...this.format,
           relationships: {
@@ -290,10 +331,10 @@ export class QueryImpl<
         cb(
           this.#newQuery(
             destSchema,
-            {
+            normalizedAST({
               table: destSchema,
               alias: relationship,
-            },
+            }),
             {
               relationships: {},
               singular: secondRelation.cardinality === 'one',
@@ -311,34 +352,34 @@ export class QueryImpl<
 
       return this.#newQuery(
         this.#tableName,
-        {
-          ...this.#ast,
+        normalizedAST(this.#ast, {
           related: [
             ...(this.#ast.related ?? []),
+            // The fields are in the order that a normalized AST has them in.
             {
-              system: this.#system,
               correlation: {
                 parentField: firstRelation.sourceField,
                 childField: firstRelation.destField,
               },
               hidden: true,
-              subquery: {
+              subquery: normalizedAST({
                 table: junctionSchema,
                 alias: relationship,
                 related: [
                   {
-                    system: this.#system,
                     correlation: {
                       parentField: secondRelation.sourceField,
                       childField: secondRelation.destField,
                     },
                     subquery: sq.#ast,
+                    system: this.#system,
                   },
                 ],
-              },
+              }),
+              system: this.#system,
             },
           ],
-        },
+        }),
         {
           ...this.format,
           relationships: {
@@ -388,10 +429,7 @@ export class QueryImpl<
 
     return this.#newQuery(
       this.#tableName,
-      {
-        ...this.#ast,
-        where,
-      },
+      normalizedAST(this.#ast, {where}),
       this.format,
       this.customQueryID,
       this.#currentJunction,
@@ -404,13 +442,12 @@ export class QueryImpl<
   ): Query<TTable, TSchema, TReturn> =>
     this.#newQuery(
       this.#tableName,
-      {
-        ...this.#ast,
+      normalizedAST(this.#ast, {
         start: {
           row,
           exclusive: !opts?.inclusive,
         },
-      },
+      }),
       this.format,
       this.customQueryID,
       this.#currentJunction,
@@ -432,10 +469,7 @@ export class QueryImpl<
 
     return this.#newQuery(
       this.#tableName,
-      {
-        ...this.#ast,
-        limit,
-      },
+      normalizedAST(this.#ast, {limit}),
       this.format,
       this.customQueryID,
       this.#currentJunction,
@@ -454,10 +488,9 @@ export class QueryImpl<
     }
     return this.#newQuery(
       this.#tableName,
-      {
-        ...this.#ast,
+      normalizedAST(this.#ast, {
         orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
-      },
+      }),
       this.format,
       this.customQueryID,
       this.#currentJunction,
@@ -484,16 +517,19 @@ export class QueryImpl<
         cb(
           this.#newQuery(
             destTableName,
-            {
+            normalizedAST({
               table: destTableName,
               alias: `${SUBQ_PREFIX}${relationship}`,
-            },
+            }),
             defaultFormat,
             this.customQueryID,
             undefined,
           ) as AnyQuery,
         ),
       );
+      // Unlike the entries of `related`, the correlated subqueries of a
+      // condition keep the order their fields are written in: normalization
+      // does not reorder them either.
       return {
         type: 'correlatedSubquery',
         related: {
@@ -521,10 +557,10 @@ export class QueryImpl<
       const queryToDest = cb(
         this.#newQuery(
           destSchema,
-          {
+          normalizedAST({
             table: destSchema,
             alias: `${SUBQ_PREFIX}zhidden_${relationship}`,
-          },
+          }),
           defaultFormat,
           this.customQueryID,
           relationship,
@@ -539,7 +575,7 @@ export class QueryImpl<
             parentField: firstRelation.sourceField,
             childField: firstRelation.destField,
           },
-          subquery: {
+          subquery: normalizedAST({
             table: junctionSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
             where: {
@@ -556,7 +592,7 @@ export class QueryImpl<
               ...(flip !== undefined ? {flip} : {}),
               ...(scalar !== undefined ? {scalar} : {}),
             },
-          },
+          }),
         },
         op: 'EXISTS',
         ...(flip !== undefined ? {flip} : {}),
@@ -567,7 +603,7 @@ export class QueryImpl<
   };
 
   get ast(): AST {
-    return this.#ast;
+    return this.#astToHandOut();
   }
 
   expressionBuilder(): ExpressionBuilder<TTable, TSchema> {

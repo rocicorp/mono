@@ -579,17 +579,20 @@ suite('buildPlanGraph', () => {
 
       expect(plans.plan.joins).toHaveLength(3);
 
-      // First join (flip: true) should be flipped and not flippable
-      expect(plans.plan.joins[0].type).toBe('flipped');
+      // The joins are in the order of the normalized AST, which sorts the
+      // EXISTS conditions by alias: comments, likes, posts.
+
+      // comments (flip: false) should be semi and not flippable
+      expect(plans.plan.joins[0].type).toBe('semi');
       expect(plans.plan.joins[0].isFlippable()).toBe(false);
 
-      // Second join (flip: false) should be semi and not flippable
+      // likes (flip: undefined) should be semi and flippable
       expect(plans.plan.joins[1].type).toBe('semi');
-      expect(plans.plan.joins[1].isFlippable()).toBe(false);
+      expect(plans.plan.joins[1].isFlippable()).toBe(true);
 
-      // Third join (flip: undefined) should be semi and flippable
-      expect(plans.plan.joins[2].type).toBe('semi');
-      expect(plans.plan.joins[2].isFlippable()).toBe(true);
+      // posts (flip: true) should be flipped and not flippable
+      expect(plans.plan.joins[2].type).toBe('flipped');
+      expect(plans.plan.joins[2].isFlippable()).toBe(false);
     });
 
     test('reset() restores join to initial type', () => {

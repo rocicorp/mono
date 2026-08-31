@@ -10,7 +10,13 @@ import {
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
 import type {AST} from './ast.ts';
-import {astSchema, mapAST, normalizeAST} from './ast.ts';
+import {
+  astSchema,
+  mapAST,
+  markNormalized,
+  normalizeAST,
+  normalizedAST,
+} from './ast.ts';
 import {PROTOCOL_VERSION} from './protocol-version.ts';
 
 test('fields are placed into correct positions', () => {
@@ -290,16 +296,9 @@ test('related subqueries are sorted', () => {
             "a",
           ],
         },
-        "hidden": undefined,
         "subquery": {
           "alias": "alias1",
-          "limit": undefined,
-          "orderBy": undefined,
-          "related": undefined,
-          "schema": undefined,
-          "start": undefined,
           "table": "table",
-          "where": undefined,
         },
         "system": "client",
       },
@@ -312,16 +311,9 @@ test('related subqueries are sorted', () => {
             "a",
           ],
         },
-        "hidden": undefined,
         "subquery": {
           "alias": "alias2",
-          "limit": undefined,
-          "orderBy": undefined,
-          "related": undefined,
-          "schema": undefined,
-          "start": undefined,
           "table": "table",
-          "where": undefined,
         },
         "system": "client",
       },
@@ -692,4 +684,133 @@ test('protocol version', () => {
   // PROTOCOL_VERSION and update the expected values.
   expect(hash).toEqual('1dsf0svqtvyhv');
   expect(PROTOCOL_VERSION).toBe(52);
+});
+
+test('normalizedAST matches normalizeAST', () => {
+  const ast: AST = {
+    table: 'table',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'b'},
+          op: '=',
+          right: {type: 'literal', value: 1},
+        },
+        {
+          type: 'and',
+          conditions: [
+            {
+              type: 'simple',
+              left: {type: 'column', name: 'a'},
+              op: '=',
+              right: {type: 'literal', value: 2},
+            },
+          ],
+        },
+      ],
+    },
+    related: [
+      {
+        correlation: {parentField: ['a'], childField: ['a']},
+        subquery: {table: 'table', alias: 'b'},
+      },
+      {
+        correlation: {parentField: ['a'], childField: ['a']},
+        subquery: {table: 'table', alias: 'a'},
+      },
+    ],
+    limit: 10,
+  };
+
+  // The subqueries of this AST are already normalized, so normalizing a single
+  // level is enough.
+  expect(JSON.stringify(normalizedAST(ast))).toBe(
+    JSON.stringify(normalizeAST(ast)),
+  );
+});
+
+test('a marked normalized AST is its own normalization', () => {
+  const normalized = markNormalized(
+    normalizedAST({
+      schema: 'schema',
+      table: 'table',
+      alias: 'alias',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'a'},
+        op: '=',
+        right: {type: 'literal', value: 1},
+      },
+      limit: 10,
+      orderBy: [['a', 'asc']],
+    }),
+  );
+  expect(normalizeAST(normalized)).toBe(normalized);
+});
+
+test('empty conjunctions are preserved', () => {
+  // An empty 'and' is always true and an empty 'or' is always false, so
+  // neither can be dropped.
+  for (const type of ['and', 'or'] as const) {
+    expect(
+      normalizeAST({table: 'table', where: {type, conditions: []}}).where,
+    ).toEqual({type, conditions: []});
+  }
+
+  // ... but a nested conjunction of the same type still collapses.
+  expect(
+    normalizeAST({
+      table: 'table',
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'a'},
+            op: '=',
+            right: {type: 'literal', value: 1},
+          },
+          {type: 'and', conditions: []},
+        ],
+      },
+    }).where,
+  ).toEqual({
+    type: 'simple',
+    left: {type: 'column', name: 'a'},
+    op: '=',
+    right: {type: 'literal', value: 1},
+  });
+});
+
+test('static parameters are ordered', () => {
+  const cond = (anchor: 'authData' | 'preMutationRow', field: string) =>
+    ({
+      type: 'simple',
+      left: {type: 'static', anchor, field},
+      op: '=',
+      right: {type: 'literal', value: 1},
+    }) as const;
+
+  const {where} = normalizeAST({
+    table: 'table',
+    where: {
+      type: 'and',
+      conditions: [
+        cond('preMutationRow', 'a'),
+        cond('authData', 'b'),
+        cond('authData', 'a'),
+      ],
+    },
+  });
+
+  expect(where).toEqual({
+    type: 'and',
+    conditions: [
+      cond('authData', 'a'),
+      cond('authData', 'b'),
+      cond('preMutationRow', 'a'),
+    ],
+  });
 });

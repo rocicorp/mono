@@ -373,25 +373,6 @@ describe('completeOrdering', () => {
               "type": "simple",
             },
             {
-              "op": "EXISTS",
-              "related": {
-                "correlation": {
-                  "childField": [
-                    "id",
-                  ],
-                  "parentField": [
-                    "ownerId",
-                  ],
-                },
-                "subquery": {
-                  "alias": "zsubq_owner",
-                  "table": "user",
-                },
-                "system": "client",
-              },
-              "type": "correlatedSubquery",
-            },
-            {
               "conditions": [
                 {
                   "left": {
@@ -427,6 +408,25 @@ describe('completeOrdering', () => {
               ],
               "type": "or",
             },
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "ownerId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_owner",
+                  "table": "user",
+                },
+                "system": "client",
+              },
+              "type": "correlatedSubquery",
+            },
           ],
           "type": "and",
         },
@@ -455,31 +455,6 @@ describe('completeOrdering', () => {
                   "value": "1",
                 },
                 "type": "simple",
-              },
-              {
-                "op": "EXISTS",
-                "related": {
-                  "correlation": {
-                    "childField": [
-                      "id",
-                    ],
-                    "parentField": [
-                      "ownerId",
-                    ],
-                  },
-                  "subquery": {
-                    "alias": "zsubq_owner",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "user",
-                  },
-                  "system": "client",
-                },
-                "type": "correlatedSubquery",
               },
               {
                 "conditions": [
@@ -522,6 +497,31 @@ describe('completeOrdering', () => {
                   },
                 ],
                 "type": "or",
+              },
+              {
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "ownerId",
+                    ],
+                  },
+                  "subquery": {
+                    "alias": "zsubq_owner",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "user",
+                  },
+                  "system": "client",
+                },
+                "type": "correlatedSubquery",
               },
             ],
             "type": "and",

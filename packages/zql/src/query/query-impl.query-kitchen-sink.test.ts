@@ -445,21 +445,6 @@ describe('kitchen sink query', () => {
               {
                 "correlation": {
                   "childField": [
-                    "id",
-                  ],
-                  "parentField": [
-                    "ownerId",
-                  ],
-                },
-                "subquery": {
-                  "alias": "owner",
-                  "table": "user",
-                },
-                "system": "client",
-              },
-              {
-                "correlation": {
-                  "childField": [
                     "issueId",
                   ],
                   "parentField": [
@@ -536,6 +521,21 @@ describe('kitchen sink query', () => {
                 },
                 "system": "client",
               },
+              {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "ownerId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "owner",
+                  "table": "user",
+                },
+                "system": "client",
+              },
             ],
             "start": {
               "exclusive": true,
@@ -552,6 +552,18 @@ describe('kitchen sink query', () => {
               "conditions": [
                 {
                   "left": {
+                    "name": "closed",
+                    "type": "column",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": false,
+                  },
+                  "type": "simple",
+                },
+                {
+                  "left": {
                     "name": "ownerId",
                     "type": "column",
                   },
@@ -563,18 +575,6 @@ describe('kitchen sink query', () => {
                       "002",
                       "003",
                     ],
-                  },
-                  "type": "simple",
-                },
-                {
-                  "left": {
-                    "name": "closed",
-                    "type": "column",
-                  },
-                  "op": "=",
-                  "right": {
-                    "type": "literal",
-                    "value": false,
                   },
                   "type": "simple",
                 },
