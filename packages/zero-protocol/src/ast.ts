@@ -419,9 +419,28 @@ function transformWhere(
   };
 }
 
-const normalizeCache = new WeakMap<AST, Required<AST>>();
+declare const normalizedTag: unique symbol;
 
-export function normalizeAST(ast: AST): Required<AST> {
+/**
+ * An {@link AST} in its normalized form: `related` is sorted, `where` is
+ * flattened and sorted, and every field is present, in a fixed order. Two ASTs
+ * that describe the same query have the same JSON encoding, and thus the same
+ * hash, once normalized.
+ *
+ * The tag only exists in the type, so the only way to get one is from
+ * {@link normalizeAST}, {@link normalizedAST} or {@link tableAST}. Spreading
+ * one keeps the tag, which is what lets a query builder derive a normalized
+ * AST from another one by replacing a field it knows to be safe.
+ */
+export type NormalizedAST = Required<AST> & {readonly [normalizedTag]: true};
+
+function asNormalized(ast: Required<AST>): NormalizedAST {
+  return ast as NormalizedAST;
+}
+
+const normalizeCache = new WeakMap<AST, NormalizedAST>();
+
+export function normalizeAST(ast: AST): NormalizedAST {
   let normalized = normalizeCache.get(ast);
   if (!normalized) {
     // normalizedAST() normalizes a single level, so normalize the subqueries
@@ -440,14 +459,14 @@ export function normalizeAST(ast: AST): Required<AST> {
 }
 
 /**
- * Registers `ast`, which must already be normalized, as its own
- * normalization, so that {@link normalizeAST} returns it as is.
+ * Registers `ast` as its own normalization, so that {@link normalizeAST}
+ * returns it as is.
  *
  * Only ASTs that are handed out are worth marking. Marking every AST that a
  * query builder creates on the way just fills the cache with garbage.
  */
-export function markNormalized<T extends AST>(ast: T): T {
-  normalizeCache.set(ast, ast as Required<AST>);
+export function markNormalized(ast: NormalizedAST): NormalizedAST {
+  normalizeCache.set(ast, ast);
   return ast;
 }
 
@@ -488,13 +507,13 @@ function normalizeSubqueries(cond: Condition): Condition {
  * {@link normalizeCondition}). Pass the result to {@link markNormalized} to
  * have {@link normalizeAST} (e.g. when hashing) return it as is.
  */
-export function normalizedAST(ast: AST): Required<AST> {
+export function normalizedAST(ast: AST): NormalizedAST {
   const {schema, table, alias, where, related, start, limit, orderBy} = ast;
   // Every field is written, in the same order, so that all normalized ASTs
   // have the same shape (one hidden class) and the same JSON encoding (and
   // thus the same hash) no matter how they were put together. The fields that
   // are undefined are dropped by JSON.stringify() anyway.
-  return {
+  return asNormalized({
     schema,
     table,
     alias,
@@ -503,7 +522,7 @@ export function normalizedAST(ast: AST): Required<AST> {
     start,
     limit,
     orderBy,
-  };
+  });
 }
 
 /**
@@ -511,8 +530,11 @@ export function normalizedAST(ast: AST): Required<AST> {
  * normalized AST) and replacing a field keeps the field order, since a
  * normalized AST has every field.
  */
-export function tableAST(table: string, alias?: string | undefined) {
-  return {
+export function tableAST(
+  table: string,
+  alias?: string | undefined,
+): NormalizedAST {
+  return asNormalized({
     schema: undefined,
     table,
     alias,
@@ -521,7 +543,7 @@ export function tableAST(table: string, alias?: string | undefined) {
     start: undefined,
     limit: undefined,
     orderBy: undefined,
-  } satisfies Required<AST>;
+  });
 }
 
 /**
@@ -617,6 +639,11 @@ export function normalizeCondition(cond: Condition): Condition {
   return normalized;
 }
 
+/**
+ * Maps the table and column names of `ast`. The result is not a
+ * {@link NormalizedAST} even if `ast` was normalized: the names it sorts by
+ * are the ones that changed.
+ */
 export function mapAST(ast: AST, mapper: NameMapper) {
   return transformAST(ast, {
     tableName: table => mapper.tableName(table),
