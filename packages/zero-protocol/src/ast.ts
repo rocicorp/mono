@@ -459,18 +459,6 @@ export function normalizeAST(ast: AST): NormalizedAST {
 }
 
 /**
- * Registers `ast` as its own normalization, so that {@link normalizeAST}
- * returns it as is.
- *
- * Only ASTs that are handed out are worth marking. Marking every AST that a
- * query builder creates on the way just fills the cache with garbage.
- */
-export function markNormalized(ast: NormalizedAST): NormalizedAST {
-  normalizeCache.set(ast, ast);
-  return ast;
-}
-
-/**
  * Normalizes the ASTs of the correlated subqueries of `cond`. The condition
  * itself is normalized by {@link normalizeCondition}.
  */
@@ -504,8 +492,7 @@ function normalizeSubqueries(cond: Condition): Condition {
  * instead of normalizing the whole tree afterwards. A builder that knows
  * which of the rules a step can break at all is better off applying just
  * those (see {@link tableAST}, {@link insertRelated} and
- * {@link normalizeCondition}). Pass the result to {@link markNormalized} to
- * have {@link normalizeAST} (e.g. when hashing) return it as is.
+ * {@link normalizeCondition}).
  */
 export function normalizedAST(ast: AST): NormalizedAST {
   const {schema, table, alias, where, related, start, limit, orderBy} = ast;
@@ -719,16 +706,62 @@ function compareValuePosition(a: ValuePosition, b: ValuePosition): number {
   switch (a.type) {
     case 'literal':
       assert(b.type === 'literal', 'Expected literal type for comparison');
-      return compareUTF8(String(a.value), String(b.value));
+      return cmpLiteralValue(a.value, b.value);
     case 'column':
       assert(b.type === 'column', 'Expected column type for comparison');
       return compareUTF8(a.name, b.name);
     case 'static':
       assert(b.type === 'static', 'Expected static type for comparison');
+      // A field is a string or a path of strings, which cmpLiteralValue()
+      // tells apart.
       return (
-        compareUTF8(a.anchor, b.anchor) ||
-        compareUTF8(String(a.field), String(b.field))
+        compareUTF8(a.anchor, b.anchor) || cmpLiteralValue(a.field, b.field)
       );
+  }
+}
+
+// null < boolean < number < string < array. Ordering values of different
+// types by their string form would make distinct values compare equal (['a',
+// 'b'] and 'a,b', or 1 and '1'), which would leave their order up to the
+// order they were written in, and with it the hash of the query.
+const LITERAL_VALUE_TYPES = ['object', 'boolean', 'number', 'string'];
+
+function literalValueType(value: LiteralValue): number {
+  return Array.isArray(value)
+    ? LITERAL_VALUE_TYPES.length
+    : LITERAL_VALUE_TYPES.indexOf(typeof value);
+}
+
+function cmpLiteralValue(a: LiteralValue, b: LiteralValue): number {
+  const type = literalValueType(a) - literalValueType(b);
+  if (type !== 0) {
+    return type;
+  }
+
+  if (Array.isArray(a)) {
+    assert(Array.isArray(b), 'Expected array for comparison');
+    for (let i = 0; i < a.length && i < b.length; i++) {
+      const val = cmpLiteralValue(a[i], b[i]);
+      if (val !== 0) {
+        return val;
+      }
+    }
+    // prefixes first
+    return a.length - b.length;
+  }
+
+  switch (typeof a) {
+    case 'string':
+      assert(typeof b === 'string', 'Expected string for comparison');
+      return compareUTF8(a, b);
+    case 'number':
+      assert(typeof b === 'number', 'Expected number for comparison');
+      return a < b ? -1 : a > b ? 1 : 0;
+    case 'boolean':
+      assert(typeof b === 'boolean', 'Expected boolean for comparison');
+      return Number(a) - Number(b);
+    default:
+      return 0; // null
   }
 }
 
