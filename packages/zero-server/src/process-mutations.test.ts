@@ -369,7 +369,9 @@ describe('handleMutateRequest', () => {
       ),
     );
     expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   test('logged-out undefined responses use null userID', async () => {
@@ -447,8 +449,11 @@ describe('handleMutateRequest', () => {
 
     // Post-commit errors: LMID is always updated
     expect(recordedLMIDs).toEqual([1, 2]);
-    // writeMutationResult is not called because they were successful mutations
-    expect(recordedResults).toEqual([]);
+    // writeMutationResult is called for successful mutations within the transaction
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+      {id: {clientID: 'cid', id: 2}, result: {}},
+    ]);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'PushProcessor',
@@ -483,7 +488,6 @@ describe('handleMutateRequest', () => {
 
     // Transaction errors: LMID is updated for all mutations
     expect(recordedLMIDs).toEqual([1, 2]);
-    // writeMutationResult is only called for the error
     expect(recordedResults).toEqual([
       {
         id: {clientID: 'cid', id: 1},
@@ -492,6 +496,7 @@ describe('handleMutateRequest', () => {
           message: expect.stringContaining('mutator exploded'),
         },
       },
+      {id: {clientID: 'cid', id: 2}, result: {}},
     ]);
   });
 
@@ -529,7 +534,6 @@ describe('handleMutateRequest', () => {
 
     // LMID is updated only once for each mutation
     expect(recordedLMIDs).toEqual([1, 2, 3, 4]);
-    // writeMutationResult is only called for failed mutations
     expect(recordedResults).toEqual([
       {
         id: {clientID: 'cid', id: 1},
@@ -538,6 +542,7 @@ describe('handleMutateRequest', () => {
           message: expect.stringContaining('first mutation failed'),
         },
       },
+      {id: {clientID: 'cid', id: 2}, result: {}},
       {
         id: {clientID: 'cid', id: 3},
         result: {
@@ -546,6 +551,7 @@ describe('handleMutateRequest', () => {
           details: {code: 'CUSTOM_ERROR'},
         },
       },
+      {id: {clientID: 'cid', id: 4}, result: {}},
     ]);
   });
 
@@ -616,7 +622,9 @@ describe('handleMutateRequest', () => {
 
     // The first mutation's LMID is persisted
     expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   test('returns parse error when the push body validation fails', async () => {
@@ -828,7 +836,9 @@ describe('handleMutateRequest', () => {
     });
 
     expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   test('returns already processed response when mutation ID is too low', async () => {
@@ -876,8 +886,10 @@ describe('handleMutateRequest', () => {
 
     // only the second mutation's LMID is persisted, since the first one is considered already processed
     expect(recordedLMIDs).toEqual([2]);
-    // Neither already processed nor successful mutations call writeMutationResult
-    expect(recordedResults).toEqual([]);
+    // already processed mutations don't write a result; successful ones do
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 2}, result: {}},
+    ]);
   });
 
   test('returns database error when transaction fails during execute phase', async () => {
@@ -914,7 +926,9 @@ describe('handleMutateRequest', () => {
 
     // only the first mutation's LMID is persisted
     expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   test.each([
@@ -981,8 +995,8 @@ describe('handleMutateRequest', () => {
 
       // Both LMIDs are persisted (first attempt for m1, retry for m2)
       expect(recordedLMIDs).toEqual([1, 2]);
-      // The retry persists the error result
       expect(recordedResults).toEqual([
+        {id: {clientID: 'cid', id: 1}, result: {}},
         {
           id: {clientID: 'cid', id: 2},
           result: {
@@ -1038,7 +1052,9 @@ describe('handleMutateRequest', () => {
 
       // First mutation's LMID is persisted, but the failing mutation's is not
       expect(recordedLMIDs).toEqual([1]);
-      expect(recordedResults).toEqual([]);
+      expect(recordedResults).toEqual([
+        {id: {clientID: 'cid', id: 1}, result: {}},
+      ]);
     },
   );
 
@@ -1111,8 +1127,9 @@ describe('handleMutateRequest', () => {
       ),
     );
     expect(recordedLMIDs).toEqual([1]);
-    // Successful mutations don't call writeMutationResult
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   describe('legacy positional API', () => {
@@ -1221,7 +1238,7 @@ type MutatorInvoker = (
   name: string,
   tx: unknown,
   args: unknown,
-) => Promise<void>;
+) => Promise<ReadonlyJSONValue | void>;
 
 const mutatorInvokers: Array<{name: string; invoke: MutatorInvoker}> = [
   {
@@ -1421,3 +1438,209 @@ describe.each(mutatorInvokers)(
     });
   },
 );
+
+describe('mutator return values', () => {
+  let consoleErrorSpy: MockInstance<typeof console.error>;
+  let consoleWarnSpy: MockInstance<typeof console.warn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+  });
+
+  test('legacy CustomMutatorDefs: return value appears in MutationResponse.result.data', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const mutators: CustomMutatorDefs<undefined> = {
+      createItem: (_tx, _args, _ctx) => Promise.resolve({id: 'abc-123'}),
+    };
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          getMutation(mutators, name)(tx, args, undefined),
+        ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({name: 'createItem'})]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [{id: {clientID: 'cid', id: 1}, result: {data: {id: 'abc-123'}}}],
+        null,
+      ),
+    );
+  });
+
+  test('legacy CustomMutatorDefs: void return leaves result.data undefined', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const mutators: CustomMutatorDefs<undefined> = {
+      noop: (_tx, _args, _ctx) => Promise.resolve(),
+    };
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          getMutation(mutators, name)(tx, args, undefined),
+        ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({name: 'noop'})]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse([{id: {clientID: 'cid', id: 1}, result: {}}], null),
+    );
+  });
+
+  test('defineMutator: return value appears in MutationResponse.result.data', async () => {
+    const createItem = defineMutatorWithType<typeof testSchema>()(
+      ({args}: {args: {name: string}; ctx: unknown; tx: unknown}) =>
+        Promise.resolve({id: 'new-' + args.name}),
+    );
+
+    const mutators = defineMutatorsWithType<typeof testSchema>()({
+      item: {create: createItem},
+    });
+
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          mustGetMutator(mutators, name).fn({
+            tx: tx as never,
+            args,
+            ctx: undefined,
+          }),
+        ),
+      query: baseQuery,
+      body: makePushBody([
+        makeCustomMutation({name: 'item.create', args: [{name: 'widget'}]}),
+      ]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [{id: {clientID: 'cid', id: 1}, result: {data: {id: 'new-widget'}}}],
+        null,
+      ),
+    );
+  });
+
+  test('defineMutator: void return leaves result.data undefined', async () => {
+    const noopMutator = defineMutatorWithType<typeof testSchema>()(() =>
+      Promise.resolve(),
+    );
+
+    const mutators = defineMutatorsWithType<typeof testSchema>()({
+      item: {noop: noopMutator},
+    });
+
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          mustGetMutator(mutators, name).fn({
+            tx: tx as never,
+            args,
+            ctx: undefined,
+          }),
+        ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({name: 'item.noop'})]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse([{id: {clientID: 'cid', id: 1}, result: {}}], null),
+    );
+  });
+
+  test('return values are independent per mutation in a batch', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    let callCount = 0;
+    const mutators: CustomMutatorDefs<undefined> = {
+      createItem: (_tx, _args, _ctx) => {
+        callCount++;
+        return Promise.resolve({seq: callCount});
+      },
+    };
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          getMutation(mutators, name)(tx, args, undefined),
+        ),
+      query: baseQuery,
+      body: makePushBody([
+        makeCustomMutation({id: 1, name: 'createItem'}),
+        makeCustomMutation({id: 2, name: 'createItem'}),
+      ]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {id: {clientID: 'cid', id: 1}, result: {data: {seq: 1}}},
+          {id: {clientID: 'cid', id: 2}, result: {data: {seq: 2}}},
+        ],
+        null,
+      ),
+    );
+  });
+
+  test('return value supports all JSON scalar types', async () => {
+    const cases: ReadonlyJSONValue[] = [
+      42,
+      'hello',
+      true,
+      false,
+      null,
+      [1, 2, 3],
+      {nested: {value: 'deep'}},
+    ];
+
+    for (const returnValue of cases) {
+      const {db: trackingDb} = createTrackingDatabase();
+
+      const mutators: CustomMutatorDefs<undefined> = {
+        fn: () => Promise.resolve(returnValue),
+      };
+
+      const response = await handleMutateRequest({
+        dbProvider: trackingDb,
+        handler: (transact, _mutation) =>
+          transact((tx, name, args) =>
+            getMutation(mutators, name)(tx, args, undefined),
+          ),
+        query: baseQuery,
+        body: makePushBody([makeCustomMutation({name: 'fn'})]),
+        userID: null,
+      });
+
+      expect(response).toEqual(
+        makeSuccessResponse(
+          [{id: {clientID: 'cid', id: 1}, result: {data: returnValue}}],
+          null,
+        ),
+      );
+    }
+  });
+});
