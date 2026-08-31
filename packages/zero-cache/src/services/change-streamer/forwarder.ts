@@ -42,6 +42,13 @@ export class Forwarder {
   #currentBroadcast: Broadcast | undefined;
   #progressMonitor: NodeJS.Timeout | undefined;
 
+  // The backup-replicator is never disconnected as a laggard, so its lag
+  // detections are logged (rather than acted upon). Track the running total and
+  // throttle the warning to at most once per grace period to avoid spamming the
+  // log for the duration of a slow catchup.
+  #backupLagEventCount = 0;
+  #lastBackupLagWarnMs: number | undefined;
+
   constructor(
     lc: LogContext,
     opts: ProgressMonitorOptions = {
@@ -153,14 +160,36 @@ export class Forwarder {
             : 'catching-up';
         const laggingDuration = sub.reportChangeRate(now, rate);
         if (laggingDuration >= this.#flowControlSlowSubscriberGracePeriodMs) {
-          this.#lc.warn?.(
-            `subscriber ${sub.id} has lagged for ${laggingDuration}ms. disconnecting`,
-            {stats},
-          );
-          sub.close(
-            StreamTooFarBehind,
-            `lagging for over ${this.#flowControlSlowSubscriberGracePeriodMs}ms (${laggingDuration}ms)`,
-          );
+          if (sub.mode === 'backup') {
+            // The backup-replicator can only be detected as a laggard during
+            // initial catchup; after that it is required for consensus. If it
+            // triggers laggard detection in the former case, just log and
+            // continue; as disconnecting it would otherwise kill the
+            // change-streamer task altogether.
+            this.#backupLagEventCount++;
+            const grace = this.#flowControlSlowSubscriberGracePeriodMs;
+            if (
+              this.#lastBackupLagWarnMs === undefined ||
+              now - this.#lastBackupLagWarnMs >= grace
+            ) {
+              this.#lastBackupLagWarnMs = now;
+              this.#lc.warn?.(
+                `backup subscriber ${sub.id} has lagged for ${laggingDuration}ms ` +
+                  `(${this.#backupLagEventCount} lag events so far). ` +
+                  `this is only expected during initial catchup`,
+                {stats},
+              );
+            }
+          } else {
+            this.#lc.warn?.(
+              `serving subscriber ${sub.id} has lagged for ${laggingDuration}ms. disconnecting`,
+              {stats},
+            );
+            sub.close(
+              StreamTooFarBehind,
+              `lagging for over ${this.#flowControlSlowSubscriberGracePeriodMs}ms (${laggingDuration}ms)`,
+            );
+          }
         }
       }
     }
