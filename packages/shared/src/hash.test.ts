@@ -45,9 +45,10 @@ test('h64 and h128 match the multi-pass reference', () => {
   }
 });
 
-test('h64 and h128 match the reference for arbitrary strings', () => {
+test('all three match the reference for arbitrary strings', () => {
   fc.assert(
     fc.property(fc.string({maxLength: 300}), s => {
+      expect(h32(s)).toBe(xxHash32(s, 0));
       expect(h64(s)).toBe(referenceHash(s, 2));
       expect(h128(s)).toBe(referenceHash(s, 4));
     }),
@@ -55,9 +56,10 @@ test('h64 and h128 match the reference for arbitrary strings', () => {
   );
 });
 
-test('h64 and h128 match the reference for arbitrary unicode', () => {
+test('all three match the reference for arbitrary unicode', () => {
   fc.assert(
     fc.property(fc.fullUnicodeString({maxLength: 300}), s => {
+      expect(h32(s)).toBe(xxHash32(s, 0));
       expect(h64(s)).toBe(referenceHash(s, 2));
       expect(h128(s)).toBe(referenceHash(s, 4));
     }),
@@ -68,6 +70,7 @@ test('h64 and h128 match the reference for arbitrary unicode', () => {
 test('successive calls do not share state', () => {
   const a = h128('some string');
   h64('a different string');
+  h32('a third string');
   h128('yet another');
   expect(h128('some string')).toBe(a);
 });

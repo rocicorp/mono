@@ -1,8 +1,9 @@
-import {xxHash32} from 'js-xxhash';
-
-export const h32 = (s: string) => xxHash32(s, 0);
-export const h64 = (s: string) => hash(s, 2);
-export const h128 = (s: string) => hash(s, 4);
+export const h32 = (s: string) => {
+  digest(s, 1);
+  return digests[0];
+};
+export const h64 = (s: string) => wide(s, 2);
+export const h128 = (s: string) => wide(s, 4);
 
 const PRIME32_1 = 2654435761;
 const PRIME32_2 = 2246822519;
@@ -12,10 +13,11 @@ const PRIME32_5 = 374761393;
 
 const MAX_WORDS = 4;
 
-// `hash` is synchronous and does not recurse, so these can be reused across
+// `digest` is synchronous and does not recurse, so these can be reused across
 // calls instead of allocated per call.
 const accs = new Int32Array(MAX_WORDS);
 const stripes = new Int32Array(MAX_WORDS * 4);
+const digests = new Uint32Array(MAX_WORDS);
 let encoder: TextEncoder | undefined;
 
 function round(acc: number, lane: number): number {
@@ -31,16 +33,16 @@ function round(acc: number, lane: number): number {
 }
 
 /**
- * xxHash32 only computes 32-bit values. Run it n times with different seeds to
- * get a larger hash with better collision resistance.
+ * xxHash32 over the UTF-8 bytes of `str` under seeds `0..words-1`, leaving the
+ * digests in `digests[0..words)`.
  *
  * A seed only changes the initial accumulator values, so every word digests the
  * same input lanes. This walks the bytes once, advancing all `words` sets of
  * accumulators per lane, and UTF-8 encodes the string once. The result is
- * identical to folding `words` separate `xxHash32(str, i)` calls, which is what
- * this used to do — and what `hash.test.ts` checks it still matches.
+ * identical to `words` separate `xxHash32(str, i)` calls — which is what this
+ * used to delegate to, and what `hash.test.ts` checks it still matches.
  */
-function hash(str: string, words: number): bigint {
+function digest(str: string, words: number): void {
   const b = (encoder ??= new TextEncoder()).encode(str);
   const len = b.length;
 
@@ -146,11 +148,8 @@ function hash(str: string, words: number): bigint {
     }
   }
 
-  /*
-      Step 6. Final mix (avalanche), then fold the words into one big int,
-      highest seed first.
-  */
-  let result = 0n;
+  // Step 6. Final mix (avalanche). The Uint32Array store turns any negatives
+  // back into a positive number.
   for (let w = 0; w < words; w++) {
     let acc = accs[w];
     acc = acc ^ (acc >>> 15);
@@ -161,9 +160,19 @@ function hash(str: string, words: number): bigint {
     acc =
       (((acc & 0xffff) * PRIME32_3) & 0xffffffff) +
       (((acc >>> 16) * PRIME32_3) << 16);
-    acc = acc ^ (acc >>> 16);
-    // Turn any negatives back into a positive number.
-    result = (result << 32n) + BigInt(acc < 0 ? acc + 4294967296 : acc);
+    digests[w] = acc ^ (acc >>> 16);
+  }
+}
+
+/**
+ * A hash wider than 32 bits, folding `words` digests together highest seed
+ * first.
+ */
+function wide(str: string, words: number): bigint {
+  digest(str, words);
+  let result = 0n;
+  for (let w = 0; w < words; w++) {
+    result = (result << 32n) + BigInt(digests[w]);
   }
   return result;
 }

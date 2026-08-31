@@ -53,7 +53,10 @@ describe('h128', () => {
 describe('h32', () => {
   for (const size of SIZES) {
     const s = makeInput(size);
-    bench(`${size} chars`, () => {
+    bench(`${size} chars | js-xxhash (before)`, () => {
+      use(xxHash32(s, 0));
+    });
+    bench(`${size} chars | single-pass (after)`, () => {
       use(h32(s));
     });
   }
