@@ -157,7 +157,6 @@
     "fastify": "^5.0.0",
     "is-in-subnet": "^4.0.1",
     "jose": "^5.9.3",
-    "js-xxhash": "^4.0.0",
     "json-custom-numbers": "^3.1.1",
     "kasi": "^1.1.0",
     "nanoid": "^5.1.2",
