@@ -2006,7 +2006,7 @@ describe('authenticate', () => {
   });
 
   describe('RPC error handling', () => {
-    test('handles validation error for wrong op in response', async () => {
+    test('handles error response', async () => {
       const z = zeroForTest({schema});
       await z.triggerConnected();
       await Promise.resolve();
@@ -2015,8 +2015,6 @@ describe('authenticate', () => {
       const p = z.inspector.serverVersion();
       const id = await idPromise;
 
-      // Simulate error response - this will fail schema validation
-      // because inspectVersionDownSchema expects op: 'version', not op: 'error'
       await z.triggerMessage([
         'inspect',
         {
@@ -2026,9 +2024,7 @@ describe('authenticate', () => {
         },
       ] satisfies InspectDownMessage);
 
-      // The RPC will reject with a validation error since the response
-      // doesn't match the expected schema
-      await expect(p).rejects.toThrow('Expected literal value "version"');
+      await expect(p).rejects.toThrow('Server encountered an internal error');
 
       await z.close();
     });
