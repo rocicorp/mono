@@ -7,6 +7,7 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {
   ChangeTag,
   Downstream,
@@ -56,6 +57,7 @@ export type SubscriberStats = {
 export class Subscriber {
   readonly #protocolVersion: number;
   readonly id: string;
+  readonly mode: ReplicatorMode;
   readonly #downstream: Subscription<string>;
   readonly #latestStatus: () => Status;
   #watermark: string;
@@ -74,6 +76,7 @@ export class Subscriber {
   constructor(
     protocolVersion: number,
     id: string,
+    mode: ReplicatorMode,
     watermark: string,
     downstream: Subscription<string>,
     latestStatus: () => Status,
@@ -81,6 +84,7 @@ export class Subscriber {
   ) {
     this.#protocolVersion = protocolVersion;
     this.id = id;
+    this.mode = mode;
     this.#downstream = downstream;
     this.#latestStatus = latestStatus;
     this.#watermark = watermark;
@@ -111,6 +115,14 @@ export class Subscriber {
     return (
       this.#bufferedBacklogBytes >= this.#backlogBackpressure.highWaterBytes
     );
+  }
+
+  /**
+   * @returns whether the subscriber is currently sending backlogged messages,
+   *          vs caught up and sending the "head" of the replication stream.
+   */
+  isBacklogged() {
+    return this.#backlog !== null || this.#bufferedBacklogBytes > 0;
   }
 
   /**

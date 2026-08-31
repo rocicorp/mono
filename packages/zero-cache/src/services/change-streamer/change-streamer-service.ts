@@ -910,6 +910,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     const subscriber = new Subscriber(
       protocolVersion,
       id,
+      mode,
       watermark,
       downstream,
       () => this.#latestStatus,

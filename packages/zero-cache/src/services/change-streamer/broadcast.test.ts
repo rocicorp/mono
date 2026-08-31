@@ -305,4 +305,209 @@ describe('change-streamer/broadcast', () => {
     expect(sub2.getStats().missedLastTimeout).toBe(false);
     expect(sub3.getStats().missedLastTimeout).toBe(false);
   });
+
+  describe('backup-replicator is a required consensus member', () => {
+    // Helper: a serving-mode subscriber (the default) and a backup-mode one.
+    const serving = () => createSubscriber('00', true);
+    const backup = () => createSubscriber('00', true, {}, 'backup');
+
+    test('a majority of serving replicas does NOT early-release while the backup is still pending', async () => {
+      const [s1] = serving();
+      const [s2] = serving();
+      const [s3] = serving();
+      const [b] = backup();
+      const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
+
+      // 4 subscribers => majority of 3.
+      const broadcast = new Broadcast(lc, [s1, s2, s3, b], begin, {
+        consensusTimeoutProportion: 2,
+        setTimeoutFn,
+        clearTimeoutFn,
+      });
+
+      // All 3 serving replicas ack: the majority is met, but the backup has
+      // not responded, so no early-release timer is armed.
+      s1.close();
+      s2.close();
+      s3.close();
+      await sleep(1);
+      expect(scheduled).toHaveLength(0);
+      expect(broadcast.isDone).toBe(false);
+
+      // The backup acking completes the set and releases via all-subscribers.
+      b.close();
+      await broadcast.done;
+      expect(broadcast.releaseMode).toBe('all-subscribers');
+      // The backup is never marked as a laggard.
+      expect(b.getStats().missedLastTimeout).toBe(false);
+    });
+
+    test('the backup acking AFTER the majority arms the timer and drops the remaining laggard', async () => {
+      const [s1] = serving();
+      const [s2] = serving();
+      const [s3] = serving();
+      const [s4] = serving();
+      const [b] = backup();
+      const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
+
+      // 5 subscribers => majority of 3.
+      const broadcast = new Broadcast(lc, [s1, s2, s3, s4, b], begin, {
+        consensusTimeoutProportion: 2,
+        setTimeoutFn,
+        clearTimeoutFn,
+      });
+
+      // 3 serving acks reach the majority, but the backup is still pending, so
+      // no timer is armed (regression guard: `>=` vs `===` on the majority).
+      s1.close();
+      s2.close();
+      s3.close();
+      await sleep(1);
+      expect(scheduled).toHaveLength(0);
+      expect(broadcast.isDone).toBe(false);
+
+      // The backup acks last. Even though `completed` (4) is now past the
+      // majority (3), the timer must still arm so the remaining laggard (s4)
+      // does not stall the pipeline.
+      b.close();
+      await sleep(1);
+      expect(scheduled).toHaveLength(1);
+      expect(broadcast.isDone).toBe(false);
+
+      // Firing the timer drops s4 as a laggard; the backup stays on-time.
+      scheduled[0].cb();
+      await broadcast.done;
+      expect(broadcast.releaseMode).toBe('consensus-timeout');
+      expect(s4.getStats().missedLastTimeout).toBe(true);
+      expect(b.getStats().missedLastTimeout).toBe(false);
+    });
+
+    test('a backup that acks WITHIN the majority arms the timer at the majority', async () => {
+      const [b] = backup();
+      const [s1] = serving();
+      const [s2] = serving();
+      const [s3] = serving();
+      const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
+
+      // 4 subscribers => majority of 3.
+      const broadcast = new Broadcast(lc, [b, s1, s2, s3], begin, {
+        consensusTimeoutProportion: 2,
+        setTimeoutFn,
+        clearTimeoutFn,
+      });
+
+      // Backup acks early, then two serving replicas reach the majority: the
+      // timer arms at the majority since the backup has already responded.
+      b.close();
+      s1.close();
+      s2.close();
+      await sleep(1);
+      expect(scheduled).toHaveLength(1);
+      expect(broadcast.isDone).toBe(false);
+
+      // The remaining serving replica is dropped; the backup is never a laggard.
+      scheduled[0].cb();
+      await broadcast.done;
+      expect(broadcast.releaseMode).toBe('consensus-timeout');
+      expect(s3.getStats().missedLastTimeout).toBe(true);
+      expect(b.getStats().missedLastTimeout).toBe(false);
+    });
+
+    test('a consensus-timeout with a still-pending backup never marks the backup timed-out', async () => {
+      // Guards the core guarantee directly: even if the timer somehow fires
+      // while the backup is pending, the backup must not be flagged as a
+      // laggard. With the fix the timer cannot arm until the backup responds,
+      // so this asserts the backup is on-time after a normal release.
+      const [s1] = serving();
+      const [s2] = serving();
+      const [s3] = serving();
+      const [b] = backup();
+      const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
+
+      const broadcast = new Broadcast(lc, [s1, s2, s3, b], begin, {
+        consensusTimeoutProportion: 2,
+        setTimeoutFn,
+        clearTimeoutFn,
+      });
+
+      s1.close();
+      s2.close();
+      s3.close();
+      await sleep(1);
+      // No timer while the backup is pending.
+      expect(scheduled).toHaveLength(0);
+
+      b.close();
+      await broadcast.done;
+      expect(b.getStats().missedLastTimeout).toBe(false);
+    });
+
+    test('a catching-up (backlogged) backup does NOT gate consensus', async () => {
+      const [s1] = serving();
+      const [s2] = serving();
+      const [s3] = serving();
+      // A backup that is still in its initial catchup: not caught up, and with a
+      // tiny backlog high-water so its live send blocks (stays pending) instead
+      // of resolving. isBacklogged() is true, so it must not be required for
+      // consensus.
+      const [b] = createSubscriber(
+        '00',
+        false,
+        {backlogHighWaterBytes: 1},
+        'backup',
+      );
+      const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
+
+      // 4 subscribers => majority of 3.
+      const broadcast = new Broadcast(lc, [s1, s2, s3, b], begin, {
+        consensusTimeoutProportion: 2,
+        setTimeoutFn,
+        clearTimeoutFn,
+      });
+
+      // The 3 serving replicas reaching the majority arms the timer immediately,
+      // even though the backup (still catching up) has not responded.
+      s1.close();
+      s2.close();
+      s3.close();
+      await sleep(1);
+      expect(scheduled).toHaveLength(1);
+      expect(broadcast.isDone).toBe(false);
+
+      // Firing the timer releases via consensus-timeout. The catching-up backup
+      // is left pending and recorded timed-out (the forwarder fail-safe, not the
+      // Broadcast, is what keeps it from being disconnected).
+      scheduled[0].cb();
+      await broadcast.done;
+      expect(broadcast.releaseMode).toBe('consensus-timeout');
+      expect(b.getStats().missedLastTimeout).toBe(true);
+    });
+
+    test('no backup present: a majority alone early-releases (unchanged behavior)', async () => {
+      const [s1] = serving();
+      const [s2] = serving();
+      const [s3] = serving();
+      const [s4] = serving();
+      const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
+
+      // 4 serving subscribers, no backup => majority of 3 releases on its own.
+      const broadcast = new Broadcast(lc, [s1, s2, s3, s4], begin, {
+        consensusTimeoutProportion: 2,
+        setTimeoutFn,
+        clearTimeoutFn,
+      });
+
+      s1.close();
+      s2.close();
+      s3.close();
+      await sleep(1);
+      expect(scheduled).toHaveLength(1);
+      expect(broadcast.isDone).toBe(false);
+
+      scheduled[0].cb();
+      await broadcast.done;
+      expect(broadcast.releaseMode).toBe('consensus-timeout');
+      expect(s4.getStats().missedLastTimeout).toBe(true);
+    });
+  });
 });
