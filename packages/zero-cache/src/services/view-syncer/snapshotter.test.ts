@@ -249,6 +249,40 @@ describe('view-syncer/snapshotter', () => {
     `);
   });
 
+  test('inactive syncable table data changes are skipped', () => {
+    expect(s.current().version).toBe('01');
+
+    replicator.processTransaction(
+      '09',
+      messages.insert('users', {id: 30, handle: 'bob'}),
+      messages.insert('issues', {id: 4, owner: 20}),
+    );
+    replicator.processTransaction('09');
+
+    const diff = s.advance(tableSpecs, allTableNames, new Set(['issues']));
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('09');
+    expect(diff.changes).toBe(1);
+
+    expect([...diff]).toMatchInlineSnapshot(`
+      [
+        {
+          "nextValue": {
+            "_0_version": "09",
+            "desc": null,
+            "id": 4,
+            "owner": 20,
+          },
+          "prevValues": [],
+          "rowKey": {
+            "id": 4,
+          },
+          "table": "issues",
+        },
+      ]
+    `);
+  });
+
   test('concurrent snapshot diffs', () => {
     const s1 = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
     const s2 = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
@@ -609,6 +643,26 @@ describe('view-syncer/snapshotter', () => {
     expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
   });
 
+  test('permissions changes are not filtered as inactive table data', () => {
+    expect(s.current().version).toBe('01');
+
+    replicator.processTransaction(
+      '07',
+      messages.update('my_app.permissions', {
+        lock: 1,
+        permissions: '{"tables":{}}',
+        hash: '12345',
+      }),
+    );
+
+    const diff = s.advance(tableSpecs, allTableNames, new Set(['issues']));
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('07');
+    expect(diff.changes).toBe(1);
+
+    expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
+  });
+
   test('changelog iterator cleaned up on aborted iteration', () => {
     const {version} = s.current();
 
@@ -653,7 +707,7 @@ describe('view-syncer/snapshotter', () => {
       messages.addColumn('comments', 'likes', {dataType: 'INT4', pos: 0}),
     );
 
-    const diff = s.advance(tableSpecs, allTableNames);
+    const diff = s.advance(tableSpecs, allTableNames, new Set(['issues']));
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
