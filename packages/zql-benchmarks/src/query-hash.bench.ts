@@ -22,6 +22,7 @@ import {xxHash32} from 'js-xxhash';
 import {bench, describe, use} from '../../shared/src/bench.ts';
 import {h64} from '../../shared/src/hash.ts';
 import {normalizeAST, type AST} from '../../zero-protocol/src/ast.ts';
+import {hashAST} from '../../zero-protocol/src/query-hash-visitor.ts';
 import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
@@ -145,6 +146,22 @@ describe('hashOfAST pipeline', () => {
 
     bench(`${label} | after: h64 encodes once, one pass`, () => {
       use(h64(JSON.stringify(normalized)).toString(36));
+    });
+  }
+});
+
+describe('hashOfAST vs the AST-specialized visitor', () => {
+  for (const [name, ast] of CASES) {
+    const normalized = normalizeAST(ast);
+    const json = JSON.stringify(normalized);
+    const label = `${name} (${json.length} chars)`;
+
+    bench(`${label} | 1. JSON.stringify + h64 (shipped)`, () => {
+      use(h64(JSON.stringify(normalized)).toString(36));
+    });
+
+    bench(`${label} | 2. AST-specialized visitor`, () => {
+      use(hashAST(normalized));
     });
   }
 });
