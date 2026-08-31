@@ -235,13 +235,13 @@ export class FlippedJoin implements Input {
     const parentKey = this.#parentKey;
     const childKey = this.#childKey;
 
-    // Build (deduped) multi-constraint and a key→child-indexes map. Same
+    // Build (deduped) multi-constraint and a key→children map. Same
     // parent-key value across multiple children groups them together.
     const computedMulti: Constraint[] = [];
-    const childIndexesByKey = new Map<string, number[]>();
-    for (let i = 0; i < childNodes.length; i++) {
+    const childNodesByKey = new Map<CanonicalKey, Node[]>();
+    for (const childNode of childNodes) {
       const constraintFromChild = buildJoinConstraint(
-        childNodes[i].row,
+        childNode.row,
         childKey,
         parentKey,
       );
@@ -253,12 +253,12 @@ export class FlippedJoin implements Input {
         continue;
       }
       const key = canonicalKey(constraintFromChild, parentKey);
-      const existing = childIndexesByKey.get(key);
+      const existing = childNodesByKey.get(key);
       if (existing === undefined) {
-        childIndexesByKey.set(key, [i]);
+        childNodesByKey.set(key, [childNode]);
         computedMulti.push(constraintFromChild);
       } else {
-        existing.push(i);
+        existing.push(childNode);
       }
     }
 
@@ -290,9 +290,10 @@ export class FlippedJoin implements Input {
         yield 'yield';
         continue;
       }
-      const key = canonicalKey(node.row, parentKey);
-      const idxs = childIndexesByKey.get(key);
-      if (idxs === undefined) {
+      const relatedChildNodes = childNodesByKey.get(
+        canonicalKey(node.row, parentKey),
+      );
+      if (relatedChildNodes === undefined) {
         // This row's parent-key doesn't match any of our computed
         // multi-constraint entries. Happens when our parent is an
         // intermediate operator (e.g. a chained FlippedJoin) that passes
@@ -302,9 +303,13 @@ export class FlippedJoin implements Input {
         continue;
       }
       // Children retain their original input order within the group
-      // because we appended to `idxs` in iteration order.
-      const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
-      yield* this.#yieldParentWithOverlay(node, relatedChildNodes);
+      // because we appended to the group in iteration order. The group is
+      // shared by every parent with this key; `#parentWithOverlay` only
+      // reads it.
+      const parentNode = this.#parentWithOverlay(node, relatedChildNodes);
+      if (parentNode !== undefined) {
+        yield parentNode;
+      }
     }
   }
 
@@ -329,10 +334,10 @@ export class FlippedJoin implements Input {
     yield* mergeSortedStreams(chunkStreams, compare);
   }
 
-  *#yieldParentWithOverlay(
+  #parentWithOverlay(
     minParentNode: Node,
     relatedChildNodes: Node[],
-  ): Stream<Node> {
+  ): Node | undefined {
     let overlaidRelatedChildNodes = relatedChildNodes;
     if (
       this.#inprogressChildChange &&
@@ -370,16 +375,17 @@ export class FlippedJoin implements Input {
       }
     }
 
-    // yield node if after the overlay it still has relationship nodes
-    if (overlaidRelatedChildNodes.length > 0) {
-      yield {
-        ...minParentNode,
-        relationships: {
-          ...minParentNode.relationships,
-          [this.#relationshipName]: () => overlaidRelatedChildNodes,
-        },
-      };
+    // return node if after the overlay it still has relationship nodes
+    if (overlaidRelatedChildNodes.length === 0) {
+      return undefined;
     }
+    return {
+      ...minParentNode,
+      relationships: {
+        ...minParentNode.relationships,
+        [this.#relationshipName]: () => overlaidRelatedChildNodes,
+      },
+    };
   }
 
   *#pushChild(change: Change): Stream<'yield'> {
@@ -572,22 +578,35 @@ export class FlippedJoin implements Input {
 export function canonicalKeyForTest(
   record: Record<string, Value | bigint | undefined>,
   keys: CompoundKey,
-): string {
+): CanonicalKey {
   return canonicalKey(record as Record<string, Value | undefined>, keys);
 }
 
+type CanonicalKey = Value | bigint;
+
 /**
- * Canonical string key over `keys` of `record`, used by `#fetchBatched`
- * both to dedupe `multiConstraint` entries (record = Constraint) and to
- * map each returned parent row back to the children that referenced its
- * parent-key tuple (record = Row).
+ * Canonical key over `keys` of `record`, used by `#fetchBatched` both to
+ * dedupe `multiConstraint` entries (record = Constraint) and to map each
+ * returned parent row back to the children that referenced its parent-key
+ * tuple (record = Row).
+ *
+ * Single keys — the common case — skip the tag string wherever `Map` already
+ * discriminates: `1`, `1n` and `true` cannot collide with each other or with
+ * any string, so they key as themselves and no per-row string is built.
+ * `null` and `undefined` share a bucket, matching the compound path. JSON
+ * values go through the tagged string form since `Map` would otherwise key
+ * them by identity, and strings keep their tag so that a plain `'j{"a":1}'`
+ * cannot land in the bucket the object `{a: 1}` renders into.
  */
 function canonicalKey(
   record: Record<string, Value | undefined>,
   keys: CompoundKey,
-): string {
+): CanonicalKey {
   if (keys.length === 1) {
-    return canonicalValue(record[keys[0]]);
+    const v = record[keys[0]];
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'string') return 's' + v;
+    return typeof v === 'object' ? canonicalValue(v) : v;
   }
   let s = '';
   for (let i = 0; i < keys.length; i++) {
