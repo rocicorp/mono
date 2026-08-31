@@ -54,6 +54,7 @@ import {
   getOrCreateLatencyHistogram,
   getOrCreateNativeHistogram,
   getOrCreateUpDownCounter,
+  getOrCreateValueHistogram,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import type {ViewSyncerDownstream} from '../../types/downstream.ts';
@@ -397,6 +398,32 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'lock-wait-time',
     'Time spent waiting to acquire the ViewSyncer lock.',
   );
+  readonly #lockHoldTime = getOrCreateLatencyHistogram(
+    'sync',
+    'lock-hold-time',
+    'Time the ViewSyncer lock was held, from acquisition to release. The ' +
+      'lock is per client group, so this is not contention between groups: ' +
+      'it stays held while its work is descheduled on the shared time-slice ' +
+      'queue, which is what makes every other operation for the same group ' +
+      'wait in sync.lock-wait-time.',
+  );
+  readonly #waveWallTime = getOrCreateLatencyHistogram(
+    'sync',
+    'wave.wall-time',
+    'Wall-clock time to process one query wave (type=query-sync) or one ' +
+      'replica advancement (type=advance), ending at pokeEnd. Compare ' +
+      'against the CPU-ish time in sync.hydration-time and ' +
+      'sync.advance-time, which exclude cooperative-yield waits: wall time ' +
+      'far above processing time means the worker is saturated by peer ' +
+      'client groups rather than by this wave.',
+  );
+  readonly #waveRows = getOrCreateCounter('sync', 'wave.rows', {
+    description:
+      'Rows processed by query waves (type=query-sync) and replica ' +
+      'advancements (type=advance), after batched de-duplication across the ' +
+      "wave's pipelines. Separates an expensive wave from a slow one.",
+    unit: '{row}',
+  });
   readonly #pipelineResets = getOrCreateCounter(
     'sync',
     'pipeline-resets',
@@ -487,62 +514,67 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.debug?.('about to acquire lock for cvr ', rid);
     const lockWaitStart = performance.now();
     return this.#lock.withLock(async () => {
-      this.#lockWaitTime.recordMs(performance.now() - lockWaitStart);
-      this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
-      const lc = this.#lc.withContext('lock', rid);
-      if (!this.#stateChanges.active) {
-        // view-syncer has been shutdown. this can be a backlog of tasks
-        // queued on the lock, or it can be a race condition in which a
-        // client connects before the ViewSyncer has been deleted from the
-        // ServiceRunner.
-        this.#lc.debug?.('state changes are inactive');
-        clearTimeout(this.#expiredQueriesTimer);
-        throw new ProtocolErrorWithLevel(
-          {
-            kind: ErrorKind.Rehome,
-            message: 'Reconnect required',
-            origin: ErrorOrigin.ZeroCache,
-          },
-          'info',
-        );
-      }
-      // If all clients have disconnected, cancel all pending work.
-      if (await this.#checkForShutdownConditionsInLock()) {
-        this.#lc.info?.(`closing clientGroupID=${this.id}`);
-        // Reject #initialized so that run() unblocks if it is still
-        // waiting on readyState(). This is a no-op if already resolved.
-        this.#initialized.reject(shutdownBeforeInitializationError());
-        this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
-        return;
-      }
-      if (!this.#cvr) {
-        this.#lc.debug?.('loading cvr');
-        this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
-          this.#cvrStore.load(lc, this.#lastConnectTime),
-        );
-        this.#ttlClock = this.#cvr.ttlClock;
-        this.#ttlClockBase = Date.now();
-      } else {
-        // Make sure the CVR ttlClock is up to date.
-        const now = Date.now();
-        this.#cvr = {
-          ...this.#cvr,
-          ttlClock: this.#getTTLClock(now),
-        };
-      }
-
+      const lockHoldStart = performance.now();
+      this.#lockWaitTime.recordMs(lockHoldStart - lockWaitStart);
       try {
-        await fn(lc, this.#cvr);
-      } catch (e) {
-        // Clear cached state if an error is encountered.
-        this.#cvr = undefined;
-        throw e;
+        this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
+        const lc = this.#lc.withContext('lock', rid);
+        if (!this.#stateChanges.active) {
+          // view-syncer has been shutdown. this can be a backlog of tasks
+          // queued on the lock, or it can be a race condition in which a
+          // client connects before the ViewSyncer has been deleted from the
+          // ServiceRunner.
+          this.#lc.debug?.('state changes are inactive');
+          clearTimeout(this.#expiredQueriesTimer);
+          throw new ProtocolErrorWithLevel(
+            {
+              kind: ErrorKind.Rehome,
+              message: 'Reconnect required',
+              origin: ErrorOrigin.ZeroCache,
+            },
+            'info',
+          );
+        }
+        // If all clients have disconnected, cancel all pending work.
+        if (await this.#checkForShutdownConditionsInLock()) {
+          this.#lc.info?.(`closing clientGroupID=${this.id}`);
+          // Reject #initialized so that run() unblocks if it is still
+          // waiting on readyState(). This is a no-op if already resolved.
+          this.#initialized.reject(shutdownBeforeInitializationError());
+          this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
+          return;
+        }
+        if (!this.#cvr) {
+          this.#lc.debug?.('loading cvr');
+          this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
+            this.#cvrStore.load(lc, this.#lastConnectTime),
+          );
+          this.#ttlClock = this.#cvr.ttlClock;
+          this.#ttlClockBase = Date.now();
+        } else {
+          // Make sure the CVR ttlClock is up to date.
+          const now = Date.now();
+          this.#cvr = {
+            ...this.#cvr,
+            ttlClock: this.#getTTLClock(now),
+          };
+        }
+
+        try {
+          await fn(lc, this.#cvr);
+        } catch (e) {
+          // Clear cached state if an error is encountered.
+          this.#cvr = undefined;
+          throw e;
+        } finally {
+          // Lock-scoped work is where validated connections gain or lose
+          // schedulable auth-maintenance deadlines. Recompute the single wakeup
+          // after every locked operation; out-of-lock fail/close transitions only
+          // clear or relax deadlines, so a stale earlier wakeup is harmless.
+          this.#scheduleAuthMaintenance(lc);
+        }
       } finally {
-        // Lock-scoped work is where validated connections gain or lose
-        // schedulable auth-maintenance deadlines. Recompute the single wakeup
-        // after every locked operation; out-of-lock fail/close transitions only
-        // clear or relax deadlines, so a stale earlier wakeup is harmless.
-        this.#scheduleAuthMaintenance(lc);
+        this.#lockHoldTime.recordMs(performance.now() - lockHoldStart);
       }
     });
   }
@@ -2416,7 +2448,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       // #processChanges does batched de-duping of rows. Wrap all pipelines in
       // a single generator in order to maximize de-duping.
-      await this.#processChanges(
+      const rows = await this.#processChanges(
         lc,
         timer,
         generateRowChanges(this.#slowHydrateThreshold),
@@ -2467,6 +2499,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `finished processing queries (process: ${totalProcessTime} ms, wall: ${wallTime} ms)`,
       );
+      this.#waveWallTime.recordMs(wallTime, {type: 'query-sync'});
+      this.#waveRows.add(rows, {type: 'query-sync'});
     });
   }
 
@@ -2571,13 +2605,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
+  /** @returns the number of rows processed, after batched de-duplication. */
   #processChanges(
     lc: LogContext,
     timer: TimeSliceTimer,
     changes: Iterable<RowChange | 'yield'>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler,
-  ) {
+  ): Promise<number> {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
       const start = performance.now();
 
@@ -2655,6 +2690,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
         span.setAttribute('totalRows', total);
       });
+
+      return total;
     });
   }
 
@@ -2699,8 +2736,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       lc.debug?.(`applying ${numChanges} to advance to ${version}`);
 
+      let rows: number;
       try {
-        await this.#processChanges(
+        rows = await this.#processChanges(
           lc,
           await timer.start(),
           changes,
@@ -2734,6 +2772,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
       );
       this.#transactionAdvanceTime.recordMs(totalProcessTime);
+      this.#waveWallTime.recordMs(wallTime, {type: 'advance'});
+      this.#waveRows.add(rows, {type: 'advance'});
       return 'success';
     });
   }
@@ -2963,8 +3003,46 @@ const CURSOR_PAGE_SIZE = 10000;
 // This effectively achieves the desired one-per-event-loop-iteration behavior.
 const timeSliceQueue = new Lock();
 
-function yieldProcess(_lc: LogContext) {
-  return timeSliceQueue.withLock(() => new Promise(setImmediate));
+// Slices waiting for their turn, excluding the one holding it. Every
+// ViewSyncer on this worker shares the queue, so this is the per-worker
+// saturation signal: with one client group it is 0, and it grows with the
+// number of groups doing IVM work at the same time.
+let timeSliceQueueWaiters = 0;
+
+/** The wait a slice incurred, and how many peers it waited behind. */
+function sliceWaitInstruments() {
+  return {
+    waitTime: getOrCreateLatencyHistogram(
+      'sync',
+      'ivm.slice-wait-time',
+      'Time a ViewSyncer waited for its turn on the worker-wide IVM ' +
+        'time-slice queue. This is scheduler delay rather than work, so it ' +
+        'is the difference between an expensive query on an idle worker and ' +
+        'an ordinary query queued behind peers. It never reaches zero: a ' +
+        'slice always yields for at least one event-loop iteration.',
+    ),
+    queueDepth: getOrCreateValueHistogram('sync', 'ivm.slice-queue-depth', {
+      description:
+        'Slices already waiting on the worker-wide IVM time-slice queue ' +
+        'when another one joins it, sampled once per yield. The count of ' +
+        'this histogram is the slice throughput of the worker.',
+      unit: '{slice}',
+      bucketBoundaries: [0, 1, 2, 4, 8, 16, 32, 64],
+    }),
+  };
+}
+
+async function yieldProcess(_lc: LogContext) {
+  const {waitTime, queueDepth} = sliceWaitInstruments();
+  queueDepth.record(timeSliceQueueWaiters);
+  timeSliceQueueWaiters++;
+  const start = performance.now();
+  try {
+    await timeSliceQueue.withLock(() => new Promise(setImmediate));
+  } finally {
+    timeSliceQueueWaiters--;
+    waitTime.recordMs(performance.now() - start);
+  }
 }
 
 function contentsAndVersion(row: Row) {
