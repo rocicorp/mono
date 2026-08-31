@@ -209,7 +209,12 @@ function processCorrelatedSubquery(
     related.subquery.where,
     false,
     undefined, // no base constraints for EXISTS/NOT EXISTS
-    condition.op === 'EXISTS' ? 1 : undefined,
+    // Both EXISTS and NOT EXISTS execute as an existence probe against the
+    // child: fetch rows matching the parent's correlation and check whether
+    // any exist. The runtime caps both with EXISTS_LIMIT (see
+    // builder.ts), so model the probe as fetching a single row rather than
+    // scanning the whole child table per parent row.
+    1,
   );
   graph.connections.push(childConnection);
 
@@ -245,7 +250,11 @@ function processCorrelatedSubquery(
   let initialType: 'semi' | 'flipped';
 
   if (isNotExists) {
-    // NOT EXISTS joins can never be flipped
+    // NOT EXISTS joins can never be flipped: a flipped join discovers parent
+    // rows by scanning children, but NOT EXISTS returns exactly the parents
+    // that have no child rows to scan. The join is still cost-estimated as
+    // an anti-join (inverted selectivity) so that plans containing it — and
+    // flip decisions for sibling joins — are based on realistic estimates.
     flippable = false;
     initialType = 'semi';
   } else if (manualFlip === true) {
@@ -270,6 +279,7 @@ function processCorrelatedSubquery(
     flippable,
     planId,
     initialType,
+    condition.op,
   );
   graph.joins.push(join);
 

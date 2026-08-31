@@ -53,6 +53,7 @@ suite('buildPlanGraph', () => {
       expect(plans.plan.joins).toHaveLength(1);
       const join = plans.plan.joins[0];
       expect(join.kind).toBe('join');
+      expect(join.op).toBe('EXISTS');
 
       // Test that it can be flipped (doesn't throw)
       expect(() => join.flip()).not.toThrow();
@@ -82,6 +83,7 @@ suite('buildPlanGraph', () => {
 
       expect(plans.plan.joins).toHaveLength(1);
       const join = plans.plan.joins[0];
+      expect(join.op).toBe('NOT EXISTS');
 
       // Test that it cannot be flipped (throws UnflippableJoinError)
       expect(() => join.flip()).toThrow('Cannot flip a non-flippable join');
@@ -314,7 +316,7 @@ suite('buildPlanGraph', () => {
       expect(postsConnection?.limit).toBe(1);
     });
 
-    test('NOT EXISTS child connection has no limit', () => {
+    test('NOT EXISTS child connection has limit=1 (existence probe)', () => {
       const ast = {
         table: 'users',
         where: {
@@ -340,8 +342,9 @@ suite('buildPlanGraph', () => {
       );
 
       expect(postsConnection).toBeDefined();
-      // NOT EXISTS child should have no limit
-      expect(postsConnection?.limit).toBeUndefined();
+      // NOT EXISTS is an existence probe just like EXISTS (the runtime caps
+      // both with EXISTS_LIMIT), so the child is costed as a limit-1 fetch.
+      expect(postsConnection?.limit).toBe(1);
     });
 
     test('AND with multiple EXISTS - each child has limit=1', () => {

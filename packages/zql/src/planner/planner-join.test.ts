@@ -1,4 +1,5 @@
 import {expect, suite, test} from 'vitest';
+import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import {
   getMultiConstraintChunkSize,
   setMultiConstraintChunkSizeForTest,
@@ -224,6 +225,158 @@ suite('PlannerJoin', () => {
       }
       // After restore, cost returns to the default chunking.
       expect(flippedCost(256)).toBe(defaultCost);
+    });
+  });
+
+  suite('anti-join (NOT EXISTS) costing', () => {
+    // Child filter passing 20% of rows (200 of 1000).
+    const CHILD_FILTER: Condition = {
+      type: 'simple',
+      op: '=',
+      left: {type: 'column', name: 'deleted'},
+      right: {type: 'literal', value: false},
+    };
+
+    // parent: 1000 rows. child: 1000 rows unfiltered, 200 filtered
+    // (filter selectivity 0.2).
+    function makeJoin(opts: {
+      op: 'EXISTS' | 'NOT EXISTS';
+      childFilters?: Condition | undefined;
+      fanout?: number;
+      parentLimit?: number | undefined;
+    }) {
+      const {op, childFilters, fanout = 1, parentLimit} = opts;
+      const model: ConnectionCostModel = (table, _sort, filters) => ({
+        startupCost: 0,
+        rows: table === 'child' ? (filters ? 200 : 1000) : 1000,
+        fanout: () => ({fanout, confidence: 'high'}) as const,
+      });
+      const parent = new PlannerSource('parent', model).connect(
+        DEFAULT_SORT,
+        undefined,
+        true,
+        undefined,
+        parentLimit,
+      );
+      const child = new PlannerSource('child', model).connect(
+        DEFAULT_SORT,
+        childFilters,
+        false,
+        undefined,
+        1, // existence probe, same as EXISTS
+      );
+      const join = new PlannerJoin(
+        parent,
+        child,
+        CONSTRAINTS.userId,
+        CONSTRAINTS.id,
+        op === 'EXISTS',
+        0,
+        'semi',
+        op,
+      );
+      return {parent, child, join};
+    }
+
+    test('NOT EXISTS pass rate is the complement of the EXISTS match rate', () => {
+      // filter selectivity 0.2, fanout 2:
+      // match rate = 1 - (1 - 0.2)^2 = 0.36 → anti pass rate = 0.64
+      const {join} = makeJoin({
+        op: 'NOT EXISTS',
+        childFilters: CHILD_FILTER,
+        fanout: 2,
+      });
+      const cost = join.estimateCost(1, []);
+      expect(cost.selectivity).toBeCloseTo(0.64);
+      expect(cost.returnedRows).toBeCloseTo(640);
+    });
+
+    test('EXISTS costing is unchanged by the op parameter', () => {
+      const {join} = makeJoin({
+        op: 'EXISTS',
+        childFilters: CHILD_FILTER,
+        fanout: 2,
+      });
+      const cost = join.estimateCost(1, []);
+      // EXISTS keeps the historical unscaled child filter selectivity for
+      // row estimates.
+      expect(cost.selectivity).toBeCloseTo(0.2);
+      expect(cost.returnedRows).toBeCloseTo(200);
+    });
+
+    test('unfiltered NOT EXISTS clamps to a selectivity floor instead of 0', () => {
+      // Unfiltered child selectivity is 1.0 so the raw complement is 0,
+      // which would estimate that no parent rows survive and zero out all
+      // plan costs. The clamp keeps estimates finite and comparable.
+      const {join} = makeJoin({op: 'NOT EXISTS'});
+      const cost = join.estimateCost(1, []);
+      expect(cost.selectivity).toBeCloseTo(0.1);
+      expect(cost.returnedRows).toBeCloseTo(100);
+    });
+
+    test('anti-join pass rate scales how many parent rows must be scanned', () => {
+      // Pass rate 0.64 with limit 10 → scan ~10/0.64 ≈ 15.6 parents, each
+      // paying one limit-1 child probe.
+      const {join} = makeJoin({
+        op: 'NOT EXISTS',
+        childFilters: CHILD_FILTER,
+        fanout: 2,
+        parentLimit: 10,
+      });
+      const cost = join.estimateCost(1, []);
+      expect(cost.cost).toBeCloseTo(10 / 0.64);
+    });
+
+    test('NOT EXISTS child probe is costed as a limit-1 fetch per parent row', () => {
+      // 1000 parents each pay a probe of scanEst 1 → cost 1000, not a full
+      // 1000-row child scan per parent (10^6).
+      const {join} = makeJoin({op: 'NOT EXISTS'});
+      const cost = join.estimateCost(1, []);
+      expect(cost.cost).toBe(1000);
+    });
+
+    test('NOT EXISTS joins must be constructed non-flippable and semi', () => {
+      const model: ConnectionCostModel = () => ({
+        startupCost: 0,
+        rows: 100,
+        fanout: () => ({fanout: 1, confidence: 'none'}) as const,
+      });
+      const parent = new PlannerSource('parent', model).connect(
+        DEFAULT_SORT,
+        undefined,
+        false,
+      );
+      const child = new PlannerSource('child', model).connect(
+        DEFAULT_SORT,
+        undefined,
+        false,
+      );
+      expect(
+        () =>
+          new PlannerJoin(
+            parent,
+            child,
+            CONSTRAINTS.userId,
+            CONSTRAINTS.id,
+            true, // flippable NOT EXISTS is invalid
+            0,
+            'semi',
+            'NOT EXISTS',
+          ),
+      ).toThrow('NOT EXISTS joins must be non-flippable semi-joins');
+      expect(
+        () =>
+          new PlannerJoin(
+            parent,
+            child,
+            CONSTRAINTS.userId,
+            CONSTRAINTS.id,
+            false,
+            0,
+            'flipped', // flipped NOT EXISTS is invalid
+            'NOT EXISTS',
+          ),
+      ).toThrow('NOT EXISTS joins must be non-flippable semi-joins');
     });
   });
 });

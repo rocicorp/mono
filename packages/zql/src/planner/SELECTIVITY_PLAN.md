@@ -251,11 +251,16 @@ This should be fixed in the same PR.
 
 ### 6. NOT EXISTS
 
-For `NOT EXISTS`, we don't short-circuit on first match:
+`NOT EXISTS` is costed as an anti-join:
 
-- Must scan ALL children to verify none match
-- Don't apply limit or use semi-join selectivity
-- Current code correctly doesn't set limit for NOT EXISTS
+- The child is still an existence probe (the runtime applies `EXISTS_LIMIT`
+  to both `EXISTS` and `NOT EXISTS` subqueries), so the child connection is
+  modeled with `limit: 1` just like `EXISTS`
+- The pass rate is the complement of the semi-join selectivity:
+  `(1 - filterSelectivity)^fanOut`, clamped to a floor
+  (`MIN_ANTI_JOIN_SELECTIVITY`) because fan-out statistics cannot see
+  childless parents — exactly the rows `NOT EXISTS` returns — and an
+  unfiltered subquery would otherwise estimate a pass rate of 0
 
 ## Future Enhancements
 

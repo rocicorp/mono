@@ -66,11 +66,31 @@ function translateConstraintsForFlippedJoin(
 // const SEMI_JOIN_OVERHEAD_MULTIPLIER = 1.5;
 
 /**
+ * Minimum fraction of parent rows assumed to survive a NOT EXISTS
+ * (anti-join) filter.
+ *
+ * The anti-join pass rate is estimated as the complement of the EXISTS match
+ * rate: `(1 - childSelectivity)^fanout`. That formula systematically
+ * overestimates matching because the fanout statistics only see parents that
+ * actually have children — parents with zero children are invisible to the
+ * child index, yet they are exactly the rows NOT EXISTS returns. In the most
+ * common case (an unfiltered NOT EXISTS subquery) child selectivity is 1.0,
+ * so the raw complement collapses to 0: the planner would estimate that no
+ * parent rows survive, zeroing out scan estimates and making every candidate
+ * plan look free (and therefore indistinguishable).
+ *
+ * Clamping to a floor keeps estimates finite and plans comparable while
+ * still letting a NOT EXISTS with selective child filters report a high pass
+ * rate (e.g. few children match → most parents pass).
+ */
+const MIN_ANTI_JOIN_SELECTIVITY = 0.1;
+
+/**
  * Represents a join between two data streams (parent and child).
  *
  * # Dual-State Pattern
  * Like all planner nodes, PlannerJoin separates:
- * 1. IMMUTABLE STRUCTURE: Parent/child nodes, constraints, flippability
+ * 1. IMMUTABLE STRUCTURE: Parent/child nodes, constraints, flippability, operator
  * 2. MUTABLE STATE: Join type (semi/flipped), pinned status
  *
  * # Join Flipping
@@ -79,7 +99,17 @@ function translateConstraintsForFlippedJoin(
  * - 'flipped': Child is outer loop, parent is inner
  *
  * Flipping is the key optimization: choosing which table scans first.
- * NOT EXISTS joins cannot be flipped (#flippable = false).
+ * NOT EXISTS joins cannot be flipped (#flippable = false): a flipped join
+ * discovers parent rows by scanning children, but the parents NOT EXISTS
+ * returns are precisely those with no child rows to scan.
+ *
+ * # NOT EXISTS (anti-join) costing
+ * NOT EXISTS executes as the same existence probe as EXISTS (fetch child
+ * rows for the parent's correlation, check whether any exist), so its cost
+ * structure matches a semi-join. Its selectivity is inverted, however: a
+ * parent row passes when NO child matches, so the pass rate is the
+ * complement of the EXISTS match rate (clamped — see
+ * MIN_ANTI_JOIN_SELECTIVITY).
  *
  * # Constraint Propagation
  * - Semi-join: Sends childConstraint to child, forwards received constraints to parent
@@ -101,6 +131,7 @@ export class PlannerJoin {
   readonly #parentConstraint: PlannerConstraint;
   readonly #childConstraint: PlannerConstraint;
   readonly #flippable: boolean;
+  readonly #op: 'EXISTS' | 'NOT EXISTS';
   readonly planId: number;
   #output?: PlannerNode | undefined; // Set once during graph construction
 
@@ -116,7 +147,12 @@ export class PlannerJoin {
     flippable: boolean,
     planId: number,
     initialType: 'semi' | 'flipped' = 'semi',
+    op: 'EXISTS' | 'NOT EXISTS' = 'EXISTS',
   ) {
+    assert(
+      op === 'EXISTS' || (!flippable && initialType === 'semi'),
+      'NOT EXISTS joins must be non-flippable semi-joins',
+    );
     this.#type = initialType;
     this.#initialType = initialType;
     this.#parent = parent;
@@ -124,6 +160,7 @@ export class PlannerJoin {
     this.#childConstraint = childConstraint;
     this.#parentConstraint = parentConstraint;
     this.#flippable = flippable;
+    this.#op = op;
     this.planId = planId;
   }
 
@@ -163,6 +200,9 @@ export class PlannerJoin {
 
   get type(): 'semi' | 'flipped' {
     return this.#type;
+  }
+  get op(): 'EXISTS' | 'NOT EXISTS' {
+    return this.#op;
   }
   isFlippable(): boolean {
     return this.#flippable;
@@ -320,6 +360,16 @@ export class PlannerJoin {
     const scaledChildSelectivity =
       1 - Math.pow(1 - child.selectivity, fanoutFactor.fanout);
 
+    // Fraction of parent rows that pass this join's filter.
+    // EXISTS passes a parent row when a child matches; NOT EXISTS
+    // (anti-join) passes when NO child matches, so its pass rate is the
+    // complement of the match rate, clamped to a floor (see
+    // MIN_ANTI_JOIN_SELECTIVITY for why the raw complement is unusable).
+    const passSelectivity =
+      this.#op === 'NOT EXISTS'
+        ? Math.max(1 - scaledChildSelectivity, MIN_ANTI_JOIN_SELECTIVITY)
+        : scaledChildSelectivity;
+
     // Why do we not need fanout in the other direction?
     // E.g., for an `inventory -> film` flipped-join, if each film has 100 inventories (100 copies)
     // then we're more likely to hit an inventory row compared to if each film has 1 inventory.
@@ -345,7 +395,7 @@ export class PlannerJoin {
       // so we can determine the total selectivity of all ANDed exists checks.
       this.#type === 'flipped'
         ? 1 * downstreamChildSelectivity
-        : scaledChildSelectivity * downstreamChildSelectivity,
+        : passSelectivity * downstreamChildSelectivity,
       branchPattern,
       planDebugger,
     );
@@ -353,6 +403,12 @@ export class PlannerJoin {
     let costEstimate: CostEstimate;
 
     if (this.type === 'semi') {
+      // EXISTS keeps the historical (unscaled) child filter selectivity for
+      // the row estimate. NOT EXISTS must use the anti-join pass rate: the
+      // raw complement (1 - child.selectivity) is 0 for any unfiltered
+      // subquery, which would estimate that no parent rows survive.
+      const rowSelectivity =
+        this.#op === 'NOT EXISTS' ? passSelectivity : child.selectivity;
       costEstimate = {
         startupCost: parent.startupCost,
         scanEst:
@@ -367,8 +423,8 @@ export class PlannerJoin {
         cost:
           parent.cost +
           parent.scanEst * (child.startupCost + child.cost + child.scanEst),
-        returnedRows: parent.returnedRows * child.selectivity,
-        selectivity: child.selectivity * parent.selectivity,
+        returnedRows: parent.returnedRows * rowSelectivity,
+        selectivity: rowSelectivity * parent.selectivity,
         limit: parent.limit,
         fanout: parent.fanout,
       };
@@ -436,11 +492,13 @@ export class PlannerJoin {
   getDebugInfo(): {
     name: string;
     type: 'semi' | 'flipped';
+    op: 'EXISTS' | 'NOT EXISTS';
     planId: number;
   } {
     return {
       name: this.getName(),
       type: this.#type,
+      op: this.#op,
       planId: this.planId,
     };
   }

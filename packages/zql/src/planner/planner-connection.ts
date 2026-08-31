@@ -121,8 +121,8 @@ export class PlannerConnection {
     this.#constraints = new Map();
     this.#isRoot = isRoot;
 
-    // Compute selectivity for EXISTS child connections (baseLimit === 1)
-    // Selectivity = fraction of rows that pass filters
+    // Compute selectivity for EXISTS/NOT EXISTS child connections
+    // (baseLimit === 1). Selectivity = fraction of rows that pass filters
     if (limit !== undefined && filters) {
       const costWithFilters = model(table, sort, filters, undefined);
       const costWithoutFilters = model(table, sort, undefined, undefined);
