@@ -9,14 +9,8 @@ import {
   clientToServer,
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
-import type {AST} from './ast.ts';
-import {
-  astSchema,
-  mapAST,
-  markNormalized,
-  normalizeAST,
-  normalizedAST,
-} from './ast.ts';
+import type {AST, Condition, LiteralValue} from './ast.ts';
+import {astSchema, mapAST, normalizeAST, normalizedAST} from './ast.ts';
 import {PROTOCOL_VERSION} from './protocol-version.ts';
 
 test('fields are placed into correct positions', () => {
@@ -745,23 +739,24 @@ test('normalizedAST matches normalizeAST', () => {
   );
 });
 
-test('a marked normalized AST is its own normalization', () => {
-  const normalized = markNormalized(
-    normalizedAST({
-      schema: 'schema',
-      table: 'table',
-      alias: 'alias',
-      where: {
-        type: 'simple',
-        left: {type: 'column', name: 'a'},
-        op: '=',
-        right: {type: 'literal', value: 1},
-      },
-      limit: 10,
-      orderBy: [['a', 'asc']],
-    }),
+test('normalizing a normalized AST changes nothing', () => {
+  const normalized = normalizedAST({
+    schema: 'schema',
+    table: 'table',
+    alias: 'alias',
+    where: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: '=',
+      right: {type: 'literal', value: 1},
+    },
+    limit: 10,
+    orderBy: [['a', 'asc']],
+  });
+  expect(JSON.stringify(normalizeAST(normalized))).toBe(
+    JSON.stringify(normalized),
   );
-  expect(normalizeAST(normalized)).toBe(normalized);
+  expect(normalizeAST(normalized)).toEqual(normalized);
 });
 
 test('empty conjunctions are preserved', () => {
@@ -799,7 +794,10 @@ test('empty conjunctions are preserved', () => {
 });
 
 test('static parameters are ordered', () => {
-  const cond = (anchor: 'authData' | 'preMutationRow', field: string) =>
+  const cond = (
+    anchor: 'authData' | 'preMutationRow',
+    field: string | string[],
+  ) =>
     ({
       type: 'simple',
       left: {type: 'static', anchor, field},
@@ -813,7 +811,9 @@ test('static parameters are ordered', () => {
       type: 'and',
       conditions: [
         cond('preMutationRow', 'a'),
+        cond('authData', ['a', 'b']),
         cond('authData', 'b'),
+        cond('authData', 'a,b'),
         cond('authData', 'a'),
       ],
     },
@@ -822,9 +822,50 @@ test('static parameters are ordered', () => {
   expect(where).toEqual({
     type: 'and',
     conditions: [
+      // Strings before paths, and 'a,b' is not the same field as ['a', 'b'].
       cond('authData', 'a'),
+      cond('authData', 'a,b'),
       cond('authData', 'b'),
+      cond('authData', ['a', 'b']),
       cond('preMutationRow', 'a'),
     ],
+  });
+});
+
+test('values of different types are ordered', () => {
+  const cond = (value: LiteralValue) =>
+    ({
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: '=',
+      right: {type: 'literal', value},
+    }) as const;
+
+  // Values whose string form is the same, and which therefore used to be
+  // ordered by the order they were written in.
+  const values: LiteralValue[] = [
+    null,
+    true,
+    1,
+    '1',
+    'a,b',
+    ['a', 'b'],
+    ['a,b'],
+  ];
+  const conditions = values.map(cond);
+
+  const normalized = (conditions: Condition[]) =>
+    JSON.stringify(
+      normalizeAST({table: 'table', where: {type: 'and', conditions}}).where,
+    );
+
+  // The order the conditions are written in does not matter.
+  expect(normalized(conditions.toReversed())).toBe(normalized(conditions));
+
+  expect(
+    normalizeAST({table: 'table', where: {type: 'and', conditions}}).where,
+  ).toEqual({
+    type: 'and',
+    conditions: values.map(cond),
   });
 });
