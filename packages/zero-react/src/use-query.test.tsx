@@ -531,6 +531,163 @@ describe('ViewStore', () => {
       cleanup();
     });
   });
+
+  describe('unchanged data on flush', () => {
+    test('same data reference keeps snapshot identity and does not notify', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const notify = vi.fn();
+      const cleanup = view.subscribeReactInternals(notify);
+
+      const rows = [{a: 1}];
+      listeners.forEach(cb => cb(rows, 'unknown'));
+      const snapshot1 = view.getSnapshot();
+      expect(snapshot1).toEqual([[{a: 1}], {type: 'unknown'}]);
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      // Same data reference, resultType and error: the previous snapshot
+      // tuple is kept (so useSyncExternalStore's Object.is bailout works) and
+      // React is not notified.
+      listeners.forEach(cb => cb(rows, 'unknown'));
+      expect(view.getSnapshot()).toBe(snapshot1);
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      // Same data reference but new resultType: new snapshot, notified.
+      listeners.forEach(cb => cb(rows, 'complete'));
+      const snapshot2 = view.getSnapshot();
+      expect(snapshot2).not.toBe(snapshot1);
+      expect(snapshot2).toEqual([[{a: 1}], {type: 'complete'}]);
+      expect(notify).toHaveBeenCalledTimes(2);
+
+      // New data reference: new snapshot, notified.
+      listeners.forEach(cb => cb([{a: 2}], 'complete'));
+      expect(view.getSnapshot()).toEqual([[{a: 2}], {type: 'complete'}]);
+      expect(notify).toHaveBeenCalledTimes(3);
+
+      cleanup();
+    });
+
+    test('same error reference keeps snapshot identity and does not notify', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const notify = vi.fn();
+      const cleanup = view.subscribeReactInternals(notify);
+
+      const error: ErroredQuery = {
+        error: 'app',
+        id: 'query1',
+        name: 'query1',
+        details: 'boom',
+      };
+      const rows: unknown[] = [];
+      listeners.forEach(cb => cb(rows, 'error', error));
+      const snapshot1 = view.getSnapshot();
+      expect(snapshot1[1].type).toBe('error');
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      listeners.forEach(cb => cb(rows, 'error', error));
+      expect(view.getSnapshot()).toBe(snapshot1);
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      // A different error object produces a new snapshot and notifies.
+      const error2: ErroredQuery = {...error, details: 'boom again'};
+      listeners.forEach(cb => cb(rows, 'error', error2));
+      expect(view.getSnapshot()).not.toBe(snapshot1);
+      expect(notify).toHaveBeenCalledTimes(2);
+
+      cleanup();
+    });
+
+    test('resolvers resolve after re-materialize even when data is unchanged', async () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1', true);
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+      const row = {a: 1};
+      listeners.forEach(cb => cb(row, 'complete'));
+      expect(view.complete).toBe(true);
+      await expect(view.waitForComplete()).resolves.toBeUndefined();
+      const snapshot = view.getSnapshot();
+
+      // Unsubscribing destroys the underlying view and resets the resolvers.
+      cleanup();
+      vi.advanceTimersByTime(20);
+      expect(view.complete).toBe(false);
+
+      // On re-materialization the new view delivers the same data reference
+      // and resultType as before the destroy. The snapshot keeps its identity
+      // and React is not notified, but completeness must still resolve.
+      const notify = vi.fn();
+      const cleanup2 = view.subscribeReactInternals(notify);
+      listeners.forEach(cb => cb(row, 'complete'));
+      expect(view.getSnapshot()).toBe(snapshot);
+      expect(notify).toHaveBeenCalledTimes(0);
+      expect(view.complete).toBe(true);
+      expect(view.nonEmpty).toBe(true);
+      await expect(view.waitForComplete()).resolves.toBeUndefined();
+      await expect(view.waitForNonEmpty()).resolves.toBeUndefined();
+
+      cleanup2();
+    });
+
+    test('empty singular query resolves after re-materialize without notifying', async () => {
+      // The realistic unchanged shape after a destroy/re-materialize cycle:
+      // an empty .one() query redelivers (undefined, 'complete'), which is
+      // reference-identical to the previous delivery.
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1', true);
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+      listeners.forEach(cb => cb(undefined, 'complete'));
+      const snapshot = view.getSnapshot();
+      expect(snapshot).toEqual([undefined, {type: 'complete'}]);
+      expect(view.complete).toBe(true);
+
+      cleanup();
+      vi.advanceTimersByTime(20);
+      expect(view.complete).toBe(false);
+
+      const notify = vi.fn();
+      const cleanup2 = view.subscribeReactInternals(notify);
+      listeners.forEach(cb => cb(undefined, 'complete'));
+      expect(view.getSnapshot()).toBe(snapshot);
+      expect(notify).toHaveBeenCalledTimes(0);
+      expect(view.complete).toBe(true);
+      await expect(view.waitForComplete()).resolves.toBeUndefined();
+
+      cleanup2();
+    });
+  });
 });
 
 describe('useSuspenseQuery', () => {
