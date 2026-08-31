@@ -2,7 +2,14 @@ import {describe, expect, test} from 'vitest';
 
 import {ErrorKind} from './error-kind.ts';
 import {ErrorOrigin} from './error-origin.ts';
-import {ProtocolError, isProtocolError, type ErrorBody} from './error.ts';
+import {ErrorReason} from './error-reason.ts';
+import {
+  errorBodySchema,
+  isRetryableHTTPStatus,
+  ProtocolError,
+  isProtocolError,
+  type ErrorBody,
+} from './error.ts';
 
 describe('ProtocolError', () => {
   test('exposes error body and metadata', () => {
@@ -47,4 +54,38 @@ describe('ProtocolError', () => {
     // while WebKit often only includes callsite URLs and line numbers.
     expect(error.stack).toMatch(/ProtocolError|error\.test\.ts:\d+:\d+/);
   });
+});
+
+describe('retryable errors', () => {
+  test('parses retryable markers on internal and operation errors', () => {
+    expect(
+      errorBodySchema.parse({
+        kind: ErrorKind.Internal,
+        origin: ErrorOrigin.ZeroCache,
+        message: 'temporary failure',
+        retryable: true,
+      }),
+    ).toMatchObject({retryable: true});
+
+    expect(
+      errorBodySchema.parse({
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.Timeout,
+        message: 'timed out',
+        mutationIDs: [],
+        retryable: true,
+      }),
+    ).toMatchObject({retryable: true});
+  });
+
+  test.each([408, 425, 429, 500, 503, 599])(
+    'classifies HTTP %i as retryable',
+    status => expect(isRetryableHTTPStatus(status)).toBe(true),
+  );
+
+  test.each([0, 200, 400, 401, 403, 404, 600])(
+    'classifies HTTP %i as non-retryable',
+    status => expect(isRetryableHTTPStatus(status)).toBe(false),
+  );
 });

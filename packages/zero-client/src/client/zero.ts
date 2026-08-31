@@ -268,6 +268,41 @@ export const DEFAULT_DISCONNECT_TIMEOUT_MS = 60 * 1_000;
  */
 export const CONNECT_TIMEOUT_MS = 10_000;
 
+/**
+ * The upper bound on the exponential backoff between reconnect attempts,
+ * before jitter is added.
+ */
+export const MAX_RUN_LOOP_INTERVAL_MS = 60_000;
+
+/**
+ * Jitter added to each backoff, as a fraction of the backoff itself. Jitter is
+ * always additive, so the delay lands in
+ * `[backoff, backoff * (1 + RUN_LOOP_JITTER_FRACTION)]`. This spreads
+ * reconnects across a fleet of clients so a recovering server (or a recovering
+ * API server behind zero-cache) is not hit by every client at once.
+ */
+export const RUN_LOOP_JITTER_FRACTION = 0.5;
+
+/**
+ * How long a connection must stay up before we consider it healthy and reset
+ * the backoff. Without this, an error that arrives immediately after every
+ * successful connect (e.g. a pending mutation whose push keeps failing) would
+ * reset the backoff on each attempt and never actually back off.
+ */
+export const STABLE_CONNECTION_MS = 5_000;
+
+/**
+ * Returns how long to wait before the next reconnect attempt, given the number
+ * of consecutive failures since the last healthy connection.
+ */
+export function runLoopBackoffMs(consecutiveFailures: number): number {
+  const backoff = Math.min(
+    RUN_LOOP_INTERVAL_MS * 2 ** Math.max(0, consecutiveFailures - 1),
+    MAX_RUN_LOOP_INTERVAL_MS,
+  );
+  return backoff + Math.random() * backoff * RUN_LOOP_JITTER_FRACTION;
+}
+
 const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
 const DEFAULT_QUERY_CHANGE_THROTTLE_MS = 10;
@@ -2107,13 +2142,18 @@ export class Zero<
     const {auth} = this.#options;
     this.#setAuth(auth);
 
-    let backoffMs: number | undefined;
     let additionalConnectParams: Record<string, string> | undefined;
+    // Consecutive failures since the last connection that stayed up for at
+    // least STABLE_CONNECTION_MS. Drives the exponential backoff below.
+    let consecutiveFailures = 0;
+    // Unexpected internal failures can be transient, but can also be a
+    // deterministic client or server bug. Limit retries until the connection
+    // is proven healthy or the application explicitly asks to reconnect.
+    let ambiguousErrorFailures = 0;
 
     while (this.#connectionManager.shouldContinueRunLoop()) {
       runLoopCounter++;
       let lc = getLogContext();
-      backoffMs = RUN_LOOP_INTERVAL_MS;
 
       try {
         const currentState = this.#connectionManager.state;
@@ -2224,7 +2264,21 @@ export class Zero<
           }
 
           case ConnectionStatus.Connected: {
+            // The connection has been up long enough to call it healthy, so
+            // start the next backoff from scratch.
+            if (
+              this.#connectedAt !== 0 &&
+              Date.now() - this.#connectedAt >= STABLE_CONNECTION_MS
+            ) {
+              consecutiveFailures = 0;
+              ambiguousErrorFailures = 0;
+            }
+
             const ready = this.#connectionReadyResolver;
+            // Capture this before waiting because #disconnect clears the
+            // instance field. If the connection survives the stability
+            // window and then fails, that failure starts a fresh retry budget.
+            const connectedAt = this.#connectedAt;
             // When connected we wait for whatever happens first out of:
             // - After pingTimeoutMs we send a ping
             // - We get a message
@@ -2245,6 +2299,14 @@ export class Zero<
                 tabHidden: this.#visibilityWatcher.waitForHidden(),
                 stateChange: this.#connectionManager.waitForStateChange(),
               });
+
+              if (
+                connectedAt !== 0 &&
+                Date.now() - connectedAt >= STABLE_CONNECTION_MS
+              ) {
+                consecutiveFailures = 0;
+                ambiguousErrorFailures = 0;
+              }
 
               switch (raceResult.key) {
                 case 'waitForPing': {
@@ -2295,6 +2357,8 @@ export class Zero<
               stateChange: this.#connectionManager.waitForStateChange(),
             });
             if (resumeResult.key === 'connectRequest') {
+              consecutiveFailures = 0;
+              ambiguousErrorFailures = 0;
               this.#connectionManager.resumeFromConnectRequest();
             }
             break;
@@ -2311,6 +2375,8 @@ export class Zero<
               stateChange: this.#connectionManager.waitForStateChange(),
             });
             if (resumeResult.key === 'connectRequest') {
+              consecutiveFailures = 0;
+              ambiguousErrorFailures = 0;
               this.#connectionManager.resumeFromConnectRequest();
             }
             break;
@@ -2354,6 +2420,26 @@ export class Zero<
             // We continue the loop because the error does not indicate
             // a need to transition to a new state and we should continue retrying
 
+            if (transition.maxRetries !== undefined) {
+              ambiguousErrorFailures++;
+              if (ambiguousErrorFailures > transition.maxRetries) {
+                lc.error?.(
+                  'Retry budget exhausted for ambiguous error; transitioning to error state',
+                  {
+                    attempts: ambiguousErrorFailures,
+                    maxRetries: transition.maxRetries,
+                    error: transition.reason.errorBody,
+                  },
+                );
+                this.#connectionManager.error(transition.reason);
+                break;
+              }
+            }
+
+            consecutiveFailures++;
+            let backoffMs = runLoopBackoffMs(consecutiveFailures);
+
+            // A server-directed backoff always wins over ours.
             const backoffParams = getBackoffParams(transition.reason);
             if (backoffParams) {
               if (backoffParams.minBackoffMs !== undefined) {
@@ -2368,7 +2454,7 @@ export class Zero<
             lc.debug?.(
               'Sleeping',
               backoffMs,
-              'ms before reconnecting due to error, state:',
+              `ms before reconnecting due to error (consecutive failures: ${consecutiveFailures}), state:`,
               this.#connectionManager.state,
             );
             sleepMs = backoffMs;

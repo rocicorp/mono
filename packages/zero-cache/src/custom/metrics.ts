@@ -18,6 +18,7 @@ export type ApiRequestResult =
   | 'http_error'
   | 'parse_error'
   | 'fetch_error'
+  | 'timeout'
   | 'url_not_allowed'
   | 'config_error';
 
@@ -26,7 +27,8 @@ export type ApiAttemptResult =
   | 'api_error'
   | 'http_error'
   | 'parse_error'
-  | 'fetch_error';
+  | 'fetch_error'
+  | 'timeout';
 
 export type ApiRequestMetricAttrs = ApiMetricBaseAttrs & {
   result: ApiRequestResult;

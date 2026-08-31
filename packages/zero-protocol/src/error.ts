@@ -25,6 +25,11 @@ const basicErrorKindSchema = v.literalUnion(
 const basicErrorBodySchema = v.object({
   kind: basicErrorKindSchema,
   message: v.string(),
+  /**
+   * Whether retrying the failed operation can succeed without changing the
+   * request. Optional for compatibility with older senders.
+   */
+  retryable: v.boolean().optional(),
   // this is optional for backwards compatibility
   origin: v.literalUnion(ErrorOrigin.Server, ErrorOrigin.ZeroCache).optional(),
 });
@@ -65,6 +70,11 @@ const pushFailedBaseSchema = v.object({
   kind: pushFailedErrorKindSchema,
   details: jsonSchema.optional(),
   /**
+   * Whether retrying the push can succeed without changing the request.
+   * Optional for compatibility with older senders.
+   */
+  retryable: v.boolean().optional(),
+  /**
    * The mutationIDs of the mutations that failed to process.
    * This can be a subset of the mutationIDs in the request.
    */
@@ -102,6 +112,11 @@ export const pushFailedBodySchema = v.union(
 const transformFailedBaseSchema = v.object({
   kind: transformFailedErrorKindSchema,
   details: jsonSchema.optional(),
+  /**
+   * Whether retrying the transform can succeed without changing the request.
+   * Optional for compatibility with older senders.
+   */
+  retryable: v.boolean().optional(),
   /**
    * The queryIDs of the queries that failed to transform.
    */
@@ -152,6 +167,19 @@ export const errorMessageSchema: v.Type<ErrorMessage> = v.tuple([
 ]);
 
 export type ErrorMessage = ['error', ErrorBody];
+
+/**
+ * HTTP responses that are expected to succeed when retried without changing
+ * the request.
+ */
+export function isRetryableHTTPStatus(status: number): boolean {
+  return (
+    status === 408 ||
+    status === 425 ||
+    status === 429 ||
+    (status >= 500 && status <= 599)
+  );
+}
 
 /**
  * Represents an error used across zero-client, zero-cache, and zero-server.

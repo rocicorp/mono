@@ -22,10 +22,11 @@ test('run-loop error->connect race', async () => {
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  // Trigger a non-auth error
+  // Trigger a non-auth error that is fatal (a zero-cache Internal error is
+  // retried, so it would not park the connection in the error state).
   await z.triggerError({
-    kind: ErrorKind.Internal,
-    message: 'internal error',
+    kind: ErrorKind.InvalidPush,
+    message: 'invalid push',
     origin: ErrorOrigin.ZeroCache,
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
@@ -53,10 +54,11 @@ test('run-loop error->connect race using state.subscribe', async () => {
     }
   });
 
-  // Trigger a non-auth error
+  // Trigger a non-auth error that is fatal (a zero-cache Internal error is
+  // retried, so it would not park the connection in the error state).
   await z.triggerError({
-    kind: ErrorKind.Internal,
-    message: 'internal error',
+    kind: ErrorKind.InvalidPush,
+    message: 'invalid push',
     origin: ErrorOrigin.ZeroCache,
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
