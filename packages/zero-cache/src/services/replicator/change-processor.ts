@@ -625,17 +625,7 @@ class TransactionProcessor {
       );
     }
 
-    if (
-      Object.keys(create.backfill ?? {}).length ===
-      Object.keys(create.spec.columns).length
-    ) {
-      this.#reloadTableSpecs();
-    } else {
-      // Make the table visible immediately unless all of the columns are
-      // being backfilled. In the backfill case, the version bump will happen
-      // with the backfill is complete.
-      this.#logResetOp(table.name);
-    }
+    this.#logResetOp(table.name);
     this.#lc.info?.(create.tag, table.name);
   }
 
@@ -829,17 +819,7 @@ class TransactionProcessor {
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
     // having a unique index), so reset pipelines to refresh table schemas.
-    // However, the reset is not necessary if the index is for a table
-    // that is not yet visible due to backfilling.
-    const tableSpec = must(this.#tableSpecs.get(index.tableName));
-    if (
-      (tableSpec.backfilling ?? []).length ===
-      Object.entries(tableSpec.columns).length - 1 // don't count _0_version
-    ) {
-      this.#reloadTableSpecs();
-    } else {
-      this.#logResetOp(index.tableName);
-    }
+    this.#logResetOp(index.tableName);
     this.#lc.info?.(create.tag, index.name);
   }
 
