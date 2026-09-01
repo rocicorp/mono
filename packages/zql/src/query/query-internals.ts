@@ -52,6 +52,9 @@ export interface QueryInternals<
   /**
    * The completed AST for this query, with any missing primary keys added to
    * orderBy and start.
+   *
+   * A QueryImpl hands out a `NormalizedAST`; this stays an `AST` so that the
+   * ASTs derived from it (e.g. by binding static parameters) still fit.
    */
   readonly ast: AST;
 

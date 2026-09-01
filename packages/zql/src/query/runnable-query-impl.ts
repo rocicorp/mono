@@ -1,4 +1,8 @@
-import type {AST, System} from '../../../zero-protocol/src/ast.ts';
+import {
+  tableAST,
+  type NormalizedAST,
+  type System,
+} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
@@ -28,7 +32,7 @@ export function newRunnableQuery<
     delegate,
     schema,
     table,
-    {table},
+    tableAST(table),
     defaultFormat,
     undefined,
   );
@@ -48,7 +52,7 @@ export class RunnableQueryImpl<
     delegate: QueryDelegate,
     schema: TSchema,
     tableName: TTable,
-    ast: AST = {table: tableName},
+    ast: NormalizedAST = tableAST(tableName),
     format: Format = defaultFormat,
     system: System = 'client',
     customQueryID?: CustomQueryID,
