@@ -1,3 +1,4 @@
+import {NodeSDK} from '@opentelemetry/sdk-node';
 import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {resetOtelDiagnosticLogger} from './otel-diag-logger.ts';
@@ -125,6 +126,9 @@ describe('Diagnostic Logger Integration Tests', () => {
     expect(mockLogContext.withContext).toHaveBeenCalledWith(
       'component',
       'otel',
+    );
+    expect(vi.mocked(NodeSDK).mock.calls[0][0]).not.toHaveProperty(
+      'metricReaders',
     );
   });
 

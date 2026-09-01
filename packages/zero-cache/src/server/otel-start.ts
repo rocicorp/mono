@@ -13,6 +13,7 @@ import {
 } from '../../../otel/src/enabled.ts';
 import {NATIVE_HISTOGRAM_INSTRUMENT_NAMES} from '../observability/metrics.ts';
 import {setupOtelDiagnosticLogger} from './otel-diag-logger.ts';
+import {createMetricReadersFromEnv} from './otel-metric-readers.ts';
 
 class OtelManager {
   static #instance: OtelManager;
@@ -69,9 +70,11 @@ class OtelManager {
     process.env.OTEL_TRACES_EXPORTER ??= otelTracesEnabled() ? 'otlp' : 'none';
     process.env.OTEL_LOGS_EXPORTER ??= otelLogsEnabled() ? 'otlp' : 'none';
 
+    const metricReaders = createMetricReadersFromEnv();
     const sdk = new NodeSDK({
       resource,
       autoDetectResources: true,
+      ...(metricReaders ? {metricReaders} : {}),
       views: NATIVE_HISTOGRAM_INSTRUMENT_NAMES.map(instrumentName => ({
         instrumentName,
         instrumentType: InstrumentType.HISTOGRAM,
