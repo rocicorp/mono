@@ -2830,6 +2830,14 @@ describe('replicator/change-processor', () => {
         ],
         ['_zero.changeLog2']: [
           {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '0e',
+            stateVersion: '0e',
+            table: 'bff',
+          },
+          {
             backfillingColumnVersions:
               '{"a":"101","b":"101","c":"101","d":"101","e":"101"}',
             op: 's',
@@ -3244,6 +3252,14 @@ describe('replicator/change-processor', () => {
         ],
         ['_zero.changeLog2']: [
           {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '0e',
+            stateVersion: '0e',
+            table: 'bff',
+          },
+          {
             backfillingColumnVersions:
               '{"a":"101","b":"101","c":"101","d":"101","e":"101"}',
             op: 's',
@@ -3593,6 +3609,14 @@ describe('replicator/change-processor', () => {
           {id: 83n, _0_version: '115'},
         ],
         ['_zero.changeLog2']: [
+          {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '0e',
+            stateVersion: '0e',
+            table: 'bff',
+          },
           {
             backfillingColumnVersions: '{}',
             op: 'r',
