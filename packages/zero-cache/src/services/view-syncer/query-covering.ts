@@ -9,6 +9,7 @@ import {
   type CorrelatedSubquery,
   type CorrelatedSubqueryCondition,
   type LiteralValue,
+  type NormalizedAST,
   type SimpleCondition,
 } from '../../../../zero-protocol/src/ast.ts';
 
@@ -24,7 +25,6 @@ export type CoveringQuery = {
   readonly queryName?: string | undefined;
 };
 
-type NormalizedAST = Required<AST>;
 type NonNullScalarLiteralValue = string | number | boolean;
 type IndexedRunningQuery = RunningQuery & {
   readonly normalizedAst: NormalizedAST;
