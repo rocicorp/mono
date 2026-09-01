@@ -1,7 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
-import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
+import {
+  hashOfAST,
+  hashOfNameAndArgs,
+} from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {ArrayView} from '../ivm/array-view.ts';
@@ -345,11 +348,10 @@ export function materializeImpl<
 
   const qi = asQueryInternals(query);
   const {ast, format, customQueryID} = qi;
-  const queryHash = qi.hash();
 
   const queryID = customQueryID
     ? hashOfNameAndArgs(customQueryID.name, customQueryID.args)
-    : queryHash;
+    : hashOfAST(qi.ast);
   const queryCompleteResolver = resolver<true>();
   let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
   let endToEndMetricRecorded = false;

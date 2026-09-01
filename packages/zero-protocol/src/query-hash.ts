@@ -14,9 +14,4 @@ export function hashOfAST(ast: AST): string {
   return hash;
 }
 
-export function hashOfNameAndArgs(
-  name: string,
-  args: readonly unknown[],
-): string {
-  return hashNameAndArgs(name, args);
-}
+export {hashNameAndArgs as hashOfNameAndArgs};

@@ -10,7 +10,7 @@ import {
   type System,
   SUBQ_PREFIX,
 } from '../../../zero-protocol/src/ast.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import {hashOfQueryInternals} from '../../../zero-protocol/src/query-hash-visitor.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {NotImplementedError} from '../error.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
@@ -172,7 +172,7 @@ export class QueryImpl<
 
   hash(): string {
     if (!this.#hash) {
-      this.#hash = hashOfAST(this.#ast);
+      this.#hash = hashOfQueryInternals(this.#ast, this.format);
     }
     return this.#hash;
   }

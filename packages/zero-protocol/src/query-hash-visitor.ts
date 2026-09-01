@@ -4,6 +4,8 @@ import {
   PRIME32_5,
   round32,
 } from '../../shared/src/xxhash32.ts';
+import type {Format} from '../../zero-types/src/format.ts';
+
 /**
  * Prototype: hash a normalized AST by visiting it, instead of by rendering it
  * to JSON and hashing the bytes.
@@ -113,7 +115,8 @@ const TAG_SIMPLE = 0x2004;
 const TAG_SUBQUERY = 0x2005;
 const TAG_AND = 0x2006;
 const TAG_OR = 0x2007;
-const TAG_NAME_ARGS = 0x2008;
+const TAG_FORMAT = 0x2008;
+const TAG_NAME_ARGS = 0x2009;
 
 // Set on a string's length word. High enough that no array length reaches it.
 const STR_MARK = 0x40000000;
@@ -274,10 +277,10 @@ function visitCorrelatedSubquery(csq: CorrelatedSubquery): void {
   visitCompoundKey(csq.correlation.childField);
   mix(csq.hidden === undefined ? TAG_UNDEF : csq.hidden ? TAG_TRUE : TAG_FALSE);
   visitOptionalString(csq.system);
-  visitAST_(csq.subquery);
+  visitAST(csq.subquery);
 }
 
-function visitAST_(ast: AST): void {
+function visitAST(ast: AST): void {
   mix(TAG_OBJ);
   visitOptionalString(ast.schema);
   mixString(ast.table);
@@ -319,7 +322,7 @@ function visitAST_(ast: AST): void {
 
 export function hashAST(ast: AST): string {
   reset();
-  visitAST_(ast);
+  visitAST(ast);
   return finalize();
 }
 
@@ -340,5 +343,13 @@ export function hashNameAndArgs(
   mix(TAG_NAME_ARGS);
   mixString(name);
   visitValue(args);
+  return finalize();
+}
+
+export function hashOfQueryInternals(ast: AST, format: Format): string {
+  reset();
+  visitAST(ast);
+  mix(TAG_FORMAT);
+  visitValue(format);
   return finalize();
 }

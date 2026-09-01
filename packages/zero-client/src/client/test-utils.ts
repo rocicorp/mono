@@ -30,7 +30,10 @@ import type {
   PushResponseBody,
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
-import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
+import {
+  hashOfAST,
+  hashOfNameAndArgs,
+} from '../../../zero-protocol/src/query-hash.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
@@ -286,14 +289,14 @@ export class TestZero<
     q: Query<keyof S['tables'] & string, S>,
   ): Promise<void> {
     const qi = asQueryInternals(q);
-    const hash = qi.customQueryID
+    const queryID = qi.customQueryID
       ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
-      : qi.hash();
+      : hashOfAST(qi.ast);
     await this.triggerPoke({
       gotQueriesPatch: [
         {
           op: 'put',
-          hash,
+          hash: queryID,
         },
       ],
     });
@@ -329,14 +332,14 @@ export class TestZero<
     // TODO(arv): The cookies here could be better... Not sure if the client
     // ever checks these?
     const qi = asQueryInternals(q);
-    const hash = qi.customQueryID
+    const queryID = qi.customQueryID
       ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
-      : qi.hash();
+      : hashOfAST(qi.ast);
     return this.triggerPoke({
       gotQueriesPatch: [
         {
           op: 'put',
-          hash,
+          hash: queryID,
         },
       ],
     });
