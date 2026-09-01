@@ -165,6 +165,13 @@ function visitValue(v: unknown): void {
       mixString(v);
       return;
     case 'number':
+      // NaN and Infinity are null by the time they reach the wire, because
+      // that is what JSON.stringify writes for them. Two queries identical on
+      // the wire must not get different IDs.
+      if (!Number.isFinite(v)) {
+        mix(TAG_NULL);
+        return;
+      }
       mix((v | 0) === v ? TAG_INT : TAG_FLOAT);
       mixNumber(v);
       return;

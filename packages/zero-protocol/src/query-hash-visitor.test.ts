@@ -491,3 +491,18 @@ test('the digest is stable across object key reordering', () => {
     hashNameAndArgs('q', [{a: 1, b: [{c: 2, d: 3}]}]),
   );
 });
+
+test('a non-finite argument hashes as null, as it serializes', () => {
+  // Same rule as undefined-in-arrays: JSON.stringify writes null for NaN and
+  // Infinity, so that is what they are on the wire.
+  expect(JSON.stringify([NaN])).toBe(JSON.stringify([null]));
+  for (const v of [NaN, Infinity, -Infinity]) {
+    expect(hashNameAndArgs('q', [v])).toBe(hashNameAndArgs('q', [null]));
+  }
+  expect(hashNameAndArgs('q', [NaN])).not.toBe(hashNameAndArgs('q', []));
+  // -0 serializes as 0 and must hash as 0.
+  expect(JSON.stringify([-0])).toBe(JSON.stringify([0]));
+  expect(hashNameAndArgs('q', [-0])).toBe(hashNameAndArgs('q', [0]));
+  // Finite floats are still themselves.
+  expect(hashNameAndArgs('q', [1.5])).not.toBe(hashNameAndArgs('q', [null]));
+});
