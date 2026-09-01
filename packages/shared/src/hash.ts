@@ -155,3 +155,8 @@ function wide(str: string, words: number): bigint {
   }
   return result;
 }
+
+// Re-exported for zero-protocol's AST hash, which cannot import xxhash32.ts
+// directly without tripping a tsc 7.0.2 bug (see the import comment in
+// zero-protocol/src/query-hash-visitor.ts).
+export {avalanche32, PRIME32_1, PRIME32_5, round32} from './xxhash32.ts';

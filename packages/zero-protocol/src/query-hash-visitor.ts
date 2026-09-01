@@ -1,32 +1,17 @@
-// These duplicate shared/src/xxhash32.ts, deliberately. Importing that module
-// from here -- the one cross-package edge zero-protocol -> shared/xxhash32 --
-// makes tsc 7.0.2 mis-evaluate Query-type relations in whole other programs:
-// with the import, the packages/zero declaration build and zero-throughput
-// report phantom TS2345 errors in zql's runnable-query-impl.ts, and
-// zero-client *stops* reporting a real error that custom.test.ts pins with a
-// ts-expect-error directive. Bisected cold-cache to exactly this import
-// statement, both directions. Until TypeScript is upgraded past this, the ~25 lines below are
-// cheaper than an import that flips type checking elsewhere. Keep them
-// identical to shared/src/xxhash32.ts.
-const PRIME32_1 = 2654435761;
-const PRIME32_2 = 2246822519;
-const PRIME32_3 = 3266489917;
-const PRIME32_5 = 374761393;
-
-function round32(acc: number, word: number): number {
-  acc = (acc + Math.imul(word, PRIME32_2)) | 0;
-  acc = (acc << 13) | (acc >>> 19);
-  return Math.imul(acc, PRIME32_1);
-}
-
-function avalanche32(acc: number): number {
-  acc ^= acc >>> 15;
-  acc = Math.imul(acc, PRIME32_2);
-  acc ^= acc >>> 13;
-  acc = Math.imul(acc, PRIME32_3);
-  acc ^= acc >>> 16;
-  return acc >>> 0;
-}
+// These live in shared/src/xxhash32.ts, imported via hash.ts's re-export
+// rather than directly: the direct zero-protocol -> shared/xxhash32.ts edge
+// makes tsc 7.0.2 mis-evaluate Query-type relations in other programs --
+// phantom TS2345s in zql's runnable-query-impl.ts under the packages/zero
+// declaration build, and zero-client silently losing the type error that
+// custom.test.ts pins with a ts-expect-error directive. Bisected cold-cache
+// to that one import statement; the hash.ts route checks clean everywhere.
+// Collapse to a direct import when TypeScript is upgraded past this.
+import {
+  avalanche32,
+  PRIME32_1,
+  PRIME32_5,
+  round32,
+} from '../../shared/src/hash.ts';
 import type {Format} from '../../zero-types/src/format.ts';
 
 /**
@@ -70,7 +55,13 @@ import type {Format} from '../../zero-types/src/format.ts';
  * `visitValue` below stays generic, for the two places an AST holds arbitrary
  * JSON: a literal's value and a bound's row.
  */
-import type {AST, Condition, CorrelatedSubquery, Ordering} from './ast.ts';
+import type {
+  AST,
+  Condition,
+  CorrelatedSubquery,
+  Ordering,
+  ValuePosition,
+} from './ast.ts';
 
 // Two 32-bit lanes, combined into 64 bits at the end. Module-level so the walk
 // mutates registers rather than allocating or threading state through it.
@@ -254,29 +245,29 @@ function visitOrdering(o: Ordering | undefined): void {
   }
 }
 
-function visitValuePosition(v: unknown): void {
-  const t = (v as {type: string}).type;
-  switch (t) {
+function visitValuePosition(v: ValuePosition): void {
+  switch (v.type) {
     case 'literal':
       mix(TAG_LITERAL);
-      visitValue((v as {value: unknown}).value);
+      visitValue(v.value);
       return;
     case 'column':
       mix(TAG_COLUMN);
-      mixString((v as {name: string}).name);
+      mixString(v.name);
       return;
-    default: {
-      // 'static' parameter reference.
+    case 'static': {
       mix(TAG_STATIC);
-      const p = v as {anchor: string; field: string | string[]};
-      mixString(p.anchor);
-      if (typeof p.field === 'string') {
-        mixString(p.field);
+      mixString(v.anchor);
+      if (typeof v.field === 'string') {
+        mixString(v.field);
       } else {
-        visitCompoundKey(p.field);
+        visitCompoundKey(v.field);
       }
       return;
     }
+    default:
+      v satisfies never;
+      return;
   }
 }
 
@@ -296,7 +287,7 @@ function visitCondition(c: Condition): void {
       visitCorrelatedSubquery(c.related);
       return;
     default: {
-      // 'and' / 'or'
+      c.type satisfies 'and' | 'or';
       mix(c.type === 'and' ? TAG_AND : TAG_OR);
       const conds = c.conditions;
       mix(conds.length);
