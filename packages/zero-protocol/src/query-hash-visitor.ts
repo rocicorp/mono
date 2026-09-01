@@ -1,3 +1,4 @@
+import {unreachable} from '../../shared/src/asserts.ts';
 // These live in shared/src/xxhash32.ts, imported via hash.ts's re-export
 // rather than directly: the direct zero-protocol -> shared/xxhash32.ts edge
 // makes tsc 7.0.2 mis-evaluate Query-type relations in other programs --
@@ -273,8 +274,7 @@ function visitValuePosition(v: ValuePosition): void {
       return;
     }
     default:
-      v satisfies never;
-      return;
+      unreachable(v);
   }
 }
 
