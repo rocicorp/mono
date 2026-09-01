@@ -1,6 +1,5 @@
-import {h64} from '../../shared/src/hash.ts';
 import {normalizeAST, type AST} from './ast.ts';
-import {hashAST} from './query-hash-visitor.ts';
+import {hashAST, hashNameAndArgs} from './query-hash-visitor.ts';
 
 const hashCache = new WeakMap<AST, string>();
 
@@ -19,6 +18,5 @@ export function hashOfNameAndArgs(
   name: string,
   args: readonly unknown[],
 ): string {
-  const argsString = JSON.stringify(args);
-  return h64(`${name}:${argsString}`).toString(36);
+  return hashNameAndArgs(name, args);
 }

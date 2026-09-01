@@ -1,3 +1,9 @@
+import {
+  avalanche32,
+  PRIME32_1,
+  PRIME32_5,
+  round32,
+} from '../../shared/src/xxhash32.ts';
 /**
  * Prototype: hash a normalized AST by visiting it, instead of by rendering it
  * to JSON and hashing the bytes.
@@ -33,12 +39,6 @@
  * JSON: a literal's value and a bound's row.
  */
 import type {AST, Condition, CorrelatedSubquery, Ordering} from './ast.ts';
-import {
-  avalanche32,
-  PRIME32_1,
-  PRIME32_5,
-  round32,
-} from '../../shared/src/xxhash32.ts';
 
 // Two 32-bit lanes, combined into 64 bits at the end. Module-level so the walk
 // mutates registers rather than allocating or threading state through it.
@@ -113,6 +113,7 @@ const TAG_SIMPLE = 0x2004;
 const TAG_SUBQUERY = 0x2005;
 const TAG_AND = 0x2006;
 const TAG_OR = 0x2007;
+const TAG_NAME_ARGS = 0x2008;
 
 // Set on a string's length word. High enough that no array length reaches it.
 const STR_MARK = 0x40000000;
@@ -154,7 +155,11 @@ function visitValue(v: unknown): void {
       if (Array.isArray(v)) {
         mix(TAG_ARR);
         for (let i = 0; i < v.length; i++) {
-          visitValue(v[i]);
+          // An `undefined` element is `null` by the time it reaches the wire,
+          // because that is what JSON.stringify makes of it. Dropping it
+          // instead would fold `[undefined]` onto `[]`.
+          const e: unknown = v[i];
+          visitValue(e === undefined ? null : e);
         }
         mix(TAG_END);
         return;
@@ -172,7 +177,9 @@ function visitValue(v: unknown): void {
       return;
     }
     default:
-      return; // undefined, functions: dropped, as JSON.stringify does
+      // `undefined` and functions as an object's value: dropped, as
+      // JSON.stringify drops them. Array elements are handled above.
+      return;
   }
 }
 
@@ -313,5 +320,25 @@ function visitAST_(ast: AST): void {
 export function hashAST(ast: AST): string {
   reset();
   visitAST_(ast);
+  return finalize();
+}
+
+/**
+ * The identity of a custom query: its name and its arguments.
+ *
+ * Same walk, entered at a different node. `args` is arbitrary JSON, which is
+ * what `visitValue` already exists to handle. The leading tag keeps this hash
+ * space disjoint from `hashAST`'s -- both produce query IDs that live in the
+ * same namespace, so an AST must not be able to fold to the same words as some
+ * name and args.
+ */
+export function hashNameAndArgs(
+  name: string,
+  args: readonly unknown[],
+): string {
+  reset();
+  mix(TAG_NAME_ARGS);
+  mixString(name);
+  visitValue(args);
   return finalize();
 }

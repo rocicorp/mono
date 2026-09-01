@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
 import {normalizeAST, type AST, type Condition} from './ast.ts';
-import {hashAST} from './query-hash-visitor.ts';
+import {hashAST, hashNameAndArgs} from './query-hash-visitor.ts';
 
 const base: AST = {table: 'issue'};
 
@@ -350,4 +350,86 @@ test('hashAST reads every field of the AST', () => {
       `mutating ${field} did not change the hash`,
     ).not.toBe(baseHash);
   }
+});
+
+const NAME_AND_ARGS: [string, readonly unknown[]][] = [
+  ['q', []],
+  ['r', []],
+  ['q', [1]],
+  ['q', [2]],
+  ['q', [1.5]],
+  ['q', ['1']],
+  ['q', [true]],
+  ['q', ['true']],
+  ['q', [null]],
+  ['q', [1, 2]],
+  ['q', [2, 1]],
+  ['q', [[1, 2]]],
+  ['q', [[1], [2]]],
+  ['q', [{a: 1}]],
+  ['q', [{a: 2}]],
+  ['q', [{b: 1}]],
+  ['q', [{a: 1, b: 2}]],
+  ['q', ['a', 'b']],
+  ['q', ['ab']],
+  ['q', ['a', ['b']]],
+  // The pieces must not run together: these differ only in where the boundary
+  // between the name and a string argument falls.
+  ['qa', ['b']],
+  ['q', ['ab', '']],
+  ['issues', [{open: true, labels: ['bug', 'p0']}]],
+  ['issues', [{open: true, labels: ['bug', 'p1']}]],
+];
+
+test('hashNameAndArgs separates every name/args pair', () => {
+  const byHash = new Map<string, string>();
+  for (const [name, args] of NAME_AND_ARGS) {
+    const key = `${name} ${JSON.stringify(args)}`;
+    const h = hashNameAndArgs(name, args);
+    const existing = byHash.get(h);
+    expect(
+      existing,
+      `collision between\n  ${existing}\n  ${key}`,
+    ).toBeUndefined();
+    byHash.set(h, key);
+  }
+});
+
+test('hashNameAndArgs depends only on the values, not call order', () => {
+  for (const [name, args] of NAME_AND_ARGS) {
+    const a = hashNameAndArgs(name, args);
+    hashAST(CORPUS[0]);
+    hashNameAndArgs('other', [1, 2, 3]);
+    expect(hashNameAndArgs(name, args)).toBe(a);
+    expect(hashNameAndArgs(name, JSON.parse(JSON.stringify(args)))).toBe(a);
+  }
+});
+
+test('hashNameAndArgs and hashAST occupy disjoint hash spaces', () => {
+  // Both produce query IDs that share a namespace, so no AST may collide with
+  // any name/args pair.
+  const astHashes = new Set(CORPUS.map(hashAST));
+  for (const [name, args] of NAME_AND_ARGS) {
+    expect(
+      astHashes.has(hashNameAndArgs(name, args)),
+      `${name}(${JSON.stringify(args)}) collided with an AST hash`,
+    ).toBe(false);
+  }
+});
+
+test('an undefined argument hashes as null, as it serializes', () => {
+  // args reach the server as JSON, where `undefined` in an array is `null`.
+  // The hash has to agree with that or two queries that are identical on the
+  // wire would get different IDs.
+  expect(hashNameAndArgs('q', [undefined])).toBe(hashNameAndArgs('q', [null]));
+  expect(hashNameAndArgs('q', [1, undefined])).toBe(
+    hashNameAndArgs('q', [1, null]),
+  );
+  // But it must not vanish: `[undefined]` is not `[]`.
+  expect(hashNameAndArgs('q', [undefined])).not.toBe(hashNameAndArgs('q', []));
+  // An undefined object *property* is dropped, which is also what
+  // JSON.stringify does.
+  expect(hashNameAndArgs('q', [{a: 1, b: undefined}])).toBe(
+    hashNameAndArgs('q', [{a: 1}]),
+  );
 });
