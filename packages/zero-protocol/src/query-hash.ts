@@ -1,5 +1,6 @@
 import {h64} from '../../shared/src/hash.ts';
 import {normalizeAST, type AST} from './ast.ts';
+import {hashAST} from './query-hash-visitor.ts';
 
 const hashCache = new WeakMap<AST, string>();
 
@@ -9,7 +10,7 @@ export function hashOfAST(ast: AST): string {
   if (cached) {
     return cached;
   }
-  const hash = h64(JSON.stringify(normalized)).toString(36);
+  const hash = hashAST(normalized);
   hashCache.set(normalized, hash);
   return hash;
 }
