@@ -5092,11 +5092,11 @@ describe('view-syncer/service', () => {
       // re-executes for a real reason (transformation hash change, etc.).
       //
       // This assertion used to expect the sig to be written here — but only
-      // because the AST hash was sensitive to JSON key order, and Postgres
-      // JSONB reorders keys, so the internal queries spuriously hash-
-      // mismatched on every restart and dragged hydration through the updater
-      // path. The visiting hash is stable across that round trip, so the
-      // spurious re-execution (and with it this side effect) is gone.
+      // because normalization passed condition objects through with whatever
+      // key order they arrived with, and Postgres jsonb reorders keys, so the
+      // internal queries spuriously hash-mismatched on every restart and
+      // dragged hydration through the updater path. Now that normalization is
+      // canonical, the spurious re-execution (and this side effect) is gone.
       expect(await loadStoredSig('query-hash1')).toBeNull();
     } finally {
       await cleanup();

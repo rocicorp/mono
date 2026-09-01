@@ -334,6 +334,7 @@ test('add renamed fields', () => {
                     "type": "simple",
                   },
                   {
+                    "flip": undefined,
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
@@ -344,6 +345,7 @@ test('add renamed fields', () => {
                           "id",
                         ],
                       },
+                      "hidden": undefined,
                       "subquery": {
                         "alias": undefined,
                         "limit": undefined,
@@ -354,7 +356,9 @@ test('add renamed fields', () => {
                         "table": "comments",
                         "where": undefined,
                       },
+                      "system": undefined,
                     },
+                    "scalar": undefined,
                     "type": "correlatedSubquery",
                   },
                 ],
