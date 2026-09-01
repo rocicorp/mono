@@ -33,8 +33,8 @@ export interface QueryInternals<
 
   /**
    * A string that uniquely identifies this query. This can be used to determine
-   * if two queries are the same and produces the same result based on the same
-   * data.
+   * if two queries are the same, i.e. whether they would produce the same
+   * result from the same data.
    */
   hash(): string;
 
