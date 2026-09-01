@@ -1,9 +1,32 @@
-import {
-  avalanche32,
-  PRIME32_1,
-  PRIME32_5,
-  round32,
-} from '../../shared/src/xxhash32.ts';
+// These duplicate shared/src/xxhash32.ts, deliberately. Importing that module
+// from here -- the one cross-package edge zero-protocol -> shared/xxhash32 --
+// makes tsc 7.0.2 mis-evaluate Query-type relations in whole other programs:
+// with the import, the packages/zero declaration build and zero-throughput
+// report phantom TS2345 errors in zql's runnable-query-impl.ts, and
+// zero-client *stops* reporting a real error that custom.test.ts pins with a
+// ts-expect-error directive. Bisected cold-cache to exactly this import
+// statement, both directions. Until TypeScript is upgraded past this, the ~25 lines below are
+// cheaper than an import that flips type checking elsewhere. Keep them
+// identical to shared/src/xxhash32.ts.
+const PRIME32_1 = 2654435761;
+const PRIME32_2 = 2246822519;
+const PRIME32_3 = 3266489917;
+const PRIME32_5 = 374761393;
+
+function round32(acc: number, word: number): number {
+  acc = (acc + Math.imul(word, PRIME32_2)) | 0;
+  acc = (acc << 13) | (acc >>> 19);
+  return Math.imul(acc, PRIME32_1);
+}
+
+function avalanche32(acc: number): number {
+  acc ^= acc >>> 15;
+  acc = Math.imul(acc, PRIME32_2);
+  acc ^= acc >>> 13;
+  acc = Math.imul(acc, PRIME32_3);
+  acc ^= acc >>> 16;
+  return acc >>> 0;
+}
 import type {Format} from '../../zero-types/src/format.ts';
 
 /**
