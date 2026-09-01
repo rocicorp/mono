@@ -156,11 +156,11 @@ describe('hashOfAST vs the AST-specialized visitor', () => {
     const json = JSON.stringify(normalized);
     const label = `${name} (${json.length} chars)`;
 
-    bench(`${label} | 1. JSON.stringify + h64 (shipped)`, () => {
+    bench(`${label} | 1. JSON.stringify + h64 (previous)`, () => {
       use(h64(JSON.stringify(normalized)).toString(36));
     });
 
-    bench(`${label} | 2. AST-specialized visitor`, () => {
+    bench(`${label} | 2. AST-specialized visitor (current)`, () => {
       use(hashAST(normalized));
     });
   }

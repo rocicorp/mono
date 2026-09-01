@@ -13,9 +13,9 @@ import type {Downstream, WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
 import {
-  SQLiteChangeLogCatchup,
   SQLiteChangeLogBarrierBacklogError,
   SQLiteChangeLogBarrierTimeoutError,
+  SQLiteChangeLogCatchup,
   type SQLiteChangeLogCatchupOptions,
   type SQLiteChangeLogCatchupReader,
   type SQLiteChangeLogCleanupGuard,
@@ -685,6 +685,7 @@ function createSubscriber(watermark: string, options: SubscriberOptions = {}) {
   const subscriber = new Subscriber(
     5,
     `subscriber-${watermark}`,
+    'serving',
     watermark,
     downstream,
     () => ({tag: 'status'}),

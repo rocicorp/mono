@@ -131,7 +131,7 @@ test('add and remove a custom query', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '0wtoqx80gjdkxc',
+          hash: '0c5kpya05ymm4b',
           name: 'customQuery',
           args: [1],
           ttl: 60000,
@@ -179,7 +179,7 @@ test('add and remove a custom query', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '0wtoqx80gjdkxc',
+          hash: '0c5kpya05ymm4b',
           name: 'customQuery',
           args: [1],
           ttl: 120000,
@@ -2301,7 +2301,7 @@ describe('update clamps TTL correctly', () => {
         desiredQueriesPatch: [
           {
             op: 'put',
-            hash: '0wtoqx80gjdkxc',
+            hash: '0c5kpya05ymm4b',
             name: 'customQuery',
             args: [1],
             ttl: 120000, // Clamped TTL value
@@ -2369,7 +2369,7 @@ describe('update clamps TTL correctly', () => {
         desiredQueriesPatch: [
           {
             op: 'put',
-            hash: '0wtoqx80gjdkxc',
+            hash: '0c5kpya05ymm4b',
             name: 'customQuery',
             args: [1],
             ttl: MAX_TTL_MS, // Already at max TTL

@@ -299,7 +299,10 @@ test('hashAST reads every field of the AST', () => {
   });
   const baseHash = hashAST(full);
 
-  const mutations: Record<string, AST> = {
+  // Typed so that every field of the AST must appear as a key: adding a field
+  // to AST breaks this line until a mutation is written for it, which is the
+  // regression this test exists to catch. Extra descriptive keys are allowed.
+  const mutations: Record<keyof Required<AST>, AST> & Record<string, AST> = {
     'schema': {...full, schema: 'other'},
     'table': {...full, table: 'comment'},
     'alias': {...full, alias: 'other'},
@@ -432,4 +435,24 @@ test('an undefined argument hashes as null, as it serializes', () => {
   expect(hashNameAndArgs('q', [{a: 1, b: undefined}])).toBe(
     hashNameAndArgs('q', [{a: 1}]),
   );
+});
+
+test('an optional field is never confusable with its own absence', () => {
+  // Every optional field writes a marker when absent. That marker must not be
+  // reproducible by a legal value of the field. `limit` is the sharp case:
+  // absent and present each write a single word, so an untagged limit equal to
+  // the marker (TAG_UNDEF, 0x100a === 4106) would collide.
+  for (const limit of [4097, 4106, 4111, 8193, 8201, 0, 1, 1000]) {
+    expect(
+      hashAST(ast({limit})),
+      `limit ${limit} hashed the same as no limit`,
+    ).not.toBe(hashAST(ast({})));
+  }
+
+  // The count-carrying fields are safe for a different reason -- a count is
+  // followed by that many items -- but pin it rather than trust the argument.
+  expect(hashAST(ast({related: []}))).not.toBe(hashAST(ast({})));
+  expect(hashAST(ast({orderBy: []}))).not.toBe(hashAST(ast({})));
+  expect(hashAST(ast({alias: ''}))).not.toBe(hashAST(ast({})));
+  expect(hashAST(ast({schema: ''}))).not.toBe(hashAST(ast({})));
 });

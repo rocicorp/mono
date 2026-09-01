@@ -15,19 +15,20 @@ import type {
   ChangeStreamMessage,
   MessageBackfill,
 } from '../protocol/current.ts';
-import {BackfillManager} from './backfill-manager.ts';
+import {BackfillManager, type BackfillMessage} from './backfill-manager.ts';
 import {ChangeStreamMultiplexer} from './change-stream-multiplexer.ts';
+
+type TestStreamItem = MessageBackfill | BackfillCompleted | BackfillMessage;
 
 describe('backfill-manager', () => {
   let backfillManager: BackfillManager;
   let changeStream: ChangeStreamMultiplexer;
   let backfillRequests: BackfillRequest[];
-  let testStreams: ((MessageBackfill | BackfillCompleted)[] | Error)[];
+  let testStreams: (TestStreamItem[] | Error)[];
   let changes: Queue<ChangeStreamMessage>;
   let lc: LogContext;
 
-  beforeEach(() => {
-    lc = createSilentLogContext();
+  function initBackfillManager(commitThresholdBytes?: number) {
     changeStream = new ChangeStreamMultiplexer(lc, '123');
     backfillManager = new BackfillManager(
       lc,
@@ -36,10 +37,9 @@ describe('backfill-manager', () => {
       JSON_PARSED,
       10,
       50,
+      commitThresholdBytes,
     );
     changeStream.addProducers(backfillManager).addListeners(backfillManager);
-    backfillRequests = [];
-    testStreams = [];
     changes = new Queue<ChangeStreamMessage>();
 
     // Drain ChangeStreamMessages to the changes queue.
@@ -48,11 +48,18 @@ describe('backfill-manager', () => {
         changes.enqueue(msg);
       }
     })();
+  }
+
+  beforeEach(() => {
+    lc = createSilentLogContext();
+    backfillRequests = [];
+    testStreams = [];
+    initBackfillManager();
   });
 
   async function* backfillStreamer(
     req: BackfillRequest,
-  ): AsyncGenerator<MessageBackfill | BackfillCompleted> {
+  ): AsyncGenerator<BackfillMessage> {
     lc.debug?.(`starting test backfill stream for`, req);
     backfillRequests.push(req);
     const stream = must(
@@ -64,8 +71,8 @@ describe('backfill-manager', () => {
       throw stream; // For testing backfill errors
     }
 
-    for (const msg of stream) {
-      yield msg;
+    for (const item of stream) {
+      yield 'message' in item ? item : {message: item, byteSize: 0};
     }
   }
 
@@ -184,6 +191,110 @@ describe('backfill-manager', () => {
         },
       },
     ]);
+  });
+
+  test('commits a transaction when the byte threshold is reached', async () => {
+    // Small threshold so that two 60-byte messages (120 bytes) cross it, but a
+    // single one (60 bytes) does not.
+    initBackfillManager(100);
+
+    const relation = {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}};
+    testStreams.push([
+      {
+        message: {
+          tag: 'backfill',
+          relation,
+          watermark: '130',
+          columns: ['b'],
+          rowValues: [[1, 2]],
+        },
+        byteSize: 60,
+      },
+      {
+        message: {
+          tag: 'backfill',
+          relation,
+          watermark: '130',
+          columns: ['b'],
+          rowValues: [[3, 4]],
+        },
+        byteSize: 60,
+      },
+      {
+        message: {
+          tag: 'backfill',
+          relation,
+          watermark: '130',
+          columns: ['b'],
+          rowValues: [[5, 6]],
+        },
+        byteSize: 60,
+      },
+      {
+        tag: 'backfill-completed',
+        relation,
+        columns: ['b'],
+        watermark: '130',
+      },
+    ]);
+
+    backfillManager.run('123', [
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {metadata: {rowKey: {a: 123}}, name: 'bar', schema: 'foo'},
+      },
+    ]);
+
+    changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
+
+    const data = (rowValues: number[][]) =>
+      [
+        'data',
+        {
+          tag: 'backfill',
+          columns: ['b'],
+          relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
+          watermark: '130',
+          rowValues,
+        },
+      ] satisfies ChangeStreamMessage;
+
+    await expectChanges([
+      // First transaction: accumulates two messages (120 bytes >= 100)...
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.01'},
+      ],
+      data([[1, 2]]),
+      data([[3, 4]]),
+      // ...then the threshold forces a commit before the third message.
+      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+      // Second transaction: the third message opens a fresh transaction.
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.02'},
+      ],
+      data([[5, 6]]),
+      // Committed to reach the backfill watermark before completing.
+      ['commit', {tag: 'commit'}, {watermark: '123.02'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '130'},
+      ],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          columns: ['b'],
+          relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
+          watermark: '130',
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
+    ] satisfies ChangeStreamMessage[]);
   });
 
   test('table backfill initiated by create-table', async () => {

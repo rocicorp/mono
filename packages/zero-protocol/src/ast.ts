@@ -7,7 +7,6 @@
  */
 
 import {compareUTF8} from 'compare-utf8';
-import {defined} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
@@ -335,10 +334,6 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
 interface ASTTransform {
   tableName(orig: string): string;
   columnName(origTable: string, origColumn: string): string;
-  related(subqueries: CorrelatedSubquery[]): readonly CorrelatedSubquery[];
-  where(cond: Condition): Condition | undefined;
-  // conjunction or disjunction, called when traversing the return value of where()
-  conditions(conds: Condition[]): readonly Condition[];
 }
 
 function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
@@ -350,28 +345,25 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
     return mustCompoundKey(serverKey);
   };
 
-  const where = ast.where ? transform.where(ast.where) : undefined;
   const transformed = {
     schema: ast.schema,
     table: tableName(ast.table),
     alias: ast.alias,
-    where: where ? transformWhere(where, ast.table, transform) : undefined,
-    related: ast.related
-      ? transform.related(
-          ast.related.map(
-            r =>
-              ({
-                correlation: {
-                  parentField: key(ast.table, r.correlation.parentField),
-                  childField: key(r.subquery.table, r.correlation.childField),
-                },
-                hidden: r.hidden,
-                subquery: transformAST(r.subquery, transform),
-                system: r.system,
-              }) satisfies Required<CorrelatedSubquery>,
-          ),
-        )
+    where: ast.where
+      ? transformWhere(ast.where, ast.table, transform)
       : undefined,
+    related: ast.related?.map(
+      r =>
+        ({
+          correlation: {
+            parentField: key(ast.table, r.correlation.parentField),
+            childField: key(r.subquery.table, r.correlation.childField),
+          },
+          hidden: r.hidden,
+          subquery: transformAST(r.subquery, transform),
+          system: r.system,
+        }) satisfies Required<CorrelatedSubquery>,
+    ),
     start: ast.start
       ? {
           ...ast.start,
@@ -423,38 +415,226 @@ function transformWhere(
 
   return {
     type: where.type,
-    conditions: transform.conditions(
-      where.conditions.map(c => transformWhere(c, table, transform)),
-    ),
+    conditions: where.conditions.map(c => transformWhere(c, table, transform)),
   };
 }
 
-const normalizeCache = new WeakMap<AST, Required<AST>>();
+declare const normalizedTag: unique symbol;
 
-const NORMALIZE_TRANSFORM: ASTTransform = {
-  tableName: t => t,
-  columnName: (_, c) => c,
-  related: sortedRelated,
-  where: flattened,
-  conditions: c => c.sort(cmpCondition),
-};
+/**
+ * An {@link AST} in its normalized form: `related` is sorted, `where` is
+ * flattened and sorted, and every field is present, in a fixed order. Two ASTs
+ * that describe the same query have the same JSON encoding, and thus the same
+ * hash, once normalized.
+ *
+ * The tag only exists in the type, so the only way to get one is from
+ * {@link normalizeAST}, {@link normalizedAST} or {@link tableAST}. Spreading
+ * one keeps the tag, which is what lets a query builder derive a normalized
+ * AST from another one by replacing a field it knows to be safe.
+ */
+export type NormalizedAST = Required<AST> & {readonly [normalizedTag]: true};
 
-export function normalizeAST(ast: AST): Required<AST> {
+function asNormalized(ast: Required<AST>): NormalizedAST {
+  return ast as NormalizedAST;
+}
+
+const normalizeCache = new WeakMap<AST, NormalizedAST>();
+
+export function normalizeAST(ast: AST): NormalizedAST {
   let normalized = normalizeCache.get(ast);
   if (!normalized) {
-    normalized = transformAST(ast, NORMALIZE_TRANSFORM);
+    // normalizedAST() normalizes a single level, so normalize the subqueries
+    // first.
+    const {where, related} = ast;
+    normalized = normalizedAST({
+      ...ast,
+      where: where && normalizeSubqueries(where),
+      related: related?.map(r =>
+        normalizedRelated({...r, subquery: normalizeAST(r.subquery)}),
+      ),
+    });
     normalizeCache.set(ast, normalized);
   }
   return normalized;
 }
 
+/**
+ * Normalizes the ASTs of the correlated subqueries of `cond`. The condition
+ * itself is normalized by {@link normalizeCondition}.
+ */
+function normalizeSubqueries(cond: Condition): Condition {
+  switch (cond.type) {
+    case 'simple':
+      return cond;
+    case 'correlatedSubquery':
+      return {
+        ...cond,
+        related: {
+          ...cond.related,
+          subquery: normalizeAST(cond.related.subquery),
+        },
+      };
+    default:
+      return {
+        type: cond.type,
+        conditions: cond.conditions.map(normalizeSubqueries),
+      };
+  }
+}
+
+/**
+ * Normalizes a single level of an AST, assuming that the ASTs of its
+ * subqueries (i.e. those in `related` and in correlated subquery conditions)
+ * are already normalized and that the `related` entries have the shape that
+ * {@link normalizedRelated} gives them.
+ *
+ * This lets a query builder keep its AST normalized as it builds it up
+ * instead of normalizing the whole tree afterwards. A builder that knows
+ * which of the rules a step can break at all is better off applying just
+ * those (see {@link tableAST}, {@link insertRelated} and
+ * {@link normalizeCondition}).
+ */
+export function normalizedAST(ast: AST): NormalizedAST {
+  const {schema, table, alias, where, related, start, limit, orderBy} = ast;
+  // Every field is written, in the same order, so that all normalized ASTs
+  // have the same shape (one hidden class) and the same JSON encoding (and
+  // thus the same hash) no matter how they were put together. The fields that
+  // are undefined are dropped by JSON.stringify() anyway.
+  return asNormalized({
+    schema,
+    table,
+    alias,
+    where: where === undefined ? undefined : normalizeCondition(where),
+    related: related === undefined ? undefined : normalizeRelated(related),
+    start,
+    limit,
+    orderBy,
+  });
+}
+
+/**
+ * The normalized AST that selects a whole table. Spreading it (or any other
+ * normalized AST) and replacing a field keeps the field order, since a
+ * normalized AST has every field.
+ */
+export function tableAST(
+  table: string,
+  alias?: string | undefined,
+): NormalizedAST {
+  return asNormalized({
+    schema: undefined,
+    table,
+    alias,
+    where: undefined,
+    related: undefined,
+    start: undefined,
+    limit: undefined,
+    orderBy: undefined,
+  });
+}
+
+/**
+ * Adds `subquery` to the `related` of a normalized AST, at the position that
+ * keeps it sorted.
+ */
+export function insertRelated(
+  related: readonly CorrelatedSubquery[] | undefined,
+  subquery: CorrelatedSubquery,
+): readonly CorrelatedSubquery[] {
+  const normalized = normalizedRelated(subquery);
+  if (related === undefined) {
+    return [normalized];
+  }
+  // Sorting is stable, so an entry goes after the ones it compares equal to.
+  let i = related.length;
+  while (i > 0 && cmpRelated(related[i - 1], normalized) > 0) {
+    i--;
+  }
+  return related.toSpliced(i, 0, normalized);
+}
+
+// Conjunctions and disjunctions that are known to be normalized. The query
+// builder rebuilds its AST for every step, so this keeps the conditions that
+// did not change from being normalized over and over again.
+const normalizedConditions = new WeakSet<Condition>();
+
+function normalizeRelated(
+  related: readonly CorrelatedSubquery[],
+): readonly CorrelatedSubquery[] {
+  for (let i = 1; i < related.length; i++) {
+    if (cmpRelated(related[i - 1], related[i]) > 0) {
+      return related.toSorted(cmpRelated);
+    }
+  }
+  return related;
+}
+
+/**
+ * Gives a correlated subquery the shape that a normalized AST has: every
+ * field, in a fixed order (see {@link normalizedAST}). Its `subquery` must
+ * already be normalized.
+ */
+export function normalizedRelated(
+  related: CorrelatedSubquery,
+): Required<CorrelatedSubquery> {
+  const {correlation, hidden, subquery, system} = related;
+  return {
+    correlation: {
+      parentField: correlation.parentField,
+      childField: correlation.childField,
+    },
+    hidden,
+    subquery,
+    system,
+  };
+}
+
+/**
+ * Normalizes a condition, assuming that the ASTs of any correlated subqueries
+ * it contains are already normalized.
+ */
+export function normalizeCondition(cond: Condition): Condition {
+  if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
+    return cond;
+  }
+  if (normalizedConditions.has(cond)) {
+    return cond;
+  }
+
+  // Flatten the conditions of nested conjunctions of the same type and sort
+  // them. The nested conditions are normalized (and thus flattened and sorted)
+  // first.
+  const conditions: Condition[] = [];
+  for (const c of cond.conditions) {
+    const n = normalizeCondition(c);
+    if (n.type === cond.type) {
+      conditions.push(...n.conditions);
+    } else {
+      conditions.push(n);
+    }
+  }
+
+  // A singleton conjunction is the same as the condition itself. Empty
+  // conjunctions, on the other hand, are meaningful: an empty 'and' is always
+  // true and an empty 'or' is always false.
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+  conditions.sort(cmpCondition);
+  const normalized: Condition = {type: cond.type, conditions};
+  normalizedConditions.add(normalized);
+  return normalized;
+}
+
+/**
+ * Maps the table and column names of `ast`. The result is not a
+ * {@link NormalizedAST} even if `ast` was normalized: the names it sorts by
+ * are the ones that changed.
+ */
 export function mapAST(ast: AST, mapper: NameMapper) {
   return transformAST(ast, {
     tableName: table => mapper.tableName(table),
     columnName: (table, col) => mapper.columnName(table, col),
-    related: r => r,
-    where: w => w,
-    conditions: c => c,
   });
 }
 
@@ -466,16 +646,7 @@ export function mapCondition(
   return transformWhere(cond, table, {
     tableName: table => mapper.tableName(table),
     columnName: (table, col) => mapper.columnName(table, col),
-    related: r => r,
-    where: w => w,
-    conditions: c => c,
   });
-}
-
-function sortedRelated(
-  related: CorrelatedSubquery[],
-): readonly CorrelatedSubquery[] {
-  return related.sort(cmpRelated);
 }
 
 function cmpCondition(a: Condition, b: Condition): number {
@@ -535,53 +706,67 @@ function compareValuePosition(a: ValuePosition, b: ValuePosition): number {
   switch (a.type) {
     case 'literal':
       assert(b.type === 'literal', 'Expected literal type for comparison');
-      return compareUTF8(String(a.value), String(b.value));
+      return cmpLiteralValue(a.value, b.value);
     case 'column':
       assert(b.type === 'column', 'Expected column type for comparison');
       return compareUTF8(a.name, b.name);
     case 'static':
-      throw new Error(
-        'Static parameters should be resolved before normalization',
+      assert(b.type === 'static', 'Expected static type for comparison');
+      // A field is a string or a path of strings, which cmpLiteralValue()
+      // tells apart.
+      return (
+        compareUTF8(a.anchor, b.anchor) || cmpLiteralValue(a.field, b.field)
       );
+  }
+}
+
+// null < boolean < number < string < array. Ordering values of different
+// types by their string form would make distinct values compare equal (['a',
+// 'b'] and 'a,b', or 1 and '1'), which would leave their order up to the
+// order they were written in, and with it the hash of the query.
+const LITERAL_VALUE_TYPES = ['object', 'boolean', 'number', 'string'];
+
+function literalValueType(value: LiteralValue): number {
+  return Array.isArray(value)
+    ? LITERAL_VALUE_TYPES.length
+    : LITERAL_VALUE_TYPES.indexOf(typeof value);
+}
+
+function cmpLiteralValue(a: LiteralValue, b: LiteralValue): number {
+  const type = literalValueType(a) - literalValueType(b);
+  if (type !== 0) {
+    return type;
+  }
+
+  if (Array.isArray(a)) {
+    assert(Array.isArray(b), 'Expected array for comparison');
+    for (let i = 0; i < a.length && i < b.length; i++) {
+      const val = cmpLiteralValue(a[i], b[i]);
+      if (val !== 0) {
+        return val;
+      }
+    }
+    // prefixes first
+    return a.length - b.length;
+  }
+
+  switch (typeof a) {
+    case 'string':
+      assert(typeof b === 'string', 'Expected string for comparison');
+      return compareUTF8(a, b);
+    case 'number':
+      assert(typeof b === 'number', 'Expected number for comparison');
+      return a < b ? -1 : a > b ? 1 : 0;
+    case 'boolean':
+      assert(typeof b === 'boolean', 'Expected boolean for comparison');
+      return Number(a) - Number(b);
+    default:
+      return 0; // null
   }
 }
 
 function cmpRelated(a: CorrelatedSubquery, b: CorrelatedSubquery): number {
   return compareUTF8(must(a.subquery.alias), must(b.subquery.alias));
-}
-
-/**
- * Returns a flattened version of the Conditions in which nested Conjunctions with
- * the same operation ('AND' or 'OR') are flattened to the same level. e.g.
- *
- * ```
- * ((a AND b) AND (c AND (d OR (e OR f)))) -> (a AND b AND c AND (d OR e OR f))
- * ```
- *
- * Also flattens singleton Conjunctions regardless of operator, and removes
- * empty Conjunctions.
- */
-function flattened(cond: Condition): Condition | undefined {
-  if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
-    return cond;
-  }
-  const conditions = defined(
-    cond.conditions.flatMap(c =>
-      c.type === cond.type ? c.conditions.map(c => flattened(c)) : flattened(c),
-    ),
-  );
-
-  switch (conditions.length) {
-    case 0:
-      return undefined;
-    case 1:
-      return conditions[0];
-    default:
-      return {
-        type: cond.type,
-        conditions,
-      };
-  }
 }
 
 function compareUTF8MaybeNull(a: string | null, b: string | null): number {

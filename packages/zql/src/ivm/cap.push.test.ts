@@ -1545,7 +1545,8 @@ describe('Cap wiring', () => {
   test('non-flipped EXISTS child with OR(exists, exists, exists) still uses Cap at every level', () => {
     // Three non-flipped EXISTS branches in an OR. Asserts every level
     // got a Cap operator. Aliases inside `where` are uniquified
-    // (`_0`/`_1`/`_2`) in source order.
+    // (`_0`/`_1`/`_2`) in the order of the normalized AST, which sorts the
+    // branches of the OR by alias.
     const ast = astOf(
       newQuery(testSchema, 'issue').whereExists('comments', c =>
         c.where(({or, exists}) =>
@@ -1555,9 +1556,9 @@ describe('Cap wiring', () => {
     );
 
     expect(capKeysFromBuild(ast)).toEqual([
-      '.zsubq_comments.zsubq_author_2:cap',
-      '.zsubq_comments.zsubq_issue_0:cap',
-      '.zsubq_comments.zsubq_revisions_1:cap',
+      '.zsubq_comments.zsubq_author_0:cap',
+      '.zsubq_comments.zsubq_issue_1:cap',
+      '.zsubq_comments.zsubq_revisions_2:cap',
       '.zsubq_comments:cap',
     ]);
   });

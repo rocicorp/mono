@@ -7,13 +7,15 @@ import {
 import type {Format} from '../../zero-types/src/format.ts';
 
 /**
- * Prototype: hash a normalized AST by visiting it, instead of by rendering it
- * to JSON and hashing the bytes.
+ * Hashes a normalized AST by visiting it, rather than by rendering it to JSON
+ * and hashing the bytes. `hashOfAST` and `hashOfNameAndArgs` in
+ * `query-hash.ts` are both built on this, so these digests are the query IDs
+ * the client registers and the transformation hashes the server stores.
  *
- * The shipped pipeline is `h64(JSON.stringify(normalizeAST(ast))).toString(36)`.
- * That materializes the whole AST as a string, UTF-8 encodes it, and only then
- * hashes — three passes over the data, two of which exist purely to produce
- * bytes to hash.
+ * The pipeline this replaced was
+ * `h64(JSON.stringify(normalizeAST(ast))).toString(36)`, which materialized
+ * the whole AST as a string, UTF-8 encoded it, and only then hashed it — three
+ * passes over the data, two of which existed purely to produce bytes to hash.
  *
  * A visitor can fold values into the hash state as it walks, so nothing is
  * materialized at all. The primitives that make that pay off:
@@ -28,9 +30,14 @@ import type {Format} from '../../zero-types/src/format.ts';
  *   one 32-bit word. No UTF-8 encoding, and half the loop iterations a
  *   byte-oriented hash would need over ASCII.
  *
- * The hash need not agree with UTF-8 xxHash32 — it only has to be injective
- * over distinct ASTs. It does NOT match `hashOfAST`, so adopting it is a wire
- * format change.
+ * These digests do not agree with xxHash32 over the old JSON encoding, and are
+ * not meant to: nothing recomputes a hash produced elsewhere and compares it,
+ * so the encoding is free to change as long as every writer moves together.
+ * What it does have to give is distinct words for structurally distinct
+ * queries — a 64-bit digest cannot promise that absolutely, but every field
+ * and node kind must at least reach the mixer, and no two of them may be
+ * written so as to be confusable. `query-hash-visitor.test.ts` holds that
+ * line with a corpus and a per-field mutation test.
  *
  * The walk is deliberately specialized to the AST shape rather than written as
  * a generic JSON-value walk. That is not premature: a generic version was
@@ -313,6 +320,13 @@ function visitAST(ast: AST): void {
   if (ast.limit === undefined) {
     mix(TAG_UNDEF);
   } else {
+    // Tagged, because this is the one optional field whose present and absent
+    // forms would otherwise both write a single bare word: an untagged
+    // `limit: 4106` is the same word as TAG_UNDEF. The other optionals are
+    // safe -- a present string carries STR_MARK, a condition or bound leads
+    // with its own kind tag, and `related`/`orderBy` write a count followed by
+    // that many items, so their streams diverge straight after.
+    mix(TAG_INT);
     mixNumber(ast.limit);
   }
 
