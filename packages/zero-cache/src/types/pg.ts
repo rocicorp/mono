@@ -366,9 +366,23 @@ type SocketFactoryOptions = {
 export function inactivityTimeoutSocket(
   lc: LogContext,
   timeoutMs = SOCKET_INACTIVITY_TIMEOUT_MS,
+  // When > 0, enables OS-level TCP keepalive probes with this initial delay.
+  // Unlike the inactivity watchdog, keepalive distinguishes an idle-but-alive
+  // connection from a dead one (the OS tears down the socket only when probes
+  // go unanswered), so it does not false-positive on connections that are
+  // legitimately idle for long stretches -- e.g. a backfill COPY stream that
+  // this process deliberately back-pressures. It does NOT catch a proxy that
+  // ACKs keepalives after its backend is gone (the case the watchdog guards);
+  // callers that disable the watchdog (timeoutMs = 0) in favor of keepalive
+  // accept that residual risk. Keepalive is a socket option, not a listener,
+  // so it survives postgres.js's removeAllListeners() on TLS upgrade.
+  keepAliveMs = 0,
 ) {
   return (options: SocketFactoryOptions): Socket => {
     const socket = new Socket();
+    if (keepAliveMs > 0) {
+      socket.setKeepAlive(true, keepAliveMs);
+    }
     const target = options.path
       ? options.path
       : `${options.host[0]}:${options.port[0]}`;
@@ -428,7 +442,20 @@ export function pgClient(
   options?: postgres.Options<{
     bigint: PostgresType<bigint>;
     json: PostgresType<JSONValue>;
-  }>,
+  }> & {
+    /**
+     * How to detect a dead ("half-open") connection:
+     *  - `'inactivity-timeout'` (default): reset the socket after
+     *    {@link SOCKET_INACTIVITY_TIMEOUT_MS} of no read/write activity. Catches
+     *    proxy-level half-opens, but false-positives on connections that are
+     *    legitimately idle for long stretches.
+     *  - `'keepalive'`: disable the inactivity watchdog and rely on OS TCP
+     *    keepalive probes instead. Use for connections that are expected to sit
+     *    idle under back-pressure (e.g. the backfill COPY stream), where the
+     *    watchdog would reset a perfectly healthy connection.
+     */
+    liveness?: 'inactivity-timeout' | 'keepalive';
+  },
   opts?: TypeOptions,
 ): PostgresDB {
   applicationName = `zero-${applicationName}`;
@@ -483,12 +510,18 @@ export function pgClient(
 
   // Set connections to expire between 5 and 10 minutes to free up state on PG.
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
-  const providedConnection = options?.connection ?? {};
+  const {liveness = 'inactivity-timeout', ...pgOptions} = options ?? {};
+  const providedConnection = pgOptions.connection ?? {};
 
   // postgres.js supports a custom socket factory via the `socket` option,
   // but it is missing from its type declarations, hence the untyped spread.
+  const socketLc = lc.withContext('appName', applicationName);
   const socketFactory = {
-    socket: inactivityTimeoutSocket(lc.withContext('appName', applicationName)),
+    socket:
+      liveness === 'keepalive'
+        ? // Disable the inactivity watchdog and use TCP keepalive instead.
+          inactivityTimeoutSocket(socketLc, 0, 60_000)
+        : inactivityTimeoutSocket(socketLc),
   };
 
   return postgres(connectionURI, {
@@ -501,7 +534,7 @@ export function pgClient(
     ['idle_timeout']: 60,
     ssl,
     ...socketFactory,
-    ...options,
+    ...pgOptions,
     connection: {
       ...providedConnection,
       ['application_name']: applicationName,

@@ -27,9 +27,27 @@ function tableKey({schema, name}: Identifier) {
   return `${schema}.${name}`;
 }
 
+/**
+ * A {@link MessageBackfill} or {@link BackfillCompleted} paired with the
+ * approximate number of upstream bytes it represents. The BackfillManager uses
+ * `byteSize` to bound the size of each replica transaction, committing and
+ * reopening once {@link COMMIT_THRESHOLD_BYTES} is reached.
+ */
+export type BackfillMessage = {
+  message: MessageBackfill | BackfillCompleted;
+  byteSize: number;
+};
+
 type BackfillStreamer = (
   req: BackfillRequest,
-) => AsyncGenerator<MessageBackfill | BackfillCompleted>;
+) => AsyncGenerator<BackfillMessage>;
+
+/**
+ * Commit (and reopen) the current backfill transaction once this many bytes of
+ * backfill data have accumulated in it. Bounds the size of a single replica
+ * COMMIT/checkpoint so it can't monopolize the replica.
+ */
+const COMMIT_THRESHOLD_BYTES = 8 * 1024 * 1024;
 
 type RunningBackfillState = {
   request: BackfillRequest;
@@ -91,6 +109,8 @@ export class BackfillManager implements Cancelable, Listener {
   /** The watermark of the current transaction in the change stream. */
   #currentTxWatermark: string | null = null;
 
+  readonly #commitThresholdBytes: number;
+
   constructor(
     lc: LogContext,
     changeStreamer: ChangeStreamMultiplexer,
@@ -98,6 +118,7 @@ export class BackfillManager implements Cancelable, Listener {
     jsonFormat: JSONFormat = JSON_STRINGIFIED,
     minBackoffMs = MIN_BACKOFF_INTERVAL_MS,
     maxBackoffMs = MAX_BACKOFF_INTERVAL_MS,
+    commitThresholdBytes = COMMIT_THRESHOLD_BYTES,
   ) {
     this.#lc = lc.withContext('component', 'backfill-manager');
     this.#changeStreamer = changeStreamer;
@@ -106,6 +127,7 @@ export class BackfillManager implements Cancelable, Listener {
     this.#minBackoffMs = minBackoffMs;
     this.#maxBackoffMs = maxBackoffMs;
     this.#retryDelayMs = minBackoffMs;
+    this.#commitThresholdBytes = commitThresholdBytes;
   }
 
   run(lastWatermark: string, initialRequests: BackfillRequest[]) {
@@ -206,6 +228,7 @@ export class BackfillManager implements Cancelable, Listener {
     // backfillTx is set if and only if a changeStreamer reservation has been
     // acquired and the backfill stream is inside a transaction.
     let backfillTx: string | null = null;
+    let uncommittedBytes = 0;
 
     /**
      * @returns the new tx watermark, or null if backfill was cancelled
@@ -267,9 +290,12 @@ export class BackfillManager implements Cancelable, Listener {
         changeStream.release(backfillTx);
       }
       backfillTx = null;
+      uncommittedBytes = 0;
     };
 
-    for await (const msg of this.#backfillStreamer(state.request)) {
+    for await (const {message: msg, byteSize} of this.#backfillStreamer(
+      state.request,
+    )) {
       // Before sending `backfill-completed`, the main replication stream
       // may need to catch up, and/or the current transaction may need to be
       // committed to open a new transaction that's up to backfill watermark.
@@ -278,10 +304,14 @@ export class BackfillManager implements Cancelable, Listener {
         (this.#changeStreamReached(lc, msg.watermark) ||
           (backfillTx !== null && backfillTx < msg.watermark));
 
-      // If necessary, yield the reservation to the main stream.
+      // Commit (and later reopen) the transaction if the main stream is
+      // waiting on the reservation, if we must catch up before completing, or
+      // if the size of current transaction has reached the commit threshold.
       if (
         backfillTx &&
-        (changeStream.waiterDelay() > 0 || mustWaitBeforeFlush)
+        (changeStream.waiterDelay() > 0 ||
+          mustWaitBeforeFlush ||
+          uncommittedBytes >= this.#commitThresholdBytes)
       ) {
         commitTx();
       }
@@ -309,6 +339,7 @@ export class BackfillManager implements Cancelable, Listener {
       // `await` to allow the change streamer to exert back pressure
       // on backfills.
       await changeStream.push(['data', msg]);
+      uncommittedBytes += byteSize;
     }
 
     // Flush any final tx and release the stream.

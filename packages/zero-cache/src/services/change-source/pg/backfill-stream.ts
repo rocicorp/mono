@@ -20,13 +20,15 @@ import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {connectPgClient, pgClient, type PostgresDB} from '../../../types/pg.ts';
-import {SchemaIncompatibilityError} from '../common/backfill-manager.ts';
+import {
+  SchemaIncompatibilityError,
+  type BackfillMessage,
+} from '../common/backfill-manager.ts';
 import type {
   BackfillCompleted,
   BackfillRequest,
   DownloadStatus,
   JSONValue,
-  MessageBackfill,
 } from '../protocol/current.ts';
 import {
   columnMetadataSchema,
@@ -82,7 +84,7 @@ export async function* streamBackfill(
   {slot, publications}: Pick<Replica, 'slot' | 'publications'>,
   bf: BackfillRequest,
   opts: StreamOptions = {},
-): AsyncGenerator<MessageBackfill | BackfillCompleted> {
+): AsyncGenerator<BackfillMessage> {
   lc = lc
     .withContext('component', 'backfill')
     .withContext('table', bf.table.name);
@@ -90,7 +92,15 @@ export async function* streamBackfill(
   const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE, textCopy = false} =
     opts;
   const db = await connectPgClient(lc, upstreamURI, 'backfill-stream', {
-    ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
+    // The COPY is a single stream that must outlive the entire table download,
+    // so allow a very long (24h) connection lifetime.
+    ['max_lifetime']: 24 * 60 * 60,
+    // A backfill COPY is a background process that can be preempted by
+    // upstream replication changes, potentially requiring it to sit idle for
+    // long stretches. Use TCP keepalive to detect dead connections instead
+    // of the inactivity watchdog, which could kill connnections that are
+    // taking a back seat for upstream replication changes.
+    liveness: 'keepalive',
   });
   let tx: TransactionPool | undefined;
   let watermark: string;
@@ -190,7 +200,7 @@ async function* stream<T>(
   parser: {parse(chunk: Buffer): Iterable<T | null>},
   decoders: ((field: T) => JSONValue)[],
   flushThresholdBytes: number,
-): AsyncGenerator<MessageBackfill | BackfillCompleted> {
+): AsyncGenerator<BackfillMessage> {
   // Backfill must read every row: TABLESAMPLE / LIMIT are reserved for shadow
   // sync and must never appear in a backfill COPY.
   assert(
@@ -274,7 +284,10 @@ async function* stream<T>(
     totalBytes += chunk.byteLength;
 
     if (bufferedBytes >= flushThresholdBytes) {
-      yield {tag: 'backfill', ...backfill, rowValues, status};
+      yield {
+        message: {tag: 'backfill', ...backfill, rowValues, status},
+        byteSize: bufferedBytes,
+      };
       totalMsgs++;
       logFlushed();
       rowValues = [];
@@ -290,12 +303,18 @@ async function* stream<T>(
 
   // Flush the last batch of rows.
   if (rowValues.length > 0) {
-    yield {tag: 'backfill', ...backfill, rowValues, status};
+    yield {
+      message: {tag: 'backfill', ...backfill, rowValues, status},
+      byteSize: bufferedBytes,
+    };
     totalMsgs++;
     logFlushed();
   }
 
-  yield {tag: 'backfill-completed', ...backfill, status};
+  yield {
+    message: {tag: 'backfill-completed', ...backfill, status},
+    byteSize: 0,
+  };
   elapsed = (performance.now() - start).toFixed(3);
   lc.info?.(
     `Finished streaming ${status.rows} rows, ${totalMsgs} msgs, ${totalBytes} bytes ` +
