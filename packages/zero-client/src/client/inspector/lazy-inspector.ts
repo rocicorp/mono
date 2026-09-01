@@ -131,8 +131,8 @@ function rpcNoAuthTry<T extends InspectDownBody>(
             reject(res.error);
           }
         }
-        socket.removeEventListener('message', f);
       }
+      socket.removeEventListener('message', f);
     };
     socket.addEventListener('message', f);
     socket.send(JSON.stringify(['inspect', {...arg, id}]));
