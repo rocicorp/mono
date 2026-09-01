@@ -506,3 +506,20 @@ test('a non-finite argument hashes as null, as it serializes', () => {
   // Finite floats are still themselves.
   expect(hashNameAndArgs('q', [1.5])).not.toBe(hashNameAndArgs('q', [null]));
 });
+
+test('a hash taken from inside another walk does not corrupt it', () => {
+  // args are arbitrary runtime objects: a getter is structurally valid JSON
+  // and can do anything, including asking for another hash mid-walk.
+  const plain = hashNameAndArgs('q', [{a: 1, b: 2}]);
+  const innerExpected = hashAST(CORPUS[3]);
+  let inner = '';
+  const sneaky = {
+    get a() {
+      inner = hashAST(CORPUS[3]);
+      return 1;
+    },
+    b: 2,
+  };
+  expect(hashNameAndArgs('q', [sneaky])).toBe(plain);
+  expect(inner).toBe(innerExpected);
+});

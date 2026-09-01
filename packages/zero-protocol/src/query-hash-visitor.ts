@@ -362,9 +362,19 @@ function visitAST(ast: AST): void {
 }
 
 export function hashAST(ast: AST): string {
-  reset();
-  visitAST(ast);
-  return finalize();
+  // Save and restore the lanes: `visitValue` reads properties of arbitrary
+  // runtime objects, and a getter is free to ask for another hash mid-walk.
+  // Without this, the inner call's reset() would corrupt the outer digest.
+  const s1 = h1;
+  const s2 = h2;
+  try {
+    reset();
+    visitAST(ast);
+    return finalize();
+  } finally {
+    h1 = s1;
+    h2 = s2;
+  }
 }
 
 /**
@@ -380,17 +390,31 @@ export function hashNameAndArgs(
   name: string,
   args: readonly unknown[],
 ): string {
-  reset();
-  mix(TAG_NAME_ARGS);
-  mixString(name);
-  visitValue(args);
-  return finalize();
+  const s1 = h1;
+  const s2 = h2;
+  try {
+    reset();
+    mix(TAG_NAME_ARGS);
+    mixString(name);
+    visitValue(args);
+    return finalize();
+  } finally {
+    h1 = s1;
+    h2 = s2;
+  }
 }
 
 export function hashOfQueryInternals(ast: AST, format: Format): string {
-  reset();
-  visitAST(ast);
-  mix(TAG_FORMAT);
-  visitValue(format);
-  return finalize();
+  const s1 = h1;
+  const s2 = h2;
+  try {
+    reset();
+    visitAST(ast);
+    mix(TAG_FORMAT);
+    visitValue(format);
+    return finalize();
+  } finally {
+    h1 = s1;
+    h2 = s2;
+  }
 }
