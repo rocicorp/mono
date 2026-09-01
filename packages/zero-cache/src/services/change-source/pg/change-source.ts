@@ -367,7 +367,7 @@ type ReservationState = {
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.
  */
-class PostgresChangeSource implements ChangeSource {
+export class PostgresChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
   readonly #upstreamUri: string;
@@ -378,6 +378,8 @@ class PostgresChangeSource implements ChangeSource {
   readonly #lagReporter: LagReporter | null;
   readonly #textCopy: boolean;
   readonly #streamInboundTimeoutMs: number | undefined;
+  readonly #subscribe: typeof subscribe;
+  readonly #streamBackfill: typeof streamBackfill;
   #stopped = false;
 
   constructor(
@@ -390,8 +392,16 @@ class PostgresChangeSource implements ChangeSource {
     lagReportIntervalMs: number,
     textCopy?: boolean | undefined,
     streamInboundTimeoutMs?: number | undefined,
+    // Injectable dependencies, overridable in tests. Default to the production
+    // implementations.
+    deps: {
+      subscribe?: typeof subscribe;
+      streamBackfill?: typeof streamBackfill;
+    } = {},
   ) {
     this.#lc = lc.withContext('component', 'change-source');
+    this.#subscribe = deps.subscribe ?? subscribe;
+    this.#streamBackfill = deps.streamBackfill ?? streamBackfill;
     this.#db = pgClient(lc, upstreamUri, 'replication-monitor', {
       max: 1,
       // used occasionally for schema changes, periodically for lag reporting
@@ -463,17 +473,23 @@ class PostgresChangeSource implements ChangeSource {
     const config = await getInternalShardConfig(this.#db, this.#shard);
     const {slot} = this.#replica;
     this.#lc.info?.(`starting replication stream@${slot}`);
-    return this.#startStream(slot, clientWatermark, config, backfillRequests);
+    return this.startStreamInternal(
+      slot,
+      clientWatermark,
+      config,
+      backfillRequests,
+    );
   }
 
-  async #startStream(
+  // Exported for testing.
+  async startStreamInternal(
     slot: string,
     clientWatermark: string,
     shardConfig: InternalShardConfig,
     backfillRequests: BackfillRequest[],
   ): Promise<ChangeStream> {
     const clientStart = majorVersionFromString(clientWatermark) + 1n;
-    const {messages, acks} = await subscribe(
+    const {messages, acks} = await this.#subscribe(
       this.#lc,
       this.#db,
       slot,
@@ -490,7 +506,7 @@ class PostgresChangeSource implements ChangeSource {
     // BackfillManager.
     const changes = new ChangeStreamMultiplexer(this.#lc, clientWatermark);
     const backfillManager = new BackfillManager(this.#lc, changes, req =>
-      streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
+      this.#streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
         textCopy: this.#textCopy,
       }),
     );
@@ -536,6 +552,20 @@ class PostgresChangeSource implements ChangeSource {
         ]);
         return false;
       }
+
+      // The only non-transaction "message" we process is our own lagReporter's
+      // message (handled above). Non-transactional messages from other shards
+      // (e.g. lag reports), should be ignored but properly classified as
+      // non-transactional, so as not to incorrectly request a stream
+      // reservation.
+      if (msg.tag === 'message' && !msg.transactional) {
+        this.#lc.debug?.(
+          'ignoring non-transactional message for different shard',
+          msg.prefix,
+        );
+        return false;
+      }
+
       return true;
     };
 
@@ -558,8 +588,8 @@ class PostgresChangeSource implements ChangeSource {
 
           if (!reservation) {
             const res = changes.reserve('replication');
-            typeof res === 'string' || (await res); // awaits should be uncommon
-            reservation = {};
+            const lastWatermark = typeof res === 'string' ? res : await res;
+            reservation = {lastWatermark};
           }
 
           let lastChange: ChangeStreamMessage | undefined;
