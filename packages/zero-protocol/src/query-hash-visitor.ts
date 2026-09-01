@@ -175,7 +175,13 @@ function visitValue(v: unknown): void {
         return;
       }
       mix(TAG_OBJ);
-      for (const k in v) {
+      // Sorted, so the digest is a function of the object's contents and not
+      // of its key order. Rows and custom-query args round-trip through
+      // Postgres JSONB, which reorders keys; an order-sensitive digest made
+      // reloaded query records look changed. (The AST's own fields don't need
+      // this: visitAST reads them in a fixed order by name.)
+      const keys = Object.keys(v).sort();
+      for (const k of keys) {
         const val = (v as Record<string, unknown>)[k];
         if (val === undefined) {
           continue; // as JSON.stringify does

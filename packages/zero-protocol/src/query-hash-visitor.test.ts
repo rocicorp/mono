@@ -456,3 +456,38 @@ test('an optional field is never confusable with its own absence', () => {
   expect(hashAST(ast({alias: ''}))).not.toBe(hashAST(ast({})));
   expect(hashAST(ast({schema: ''}))).not.toBe(hashAST(ast({})));
 });
+
+test('the digest is stable across object key reordering', () => {
+  // Postgres JSONB reorders object keys (length, then bytewise), and
+  // normalization does not rebuild condition objects, so an AST reloaded from
+  // the CVR arrives with different key order than when it was stored. The old
+  // JSON.stringify-based digest changed under that round trip, which made
+  // every reloaded query record look changed and spuriously re-execute on
+  // view-syncer restart. The visiting digest walks fields in a fixed order and
+  // must not care.
+  function reordered<T>(v: T): T {
+    if (Array.isArray(v)) {
+      return v.map(reordered) as T;
+    }
+    if (v !== null && typeof v === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(v).reverse()) {
+        out[k] = reordered((v as Record<string, unknown>)[k]);
+      }
+      return out as T;
+    }
+    return v;
+  }
+
+  for (let i = 0; i < CORPUS.length; i++) {
+    const shuffled = reordered(CORPUS[i]);
+    // Key order is the one thing that may differ...
+    expect(shuffled).toEqual(CORPUS[i]);
+    // ...and the digest must not see it.
+    expect(hashAST(shuffled), JSONS[i]).toBe(hashAST(CORPUS[i]));
+  }
+
+  expect(hashNameAndArgs('q', [reordered({a: 1, b: [{c: 2, d: 3}]})])).toBe(
+    hashNameAndArgs('q', [{a: 1, b: [{c: 2, d: 3}]}]),
+  );
+});
