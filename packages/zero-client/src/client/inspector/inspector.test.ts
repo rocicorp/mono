@@ -2006,11 +2006,13 @@ describe('authenticate', () => {
   });
 
   describe('RPC error handling', () => {
-    test('handles error response', async () => {
+    test('handles error response and removes listener', async () => {
       const z = zeroForTest({schema});
       await z.triggerConnected();
       await Promise.resolve();
 
+      const socket = await z.socket;
+      const removeEventListener = vi.spyOn(socket, 'removeEventListener');
       const idPromise = waitForID(z.socket, 'version');
       const p = z.inspector.serverVersion();
       const id = await idPromise;
@@ -2025,6 +2027,10 @@ describe('authenticate', () => {
       ] satisfies InspectDownMessage);
 
       await expect(p).rejects.toThrow('Server encountered an internal error');
+      expect(removeEventListener).toHaveBeenCalledWith(
+        'message',
+        expect.any(Function),
+      );
 
       await z.close();
     });
