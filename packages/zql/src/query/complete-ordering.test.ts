@@ -326,6 +326,7 @@ describe('completeOrdering', () => {
         "start": undefined,
         "table": "issue",
         "where": {
+          "flip": undefined,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -336,6 +337,7 @@ describe('completeOrdering', () => {
                 "id",
               ],
             },
+            "hidden": undefined,
             "subquery": {
               "alias": "zsubq_labels",
               "limit": undefined,
@@ -345,6 +347,7 @@ describe('completeOrdering', () => {
               "start": undefined,
               "table": "issueLabel",
               "where": {
+                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -355,6 +358,7 @@ describe('completeOrdering', () => {
                       "labelId",
                     ],
                   },
+                  "hidden": undefined,
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
                     "limit": undefined,
@@ -367,11 +371,13 @@ describe('completeOrdering', () => {
                   },
                   "system": "client",
                 },
+                "scalar": undefined,
                 "type": "correlatedSubquery",
               },
             },
             "system": "client",
           },
+          "scalar": undefined,
           "type": "correlatedSubquery",
         },
       }
@@ -392,6 +398,7 @@ describe('completeOrdering', () => {
           "start": undefined,
           "table": "issue",
           "where": {
+            "flip": undefined,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -402,6 +409,7 @@ describe('completeOrdering', () => {
                   "id",
                 ],
               },
+              "hidden": undefined,
               "subquery": {
                 "alias": "zsubq_labels",
                 "limit": undefined,
@@ -420,6 +428,7 @@ describe('completeOrdering', () => {
                 "start": undefined,
                 "table": "issueLabel",
                 "where": {
+                  "flip": undefined,
                   "op": "EXISTS",
                   "related": {
                     "correlation": {
@@ -430,6 +439,7 @@ describe('completeOrdering', () => {
                         "labelId",
                       ],
                     },
+                    "hidden": undefined,
                     "subquery": {
                       "alias": "zsubq_zhidden_labels",
                       "limit": undefined,
@@ -447,11 +457,13 @@ describe('completeOrdering', () => {
                     },
                     "system": "client",
                   },
+                  "scalar": undefined,
                   "type": "correlatedSubquery",
                 },
               },
               "system": "client",
             },
+            "scalar": undefined,
             "type": "correlatedSubquery",
           },
         }
@@ -506,6 +518,7 @@ describe('completeOrdering', () => {
                   "type": "simple",
                 },
                 {
+                  "flip": undefined,
                   "op": "EXISTS",
                   "related": {
                     "correlation": {
@@ -516,6 +529,7 @@ describe('completeOrdering', () => {
                         "id",
                       ],
                     },
+                    "hidden": undefined,
                     "subquery": {
                       "alias": "zsubq_comments",
                       "limit": undefined,
@@ -528,12 +542,14 @@ describe('completeOrdering', () => {
                     },
                     "system": "client",
                   },
+                  "scalar": undefined,
                   "type": "correlatedSubquery",
                 },
               ],
               "type": "or",
             },
             {
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -544,6 +560,7 @@ describe('completeOrdering', () => {
                     "ownerId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "limit": undefined,
@@ -556,6 +573,7 @@ describe('completeOrdering', () => {
                 },
                 "system": "client",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
           ],
@@ -607,6 +625,7 @@ describe('completeOrdering', () => {
                     "type": "simple",
                   },
                   {
+                    "flip": undefined,
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
@@ -617,6 +636,7 @@ describe('completeOrdering', () => {
                           "id",
                         ],
                       },
+                      "hidden": undefined,
                       "subquery": {
                         "alias": "zsubq_comments",
                         "limit": undefined,
@@ -634,12 +654,14 @@ describe('completeOrdering', () => {
                       },
                       "system": "client",
                     },
+                    "scalar": undefined,
                     "type": "correlatedSubquery",
                   },
                 ],
                 "type": "or",
               },
               {
+                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -650,6 +672,7 @@ describe('completeOrdering', () => {
                       "ownerId",
                     ],
                   },
+                  "hidden": undefined,
                   "subquery": {
                     "alias": "zsubq_owner",
                     "limit": undefined,
@@ -667,6 +690,7 @@ describe('completeOrdering', () => {
                   },
                   "system": "client",
                 },
+                "scalar": undefined,
                 "type": "correlatedSubquery",
               },
             ],

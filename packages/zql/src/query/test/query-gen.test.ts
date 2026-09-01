@@ -156,6 +156,7 @@ test('stable generation', () => {
             "type": "simple",
           },
           {
+            "flip": undefined,
             "op": "NOT EXISTS",
             "related": {
               "correlation": {
@@ -166,6 +167,7 @@ test('stable generation', () => {
                   "councilman",
                 ],
               },
+              "hidden": undefined,
               "subquery": {
                 "alias": "zsubq_cleaner",
                 "limit": undefined,
@@ -189,6 +191,7 @@ test('stable generation', () => {
                       "type": "simple",
                     },
                     {
+                      "flip": undefined,
                       "op": "EXISTS",
                       "related": {
                         "correlation": {
@@ -199,6 +202,7 @@ test('stable generation', () => {
                             "amendment",
                           ],
                         },
+                        "hidden": undefined,
                         "subquery": {
                           "alias": "zsubq_cleaner",
                           "limit": undefined,
@@ -263,6 +267,7 @@ test('stable generation', () => {
                         },
                         "system": "permissions",
                       },
+                      "scalar": undefined,
                       "type": "correlatedSubquery",
                     },
                   ],
@@ -271,6 +276,7 @@ test('stable generation', () => {
               },
               "system": "permissions",
             },
+            "scalar": undefined,
             "type": "correlatedSubquery",
           },
         ],

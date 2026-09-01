@@ -5085,14 +5085,19 @@ describe('view-syncer/service', () => {
       // deployment would see a spurious re-send of every row.
       expect(await drainUntilRowsPatchOrQuiet(queue)).toBeUndefined();
 
-      // The sig *does* get initialized on this cycle — but through
-      // CVRQueryDrivenUpdater.flush's opportunistic pass over all queries
-      // (triggered by the normal add of internal queries on restart), not
-      // through drift re-execution. That's the intended "sigs get initialized
-      // whenever they next re-execute via the normal path" behavior.
-      expect(await loadStoredSig('query-hash1')).toEqual(
-        expectedIssuesSig(issueRowID('2'), issueRowID('6')),
-      );
+      // The sig stays uninitialized. Nothing re-executes on this restart:
+      // every query re-hashes to its stored transformationHash and is hydrated
+      // as unchanged, which does not go through CVRQueryDrivenUpdater and its
+      // opportunistic sig pass. It gets initialized whenever the query next
+      // re-executes for a real reason (transformation hash change, etc.).
+      //
+      // This assertion used to expect the sig to be written here — but only
+      // because normalization passed condition objects through with whatever
+      // key order they arrived with, and Postgres jsonb reorders keys, so the
+      // internal queries spuriously hash-mismatched on every restart and
+      // dragged hydration through the updater path. Now that normalization is
+      // canonical, the spurious re-execution (and this side effect) is gone.
+      expect(await loadStoredSig('query-hash1')).toBeNull();
     } finally {
       await cleanup();
     }

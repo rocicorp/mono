@@ -589,16 +589,53 @@ export function normalizedRelated(
   };
 }
 
+function normalizeValuePosition<T extends ValuePosition>(v: T): T {
+  switch (v.type) {
+    case 'literal':
+      return {type: 'literal', value: v.value} as T;
+    case 'column':
+      return {type: 'column', name: v.name} as T;
+    default:
+      return {type: 'static', anchor: v.anchor, field: v.field} as T;
+  }
+}
+
 /**
  * Normalizes a condition, assuming that the ASTs of any correlated subqueries
  * it contains are already normalized.
+ *
+ * Like {@link normalizedAST}, this rebuilds every node with its fields in a
+ * fixed order, so that structurally equal conditions have the same JSON
+ * encoding (and thus the same hash) no matter how they were put together.
+ * That includes a round trip through Postgres, whose jsonb type reorders
+ * object keys: without the rebuild, every query record reloaded from the CVR
+ * re-hashed to a different transformationHash than was stored, making it look
+ * changed and re-execute on every view-syncer restart.
  */
 export function normalizeCondition(cond: Condition): Condition {
-  if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
-    return cond;
-  }
   if (normalizedConditions.has(cond)) {
     return cond;
+  }
+  if (cond.type === 'simple') {
+    const normalized: Condition = {
+      type: 'simple',
+      op: cond.op,
+      left: normalizeValuePosition(cond.left),
+      right: normalizeValuePosition(cond.right),
+    };
+    normalizedConditions.add(normalized);
+    return normalized;
+  }
+  if (cond.type === 'correlatedSubquery') {
+    const normalized: Condition = {
+      type: 'correlatedSubquery',
+      related: normalizedRelated(cond.related),
+      op: cond.op,
+      flip: cond.flip,
+      scalar: cond.scalar,
+    };
+    normalizedConditions.add(normalized);
+    return normalized;
   }
 
   // Flatten the conditions of nested conjunctions of the same type and sort
