@@ -552,8 +552,9 @@ export class QueryImpl<
           },
           subquery: {
             ...tableAST(junctionSchema, `${SUBQ_PREFIX}${relationship}`),
-            // A single condition is flattened and sorted.
-            where: {
+            // A single condition needs no flattening or sorting, but the node
+            // itself still has to be rebuilt into the canonical field order.
+            where: normalizeCondition({
               type: 'correlatedSubquery',
               related: {
                 system: this.#system,
@@ -566,7 +567,7 @@ export class QueryImpl<
               op: 'EXISTS',
               ...(flip !== undefined ? {flip} : {}),
               ...(scalar !== undefined ? {scalar} : {}),
-            },
+            }),
           },
         },
         op: 'EXISTS',

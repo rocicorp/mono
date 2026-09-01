@@ -230,9 +230,9 @@ describe('view-syncer/yield-during-hydrate', () => {
     updater.trackQueries(
       lc,
       [
-        {id: 'query-hash1', transformationHash: 'gojujxnrngdx'},
-        {id: 'lmids', transformationHash: '2jf1ycuha0k5e'},
-        {id: 'mutationResults', transformationHash: 'lcbd7o1qvz9g'},
+        {id: 'query-hash1', transformationHash: '3mzgp92sfsypq'},
+        {id: 'lmids', transformationHash: '1sjov59xnpa6'},
+        {id: 'mutationResults', transformationHash: '289re8rdeh88f'},
       ],
       [],
     );

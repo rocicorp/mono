@@ -623,6 +623,7 @@ describe('unreadable tables', () => {
           "where": {
             "conditions": [
               {
+                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -633,6 +634,7 @@ describe('unreadable tables', () => {
                       "unreadableId",
                     ],
                   },
+                  "hidden": undefined,
                   "subquery": {
                     "alias": "zsubq_unreadable",
                     "limit": undefined,
@@ -648,6 +650,7 @@ describe('unreadable tables', () => {
                   },
                   "system": "permissions",
                 },
+                "scalar": undefined,
                 "type": "correlatedSubquery",
               },
             ],
@@ -668,6 +671,7 @@ describe('unreadable tables', () => {
           "where": {
             "conditions": [
               {
+                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -678,6 +682,7 @@ describe('unreadable tables', () => {
                       "unreadableId",
                     ],
                   },
+                  "hidden": undefined,
                   "subquery": {
                     "alias": "zsubq_unreadable",
                     "limit": undefined,
@@ -693,6 +698,7 @@ describe('unreadable tables', () => {
                   },
                   "system": "permissions",
                 },
+                "scalar": undefined,
                 "type": "correlatedSubquery",
               },
             ],
@@ -725,6 +731,7 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "NOT EXISTS",
               "related": {
                 "correlation": {
@@ -735,6 +742,7 @@ describe('unreadable tables', () => {
                     "unreadableId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
@@ -750,6 +758,7 @@ describe('unreadable tables', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
           ],
@@ -780,6 +789,7 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "NOT EXISTS",
               "related": {
                 "correlation": {
@@ -790,6 +800,7 @@ describe('unreadable tables', () => {
                     "unreadableId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
@@ -805,6 +816,7 @@ describe('unreadable tables', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
           ],
@@ -837,6 +849,7 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -847,6 +860,7 @@ describe('unreadable tables', () => {
                     "readableId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_readable",
                   "limit": undefined,
@@ -858,6 +872,7 @@ describe('unreadable tables', () => {
                   "where": {
                     "conditions": [
                       {
+                        "flip": undefined,
                         "op": "EXISTS",
                         "related": {
                           "correlation": {
@@ -868,6 +883,7 @@ describe('unreadable tables', () => {
                               "unreadableId",
                             ],
                           },
+                          "hidden": undefined,
                           "subquery": {
                             "alias": "zsubq_unreadable",
                             "limit": undefined,
@@ -883,6 +899,7 @@ describe('unreadable tables', () => {
                           },
                           "system": "permissions",
                         },
+                        "scalar": undefined,
                         "type": "correlatedSubquery",
                       },
                     ],
@@ -891,6 +908,7 @@ describe('unreadable tables', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
           ],
@@ -922,6 +940,7 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -932,6 +951,7 @@ describe('unreadable tables', () => {
                     "readableId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_readable",
                   "limit": undefined,
@@ -943,6 +963,7 @@ describe('unreadable tables', () => {
                   "where": {
                     "conditions": [
                       {
+                        "flip": undefined,
                         "op": "EXISTS",
                         "related": {
                           "correlation": {
@@ -953,6 +974,7 @@ describe('unreadable tables', () => {
                               "unreadableId",
                             ],
                           },
+                          "hidden": undefined,
                           "subquery": {
                             "alias": "zsubq_unreadable",
                             "limit": undefined,
@@ -968,6 +990,7 @@ describe('unreadable tables', () => {
                           },
                           "system": "permissions",
                         },
+                        "scalar": undefined,
                         "type": "correlatedSubquery",
                       },
                     ],
@@ -976,6 +999,7 @@ describe('unreadable tables', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
           ],
@@ -1008,6 +1032,7 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1018,6 +1043,7 @@ describe('unreadable tables', () => {
                     "readableId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_readable",
                   "limit": undefined,
@@ -1033,9 +1059,11 @@ describe('unreadable tables', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
             {
+              "flip": undefined,
               "op": "NOT EXISTS",
               "related": {
                 "correlation": {
@@ -1046,6 +1074,7 @@ describe('unreadable tables', () => {
                     "unreadableId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
@@ -1061,6 +1090,7 @@ describe('unreadable tables', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
           ],
@@ -1092,6 +1122,7 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1102,6 +1133,7 @@ describe('unreadable tables', () => {
                     "readableId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_readable",
                   "limit": undefined,
@@ -1117,9 +1149,11 @@ describe('unreadable tables', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
             {
+              "flip": undefined,
               "op": "NOT EXISTS",
               "related": {
                 "correlation": {
@@ -1130,6 +1164,7 @@ describe('unreadable tables', () => {
                     "unreadableId",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
@@ -1145,6 +1180,7 @@ describe('unreadable tables', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
           ],
@@ -1605,6 +1641,7 @@ describe('admin readable', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1615,6 +1652,7 @@ describe('admin readable', () => {
                     "id",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_self1",
                   "limit": undefined,
@@ -1638,6 +1676,7 @@ describe('admin readable', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
             {
@@ -1681,6 +1720,7 @@ describe('admin readable', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1691,6 +1731,7 @@ describe('admin readable', () => {
                     "id",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_self1",
                   "limit": undefined,
@@ -1731,6 +1772,7 @@ describe('admin readable', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
             {
@@ -1774,6 +1816,7 @@ describe('admin readable', () => {
         "where": {
           "conditions": [
             {
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1784,6 +1827,7 @@ describe('admin readable', () => {
                     "id",
                   ],
                 },
+                "hidden": undefined,
                 "subquery": {
                   "alias": "zsubq_self1",
                   "limit": undefined,
@@ -1795,6 +1839,7 @@ describe('admin readable', () => {
                   "where": {
                     "conditions": [
                       {
+                        "flip": undefined,
                         "op": "EXISTS",
                         "related": {
                           "correlation": {
@@ -1805,6 +1850,7 @@ describe('admin readable', () => {
                               "id",
                             ],
                           },
+                          "hidden": undefined,
                           "subquery": {
                             "alias": "zsubq_self2",
                             "limit": undefined,
@@ -1828,6 +1874,7 @@ describe('admin readable', () => {
                           },
                           "system": "permissions",
                         },
+                        "scalar": undefined,
                         "type": "correlatedSubquery",
                       },
                       {
@@ -1848,6 +1895,7 @@ describe('admin readable', () => {
                 },
                 "system": "permissions",
               },
+              "scalar": undefined,
               "type": "correlatedSubquery",
             },
             {

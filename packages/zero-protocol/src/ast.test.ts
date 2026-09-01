@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {h64} from '../../shared/src/hash.ts';
 import {
   number,
@@ -867,5 +867,131 @@ test('values of different types are ordered', () => {
   ).toEqual({
     type: 'and',
     conditions: values.map(cond),
+  });
+});
+
+describe('normalization is canonical across key reordering', () => {
+  // Postgres jsonb reorders object keys (by length, then bytewise), so an AST
+  // stored in the CVR comes back with different key order than it was written
+  // with. Normalization must erase that difference: hashOfAST is
+  // h64(JSON.stringify(normalizeAST(ast))), and JSON.stringify is
+  // key-order-sensitive, so any node normalization passes through unchanged
+  // makes a reloaded query record hash differently than it did when stored.
+  // Every such record then looks changed and re-executes on every view-syncer
+  // restart.
+  function reordered<T>(v: T): T {
+    if (Array.isArray(v)) {
+      return v.map(reordered) as T;
+    }
+    if (v !== null && typeof v === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(v).reverse()) {
+        out[k] = reordered((v as Record<string, unknown>)[k]);
+      }
+      return out as T;
+    }
+    return v;
+  }
+
+  const CASES: [name: string, ast: AST][] = [
+    ['bare table', {table: 'issue'}],
+    [
+      'simple condition',
+      {
+        table: 'issue',
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: 'a'},
+        },
+      },
+    ],
+    [
+      'parameter reference',
+      {
+        table: 'issue',
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'creatorID'},
+          right: {type: 'static', anchor: 'authData', field: 'sub'},
+        },
+      },
+    ],
+    [
+      'conjunction',
+      {
+        table: 'issue',
+        where: {
+          type: 'and',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 1},
+            },
+            {
+              type: 'simple',
+              op: '<',
+              left: {type: 'column', name: 'b'},
+              right: {type: 'literal', value: 2},
+            },
+          ],
+        },
+      },
+    ],
+    [
+      'correlated subquery condition',
+      {
+        table: 'issue',
+        where: {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          flip: true,
+          related: {
+            correlation: {parentField: ['creatorID'], childField: ['id']},
+            subquery: {
+              table: 'user',
+              alias: 'creator',
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'role'},
+                right: {type: 'literal', value: 'crew'},
+              },
+            },
+            system: 'client',
+          },
+        },
+      },
+    ],
+    [
+      'related',
+      {
+        table: 'issue',
+        related: [
+          {
+            correlation: {parentField: ['id'], childField: ['issueID']},
+            subquery: {table: 'comment', alias: 'comments', limit: 10},
+            hidden: true,
+            system: 'client',
+          },
+        ],
+        orderBy: [['id', 'asc']],
+        limit: 100,
+      },
+    ],
+  ];
+
+  test.each(CASES)('%s', (_name, ast) => {
+    const shuffled = reordered(ast);
+    // Key order is the only thing that differs going in...
+    expect(shuffled).toEqual(ast);
+    // ...and nothing may differ coming out.
+    expect(JSON.stringify(normalizeAST(shuffled))).toBe(
+      JSON.stringify(normalizeAST(ast)),
+    );
   });
 });
