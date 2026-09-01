@@ -1,12 +1,13 @@
 /**
  * Benchmarks for `hashOfAST` (`packages/zero-protocol/src/query-hash.ts`).
  *
- * `hashOfAST(ast)` is `h64(JSON.stringify(normalizeAST(ast))).toString(36)`.
- * `h64` used to run `xxHash32` twice over the string, and `xxHash32` UTF-8
- * encodes its string argument on every call, so one hash allocated a JSON
- * string plus two identical byte arrays and walked the bytes twice. `h64` now
- * encodes once and derives both words in one pass; `multiPassH64` below is the
- * old behaviour, kept as the "before" baseline.
+ * `hashOfAST` now hashes by visiting the normalized AST directly (`hashAST` in
+ * `query-hash-visitor.ts`). It used to be
+ * `h64(JSON.stringify(normalizeAST(ast))).toString(36)` — and before #6448,
+ * `h64` additionally ran `xxHash32` twice over the string, UTF-8 encoding it
+ * each time. The JSON/h64 suites below are those historical baselines, kept so
+ * the ledger of what each step bought stays runnable; `multiPassH64` is the
+ * oldest form.
  *
  * Both `normalizeAST` and `hashOfAST` memoize on object identity, so the
  * pipeline only runs for an AST the process has not seen before. That is the
@@ -22,7 +23,6 @@ import {xxHash32} from 'js-xxhash';
 import {bench, describe, use} from '../../shared/src/bench.ts';
 import {h64} from '../../shared/src/hash.ts';
 import {normalizeAST, type AST} from '../../zero-protocol/src/ast.ts';
-import {hashAST} from '../../zero-protocol/src/query-hash-visitor.ts';
 import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
@@ -146,22 +146,6 @@ describe('hashOfAST pipeline', () => {
 
     bench(`${label} | after: h64 encodes once, one pass`, () => {
       use(h64(JSON.stringify(normalized)).toString(36));
-    });
-  }
-});
-
-describe('hashOfAST vs the AST-specialized visitor', () => {
-  for (const [name, ast] of CASES) {
-    const normalized = normalizeAST(ast);
-    const json = JSON.stringify(normalized);
-    const label = `${name} (${json.length} chars)`;
-
-    bench(`${label} | 1. JSON.stringify + h64 (previous)`, () => {
-      use(h64(JSON.stringify(normalized)).toString(36));
-    });
-
-    bench(`${label} | 2. AST-specialized visitor (current)`, () => {
-      use(hashAST(normalized));
     });
   }
 });

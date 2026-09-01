@@ -102,17 +102,20 @@ function mixString(s: string): void {
   }
 }
 
-const f64 = new Float64Array(1);
-const i32 = new Int32Array(f64.buffer);
+// A DataView with an explicit byte order, not a Float64Array/Int32Array
+// aliasing pair: typed arrays read the buffer in host byte order, and these
+// digests are persisted, so a big-endian runtime would fold a float's words
+// swapped and disagree with every little-endian peer.
+const numView = new DataView(new ArrayBuffer(8));
 
 /** Fold a number: one word for an int32, two for anything else. */
 function mixNumber(n: number): void {
   if ((n | 0) === n) {
     mix(n);
   } else {
-    f64[0] = n;
-    mix(i32[0]);
-    mix(i32[1]);
+    numView.setFloat64(0, n, true);
+    mix(numView.getInt32(0, true));
+    mix(numView.getInt32(4, true));
   }
 }
 
