@@ -282,7 +282,7 @@ describe('CustomQueryTransformer', () => {
           right: {type: 'literal', value: 123},
         },
       },
-      transformationHash: '0nk9073060s5lz',
+      transformationHash: '0nk90730537eai',
     },
     {
       id: 'query2',
@@ -295,7 +295,7 @@ describe('CustomQueryTransformer', () => {
           right: {type: 'literal', value: 'user123'},
         },
       },
-      transformationHash: '04pjys205tt5w3',
+      transformationHash: '04pjys20c16bgz',
     },
   ];
 

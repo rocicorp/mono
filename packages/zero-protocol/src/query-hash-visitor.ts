@@ -13,8 +13,9 @@
  * - Two 32-bit accumulators held in module-level `let`s, so the "state" is
  *   plain numbers in registers rather than an object being threaded through
  *   the walk.
- * - `Math.imul` for the mixing step. js-xxhash avoids it (splitting each
- *   multiply into 16-bit halves) to support ancient engines; we don't need to.
+ * - xxHash32's own round and final mix, shared with `shared/src/hash.ts` via
+ *   `shared/src/xxhash32.ts`. Only the ingestion differs: that one feeds them
+ *   UTF-8 bytes, this one feeds them words straight out of the structure.
  * - Strings folded straight from `charCodeAt`, two UTF-16 units at a time, into
  *   one 32-bit word. No UTF-8 encoding, and half the loop iterations a
  *   byte-oriented hash would need over ASCII.
@@ -32,29 +33,29 @@
  * JSON: a literal's value and a bound's row.
  */
 import type {AST, Condition, CorrelatedSubquery, Ordering} from './ast.ts';
+import {
+  avalanche32,
+  PRIME32_1,
+  PRIME32_5,
+  round32,
+} from '../../shared/src/xxhash32.ts';
 
-// xxHash32's primes, reused because they're well-tested odd constants with
-// good bit distribution. The construction below is not xxHash.
-const P1 = 0x9e3779b1 | 0;
-const P2 = 0x85ebca77 | 0;
-const P3 = 0xc2b2ae3d | 0;
-const P4 = 0x27d4eb2f | 0;
-const P5 = 0x165667b1 | 0;
-
-// Two independent 32-bit lanes, combined into 64 bits at the end. Module-level
-// so the walk mutates registers rather than allocating or threading state.
+// Two 32-bit lanes, combined into 64 bits at the end. Module-level so the walk
+// mutates registers rather than allocating or threading state through it.
 let h1 = 0;
 let h2 = 0;
 
-/** Fold one 32-bit word into both lanes. */
+/**
+ * Fold one 32-bit word into both lanes.
+ *
+ * Both lanes run xxHash32's own round; only their starting values differ, so
+ * they diverge immediately and stay diverged. That is the same construction
+ * `h64` uses to widen xxHash32 past 32 bits, just fed words taken from a
+ * structure rather than bytes taken from a string.
+ */
 function mix(w: number): void {
-  let a = (h1 + Math.imul(w, P2)) | 0;
-  a = (a << 13) | (a >>> 19);
-  h1 = Math.imul(a, P1);
-
-  let b = (h2 ^ Math.imul(w, P3)) | 0;
-  b = (b << 17) | (b >>> 15);
-  h2 = Math.imul(b, P4);
+  h1 = round32(h1, w);
+  h2 = round32(h2, w);
 }
 
 /**
@@ -117,29 +118,15 @@ const TAG_OR = 0x2007;
 const STR_MARK = 0x40000000;
 
 function reset(): void {
-  h1 = P5;
-  h2 = P1;
+  h1 = PRIME32_5;
+  h2 = PRIME32_1;
 }
 
 /** Collapse the two lanes into one 64-bit value, avalanching each first. */
 function finalize(): string {
-  let a = h1;
-  a ^= a >>> 15;
-  a = Math.imul(a, P2);
-  a ^= a >>> 13;
-  a = Math.imul(a, P3);
-  a ^= a >>> 16;
-
-  let b = h2;
-  b ^= b >>> 16;
-  b = Math.imul(b, P3);
-  b ^= b >>> 13;
-  b = Math.imul(b, P2);
-  b ^= b >>> 15;
-
   return (
-    (a >>> 0).toString(36).padStart(7, '0') +
-    (b >>> 0).toString(36).padStart(7, '0')
+    avalanche32(h1).toString(36).padStart(7, '0') +
+    avalanche32(h2).toString(36).padStart(7, '0')
   );
 }
 
