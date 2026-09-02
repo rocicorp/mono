@@ -224,12 +224,22 @@ export function buildReport(args: {
   };
 
   const changeLogBytes = resources.map(s => s.changeLogBytes);
+  const changeLogLiveBytes = resources
+    .map(s => s.changeLogLiveBytes)
+    .filter((v): v is number => v !== undefined);
+  const changeLogFreeBytes = resources
+    .map(s => s.changeLogFreeBytes)
+    .filter((v): v is number => v !== undefined);
   const slotRetained = resources.map(s =>
     s.slots.reduce((acc, slot) => acc + slot.retainedBytes, 0),
   );
   const resourceReport: Record<string, unknown> = {
     changeLogBytes: stats(changeLogBytes),
     changeLogBytesFinal: changeLogBytes.at(-1) ?? 0,
+    changeLogLiveBytes: stats(changeLogLiveBytes),
+    changeLogLiveBytesFinal: changeLogLiveBytes.at(-1) ?? 0,
+    changeLogFreeBytes: stats(changeLogFreeBytes),
+    changeLogFreeBytesFinal: changeLogFreeBytes.at(-1) ?? 0,
     slotRetainedBytes: stats(slotRetained),
     slotRetainedBytesFinal: slotRetained.at(-1) ?? 0,
     backupBytesFinal: resources.at(-1)?.backupBytes ?? -1,

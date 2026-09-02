@@ -1,5 +1,8 @@
+import {existsSync} from 'node:fs';
 import {stat} from 'node:fs/promises';
+import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {Database} from '../../../../packages/zqlite/src/db.ts';
 import type {SoakConfig} from './config.ts';
 import {backupSize} from './infra.ts';
 import type {SoakLog} from './logs.ts';
@@ -30,6 +33,10 @@ export type ResourceSample = {
   readonly atMs: number;
   readonly phase: string;
   readonly changeLogBytes: number;
+  /** SQLite pages that hold live data, excluding pages on the freelist. */
+  readonly changeLogLiveBytes: number | undefined;
+  /** Reusable pages retained in the physical SQLite database file. */
+  readonly changeLogFreeBytes: number | undefined;
   readonly replicaBytes: Readonly<Record<string, number>>;
   readonly slots: readonly SlotSample[];
   readonly backupObjects: number;
@@ -50,7 +57,56 @@ export async function sqliteFootprint(file: string): Promise<number> {
   return sizes.reduce((a, b) => a + b, 0);
 }
 
-export async function readSlots(sql: postgres.Sql): Promise<SlotSample[]> {
+export type SQLitePageUsage = {
+  readonly liveBytes: number;
+  readonly freeBytes: number;
+};
+
+/**
+ * Physical SQLite files do not normally shrink after DELETE. Pages move to the
+ * freelist and are reused by later writes, so live pages are the recovery
+ * signal while {@link sqliteFootprint} remains the disk-capacity signal.
+ */
+export function sqlitePageUsage(
+  lc: LogContext,
+  file: string,
+): SQLitePageUsage | undefined {
+  if (!existsSync(file)) {
+    return undefined;
+  }
+  let db: Database | undefined;
+  try {
+    try {
+      db = new Database(lc, file, {readonly: true});
+    } catch {
+      // Match the oracle: a WAL database can reject a read-only connection
+      // when its shared-memory file is not usable. This fallback never writes.
+      db = new Database(lc, file);
+    }
+    const [{page_count: pageCount}] = db.pragma<{page_count: number}>(
+      'page_count',
+    );
+    const [{page_size: pageSize}] = db.pragma<{page_size: number}>('page_size');
+    const [{freelist_count: freePages}] = db.pragma<{
+      freelist_count: number;
+    }>('freelist_count');
+    return {
+      liveBytes: Math.max(0, pageCount - freePages) * pageSize,
+      freeBytes: freePages * pageSize,
+    };
+  } catch {
+    // The change log is deliberately deleted and recreated in C6/C12/C14.
+    // A sample racing one of those operations is unavailable, not fatal.
+    return undefined;
+  } finally {
+    db?.close();
+  }
+}
+
+export async function readSlots(
+  sql: postgres.Sql,
+  slotPrefix: string,
+): Promise<SlotSample[]> {
   const rows = await sql<
     {
       slotName: string;
@@ -65,7 +121,8 @@ export async function readSlots(sql: postgres.Sql): Promise<SlotSample[]> {
            pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)
              AS "unconfirmedBytes"
       FROM pg_replication_slots
-     WHERE slot_type = 'logical'`;
+     WHERE slot_type = 'logical'
+       AND starts_with(slot_name, ${slotPrefix})`;
   return rows.map(r => ({
     slotName: r.slotName,
     active: r.active,
@@ -127,6 +184,7 @@ export function purgeStreaks(log: SoakLog, sinceMs = 0): PurgeStreaks {
 export class ResourceSampler {
   readonly samples: ResourceSample[] = [];
   readonly #config: SoakConfig;
+  readonly #lc: LogContext;
   readonly #sql: postgres.Sql;
   readonly #files: ReadonlyArray<{node: string; replicaFile: string}>;
   readonly #changeLogFile: string;
@@ -135,11 +193,13 @@ export class ResourceSampler {
   #sampling = false;
 
   constructor(
+    lc: LogContext,
     config: SoakConfig,
     sql: postgres.Sql,
     changeLogFile: string,
     files: ReadonlyArray<{node: string; replicaFile: string}>,
   ) {
+    this.#lc = lc;
     this.#config = config;
     this.#sql = sql;
     this.#changeLogFile = changeLogFile;
@@ -173,13 +233,18 @@ export class ResourceSampler {
       }
       const [changeLogBytes, slots, backup] = await Promise.all([
         sqliteFootprint(this.#changeLogFile),
-        readSlots(this.#sql).catch(() => [] as SlotSample[]),
+        readSlots(this.#sql, `${this.#config.appID}_0_`).catch(
+          () => [] as SlotSample[],
+        ),
         backupSize(this.#config).catch(() => ({objects: -1, bytes: -1})),
       ]);
+      const pageUsage = sqlitePageUsage(this.#lc, this.#changeLogFile);
       const sample: ResourceSample = {
         atMs: Date.now(),
         phase: this.#phase,
         changeLogBytes,
+        changeLogLiveBytes: pageUsage?.liveBytes,
+        changeLogFreeBytes: pageUsage?.freeBytes,
         replicaBytes,
         slots,
         backupObjects: backup.objects,

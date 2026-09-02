@@ -108,11 +108,18 @@ quietly routes everything to PG would pass the gate while proving nothing, so
 the report lists each required route with its count or an explicit
 `NOT EXERCISED`.
 
-**Resource bounds (7.7)** sample the change log's local disk, the upstream
-replication slot's retained WAL, each replica's footprint and the backup's
-size, and summarize purge-pass stop reasons. A run that sits chronically at
-`continuation: 'immediate'` / `stopped: 'batch-limit'` is a purger losing to the
-write rate.
+**Resource bounds (7.7)** include these samples:
+
+- The physical disk footprint and the live/free pages of the change log.
+- The upstream replication slots for this soak app.
+- The footprint of each replica.
+- The size of the backup.
+
+The report also summarizes the stop reasons for purge passes. SQLite normally
+reuses freed pages instead of shrinking the physical file. Thus, C9 checks that
+live pages decrease after recovery. C9 does not require file truncation. A run
+fails when the purger repeatedly reports `continuation: 'immediate'` and
+`stopped: 'batch-limit'`.
 
 ## Where the numbers come from
 
@@ -177,7 +184,7 @@ consistently held is the evidence that the check can be tightened.
 | C6  | Delete only the change log, restart, then wipe a view-syncer replica | forced `created` reseed; the 1.4 measurement                     |
 | C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap                            |
 | C8  | SIGKILL the replication-manager mid-burst, restart                   | reconcile by _truncation_, not reseed                            |
-| C9  | Stop minio under sustained writes, then restart it                   | log bytes and slot WAL bounded, and both recover                 |
+| C9  | Stop minio for five minutes under sustained writes, then restart it  | live log pages and app-scoped slot WAL grow, then drain          |
 | C10 | `readPercent` 100 -> 0, restart                                      | every route becomes `pg/percentage`                              |
 | C11 | `serve` -> `compare` -> `write`, restart each time                   | the writer stays, reads stop, comparison stops                   |
 | C12 | `write` -> `off`, restart                                            | does turning it off actually free the disk                       |

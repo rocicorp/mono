@@ -6,7 +6,7 @@ import type {SoakConfig} from './config.ts';
 import {backupGenerations, sleep, startMinio, stopMinio} from './infra.ts';
 import type {SoakEvent, SoakLog} from './logs.ts';
 import type {MetricStore} from './otlp.ts';
-import type {ResourceSampler} from './resources.ts';
+import type {ResourceSample, ResourceSampler} from './resources.ts';
 
 /**
  * The chaos matrix of plan section 6.
@@ -581,7 +581,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
     title: 'Stop minio under sustained writes, then restart it',
     expected: 'backup watermark freezes, then catches up; both bounded',
     async run(ctx, out) {
-      const downSeconds = Math.max(60, Math.round(120 * ctx.config.scale));
+      const downSeconds = Math.max(60, Math.round(300 * ctx.config.scale));
       const load = ctx.traffic.runStage({
         rate: 25,
         durationSeconds: downSeconds + 60,
@@ -593,6 +593,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       await sleep(downSeconds * 1000);
       const during = await ctx.sampler.sample();
       await startMinio(ctx.config);
+      const recoveredAt = Date.now();
       out.notes.push('restarted minio');
       await load;
       // Let the backup catch up and the acker walk the slot forward.
@@ -600,23 +601,65 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       const after = await ctx.sampler.sample();
       const slotBytes = (s: typeof before) =>
         (s?.slots ?? []).reduce((acc, slot) => acc + slot.retainedBytes, 0);
+      const liveBytes = (s: ResourceSample | undefined) =>
+        s?.changeLogLiveBytes ?? -1;
       out.measurements['changeLogBytesBefore'] = before?.changeLogBytes ?? -1;
       out.measurements['changeLogBytesDuring'] = during?.changeLogBytes ?? -1;
       out.measurements['changeLogBytesAfter'] = after?.changeLogBytes ?? -1;
+      out.measurements['changeLogLiveBytesBefore'] = liveBytes(before);
+      out.measurements['changeLogLiveBytesDuring'] = liveBytes(during);
+      out.measurements['changeLogLiveBytesAfter'] = liveBytes(after);
+      out.measurements['changeLogFreeBytesAfter'] =
+        after?.changeLogFreeBytes ?? -1;
       out.measurements['slotRetainedBytesBefore'] = slotBytes(before);
       out.measurements['slotRetainedBytesDuring'] = slotBytes(during);
       out.measurements['slotRetainedBytesAfter'] = slotBytes(after);
-      if (
-        after &&
-        during &&
-        after.changeLogBytes > during.changeLogBytes &&
-        during.changeLogBytes > 0
-      ) {
+      const backupRecoveries = ctx.log.events.filter(
+        e => e.tsMs >= recoveredAt && e.kind === 'backup-watermark',
+      ).length;
+      const recoveryPurges = ctx.log.events.filter(
+        e => e.tsMs >= recoveredAt && e.kind === 'purge-pass',
+      );
+      const purgedRowsAfterRecovery = recoveryPurges.reduce(
+        (sum, event) =>
+          sum +
+          (typeof event.detail.deletedRows === 'number'
+            ? event.detail.deletedRows
+            : 0),
+        0,
+      );
+      out.measurements['backupRecoveries'] = backupRecoveries;
+      out.measurements['purgePassesAfterRecovery'] = recoveryPurges.length;
+      out.measurements['purgedRowsAfterRecovery'] = purgedRowsAfterRecovery;
+
+      if ([before, during, after].some(s => liveBytes(s) < 0)) {
+        out.findings.push('C9: change-log live-page usage was not measurable');
+      } else {
+        if (liveBytes(during) <= liveBytes(before)) {
+          out.findings.push(
+            'C9: the minio outage did not grow live change-log pages',
+          );
+        }
+        if (liveBytes(after) >= liveBytes(during)) {
+          out.findings.push(
+            'C9: live change-log pages did not drain after the backup recovered',
+          );
+        }
+      }
+      if (backupRecoveries === 0) {
         out.findings.push(
-          'C9: the change log did not shrink after the backup recovered',
+          'C9: no backup watermark was observed after minio recovered',
         );
       }
-      if (slotBytes(after) > slotBytes(during) && slotBytes(during) > 0) {
+      if (purgedRowsAfterRecovery === 0) {
+        out.findings.push(
+          'C9: no change-log rows were purged after minio recovered',
+        );
+      }
+      if (slotBytes(during) <= slotBytes(before)) {
+        out.findings.push('C9: the minio outage did not grow retained WAL');
+      }
+      if (slotBytes(after) >= slotBytes(during) && slotBytes(during) > 0) {
         out.findings.push(
           'C9: retained WAL did not drain after the backup recovered',
         );
