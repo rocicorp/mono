@@ -75,8 +75,33 @@ A join can execute in two directions:
 
 **Key constraints:**
 
-- `NOT EXISTS` joins cannot be flipped (marked `flippable: false`)
+- `NOT EXISTS` joins cannot be flipped (marked `flippable: false`): a flipped
+  join discovers parent rows by scanning children, but `NOT EXISTS` returns
+  exactly the parents with no child rows to scan. They are still cost-estimated
+  as anti-joins (see below) so that plans containing them — and flip decisions
+  for sibling joins — use realistic estimates.
 - Flipping a join makes both parent and child unlimited (removes LIMIT propagation)
+
+### 2a. NOT EXISTS (Anti-Join) Costing
+
+`NOT EXISTS` executes as the same existence probe as `EXISTS`: fetch child rows
+matching the parent's correlation and check whether any exist (the runtime caps
+both with `EXISTS_LIMIT`). So its child connection is modeled with `limit: 1`,
+just like `EXISTS`.
+
+Its selectivity is inverted, however. Where `EXISTS` passes a parent row with
+probability `1 - (1 - childSelectivity)^fanout` (the chance at least one child
+matches), `NOT EXISTS` passes with the complement:
+
+```
+antiSelectivity = max((1 - childSelectivity)^fanout, MIN_ANTI_JOIN_SELECTIVITY)
+```
+
+The floor exists because fanout statistics only see parents that have children
+— the childless parents `NOT EXISTS` returns are invisible to the child index.
+An unfiltered `NOT EXISTS` subquery has `childSelectivity = 1.0`, so the raw
+complement would be 0 (no parents survive), zeroing out scan estimates and
+making all candidate plans look equally free.
 
 ### 3. Constraint Propagation
 

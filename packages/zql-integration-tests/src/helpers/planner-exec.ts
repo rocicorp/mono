@@ -515,6 +515,13 @@ export async function createPlannerInfrastructure(config: {
     const selectedCostModel = useIndexedDb ? indexedCostModel : costModel;
     const selectedDelegate = useIndexedDb ? indexedDelegate : delegates.sqlite;
 
+    // The loop below overrides delegate state (debug tracking, and mapAst is
+    // cleared because the AST is pre-mapped to server names here). The
+    // delegate is shared with other helpers (e.g. runAndCompare), so restore
+    // its original state when done.
+    const originalDebug = selectedDelegate.debug;
+    const originalMapAst = selectedDelegate.mapAst;
+
     // Plan with debugger to collect all attempts
     const planDebugger = new AccumulatorDebugger();
     planQuery(ast, selectedCostModel, planDebugger);
@@ -592,6 +599,10 @@ export async function createPlannerInfrastructure(config: {
         runtimeDebugFlags.trackRowCountsVended = false;
       }
     }
+
+    // Restore the delegate for other users (see note above).
+    selectedDelegate.debug = originalDebug;
+    selectedDelegate.mapAst = originalMapAst;
 
     return results;
   }

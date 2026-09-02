@@ -269,8 +269,17 @@ export class PlannerGraph {
     // Build FO→FI cache once to avoid redundant BFS traversals in each iteration
     const fofiCache = buildFOFICache(this);
 
+    // With no flippable joins there is only one possible plan, but if the
+    // graph has joins at all (e.g. only NOT EXISTS, or only manually pinned
+    // flips) we still evaluate that single plan so constraints propagate and
+    // cost estimates / debug events are produced for it. A join-free graph
+    // has nothing to plan.
     const numPatterns =
-      flippableJoins.length === 0 ? 0 : 2 ** flippableJoins.length;
+      flippableJoins.length === 0
+        ? this.joins.length === 0
+          ? 0
+          : 1
+        : 2 ** flippableJoins.length;
     let bestCost = Infinity;
     let bestPlan: PlanState | undefined = undefined;
     let bestAttemptNumber = -1;
@@ -374,10 +383,7 @@ export class PlannerGraph {
         });
       }
     } else {
-      assert(
-        numPatterns === 0,
-        'no plan was found but flippable joins did exist!',
-      );
+      assert(numPatterns === 0, 'no plan was found but joins did exist!');
     }
   }
 }
