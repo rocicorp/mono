@@ -150,6 +150,7 @@ const TAG_NAME_ARGS = 0x2009;
 const TAG_SYSTEM_PERMISSIONS = 0x200a;
 const TAG_SYSTEM_CLIENT = 0x200b;
 const TAG_SYSTEM_TEST = 0x200c;
+const TAG_JUNCTION = 0x200d;
 
 // Set on a string's length word. High enough that no array length reaches it.
 const STR_MARK = 0x40000000;
@@ -455,6 +456,10 @@ export function hashNameAndArgs(
  *   {@link visitCorrelatedSubquery} -- but a query with neither has nowhere to
  *   put it, and would otherwise hash the same whether it was built for the
  *   client or for permissions.
+ * - **currentJunction**: builder state, set on the sub-query handed to a
+ *   two-hop relationship's callback, which makes `limit` and `orderBy` throw.
+ *   It leaves no trace in the AST at all, so two queries that differ only in
+ *   whether those methods work would otherwise be indistinguishable.
  *
  * The name and args are taken apart rather than as a `CustomQueryID` because
  * that type lives in `zql`, which is above this package; `hashNameAndArgs`
@@ -464,6 +469,7 @@ export function hashOfQueryInternals(
   ast: AST,
   format: Format,
   system: System,
+  currentJunction: string | undefined,
   customQueryName: string | undefined,
   customQueryArgs: readonly unknown[] | undefined,
 ): string {
@@ -475,6 +481,12 @@ export function hashOfQueryInternals(
     mix(TAG_FORMAT);
     visitValue(format);
     mixSystem(system);
+    if (currentJunction === undefined) {
+      mix(TAG_UNDEF);
+    } else {
+      mix(TAG_JUNCTION);
+      mixString(currentJunction);
+    }
     if (customQueryName === undefined) {
       mix(TAG_UNDEF);
     } else {

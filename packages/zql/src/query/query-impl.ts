@@ -374,6 +374,7 @@ export class QueryImpl<
         this.#ast,
         this.format,
         this.#system,
+        this.#currentJunction,
         this.customQueryID?.name,
         this.customQueryID?.args,
       );
