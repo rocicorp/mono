@@ -1,5 +1,6 @@
-import {expect, test, vi} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import type {IndexPredicate, PublishedIndexSpec} from '../../../db/specs.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {Sink} from '../../../types/streams.ts';
 import {Subscription} from '../../../types/subscription.ts';
@@ -9,9 +10,15 @@ import type {
   ChangeStreamMessage,
   MessageBackfill,
 } from '../protocol/current.ts';
-import {Acker, LagReporter, PostgresChangeSource} from './change-source.ts';
+import {
+  Acker,
+  isIndexStructurallyChanged,
+  LagReporter,
+  PostgresChangeSource,
+} from './change-source.ts';
 import type {ServerContext} from './initial-sync.ts';
 import type {StreamMessage} from './logical-replication/stream.ts';
+import type {PublishedTableWithReplicaIdentity} from './schema/published.ts';
 import type {
   BackupOptions,
   InternalShardConfig,
@@ -287,4 +294,101 @@ test('lag reporter retries missing reports', async () => {
     reporter.stop();
     vi.useRealTimers();
   }
+});
+
+describe('isIndexStructurallyChanged: partial index predicates', () => {
+  const tables = (columns: Record<string, number>) =>
+    new Map([
+      [
+        1,
+        {
+          schema: 'public',
+          name: 'foo',
+          columns: Object.fromEntries(
+            Object.entries(columns).map(([name, pos]) => [name, {pos}]),
+          ),
+        } as unknown as PublishedTableWithReplicaIdentity,
+      ],
+    ]);
+  const index = (predicate?: IndexPredicate): PublishedIndexSpec => ({
+    schema: 'public',
+    tableName: 'foo',
+    name: 'foo_live',
+    unique: false,
+    columns: {id: 'ASC'},
+    ...(predicate ? {predicate} : {}),
+  });
+  const isNull = (column: string): IndexPredicate => ({
+    type: 'null-test',
+    column,
+    op: 'IS NULL',
+  });
+  const isNotNull = (column: string): IndexPredicate => ({
+    type: 'null-test',
+    column,
+    op: 'IS NOT NULL',
+  });
+  const t = tables({id: 1, flag: 2, other: 3});
+
+  test('same predicate is unchanged', () => {
+    expect(
+      isIndexStructurallyChanged(
+        index(isNull('flag')),
+        index(isNull('flag')),
+        t,
+        t,
+      ),
+    ).toBe(false);
+  });
+
+  test('different predicate is a change', () => {
+    expect(
+      isIndexStructurallyChanged(
+        index(isNull('flag')),
+        index(isNotNull('flag')),
+        t,
+        t,
+      ),
+    ).toBe(true);
+    expect(
+      isIndexStructurallyChanged(
+        index(isNull('flag')),
+        index(isNull('other')),
+        t,
+        t,
+      ),
+    ).toBe(true);
+  });
+
+  test('adding or removing a predicate is a change', () => {
+    expect(
+      isIndexStructurallyChanged(index(), index(isNull('flag')), t, t),
+    ).toBe(true);
+    expect(
+      isIndexStructurallyChanged(index(isNull('flag')), index(), t, t),
+    ).toBe(true);
+  });
+
+  test('renaming a predicate column is cosmetic', () => {
+    expect(
+      isIndexStructurallyChanged(
+        index(isNull('flag')),
+        index(isNull('flagged')),
+        tables({id: 1, flag: 2}),
+        tables({id: 1, flagged: 2}),
+      ),
+    ).toBe(false);
+  });
+
+  test('a predicate column with a new attnum is a change', () => {
+    // e.g. DROP COLUMN flag, ADD COLUMN flag
+    expect(
+      isIndexStructurallyChanged(
+        index(isNull('flag')),
+        index(isNull('flag')),
+        tables({id: 1, flag: 2}),
+        tables({id: 1, flag: 3}),
+      ),
+    ).toBe(true);
+  });
 });
