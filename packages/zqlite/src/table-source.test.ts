@@ -42,6 +42,25 @@ const columns = {
 
 const lc = createSilentLogContext();
 
+test('a partial unique index cannot satisfy the row-key assertion', () => {
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    CREATE TABLE partial_key (id TEXT, active INTEGER);
+    CREATE UNIQUE INDEX partial_key_id ON partial_key(id) WHERE active = 1;
+  `);
+  expect(
+    () =>
+      new TableSource(
+        lc,
+        testLogConfig,
+        db,
+        'partial_key',
+        {id: {type: 'string'}, active: {type: 'boolean'}},
+        ['id'],
+      ),
+  ).toThrow('does not have a UNIQUE index');
+});
+
 describe('fetching from a table source', () => {
   type Foo = {id: string; a: number; b: number; c: number};
   const allRows: Foo[] = [];
