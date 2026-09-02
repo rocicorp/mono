@@ -135,7 +135,6 @@ export class SQLiteStatFanout {
       SELECT il.name as index_name, ii.seqno, ii.name as column_name
       FROM pragma_index_list(?) il
       JOIN pragma_index_info(il.name) ii
-      WHERE il.partial = 0
       ORDER BY il.seq, ii.seqno
     `);
   }

@@ -14,6 +14,7 @@ import {
 } from '../../db/create.ts';
 import {
   computeZqlSpecs,
+  listIndexes,
   listTables,
   type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
@@ -729,49 +730,43 @@ class TransactionProcessor {
         msg.new,
         'ignore-default',
       );
-      if (oldName !== newName) {
-        // Rename the column in place first so that SQLite rewrites every
-        // reference to it in the table's index definitions, including the
-        // WHERE clauses of partial indexes.
-        this.#db.db.exec(
-          `ALTER TABLE ${id(table)} RENAME ${id(oldName)} TO ${id(newName)}`,
-        );
-        oldName = newName;
-      }
       const tableSpec = must(
         listTables(this.#db.db, false, false).find(
           tableSpec => tableSpec.name === table,
         ),
       );
-      // Recreating the table drops its indexes, so capture their DDL to
-      // replay afterwards. Auto-indexes (PRIMARY KEY) have no DDL and are
-      // recreated by the CREATE TABLE statement itself.
-      const indexDDL = this.#db.db
-        .prepare(
-          `SELECT sql FROM sqlite_master
-             WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL
-             ORDER BY rowid`,
-        )
-        .all<{sql: string}>(table)
-        .map(({sql}) => sql);
+      const indexes = listIndexes(this.#db.db).filter(
+        idx => idx.tableName === table,
+      );
       const tmpTable = `tmp.${table}`;
-      const columns = Object.keys(tableSpec.columns);
+      const newColumns = mapEntries(tableSpec.columns, (column, spec) => [
+        column === oldName ? newName : column,
+        column === oldName ? {...newLiteSpec, pos: spec.pos} : spec,
+      ]);
+      const sourceColumns = Object.keys(tableSpec.columns);
+      const destinationColumns = Object.keys(newColumns);
       const stmts = [
         createLiteTableStatement({
           ...tableSpec,
           name: tmpTable,
-          columns: mapEntries(tableSpec.columns, (column, spec) => [
-            column,
-            column === newName ? {...newLiteSpec, pos: spec.pos} : spec,
-          ]),
+          columns: newColumns,
         }),
-        `INSERT INTO ${id(tmpTable)} (${columns.map(id).join(',')})
-         SELECT ${columns.map(id).join(',')} FROM ${id(table)};`,
+        `INSERT INTO ${id(tmpTable)} (${destinationColumns.map(id).join(',')})
+         SELECT ${sourceColumns.map(id).join(',')} FROM ${id(table)};`,
         `DROP TABLE ${id(table)};`,
         `ALTER TABLE ${id(tmpTable)} RENAME TO ${id(table)};`,
-        ...indexDDL.map(sql => `${sql};`),
+        ...indexes.map(idx =>
+          createLiteIndexStatement({
+            ...idx,
+            columns: mapEntries(idx.columns, (column, direction) => [
+              column === oldName ? newName : column,
+              direction,
+            ]),
+          }),
+        ),
       ];
       this.#db.db.exec(stmts.join(''));
+      oldName = newName;
     }
     if (oldName !== newName) {
       this.#db.db.exec(

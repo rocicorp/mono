@@ -1,4 +1,3 @@
-import type {LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
 import type postgres from 'postgres';
 import {assert} from '../../../../../../shared/src/asserts.ts';
@@ -10,18 +9,8 @@ import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
 } from '../../../../db/pg-to-lite.ts';
-import {
-  publishedColumnSpec,
-  publishedIndexSpec,
-  publishedTableSpec,
-  type PublishedIndexSpec,
-} from '../../../../db/specs.ts';
-import {getOrCreateCounter} from '../../../../observability/metrics.ts';
+import {publishedIndexSpec, publishedTableSpec} from '../../../../db/specs.ts';
 import {liteTableName} from '../../../../types/names.ts';
-import {
-  translatePostgresIndexPredicate,
-  type UnsupportedPredicateReason,
-} from './index-predicate.ts';
 
 export function publishedSchemaQuery(publications: readonly string[]) {
   // Notes:
@@ -44,7 +33,6 @@ WITH published_columns AS (SELECT
   atttypid::int8 AS "typeOID", 
   pt.typtype,
   elem_pt.typtype AS "elemTyptype",
-  coll.collisdeterministic AS "collationIsDeterministic",
   NULLIF(atttypmod, -1) AS "maxLen", 
   attndims "arrayDims", 
   attnotnull AS "notNull",
@@ -57,7 +45,6 @@ JOIN pg_class pc ON pc.oid = attrelid
 JOIN pg_namespace pns ON pns.oid = relnamespace
 JOIN pg_type pt ON atttypid = pt.oid
 LEFT JOIN pg_type elem_pt ON elem_pt.oid = pt.typelem
-LEFT JOIN pg_collation coll ON coll.oid = pg_attribute.attcollation
 JOIN pg_publication_tables as pb ON 
   pb.schemaname = nspname AND 
   pb.tablename = pc.relname AND
@@ -85,7 +72,6 @@ tables AS (SELECT json_build_object(
       'pgTypeClass', "typtype",
       'elemPgTypeClass', "elemTyptype",
       'typeOID', "typeOID",
-      'collationIsDeterministic', "collationIsDeterministic",
       -- https://stackoverflow.com/a/52376230
       'characterMaximumLength', CASE WHEN "typeOID" = 1043 OR "typeOID" = 1042 
                                      THEN "maxLen" - 4 
@@ -133,17 +119,10 @@ tables AS (SELECT json_build_object(
       pg_indexes.indexname as "name",
       index_column.name as "col",
       CASE WHEN pg_index.indoption[index_column.pos-1] & 1 = 1 THEN 'DESC' ELSE 'ASC' END as "dir",
-      -- Partial indexes are always reported as non-unique. Nothing on the
-      -- replica relies on the uniqueness of a partial index (it cannot serve
-      -- as a row key), and reporting it as non-unique keeps the ddl event
-      -- format compatible with older versions of the zero-cache, which
-      -- ignore "predicateSQL" and would otherwise create a full UNIQUE index
-      -- on the replica.
-      (pg_index.indisunique AND pg_index.indpred IS NULL) as "unique",
+      pg_index.indisunique as "unique",
       pg_index.indisprimary as "isPrimaryKey",
       pg_index.indisreplident as "isReplicaIdentity",
-      pg_index.indimmediate as "isImmediate",
-      pg_get_expr(pg_index.indpred, pg_index.indrelid, false) as "predicateSQL"
+      pg_index.indimmediate as "isImmediate"
     FROM pg_indexes
     JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
     JOIN pg_class pc ON
@@ -167,6 +146,7 @@ tables AS (SELECT json_build_object(
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
     WHERE pb.pubname IN (${literal(publications)})
       AND pg_index.indexprs IS NULL
+      AND pg_index.indpred IS NULL
       AND (pg_constraint.contype IS NULL OR pg_constraint.contype IN ('p', 'u'))
       AND indexed.attnames <@ pb.attnames
       AND (current_setting('server_version_num')::int >= 160000 OR false = ALL(indexed.generated))
@@ -184,11 +164,10 @@ tables AS (SELECT json_build_object(
       'isPrimaryKey', "isPrimaryKey",
       'isReplicaIdentity', "isReplicaIdentity",
       'isImmediate', "isImmediate",
-      'predicateSQL', "predicateSQL",
       'columns', json_object_agg("col", "dir")
     ) AS index FROM indexed_columns 
       GROUP BY "schema", "tableName", "name", "unique", 
-         "isPrimaryKey", "isReplicaIdentity", "isImmediate", "predicateSQL")
+         "isPrimaryKey", "isReplicaIdentity", "isImmediate")
 
     SELECT json_build_object(
       'tables', COALESCE((SELECT json_agg("table") FROM tables), '[]'::json),
@@ -198,100 +177,18 @@ tables AS (SELECT json_build_object(
   );
 }
 
-const rawPublishedColumnSpec = publishedColumnSpec.extend({
-  collationIsDeterministic: v.boolean().nullable().optional(),
-});
-
-const rawPublishedTableSpec = publishedTableSpec.extend({
-  columns: v.record(rawPublishedColumnSpec),
-});
-
-const rawPublishedIndexSpec = publishedIndexSpec.extend({
-  predicateSQL: v.string().nullable().optional(),
-});
-
-export type SkippedIndexDiagnostic = {
-  readonly schema: string;
-  readonly index: string;
-  readonly predicate: string;
-  readonly reason: UnsupportedPredicateReason;
-};
-
-const skippedIndexDiagnostics = new WeakMap<
-  object,
-  readonly SkippedIndexDiagnostic[]
->();
-export function getSkippedIndexDiagnostics(
-  schema: PublishedSchema,
-): readonly SkippedIndexDiagnostic[] {
-  return skippedIndexDiagnostics.get(schema) ?? [];
-}
-
-export function warnForSkippedIndexes(
-  lc: LogContext,
-  schema: PublishedSchema,
-  warned: Set<string> = new Set(),
-): void {
-  for (const diagnostic of getSkippedIndexDiagnostics(schema)) {
-    const key = JSON.stringify(diagnostic);
-    if (warned.has(key)) continue;
-    warned.add(key);
-    lc.warn?.('Skipping unsupported PostgreSQL partial index', diagnostic);
-    getOrCreateCounter('replication', 'skipped_index', {
-      description: 'Number of PostgreSQL indexes skipped during replication.',
-      unit: '{index}',
-    }).add(1, {reason: diagnostic.reason, partial: true});
-  }
-}
-
 export const publishedSchema = v
   .object({
-    tables: v.array(rawPublishedTableSpec),
-    indexes: v.array(rawPublishedIndexSpec),
+    tables: v.array(publishedTableSpec),
+    indexes: v.array(publishedIndexSpec),
   })
-  .map(({tables: rawTables, indexes: rawIndexes}) => {
-    const diagnostics: SkippedIndexDiagnostic[] = [];
-    const indexes: PublishedIndexSpec[] = [];
-    for (const rawIndex of rawIndexes) {
-      const {predicateSQL, ...index} = rawIndex;
-      if (predicateSQL !== null && predicateSQL !== undefined) {
-        const table = rawTables.find(
-          candidate =>
-            candidate.schema === index.schema &&
-            candidate.name === index.tableName,
-        );
-        const translation = table
-          ? translatePostgresIndexPredicate(predicateSQL, table)
-          : {supported: false as const, reason: 'unpublished-column' as const};
-        if (!translation.supported) {
-          diagnostics.push({
-            schema: index.schema,
-            index: index.name,
-            predicate: predicateSQL,
-            reason: translation.reason,
-          });
-          continue;
-        }
-        indexes.push({...index, predicate: translation.predicate});
-      } else {
-        indexes.push(index);
-      }
-    }
-
-    const tables = rawTables.map(table => ({
-      ...table,
-      columns: Object.fromEntries(
-        Object.entries(table.columns).map(
-          ([name, {collationIsDeterministic: _, ...column}]) => [name, column],
-        ),
-      ),
-    }));
+  .map(({tables, indexes}) => {
     const zqlSpecs = computeZqlSpecsFromLiteSpecs(
       tables.map(t => mapPostgresToLite(t)),
       indexes.map(mapPostgresToLiteIndex),
       {includeBackfillingColumns: true},
     );
-    const result = {
+    return {
       indexes,
 
       // Denormalize the schema such that each `table` includes the
@@ -334,8 +231,6 @@ export const publishedSchema = v
         };
       }),
     };
-    skippedIndexDiagnostics.set(result, diagnostics);
-    return result;
   });
 
 export type PublishedSchema = v.Infer<typeof publishedSchema>;
@@ -410,11 +305,8 @@ export async function getPublicationInfo(
     () => `Invalid publishedSchema result ${BigIntJSON.stringify(result[2])}`,
   );
 
-  const schema = v.parse(result[2][0].publishedSchema, publishedSchema);
-  const info = {
+  return {
     publications: v.parse(result[1], publicationsResultSchema),
-    ...schema,
+    ...v.parse(result[2][0].publishedSchema, publishedSchema),
   };
-  skippedIndexDiagnostics.set(info, getSkippedIndexDiagnostics(schema));
-  return info;
 }

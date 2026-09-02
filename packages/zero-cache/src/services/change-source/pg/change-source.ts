@@ -18,7 +18,6 @@ import {
 } from '../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
-import {mapIndexPredicateColumns} from '../../../db/index-predicate.ts';
 import {
   mapPostgresToLiteColumn,
   UnsupportedColumnDefaultError,
@@ -105,7 +104,6 @@ import {
   getPublicationInfo,
   type PublishedSchema,
   type PublishedTableWithReplicaIdentity,
-  warnForSkippedIndexes,
 } from './schema/published.ts';
 import {
   dropShard,
@@ -1094,7 +1092,6 @@ class ChangeMaker {
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
   #error: ReplicationError | undefined;
-  readonly #skippedIndexWarnings = new Set<string>();
 
   constructor(
     {appID, shardNum}: ShardID,
@@ -1289,17 +1286,6 @@ class ChangeMaker {
       .withContext('lsn', fromBigInt(lsn))
       .withContext('tag', event.event.tag)
       .withContext('query', event.context.query);
-
-    if (event.previousSchema) {
-      warnForSkippedIndexes(
-        lc,
-        event.previousSchema,
-        this.#skippedIndexWarnings,
-      );
-    }
-    if (event.schema) {
-      warnForSkippedIndexes(lc, event.schema, this.#skippedIndexWarnings);
-    }
 
     // Cancel manual schema adjustment timeouts when an upstream schema change
     // is about to happen, so as to avoid interfering / redundant work.
@@ -1796,7 +1782,7 @@ function specsByID(published: PublishedSchema) {
  * Compares boolean properties directly and resolves column names to their
  * stable attnums (pg_attribute `attnum`) for the column comparison.
  */
-export function isIndexStructurallyChanged(
+function isIndexStructurallyChanged(
   prev: PublishedIndexSpec,
   next: PublishedIndexSpec,
   prevTables: Map<number, PublishedTableWithReplicaIdentity>,
@@ -1824,26 +1810,6 @@ export function isIndexStructurallyChanged(
   if (!prevTable || !nextTable) {
     // Can't resolve tables; conservatively treat as changed.
     return true;
-  }
-
-  if ((prev.predicate === undefined) !== (next.predicate === undefined)) {
-    return true;
-  }
-  if (prev.predicate && next.predicate) {
-    let unresolved = false;
-    const prevPredicate = mapIndexPredicateColumns(prev.predicate, name => {
-      const pos = prevTable.columns[name]?.pos;
-      if (pos === undefined) unresolved = true;
-      return String(pos);
-    });
-    const nextPredicate = mapIndexPredicateColumns(next.predicate, name => {
-      const pos = nextTable.columns[name]?.pos;
-      if (pos === undefined) unresolved = true;
-      return String(pos);
-    });
-    if (unresolved || !deepEqual(prevPredicate, nextPredicate)) {
-      return true;
-    }
   }
 
   const prevEntries = Object.entries(prev.columns);
