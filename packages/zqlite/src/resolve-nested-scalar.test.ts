@@ -1,6 +1,7 @@
 import {expect, test} from 'vitest';
 import type {AST, LiteralValue} from '../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
 import {resolveSimpleScalarSubqueries} from './resolve-scalar-subqueries.ts';
 
 /**
@@ -14,9 +15,18 @@ import {resolveSimpleScalarSubqueries} from './resolve-scalar-subqueries.ts';
  * gate — pinned on the unique `lowerCaseName` — rewrites to
  * `label.projectID = <literal>`, which completes the key.
  */
-const specs = new Map<string, {tableSpec: {uniqueKeys: PrimaryKey[]}}>([
-  ['label', {tableSpec: {uniqueKeys: [['id'], ['projectID', 'name']]}}],
-  ['project', {tableSpec: {uniqueKeys: [['id'], ['lowerCaseName']]}}],
+const specs = new Map<
+  string,
+  {tableSpec: {uniqueKeys: PrimaryKey[]}; zqlSpec: Record<string, SchemaValue>}
+>([
+  [
+    'label',
+    {tableSpec: {uniqueKeys: [['id'], ['projectID', 'name']]}, zqlSpec: {}},
+  ],
+  [
+    'project',
+    {tableSpec: {uniqueKeys: [['id'], ['lowerCaseName']]}, zqlSpec: {}},
+  ],
 ]);
 
 const ast: AST = {
