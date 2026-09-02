@@ -39,7 +39,7 @@ function newMockQuery(query: string, singular = false): Query<string, Schema> {
   const ret = {
     [queryInternalsTag]: true,
     hash() {
-      return query;
+      return query + singular;
     },
     format: {singular},
   } as unknown as QueryImpl<string, Schema>;
@@ -53,7 +53,7 @@ function newMockQueryWithFormat(
   const ret = {
     [queryInternalsTag]: true,
     hash() {
-      return query;
+      return query + JSON.stringify(format);
     },
     format,
   } as unknown as QueryImpl<string, Schema>;

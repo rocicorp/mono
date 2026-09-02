@@ -1,15 +1,19 @@
+import {
+  avalanche32,
+  PRIME32_1,
+  PRIME32_2,
+  PRIME32_3,
+  PRIME32_4,
+  PRIME32_5,
+  round32,
+} from './xxhash32.ts';
+
 export const h32 = (s: string) => {
   digest(s, 1);
   return digests[0];
 };
 export const h64 = (s: string) => wide(s, 2);
 export const h128 = (s: string) => wide(s, 4);
-
-const PRIME32_1 = 2654435761;
-const PRIME32_2 = 2246822519;
-const PRIME32_3 = 3266489917;
-const PRIME32_4 = 668265263;
-const PRIME32_5 = 374761393;
 
 const MAX_WORDS = 4;
 
@@ -19,18 +23,6 @@ const accs = new Int32Array(MAX_WORDS);
 const stripes = new Int32Array(MAX_WORDS * 4);
 const digests = new Uint32Array(MAX_WORDS);
 let encoder: TextEncoder | undefined;
-
-function round(acc: number, lane: number): number {
-  const laneN0 = lane & 0xffff;
-  const laneN1 = lane >>> 16;
-  acc =
-    (acc + (laneN0 * PRIME32_2 + ((laneN1 * PRIME32_2) << 16))) & 0xffffffff;
-  acc = (acc << 13) | (acc >>> 19);
-  return (
-    ((acc & 0xffff) * PRIME32_1 + (((acc >>> 16) * PRIME32_1) << 16)) &
-    0xffffffff
-  );
-}
 
 /**
  * xxHash32 over the UTF-8 bytes of `str` under seeds `0..words-1`, leaving the
@@ -91,10 +83,10 @@ function digest(str: string, words: number): void {
         (b[offset + 15] << 24);
       for (let w = 0; w < words; w++) {
         const base = w << 2;
-        stripes[base] = round(stripes[base], l0);
-        stripes[base + 1] = round(stripes[base + 1], l1);
-        stripes[base + 2] = round(stripes[base + 2], l2);
-        stripes[base + 3] = round(stripes[base + 3], l3);
+        stripes[base] = round32(stripes[base], l0);
+        stripes[base + 1] = round32(stripes[base + 1], l1);
+        stripes[base + 2] = round32(stripes[base + 2], l2);
+        stripes[base + 3] = round32(stripes[base + 3], l3);
       }
     }
 
@@ -129,38 +121,25 @@ function digest(str: string, words: number): void {
     const laneN1 = b[offset + 2] + (b[offset + 3] << 8);
     const laneP = laneN0 * PRIME32_3 + ((laneN1 * PRIME32_3) << 16);
     for (let w = 0; w < words; w++) {
-      let acc = (accs[w] + laneP) & 0xffffffff;
+      let acc = (accs[w] + laneP) | 0;
       acc = (acc << 17) | (acc >>> 15);
-      accs[w] =
-        ((acc & 0xffff) * PRIME32_4 + (((acc >>> 16) * PRIME32_4) << 16)) &
-        0xffffffff;
+      accs[w] = Math.imul(acc, PRIME32_4);
     }
   }
 
   for (; offset < len; ++offset) {
     const lane = b[offset];
     for (let w = 0; w < words; w++) {
-      let acc = accs[w] + lane * PRIME32_5;
+      let acc = (accs[w] + Math.imul(lane, PRIME32_5)) | 0;
       acc = (acc << 11) | (acc >>> 21);
-      accs[w] =
-        ((acc & 0xffff) * PRIME32_1 + (((acc >>> 16) * PRIME32_1) << 16)) &
-        0xffffffff;
+      accs[w] = Math.imul(acc, PRIME32_1);
     }
   }
 
   // Step 6. Final mix (avalanche). The Uint32Array store turns any negatives
   // back into a positive number.
   for (let w = 0; w < words; w++) {
-    let acc = accs[w];
-    acc = acc ^ (acc >>> 15);
-    acc =
-      (((acc & 0xffff) * PRIME32_2) & 0xffffffff) +
-      (((acc >>> 16) * PRIME32_2) << 16);
-    acc = acc ^ (acc >>> 13);
-    acc =
-      (((acc & 0xffff) * PRIME32_3) & 0xffffffff) +
-      (((acc >>> 16) * PRIME32_3) << 16);
-    digests[w] = acc ^ (acc >>> 16);
+    digests[w] = avalanche32(accs[w]);
   }
 }
 
@@ -176,3 +155,8 @@ function wide(str: string, words: number): bigint {
   }
   return result;
 }
+
+// Re-exported for zero-protocol's AST hash, which cannot import xxhash32.ts
+// directly without tripping a tsc 7.0.2 bug (see the import comment in
+// zero-protocol/src/query-hash-visitor.ts).
+export {avalanche32, PRIME32_1, PRIME32_5, round32} from './xxhash32.ts';

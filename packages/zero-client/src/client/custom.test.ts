@@ -1020,7 +1020,7 @@ describe('server results and keeping read queries', () => {
     // query is not removed, only put.
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"37augjshwgayh","name":"a","args":[],"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1o2vimr0oukr3l","name":"a","args":[],"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -1047,7 +1047,7 @@ describe('server results and keeping read queries', () => {
     // mutation is no longer outstanding, query is removed.
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"37augjshwgayh"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1o2vimr0oukr3l"}]}]`,
       ]);
     });
 
@@ -1064,7 +1064,7 @@ describe('server results and keeping read queries', () => {
 
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1pmg07l6czqjy","name":"b","args":[],"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"0izedpx0ua8to9","name":"b","args":[],"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -1107,7 +1107,7 @@ describe('server results and keeping read queries', () => {
 
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1pmg07l6czqjy"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"0izedpx0ua8to9"}]}]`,
       ]);
     });
 
