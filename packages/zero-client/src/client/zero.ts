@@ -219,6 +219,17 @@ type ConnectAttemptControl = {
   readonly controller: AbortController;
   readonly connected: Resolver<void>;
   readonly events: [date: Date, event: string][];
+  /**
+   * The error this attempt was aborted with. Read this instead of
+   * `controller.signal.reason`: on runtimes whose `AbortController` predates
+   * the 2021 `signal.reason` spec addition (e.g. React Native's bundled
+   * `abort-controller@3` polyfill), `abort(reason)` silently discards the
+   * reason and `signal.reason` reads `undefined` — the run loop then wraps
+   * that `undefined` as a non-retryable internal error, so every retryable
+   * connect failure (e.g. `ConnectTimeout`) permanently pauses the run loop
+   * instead of retrying.
+   */
+  abortReason?: ZeroError | undefined;
 };
 
 function connectionReadyResolver(): Resolver<void> {
@@ -1764,7 +1775,7 @@ export class Zero<
     // The run loop has already stopped waiting for this attempt if it was
     // canceled. Do not let setup that completed late create a socket.
     if (signal.aborted) {
-      throw signal.reason;
+      throw attempt.abortReason ?? signal.reason;
     }
 
     const [ws, initConnectionQueries, deletedClients] = await createSocket(
@@ -1797,7 +1808,7 @@ export class Zero<
     // still belongs to this attempt and must be closed.
     if (signal.aborted) {
       ws.close();
-      throw signal.reason;
+      throw attempt.abortReason ?? signal.reason;
     }
 
     if (this.closed) {
@@ -1822,7 +1833,7 @@ export class Zero<
     lc.debug?.('Waiting for connection to be acknowledged');
     await attempt.connected.promise;
     if (signal.aborted) {
-      throw signal.reason;
+      throw attempt.abortReason ?? signal.reason;
     }
     this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
     // push any outstanding mutations on reconnect.
@@ -1839,7 +1850,14 @@ export class Zero<
   }
 
   #disconnect(lc: LogContext, reason: ZeroError, closeCode?: CloseCode): void {
-    this.#currentConnectAttempt?.controller.abort(reason);
+    const attempt = this.#currentConnectAttempt;
+    if (attempt) {
+      // Recorded on the attempt as well as passed to abort() — see
+      // ConnectAttemptControl.abortReason for why signal.reason alone is not
+      // sufficient on every runtime.
+      attempt.abortReason = reason;
+      attempt.controller.abort(reason);
+    }
 
     if (shouldReportConnectError(reason)) {
       this.#connectErrorCount++;
@@ -2159,7 +2177,9 @@ export class Zero<
             this.#addConnectEvent(lc, attempt, 'starting the connection');
             const canceled = resolver<never>();
             const abortHandler = () =>
-              canceled.reject(attempt.controller.signal.reason);
+              canceled.reject(
+                attempt.abortReason ?? attempt.controller.signal.reason,
+              );
             attempt.controller.signal.addEventListener('abort', abortHandler, {
               once: true,
             });
