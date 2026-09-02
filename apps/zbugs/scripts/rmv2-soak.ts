@@ -178,6 +178,7 @@ function parseConfig(): SoakConfig {
     logsDir,
     reportPath: join(root, 'report.json'),
     upstreamDB,
+    appID: 'rmv2_soak',
     viewSyncers: numOpt('view-syncers', values['view-syncers'], 3),
     rmPort: 4850,
     vsBasePort: 4860,
@@ -443,7 +444,9 @@ async function main(): Promise<void> {
       const controlStages: StageResult[] = [];
       for (const phase of workloadPhases(config)) {
         for (const stage of phase.stages) {
-          controlStages.push(await controlTraffic.runStage(stage));
+          controlStages.push(
+            await control.guard(controlTraffic.runStage(stage)),
+          );
         }
       }
       await sleep(config.metricExportIntervalMs * 3);
@@ -490,17 +493,19 @@ async function main(): Promise<void> {
 
     const quiesceAndCompare = async (label: string) => {
       quiesceCount++;
-      const result = await runOracle(
-        lc,
-        sql,
-        // Not `replicaHandles()`: a node that is deliberately down has no
-        // replica to read, and waiting for it would hang the sentinel.
-        soakCluster.nodes
-          .filter(n => n.running)
-          .map(n => ({node: n.name, replicaFile: n.replicaFile})),
-        fixture,
-        label,
-        `rmv2-soak-quiesce-${config.runID}-${quiesceCount}`,
+      const result = await soakCluster.guard(
+        runOracle(
+          lc,
+          sql,
+          // Not `replicaHandles()`: a node that is deliberately down has no
+          // replica to read, and waiting for it would hang the sentinel.
+          soakCluster.nodes
+            .filter(n => n.running)
+            .map(n => ({node: n.name, replicaFile: n.replicaFile})),
+          fixture,
+          label,
+          `rmv2-soak-quiesce-${config.runID}-${quiesceCount}`,
+        ),
       );
       oracle.push(result);
       say(
@@ -519,7 +524,7 @@ async function main(): Promise<void> {
       const phaseStartedMs = Date.now();
       const stages: StageResult[] = [];
       for (const stage of phase.stages) {
-        stages.push(await traffic.runStage(stage));
+        stages.push(await soakCluster.guard(traffic.runStage(stage)));
       }
       phases.push({
         name: phase.name,
@@ -564,8 +569,8 @@ async function main(): Promise<void> {
         // Give the action a workload to land in, rather than hitting an idle
         // system: the stages cycle underneath the chaos matrix.
         const stage = mixed.stages[mixedStages.length % mixed.stages.length];
-        const load = traffic.runStage(stage);
-        const outcome = await runChaosAction(action, ctx);
+        const load = soakCluster.guard(traffic.runStage(stage));
+        const outcome = await soakCluster.guard(runChaosAction(action, ctx));
         mixedStages.push(await load);
         chaosOutcomes.push(outcome);
         for (const finding of outcome.findings) {

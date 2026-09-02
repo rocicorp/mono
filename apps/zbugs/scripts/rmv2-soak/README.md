@@ -211,6 +211,13 @@ view-syncer environment says `off` explicitly rather than relying on omission.
 (A view-syncer that inherits a writing mode now warns rather than refusing to
 start, since #6412, but it still runs no log.)
 
+**The app identity is isolated.** Zero defaults `ZERO_APP_ID` to `zero`, which
+is also what an ordinary local zbugs process uses. Sharing it means sharing the
+CDC ownership row and replication slot: another RM startup can set the soak's
+owner to `NULL` and terminate its change-streamer. The harness explicitly uses
+`rmv2_soak`; its fixed ports already prevent two soak runs from competing with
+each other.
+
 **The backup path is not the configured path.**
 `initializePostgresChangeSource` derives a destination backup URL whose last
 segment is a generation id -- the replica fork/resumption identity -- and logs
