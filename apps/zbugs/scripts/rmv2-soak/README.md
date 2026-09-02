@@ -136,9 +136,9 @@ Section 1.4: **the residual wait is a reseed window, not a restore window.**
 The purge floor is capped at the backup watermark, so `log.minWatermark <=
 backupWatermark` holds for any log that held the history (invariant 14), and a
 view-syncer restoring from a backup the replication-manager published is
-covered by construction. Only a log that _just reseeded_ sits above the backup
-watermark. Today that ends in a free demotion to PG; after PG is retired it
-becomes a hold.
+covered by construction. Only a log that _just reseeded_ can sit above the
+backup watermark. The replication-manager readiness gate absorbs that window:
+it waits for a backup that covers the startup replica before serving followers.
 
 The report gives that window two numbers, because one number would lie:
 
@@ -172,7 +172,7 @@ consistently held is the evidence that the check can be tightened.
 | C1  | SIGTERM a view-syncer (graceful drain), restart                      | `sqlite/selected`                                                |
 | C2  | SIGQUIT a view-syncer (abrupt), restart                              | `sqlite/selected`                                                |
 | C3  | Kill a view-syncer, delete its replica, restart                      | restore, then `sqlite`; **must not demote**                      |
-| C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`, then `pg/watermark-uncovered`                 |
+| C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`; stale long-gap replica discarded and restored |
 | C5  | SIGTERM the replication-manager, restart                             | a valid log resumes from its own head                            |
 | C6  | Delete only the change log, restart, then wipe a view-syncer replica | forced `created` reseed; the 1.4 measurement                     |
 | C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap                            |

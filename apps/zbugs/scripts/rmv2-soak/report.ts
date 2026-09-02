@@ -11,36 +11,48 @@ import {purgeStreaks, type ResourceSample} from './resources.ts';
  * Plan sections 7.5 (tripwires), 7.6 (coverage) and 8 (measured quantities).
  *
  * A soak that quietly routes everything to PG passes the oracle and the
- * tripwires while proving nothing, so coverage is a *positive* requirement:
- * at least one of each route, or an explicit "not exercised" row.
+ * tripwires while proving nothing, so coverage is a *positive* requirement.
+ * Only routes exercised by the selected chaos actions are required; this
+ * keeps smoke runs useful without weakening the full soak's gate.
  */
 
 /** Drawn from `ChangeLogReadRouteReason`, the closed set of route reasons. */
 export const REQUIRED_ROUTES: readonly {
   route: string;
   triggeredBy: string;
+  chaos: readonly string[];
 }[] = [
-  {route: 'sqlite/selected', triggeredBy: 'C1, C2, C4'},
+  {
+    route: 'sqlite/selected',
+    triggeredBy: 'C1, C2, or C4',
+    chaos: ['C1', 'C2', 'C4'],
+  },
   {
     route: 'sqlite/selected-cold',
-    triggeredBy: 'C6, and reconnects within retentionMs of a seed',
-  },
-  {route: 'pg/backup-uncovered', triggeredBy: 'C6 inside the reseed window'},
-  {
-    // Structurally hard to reach, and measured to be so. A *restarting*
-    // follower cannot take it at any gap length: `restoreReplica` runs on
-    // every view-syncer start and the snapshot reservation hands it the log's
-    // `minWatermark`, so a replica below the minimum is discarded and
-    // re-restored before the subscriber reaches `/changes` (C4's long gap
-    // asserts exactly that conversion). It belongs instead to a follower that
-    // survives a *stream* disconnect long enough for the purge floor to pass
-    // its ack -- and SIGSTOP does not produce one, because the change-streamer
-    // keeps a frozen subscriber registered and lets it drain on resume.
-    route: 'pg/watermark-uncovered',
-    triggeredBy:
-      'a stream disconnect outliving the purge floor; not reachable from a restart',
+    triggeredBy: 'C6 or C13 after a change-log reseed',
+    chaos: ['C6', 'C13'],
   },
 ];
+
+export type RouteCoverage = {
+  readonly route: string;
+  readonly count: number;
+  readonly triggeredBy: string;
+};
+
+export function requiredRouteCoverage(
+  census: Readonly<Record<string, number>>,
+  selectedChaos: readonly string[],
+): RouteCoverage[] {
+  const selected = new Set(selectedChaos);
+  return REQUIRED_ROUTES.filter(({chaos}) =>
+    chaos.some(id => selected.has(id)),
+  ).map(({route, triggeredBy}) => ({
+    route,
+    count: census[route] ?? 0,
+    triggeredBy,
+  }));
+}
 
 export type PhaseRecord = {
   readonly name: string;
@@ -58,7 +70,7 @@ export type SoakReport = {
   readonly oracle: OracleResult[];
   readonly chaos: ChaosOutcome[];
   readonly census: Record<string, number>;
-  readonly coverage: {route: string; count: number; triggeredBy: string}[];
+  readonly coverage: RouteCoverage[];
   readonly tripwires: Tripwire[];
   readonly measurements: Record<string, unknown>;
   readonly resources: Record<string, unknown>;
@@ -136,11 +148,7 @@ export function buildReport(args: {
     'source',
     'reason',
   );
-  const coverage = REQUIRED_ROUTES.map(({route, triggeredBy}) => ({
-    route,
-    count: census[route] ?? 0,
-    triggeredBy,
-  }));
+  const coverage = requiredRouteCoverage(census, config.chaos);
 
   const backupLags = log.events
     .filter(e => e.kind === 'backup-watermark')
@@ -277,13 +285,11 @@ export function buildReport(args: {
     );
   }
 
-  // Coverage gaps are reported but do not fail the run: a smoke-scale run
-  // legitimately skips the chaos actions that produce them. Divergence,
-  // tripwires and chaos findings do.
   const pass =
     oracle.every(r => r.ok) &&
     namedTripwires.length === 0 &&
-    chaos.every(c => c.findings.length === 0);
+    chaos.every(c => c.findings.length === 0) &&
+    uncovered.length === 0;
 
   return {
     runID: config.runID,
