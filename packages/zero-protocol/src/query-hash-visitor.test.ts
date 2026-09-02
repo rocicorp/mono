@@ -618,9 +618,12 @@ test('hashOfQueryInternals separates queries that differ only by system', () => 
 });
 
 test('every simple operator hashes distinctly', () => {
-  // The operator is looked up in a Record rather than switched on, so a
-  // duplicated tag would be silent -- two operators would hash alike and the
-  // Record's type would still be satisfied. Pin every one apart.
+  // `visitCondition` folds the operator with `mixString`, so what has to hold
+  // is that no two operator strings fold to the same words -- `mixString`
+  // length-prefixes, which is what keeps 'IS' and 'IS NOT' apart. Nothing in
+  // the walk enumerates the operators, so a member added to `SimpleOperator`
+  // would be hashed without anyone touching this file; pinning all fourteen
+  // apart is what would catch a folding change that collapsed any of them.
   const ops = [
     '=',
     '!=',
