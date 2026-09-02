@@ -212,6 +212,7 @@ export class QueryImpl<
       this.#hash = hashOfQueryInternals(
         this.#ast,
         this.format,
+        this.#system,
         this.customQueryID?.name,
         this.customQueryID?.args,
       );

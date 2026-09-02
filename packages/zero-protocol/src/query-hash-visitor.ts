@@ -61,6 +61,7 @@ import type {
   Condition,
   CorrelatedSubquery,
   Ordering,
+  System,
   ValuePosition,
 } from './ast.ts';
 
@@ -142,6 +143,12 @@ const TAG_AND = 0x2006;
 const TAG_OR = 0x2007;
 const TAG_FORMAT = 0x2008;
 const TAG_NAME_ARGS = 0x2009;
+// `System` is a closed set of three, so it folds as one word rather than as a
+// string. The switch below is exhaustive, so adding a member is a type error
+// rather than a silent collision with an existing one.
+const TAG_SYSTEM_PERMISSIONS = 0x200a;
+const TAG_SYSTEM_CLIENT = 0x200b;
+const TAG_SYSTEM_TEST = 0x200c;
 
 // Set on a string's length word. High enough that no array length reaches it.
 const STR_MARK = 0x40000000;
@@ -233,6 +240,22 @@ function visitOptionalString(s: string | undefined): void {
     mix(TAG_UNDEF);
   } else {
     mixString(s);
+  }
+}
+
+function mixSystem(system: System): void {
+  switch (system) {
+    case 'permissions':
+      mix(TAG_SYSTEM_PERMISSIONS);
+      break;
+    case 'client':
+      mix(TAG_SYSTEM_CLIENT);
+      break;
+    case 'test':
+      mix(TAG_SYSTEM_TEST);
+      break;
+    default:
+      unreachable(system);
   }
 }
 
@@ -409,20 +432,29 @@ export function hashNameAndArgs(
 
 /**
  * The identity of a query as the client sees it: its AST, the shape it returns,
- * and -- for a custom query -- the name and arguments it was declared with.
+ * the system it was built for, and -- for a custom query -- the name and
+ * arguments it was declared with.
  *
- * The name and args have to be in here because they are the one part of a
- * query's identity that leaves no trace in its AST: `nameAndArgs` reuses the
- * AST it is given and only attaches a `CustomQueryID`, so without this two
- * different named queries over the same table would be indistinguishable.
+ * Everything past the AST is here because it is part of what makes two queries
+ * different while leaving no trace, or an incomplete one, in the AST itself:
  *
- * They are taken apart rather than as a `CustomQueryID` because that type lives
- * in `zql`, which is above this package; `hashNameAndArgs` splits them the same
- * way.
+ * - **name and args**: `nameAndArgs` reuses the AST it is given and only
+ *   attaches a `CustomQueryID`, so without these two different named queries
+ *   over the same table would be indistinguishable.
+ * - **system**: a query stamps it onto every `related` entry and every `exists`
+ *   correlation it builds, so it is already hashed via
+ *   {@link visitCorrelatedSubquery} -- but a query with neither has nowhere to
+ *   put it, and would otherwise hash the same whether it was built for the
+ *   client or for permissions.
+ *
+ * The name and args are taken apart rather than as a `CustomQueryID` because
+ * that type lives in `zql`, which is above this package; `hashNameAndArgs`
+ * splits them the same way.
  */
 export function hashOfQueryInternals(
   ast: AST,
   format: Format,
+  system: System,
   customQueryName: string | undefined,
   customQueryArgs: readonly unknown[] | undefined,
 ): string {
@@ -433,6 +465,7 @@ export function hashOfQueryInternals(
     visitAST(ast);
     mix(TAG_FORMAT);
     visitValue(format);
+    mixSystem(system);
     if (customQueryName === undefined) {
       mix(TAG_UNDEF);
     } else {

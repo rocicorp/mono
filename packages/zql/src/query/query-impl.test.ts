@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
+import {newStaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
 describe('QueryImpl run/preload/materialize', () => {
@@ -79,6 +80,22 @@ describe('QueryImpl.hash covers custom query identity', () => {
   test('the same name and args agree', () => {
     expect(asQueryInternals(bi.nameAndArgs('foo', [1])).hash()).toBe(
       asQueryInternals(bi.nameAndArgs('foo', [1])).hash(),
+    );
+  });
+});
+
+describe('QueryImpl.hash covers the system', () => {
+  test('a client query differs from a permissions query over the same table', () => {
+    // With no relationship and no `exists`, there is nowhere in the AST for the
+    // system to be stamped, so the hash has to carry it.
+    expect(asQueryInternals(newQuery(schema, 'issue')).hash()).not.toBe(
+      asQueryInternals(newStaticQuery(schema, 'issue')).hash(),
+    );
+  });
+
+  test('the same system agrees', () => {
+    expect(asQueryInternals(newQuery(schema, 'issue')).hash()).toBe(
+      asQueryInternals(newQuery(schema, 'issue')).hash(),
     );
   });
 });

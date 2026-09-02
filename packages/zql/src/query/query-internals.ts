@@ -36,11 +36,13 @@ export interface QueryInternals<
    * if two queries are the same, i.e. whether they would produce the same
    * result from the same data.
    *
-   * It covers the AST, the {@linkcode format} the results take, and, for a
-   * custom query, the name and arguments it was declared with. That last part
-   * has to be hashed explicitly because {@linkcode nameAndArgs} reuses the AST
-   * it is given -- two custom queries over the same table would otherwise share
-   * a hash, and anything keyed by it (a view, for one) would conflate them.
+   * It covers the AST, the {@linkcode format} the results take, the system the
+   * query was built for, and, for a custom query, the name and arguments it was
+   * declared with. The last two are hashed explicitly because they leave no
+   * trace in the AST -- {@linkcode nameAndArgs} reuses the AST it is given, and
+   * a query with no relationship and no `exists` has nowhere to stamp its
+   * system. Without them, two such queries would share a hash and anything
+   * keyed by it (a view, for one) would conflate them.
    *
    * This is not the ID the server knows a custom query by; that one is the hash
    * of just its name and args, so that client queries with divergent ASTs can
