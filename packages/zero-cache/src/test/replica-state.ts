@@ -42,18 +42,10 @@ export function canonicalReplicaState(db: Database) {
     }))
     .sort(byName);
 
-  // Include the DDL so that partial index predicates are compared too.
-  const indexDDL = new Map(
-    db
-      .prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'index'`)
-      .all<{name: string; sql: string | null}>()
-      .map(({name, sql}) => [name, sql]),
-  );
   const indexes = listIndexes(db)
     .map(index => ({
       ...index,
       columns: Object.entries(index.columns),
-      sql: indexDDL.get(index.name) ?? null,
     }))
     .sort(byName);
 

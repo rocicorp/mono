@@ -39,7 +39,7 @@ export const columnSpec = v.object({
 
 export type ColumnSpec = Readonly<v.Infer<typeof columnSpec>>;
 
-export const publishedColumnSpec = columnSpec.extend({
+const publishedColumnSpec = columnSpec.extend({
   typeOID: v.number(),
 });
 
@@ -109,65 +109,11 @@ export type PublishedTableSpec = Readonly<v.Infer<typeof publishedTableSpec>>;
 
 export const directionSchema = v.literalUnion('ASC', 'DESC');
 
-export type IndexPredicateValue =
-  | {readonly type: 'boolean'; readonly value: boolean}
-  | {readonly type: 'integer'; readonly value: string}
-  | {readonly type: 'string'; readonly value: string};
-
-export type IndexPredicate =
-  | {
-      readonly type: 'and' | 'or';
-      readonly conditions: readonly IndexPredicate[];
-    }
-  | {readonly type: 'not'; readonly condition: IndexPredicate}
-  | {
-      readonly type: 'null-test';
-      readonly column: string;
-      readonly op: 'IS NULL' | 'IS NOT NULL';
-    }
-  | {
-      readonly type: 'comparison';
-      readonly column: string;
-      readonly op: '=' | '<>' | '<' | '<=' | '>' | '>=';
-      readonly value: IndexPredicateValue;
-    };
-
-const indexPredicateValueSchema: v.Type<IndexPredicateValue> = v.union(
-  v.readonlyObject({type: v.literal('boolean'), value: v.boolean()}),
-  v.readonlyObject({type: v.literal('integer'), value: v.string()}),
-  v.readonlyObject({type: v.literal('string'), value: v.string()}),
-);
-
-export const indexPredicateSchema: v.Type<IndexPredicate> = v.lazy(() =>
-  v.union(
-    v.readonlyObject({
-      type: v.literalUnion('and', 'or'),
-      conditions: v.readonlyArray(indexPredicateSchema),
-    }),
-    v.readonlyObject({
-      type: v.literal('not'),
-      condition: indexPredicateSchema,
-    }),
-    v.readonlyObject({
-      type: v.literal('null-test'),
-      column: v.string(),
-      op: v.literalUnion('IS NULL', 'IS NOT NULL'),
-    }),
-    v.readonlyObject({
-      type: v.literal('comparison'),
-      column: v.string(),
-      op: v.literalUnion('=', '<>', '<', '<=', '>', '>='),
-      value: indexPredicateValueSchema,
-    }),
-  ),
-);
-
 export const liteIndexSpec = v.object({
   name: v.string(),
   tableName: v.string(),
   unique: v.boolean(),
   columns: v.record(directionSchema),
-  predicate: indexPredicateSchema.optional(),
 });
 
 export type MutableLiteIndexSpec = v.Infer<typeof liteIndexSpec>;
