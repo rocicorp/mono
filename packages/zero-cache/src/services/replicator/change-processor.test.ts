@@ -2249,6 +2249,7 @@ describe('replicator/change-processor', () => {
       setup: `
         CREATE TABLE foo(id INT8, numburr TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        CREATE INDEX foo_present ON foo (id) WHERE numburr IS NOT NULL;
         INSERT INTO foo(id, numburr, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
@@ -2349,6 +2350,17 @@ describe('replicator/change-processor', () => {
           name: 'foo_pkey',
           unique: true,
           columns: {id: 'ASC'},
+        },
+        {
+          tableName: 'foo',
+          name: 'foo_present',
+          unique: false,
+          columns: {id: 'ASC'},
+          predicate: {
+            type: 'null-test',
+            column: 'number',
+            op: 'IS NOT NULL',
+          },
         },
       ],
     },

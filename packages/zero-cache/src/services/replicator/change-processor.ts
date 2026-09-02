@@ -12,6 +12,7 @@ import {
   createLiteTableStatement,
   liteColumnDef,
 } from '../../db/create.ts';
+import {mapIndexPredicateColumns} from '../../db/index-predicate.ts';
 import {
   computeZqlSpecs,
   listIndexes,
@@ -762,6 +763,11 @@ class TransactionProcessor {
               column === oldName ? newName : column,
               direction,
             ]),
+            predicate: idx.predicate
+              ? mapIndexPredicateColumns(idx.predicate, column =>
+                  column === oldName ? newName : column,
+                )
+              : undefined,
           }),
         ),
       ];

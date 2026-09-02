@@ -1,5 +1,6 @@
 import {assertValidLiteColumnSpec} from '../types/lite.ts';
 import {id, idList} from '../types/sql.ts';
+import {liteIndexPredicateSQL} from './index-predicate.ts';
 import type {ColumnSpec, LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
 /**
@@ -43,7 +44,10 @@ export function createLiteIndexStatement(index: LiteIndexSpec): string {
     .map(([name, dir]) => `${id(name)} ${dir}`)
     .join(',');
   const unique = index.unique ? 'UNIQUE' : '';
+  const predicate = index.predicate
+    ? ` WHERE ${liteIndexPredicateSQL(index.predicate)}`
+    : '';
   return `CREATE ${unique} INDEX ${id(index.name)} ON ${id(
     index.tableName,
-  )} (${columns});`;
+  )} (${columns})${predicate};`;
 }

@@ -321,6 +321,45 @@ describe('lite/indexes', () => {
         },
       ],
     },
+    {
+      name: 'partial indexes',
+      setupQuery: `
+    CREATE TABLE item (
+      id TEXT PRIMARY KEY,
+      active BOOL,
+      deleted_at TEXT,
+      status TEXT
+    );
+    CREATE UNIQUE INDEX active_item ON item (status DESC)
+      WHERE active = 1 AND deleted_at IS NULL;
+    `,
+      expectedResult: [
+        {
+          name: 'active_item',
+          tableName: 'item',
+          unique: true,
+          columns: {status: 'DESC'},
+          predicate: {
+            type: 'and',
+            conditions: [
+              {
+                type: 'comparison',
+                column: 'active',
+                op: '=',
+                value: {type: 'boolean', value: true},
+              },
+              {type: 'null-test', column: 'deleted_at', op: 'IS NULL'},
+            ],
+          },
+        },
+        {
+          name: 'sqlite_autoindex_item_1',
+          tableName: 'item',
+          unique: true,
+          columns: {id: 'ASC'},
+        },
+      ],
+    },
   ];
 
   for (const c of cases) {
@@ -430,6 +469,18 @@ describe('computeZqlSpec', () => {
         },
       ]
     `);
+  });
+
+  test('a partial unique index is not a row key', () => {
+    expect(
+      t(`
+        CREATE TABLE partial_only(id "TEXT|NOT_NULL", active BOOL);
+        CREATE UNIQUE INDEX partial_only_id ON partial_only(id)
+          WHERE active = 1;
+        CREATE TABLE full_key(id "TEXT|NOT_NULL");
+        CREATE UNIQUE INDEX full_key_id ON full_key(id);
+      `).map(({tableSpec}) => tableSpec.name),
+    ).toEqual(['full_key']);
   });
 
   test('min row version', () => {

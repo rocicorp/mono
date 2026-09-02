@@ -1216,6 +1216,41 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
     ],
     [
+      'create partial unique index',
+      `CREATE UNIQUE INDEX foo_live ON foo (id) WHERE flt IS NOT NULL;`,
+      [[{tag: 'create-index'}]],
+      {foo: []},
+      [],
+      [
+        {
+          tableName: 'foo',
+          name: 'foo_live',
+          columns: {id: 'ASC'},
+          unique: true,
+          predicate: {
+            type: 'null-test',
+            column: 'flt',
+            op: 'IS NOT NULL',
+          },
+        },
+      ],
+    ],
+    [
+      'drop partial index',
+      'DROP INDEX foo_live;',
+      [
+        [
+          {
+            tag: 'drop-index',
+            id: {schema: 'public', name: 'foo_live'},
+          },
+        ],
+      ],
+      {foo: []},
+      [],
+      [],
+    ],
+    [
       'drop index',
       'DROP INDEX foo_flt1;',
       [

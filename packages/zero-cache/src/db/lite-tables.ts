@@ -16,6 +16,10 @@ import {
   mapLiteDataTypeToZqlSchemaValue,
   nullableUpstream,
 } from '../types/lite.ts';
+import {
+  extractLiteIndexPredicateSQL,
+  parseLiteIndexPredicateSQL,
+} from './index-predicate.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import type {
   LiteAndZqlSpec,
@@ -33,6 +37,8 @@ type ColumnInfo = {
   dflt: string | null;
   keyPos: number;
 };
+
+const BOOLEAN_LITE_TYPE_RE = /^(?:bool|boolean)(?:\||$)/i;
 
 export type LiteTableSpecWithReplicationStatus = LiteTableSpec & {
   readonly backfilling?: string[];
@@ -145,6 +151,8 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
          idx.name as indexName, 
          idx.tbl_name as tableName, 
          info."unique" as "unique",
+         info.partial as partial,
+         idx.sql as sql,
          col.name as column,
          CASE WHEN col.desc = 0 THEN 'ASC' ELSE 'DESC' END as dir
       FROM sqlite_master as idx
@@ -159,12 +167,37 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
     indexName: string;
     tableName: string;
     unique: number;
+    partial: number;
+    sql: string | null;
     column: string;
     dir: 'ASC' | 'DESC';
   }[];
 
   const ret: MutableLiteIndexSpec[] = [];
-  for (const {indexName: name, tableName, unique, column, dir} of indexes) {
+  const booleanColumns = new Map<string, ReadonlySet<string>>();
+  const isBooleanColumn = (table: string, column: string) => {
+    let columns = booleanColumns.get(table);
+    if (!columns) {
+      columns = new Set(
+        db
+          .prepare('SELECT name, type FROM pragma_table_info(?)')
+          .all<{name: string; type: string}>(table)
+          .filter(({type}) => BOOLEAN_LITE_TYPE_RE.test(type))
+          .map(({name}) => name),
+      );
+      booleanColumns.set(table, columns);
+    }
+    return columns.has(column);
+  };
+  for (const {
+    indexName: name,
+    tableName,
+    unique,
+    partial,
+    sql,
+    column,
+    dir,
+  } of indexes) {
     if (ret.at(-1)?.name === name) {
       // Aggregate multiple column names into the array.
       must(ret.at(-1)).columns[column] = dir;
@@ -174,6 +207,15 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
         name,
         columns: {[column]: dir},
         unique: unique !== 0,
+        predicate:
+          partial === 0
+            ? undefined
+            : parseLiteIndexPredicateSQL(
+                extractLiteIndexPredicateSQL(
+                  must(sql, `partial index ${name} has no SQL definition`),
+                ),
+                column => isBooleanColumn(tableName, column),
+              ),
       });
     }
   }
@@ -236,7 +278,9 @@ export function computeZqlSpecsFromLiteSpecs(
   fullTables?.clear();
 
   const uniqueIndexColumns = new Map<string, string[][]>();
-  for (const {tableName, columns} of indexes.filter(idx => idx.unique)) {
+  for (const {tableName, columns} of indexes.filter(
+    idx => idx.unique && idx.predicate === undefined,
+  )) {
     if (!uniqueIndexColumns.has(tableName)) {
       uniqueIndexColumns.set(tableName, []);
     }

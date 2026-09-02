@@ -11,19 +11,18 @@ import {publishedSchema, publishedSchemaQuery} from './published.ts';
 //
 // Increment this when changing the format of the contents of the "ddl" events.
 // This will allow old / incompatible code to detect the change and abort.
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 3;
 
-// In protocol v2 (planned, not yet emitted), "ddlStart" events that are not
+// In protocol v2, "ddlStart" events that are not
 // associated with a schema change will be context-only, omitting the
 // `schema` snapshot entirely. This avoids bloating the WAL with (large)
 // redundant schema snapshots for DDL commands that do not affect the
 // published schema, e.g. the CREATE/ALTER/DROP TABLE sub-commands executed
 // by REFRESH MATERIALIZED VIEW CONCURRENTLY.
 //
-// This release already accepts v2 events so that the (subsequent) release
-// that upgrades the triggers to emit them remains rollback safe with respect
-// to this one.
-const versionSchema = v.literalUnion(PROTOCOL_VERSION, 2);
+// Protocol v3 adds partial-index predicates to schema snapshots. Versions 1
+// and 2 remain readable for change-log catchup and rolling upgrades.
+const versionSchema = v.literalUnion(1, 2, PROTOCOL_VERSION);
 
 const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
