@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
-import {newQuery} from './query-impl.ts';
+import {newQuery, newQueryImpl} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
+import type {AnyQuery} from './query.ts';
 import {newStaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
@@ -97,5 +98,70 @@ describe('QueryImpl.hash covers the system', () => {
     expect(asQueryInternals(newQuery(schema, 'issue')).hash()).toBe(
       asQueryInternals(newQuery(schema, 'issue')).hash(),
     );
+  });
+});
+
+describe('QueryImpl.hash covers the junction', () => {
+  // The sub-query handed to a two-hop callback carries the junction, which
+  // decides whether `limit` and `orderBy` throw but leaves no trace in the AST.
+  // Rebuilding a query from that sub-query's own AST and format gives one that
+  // is identical in every way the AST can see, so only the junction is left to
+  // tell them apart.
+  function capture(
+    build: (cb: (q: AnyQuery) => AnyQuery) => unknown,
+  ): AnyQuery {
+    let captured: AnyQuery | undefined;
+    build(q => {
+      captured = q;
+      return q;
+    });
+    expect(captured).toBeDefined();
+    return captured!;
+  }
+
+  function withoutJunction(q: AnyQuery): AnyQuery {
+    const {ast, format} = asQueryInternals(q);
+    return newQueryImpl(
+      schema,
+      ast.table as keyof typeof schema.tables,
+      ast,
+      format,
+      'client',
+    ) as AnyQuery;
+  }
+
+  test('the sub-query of a two-hop related differs from the same query without the junction', () => {
+    const inner = capture(cb =>
+      newQuery(schema, 'issue').related('labels', cb),
+    );
+    expect(() => inner.limit(1)).toThrow('Limit is not supported');
+    expect(asQueryInternals(inner).hash()).not.toBe(
+      asQueryInternals(withoutJunction(inner)).hash(),
+    );
+  });
+
+  test('the sub-query of a two-hop exists differs from the same query without the junction', () => {
+    const inner = capture(cb =>
+      newQuery(schema, 'issue').whereExists('labels', cb),
+    );
+    expect(() => inner.orderBy('id', 'asc')).toThrow(
+      'Order by is not supported',
+    );
+    expect(asQueryInternals(inner).hash()).not.toBe(
+      asQueryInternals(withoutJunction(inner)).hash(),
+    );
+  });
+
+  test('the sub-query of a one-hop related has no junction', () => {
+    const inner = capture(cb => newQuery(schema, 'issue').related('owner', cb));
+    expect(asQueryInternals(inner).hash()).toBe(
+      asQueryInternals(withoutJunction(inner)).hash(),
+    );
+  });
+
+  test('the same junction agrees', () => {
+    const a = capture(cb => newQuery(schema, 'issue').related('labels', cb));
+    const b = capture(cb => newQuery(schema, 'issue').related('labels', cb));
+    expect(asQueryInternals(a).hash()).toBe(asQueryInternals(b).hash());
   });
 });
