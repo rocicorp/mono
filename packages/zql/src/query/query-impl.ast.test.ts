@@ -5,8 +5,9 @@ import {
   toStaticParam,
   type AST,
   type Condition,
+  type NormalizedAST,
 } from '../../../zero-protocol/src/ast.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import {hashOfNormalizedAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
@@ -2936,7 +2937,15 @@ describe('normalized by construction', () => {
 
   function expectNormalized(q: AnyQuery) {
     expect(JSON.stringify(ast(q))).toBe(JSON.stringify(normalizedCopyOf(q)));
-    expect(asQueryInternals(q).hash()).toBe(hashOfAST(normalizedCopyOf(q)));
+    // Hash without normalizing: if the built AST were not already normalized,
+    // it would hash differently from the normalized copy. Going through
+    // `hashOfAST` would normalize both sides and assert nothing, and `hash()`
+    // covers the format too, so neither is the right instrument here.
+    // The cast is the claim under test: QueryInternals exposes `ast` as a
+    // plain AST, and this asserts the one a query built is in fact normalized.
+    expect(hashOfNormalizedAST(ast(q) as NormalizedAST)).toBe(
+      hashOfNormalizedAST(normalizedCopyOf(q)),
+    );
     // The JSON encoding says nothing about the fields that are undefined, so
     // check the shape (which V8 cares about) as well.
     expectNormalizedShape(ast(q));

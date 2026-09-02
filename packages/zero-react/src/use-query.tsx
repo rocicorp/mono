@@ -448,7 +448,7 @@ export class ViewStore {
       };
     }
 
-    const hash = qi.hash() + JSON.stringify(qi.format) + zero.clientID;
+    const hash = qi.hash() + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
       existing = new ViewWrapper(q, zero, ttl, view => {

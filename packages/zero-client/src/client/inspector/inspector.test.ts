@@ -9,6 +9,7 @@ import {
   type InspectQueriesDown,
 } from '../../../../zero-protocol/src/inspect-down.ts';
 import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
+import {hashOfAST} from '../../../../zero-protocol/src/query-hash.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -371,7 +372,7 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: asQueryInternals(issueQuery).hash(),
+            queryID: hashOfAST(asQueryInternals(issueQuery).ast),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
@@ -391,7 +392,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(asQueryInternals(issueQuery).hash()).toBe(queries[0].id);
+    expect(hashOfAST(asQueryInternals(issueQuery).ast)).toBe(queries[0].id);
 
     // We should have metrics for all.. even if empty
     expect(queries[0].metrics).toMatchInlineSnapshot(`
@@ -726,7 +727,7 @@ test('clientZQL with legacy queries', async () => {
       value: [
         {
           clientID: z.clientID,
-          queryID: asQueryInternals(issueQuery).hash(),
+          queryID: hashOfAST(asQueryInternals(issueQuery).ast),
           ast: {
             table: 'issues',
             where: {
@@ -751,7 +752,7 @@ test('clientZQL with legacy queries', async () => {
 
   const queries = await queriesP;
   expect(queries).toHaveLength(1);
-  expect(queries[0].id).toBe(asQueryInternals(issueQuery).hash());
+  expect(queries[0].id).toBe(hashOfAST(asQueryInternals(issueQuery).ast));
   expect(queries[0].clientZQL).toBe("issue.where('ownerId', 'arv')");
   expect(queries[0].serverZQL).toBe("issues.where('owner_id', 'arv')");
 

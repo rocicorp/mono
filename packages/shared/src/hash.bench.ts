@@ -2,6 +2,20 @@ import {xxHash32} from 'js-xxhash';
 import {bench, describe, use} from './bench.ts';
 import {h128, h32, h64} from './hash.ts';
 
+// A caveat about reading these numbers, and any vitest benchmark that compares
+// code across a module boundary: vite rewrites an imported binding into a
+// property lookup on a module namespace object, so an imported function or
+// constant is re-loaded on every use and never inlined or constant-folded.
+// That is invisible in the source and can dominate a tight loop -- moving this
+// file's primitives into their own module appeared to cost 4x under vitest and
+// exactly nothing (0.98-1.01x) once bundled.
+//
+// So these benchmarks are trustworthy for "same code, different algorithm" and
+// misleading for "same algorithm, different module layout". `multiPass` below
+// calls the imported `xxHash32` in a loop while `h64`/`h128` are local, which
+// flatters them somewhat; bundled, the real margins are 1.9x for h64 and 3.1x
+// for h128. To measure a layout change, bundle with esbuild and run it under node.
+
 /**
  * The implementation `hash.ts` replaced: one `xxHash32` pass per word, each
  * pass UTF-8 encoding the string again.

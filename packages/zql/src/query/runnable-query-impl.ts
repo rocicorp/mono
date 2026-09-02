@@ -82,14 +82,20 @@ export class RunnableQueryImpl<
   }
 
   override run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
-    return this.#delegate.run(this, options);
+    // The type arguments on the delegate calls in this class are written out
+    // because tsc 7.0.2 fails to infer them in some program layouts (the
+    // packages/zero declaration build, apps/zero-throughput): inference
+    // collapses TSchema to its constraint and the call misreports as a
+    // TS2345 assignability error. Explicit arguments are inert where
+    // inference works and correct where it does not.
+    return this.#delegate.run<TTable, TSchema, TReturn>(this, options);
   }
 
   override preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
-    return this.#delegate.preload(this, options);
+    return this.#delegate.preload<TTable, TSchema, TReturn>(this, options);
   }
 
   override materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
@@ -112,6 +118,10 @@ export class RunnableQueryImpl<
       options = {ttl: factory as TTL | undefined};
     }
 
-    return this.#delegate.materialize(this, actualFactory, options);
+    return this.#delegate.materialize<TTable, TSchema, TReturn, T>(
+      this,
+      actualFactory,
+      options,
+    );
   }
 }
