@@ -27,12 +27,9 @@ export const REQUIRED_ROUTES: readonly {
     triggeredBy: 'C1, C2, or C4',
     chaos: ['C1', 'C2', 'C4'],
   },
-  {
-    route: 'sqlite/selected-cold',
-    triggeredBy: 'C6 or C13 after a change-log reseed',
-    chaos: ['C6', 'C13'],
-  },
 ];
+
+const COLD_LOG_CHAOS = ['C6', 'C13'];
 
 export type RouteCoverage = {
   readonly route: string;
@@ -43,15 +40,41 @@ export type RouteCoverage = {
 export function requiredRouteCoverage(
   census: Readonly<Record<string, number>>,
   selectedChaos: readonly string[],
+  coldReadPercent = 100,
 ): RouteCoverage[] {
   const selected = new Set(selectedChaos);
-  return REQUIRED_ROUTES.filter(({chaos}) =>
+  const coverage = REQUIRED_ROUTES.filter(({chaos}) =>
     chaos.some(id => selected.has(id)),
   ).map(({route, triggeredBy}) => ({
     route,
     count: census[route] ?? 0,
     triggeredBy,
   }));
+  if (!COLD_LOG_CHAOS.some(id => selected.has(id))) {
+    return coverage;
+  }
+  if (coldReadPercent === 0) {
+    coverage.push({
+      route: 'pg/cold-log',
+      count: census['pg/cold-log'] ?? 0,
+      triggeredBy: 'C6 or C13 after a reseed with cold reads disabled',
+    });
+    return coverage;
+  }
+  if (coldReadPercent === 100) {
+    coverage.push({
+      route: 'sqlite/selected-cold',
+      count: census['sqlite/selected-cold'] ?? 0,
+      triggeredBy: 'C6 or C13 after a change-log reseed',
+    });
+    return coverage;
+  }
+  coverage.push({
+    route: 'sqlite/selected-cold or pg/cold-log',
+    count: (census['sqlite/selected-cold'] ?? 0) + (census['pg/cold-log'] ?? 0),
+    triggeredBy: 'C6 or C13 with partial cold-read sampling',
+  });
+  return coverage;
 }
 
 export type PhaseRecord = {
@@ -148,7 +171,11 @@ export function buildReport(args: {
     'source',
     'reason',
   );
-  const coverage = requiredRouteCoverage(census, config.chaos);
+  const coverage = requiredRouteCoverage(
+    census,
+    config.chaos,
+    config.changeLog.coldReadPercent,
+  );
 
   const backupLags = log.events
     .filter(e => e.kind === 'backup-watermark')

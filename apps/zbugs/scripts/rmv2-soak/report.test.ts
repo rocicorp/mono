@@ -31,3 +31,29 @@ test('does not require demotion routes after the backup coverage fix', () => {
 test('has no required routes when chaos is disabled', () => {
   expect(requiredRouteCoverage({}, [])).toEqual([]);
 });
+
+test('requires the PG cold-log route when cold reads are disabled', () => {
+  expect(requiredRouteCoverage({'pg/cold-log': 3}, ['C6'], 0)).toEqual([
+    {
+      route: 'pg/cold-log',
+      count: 3,
+      triggeredBy: 'C6 or C13 after a reseed with cold reads disabled',
+    },
+  ]);
+});
+
+test('accepts either cold route for a partial rollout', () => {
+  expect(
+    requiredRouteCoverage(
+      {'pg/cold-log': 2, 'sqlite/selected-cold': 1},
+      ['C13'],
+      50,
+    ),
+  ).toEqual([
+    {
+      route: 'sqlite/selected-cold or pg/cold-log',
+      count: 3,
+      triggeredBy: 'C6 or C13 with partial cold-read sampling',
+    },
+  ]);
+});
