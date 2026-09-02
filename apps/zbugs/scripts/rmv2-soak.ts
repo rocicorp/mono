@@ -484,6 +484,7 @@ async function main(): Promise<void> {
       runID: `soak-${config.runID}`,
     });
     sampler = new ResourceSampler(
+      lc,
       config,
       sql,
       soakCluster.changeLogFile,
