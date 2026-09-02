@@ -991,6 +991,24 @@ test.each(['-1', '1.5'])(
   },
 );
 
+test('PG change log is enabled by default and can be disabled by env', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {},
+  }).config;
+  const disabled = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED: 'false'},
+  }).config;
+
+  expect(defaults.changeStreamer.pgChangeLogEnabled).toBe(true);
+  expect(disabled.changeStreamer.pgChangeLogEnabled).toBe(false);
+});
+
 test('legacy queries are disabled by default', () => {
   const {config} = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: 'ZERO_',
