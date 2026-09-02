@@ -242,6 +242,19 @@ function getIncrementalMigrations(shard: ShardConfig): IncrementalMigrationMap {
         `;
       },
     },
+
+    // v26: Upgrade the DDL event triggers to include partial indexes in
+    // schema snapshots. Note that setupTriggers() also refreshes the stored
+    // "publishedSchema" so that the change in format does not manifest as a
+    // spurious schema change.
+    26: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
+      },
+    },
   };
 }
 

@@ -58,7 +58,7 @@ import {initReplicationState} from '../../replicator/schema/replication-state.ts
 import {toStateVersionString} from './lsn.ts';
 import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
-import {getPublicationInfo} from './schema/published.ts';
+import {getPublicationInfo, warnForSkippedIndexes} from './schema/published.ts';
 import {
   dropShard,
   getInternalShardConfig,
@@ -171,6 +171,7 @@ export async function initialSync(
         },
         {mode: Mode.READONLY},
       );
+      warnForSkippedIndexes(lc, published);
       // Note: If this throws, initial-sync is aborted.
       validatePublications(lc, published);
 

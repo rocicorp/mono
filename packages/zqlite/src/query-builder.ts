@@ -218,6 +218,16 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
     return likeConditionToSQL(filter);
   }
 
+  if (
+    (op === 'IS' || op === 'IS NOT') &&
+    filter.right.type === 'literal' &&
+    filter.right.value === null
+  ) {
+    return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
+      op,
+    )} NULL`;
+  }
+
   return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
     filter.op,
   )} ${valuePositionToSQL(filter.right)}`;
@@ -297,7 +307,7 @@ function nullableAwareEquality(
     // A NULL bound value proves the column is nullable regardless of the
     // column metadata, and `=` never matches NULL — `IS` selects the NULL
     // tie-break group a cursor anchored on a NULL value needs.
-    return sql`${sql.ident(field)} IS ${value}`;
+    return sql`${sql.ident(field)} IS NULL`;
   }
   // Use = instead of IS for non-nullable columns to enable better
   // index usage in SQLite.
