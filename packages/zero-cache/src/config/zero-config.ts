@@ -394,11 +394,11 @@ export const zeroOptions = {
       ],
     },
 
-    // Temporary rollout gate. Disable this for the compatibility deployment,
-    // then enable it after all replication managers can consume partial-index
-    // schema snapshots.
+    // Temporary rollout gate. This defaults off for the compatibility
+    // deployment; enable it after all replication managers can consume
+    // partial-index schema snapshots.
     pgPartialIndexTriggers: {
-      type: v.boolean().default(true),
+      type: v.boolean().default(false),
       hidden: true,
     },
 
