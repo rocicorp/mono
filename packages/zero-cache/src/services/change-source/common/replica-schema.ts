@@ -24,6 +24,8 @@ import {
   recordEvent,
 } from '../../replicator/schema/replication-state.ts';
 
+const PARTIAL_INDEX_REPLICA_VERSION = 18;
+
 export async function initReplica(
   log: LogContext,
   debugName: string,
@@ -38,7 +40,7 @@ export async function initReplica(
 
   const setupMigration: Migration = {
     migrateSchema: (log, tx) => initialSync(log, tx),
-    minSafeVersion: 1,
+    minSafeVersion: PARTIAL_INDEX_REPLICA_VERSION,
   };
 
   try {
@@ -390,6 +392,13 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
     migrateData: (lc, db) => {
       populateBackfillingFromColumnMetadata(lc, db);
     },
+  },
+
+  // Partial UNIQUE indexes are persisted in SQLite as unique indexes. Older
+  // zero-cache versions do not distinguish partial indexes and can select
+  // their columns as global row keys, so they must not open this replica.
+  [PARTIAL_INDEX_REPLICA_VERSION]: {
+    minSafeVersion: PARTIAL_INDEX_REPLICA_VERSION,
   },
 };
 

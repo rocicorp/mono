@@ -589,7 +589,7 @@ export function replicaIdentitiesForTablesWithoutPrimaryKeys(
       // - UNIQUE
       // - NOT NULL columns
       // - not deferrable (i.e. isImmediate)
-      // - not partial (are already filtered out)
+      // - not partial
       //
       // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-REPLICA-IDENTITY
       const {schema, name: tableName} = table;
@@ -598,7 +598,8 @@ export function replicaIdentitiesForTablesWithoutPrimaryKeys(
           idx.schema === schema &&
           idx.tableName === tableName &&
           idx.unique &&
-          idx.isImmediate,
+          idx.isImmediate &&
+          idx.predicate === undefined,
       )) {
         if (Object.keys(columns).some(col => !table.columns[col].notNull)) {
           continue; // Only indexes with all NOT NULL columns are suitable.

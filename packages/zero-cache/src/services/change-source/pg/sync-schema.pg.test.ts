@@ -24,7 +24,7 @@ const SHARD_NUM = 9;
 const CURRENT_SCHEMA_VERSIONS = {
   dataVersion: CURRENT_SCHEMA_VERSION,
   schemaVersion: CURRENT_SCHEMA_VERSION,
-  minSafeVersion: 1,
+  minSafeVersion: 18,
   lock: 1, // Internal column, always 1
 };
 const WATERMARK_REGEX = /[0-9a-z]{4,}/;
