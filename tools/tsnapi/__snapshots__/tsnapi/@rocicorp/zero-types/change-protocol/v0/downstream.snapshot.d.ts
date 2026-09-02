@@ -207,6 +207,7 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
         tableName: v.Type<string>;
         unique: v.Type<boolean>;
         columns: v.Type<Record<string, "ASC" | "DESC">>;
+        predicate: v.Optional<import("../../../../db/specs.ts").IndexPredicate>;
     }, "schema"> & {
         schema: v.Type<string>;
     }, undefined>;
@@ -434,6 +435,7 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
         tableName: v.Type<string>;
         unique: v.Type<boolean>;
         columns: v.Type<Record<string, "ASC" | "DESC">>;
+        predicate: v.Optional<import("../../../../db/specs.ts").IndexPredicate>;
     }, "schema"> & {
         schema: v.Type<string>;
     }, undefined>;
