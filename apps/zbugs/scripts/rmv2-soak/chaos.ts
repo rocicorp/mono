@@ -459,6 +459,13 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
           e.detail.reason === 'watermark-uncovered',
       );
       out.measurements['longGapWatermarkUncovered'] = uncovered ? 'yes' : 'no';
+      if (uncovered) {
+        out.findings.push(
+          'C4 routed a restarting follower through pg/watermark-uncovered; ' +
+            'the snapshot gate should discard and restore a stale replica ' +
+            'before it subscribes',
+        );
+      }
     },
   },
   {
@@ -490,7 +497,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
     title:
       'Stop the RM, delete only the change log, restart, then immediately wipe a view-syncer replica',
     expected:
-      'forced `created` reseed, then a restore held until a backup passes the seed',
+      'forced `created` reseed; RM readiness waits for a covering backup, then the restore uses SQLite',
     async run(ctx, out) {
       const since = Date.now();
       await ctx.cluster.rm.stop('SIGTERM');
@@ -507,10 +514,9 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
           'C6 deleted the change log but no reseed was observed',
         );
       }
-      // The restore that has to be held: the RM reseeded at the replica head
-      // while the newest backup still sits behind it, so the log alone cannot
-      // bridge the gap. Today this ends in a free demotion to PG; after PG is
-      // retired it becomes a wait.
+      // The RM reseeded at the replica head while the newest backup may still
+      // sit behind it. The readiness gate must absorb that window so the
+      // follower is never offered an uncovering backup and demoted to PG.
       const backSince = Date.now();
       await restartViewSyncer(ctx, 2, 'SIGQUIT', out, {deleteReplica: true});
       expectNoDemotions(ctx, backSince, 'C6', out);
@@ -721,7 +727,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
     id: 'C13',
     title: 'A view-syncer already behind, meeting a reseed (C4 and C6)',
     expected:
-      'watermark-uncovered -> forced restore -> held until a backup passes the seed',
+      'stale replica discarded -> restore; RM readiness waits for a backup that passes the seed',
     async run(ctx, out) {
       const vs = viewSyncerAt(ctx, 1);
       const load = ctx.traffic.runStage({
