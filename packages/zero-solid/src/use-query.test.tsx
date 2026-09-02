@@ -931,7 +931,10 @@ test('useQuery plural and singular with same hash create different views', () =>
   // because the singular flag is no longer included in the zql-level hash.
   const pluralQuery = tableQuery.where('a', 1).limit(1);
   const singularQuery = tableQuery.where('a', 1).one();
-  expect(asQueryInternals(pluralQuery).hash()).toBe(
+  expect(asQueryInternals(pluralQuery).ast).toEqual(
+    asQueryInternals(singularQuery).ast,
+  );
+  expect(asQueryInternals(pluralQuery).hash()).not.toBe(
     asQueryInternals(singularQuery).hash(),
   );
 
@@ -997,7 +1000,7 @@ test('useQuery nested one() and limit(1) with same hash create different views',
   });
   const issueQuery = newQuery(schema, 'issue');
 
-  // one() and limit(1) on a *nested* relationship produce the same AST hash
+  // one() and limit(1) on a *nested* relationship produce the same AST
   // because the singular flag lives only in the format, not the AST. The view
   // hash must therefore fold the whole format (including nested relationships),
   // not just the top-level singular flag.
@@ -1007,7 +1010,10 @@ test('useQuery nested one() and limit(1) with same hash create different views',
   const singularRel = issueQuery
     .where('id', 'i1')
     .related('comments', q => q.one());
-  expect(asQueryInternals(pluralRel).hash()).toBe(
+  expect(asQueryInternals(pluralRel).ast).toEqual(
+    asQueryInternals(singularRel).ast,
+  );
+  expect(asQueryInternals(pluralRel).hash()).not.toBe(
     asQueryInternals(singularRel).hash(),
   );
 

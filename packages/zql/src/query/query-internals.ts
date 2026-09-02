@@ -33,19 +33,8 @@ export interface QueryInternals<
 
   /**
    * A string that uniquely identifies this query. This can be used to determine
-   * if two queries are the same.
-   *
-   * The hash of a custom query, on the client, is the hash of its AST.
-   * The hash of a custom query, on the server, is the hash of its name and args.
-   *
-   * The first allows many client-side queries to be pinned to the same backend query.
-   * The second ensures we do not invoke a named query on the backend more than once for the same `name:arg` pairing.
-   *
-   * If the query.hash was of `name:args` then `useQuery` would de-dupe
-   * queries with divergent ASTs.
-   *
-   * QueryManager will hash based on `name:args` since it is speaking with
-   * the server which tracks queries by `name:args`.
+   * if two queries are the same, i.e. whether they would produce the same
+   * result from the same data.
    */
   hash(): string;
 

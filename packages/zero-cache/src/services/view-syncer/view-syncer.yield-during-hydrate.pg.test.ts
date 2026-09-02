@@ -107,7 +107,7 @@ describe('view-syncer/yield-during-hydrate', () => {
       .spyOn(TimeSliceTimer.prototype, 'elapsedLap')
       .mockImplementation(function (this: TimeSliceTimer) {
         if (expectYieldBeforeNext) {
-          expect(yieldSpy).toBeCalledTimes(lastYieldCallCount + 1);
+          expect(yieldSpy).toHaveBeenCalledTimes(lastYieldCallCount + 1);
         }
         if (lastYieldCallCount !== yieldSpy.mock.calls.length) {
           lastYieldCallCount = yieldSpy.mock.calls.length;
@@ -119,7 +119,7 @@ describe('view-syncer/yield-during-hydrate', () => {
         return elapsed;
       });
 
-    expect(elapsedLapSpy).toBeCalledTimes(0);
+    expect(elapsedLapSpy).toHaveBeenCalledTimes(0);
 
     // Connect and add queries.  These queries will read a total of 9 rows.
     const client = connect(SYNC_CONTEXT, [
@@ -149,7 +149,7 @@ describe('view-syncer/yield-during-hydrate', () => {
       .spyOn(TimeSliceTimer.prototype, 'elapsedLap')
       .mockImplementation(function (this: TimeSliceTimer) {
         if (expectYieldBeforeNext) {
-          expect(yieldSpy).toBeCalledTimes(lastYieldCallCount + 1);
+          expect(yieldSpy).toHaveBeenCalledTimes(lastYieldCallCount + 1);
         }
         if (lastYieldCallCount !== yieldSpy.mock.calls.length) {
           lastYieldCallCount = yieldSpy.mock.calls.length;
@@ -161,7 +161,7 @@ describe('view-syncer/yield-during-hydrate', () => {
         return elapsed;
       });
 
-    expect(elapsedLapSpy).toBeCalledTimes(0);
+    expect(elapsedLapSpy).toHaveBeenCalledTimes(0);
 
     // Connect and add queries.  These queries will read a total of 9 rows.
     const client = connect(SYNC_CONTEXT, [
@@ -200,7 +200,7 @@ describe('view-syncer/yield-during-hydrate', () => {
     expectYieldMessage(yieldSpy, 'yield in processChanges');
   });
 
-  test('yields during hydration of unchanged queries on client connectt when time slice is exceeded', async () => {
+  test('yields during hydration of unchanged queries on client connect when time slice is exceeded', async () => {
     const lc = createSilentLogContext();
     const cvrStore = new CVRStore(
       lc,
@@ -230,9 +230,9 @@ describe('view-syncer/yield-during-hydrate', () => {
     updater.trackQueries(
       lc,
       [
-        {id: 'query-hash1', transformationHash: '3mzgp92sfsypq'},
-        {id: 'lmids', transformationHash: '1sjov59xnpa6'},
-        {id: 'mutationResults', transformationHash: '289re8rdeh88f'},
+        {id: 'query-hash1', transformationHash: '0q8bwg80s7o9fa'},
+        {id: 'lmids', transformationHash: '0mhzgfa1se3o2g'},
+        {id: 'mutationResults', transformationHash: '0kkm9ay0i9puyn'},
       ],
       [],
     );
@@ -247,7 +247,7 @@ describe('view-syncer/yield-during-hydrate', () => {
       .spyOn(TimeSliceTimer.prototype, 'elapsedLap')
       .mockImplementation(function (this: TimeSliceTimer) {
         if (expectYieldBeforeNext) {
-          expect(yieldSpy).toBeCalledTimes(lastYieldCallCount + 1);
+          expect(yieldSpy).toHaveBeenCalledTimes(lastYieldCallCount + 1);
         }
         if (lastYieldCallCount !== yieldSpy.mock.calls.length) {
           lastYieldCallCount = yieldSpy.mock.calls.length;
