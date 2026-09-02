@@ -11,6 +11,8 @@ import type {
 import {Catch} from '../ivm/catch.ts';
 import {consume} from '../ivm/stream.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
+import {applyFlipBlueprint} from '../planner/planner-builder.ts';
+import {AccumulatorDebugger} from '../planner/planner-debug.ts';
 import {simpleCostModel} from '../planner/test/helpers.ts';
 import {
   bindStaticParameters,
@@ -19,6 +21,7 @@ import {
   groupSubqueryConditions,
   partitionBranches,
 } from './builder.ts';
+import {BoundedPlanCache, planWithCache} from './plan-cache.ts';
 import {TestBuilderDelegate} from './test-builder-delegate.ts';
 
 import {
@@ -2954,4 +2957,138 @@ test('duplicate relationship alias uses last-writer-wins', () => {
   );
   expect(sink.pushes.length).toBe(1);
   expect(sink.pushes[0].type).toBe('child');
+});
+
+const existsUserStatesAST: AST = {
+  table: 'users',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      correlation: {parentField: ['id'], childField: ['userID']},
+      subquery: {
+        table: 'userStates',
+        alias: 'zsubq_userStates',
+        orderBy: [
+          ['userID', 'asc'],
+          ['stateCode', 'asc'],
+        ],
+      },
+    },
+  },
+};
+
+const nestedExistsAST: AST = {
+  table: 'users',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      correlation: {parentField: ['id'], childField: ['userID']},
+      subquery: {
+        table: 'userStates',
+        alias: 'zsubq_userStates',
+        orderBy: [
+          ['userID', 'asc'],
+          ['stateCode', 'asc'],
+        ],
+        where: {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['stateCode'], childField: ['code']},
+            subquery: {
+              table: 'states',
+              alias: 'zsubq_states',
+              orderBy: [['code', 'asc']],
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+test('plan cache hit builds the same pipeline as a miss', () => {
+  const ast = existsUserStatesAST;
+
+  const uncached = new Catch(
+    buildPipeline(
+      ast,
+      testBuilderDelegate().delegate,
+      'query-id',
+      simpleCostModel,
+    ),
+  ).fetch();
+
+  const store = new BoundedPlanCache(8, 1 << 20);
+  const rows = [0, 1, 2].map(i => {
+    const {delegate} = testBuilderDelegate();
+    delegate.planCache = {store, epoch: 'v1'};
+    return new Catch(
+      buildPipeline(ast, delegate, `query-id-${i}`, simpleCostModel),
+    ).fetch();
+  });
+
+  expect(store.stats()).toMatchObject({hits: 2, misses: 1, entries: 1});
+  for (const cached of rows) {
+    expect(cached).toEqual(uncached);
+  }
+});
+
+test('plan cache is bypassed while a PlanDebugger is collecting', () => {
+  const {delegate} = testBuilderDelegate();
+  const store = new BoundedPlanCache(8, 1 << 20);
+  delegate.planCache = {store, epoch: 'v1'};
+
+  const planDebugger = new AccumulatorDebugger();
+  buildPipeline(
+    existsUserStatesAST,
+    delegate,
+    'query-id',
+    simpleCostModel,
+    lc,
+    planDebugger,
+  );
+
+  expect(planDebugger.getEvents('plan-complete').length).toBeGreaterThan(0);
+  expect(store.stats()).toMatchObject({hits: 0, misses: 0, entries: 0});
+});
+
+test('every flip blueprint of an EXISTS query hydrates the same rows', () => {
+  // `flip` is a plan choice, not a semantic one, which is what makes a
+  // strategy-only blueprint safe to reuse. The same invariant the chinook
+  // flip-invariance sweep pins to the Postgres oracle is checked here against
+  // the planner's own choice: every one of the 2^k assignments a blueprint can
+  // carry must hydrate to identical rows.
+  const flippable = [true, false];
+  const blueprints = flippable.flatMap(outer =>
+    flippable.map(inner => ({
+      flips: [inner, outer],
+      related: {},
+    })),
+  );
+
+  const rowsFor = (ast: AST) =>
+    new Catch(
+      buildPipeline(ast, testBuilderDelegate().delegate, 'query-id'),
+    ).fetch();
+
+  const [first, ...rest] = blueprints.map(blueprint =>
+    rowsFor(applyFlipBlueprint(nestedExistsAST, blueprint)),
+  );
+  expect(first.length).toBeGreaterThan(0);
+  for (const rows of rest) {
+    expect(rows).toEqual(first);
+  }
+
+  const store = new BoundedPlanCache(8, 1 << 20);
+  const cache = {store, epoch: 'v1'};
+  const planned = planWithCache(cache, nestedExistsAST, simpleCostModel);
+  const cached = planWithCache(cache, nestedExistsAST, simpleCostModel);
+  expect(store.stats()).toMatchObject({hits: 1, misses: 1});
+  expect(cached).toEqual(planned);
+  expect(rowsFor(applyFlipBlueprint(nestedExistsAST, cached))).toEqual(first);
 });

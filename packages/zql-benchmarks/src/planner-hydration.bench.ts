@@ -1,3 +1,4 @@
+import {assert} from '../../shared/src/asserts.ts';
 import {bench, describe} from '../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
@@ -13,6 +14,13 @@ import type {TableSchema} from '../../zero-types/src/schema.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
+import {buildPipeline} from '../../zql/src/builder/builder.ts';
+import {
+  BoundedPlanCache,
+  type PlanCache,
+} from '../../zql/src/builder/plan-cache.ts';
+import {TestBuilderDelegate} from '../../zql/src/builder/test-builder-delegate.ts';
+import {Catch} from '../../zql/src/ivm/catch.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
 import {planQuery} from '../../zql/src/planner/planner-builder.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
@@ -20,6 +28,12 @@ import {newQueryImpl} from '../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
+import {ROSTER_AST, TRACKERS_AST} from './assignment-wave-asts.ts';
+import {
+  createAssignmentWaveReplica,
+  createAssignmentWaveSources,
+  primaryKeys,
+} from './assignment-wave-replica.ts';
 
 const pgContent = await getChinook();
 
@@ -130,3 +144,70 @@ benchmarkQuery(
     ),
   ),
 );
+
+// The assignment-wave ASTs from the zero-cache planning diagnosis, built end to
+// end so that a cache hit is measured against the real cost it displaces:
+// buildPipeline plus hydration, not planning alone.
+const assignmentWave = createAssignmentWaveReplica();
+const assignmentWaveCostModel = createSQLiteCostModel(
+  assignmentWave.db,
+  assignmentWave.tableSpecs,
+);
+
+function benchmarkAssignmentWaveHydration(name: string, ast: AST) {
+  const plannerInput = completeOrdering(ast, tableName =>
+    must(primaryKeys.get(tableName), `Table ${tableName} not found`),
+  );
+
+  const hydrate = (planCache: PlanCache | undefined) => {
+    const delegate = new TestBuilderDelegate(
+      createAssignmentWaveSources(assignmentWave.db, assignmentWave.tableSpecs),
+    );
+    delegate.planCache = planCache;
+    return new Catch(
+      buildPipeline(
+        plannerInput,
+        delegate,
+        'assignment-wave-bench',
+        assignmentWaveCostModel,
+      ),
+    ).fetch();
+  };
+
+  const warm: PlanCache = {
+    store: new BoundedPlanCache(1024, 16 * 1024 * 1024),
+    epoch: 'e',
+  };
+  // A cache hit must produce exactly the rows an uncached build produces.
+  const uncachedRows = hydrate(undefined);
+  hydrate(warm);
+  assert(
+    JSON.stringify(hydrate(warm)) === JSON.stringify(uncachedRows),
+    `Cached hydration of ${name} differs from uncached`,
+  );
+
+  describe(name, () => {
+    bench(`build + hydrate, plan cache off: ${name}`, () => {
+      hydrate(undefined);
+    });
+
+    bench(`build + hydrate, plan cache cold: ${name}`, () => {
+      hydrate({
+        store: new BoundedPlanCache(1024, 16 * 1024 * 1024),
+        epoch: 'e',
+      });
+    });
+
+    bench(`build + hydrate, plan cache warm: ${name}`, () => {
+      hydrate(warm);
+    });
+  });
+}
+
+describe('assignment wave hydration', () => {
+  benchmarkAssignmentWaveHydration('assignment.roster', ROSTER_AST);
+  benchmarkAssignmentWaveHydration(
+    'problem_trackers.for_assignment',
+    TRACKERS_AST,
+  );
+});

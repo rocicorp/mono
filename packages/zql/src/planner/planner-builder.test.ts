@@ -1,16 +1,18 @@
 import {expect, suite, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {asQueryInternals} from '../query/query-internals.ts';
 import type {AnyQuery} from '../query/query.ts';
-import {buildPlanGraph} from './planner-builder.ts';
+import {buildPlanGraph, planQuery} from './planner-builder.ts';
 import {simpleCostModel} from './test/helpers.ts';
 import {builder} from './test/test-schema.ts';
 
-suite('buildPlanGraph', () => {
-  function getAST(q: AnyQuery): AST {
-    return asQueryInternals(q).ast;
-  }
+function getAST(q: AnyQuery): AST {
+  return asQueryInternals(q).ast;
+}
 
+suite('buildPlanGraph', () => {
   suite('basic structure', () => {
     test('creates plan graph for simple table query', () => {
       const ast = getAST(builder.users);
@@ -606,5 +608,66 @@ suite('buildPlanGraph', () => {
       join.reset();
       expect(join.type).toBe('flipped');
     });
+  });
+});
+
+suite('planQuery purity', () => {
+  const query = builder.users
+    .whereExists('posts', q => q.whereExists('user'))
+    .whereExists('comments')
+    .related('likes', q => q.whereExists('author'));
+
+  function ownSymbolPaths(value: unknown, path = '$'): string[] {
+    if (value === null || typeof value !== 'object') {
+      return [];
+    }
+    const found = Object.getOwnPropertySymbols(value).map(
+      s => `${path}[${String(s)}]`,
+    );
+    for (const [key, child] of Object.entries(value)) {
+      found.push(...ownSymbolPaths(child, `${path}.${key}`));
+    }
+    return found;
+  }
+
+  test('leaves the input AST untouched, including symbol keys', () => {
+    const ast = getAST(query);
+    const before = JSON.stringify(ast);
+
+    const planned = planQuery(ast, simpleCostModel);
+
+    expect(JSON.stringify(ast)).toBe(before);
+    expect(ownSymbolPaths(ast)).toEqual([]);
+    expect(planned).not.toBe(ast);
+  });
+
+  test('stamps flip decisions matching the planned graph', () => {
+    const ast = getAST(query);
+    const plans = buildPlanGraph(ast, simpleCostModel, true);
+    plans.plan.plan();
+
+    const planned = planQuery(ast, simpleCostModel);
+    const where = must(planned.where);
+    assert(where.type === 'and', 'expected a conjunction');
+
+    // The planner numbers a correlated subquery after the conditions of its
+    // own subquery, so `posts.user` is join 0, `posts` is join 1, and
+    // `comments` is join 2.
+    const posts = where.conditions[0];
+    assert(posts.type === 'correlatedSubquery', 'expected the posts EXISTS');
+    const postsUser = must(posts.related.subquery.where);
+    assert(
+      postsUser.type === 'correlatedSubquery',
+      'expected the posts.user EXISTS',
+    );
+    const comments = where.conditions[1];
+    assert(
+      comments.type === 'correlatedSubquery',
+      'expected the comments EXISTS',
+    );
+
+    expect([postsUser.flip, posts.flip, comments.flip]).toEqual(
+      plans.plan.joins.map(j => j.type === 'flipped'),
+    );
   });
 });

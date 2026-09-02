@@ -8,7 +8,6 @@ import type {
   CorrelatedSubqueryCondition,
   Disjunction,
 } from '../../../zero-protocol/src/ast.ts';
-import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
@@ -235,7 +234,6 @@ function processCorrelatedSubquery(
   );
 
   const planId = getPlanId();
-  condition[planIdSymbol] = planId;
 
   // Determine flippability and initial type based on flip flag and operator
   const isNotExists = condition.op === 'NOT EXISTS';
@@ -308,41 +306,103 @@ function planRecursively(
   plans.plan.plan(planDebugger, lc);
 }
 
+/**
+ * The planner's join flip choices for one AST, in a form that outlives the
+ * planner graph.
+ *
+ * `flips` is indexed by plan ID: the position of a correlated subquery
+ * condition in the depth first walk of this AST's own `where` clause.
+ * `related` holds the blueprint of each planned related subquery, keyed by
+ * alias.
+ *
+ * A blueprint is deeply frozen and holds no reference to an AST, a
+ * {@link PlannerGraph}, a cost model, or any IVM object, so it can be cached
+ * and reapplied to any structurally identical AST to produce a fresh planned
+ * AST. Every stateful operator and storage object is still built from scratch
+ * by the builder.
+ */
+export type FlipBlueprint = {
+  readonly flips: readonly boolean[];
+  readonly related: {readonly [alias: string]: FlipBlueprint};
+};
+
+/**
+ * Plans `ast` and returns only the resulting flip decisions. Callers that want
+ * a planned AST should use {@link planQuery}; this entry point exists so that
+ * hosts can cache the decisions across structurally identical queries.
+ */
+export function planQueryBlueprint(
+  ast: AST,
+  model: ConnectionCostModel,
+  planDebugger?: PlanDebugger,
+  lc?: LogContext,
+): FlipBlueprint {
+  const plans = buildPlanGraph(ast, model, true);
+  planRecursively(plans, planDebugger, lc);
+  return blueprintOf(plans);
+}
+
 export function planQuery(
   ast: AST,
   model: ConnectionCostModel,
   planDebugger?: PlanDebugger,
   lc?: LogContext,
 ): AST {
-  const plans = buildPlanGraph(ast, model, true);
-  planRecursively(plans, planDebugger, lc);
-  return applyPlansToAST(ast, plans);
+  return applyFlipBlueprint(
+    ast,
+    planQueryBlueprint(ast, model, planDebugger, lc),
+  );
 }
 
+function blueprintOf(plans: Plans): FlipBlueprint {
+  const flips: boolean[] = new Array(plans.plan.joins.length).fill(false);
+  for (const join of plans.plan.joins) {
+    flips[join.planId] = join.type === 'flipped';
+  }
+
+  const related: {[alias: string]: FlipBlueprint} = {};
+  for (const [alias, subPlan] of Object.entries(plans.subPlans)) {
+    related[alias] = blueprintOf(subPlan);
+  }
+
+  return Object.freeze({
+    flips: Object.freeze(flips),
+    related: Object.freeze(related),
+  });
+}
+
+/**
+ * Rebuilds `condition` with the blueprint's flip choices applied.
+ *
+ * Plan IDs are not stored on the AST. They are re-derived by walking the
+ * condition tree in the same order {@link buildPlanGraph} assigns them, i.e.
+ * depth first, with a correlated subquery numbered after the conditions of its
+ * own subquery. Conditions that {@link processOr} filters out contain no
+ * correlated subquery and so consume no IDs, which keeps both walks in step.
+ */
 function applyToCondition(
   condition: Condition,
-  flippedIds: Set<number>,
+  flips: readonly boolean[],
+  getPlanId: () => number,
 ): Condition {
   if (condition.type === 'simple') {
     return condition;
   }
 
   if (condition.type === 'correlatedSubquery') {
-    const planId = (condition as unknown as Record<symbol, number>)[
-      planIdSymbol
-    ];
-    const shouldFlip = planId !== undefined && flippedIds.has(planId);
+    const {subquery} = condition.related;
+    const where = subquery.where
+      ? applyToCondition(subquery.where, flips, getPlanId)
+      : undefined;
 
     return {
       ...condition,
-      flip: shouldFlip,
+      flip: flips[getPlanId()],
       related: {
         ...condition.related,
         subquery: {
-          ...condition.related.subquery,
-          where: condition.related.subquery.where
-            ? applyToCondition(condition.related.subquery.where, flippedIds)
-            : undefined,
+          ...subquery,
+          where,
         },
       },
     };
@@ -350,33 +410,39 @@ function applyToCondition(
 
   return {
     ...condition,
-    conditions: condition.conditions.map(c => applyToCondition(c, flippedIds)),
+    conditions: condition.conditions.map(c =>
+      applyToCondition(c, flips, getPlanId),
+    ),
   };
 }
 
-export function applyPlansToAST(ast: AST, plans: Plans): AST {
-  const flippedIds = new Set<number>();
-  for (const join of plans.plan.joins) {
-    if (join.type === 'flipped' && join.planId !== undefined) {
-      flippedIds.add(join.planId);
-    }
-  }
-
+/**
+ * Stamps `blueprint`'s decisions onto a fresh copy of `ast`. `ast` is not
+ * modified, and no part of `blueprint` ends up in the result.
+ */
+export function applyFlipBlueprint(ast: AST, blueprint: FlipBlueprint): AST {
+  let nextPlanId = 0;
   return {
     ...ast,
-    where: ast.where ? applyToCondition(ast.where, flippedIds) : undefined,
+    where: ast.where
+      ? applyToCondition(ast.where, blueprint.flips, () => nextPlanId++)
+      : undefined,
     related: ast.related?.map(csq => {
       const alias = must(
         csq.subquery.alias,
         'Related subquery must have alias',
       );
-      const subPlan = plans.subPlans[alias];
+      const subBlueprint = blueprint.related[alias];
       return {
         ...csq,
-        subquery: subPlan
-          ? applyPlansToAST(csq.subquery, subPlan)
+        subquery: subBlueprint
+          ? applyFlipBlueprint(csq.subquery, subBlueprint)
           : csq.subquery,
       };
     }),
   };
+}
+
+export function applyPlansToAST(ast: AST, plans: Plans): AST {
+  return applyFlipBlueprint(ast, blueprintOf(plans));
 }
