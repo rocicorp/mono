@@ -373,13 +373,27 @@ function applyOperation(
           Object.keys(index.columns).map(name => [name, 'DESC']),
         );
       }
-      if (operation.secondary % 3 === 0) {
-        index.predicate = {
+      const predicateKind = operation.secondary % 6;
+      if (predicateKind % 2 === 0) {
+        const column =
+          model.columns[operation.secondary % model.columns.length];
+        const nullTest: IndexPredicate = {
           type: 'null-test',
-          column:
-            model.columns[operation.secondary % model.columns.length].name,
-          op: operation.secondary % 2 === 0 ? 'IS NULL' : 'IS NOT NULL',
+          column: column.name,
+          op: operation.secondary % 4 === 0 ? 'IS NULL' : 'IS NOT NULL',
         };
+        index.predicate =
+          predicateKind === 0
+            ? nullTest
+            : predicateKind === 2
+              ? comparisonPredicate(column)
+              : {
+                  type: 'and',
+                  conditions: [
+                    nullTest,
+                    {type: 'not', condition: comparisonPredicate(column)},
+                  ],
+                };
       }
       model.indexes.push(index);
       changes.push({tag: 'create-index', spec: index});
@@ -428,6 +442,22 @@ function applyOperation(
   model.rows.push(newRow);
   changes.push({tag: 'insert', relation, new: newRow});
   return changes;
+}
+
+function comparisonPredicate(column: ModelColumn): IndexPredicate {
+  return /int/.test(column.spec.dataType)
+    ? {
+        type: 'comparison',
+        column: column.name,
+        op: '>',
+        value: {type: 'integer', value: '1'},
+      }
+    : {
+        type: 'comparison',
+        column: column.name,
+        op: '<>',
+        value: {type: 'string', value: 'tenant-1'},
+      };
 }
 
 function predicateReferencesColumn(

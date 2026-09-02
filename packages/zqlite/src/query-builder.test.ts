@@ -55,6 +55,45 @@ test('a production NULL filter can use a partial index', () => {
   expect(plan.some(({detail}) => detail.includes('live_issue'))).toBe(true);
 });
 
+test('a bound equality value can use a partial index', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(`
+    CREATE TABLE issue(id TEXT PRIMARY KEY, priority INTEGER);
+    CREATE INDEX urgent_issue ON issue(id) WHERE priority = 1;
+  `);
+  const query = format(
+    buildSelectQuery(
+      'issue',
+      {id: {type: 'string'}, priority: {type: 'number'}},
+      undefined,
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'priority'},
+        op: '=',
+        right: {type: 'literal', value: 1},
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ),
+  );
+  expect(query.text).toContain('"priority" = ?');
+  expect(query.values).toEqual([1]);
+
+  // SQLite consults the bound value when planning, and re-plans when the
+  // value changes, so the partial index is used exactly when the bound
+  // value satisfies its predicate. (Note that this does not apply to
+  // `IS ?`, which is why NULL filters are emitted as literals.)
+  const usesIndex = (priority: number) =>
+    db
+      .prepare(`EXPLAIN QUERY PLAN ${query.text}`)
+      .all<{detail: string}>(priority)
+      .some(({detail}) => detail.includes('urgent_issue'));
+  expect(usesIndex(1)).toBe(true);
+  expect(usesIndex(2)).toBe(false);
+});
+
 test('non-nullable cursor columns use range and equality operators without IS NULL guards', () => {
   const columns = {
     id: {type: 'string'},

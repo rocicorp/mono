@@ -158,7 +158,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     }
   }
 
-  test.each([
+  type EndToMidCase = [
+    name: string,
+    statements: string | string[],
+    transactions: Partial<DataOrSchemaChange>[][],
+    expectedData: Record<string, JSONValue[]>,
+    expectedTables: LiteTableSpec[],
+    expectedIndexes: ReplicaIndexSpec[],
+    expectedIndexDDL?: Record<string, string>,
+  ];
+
+  test.each<EndToMidCase>([
     [
       'create table',
       `CREATE TABLE my.baz (
@@ -1237,6 +1247,41 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
     ],
     [
+      'change partial index predicate',
+      // Both statements are executed in a single transaction.
+      `DROP INDEX foo_live; CREATE INDEX foo_live ON foo (id) WHERE flt IS NULL;`,
+      [
+        [
+          {tag: 'drop-index', id: {schema: 'public', name: 'foo_live'}},
+          {
+            tag: 'create-index',
+            spec: {
+              schema: 'public',
+              tableName: 'foo',
+              name: 'foo_live',
+              unique: false,
+              columns: {id: 'ASC'},
+              predicate: {type: 'null-test', column: 'flt', op: 'IS NULL'},
+            },
+          },
+        ],
+      ],
+      {foo: []},
+      [],
+      [
+        {
+          tableName: 'foo',
+          name: 'foo_live',
+          columns: {id: 'ASC'},
+          unique: false,
+          partial: true,
+        },
+      ],
+      {
+        foo_live: `CREATE INDEX "foo_live" ON "foo" ("id" ASC) WHERE "flt" IS NULL`,
+      },
+    ],
+    [
       'drop partial index',
       'DROP INDEX foo_live;',
       [
@@ -1248,6 +1293,59 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         ],
       ],
       {foo: []},
+      [],
+      [],
+    ],
+    [
+      'create table with a column referenced only by a partial index predicate',
+      `CREATE TABLE your.pred(id TEXT PRIMARY KEY, flag INT4, other INT4);
+       CREATE INDEX pred_flag ON your.pred (other) WHERE flag > 0;`,
+      [[{tag: 'create-table'}, {tag: 'create-index'}, {tag: 'create-index'}]],
+      {['your.pred']: []},
+      [],
+      [
+        {
+          tableName: 'your.pred',
+          name: 'your.pred_flag',
+          columns: {other: 'ASC'},
+          unique: false,
+          partial: true,
+        },
+      ],
+      {
+        ['your.pred_flag']: `CREATE INDEX "your.pred_flag" ON "your.pred" ("other" ASC) WHERE "flag" > 0`,
+      },
+    ],
+    [
+      'drop column referenced only by a partial index predicate',
+      // PostgreSQL drops the dependent index. The index must be dropped
+      // before the column on the replica, as SQLite refuses to drop a
+      // column that is referenced by an index.
+      'ALTER TABLE your.pred DROP flag;',
+      [
+        [
+          {tag: 'drop-index', id: {schema: 'your', name: 'pred_flag'}},
+          {
+            tag: 'drop-column',
+            table: {schema: 'your', name: 'pred'},
+            column: 'flag',
+          },
+        ],
+      ],
+      {['your.pred']: []},
+      [],
+      [],
+    ],
+    [
+      'drop table with partial index',
+      'DROP TABLE your.pred;',
+      [
+        [
+          {tag: 'drop-index', id: {schema: 'your', name: 'pred_pkey'}},
+          {tag: 'drop-table', id: {schema: 'your', name: 'pred'}},
+        ],
+      ],
+      {},
       [],
       [],
     ],
@@ -2118,14 +2216,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
       [],
     ],
-  ] satisfies [
-    name: string,
-    statements: string | string[],
-    transactions: Partial<DataOrSchemaChange>[][],
-    expectedData: Record<string, JSONValue>,
-    expectedTables: LiteTableSpec[],
-    expectedIndexes: ReplicaIndexSpec[],
-  ][])(
+  ] satisfies EndToMidCase[])(
     '%s',
     async (
       _name,
@@ -2134,6 +2225,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       expectedData,
       expectedTables,
       expectedIndexes,
+      expectedIndexDDL,
     ) => {
       stmts = Array.isArray(stmts) ? stmts : [stmts];
       await Promise.all(stmts.map(stmt => upstream.unsafe(stmt)));
@@ -2155,6 +2247,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         expect(JSON.stringify(indexes.get(index.name), null, 2)).toBe(
           JSON.stringify(index, null, 2),
         );
+      }
+      for (const [name, ddl] of Object.entries(expectedIndexDDL ?? {})) {
+        expect(
+          replica
+            .prepare(`SELECT sql FROM sqlite_master WHERE name = ?`)
+            .get<{sql: string}>(name)?.sql,
+        ).toBe(ddl);
       }
     },
   );

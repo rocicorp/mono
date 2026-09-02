@@ -1796,7 +1796,7 @@ function specsByID(published: PublishedSchema) {
  * Compares boolean properties directly and resolves column names to their
  * stable attnums (pg_attribute `attnum`) for the column comparison.
  */
-function isIndexStructurallyChanged(
+export function isIndexStructurallyChanged(
   prev: PublishedIndexSpec,
   next: PublishedIndexSpec,
   prevTables: Map<number, PublishedTableWithReplicaIdentity>,
