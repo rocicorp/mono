@@ -1,6 +1,11 @@
 import {expect, test} from 'vitest';
+import type {Format} from '../../zero-types/src/format.ts';
 import {normalizeAST, type AST, type Condition} from './ast.ts';
-import {hashAST, hashNameAndArgs} from './query-hash-visitor.ts';
+import {
+  hashAST,
+  hashNameAndArgs,
+  hashOfQueryInternals,
+} from './query-hash-visitor.ts';
 
 const base: AST = {table: 'issue'};
 
@@ -522,4 +527,60 @@ test('a hash taken from inside another walk does not corrupt it', () => {
   };
   expect(hashNameAndArgs('q', [sneaky])).toBe(plain);
   expect(inner).toBe(innerExpected);
+});
+
+const fmt: Format = {singular: false, relationships: {}};
+
+test('hashOfQueryInternals separates queries that differ only by name or args', () => {
+  const a = CORPUS[0];
+  // `nameAndArgs` reuses the AST it is given, so the name and args are the only
+  // thing telling these apart -- the AST and the format are identical.
+  const seen = new Map<string, string>();
+  const cases: [string | undefined, readonly unknown[] | undefined][] = [
+    [undefined, undefined],
+    ['foo', []],
+    ['foo', [1]],
+    ['foo', [2]],
+    ['foo', [1, 2]],
+    ['bar', [1]],
+    ['bar', []],
+  ];
+  for (const [name, args] of cases) {
+    const key = `${name} ${JSON.stringify(args)}`;
+    const h = hashOfQueryInternals(a, fmt, name, args);
+    const existing = seen.get(h);
+    expect(
+      existing,
+      `collision between\n  ${existing}\n  ${key}`,
+    ).toBeUndefined();
+    seen.set(h, key);
+  }
+});
+
+test('hashOfQueryInternals still separates every AST in the corpus', () => {
+  const byHash = new Map<string, number>();
+  CORPUS.forEach((a, i) => {
+    const h = hashOfQueryInternals(a, fmt, 'q', [1]);
+    expect(byHash.get(h), `collision at corpus ${i}`).toBeUndefined();
+    byHash.set(h, i);
+  });
+});
+
+test('hashOfQueryInternals depends only on the values, not call order', () => {
+  const a = CORPUS[0];
+  const h = hashOfQueryInternals(a, fmt, 'foo', [1, {b: 2}]);
+  hashAST(CORPUS[1]);
+  hashNameAndArgs('other', [9]);
+  expect(hashOfQueryInternals(a, fmt, 'foo', [1, {b: 2}])).toBe(h);
+  // Structurally equal but distinct args hash the same.
+  expect(hashOfQueryInternals(a, fmt, 'foo', [1, {b: 2}])).toBe(h);
+});
+
+test('an absent custom query is not confusable with a named one', () => {
+  const a = CORPUS[0];
+  // The absent case mixes its own tag rather than nothing at all, so a query
+  // with no name cannot fold like some query that has one.
+  expect(hashOfQueryInternals(a, fmt, undefined, undefined)).not.toBe(
+    hashOfQueryInternals(a, fmt, '', []),
+  );
 });

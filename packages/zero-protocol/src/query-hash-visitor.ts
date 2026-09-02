@@ -407,7 +407,25 @@ export function hashNameAndArgs(
   }
 }
 
-export function hashOfQueryInternals(ast: AST, format: Format): string {
+/**
+ * The identity of a query as the client sees it: its AST, the shape it returns,
+ * and -- for a custom query -- the name and arguments it was declared with.
+ *
+ * The name and args have to be in here because they are the one part of a
+ * query's identity that leaves no trace in its AST: `nameAndArgs` reuses the
+ * AST it is given and only attaches a `CustomQueryID`, so without this two
+ * different named queries over the same table would be indistinguishable.
+ *
+ * They are taken apart rather than as a `CustomQueryID` because that type lives
+ * in `zql`, which is above this package; `hashNameAndArgs` splits them the same
+ * way.
+ */
+export function hashOfQueryInternals(
+  ast: AST,
+  format: Format,
+  customQueryName: string | undefined,
+  customQueryArgs: readonly unknown[] | undefined,
+): string {
   const s1 = h1;
   const s2 = h2;
   try {
@@ -415,6 +433,13 @@ export function hashOfQueryInternals(ast: AST, format: Format): string {
     visitAST(ast);
     mix(TAG_FORMAT);
     visitValue(format);
+    if (customQueryName === undefined) {
+      mix(TAG_UNDEF);
+    } else {
+      mix(TAG_NAME_ARGS);
+      mixString(customQueryName);
+      visitValue(customQueryArgs);
+    }
     return finalize();
   } finally {
     h1 = s1;
