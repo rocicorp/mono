@@ -333,9 +333,10 @@ test('hashAST reads every field of the AST', () => {
       ...full,
       related: [{...full.related![0], system: 'permissions'}, full.related![1]],
     },
-    // The remaining member, and the absent case. `System` folds as a tag rather
-    // than as a string, so these are the pairs that would collide if a tag were
-    // ever duplicated or reused.
+    // The remaining member, and the absent case. Each of these only has to
+    // differ from `full`; that two systems also differ from *each other* is
+    // what the pairwise test below covers, since this loop compares against
+    // `baseHash` alone.
     'related system test': {
       ...full,
       related: [{...full.related![0], system: 'test'}, full.related![1]],
@@ -674,4 +675,33 @@ test('both parameter anchors hash distinctly', () => {
       }),
     );
   expect(cond('authData')).not.toBe(cond('preMutationRow'));
+});
+
+test('every system on a correlated subquery hashes distinctly', () => {
+  // The mutation test above compares each variant against one baseline, so two
+  // systems sharing a tag by accident would satisfy it. Pin all four against
+  // each other.
+  const variants = [undefined, 'client', 'permissions', 'test'] as const;
+  const byHash = new Map<string, string>();
+  for (const system of variants) {
+    const h = hashAST(
+      normalizeAST({
+        table: 'issue',
+        related: [
+          {
+            correlation: {parentField: ['id'], childField: ['issueId']},
+            subquery: {table: 'comment', alias: 'c'},
+            system,
+          },
+        ],
+      }),
+    );
+    const existing = byHash.get(h);
+    expect(
+      existing,
+      `system ${system} collided with ${existing}`,
+    ).toBeUndefined();
+    byHash.set(h, String(system));
+  }
+  expect(byHash.size).toBe(variants.length);
 });
