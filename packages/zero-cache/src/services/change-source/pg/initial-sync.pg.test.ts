@@ -930,7 +930,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             orgID: 'ASC',
           },
           name: 'issues_unique_admin',
-          unique: true,
+          unique: false,
           predicate: {
             type: 'comparison',
             column: 'isAdmin',

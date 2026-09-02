@@ -133,12 +133,17 @@ tables AS (SELECT json_build_object(
       pg_indexes.indexname as "name",
       index_column.name as "col",
       CASE WHEN pg_index.indoption[index_column.pos-1] & 1 = 1 THEN 'DESC' ELSE 'ASC' END as "dir",
-      pg_index.indisunique as "unique",
+      -- Partial indexes are always reported as non-unique. Nothing on the
+      -- replica relies on the uniqueness of a partial index (it cannot serve
+      -- as a row key), and reporting it as non-unique keeps the ddl event
+      -- format compatible with older versions of the zero-cache, which
+      -- ignore "predicateSQL" and would otherwise create a full UNIQUE index
+      -- on the replica.
+      (pg_index.indisunique AND pg_index.indpred IS NULL) as "unique",
       pg_index.indisprimary as "isPrimaryKey",
       pg_index.indisreplident as "isReplicaIdentity",
       pg_index.indimmediate as "isImmediate",
-      pg_get_expr(pg_index.indpred, pg_index.indrelid, false) as "predicateSQL",
-      pg_index.indnullsnotdistinct as "nullsNotDistinct"
+      pg_get_expr(pg_index.indpred, pg_index.indrelid, false) as "predicateSQL"
     FROM pg_indexes
     JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
     JOIN pg_class pc ON
@@ -180,12 +185,10 @@ tables AS (SELECT json_build_object(
       'isReplicaIdentity', "isReplicaIdentity",
       'isImmediate', "isImmediate",
       'predicateSQL', "predicateSQL",
-      'nullsNotDistinct', "nullsNotDistinct",
       'columns', json_object_agg("col", "dir")
     ) AS index FROM indexed_columns 
       GROUP BY "schema", "tableName", "name", "unique", 
-         "isPrimaryKey", "isReplicaIdentity", "isImmediate",
-         "predicateSQL", "nullsNotDistinct")
+         "isPrimaryKey", "isReplicaIdentity", "isImmediate", "predicateSQL")
 
     SELECT json_build_object(
       'tables', COALESCE((SELECT json_agg("table") FROM tables), '[]'::json),
@@ -205,7 +208,6 @@ const rawPublishedTableSpec = publishedTableSpec.extend({
 
 const rawPublishedIndexSpec = publishedIndexSpec.extend({
   predicateSQL: v.string().nullable().optional(),
-  nullsNotDistinct: v.boolean().optional(),
 });
 
 export type SkippedIndexDiagnostic = {
@@ -251,17 +253,8 @@ export const publishedSchema = v
     const diagnostics: SkippedIndexDiagnostic[] = [];
     const indexes: PublishedIndexSpec[] = [];
     for (const rawIndex of rawIndexes) {
-      const {predicateSQL, nullsNotDistinct, ...index} = rawIndex;
+      const {predicateSQL, ...index} = rawIndex;
       if (predicateSQL !== null && predicateSQL !== undefined) {
-        if (index.unique && nullsNotDistinct) {
-          diagnostics.push({
-            schema: index.schema,
-            index: index.name,
-            predicate: predicateSQL,
-            reason: 'nulls-not-distinct',
-          });
-          continue;
-        }
         const table = rawTables.find(
           candidate =>
             candidate.schema === index.schema &&

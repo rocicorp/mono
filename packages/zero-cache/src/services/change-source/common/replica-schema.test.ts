@@ -27,7 +27,7 @@ import {
 export const CURRENT_SCHEMA_VERSIONS = {
   dataVersion: CURRENT_SCHEMA_VERSION,
   schemaVersion: CURRENT_SCHEMA_VERSION,
-  minSafeVersion: 18,
+  minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
 
@@ -753,33 +753,49 @@ describe('replica-schema-migrations', () => {
     });
   }
 
-  test('a v17 zero-cache cannot run against a v18 replica', async () => {
+  // Migration 17 sets no `minSafeVersion`, which is what makes this legal, and
+  // the reason it can: nothing at v16 reads "_zero.backfilling", and what a v16
+  // zero-cache does write — "_zero.column_metadata.backfill" — is what
+  // migration 17's `migrateData` rebuilds the table from on the way forward.
+  test('a v16 zero-cache runs against a v17 replica', async () => {
     const replica = replicaFile.connect(lc);
     initLiteDB(replica, CREATE_VERSION_HISTORY, {});
     await initReplica(lc, 'test', replicaFile.path, (_, db) => {
       initReplicationState(db, ['foo_publication'], '123');
       return promiseVoid;
     });
+    replica
+      .prepare(/*sql*/ `INSERT INTO "${BACKFILLING_TABLE}"
+                 ("schema", "table", "column", "backfill") VALUES (?, ?, ?, ?)`)
+      .run('my', 'foo', 'a', '{"fooID":1}');
 
-    const v17MigrationMap = Object.fromEntries(
+    const v16MigrationMap = Object.fromEntries(
       Object.entries(schemaVersionMigrationMap).filter(
-        ([version]) => Number(version) <= 17,
+        ([version]) => Number(version) <= 16,
       ),
     );
-    await expect(
-      runSchemaMigrations(
-        lc,
-        'test',
-        replicaFile.path,
-        {
-          migrateSchema: () => {
-            throw new Error('the replica is already synced');
-          },
+    await runSchemaMigrations(
+      lc,
+      'test',
+      replicaFile.path,
+      {
+        migrateSchema: () => {
+          throw new Error('the replica is already synced');
         },
-        v17MigrationMap,
-      ),
-    ).rejects.toThrow(
-      'Cannot run test at schema v17 because rollback limit is v18',
+      },
+      v16MigrationMap,
     );
+
+    expectMatchingObjectsInTables(replica, {
+      // The data version rolls back; the schema version never moves backwards.
+      ['_zero.versionHistory']: [
+        {dataVersion: 16, schemaVersion: 17, minSafeVersion: 1},
+      ],
+      // The table is left alone rather than dropped, so rolling forward does
+      // not have to recreate it.
+      [BACKFILLING_TABLE]: [
+        {schema: 'my', table: 'foo', column: 'a', backfill: '{"fooID":1}'},
+      ],
+    });
   });
 });

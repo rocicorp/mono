@@ -1230,7 +1230,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tableName: 'foo',
           name: 'foo_live',
           columns: {id: 'ASC'},
-          unique: true,
+          // Partial indexes are replicated as non-unique.
+          unique: false,
           partial: true,
         },
       ],

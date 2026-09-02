@@ -73,30 +73,34 @@ describe('SQLite index predicates', () => {
     });
   });
 
-  test('unique indexes constrain only predicate members', () => {
+  test('partial indexes are never unique on the replica', () => {
     const db = new Database(createSilentLogContext(), ':memory:');
     db.exec(`CREATE TABLE item(id INTEGER, code TEXT, active BOOL);`);
-    db.exec(
-      createLiteIndexStatement({
-        name: 'active_code',
-        tableName: 'item',
-        unique: true,
-        columns: {code: 'ASC'},
-        predicate: {
-          type: 'comparison',
-          column: 'active',
-          op: '=',
-          value: {type: 'boolean', value: true},
-        },
-      }),
+    const stmt = createLiteIndexStatement({
+      name: 'active_code',
+      tableName: 'item',
+      unique: true,
+      columns: {code: 'ASC'},
+      predicate: {
+        type: 'comparison',
+        column: 'active',
+        op: '=',
+        value: {type: 'boolean', value: true},
+      },
+    });
+    expect(stmt).toBe(
+      `CREATE  INDEX "active_code" ON "item" ("code" ASC) WHERE "active" = 1;`,
     );
+    db.exec(stmt);
 
+    // Rows that would violate a UNIQUE partial index are accepted.
     db.exec(`
-      INSERT INTO item VALUES (1, 'same', 0), (2, 'same', 0);
-      INSERT INTO item VALUES (3, 'same', 1);
+      INSERT INTO item VALUES (1, 'same', 1), (2, 'same', 1);
     `);
-    expect(() => db.exec(`INSERT INTO item VALUES (4, 'same', 1);`)).toThrow(
-      'UNIQUE constraint failed',
-    );
+    expect(
+      db
+        .prepare(`SELECT "unique", partial FROM pragma_index_list('item')`)
+        .all(),
+    ).toEqual([{unique: 0, partial: 1}]);
   });
 });

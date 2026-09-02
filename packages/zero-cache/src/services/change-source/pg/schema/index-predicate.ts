@@ -29,7 +29,6 @@ export const unsupportedPredicateReasons = [
   'unsupported-cast',
   'unsupported-syntax',
   'non-deterministic-collation',
-  'nulls-not-distinct',
 ] as const;
 
 export type UnsupportedPredicateReason =

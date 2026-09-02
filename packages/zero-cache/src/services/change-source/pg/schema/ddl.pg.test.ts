@@ -16,7 +16,6 @@ import {
   ddlStartEventSchema,
   ddlUpdateEventSchema,
   schemaSnapshotEventSchema,
-  PROTOCOL_VERSION,
   type DdlStartEvent,
   type DdlUpdateEvent,
   type SchemaSnapshotEvent,
@@ -112,7 +111,7 @@ describe('change-source/tables/ddl', () => {
     schema: NonNullable<DdlStartEvent['schema']>;
   } = {
     type: 'ddlStart',
-    version: PROTOCOL_VERSION,
+    version: 1,
     event: {tag: 'UNUSED'},
     previousSchema: null,
     schema: {
@@ -332,7 +331,7 @@ describe('change-source/tables/ddl', () => {
             'CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))',
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'CREATE TABLE'},
         schema: {
           tables: inserted(DDL_START.schema.tables, 0, {
@@ -417,7 +416,7 @@ describe('change-source/tables/ddl', () => {
           query: 'CREATE INDEX foo_name_index on pub.foo (name desc, id)',
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'CREATE INDEX'},
         schema: {
           tables: DDL_START.schema.tables,
@@ -442,7 +441,7 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER TABLE pub.foo RENAME TO food',
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -524,7 +523,7 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER TABLE pub.yoo SET SCHEMA private',
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
           tables: dropped(DDL_START.schema.tables, 2, 1),
@@ -541,7 +540,7 @@ describe('change-source/tables/ddl', () => {
         },
         event: {tag: 'ALTER TABLE'},
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -608,7 +607,7 @@ describe('change-source/tables/ddl', () => {
           query: "ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'",
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
           indexes: DDL_START.schema.indexes,
@@ -670,7 +669,7 @@ describe('change-source/tables/ddl', () => {
           query: "ALTER TABLE pub.foo ALTER name SET DEFAULT 'alice'",
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
           indexes: DDL_START.schema.indexes,
@@ -724,7 +723,7 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER TABLE pub.foo RENAME name to handle',
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -797,7 +796,7 @@ describe('change-source/tables/ddl', () => {
       {
         context: {query: 'ALTER TABLE pub.foo drop description'},
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -842,7 +841,7 @@ describe('change-source/tables/ddl', () => {
       {
         context: {query: 'DROP TABLE pub.foo, pub.yoo'},
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'DROP TABLE'},
         schema: {
           tables: [
@@ -913,7 +912,7 @@ describe('change-source/tables/ddl', () => {
           query: 'DROP INDEX pub.foo_custom_index, pub.yoo_custom_index',
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'DROP INDEX'},
         schema: {
           indexes: [
@@ -970,7 +969,7 @@ describe('change-source/tables/ddl', () => {
       {
         context: {query: 'ALTER PUBLICATION zero_sum ADD TABLE pub.yoo'},
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER PUBLICATION'},
         schema: {
           indexes: DDL_START.schema.indexes,
@@ -1022,7 +1021,7 @@ describe('change-source/tables/ddl', () => {
       {
         context: {query: 'ALTER PUBLICATION zero_sum DROP TABLE pub.foo'},
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER PUBLICATION'},
         schema: {
           indexes: DDL_START.schema.indexes,
@@ -1076,7 +1075,7 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER PUBLICATION zero_all ADD TABLES IN SCHEMA zero',
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER PUBLICATION'},
         schema: {
           indexes: [
@@ -1125,7 +1124,7 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER SCHEMA pub RENAME TO bup',
         },
         type: 'ddlUpdate',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'ALTER SCHEMA'},
         schema: {
           tables: [
@@ -1367,7 +1366,7 @@ describe('change-source/tables/ddl', () => {
       `,
         },
         type: 'schemaSnapshot',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'COMMENT'},
         schema: {
           tables: replaced(DDL_START.schema.tables, 0, 1, {
@@ -1393,7 +1392,7 @@ describe('change-source/tables/ddl', () => {
       `,
         },
         type: 'schemaSnapshot',
-        version: PROTOCOL_VERSION,
+        version: 1,
         event: {tag: 'MANUAL'},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -1633,7 +1632,7 @@ describe('change-source/tables/ddl', () => {
     let msg = messages[2] as MessageMessage;
     expect(parseDDLUpdateEvent(msg)).toMatchObject({
       type: 'ddlUpdate',
-      version: PROTOCOL_VERSION,
+      version: 1,
       // Top level query may not provide any information about the actual DDL command.
       context: {query: 'CALL procedure_name()'},
       event: {tag: 'ALTER TABLE'},
@@ -1642,7 +1641,7 @@ describe('change-source/tables/ddl', () => {
     msg = messages[6] as MessageMessage;
     expect(parseDDLUpdateEvent(msg)).toMatchObject({
       type: 'ddlUpdate',
-      version: PROTOCOL_VERSION,
+      version: 1,
       context: {
         // A compound top level query may contain more than one DDL command.
         query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
@@ -1652,7 +1651,7 @@ describe('change-source/tables/ddl', () => {
     msg = messages[8] as MessageMessage;
     expect(parseDDLUpdateEvent(msg)).toMatchObject({
       type: 'ddlUpdate',
-      version: PROTOCOL_VERSION,
+      version: 1,
       context: {
         // A compound top level query may contain more than one DDL command.
         query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
