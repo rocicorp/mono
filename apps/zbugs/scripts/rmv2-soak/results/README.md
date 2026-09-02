@@ -39,3 +39,19 @@ live-page usage was 20.41 MB. Thus, the outage sample was smaller even though
 MinIO pinned the purge floor. The app-slot growth proves that the outage pinned
 the upstream acknowledgment. C9 must check the post-recovery decrease, not the
 change from the pre-outage sample.
+
+## `2026-09-02-c9-final-post-fix.json`
+
+- Integration branch: `mlaw/soak-post-fix-run` at `716690ffc`.
+- Backup fix: `425ced06a`.
+- Command: `node scripts/rmv2-soak.ts --chaos C9 --seed --run-id c9-final-post-fix-2026-09-02`.
+- Duration: 1,026 seconds.
+- Result: `PASS` with no findings.
+- Correctness: all five oracle checks passed.
+- Purge: 29,897 rows were removed after MinIO recovered.
+- WAL: the app slot grew from 5.31 MB to 66.00 MB, then decreased to 176 bytes.
+- Live pages: usage decreased from 13.86 MB to 1.88 MB after recovery.
+- Purge bounds: no pass reached the batch limit or requested an immediate continuation.
+
+This run confirms C9 recovery after the planned five-minute MinIO outage. The
+physical SQLite file stayed at 42.37 MB and reused 31.62 MB of free pages.

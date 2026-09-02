@@ -1,0 +1,658 @@
+{
+  "runID": "c9-final-post-fix-2026-09-02",
+  "startedMs": 1788378840880,
+  "finishedMs": 1788379866552,
+  "config": {
+    "appID": "rmv2_soak",
+    "viewSyncers": 3,
+    "changeLog": {
+      "mode": "serve",
+      "readPercent": 100,
+      "coldReadPercent": 100,
+      "comparePercent": 100,
+      "retentionMs": 60000
+    },
+    "backupIntervalSeconds": 2,
+    "vfsPollIntervalMs": 1000,
+    "startupDelayMs": 1000,
+    "snapshotBackupIntervalHours": 4,
+    "chaos": ["C9"],
+    "scale": 1,
+    "baseline": false,
+    "root": "/Users/mlaw/workspace/zero/mono/apps/zbugs/.soak/c9-final-post-fix-2026-09-02"
+  },
+  "phases": [
+    {
+      "name": "sustained",
+      "startedMs": 1788378851628,
+      "finishedMs": 1788379151603,
+      "stages": [
+        {
+          "label": "sustained",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 300,
+          "transactions": 7500,
+          "mutations": 9000,
+          "elapsedSeconds": 299.9666975,
+          "actualTransactionsPerSecond": 25.002775516438785,
+          "shapes": {
+            "insert": 3000,
+            "update": 3000,
+            "delete": 750,
+            "churn": 750
+          },
+          "residueRows": 2250,
+          "latencyMs": {
+            "p50": 3.9139169999980368,
+            "p95": 6.244708000012906,
+            "p99": 9.164624999997613,
+            "max": 26.966709000000264
+          }
+        }
+      ]
+    },
+    {
+      "name": "burst",
+      "startedMs": 1788379152205,
+      "finishedMs": 1788379252210,
+      "stages": [
+        {
+          "label": "burst-1",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 20,
+          "transactions": 10000,
+          "mutations": 12000,
+          "elapsedSeconds": 19.998769542000023,
+          "actualTransactionsPerSecond": 500.0307633426495,
+          "shapes": {
+            "insert": 4000,
+            "update": 4000,
+            "delete": 1000,
+            "churn": 1000
+          },
+          "residueRows": 5250,
+          "latencyMs": {
+            "p50": 1.5053749999497086,
+            "p95": 3.1939580000471324,
+            "p99": 6.404041000001598,
+            "max": 24.815332999976818
+          }
+        },
+        {
+          "label": "burst-gap-1",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 20,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 19.999868166,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 5250,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        },
+        {
+          "label": "burst-2",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 20,
+          "transactions": 10000,
+          "mutations": 12000,
+          "elapsedSeconds": 20.001147999999986,
+          "actualTransactionsPerSecond": 499.97130164728577,
+          "shapes": {
+            "insert": 4000,
+            "update": 4000,
+            "delete": 1000,
+            "churn": 1000
+          },
+          "residueRows": 8250,
+          "latencyMs": {
+            "p50": 1.530834000033792,
+            "p95": 3.328166000021156,
+            "p99": 6.6739159999997355,
+            "max": 33.229874999960884
+          }
+        },
+        {
+          "label": "burst-gap-2",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 20,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 20.000620542000046,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 8250,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        },
+        {
+          "label": "burst-3",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 20,
+          "transactions": 10000,
+          "mutations": 12000,
+          "elapsedSeconds": 19.998570625000053,
+          "actualTransactionsPerSecond": 500.03573692907236,
+          "shapes": {
+            "insert": 4000,
+            "update": 4000,
+            "delete": 1000,
+            "churn": 1000
+          },
+          "residueRows": 11250,
+          "latencyMs": {
+            "p50": 1.5710420000250451,
+            "p95": 3.166875000053551,
+            "p99": 6.0131669999682344,
+            "max": 34.567250000021886
+          }
+        }
+      ]
+    },
+    {
+      "name": "quiet",
+      "startedMs": 1788379252995,
+      "finishedMs": 1788379342998,
+      "stages": [
+        {
+          "label": "quiet",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 90,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 90.00145237500006,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 11250,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "fat",
+      "startedMs": 1788379343898,
+      "finishedMs": 1788379463866,
+      "stages": [
+        {
+          "label": "fat",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 120,
+          "transactions": 3000,
+          "mutations": 3600,
+          "elapsedSeconds": 119.96451670799998,
+          "actualTransactionsPerSecond": 25.007394539021565,
+          "shapes": {
+            "insert": 1200,
+            "update": 1200,
+            "delete": 300,
+            "churn": 300
+          },
+          "residueRows": 12150,
+          "latencyMs": {
+            "p50": 4.6077920000534505,
+            "p95": 6.999540999997407,
+            "p99": 10.143750000046566,
+            "max": 25.246500000008382
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed",
+      "startedMs": 1788379465141,
+      "finishedMs": 1788379860491,
+      "stages": [
+        {
+          "label": "mixed-sustained",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 60,
+          "transactions": 1500,
+          "mutations": 1510,
+          "elapsedSeconds": 59.96493650000007,
+          "actualTransactionsPerSecond": 25.0146183344995,
+          "shapes": {
+            "insert": 1181,
+            "update": 19,
+            "delete": 295,
+            "churn": 5
+          },
+          "residueRows": 13050,
+          "latencyMs": {
+            "p50": 4.420250000082888,
+            "p95": 6.206624999991618,
+            "p99": 8.769417000003159,
+            "max": 24.9617080000462
+          }
+        }
+      ]
+    }
+  ],
+  "oracle": [
+    {
+      "label": "after phase sustained",
+      "atMs": 1788379152204,
+      "quiesceMs": 127,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69atv2so",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 16484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69atv2so",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 16484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69atv2so",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 16484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69atv2so",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 16484,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase burst",
+      "atMs": 1788379252995,
+      "quiesceMs": 106,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69dd30mo",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69dd30mo",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69dd30mo",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69dd30mo",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase quiet",
+      "atMs": 1788379343898,
+      "quiesceMs": 228,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69dg2o0g",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69dg2o0g",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69dg2o0g",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69dg2o0g",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase fat",
+      "atMs": 1788379465141,
+      "quiesceMs": 132,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69drghbs",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 26384,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69drghbs",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 26384,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69drghbs",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 26384,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69drghbs",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 26384,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after C9",
+      "atMs": 1788379860491,
+      "quiesceMs": 245,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69f0a5fk",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 29534,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69f0a5fk",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 29534,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69f0a5fk",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 29534,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69f0a5fk",
+          "replicaVersion": "69a4czsg",
+          "tables": 13,
+          "rows": 29534,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    }
+  ],
+  "chaos": [
+    {
+      "id": "C9",
+      "title": "Stop minio under sustained writes, then restart it",
+      "startedMs": 1788379465141,
+      "finishedMs": 1788379859140,
+      "notes": ["stopped minio for 300s", "restarted minio"],
+      "census": {},
+      "findings": [],
+      "measurements": {
+        "changeLogBytesBefore": 42371632,
+        "changeLogBytesDuring": 42371632,
+        "changeLogBytesAfter": 42371632,
+        "changeLogLiveBytesBefore": 20357120,
+        "changeLogLiveBytesDuring": 13860864,
+        "changeLogLiveBytesAfter": 1875968,
+        "changeLogFreeBytesAfter": 31621120,
+        "slotRetainedBytesBefore": 5314688,
+        "slotRetainedBytesDuring": 65997768,
+        "slotRetainedBytesAfter": 176,
+        "backupRecoveries": 26,
+        "purgePassesAfterRecovery": 2,
+        "purgedRowsAfterRecovery": 29897
+      }
+    }
+  ],
+  "census": {
+    "pg/not-ready": 1,
+    "pg/log-unavailable": 1,
+    "sqlite/selected-cold": 2
+  },
+  "coverage": [],
+  "tripwires": [
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788379575141,
+      "message": "cannot fetch page",
+      "detail": {
+        "name": "zero-backup.db"
+      }
+    },
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788379575142,
+      "message": "vfs-query exited with error",
+      "detail": {}
+    },
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788379581301,
+      "message": "",
+      "detail": {}
+    },
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788379692137,
+      "message": "vfs-query exited with error",
+      "detail": {}
+    },
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788379704181,
+      "message": "",
+      "detail": {}
+    }
+  ],
+  "measurements": {
+    "reseedToCoveringBackupMs": {
+      "n": 0
+    },
+    "reservationHoldMs": {
+      "n": 0
+    },
+    "reservationHoldMsC3": {
+      "n": 0
+    },
+    "reseedToCoveringBackupMsC6C13": {
+      "n": 0
+    },
+    "backupLagMs": {
+      "n": 294,
+      "min": 12,
+      "p50": 895,
+      "p95": 1042,
+      "max": 2570,
+      "mean": 567.8299319727892
+    },
+    "reservationConfirmDelays": 0,
+    "reservationDemotions": 0,
+    "barrierTimeouts": 0,
+    "compareResults": {
+      "match": 40558
+    },
+    "initCompareResults": {
+      "equal": 1
+    },
+    "floorProbes": {
+      "retained": 24
+    },
+    "reconcileWipes": {
+      "created": 1
+    },
+    "purgeDeclines": {},
+    "catchupRows": 0,
+    "catchupBytes": 0,
+    "catchupDurationSeconds": 0.001,
+    "catchupResults": {
+      "range/false": 2
+    },
+    "litestreamRestores": {
+      "no_backup": 1,
+      "success": 3
+    },
+    "purgedRows": 159314
+  },
+  "resources": {
+    "changeLogBytes": {
+      "n": 206,
+      "min": 2249528,
+      "p50": 42371632,
+      "p95": 42371632,
+      "max": 42371632,
+      "mean": 32116694.446601942
+    },
+    "changeLogBytesFinal": 42371632,
+    "changeLogLiveBytes": {
+      "n": 206,
+      "min": 77824,
+      "p50": 8228864,
+      "p95": 26521600,
+      "max": 32751616,
+      "mean": 9270798.912621358
+    },
+    "changeLogLiveBytesFinal": 778240,
+    "changeLogFreeBytes": {
+      "n": 206,
+      "min": 0,
+      "p50": 18460672,
+      "p95": 31621120,
+      "max": 33419264,
+      "mean": 14288677.281553399
+    },
+    "changeLogFreeBytesFinal": 32718848,
+    "slotRetainedBytes": {
+      "n": 206,
+      "min": 56,
+      "p50": 3748216,
+      "p95": 62359776,
+      "max": 66792608,
+      "mean": 16487895.18446602
+    },
+    "slotRetainedBytesFinal": 24096,
+    "backupBytesFinal": 85150714,
+    "backupObjectsFinal": 876,
+    "purge": {
+      "longestBatchLimitStreak": 0,
+      "passes": 25,
+      "batchLimitPasses": 0,
+      "immediateContinuations": 0,
+      "byStopReason": {
+        "none": 25
+      }
+    },
+    "samples": 206
+  },
+  "findings": [],
+  "pass": true
+}
