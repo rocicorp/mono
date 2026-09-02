@@ -333,6 +333,20 @@ test('hashAST reads every field of the AST', () => {
       ...full,
       related: [{...full.related![0], system: 'permissions'}, full.related![1]],
     },
+    // The remaining member, and the absent case. `System` folds as a tag rather
+    // than as a string, so these are the pairs that would collide if a tag were
+    // ever duplicated or reused.
+    'related system test': {
+      ...full,
+      related: [{...full.related![0], system: 'test'}, full.related![1]],
+    },
+    // Clearing it, which has to come off the *second* entry: normalizeAST sorts
+    // related by alias, so `related[0]` is `assignee`, which has no system to
+    // begin with, and `related[1]` is `creator`, which does.
+    'related system absent': {
+      ...full,
+      related: [full.related![0], {...full.related![1], system: undefined}],
+    },
     'related subquery': {
       ...full,
       related: [
