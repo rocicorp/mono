@@ -68,8 +68,13 @@ node scripts/rmv2-soak.ts                               # the full run
 node scripts/rmv2-soak.ts --scale 0.05 --chaos none     # a two-minute smoke test
 node scripts/rmv2-soak.ts --chaos all                   # adds C9 and the rollback drills
 node scripts/rmv2-soak.ts --baseline                    # adds the phase-0 A/B control
+node scripts/rmv2-soak.ts --scale 0.1 --chaos C6 --cold-read-percent 0
 node scripts/rmv2-soak.ts --help
 ```
+
+The C6 control disables cold reads but keeps ordinary SQLite reads at 100%.
+Its positive coverage route changes from `sqlite/selected-cold` to
+`pg/cold-log`.
 
 Call `scripts/rmv2-soak.ts` directly rather than through `pnpm run rmv2-soak --`.
 pnpm forwards the `--` itself as an argument, and `parseArgs` runs `strict`, so
@@ -181,7 +186,7 @@ consistently held is the evidence that the check can be tightened.
 | C3  | Kill a view-syncer, delete its replica, restart                      | restore, then `sqlite`; **must not demote**                      |
 | C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`; stale long-gap replica discarded and restored |
 | C5  | SIGTERM the replication-manager, restart                             | a valid log resumes from its own head                            |
-| C6  | Delete only the change log, restart, then wipe a view-syncer replica | forced `created` reseed; the 1.4 measurement                     |
+| C6  | Delete only the change log, restart, then wipe a view-syncer replica | `sqlite/selected-cold`, or `pg/cold-log` when cold reads are off |
 | C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap                            |
 | C8  | SIGKILL the replication-manager mid-burst, restart                   | reconcile by _truncation_, not reseed                            |
 | C9  | Stop minio for five minutes under sustained writes, then restart it  | live log pages and app-scoped slot WAL grow, then drain          |
