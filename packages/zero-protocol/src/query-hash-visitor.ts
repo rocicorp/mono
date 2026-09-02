@@ -144,8 +144,9 @@ const TAG_OR = 0x2007;
 const TAG_FORMAT = 0x2008;
 const TAG_NAME_ARGS = 0x2009;
 // `System` is a closed set of three, so it folds as one word rather than as a
-// string. The switch below is exhaustive, so adding a member is a type error
-// rather than a silent collision with an existing one.
+// string -- on an AST it appears once per correlated subquery, so this is on
+// the walk's hot path. The switch below is exhaustive, so adding a member is a
+// type error rather than a silent collision with an existing one.
 const TAG_SYSTEM_PERMISSIONS = 0x200a;
 const TAG_SYSTEM_CLIENT = 0x200b;
 const TAG_SYSTEM_TEST = 0x200c;
@@ -243,6 +244,14 @@ function visitOptionalString(s: string | undefined): void {
   }
 }
 
+function mixOptionalSystem(system: System | undefined): void {
+  if (system === undefined) {
+    mix(TAG_UNDEF);
+  } else {
+    mixSystem(system);
+  }
+}
+
 function mixSystem(system: System): void {
   switch (system) {
     case 'permissions':
@@ -336,7 +345,7 @@ function visitCorrelatedSubquery(csq: CorrelatedSubquery): void {
   visitCompoundKey(csq.correlation.parentField);
   visitCompoundKey(csq.correlation.childField);
   mix(csq.hidden === undefined ? TAG_UNDEF : csq.hidden ? TAG_TRUE : TAG_FALSE);
-  visitOptionalString(csq.system);
+  mixOptionalSystem(csq.system);
   visitAST(csq.subquery);
 }
 
