@@ -21,3 +21,21 @@ correctly.
 
 The next harness change measures live and free SQLite pages. It also limits the
 WAL measurement to replication slots that start with `rmv2_soak_0_`.
+
+## `2026-09-02-c9-corrected-post-fix.json`
+
+- Integration branch: `mlaw/soak-post-fix-run` at `879016fb6`.
+- Backup fix: `425ced06a`.
+- Command: `node scripts/rmv2-soak.ts --chaos C9 --seed --run-id c9-corrected-post-fix-2026-09-02`.
+- Duration: 1,026 seconds.
+- Result: `FAIL` because C9 reported one harness finding.
+- Correctness: all five oracle checks passed.
+- Purge: 30,604 rows were removed after MinIO recovered.
+- WAL: the app slot grew from 1.05 MB to 56.29 MB, then decreased to 0.86 MB.
+- Live pages: usage decreased from 13.43 MB to 1.49 MB after recovery.
+
+The pre-outage sample still contained data from the 8 KB payload phase. Its
+live-page usage was 20.41 MB. Thus, the outage sample was smaller even though
+MinIO pinned the purge floor. The app-slot growth proves that the outage pinned
+the upstream acknowledgment. C9 must check the post-recovery decrease, not the
+change from the pre-outage sample.

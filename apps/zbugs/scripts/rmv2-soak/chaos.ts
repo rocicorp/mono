@@ -59,6 +59,54 @@ export type MutableOutcome = {
   measurements: Record<string, number | string>;
 };
 
+export type C9ResourceMeasurements = {
+  readonly changeLogLiveBytesBefore: number;
+  readonly changeLogLiveBytesDuring: number;
+  readonly changeLogLiveBytesAfter: number;
+  readonly slotRetainedBytesBefore: number;
+  readonly slotRetainedBytesDuring: number;
+  readonly slotRetainedBytesAfter: number;
+};
+
+/**
+ * C9 starts after the fat-payload phase, so its pre-outage live-page count can
+ * exceed the count during the outage. Recovery only requires the pinned live
+ * pages and retained WAL to drain after MinIO returns.
+ */
+export function c9ResourceFindings({
+  changeLogLiveBytesBefore,
+  changeLogLiveBytesDuring,
+  changeLogLiveBytesAfter,
+  slotRetainedBytesBefore,
+  slotRetainedBytesDuring,
+  slotRetainedBytesAfter,
+}: C9ResourceMeasurements): string[] {
+  const findings: string[] = [];
+  if (
+    [
+      changeLogLiveBytesBefore,
+      changeLogLiveBytesDuring,
+      changeLogLiveBytesAfter,
+    ].some(bytes => bytes < 0)
+  ) {
+    findings.push('C9: change-log live-page usage was not measurable');
+  } else if (changeLogLiveBytesAfter >= changeLogLiveBytesDuring) {
+    findings.push(
+      'C9: live change-log pages did not drain after the backup recovered',
+    );
+  }
+  if (slotRetainedBytesDuring <= slotRetainedBytesBefore) {
+    findings.push('C9: the minio outage did not grow retained WAL');
+  }
+  if (
+    slotRetainedBytesAfter >= slotRetainedBytesDuring &&
+    slotRetainedBytesDuring > 0
+  ) {
+    findings.push('C9: retained WAL did not drain after the backup recovered');
+  }
+  return findings;
+}
+
 const CENSUS_METRIC = 'sqlite_change_log.catchup_routes';
 
 /**
@@ -632,20 +680,16 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       out.measurements['purgePassesAfterRecovery'] = recoveryPurges.length;
       out.measurements['purgedRowsAfterRecovery'] = purgedRowsAfterRecovery;
 
-      if ([before, during, after].some(s => liveBytes(s) < 0)) {
-        out.findings.push('C9: change-log live-page usage was not measurable');
-      } else {
-        if (liveBytes(during) <= liveBytes(before)) {
-          out.findings.push(
-            'C9: the minio outage did not grow live change-log pages',
-          );
-        }
-        if (liveBytes(after) >= liveBytes(during)) {
-          out.findings.push(
-            'C9: live change-log pages did not drain after the backup recovered',
-          );
-        }
-      }
+      out.findings.push(
+        ...c9ResourceFindings({
+          changeLogLiveBytesBefore: liveBytes(before),
+          changeLogLiveBytesDuring: liveBytes(during),
+          changeLogLiveBytesAfter: liveBytes(after),
+          slotRetainedBytesBefore: slotBytes(before),
+          slotRetainedBytesDuring: slotBytes(during),
+          slotRetainedBytesAfter: slotBytes(after),
+        }),
+      );
       if (backupRecoveries === 0) {
         out.findings.push(
           'C9: no backup watermark was observed after minio recovered',
@@ -654,14 +698,6 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       if (purgedRowsAfterRecovery === 0) {
         out.findings.push(
           'C9: no change-log rows were purged after minio recovered',
-        );
-      }
-      if (slotBytes(during) <= slotBytes(before)) {
-        out.findings.push('C9: the minio outage did not grow retained WAL');
-      }
-      if (slotBytes(after) >= slotBytes(during) && slotBytes(during) > 0) {
-        out.findings.push(
-          'C9: retained WAL did not drain after the backup recovered',
         );
       }
     },
