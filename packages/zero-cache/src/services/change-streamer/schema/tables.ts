@@ -174,6 +174,7 @@ export async function ensureReplicationConfig(
   autoReset: boolean,
   purgeLock?: PurgeLock,
   setTimeoutFn: typeof setTimeout = setTimeout,
+  pgChangeLogEnabled = true,
 ) {
   const {publications, replicaVersion, watermark} = subscriptionState;
   const replicaConfig = {publications, replicaVersion};
@@ -230,7 +231,9 @@ export async function ensureReplicationConfig(
         needsTruncate = true;
         stmts.push(
           sql`TRUNCATE TABLE ${sql(schema)}."replicationState"`,
-          sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
+          ...(pgChangeLogEnabled
+            ? [sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`]
+            : []),
           sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
           sql`TRUNCATE TABLE ${sql(schema)}."tableMetadata"`,
           sql`TRUNCATE TABLE ${sql(schema)}."backfilling"`,
@@ -239,18 +242,20 @@ export async function ensureReplicationConfig(
     }
     // Initialize (or re-initialize TRUNCATED) tables
     if (results.length === 0 || needsTruncate) {
-      // The storer uses the earliest changeLog entry as the safe watermark
-      // from which subscribers can be resumed. These initial entries ensure
-      // that subscribers can start from a freshly synced replica, even if
-      // new changes have been replicated and not purged from the changeLog.
+      // When enabled, the PG storer uses the earliest changeLog entry as the
+      // safe watermark from which subscribers can be resumed. These initial
+      // entries ensure that subscribers can start from a freshly synced
+      // replica, even if new changes have been replicated and not purged.
       //
       // TODO: Replace this with an explicit `firstWatermark` column in the
       //       change db.
       const watermark = replicaConfig.replicaVersion;
-      const initialTx: FullChangeLogEntry[] = [
-        {watermark, pos: 0, change: {tag: 'begin'}},
-        {watermark, pos: 1, change: {tag: 'commit'}},
-      ];
+      const initialTx: FullChangeLogEntry[] = pgChangeLogEnabled
+        ? [
+            {watermark, pos: 0, change: {tag: 'begin'}},
+            {watermark, pos: 1, change: {tag: 'commit'}},
+          ]
+        : [];
 
       stmts.push(
         sql`INSERT INTO ${sql(schema)}."replicationConfig" ${sql(replicaConfig)}`,
