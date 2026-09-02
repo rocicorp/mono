@@ -912,6 +912,23 @@ test('ZERO_ALLOW_LEGACY_QUERIES enables legacy queries', () => {
   expect(config.allowLegacyQueries).toBe(true);
 });
 
+test('partial-index trigger migration defaults on and can be disabled', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+  expect(defaults.config.upstream.pgPartialIndexTriggers).toBe(true);
+
+  const disabled = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_UPSTREAM_PG_PARTIAL_INDEX_TRIGGERS: 'false'},
+  });
+  expect(disabled.config.upstream.pgPartialIndexTriggers).toBe(false);
+});
+
 test('--shard-id disallowed', () => {
   const logger = {info: vi.fn()};
   expect(() =>
