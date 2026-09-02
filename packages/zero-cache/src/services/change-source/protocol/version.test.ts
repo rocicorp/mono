@@ -41,9 +41,9 @@ test('protocol versions', () => {
   // is additive: the stream is parsed in 'passthrough' mode, so an older peer
   // ignores the field and a newer peer treats its absence as "no commit time
   // reported". No new version directory was needed.
-  t(current, '1vrxj3cwxp2mq', '/changes/v0/stream');
+  t(current, '37sbudqm1hcbg', '/changes/v0/stream');
   // During initial development, we use v0 as a non-stable
   // version (i.e. breaking change are allowed). Once the
   // protocol graduates to v1, versions must be stable.
-  t(v0, '1vrxj3cwxp2mq', '/changes/v0/stream');
+  t(v0, '37sbudqm1hcbg', '/changes/v0/stream');
 });

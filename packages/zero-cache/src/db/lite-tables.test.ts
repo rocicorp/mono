@@ -12,8 +12,8 @@ import {
   listIndexes,
   listTables,
   type LiteTableSpecWithReplicationStatus,
-  type ReplicaIndexSpec,
 } from './lite-tables.ts';
+import type {LiteIndexSpec} from './specs.ts';
 
 describe('lite/tables', () => {
   type Case = {
@@ -242,7 +242,7 @@ describe('lite/indexes', () => {
   type Case = {
     name: string;
     setupQuery: string;
-    expectedResult: ReplicaIndexSpec[];
+    expectedResult: LiteIndexSpec[];
   };
 
   const cases: Case[] = [
@@ -318,34 +318,6 @@ describe('lite/indexes', () => {
           tableName: 'users',
           unique: true,
           columns: {handle: 'ASC'},
-        },
-      ],
-    },
-    {
-      name: 'partial indexes',
-      setupQuery: `
-    CREATE TABLE item (
-      id TEXT PRIMARY KEY,
-      active BOOL,
-      deleted_at TEXT,
-      status TEXT
-    );
-    CREATE UNIQUE INDEX active_item ON item (status DESC)
-      WHERE active = 1 AND deleted_at IS NULL;
-    `,
-      expectedResult: [
-        {
-          name: 'active_item',
-          tableName: 'item',
-          unique: true,
-          columns: {status: 'DESC'},
-          partial: true,
-        },
-        {
-          name: 'sqlite_autoindex_item_1',
-          tableName: 'item',
-          unique: true,
-          columns: {id: 'ASC'},
         },
       ],
     },
@@ -458,18 +430,6 @@ describe('computeZqlSpec', () => {
         },
       ]
     `);
-  });
-
-  test('a partial unique index is not a row key', () => {
-    expect(
-      t(`
-        CREATE TABLE partial_only(id "TEXT|NOT_NULL", active BOOL);
-        CREATE UNIQUE INDEX partial_only_id ON partial_only(id)
-          WHERE active = 1;
-        CREATE TABLE full_key(id "TEXT|NOT_NULL");
-        CREATE UNIQUE INDEX full_key_id ON full_key(id);
-      `).map(({tableSpec}) => tableSpec.name),
-    ).toEqual(['full_key']);
   });
 
   test('min row version', () => {

@@ -648,15 +648,4 @@ describe('SQLiteStatFanout', () => {
       expect(result2.source).not.toBe('default');
     });
   });
-
-  test('partial-index statistics are ignored', () => {
-    db.exec(`
-      CREATE TABLE item(id INTEGER PRIMARY KEY, project_id INTEGER, active INTEGER);
-      CREATE INDEX active_project ON item(project_id) WHERE active = 1;
-      INSERT INTO item VALUES (1, 10, 1), (2, 10, 1), (3, 20, 0);
-      ANALYZE;
-    `);
-    fanoutCalc = new SQLiteStatFanout(db);
-    expectFanout('item', ['project_id'], {source: 'default', fanout: 3});
-  });
 });

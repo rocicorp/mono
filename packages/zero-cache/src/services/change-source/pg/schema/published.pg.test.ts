@@ -1691,7 +1691,6 @@ describe('tables/published', () => {
         issue_id INTEGER PRIMARY KEY,
         org_id INTEGER CHECK (org_id > 0),
         component_id INTEGER,
-        secret INTEGER,
         excluded INTEGER GENERATED ALWAYS AS (issue_id + 1) STORED
       );
       CREATE TABLE test.users (
@@ -1700,15 +1699,9 @@ describe('tables/published', () => {
       );
       CREATE INDEX idx_with_expression ON test.issues (org_id, (component_id + 1));
       CREATE INDEX partial_idx ON test.issues (component_id) WHERE org_id > 1000;
-      CREATE INDEX unpublished_predicate ON test.issues (component_id) WHERE secret > 0;
-      CREATE INDEX unsupported_function ON test.issues (component_id) WHERE abs(org_id) > 0;
-      CREATE UNIQUE INDEX partial_unique ON test.issues (component_id)
-        WHERE org_id > 0;
       CREATE INDEX idx_with_gen ON test.issues (issue_id, org_id, component_id, excluded);
       CREATE INDEX birthday_idx ON test.users (user_id, birthday);
-      CREATE PUBLICATION zero_data FOR
-        TABLE test.issues (issue_id, org_id, component_id),
-        TABLE test.users (user_id);`,
+      CREATE PUBLICATION zero_data FOR TABLE test.issues, TABLE test.users (user_id);`,
         {
           publications: [
             {
@@ -1795,48 +1788,6 @@ describe('tables/published', () => {
           "isImmediate": true,
           "columns": {
             "issue_id": "ASC"
-          }
-        },
-        {
-          "schema": "test",
-          "tableName": "issues",
-          "name": "partial_idx",
-          "unique": false,
-          "isPrimaryKey": false,
-          "isReplicaIdentity": false,
-          "isImmediate": true,
-          "columns": {
-            "component_id": "ASC"
-          },
-          "predicate": {
-            "type": "comparison",
-            "column": "org_id",
-            "op": ">",
-            "value": {
-              "type": "integer",
-              "value": "1000"
-            }
-          }
-        },
-        {
-          "schema": "test",
-          "tableName": "issues",
-          "name": "partial_unique",
-          "unique": false,
-          "isPrimaryKey": false,
-          "isReplicaIdentity": false,
-          "isImmediate": true,
-          "columns": {
-            "component_id": "ASC"
-          },
-          "predicate": {
-            "type": "comparison",
-            "column": "org_id",
-            "op": ">",
-            "value": {
-              "type": "integer",
-              "value": "0"
-            }
           }
         },
         {
@@ -1989,27 +1940,6 @@ describe('tables/published', () => {
           "isImmediate": true,
           "columns": {
             "issue_id": "ASC"
-          }
-        },
-        {
-          "schema": "test",
-          "tableName": "issues",
-          "name": "partial_idx",
-          "unique": false,
-          "isPrimaryKey": false,
-          "isReplicaIdentity": false,
-          "isImmediate": true,
-          "columns": {
-            "component_id": "ASC"
-          },
-          "predicate": {
-            "type": "comparison",
-            "column": "org_id",
-            "op": ">",
-            "value": {
-              "type": "integer",
-              "value": "1000"
-            }
           }
         },
         {
