@@ -2722,7 +2722,12 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         // Test stringified indexes to verify field ordering.
         expect(JSON.stringify(syncedIndexes, null, 2)).toEqual(
           JSON.stringify(
-            c.replicatedIndexes.map(idx => mapPostgresToLiteIndex(idx)),
+            c.replicatedIndexes.map(idx => {
+              // The replica reports a `partial` flag rather than the
+              // structured predicate.
+              const {predicate, ...lite} = mapPostgresToLiteIndex(idx);
+              return predicate ? {...lite, partial: true} : lite;
+            }),
             null,
             2,
           ),

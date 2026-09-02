@@ -16,10 +16,6 @@ import {
   mapLiteDataTypeToZqlSchemaValue,
   nullableUpstream,
 } from '../types/lite.ts';
-import {
-  extractLiteIndexPredicateSQL,
-  parseLiteIndexPredicateSQL,
-} from './index-predicate.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import type {
   LiteAndZqlSpec,
@@ -37,8 +33,6 @@ type ColumnInfo = {
   dflt: string | null;
   keyPos: number;
 };
-
-const BOOLEAN_LITE_TYPE_RE = /^(?:bool|boolean)(?:\||$)/i;
 
 export type LiteTableSpecWithReplicationStatus = LiteTableSpec & {
   readonly backfilling?: string[];
@@ -144,7 +138,20 @@ export function listTables(
   return tables;
 }
 
-export function listIndexes(db: Database): LiteIndexSpec[] {
+/**
+ * An index as it exists on the replica. SQLite retains only the DDL text of a
+ * partial index, not a structured predicate, so replica indexes report a
+ * `partial` flag in place of the {@link LiteIndexSpec.predicate}.
+ */
+export type ReplicaIndexSpec = Omit<LiteIndexSpec, 'predicate'> & {
+  readonly partial?: boolean | undefined;
+};
+
+type MutableReplicaIndexSpec = Omit<MutableLiteIndexSpec, 'predicate'> & {
+  partial?: boolean | undefined;
+};
+
+export function listIndexes(db: Database): ReplicaIndexSpec[] {
   const indexes = db
     .prepare(
       `SELECT 
@@ -152,7 +159,6 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
          idx.tbl_name as tableName, 
          info."unique" as "unique",
          info.partial as partial,
-         idx.sql as sql,
          col.name as column,
          CASE WHEN col.desc = 0 THEN 'ASC' ELSE 'DESC' END as dir
       FROM sqlite_master as idx
@@ -168,33 +174,16 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
     tableName: string;
     unique: number;
     partial: number;
-    sql: string | null;
     column: string;
     dir: 'ASC' | 'DESC';
   }[];
 
-  const ret: MutableLiteIndexSpec[] = [];
-  const booleanColumns = new Map<string, ReadonlySet<string>>();
-  const isBooleanColumn = (table: string, column: string) => {
-    let columns = booleanColumns.get(table);
-    if (!columns) {
-      columns = new Set(
-        db
-          .prepare('SELECT name, type FROM pragma_table_info(?)')
-          .all<{name: string; type: string}>(table)
-          .filter(({type}) => BOOLEAN_LITE_TYPE_RE.test(type))
-          .map(({name}) => name),
-      );
-      booleanColumns.set(table, columns);
-    }
-    return columns.has(column);
-  };
+  const ret: MutableReplicaIndexSpec[] = [];
   for (const {
     indexName: name,
     tableName,
     unique,
     partial,
-    sql,
     column,
     dir,
   } of indexes) {
@@ -207,15 +196,7 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
         name,
         columns: {[column]: dir},
         unique: unique !== 0,
-        predicate:
-          partial === 0
-            ? undefined
-            : parseLiteIndexPredicateSQL(
-                extractLiteIndexPredicateSQL(
-                  must(sql, `partial index ${name} has no SQL definition`),
-                ),
-                column => isBooleanColumn(tableName, column),
-              ),
+        ...(partial === 0 ? {} : {partial: true}),
       });
     }
   }
@@ -266,9 +247,16 @@ export function computeZqlSpecs(
   );
 }
 
+function isPartialIndex(idx: LiteIndexSpec | ReplicaIndexSpec): boolean {
+  return (
+    ('predicate' in idx && idx.predicate !== undefined) ||
+    ('partial' in idx && idx.partial === true)
+  );
+}
+
 export function computeZqlSpecsFromLiteSpecs(
   tables: LiteTableSpecWithReplicationStatus[],
-  indexes: LiteIndexSpec[],
+  indexes: readonly (LiteIndexSpec | ReplicaIndexSpec)[],
   {includeBackfillingColumns}: ZqlSpecOptions,
   tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
   fullTables?: Map<string, LiteTableSpec>,
@@ -278,8 +266,10 @@ export function computeZqlSpecsFromLiteSpecs(
   fullTables?.clear();
 
   const uniqueIndexColumns = new Map<string, string[][]>();
+  // A partial unique index only constrains the rows matching its predicate,
+  // so it cannot serve as a row key.
   for (const {tableName, columns} of indexes.filter(
-    idx => idx.unique && idx.predicate === undefined,
+    idx => idx.unique && !isPartialIndex(idx),
   )) {
     if (!uniqueIndexColumns.has(tableName)) {
       uniqueIndexColumns.set(tableName, []);

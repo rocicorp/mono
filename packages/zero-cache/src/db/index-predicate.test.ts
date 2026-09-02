@@ -3,10 +3,8 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {Database} from '../../../zqlite/src/db.ts';
 import {createLiteIndexStatement} from './create.ts';
 import {
-  extractLiteIndexPredicateSQL,
   liteIndexPredicateSQL,
   mapIndexPredicateColumns,
-  parseLiteIndexPredicateSQL,
 } from './index-predicate.ts';
 import type {IndexPredicate} from './specs.ts';
 
@@ -41,22 +39,9 @@ describe('SQLite index predicates', () => {
     ],
   } as const satisfies IndexPredicate;
 
-  test('generates and parses canonical SQLite SQL', () => {
-    const sql = liteIndexPredicateSQL(predicate);
-    expect(sql).toBe(
+  test('generates canonical SQLite SQL', () => {
+    expect(liteIndexPredicateSQL(predicate)).toBe(
       `("active" = 1 AND ("deleted_at" IS NULL OR "attempts" >= -5 OR "kind""quoted" <> 'it''s \\ unicode ✓'))`,
-    );
-    expect(
-      parseLiteIndexPredicateSQL(sql, column => column === 'active'),
-    ).toEqual(predicate);
-  });
-
-  test('extracts only a top-level WHERE clause', () => {
-    const create =
-      `CREATE INDEX "WHE""RE" ON "t" ("where" ASC) ` +
-      `WHERE ${liteIndexPredicateSQL(predicate)};`;
-    expect(extractLiteIndexPredicateSQL(create)).toBe(
-      liteIndexPredicateSQL(predicate),
     );
   });
 

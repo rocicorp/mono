@@ -12,8 +12,8 @@ import {
   listIndexes,
   listTables,
   type LiteTableSpecWithReplicationStatus,
+  type ReplicaIndexSpec,
 } from './lite-tables.ts';
-import type {LiteIndexSpec} from './specs.ts';
 
 describe('lite/tables', () => {
   type Case = {
@@ -242,7 +242,7 @@ describe('lite/indexes', () => {
   type Case = {
     name: string;
     setupQuery: string;
-    expectedResult: LiteIndexSpec[];
+    expectedResult: ReplicaIndexSpec[];
   };
 
   const cases: Case[] = [
@@ -339,18 +339,7 @@ describe('lite/indexes', () => {
           tableName: 'item',
           unique: true,
           columns: {status: 'DESC'},
-          predicate: {
-            type: 'and',
-            conditions: [
-              {
-                type: 'comparison',
-                column: 'active',
-                op: '=',
-                value: {type: 'boolean', value: true},
-              },
-              {type: 'null-test', column: 'deleted_at', op: 'IS NULL'},
-            ],
-          },
+          partial: true,
         },
         {
           name: 'sqlite_autoindex_item_1',

@@ -5,8 +5,12 @@ import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
-import {listIndexes, listTables} from '../../../db/lite-tables.ts';
-import type {LiteIndexSpec, LiteTableSpec} from '../../../db/specs.ts';
+import {
+  listIndexes,
+  listTables,
+  type ReplicaIndexSpec,
+} from '../../../db/lite-tables.ts';
+import type {LiteTableSpec} from '../../../db/specs.ts';
 import {getConnectionURI, testDBs} from '../../../test/db.ts';
 import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
@@ -1227,11 +1231,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           name: 'foo_live',
           columns: {id: 'ASC'},
           unique: true,
-          predicate: {
-            type: 'null-test',
-            column: 'flt',
-            op: 'IS NOT NULL',
-          },
+          partial: true,
         },
       ],
     ],
@@ -2123,7 +2123,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     transactions: Partial<DataOrSchemaChange>[][],
     expectedData: Record<string, JSONValue>,
     expectedTables: LiteTableSpec[],
-    expectedIndexes: LiteIndexSpec[],
+    expectedIndexes: ReplicaIndexSpec[],
   ][])(
     '%s',
     async (

@@ -6,10 +6,10 @@ import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {
   listIndexes,
+  type ReplicaIndexSpec,
   listTables,
   type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
-import type {LiteIndexSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -59,7 +59,9 @@ describe('replicator/change-processor', () => {
     downstream: ChangeStreamData[];
     data: Record<string, Record<string, unknown>[]>;
     tableSpecs?: LiteTableSpecWithReplicationStatus[];
-    indexSpecs?: LiteIndexSpec[];
+    indexSpecs?: ReplicaIndexSpec[];
+    // Expected `sqlite_master.sql` for named indexes.
+    indexDDL?: Record<string, string>;
     expectedTablesInBackupReplicatorChangeLog?: string[];
   };
 
@@ -2356,13 +2358,13 @@ describe('replicator/change-processor', () => {
           name: 'foo_present',
           unique: false,
           columns: {id: 'ASC'},
-          predicate: {
-            type: 'null-test',
-            column: 'number',
-            op: 'IS NOT NULL',
-          },
+          partial: true,
         },
       ],
+      indexDDL: {
+        foo_present:
+          'CREATE INDEX foo_present ON foo (id) WHERE "number" IS NOT NULL',
+      },
     },
     {
       name: 'drop table',
@@ -3698,6 +3700,13 @@ describe('replicator/change-processor', () => {
         }
         if (c.indexSpecs) {
           expect(listIndexes(replica)).toEqual(c.indexSpecs);
+        }
+        for (const [name, ddl] of Object.entries(c.indexDDL ?? {})) {
+          expect(
+            replica
+              .prepare(`SELECT sql FROM sqlite_master WHERE name = ?`)
+              .get<{sql: string}>(name)?.sql,
+          ).toBe(ddl);
         }
       }
     });
