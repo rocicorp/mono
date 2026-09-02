@@ -2,7 +2,11 @@ import type postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import * as PostgresTypeClass from '../../../../db/postgres-type-class-enum.ts';
 import {test, type PgTest} from '../../../../test/db.ts';
-import {getPublicationInfo, type PublicationInfo} from './published.ts';
+import {
+  getPublicationInfo,
+  getSkippedIndexDiagnostics,
+  type PublicationInfo,
+} from './published.ts';
 
 describe('tables/published', () => {
   let db: postgres.Sql;
@@ -1853,6 +1857,83 @@ describe('tables/published', () => {
         }
       ]"
     `);
+  });
+
+  test('production partial-index predicate shapes', async () => {
+    await db.unsafe(/*sql*/ `
+      CREATE SCHEMA test;
+      CREATE TABLE test.items (
+        id INT PRIMARY KEY,
+        language TEXT,
+        is_primary BOOL,
+        nullable_id INT,
+        status TEXT,
+        end_date TEXT,
+        following BOOL,
+        is_reciprocal_follow BOOL,
+        closed_at TIMESTAMPTZ
+      );
+      CREATE INDEX boolean_false ON test.items (id) WHERE is_primary = false;
+      CREATE INDEX text_equality ON test.items (id) WHERE language = 'en-US';
+      CREATE INDEX boolean_true ON test.items (id) WHERE is_primary = true;
+      CREATE INDEX bare_boolean ON test.items (id) WHERE following;
+      CREATE INDEX null_test ON test.items (id) WHERE nullable_id IS NOT NULL;
+      CREATE INDEX and_predicate ON test.items (id)
+        WHERE following AND is_reciprocal_follow = false;
+      CREATE INDEX is_null ON test.items (id) WHERE closed_at IS NULL;
+      CREATE INDEX literal_list ON test.items (id)
+        WHERE status IN ('in_progress', 'want_to_read');
+      CREATE INDEX regex ON test.items (id)
+        WHERE end_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+      CREATE PUBLICATION zero_data FOR TABLE test.items;
+    `);
+
+    const published = await getPublicationInfo(db, ['zero_data']);
+    const partialIndexes = published.indexes.filter(
+      index => index.name !== 'items_pkey',
+    );
+    expect(partialIndexes.map(index => index.name).sort()).toEqual([
+      'and_predicate',
+      'bare_boolean',
+      'boolean_false',
+      'boolean_true',
+      'is_null',
+      'literal_list',
+      'null_test',
+      'text_equality',
+    ]);
+    expect(partialIndexes.every(index => index.predicate !== undefined)).toBe(
+      true,
+    );
+    expect(
+      published.indexes.find(index => index.name === 'literal_list'),
+    ).toMatchObject({
+      predicate: {
+        type: 'or',
+        conditions: [
+          {
+            type: 'comparison',
+            column: 'status',
+            op: '=',
+            value: {type: 'string', value: 'in_progress'},
+          },
+          {
+            type: 'comparison',
+            column: 'status',
+            op: '=',
+            value: {type: 'string', value: 'want_to_read'},
+          },
+        ],
+      },
+    });
+    expect(getSkippedIndexDiagnostics(published)).toEqual([
+      {
+        schema: 'test',
+        index: 'regex',
+        predicate: "(end_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'::text)",
+        reason: 'unsupported-operator',
+      },
+    ]);
   });
 
   test('includes generated columns for pg 18+', async ({skip}) => {
