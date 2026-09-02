@@ -1,0 +1,639 @@
+{
+  "runID": "cold-read-control-post-fix-2026-09-02",
+  "startedMs": 1788380378657,
+  "finishedMs": 1788380537315,
+  "config": {
+    "appID": "rmv2_soak",
+    "viewSyncers": 3,
+    "changeLog": {
+      "mode": "serve",
+      "readPercent": 100,
+      "coldReadPercent": 0,
+      "comparePercent": 100,
+      "retentionMs": 60000
+    },
+    "backupIntervalSeconds": 2,
+    "vfsPollIntervalMs": 1000,
+    "startupDelayMs": 1000,
+    "snapshotBackupIntervalHours": 4,
+    "chaos": ["C6"],
+    "scale": 0.1,
+    "baseline": false,
+    "root": "/Users/mlaw/workspace/zero/mono/apps/zbugs/.soak/cold-read-control-post-fix-2026-09-02"
+  },
+  "phases": [
+    {
+      "name": "sustained",
+      "startedMs": 1788380390446,
+      "finishedMs": 1788380420413,
+      "stages": [
+        {
+          "label": "sustained",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 30,
+          "transactions": 750,
+          "mutations": 900,
+          "elapsedSeconds": 29.965306540999997,
+          "actualTransactionsPerSecond": 25.028944688879232,
+          "shapes": {
+            "insert": 300,
+            "update": 300,
+            "delete": 75,
+            "churn": 75
+          },
+          "residueRows": 225,
+          "latencyMs": {
+            "p50": 4.262624999999389,
+            "p95": 6.900999999998021,
+            "p99": 12.39916699999958,
+            "max": 23.08245900000111
+          }
+        }
+      ]
+    },
+    {
+      "name": "burst",
+      "startedMs": 1788380420955,
+      "finishedMs": 1788380430957,
+      "stages": [
+        {
+          "label": "burst-1",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 2,
+          "transactions": 1000,
+          "mutations": 1200,
+          "elapsedSeconds": 2.0003761659999943,
+          "actualTransactionsPerSecond": 499.90597618428274,
+          "shapes": {
+            "insert": 400,
+            "update": 400,
+            "delete": 100,
+            "churn": 100
+          },
+          "residueRows": 525,
+          "latencyMs": {
+            "p50": 1.6126670000012382,
+            "p95": 3.9229170000035083,
+            "p99": 13.4209170000031,
+            "max": 23.141749999995227
+          }
+        },
+        {
+          "label": "burst-gap-1",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 2,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 2.0006885830000027,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 525,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        },
+        {
+          "label": "burst-2",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 2,
+          "transactions": 1000,
+          "mutations": 1200,
+          "elapsedSeconds": 1.9999947909999973,
+          "actualTransactionsPerSecond": 500.0013022533924,
+          "shapes": {
+            "insert": 400,
+            "update": 400,
+            "delete": 100,
+            "churn": 100
+          },
+          "residueRows": 825,
+          "latencyMs": {
+            "p50": 1.5197079999998095,
+            "p95": 3.3882919999959995,
+            "p99": 5.386833000004117,
+            "max": 7.4487909999952535
+          }
+        },
+        {
+          "label": "burst-gap-2",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 2,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 1.9998939159999936,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 825,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        },
+        {
+          "label": "burst-3",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 2,
+          "transactions": 1000,
+          "mutations": 1200,
+          "elapsedSeconds": 2.000735166999999,
+          "actualTransactionsPerSecond": 499.81627578399065,
+          "shapes": {
+            "insert": 400,
+            "update": 400,
+            "delete": 100,
+            "churn": 100
+          },
+          "residueRows": 1125,
+          "latencyMs": {
+            "p50": 1.563125000000582,
+            "p95": 3.3439590000052704,
+            "p99": 5.824583000001439,
+            "max": 11.139917000000423
+          }
+        }
+      ]
+    },
+    {
+      "name": "quiet",
+      "startedMs": 1788380431431,
+      "finishedMs": 1788380506432,
+      "stages": [
+        {
+          "label": "quiet",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 75,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 75.00039091699999,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 1125,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "fat",
+      "startedMs": 1788380507068,
+      "finishedMs": 1788380519039,
+      "stages": [
+        {
+          "label": "fat",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 12,
+          "transactions": 300,
+          "mutations": 360,
+          "elapsedSeconds": 11.970676250000004,
+          "actualTransactionsPerSecond": 25.061240796650893,
+          "shapes": {
+            "insert": 120,
+            "update": 120,
+            "delete": 30,
+            "churn": 30
+          },
+          "residueRows": 1215,
+          "latencyMs": {
+            "p50": 5.034875000012107,
+            "p95": 8.172665999998571,
+            "p99": 12.558332999993581,
+            "max": 20.340666000003694
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed",
+      "startedMs": 1788380519688,
+      "finishedMs": 1788380531294,
+      "stages": [
+        {
+          "label": "mixed-sustained",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 6,
+          "transactions": 150,
+          "mutations": 180,
+          "elapsedSeconds": 5.964619959000003,
+          "actualTransactionsPerSecond": 25.14829126265879,
+          "shapes": {
+            "insert": 60,
+            "update": 60,
+            "delete": 15,
+            "churn": 15
+          },
+          "residueRows": 1260,
+          "latencyMs": {
+            "p50": 3.6127080000005662,
+            "p95": 8.507666999998037,
+            "p99": 38.72399999998743,
+            "max": 42.02708299999358
+          }
+        }
+      ]
+    }
+  ],
+  "oracle": [
+    {
+      "label": "after phase sustained",
+      "atMs": 1788380420955,
+      "quiesceMs": 127,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69fljjm8",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 14459,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69fljjm8",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 14459,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69fljjm8",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 14459,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69fljjm8",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 14459,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase burst",
+      "atMs": 1788380431431,
+      "quiesceMs": 108,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69fuj4yo",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15359,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69fuj4yo",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15359,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69fuj4yo",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15359,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69fuj4yo",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15359,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase quiet",
+      "atMs": 1788380507068,
+      "quiesceMs": 233,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69fvbx6w",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15359,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69fvbx6w",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15359,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69fvbx6w",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15359,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69fvbx6w",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15359,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase fat",
+      "atMs": 1788380519688,
+      "quiesceMs": 226,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69fwxbko",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15449,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69fwxbko",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15449,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69fwxbko",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15449,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69fwxbko",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15449,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after C6",
+      "atMs": 1788380531294,
+      "quiesceMs": 232,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "69fxmukg",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15494,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "69fxmukg",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15494,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "69fxmukg",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15494,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "69fxmukg",
+          "replicaVersion": "69fj4we8",
+          "tables": 13,
+          "rows": 15494,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    }
+  ],
+  "chaos": [
+    {
+      "id": "C6",
+      "title": "Stop the RM, delete only the change log, restart, then immediately wipe a view-syncer replica",
+      "startedMs": 1788380519688,
+      "finishedMs": 1788380530650,
+      "notes": [
+        "deleted only replica.db-change-log*",
+        "SIGQUIT vs-2",
+        "deleted vs-2's replica"
+      ],
+      "census": {
+        "pg/not-ready": 4,
+        "pg/cold-log": 1
+      },
+      "findings": [],
+      "measurements": {
+        "reseedReason": "created",
+        "restartMs.vs-2": 1597,
+        "reservationHoldMs.vs-2": 3,
+        "reseedToConfirmMs": 4782,
+        "demotions": 0,
+        "reseedSeedWatermark": "69fwxbko",
+        "reseedToCoveringBackupMs": 3697,
+        "reseedCoveringBackupWatermark": "69fxdw34"
+      }
+    }
+  ],
+  "census": {
+    "pg/not-ready": 5,
+    "pg/log-unavailable": 1,
+    "pg/cold-log": 3
+  },
+  "coverage": [
+    {
+      "route": "pg/cold-log",
+      "count": 3,
+      "triggeredBy": "C6 or C13 after a reseed with cold reads disabled"
+    }
+  ],
+  "tripwires": [],
+  "measurements": {
+    "reseedToCoveringBackupMs": {
+      "n": 1,
+      "min": 3697,
+      "p50": 3697,
+      "p95": 3697,
+      "max": 3697,
+      "mean": 3697
+    },
+    "reservationHoldMs": {
+      "n": 1,
+      "min": 3,
+      "p50": 3,
+      "p95": 3,
+      "max": 3,
+      "mean": 3
+    },
+    "reservationHoldMsC3": {
+      "n": 0
+    },
+    "reseedToCoveringBackupMsC6C13": {
+      "n": 1,
+      "min": 3697,
+      "p50": 3697,
+      "p95": 3697,
+      "max": 3697,
+      "mean": 3697
+    },
+    "backupLagMs": {
+      "n": 33,
+      "min": 20,
+      "p50": 1008,
+      "p95": 2623,
+      "max": 111766,
+      "mean": 4047.939393939394
+    },
+    "reservationConfirmDelays": 0,
+    "reservationDemotions": 0,
+    "barrierTimeouts": 0,
+    "compareResults": {},
+    "initCompareResults": {
+      "equal": 2
+    },
+    "floorProbes": {
+      "retained": 4
+    },
+    "reconcileWipes": {
+      "created": 2
+    },
+    "purgeDeclines": {},
+    "catchupRows": 0,
+    "catchupBytes": 0,
+    "catchupDurationSeconds": 0,
+    "catchupResults": {},
+    "litestreamRestores": {
+      "no_backup": 1,
+      "success": 5
+    },
+    "purgedRows": 12008
+  },
+  "resources": {
+    "changeLogBytes": {
+      "n": 30,
+      "min": 0,
+      "p50": 13536504,
+      "p95": 14115816,
+      "max": 14115816,
+      "mean": 10399174.133333333
+    },
+    "changeLogBytesFinal": 2809848,
+    "changeLogLiveBytes": {
+      "n": 29,
+      "min": 221184,
+      "p50": 4583424,
+      "p95": 5517312,
+      "max": 5517312,
+      "mean": 3214653.793103448
+    },
+    "changeLogLiveBytesFinal": 262144,
+    "changeLogFreeBytes": {
+      "n": 29,
+      "min": 0,
+      "p50": 0,
+      "p95": 3526656,
+      "max": 4677632,
+      "mean": 476124.6896551724
+    },
+    "changeLogFreeBytesFinal": 0,
+    "slotRetainedBytes": {
+      "n": 30,
+      "min": 56,
+      "p50": 908336,
+      "p95": 7502328,
+      "max": 7602776,
+      "mean": 1925095.7333333334
+    },
+    "slotRetainedBytesFinal": 3211592,
+    "backupBytesFinal": 33780719,
+    "backupObjectsFinal": 130,
+    "purge": {
+      "longestBatchLimitStreak": 0,
+      "passes": 4,
+      "batchLimitPasses": 0,
+      "immediateContinuations": 0,
+      "byStopReason": {
+        "none": 4
+      }
+    },
+    "samples": 30
+  },
+  "findings": [],
+  "pass": true
+}

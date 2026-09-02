@@ -55,3 +55,21 @@ change from the pre-outage sample.
 
 This run confirms C9 recovery after the planned five-minute MinIO outage. The
 physical SQLite file stayed at 42.37 MB and reused 31.62 MB of free pages.
+
+## `2026-09-02-cold-read-control-post-fix.json`
+
+- Integration branch: `mlaw/soak-post-fix-run` at `560f313ee`.
+- Backup fix: `425ced06a`.
+- Command: `node scripts/rmv2-soak.ts --scale 0.1 --chaos C6 --read-percent 100 --cold-read-percent 0 --seed --run-id cold-read-control-post-fix-2026-09-02`.
+- Duration: 159 seconds.
+- Result: `PASS` with no findings.
+- Coverage: three requests used `pg/cold-log`.
+- Correctness: all five oracle checks passed.
+- Reseed window: 3,697 ms.
+- Reservation hold: 3 ms.
+- Safety: no reservation demotions, barrier timeouts, or purge-floor violations occurred.
+
+The full run with `coldReadPercent=100` routed C6 through
+`sqlite/selected-cold`. This control routed the same cold C6 path through
+`pg/cold-log`. Thus, the cold-read setting is the only route-selection
+difference between these run shapes.
