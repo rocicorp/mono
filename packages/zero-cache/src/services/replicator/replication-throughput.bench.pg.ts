@@ -59,6 +59,7 @@ const shard = {
 };
 const benchmarkRecorder = createManualBenchmarkRecorder();
 const streamerOptions = {
+  pgChangeLogEnabled: true,
   backPressureLimitHeapProportion: 0.04,
   flowControlConsensusTimeoutProportion: 2,
   statementTimeoutMs: 60_000,

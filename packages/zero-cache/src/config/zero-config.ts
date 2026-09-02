@@ -734,6 +734,16 @@ export const zeroOptions = {
       hidden: true,
     },
 
+    pgChangeLogEnabled: {
+      type: v.boolean().default(true),
+      desc: [
+        `Whether the legacy Postgres change log remains authoritative for`,
+        `stream initialization, persistence, catchup, and upstream ACKs.`,
+        `Disabling it requires SQLite serve mode at 100 percent and a v5 backup.`,
+      ],
+      hidden: true,
+    },
+
     sqliteChangeLogReadPercent: {
       type: v.number().default(0),
       desc: [
