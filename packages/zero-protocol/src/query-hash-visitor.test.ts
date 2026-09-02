@@ -615,3 +615,63 @@ test('hashOfQueryInternals separates queries that differ only by system', () => 
   const test_ = hashOfQueryInternals(a, fmt, 'test', undefined, undefined);
   expect(new Set([client, perms, test_]).size).toBe(3);
 });
+
+test('every simple operator hashes distinctly', () => {
+  // The operator is looked up in a Record rather than switched on, so a
+  // duplicated tag would be silent -- two operators would hash alike and the
+  // Record's type would still be satisfied. Pin every one apart.
+  const ops = [
+    '=',
+    '!=',
+    'IS',
+    'IS NOT',
+    '<',
+    '>',
+    '<=',
+    '>=',
+    'LIKE',
+    'NOT LIKE',
+    'ILIKE',
+    'NOT ILIKE',
+    'IN',
+    'NOT IN',
+  ] as const;
+  const byHash = new Map<string, string>();
+  for (const op of ops) {
+    const h = hashAST(
+      where({
+        type: 'simple',
+        op,
+        left: {type: 'column', name: 'title'},
+        right: {type: 'literal', value: 'x'},
+      }),
+    );
+    const existing = byHash.get(h);
+    expect(existing, `${op} collided with ${existing}`).toBeUndefined();
+    byHash.set(h, op);
+  }
+  expect(byHash.size).toBe(ops.length);
+});
+
+test('both exists operators hash distinctly', () => {
+  const related = {
+    correlation: {parentField: ['id'], childField: ['issueId']},
+    subquery: {table: 'comment', alias: 'c'},
+  } as const;
+  const cond = (op: 'EXISTS' | 'NOT EXISTS') =>
+    hashAST(where({type: 'correlatedSubquery', op, related}));
+  expect(cond('EXISTS')).not.toBe(cond('NOT EXISTS'));
+});
+
+test('both parameter anchors hash distinctly', () => {
+  const cond = (anchor: 'authData' | 'preMutationRow') =>
+    hashAST(
+      where({
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'ownerID'},
+        right: {type: 'static', anchor, field: 'sub'},
+      }),
+    );
+  expect(cond('authData')).not.toBe(cond('preMutationRow'));
+});
