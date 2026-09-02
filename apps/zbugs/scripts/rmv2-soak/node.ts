@@ -106,6 +106,7 @@ export class SoakNode {
   #logStream: WriteStream | undefined;
   #exited: Promise<{code: number | null; signal: NodeJS.Signals | null}> =
     Promise.resolve({code: null, signal: null});
+  #unexpectedExit: Promise<never> = new Promise(() => {});
   #startCount = 0;
   #stopping = false;
   /**
@@ -139,6 +140,10 @@ export class SoakNode {
 
   get startCount(): number {
     return this.#startCount;
+  }
+
+  get unexpectedExit(): Promise<never> {
+    return this.#unexpectedExit;
   }
 
   /**
@@ -190,6 +195,18 @@ export class SoakNode {
         resolve({code, signal});
       });
     });
+    this.#unexpectedExit = this.#exited.then(({code, signal}) => {
+      if (!this.#stopping) {
+        throw new Error(
+          `${this.name} exited unexpectedly (code=${code} signal=${signal})`,
+        );
+      }
+      return new Promise<never>(() => {});
+    });
+    // A node can exit between awaited harness operations. Mark the rejection
+    // handled here; `SoakCluster.guard()` still observes the original promise
+    // and fails the operation currently in flight.
+    this.#unexpectedExit.catch(() => undefined);
 
     // Sample the tree while the node is coming up, so that a start which
     // fails partway through still leaves a reapable set behind.
@@ -203,20 +220,8 @@ export class SoakNode {
         record.message.startsWith('all workers ready'),
       readyTimeoutMs,
     );
-    const died = this.#exited.then(({code, signal}) => {
-      if (!this.#stopping) {
-        throw new Error(
-          `${this.name} exited before becoming ready (code=${code} signal=${signal})`,
-        );
-      }
-      return undefined;
-    });
-    // The process usually outlives `start()`, so this rejection has to be
-    // marked handled; attaching the handler does not stop the race below from
-    // seeing it.
-    died.catch(() => undefined);
     try {
-      await Promise.race([ready, died]);
+      await Promise.race([ready, this.#unexpectedExit]);
     } catch (e) {
       // A failed start still leaves workers behind; reap them so the next
       // attempt is not blocked by the replica locks they hold.

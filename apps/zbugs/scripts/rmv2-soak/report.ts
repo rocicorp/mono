@@ -296,6 +296,7 @@ export function buildReport(args: {
     startedMs: args.startedMs,
     finishedMs: Date.now(),
     config: {
+      appID: config.appID,
       viewSyncers: config.viewSyncers,
       changeLog: config.changeLog,
       backupIntervalSeconds: config.backupIntervalSeconds,

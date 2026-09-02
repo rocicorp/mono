@@ -41,6 +41,7 @@ export type SoakConfig = {
   readonly reportPath: string;
 
   readonly upstreamDB: string;
+  readonly appID: string;
   readonly viewSyncers: number;
 
   readonly rmPort: number;
@@ -111,6 +112,11 @@ function commonEnv(config: SoakConfig, node: string): NodeJS.ProcessEnv {
     ZERO_UPSTREAM_DB: config.upstreamDB,
     ZERO_CVR_DB: config.upstreamDB,
     ZERO_CHANGE_DB: config.upstreamDB,
+    // Do not share the default `zero` app's CDC ownership row or replication
+    // slot with an ordinary local zbugs process. The fixed ports already make
+    // concurrent soak runs mutually exclusive, so a stable dedicated id is
+    // sufficient and avoids leaking a new slot/schema for every run.
+    ZERO_APP_ID: config.appID,
     ZERO_TASK_ID: node,
     ZERO_LOG_FORMAT: 'json',
     ZERO_SHADOW_SYNC_ENABLED: 'false',

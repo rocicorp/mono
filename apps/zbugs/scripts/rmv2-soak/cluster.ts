@@ -11,6 +11,13 @@ import type {SoakLog} from './logs.ts';
 import {SoakNode} from './node.ts';
 import type {ReplicaHandle} from './oracle.ts';
 
+export function guardNodeExits<T>(
+  operation: Promise<T>,
+  nodes: readonly Pick<SoakNode, 'unexpectedExit'>[],
+): Promise<T> {
+  return Promise.race([operation, ...nodes.map(node => node.unexpectedExit)]);
+}
+
 /**
  * The topology of plan section 2: one replication-manager with
  * `NUM_SYNC_WORKERS=0`, and N view-syncers, each with its own replica
@@ -71,6 +78,11 @@ export class SoakCluster {
 
   replicaHandles(): ReplicaHandle[] {
     return this.nodes.map(n => ({node: n.name, replicaFile: n.replicaFile}));
+  }
+
+  /** Fails an in-flight harness operation if any node dies unexpectedly. */
+  guard<T>(operation: Promise<T>): Promise<T> {
+    return guardNodeExits(operation, this.nodes);
   }
 
   async startReplicationManager(
