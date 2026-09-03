@@ -1,6 +1,9 @@
 // oxlint-disable no-explicit-any
 import {assert} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {
+  ReadonlyJSONObject,
+  ReadonlyJSONValue,
+} from '../../../shared/src/json.ts';
 import {
   type AST,
   type CompoundKey,
@@ -634,16 +637,11 @@ export class QueryImpl<
     if (cond.type === 'simple' && cond.left.type === 'column') {
       key = whereKey(cond.left.name, cond.op);
       const right = cond.right;
-      if (right.type === 'literal' && isPrimitive(right.value)) {
-        tValue = right.value;
-        delta = undefined;
-      } else {
-        const tag = rightTag(right);
-        if (tag !== undefined) {
-          tValue = tag;
-          delta = undefined;
-        }
-      }
+      tValue =
+        right.type === 'literal' && isPrimitive(right.value)
+          ? right.value
+          : rightTag(right);
+      delta = undefined;
     } else {
       // A sub-query an `exists` correlates to is itself interned, so its
       // identity settles that part of the tree without walking it.
@@ -949,30 +947,69 @@ function isPrimitive(v: LiteralValue): v is string | number | boolean | null {
 }
 
 /**
+ * Folds a JSON value into a self-delimiting token: a string is
+ * length-prefixed, a number is terminated, an array or object is
+ * count-prefixed and encodes its members recursively, and the rest are fixed
+ * width. Tokens can therefore be concatenated into a key with no way for one
+ * to run into the next, and the leading tag keeps `'1'` and `1` apart.
+ *
+ * Not `JSON.stringify`: it writes `Infinity`, `NaN` and `null` all as `null`,
+ * and this token is trusted as exact, so a nested value that serialized like
+ * another's would hand back a query with the wrong value in its AST. Numbers
+ * are written the way `String` writes them, which keeps those apart. An
+ * `undefined` property is skipped, as `deepEqual` would skip it; property
+ * order is part of the encoding, so an object spelled in another order
+ * interns separately.
+ */
+function valueTag(v: ReadonlyJSONValue): string {
+  switch (typeof v) {
+    case 'string':
+      return `:s${enc(v)}`;
+    case 'number':
+      return `:n${v};`;
+    case 'boolean':
+      return v ? ':t' : ':f';
+    default: {
+      if (v === null) {
+        return ':z';
+      }
+      if (Array.isArray(v)) {
+        let out = `:a${v.length}:`;
+        for (const e of v) {
+          out += valueTag(e);
+        }
+        return out;
+      }
+      // `Array.isArray` does not narrow a readonly array out of the union.
+      const o = v as ReadonlyJSONObject;
+      let body = '';
+      let n = 0;
+      for (const key in o) {
+        const e = o[key];
+        if (e !== undefined && Object.hasOwn(o, key)) {
+          body += enc(key) + valueTag(e);
+          n++;
+        }
+      }
+      return `:o${n}:${body}`;
+    }
+  }
+}
+
+/**
  * Folds the right-hand side of a simple condition into a transition value, so
  * that the transition is exact and the lookup needs no comparison at all.
  *
- * The leading tag keeps `'1'` and `1` apart. Arrays (`IN`) and parameter
- * references are serialized: that is one pass over a small value, where leaving
- * them in the delta would instead cost a `deepEqual` over the whole condition
- * for every sibling a lookup walks past.
+ * Arrays (`IN`) and parameter references are encoded in full: that is one
+ * pass over a small value, where leaving them in the delta would instead cost
+ * a `deepEqual` over the whole condition for every sibling a lookup walks
+ * past.
  */
-function rightTag(right: SimpleCondition['right']): string | undefined {
+function rightTag(right: SimpleCondition['right']): string {
   if (right.type !== 'literal') {
-    return `:p${JSON.stringify(right)}`;
+    return `:p${valueTag(right as unknown as ReadonlyJSONValue)}`;
   }
-  const v = right.value;
-  switch (typeof v) {
-    case 'string':
-      return `:s${v}`;
-    case 'number':
-      return `:n${v}`;
-    case 'boolean':
-      return `:b${v}`;
-    case 'object':
-      return v === null ? ':z' : `:a${JSON.stringify(v)}`;
-  }
-  return undefined;
+  return valueTag(right.value);
 }
 
 /**
@@ -1004,10 +1041,7 @@ function condKey(cond: Condition): string | undefined {
       if (cond.left.type !== 'column') {
         return undefined;
       }
-      const tag = rightTag(cond.right);
-      return tag === undefined
-        ? undefined
-        : `S${enc(cond.left.name)}${enc(cond.op)}${tag}`;
+      return `S${enc(cond.left.name)}${enc(cond.op)}${rightTag(cond.right)}`;
     }
     case 'correlatedSubquery': {
       const id = astIDs.get(cond.related.subquery);
