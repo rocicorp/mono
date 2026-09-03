@@ -6,7 +6,6 @@ import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
-import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
@@ -25,7 +24,10 @@ import {
   ProcessManager,
   runUntilKilled,
 } from '../services/life-cycle.ts';
-import {startReplicaBackupProcess} from '../services/litestream/commands.ts';
+import {
+  deleteReplicaAndLitestreamState,
+  startReplicaBackupProcess,
+} from '../services/litestream/commands.ts';
 import {
   changeLogFileName,
   deleteChangeLogDB,
@@ -286,9 +288,7 @@ export default async function runWorker(
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
         lc.warn?.(`resetting replica ${replica.file}`, e);
-        // TODO: Make deleteLiteDB work with litestream. It will probably have to be
-        //       a semantic wipe instead of a file delete.
-        deleteLiteDB(replica.file);
+        deleteReplicaAndLitestreamState(replica.file);
         // The change log carries the identity of the replica it was written
         // beside, and the retry performs a fresh initial sync with a new
         // replicaVersion. Reconciliation would catch that on its own (as
