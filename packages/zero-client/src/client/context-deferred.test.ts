@@ -123,26 +123,39 @@ test('a view destroyed while deferred is not hydrated', () => {
   expect(view.data).toEqual([]);
 });
 
-test('a deferred pipeline that fails to build is logged and does not strand the others', async () => {
+test('a query for an unknown table throws from materialize, as before deferral', () => {
   const {context} = newContext();
   context.deferPipelines();
-  // t2 is not in the context's schema, so buildPipeline throws Source not found.
   const otherSchema = createSchema({
     tables: [table('t2').columns({id: string()}).primaryKey('id')],
   });
-  const bad = context.materialize(newQuery(otherSchema, 't2'));
-  const good = context.materialize(newQuery(schema, 't1'));
-  let badType = 'unknown';
-  bad.addListener((_d, type) => {
-    badType = type;
+
+  expect(() => context.materialize(newQuery(otherSchema, 't2'))).toThrow();
+});
+
+test('a deferred pipeline that fails at attach is logged and does not strand the others', async () => {
+  const {context} = newContext();
+  context.deferPipelines();
+  const view = context.materialize(newQuery(schema, 't1'));
+  let type = 'unknown';
+  view.addListener((_d, t) => {
+    type = t;
   });
 
-  context.processChanges(undefined, 'h1' as Hash, [add('e1', 'one')]);
+  // A diff for a table the schema does not know poisons the source branch, so
+  // rebuilding the pipeline at attach time fails.
+  expect(() =>
+    context.processChanges(undefined, 'h1' as Hash, [
+      {
+        key: `${ENTITIES_KEY_PREFIX}nosuch/e1`,
+        op: 'add',
+        newValue: {id: 'e1'},
+      },
+    ]),
+  ).toThrow();
+
   expect(() => context.markPipelinesReady()).not.toThrow();
+  await vi.waitFor(() => expect(type).toBe('error'));
 
-  expect(good.data).toMatchObject([{id: 'e1'}]);
-  await vi.waitFor(() => expect(badType).toBe('error'));
-
-  bad.destroy();
-  good.destroy();
+  view.destroy();
 });

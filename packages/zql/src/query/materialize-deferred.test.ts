@@ -2,6 +2,7 @@ import {expect, test, vi} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {ArrayView} from '../ivm/array-view.ts';
+import type {SourceSchema} from '../ivm/schema.ts';
 import {makeSourceChangeAdd, type Source} from '../ivm/source.ts';
 import {consume} from '../ivm/stream.ts';
 import type {MetricMap} from './metrics-delegate.ts';
@@ -19,7 +20,8 @@ class DeferredDelegate extends QueryDelegateImpl {
   #ready = false;
   readonly #pending = new Set<() => void>();
   readonly metrics: string[] = [];
-  getSourceCalls = 0;
+  /** Connections currently open against the sources. */
+  liveConnections = 0;
 
   override get pipelinesReady(): boolean {
     return this.#ready;
@@ -37,11 +39,31 @@ class DeferredDelegate extends QueryDelegateImpl {
   }
 
   override getSource(name: string): Source {
-    this.getSourceCalls++;
     if (this.failingTables.has(name)) {
       throw new Error(`boom: ${name}`);
     }
-    return super.getSource(name);
+    const source = super.getSource(name);
+    // Wrapped so tests can assert that nothing is connected to the sources
+    // while hydration is deferred.
+    const counting: Source = {
+      get tableSchema() {
+        return source.tableSchema;
+      },
+      connect: (sort, filters, splitEditKeys, debug) => {
+        this.liveConnections++;
+        const input = source.connect(sort, filters, splitEditKeys, debug);
+        return {
+          ...input,
+          destroy: () => {
+            this.liveConnections--;
+            input.destroy();
+          },
+        };
+      },
+      push: change => source.push(change),
+      genPush: change => source.genPush(change),
+    };
+    return counting;
   }
 
   override addMetric<K extends keyof MetricMap>(
@@ -74,13 +96,9 @@ class DeferredDelegate extends QueryDelegateImpl {
 
 function newDelegate() {
   const delegate = new DeferredDelegate();
-  // Load sources directly, bypassing getSource counting, as ZeroRep.init does.
-  const issues = must(
-    QueryDelegateImpl.prototype.getSource.call(delegate, 'issue'),
-  );
-  const comments = must(
-    QueryDelegateImpl.prototype.getSource.call(delegate, 'comment'),
-  );
+  // Loaded directly into the sources, as ZeroRep.init does.
+  const issues = must(delegate.getSource('issue'));
+  const comments = must(delegate.getSource('comment'));
   const addIssue = (id: string) =>
     consume(
       issues.push(
@@ -119,7 +137,7 @@ test('materialize before ready returns an empty, unknown view and registers the 
   expect(listener).toHaveBeenCalledTimes(1);
   expect(listener.mock.calls[0][1]).toBe('unknown');
   expect(delegate.addedServerQueries).toHaveLength(1);
-  expect(delegate.getSourceCalls).toBe(0);
+  expect(delegate.liveConnections).toBe(0);
   expect(delegate.pendingCount).toBe(1);
   expect(delegate.metrics).not.toContain('query-materialization-client');
 
@@ -140,7 +158,7 @@ test('rows loaded while deferred appear once pipelines are ready', () => {
   delegate.markReady();
 
   expect(delegate.pendingCount).toBe(0);
-  expect(delegate.getSourceCalls).toBeGreaterThan(0);
+  expect(delegate.liveConnections).toBeGreaterThan(0);
   expect(view.data).toMatchObject([{id: 'i1'}, {id: 'i2'}]);
   expect(listener).toHaveBeenCalledTimes(2);
   expect(listener.mock.calls[1][1]).toBe('unknown');
@@ -157,7 +175,7 @@ test('destroy before ready never builds the pipeline', () => {
 
   expect(delegate.pendingCount).toBe(0);
   delegate.markReady();
-  expect(delegate.getSourceCalls).toBe(0);
+  expect(delegate.liveConnections).toBe(0);
 });
 
 test('complete is gated on both got and the pipeline being attached', async () => {
@@ -258,7 +276,7 @@ test('materialize after ready builds the pipeline immediately', () => {
 
   const view = delegate.materialize(newQuery(schema, 'issue'));
   expect(delegate.pendingCount).toBe(0);
-  expect(delegate.getSourceCalls).toBeGreaterThan(0);
+  expect(delegate.liveConnections).toBeGreaterThan(0);
   expect(view.data).toMatchObject([{id: 'i1'}]);
   expect(delegate.metrics).toContain('query-materialization-client');
 
@@ -299,11 +317,11 @@ test('end-to-end metric is recorded once the view is hydrated, not on got alone'
   view.destroy();
 });
 
-test('a factory that reads the schema before ready gets a live pipeline', () => {
-  const {delegate, addIssue} = newDelegate();
-  let schemaTable: string | undefined;
+test('a factory can read the schema before ready, and stays deferred', () => {
+  const {delegate, addIssue, addComment} = newDelegate();
+  let deferredSchema: SourceSchema | undefined;
   const view = delegate.materialize(
-    newQuery(schema, 'issue'),
+    newQuery(schema, 'issue').related('comments'),
     (
       _q,
       input,
@@ -314,25 +332,29 @@ test('a factory that reads the schema before ready gets a live pipeline', () => 
       updateTTL,
     ) => {
       // Reads the schema at construction, as ArrayView did before deferral.
-      schemaTable = input.getSchema().tableName;
+      deferredSchema = input.getSchema();
       const v = new ArrayView(input, format, queryComplete, updateTTL);
       v.onDestroy = onDestroy;
       onTransactionCommit(() => v.flush());
       return v;
     },
   );
-  expect(schemaTable).toBe('issue');
-  expect(delegate.getSourceCalls).toBeGreaterThan(0);
 
-  // The pipeline was built eagerly and is connected: rows pushed before ready
-  // arrive through the normal push path.
+  // The schema is the one the pipeline reports, relationships included.
+  expect(deferredSchema?.tableName).toBe('issue');
+  expect(Object.keys(must(deferredSchema).relationships)).toEqual(['comments']);
+  // It came from a pipeline that was destroyed again, so the view is still
+  // deferred: nothing is connected and rows do not reach it yet.
+  expect(delegate.liveConnections).toBe(0);
+
   addIssue('i1');
+  addComment('c1', 'i1');
   delegate.commit();
-  expect(view.data).toMatchObject([{id: 'i1'}]);
+  expect(view.data).toEqual([]);
 
-  // markReady is a no-op for this view.
   delegate.markReady();
-  expect(view.data).toMatchObject([{id: 'i1'}]);
+  expect(view.data).toMatchObject([{id: 'i1', comments: [{id: 'c1'}]}]);
+
   view.destroy();
 });
 
@@ -349,9 +371,19 @@ test('a factory that never calls setOutput does not break the drain', () => {
   view.destroy();
 });
 
-test('a pipeline that fails to build marks its view as errored and does not block others', async () => {
-  const {delegate, addIssue} = newDelegate();
+test('a query that cannot be built throws from materialize, as before deferral', () => {
+  const {delegate} = newDelegate();
   delegate.failingTables.add('comment');
+
+  expect(() => delegate.materialize(newQuery(schema, 'comment'))).toThrow(
+    'boom: comment',
+  );
+  // Nothing was queued for the drain.
+  expect(delegate.pendingCount).toBe(0);
+});
+
+test('a pipeline that fails at attach errors its own view and does not block others', async () => {
+  const {delegate, addIssue} = newDelegate();
   const bad = delegate.materialize(newQuery(schema, 'comment'));
   const good = delegate.materialize(newQuery(schema, 'issue'));
   let badType: ResultType = 'unknown';
@@ -362,6 +394,8 @@ test('a pipeline that fails to build marks its view as errored and does not bloc
   });
   addIssue('i1');
 
+  // Both probes succeeded; only the rebuild at attach time fails.
+  delegate.failingTables.add('comment');
   delegate.markReady();
 
   expect(good.data).toMatchObject([{id: 'i1'}]);

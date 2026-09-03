@@ -425,7 +425,7 @@ export function materializeImpl<
     : delegate.addServerQuery(ast, ttl, gotCallback);
 
   const deferred = deferPipeline
-    ? new DeferredInput(() => buildPipeline(ast, delegate, queryID))
+    ? newDeferredInput(ast, delegate, queryID)
     : undefined;
   const input: Input = deferred ?? buildPipeline(ast, delegate, queryID);
 
@@ -484,6 +484,33 @@ export function materializeImpl<
   }
 
   return view as T;
+}
+
+/**
+ * Creates the placeholder input for a query whose pipeline cannot be built yet.
+ *
+ * `Input.getSchema()` is unconditional, so the placeholder needs the schema up
+ * front. It is captured by building a pipeline and immediately destroying it:
+ * building only connects to the sources, while the indexes and rows -- the
+ * expensive part this deferral exists to postpone -- are read on the first
+ * fetch. Measured at ~5us against ~500us for a single 100 row fetch.
+ *
+ * Building here also means a query that cannot be built at all (an unknown
+ * table, `not(exists())` on the client) still throws from `materialize()`,
+ * as it did before hydration was deferred.
+ */
+function newDeferredInput(
+  ast: AST,
+  delegate: QueryDelegate,
+  queryID: string,
+): DeferredInput {
+  const build = () => buildPipeline(ast, delegate, queryID);
+  const probe = build();
+  try {
+    return new DeferredInput(probe.getSchema(), build);
+  } finally {
+    probe.destroy();
+  }
 }
 
 function arrayViewFactory<
