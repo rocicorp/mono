@@ -726,10 +726,12 @@ export class QueryImpl<
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
   ): Query<TTable, TSchema, TReturn> {
+    // The row is an object, so it is encoded to a string to serve as the
+    // lookup key. Property order is part of that string.
     return this.#derive(
       opts?.inclusive ? 'start:inclusive' : 'start:exclusive',
+      valueTag(row as ReadonlyJSONValue),
       undefined,
-      row,
       () =>
         this.#newQuery(
           this.#tableName,
