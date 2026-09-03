@@ -10,6 +10,7 @@ const UUID_RE =
 const INTEGER_RE = /^[+-]?\d+$/;
 const WHITESPACE_RE = /\s/;
 const OPERATOR_TOKEN_RE = /^(?:::|<>|!=|<=|>=|=|<|>)/;
+const UNSUPPORTED_OPERATOR_TOKEN_RE = /^(?:!~\*|!~|~\*|~)/;
 const INTEGER_TOKEN_RE = /^[+-]?\d+/;
 const WORD_TOKEN_RE = /^[A-Za-z_][A-Za-z0-9_$]*/;
 const SIMPLE_ESCAPES: Readonly<Record<string, string>> = {
@@ -82,6 +83,9 @@ type Token =
       readonly type:
         | '('
         | ')'
+        | '['
+        | ']'
+        | ','
         | '.'
         | '::'
         | '='
@@ -94,6 +98,7 @@ type Token =
         | 'AND'
         | 'OR'
         | 'NOT'
+        | 'IN'
         | 'IS'
         | 'EOF';
     }
@@ -173,9 +178,18 @@ class Parser {
       }
       return {type: 'null-test', expression: left, not};
     }
+    if (this.#take('IN')) {
+      this.expect('(');
+      const values = this.#parseOperandList(')');
+      this.expect(')');
+      return comparisons(left, values);
+    }
     const op = this.#tokens[this.#position]?.type;
     if (isComparison(op)) {
       this.#position++;
+      if (op === '=' && this.#takeIdentifier('ANY')) {
+        return comparisons(left, this.#parseLiteralArray());
+      }
       return {
         type: 'comparison',
         left,
@@ -188,12 +202,41 @@ class Parser {
       throw new UnsupportedPredicateError('non-deterministic-collation');
     }
     if (
+      next?.type === 'unsupported' &&
+      UNSUPPORTED_OPERATOR_TOKEN_RE.test(next.value)
+    ) {
+      throw new UnsupportedPredicateError('unsupported-operator');
+    }
+    if (
       next?.type === 'identifier' &&
       unsupportedOperatorWords.has(next.value.toUpperCase())
     ) {
       throw new UnsupportedPredicateError('unsupported-operator');
     }
     return left;
+  }
+
+  #parseLiteralArray(): readonly Expr[] {
+    this.expect('(');
+    this.#expectIdentifier('ARRAY');
+    this.expect('[');
+    const values = this.#parseOperandList(']');
+    this.expect(']');
+    if (this.#take('::')) {
+      this.#parseCastName();
+      this.expect('[');
+      this.expect(']');
+    }
+    this.expect(')');
+    return values;
+  }
+
+  #parseOperandList(end: ')' | ']'): readonly Expr[] {
+    const values: Expr[] = [];
+    if (this.#tokens[this.#position]?.type === end) return values;
+    values.push(this.#parseOperand());
+    while (this.#take(',')) values.push(this.#parseOperand());
+    return values;
   }
 
   #parseOperand(): Expr {
@@ -240,6 +283,7 @@ class Parser {
   #parseCastName(): string {
     const first = this.#expectIdentifier();
     const parts = [first];
+    let separator = '.';
     while (this.#take('.')) parts.push(this.#expectIdentifier());
     const next = this.#tokens[this.#position];
     if (
@@ -248,19 +292,35 @@ class Parser {
       next.value.toLowerCase() === 'varying'
     ) {
       parts.push(this.#expectIdentifier());
+      separator = ' ';
     }
     if (this.#tokens[this.#position]?.type === '(') {
       throw new UnsupportedPredicateError('unsupported-cast');
     }
-    return parts.join('.');
+    return parts.join(separator);
   }
 
-  #expectIdentifier(): string {
+  #expectIdentifier(expected?: string): string {
     const token = this.#tokens[this.#position++];
-    if (token?.type !== 'identifier') {
+    if (
+      token?.type !== 'identifier' ||
+      (expected !== undefined && token.value.toUpperCase() !== expected)
+    ) {
       throw new UnsupportedPredicateError('unsupported-cast');
     }
     return token.value;
+  }
+
+  #takeIdentifier(expected: string): boolean {
+    const token = this.#tokens[this.#position];
+    if (
+      token?.type !== 'identifier' ||
+      token.value.toUpperCase() !== expected
+    ) {
+      return false;
+    }
+    this.#position++;
+    return true;
   }
 
   #take(type: Token['type']): boolean {
@@ -278,13 +338,21 @@ class Parser {
 
 const unsupportedOperatorWords = new Set([
   'ALL',
-  'ANY',
   'BETWEEN',
   'ILIKE',
-  'IN',
   'LIKE',
   'SIMILAR',
 ]);
+
+function comparisons(left: Expr, values: readonly Expr[]): Expr {
+  if (values.length === 0) {
+    throw new UnsupportedPredicateError('unsupported-syntax');
+  }
+  const expressions = values.map(
+    right => ({type: 'comparison', left, op: '=', right}) as const,
+  );
+  return expressions.length === 1 ? expressions[0] : {type: 'or', expressions};
+}
 
 function normalize(
   expression: Expr,
@@ -661,7 +729,22 @@ function tokenize(sql: string): readonly Token[] {
       i += operator.length;
       continue;
     }
-    if (char === '(' || char === ')' || char === '.') {
+    const unsupportedOperator = UNSUPPORTED_OPERATOR_TOKEN_RE.exec(
+      sql.slice(i),
+    )?.[0];
+    if (unsupportedOperator) {
+      tokens.push({type: 'unsupported', value: unsupportedOperator});
+      i += unsupportedOperator.length;
+      continue;
+    }
+    if (
+      char === '(' ||
+      char === ')' ||
+      char === '[' ||
+      char === ']' ||
+      char === ',' ||
+      char === '.'
+    ) {
       tokens.push({type: char});
       i++;
       continue;
@@ -690,6 +773,7 @@ function tokenize(sql: string): readonly Token[] {
         keyword === 'AND' ||
         keyword === 'OR' ||
         keyword === 'NOT' ||
+        keyword === 'IN' ||
         keyword === 'IS'
       ) {
         tokens.push({type: keyword});
