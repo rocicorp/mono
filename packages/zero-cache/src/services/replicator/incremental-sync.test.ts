@@ -917,10 +917,10 @@ describe('replicator/incremental-sync', () => {
     expect(processMessages).not.toHaveBeenCalled();
   });
 
-  test('stop() interrupts a run loop stuck on an in-flight processMessage', async () => {
+  test('stop() interrupts a run loop stuck on an in-flight processMessages', async () => {
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
 
-    // Simulates a processMessage() call that never resolves on its own -- as
+    // Simulates a processMessages() call that never resolves on its own -- as
     // happens when the write worker is paused inside LitestreamCheckpointer's
     // WAL-drain poll (see litestream-checkpointer.test.ts for that piece in
     // isolation) -- until abort() interrupts it. Mocked here at the
@@ -928,8 +928,8 @@ describe('replicator/incremental-sync', () => {
     // worker thread or litestream process; it only exercises whether
     // IncrementalSyncer actually calls abort() when asked to stop.
     const {promise: stuck, resolve: unstick} = resolver<CommitResult | null>();
-    const processMessage = vi
-      .spyOn(worker, 'processMessage')
+    const processMessages = vi
+      .spyOn(worker, 'processMessages')
       .mockReturnValue(stuck);
     const abort = vi.spyOn(worker, 'abort').mockImplementation(() => {
       unstick(null);
@@ -942,7 +942,7 @@ describe('replicator/incremental-sync', () => {
     await versionReady.next(); // Get the initial nextStateVersion.
 
     downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
-    await vi.waitFor(() => expect(processMessage).toHaveBeenCalled());
+    await vi.waitFor(() => expect(processMessages).toHaveBeenCalled());
 
     syncer.stop(lc);
     expect(abort).toHaveBeenCalled();
