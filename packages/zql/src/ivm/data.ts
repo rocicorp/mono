@@ -72,7 +72,7 @@ export function compareValues(a: Value, b: Value): number {
     );
   }
 
-  throw new Error(`Unsupported type: ${a}`);
+  throw new Error(`Unsupported type: ${typeof a}`);
 }
 
 export type NormalizedValue = Exclude<Value, undefined>;

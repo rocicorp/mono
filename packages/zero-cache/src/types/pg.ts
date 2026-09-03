@@ -109,7 +109,7 @@ function serializeTimestamp(val: unknown): string {
         return val.toISOString();
       }
   }
-  throw new Error(`Unsupported type "${typeof val}" for timestamp: ${val}`);
+  throw new Error(`Unsupported type "${typeof val}" for timestamp`);
 }
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -121,7 +121,7 @@ function serializeTime(x: unknown, type: 'time' | 'timetz'): string {
     case 'number':
       return millisecondsToPostgresTime(x);
   }
-  throw new Error(`Unsupported type "${typeof x}" for ${type}: ${x}`);
+  throw new Error(`Unsupported type "${typeof x}" for ${type}`);
 }
 
 export function millisecondsToPostgresTime(milliseconds: number): string {
