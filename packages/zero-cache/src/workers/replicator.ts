@@ -84,19 +84,18 @@ async function prepare(
   {file, vacuumIntervalHours}: ReplicaOptions,
   walMode: WalMode,
   mode: ReplicaFileMode,
-): Promise<{file: string; walMode: WalMode}> {
+): Promise<{file: string; walMode: WalMode; pageSize: number}> {
   // Perform any upgrades to the replica in case the backup is an
   // earlier version.
   await upgradeReplica(lc, `${mode}-replica`, file);
 
   const replica = new Database(lc, file);
+  let pageSize: number;
   try {
     // Start by folding any (e.g. restored) WAL(2) files into the main db.
     await setJournalMode(lc, replica, 'delete');
 
-    const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
-      'page_size',
-    );
+    [{page_size: pageSize}] = replica.pragma<{page_size: number}>('page_size');
     const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
       'page_count',
     );
@@ -139,7 +138,7 @@ async function prepare(
   } finally {
     replica.close();
   }
-  return {file, walMode};
+  return {file, walMode, pageSize};
 }
 
 // Setting the journal_mode requires an exclusive lock on the replica.

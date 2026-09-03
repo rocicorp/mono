@@ -15,6 +15,7 @@ import {
 import {StatementRunner} from '../../db/statements.ts';
 import {deleteChangeLogDB} from '../replicator/change-log-db.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
+import {litestreamSocketPath} from './litestream-controller.ts';
 import {
   litestreamBackupListDuration,
   litestreamBackupMetricAttrs,
@@ -79,11 +80,14 @@ function getLitestream(
     region,
     port,
     checkpointThresholdMB,
-    minCheckpointPageCount = checkpointThresholdMB * 250, // SQLite page size is 4KB
+    // Note: This assumes the default page size. If page size configuration
+    // is added, this computation must be adjusted accordingly.
+    minCheckpointPageCount = checkpointThresholdMB * 256, // 1 MiB / 4 KiB page size
     maxCheckpointPageCount = minCheckpointPageCount * 10,
     incrementalBackupIntervalMinutes,
     incrementalBackupIntervalSeconds,
     snapshotBackupIntervalHours,
+    snapshotBackupIntervalHoursV5,
     multipartConcurrency,
     multipartSize,
   } = config;
@@ -95,6 +99,9 @@ function getLitestream(
     (v5 ? executableV5 : executable) ??
     must(executable, `Missing --litestream-executable`);
   const litestreamConfig = v5 ? configPathV5 : configPath;
+  const snapshotIntervalHours = v5
+    ? snapshotBackupIntervalHoursV5
+    : snapshotBackupIntervalHours;
 
   return {
     litestream,
@@ -116,14 +123,15 @@ function getLitestream(
       ),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
       ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS']: String(
-        snapshotBackupIntervalHours,
+        snapshotIntervalHours,
       ),
       ['ZERO_LITESTREAM_SNAPSHOT_RETENTION_INTERVAL_HOURS']: String(
-        snapshotBackupIntervalHours + 6, // delete old snapshots after 6 hours
+        snapshotIntervalHours + 6, // delete old snapshots after 6 hours
       ),
       ['ZERO_LITESTREAM_MULTIPART_CONCURRENCY']: String(multipartConcurrency),
       ['ZERO_LITESTREAM_MULTIPART_SIZE']: String(multipartSize),
       ['ZERO_LOG_FORMAT']: 'json',
+      ['ZERO_LITESTREAM_SOCKET_PATH']: litestreamSocketPath(replicaFile),
       ['LITESTREAM_CONFIG']: litestreamConfig,
       ['LITESTREAM_PORT']: String(port),
       ...(endpoint ? {['ZERO_LITESTREAM_ENDPOINT']: endpoint} : {}),

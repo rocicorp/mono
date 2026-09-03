@@ -32,7 +32,10 @@ import {
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
 import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
-import {ThreadWriteWorkerClient} from '../services/replicator/write-worker-client.ts';
+import {
+  ThreadWriteWorkerClient,
+  type ForceCheckpointConfig,
+} from '../services/replicator/write-worker-client.ts';
 import {
   parentWorker,
   singleProcessMode,
@@ -89,11 +92,11 @@ export default async function runWorker(
     await restoreReplica(lc, config);
   }
 
-  const {file: dbPath, walMode} = await setupReplica(
-    lc,
-    fileMode,
-    config.replica,
-  );
+  const {
+    file: dbPath,
+    walMode,
+    pageSize,
+  } = await setupReplica(lc, fileMode, config.replica);
   unregisterInitialCorruptionDiagnosticTarget();
   registerSQLiteCorruptionDiagnosticTarget(
     {
@@ -110,10 +113,25 @@ export default async function runWorker(
 
   setupMetrics(lc, dbPath, walMode);
 
-  // Create the write worker for async SQLite writes.
+  // Create the write worker for async SQLite writes. Enable write-path
+  // checkpoint backpressure only for the backup replicator on litestream v5,
+  // which owns the replica litestream backs up.
   const pragmas = getPragmaConfig(fileMode);
+  const checkpoint: ForceCheckpointConfig | null =
+    mode === 'backup' &&
+    config.litestream.backupURL &&
+    config.litestream.backupUsingV5
+      ? {
+          checkpointThresholdPages:
+            (config.litestream.forceCheckpointThresholdMB * 1024 ** 2) /
+            pageSize,
+          maxWalPages: !config.litestream.maxWalSizeMB
+            ? undefined
+            : (config.litestream.maxWalSizeMB * 1024 ** 2) / pageSize,
+        }
+      : null;
   const workerClient = new ThreadWriteWorkerClient();
-  await workerClient.init(dbPath, mode, pragmas, config.log);
+  await workerClient.init(dbPath, mode, pragmas, config.log, checkpoint);
 
   const shard = getShardConfig(config);
   const {
