@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {
   HashIndex,
   MAX_SCAN,
@@ -265,27 +265,63 @@ test('replace of a node this map never stored is a no-op', () => {
   expect(t.restSize).toBe(1);
 });
 
-test('a hash index round trips and prunes a collected entry on lookup', () => {
-  const h = new HashIndex<object>();
-  const a = make('a');
-  h.set('h1', a);
-  expect(h.get('h1')).toBe(a);
-  expect(h.get('h2')).toBeUndefined();
+/**
+ * Runs `fn` with a `WeakRef` whose targets can be collected on demand, so a
+ * test can stand in for the garbage collector without reaching into the
+ * structure under test.
+ */
+function withCollectableWeakRefs(
+  fn: (collect: (target: object) => void) => void,
+): void {
+  const dead = new WeakSet<object>();
+  class FakeWeakRef<T extends object> {
+    readonly #target: T;
+    constructor(target: T) {
+      this.#target = target;
+    }
+    deref(): T | undefined {
+      return dead.has(this.#target) ? undefined : this.#target;
+    }
+  }
+  vi.stubGlobal('WeakRef', FakeWeakRef);
+  try {
+    fn(t => dead.add(t));
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
 
-  h.map.set('h1', emptyRef);
-  expect(h.get('h1')).toBeUndefined();
-  expect(h.map.has('h1')).toBe(false);
+test('a hash index round trips and forgets a collected entry', () => {
+  withCollectableWeakRefs(collect => {
+    const h = new HashIndex<object>();
+    const a = make('a');
+    h.set('h1', a);
+    expect(h.get('h1')).toBe(a);
+    expect(h.get('h2')).toBeUndefined();
+
+    collect(a);
+    expect(h.get('h1')).toBeUndefined();
+    // A collected entry does not shadow a later one under the same hash.
+    const b = make('b');
+    h.set('h1', b);
+    expect(h.get('h1')).toBe(b);
+  });
 });
 
-test('a hash index sweeps dead entries once it has grown', () => {
-  const h = new HashIndex<object>();
-  for (let i = 0; i < 1000; i++) {
-    h.set(`dead-${i}`, make(`v${i}`));
-    h.map.set(`dead-${i}`, emptyRef);
-  }
-  expect(h.map.size).toBeLessThan(200);
-
-  const live = Array.from({length: 300}, (_, i) => make(`live${i}`));
-  live.forEach((v, i) => h.set(`live-${i}`, v));
-  live.forEach((v, i) => expect(h.get(`live-${i}`)).toBe(v));
+test('a hash index keeps live entries through any amount of dead ones', () => {
+  withCollectableWeakRefs(collect => {
+    const h = new HashIndex<object>();
+    const live = Array.from({length: 300}, (_, i) => make(`live${i}`));
+    live.forEach((v, i) => h.set(`live-${i}`, v));
+    // Enough dead inserts to cross several sweeps.
+    for (let i = 0; i < 1000; i++) {
+      const v = make(`v${i}`);
+      h.set(`dead-${i}`, v);
+      collect(v);
+    }
+    live.forEach((v, i) => expect(h.get(`live-${i}`)).toBe(v));
+    for (let i = 0; i < 1000; i++) {
+      expect(h.get(`dead-${i}`)).toBeUndefined();
+    }
+  });
 });

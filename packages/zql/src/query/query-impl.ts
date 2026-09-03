@@ -259,11 +259,6 @@ export class QueryImpl<
     return this.#transitions;
   }
 
-  /** @internal Exposed for tests. Only a root has one. */
-  get hashIndexForTesting(): HashIndex<QueryImpl<any, any, any>> | undefined {
-    return this.#byHash;
-  }
-
   constructor(
     schema: TSchema,
     tableName: TTable,

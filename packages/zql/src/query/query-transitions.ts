@@ -385,11 +385,6 @@ export class HashIndex<T extends object> {
   readonly #byHash = new Map<string, WeakRef<T>>();
   #sweepAt = SWEEP_INITIAL;
 
-  /** The underlying map. Exposed for tests. */
-  get map(): Map<string, WeakRef<T>> {
-    return this.#byHash;
-  }
-
   get(hash: string): T | undefined {
     const ref = this.#byHash.get(hash);
     if (ref === undefined) {

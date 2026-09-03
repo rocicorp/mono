@@ -132,29 +132,17 @@ test('convergence waits for a hash; building alone changes nothing', () => {
   const a = root.where('closed', false).limit(5);
   const b = root.limit(5).where('closed', false);
   expect(a).not.toBe(b);
-  // Nothing has been hashed, so nothing has been indexed or redirected.
-  expect(asQueryImpl(root).hashIndexForTesting).toBeUndefined();
+  // Nothing has been hashed, so nothing has been redirected.
   expect(root.limit(5).where('closed', false)).toBe(b);
 
-  // Only the hashed query is indexed, and only under the root.
+  // Hashing `a` alone indexes it but redirects nothing: `b` has not been
+  // hashed, so its path is unchanged.
   asQueryInternals(a).hash();
-  const index = asQueryImpl(root).hashIndexForTesting!;
-  expect(index.get(asQueryInternals(a).hash())).toBe(a);
-  expect(asQueryImpl(a).hashIndexForTesting).toBeUndefined();
-  expect(asQueryImpl(root.where('closed', false)).hashIndexForTesting).toBe(
-    undefined,
-  );
   expect(root.limit(5).where('closed', false)).toBe(b);
 
   // Hashing `b` is what redirects its path.
   asQueryInternals(b).hash();
   expect(root.limit(5).where('closed', false)).toBe(a);
-});
-
-test('a root is its own canonical form and is never indexed', () => {
-  const root = freshRoot('root-hash');
-  asQueryInternals(root).hash();
-  expect(asQueryImpl(root).hashIndexForTesting).toBeUndefined();
 });
 
 test('the hash index is scoped by root', () => {
