@@ -223,10 +223,10 @@ const ackSchema = v.object({ack: v.number()});
 
 type Ack = v.Infer<typeof ackSchema>;
 
-/** A parsed JSON value paired with the exact source text it was parsed from. */
-export type ParsedJSON<T> = {
+/** A parsed value paired with its approximate serialized transport size. */
+export type Sized<T> = {
   data: T;
-  json: string;
+  size: number;
 };
 
 export function streamOut<T extends JSONValue>(
@@ -322,17 +322,17 @@ export function streamIn<T extends JSONValue>(
 }
 
 /**
- * Streams in messages sent by {@link streamOutStringified}, preserving the
- * exact application-level JSON alongside its parsed and validated value.
+ * Streams in parsed messages while retaining only the transport-frame size.
+ * The size bounds downstream batching without keeping or copying the JSON.
  */
-export function streamInStringified<T extends JSONValue>(
+export function streamInWithSize<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
-): Promise<Source<ParsedJSON<T>>> {
-  return streamInInternal(lc, source, schema, (data, frame, id) => ({
+): Promise<Source<Sized<T>>> {
+  return streamInInternal(lc, source, schema, (data, frame) => ({
     data,
-    json: extractStringifiedMessage(frame, id),
+    size: frame.length,
   }));
 }
 
@@ -381,15 +381,6 @@ async function streamInInternal<T extends JSONValue, Out>(
 
   await closer.connected;
   return sink;
-}
-
-function extractStringifiedMessage(frame: string, id: number): string {
-  const prefix = `{"id":${id},"msg":`;
-  assert(
-    frame.startsWith(prefix) && frame.endsWith('}'),
-    `invalid streamed message frame`,
-  );
-  return frame.slice(prefix.length, -1);
 }
 
 class WebSocketCloser {
