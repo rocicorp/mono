@@ -107,9 +107,14 @@ function createAPI(): API {
       }
     },
 
-    processMessage(downstream: ChangeStreamData) {
+    processMessages(downstream: readonly ChangeStreamData[]) {
       try {
-        return must(processor).processMessage(must(lc), downstream);
+        let commitResult = null;
+        for (const message of downstream) {
+          commitResult =
+            must(processor).processMessage(must(lc), message) ?? commitResult;
+        }
+        return commitResult;
       } catch (e) {
         handleCorruptedDb(e);
         throw e;

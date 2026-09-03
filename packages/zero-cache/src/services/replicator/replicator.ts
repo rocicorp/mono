@@ -141,7 +141,7 @@ export class ReplicatorService implements Replicator, Service {
   async stop() {
     this.#incrementalSyncer.stop(this.#lc);
     // Wait for the syncer's run loop to finish so that any in-flight
-    // worker.processMessage() call completes and clears #pending
+    // worker.processMessages() call completes and clears #pending
     // before we send the 'stop' message to the worker.
     await this.#runPromise;
     await this.#worker.stop();

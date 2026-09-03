@@ -29,7 +29,7 @@ import {
   type ChangeStreamer,
   type ChangeStreamerService,
   type Downstream,
-  type SerializedDownstream,
+  type SizedDownstream,
 } from '../change-streamer/change-streamer.ts';
 import {initChangeStreamerSchema} from '../change-streamer/schema/init.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
@@ -144,10 +144,7 @@ type ParentMessage =
     ];
 
 type ChildMessage =
-  | [
-      'replication-resumption:downstream',
-      {seq: number; msg: SerializedDownstream},
-    ]
+  | ['replication-resumption:downstream', {seq: number; msg: SizedDownstream}]
   | ['replication-resumption:source-error', {message: string}]
   | ['replication-resumption:source-end', Record<string, never>];
 
@@ -284,7 +281,10 @@ class ForkedReplicator {
           'replication-resumption:downstream',
           {
             seq,
-            msg: {data: BigIntJSON.parse(value) as Downstream, json: value},
+            msg: {
+              data: BigIntJSON.parse(value) as Downstream,
+              size: value.length,
+            },
           },
         ]);
         await this.#waitForConsumed(bridge, seq);

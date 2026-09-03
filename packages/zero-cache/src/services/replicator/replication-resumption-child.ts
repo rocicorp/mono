@@ -9,7 +9,7 @@ import {getPragmaConfig, setupReplica} from '../../workers/replicator.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {
   ChangeStreamer,
-  SerializedDownstream,
+  SizedDownstream,
   SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import {exitAfter, runUntilKilled} from '../life-cycle.ts';
@@ -24,10 +24,7 @@ import {
 type ChildFailpoint = 'none' | 'after-sqlite-commit-before-ack';
 
 type ParentMessage =
-  | [
-      'replication-resumption:downstream',
-      {seq: number; msg: SerializedDownstream},
-    ]
+  | ['replication-resumption:downstream', {seq: number; msg: SizedDownstream}]
   | ['replication-resumption:source-error', {message: string}]
   | ['replication-resumption:source-end', Record<string, never>];
 
@@ -67,17 +64,17 @@ class IPCChangeStreamer implements ChangeStreamer {
     this.#parent = parent;
   }
 
-  subscribe(ctx: SubscriberContext): Promise<Source<SerializedDownstream>> {
+  subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>> {
     send(this.#parent, ['replication-resumption:subscribe', ctx]);
     return Promise.resolve(new IPCDownstreamSource(this.#parent));
   }
 }
 
 type QueueEntry =
-  | {type: 'message'; seq: number; msg: SerializedDownstream}
+  | {type: 'message'; seq: number; msg: SizedDownstream}
   | {type: 'end'};
 
-export class IPCDownstreamSource implements Source<SerializedDownstream> {
+export class IPCDownstreamSource implements Source<SizedDownstream> {
   readonly #parent: Worker;
   readonly #queue = new Queue<QueueEntry>();
   readonly #abortController = new AbortController();
@@ -127,7 +124,7 @@ export class IPCDownstreamSource implements Source<SerializedDownstream> {
     return this.#abortController.signal;
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<SerializedDownstream> {
+  [Symbol.asyncIterator](): AsyncIterator<SizedDownstream> {
     let previousSeq: number | undefined;
     return {
       next: async () => {
@@ -190,10 +187,10 @@ class FailpointWriteWorkerClient implements WriteWorkerClient {
     return this.#inner.getSubscriptionState();
   }
 
-  async processMessage(
-    downstream: ChangeStreamData,
+  async processMessages(
+    downstream: readonly ChangeStreamData[],
   ): Promise<CommitResult | null> {
-    const result = await this.#inner.processMessage(downstream);
+    const result = await this.#inner.processMessages(downstream);
     if (
       result?.watermark &&
       this.#failpoint === 'after-sqlite-commit-before-ack' &&
