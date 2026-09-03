@@ -561,6 +561,21 @@ export const zeroOptions = {
     ],
   },
 
+  viewSyncerHydrationBudgetMs: {
+    type: v
+      .number()
+      .assert(
+        value => Number.isSafeInteger(value) && value >= 0,
+        'must be a nonnegative integer',
+      )
+      .default(0),
+    desc: [
+      `The soft time budget in milliseconds for hydrating inactive queries`,
+      `during a view-syncer hydration pass. Active and internal queries always`,
+      `finish. A value of 0 disables hydration-budget eviction.`,
+    ],
+  },
+
   change: {
     db: {
       type: v.string().optional(),

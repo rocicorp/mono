@@ -292,6 +292,12 @@ test('zero-cache --help', () => {
                                                                                    to the event loop. Lower values increase responsiveness and fairness at                                                    
                                                                                    the cost of reduced throughput.                                                                                            
                                                                                                                                                                                                               
+     --view-syncer-hydration-budget-ms number                                      default: 0                                                                                                                 
+       ZERO_VIEW_SYNCER_HYDRATION_BUDGET_MS env                                                                                                                                                               
+                                                                                   The soft time budget in milliseconds for hydrating inactive queries                                                        
+                                                                                   during a view-syncer hydration pass. Active and internal queries always                                                    
+                                                                                   finish. A value of 0 disables hydration-budget eviction.                                                                   
+                                                                                                                                                                                                              
      --change-db string                                                            optional                                                                                                                   
        ZERO_CHANGE_DB env                                                                                                                                                                                     
                                                                                    The Postgres database used to store recent replication log entries, in order                                               
@@ -904,6 +910,39 @@ test('--enable-query-covering can be disabled', () => {
 
   expect(config.enableQueryCovering).toBe(false);
 });
+
+test('view-syncer hydration budget defaults to disabled and accepts milliseconds', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+  expect(defaults.config.viewSyncerHydrationBudgetMs).toBe(0);
+
+  const configured = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_VIEW_SYNCER_HYDRATION_BUDGET_MS: '250'},
+  });
+  expect(configured.config.viewSyncerHydrationBudgetMs).toBe(250);
+});
+
+test.each(['-1', '1.5'])(
+  'view-syncer hydration budget rejects %s',
+  hydrationBudgetMs => {
+    expect(() =>
+      parseOptionsAdvanced(zeroOptions, {
+        envNamePrefix: 'ZERO_',
+        allowUnknown: false,
+        allowPartial: true,
+        env: {
+          ZERO_VIEW_SYNCER_HYDRATION_BUDGET_MS: hydrationBudgetMs,
+        },
+      }),
+    ).toThrow();
+  },
+);
 
 test('legacy queries are disabled by default', () => {
   const {config} = parseOptionsAdvanced(zeroOptions, {
