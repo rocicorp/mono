@@ -67,11 +67,13 @@ import {deepEqual, type ReadonlyJSONValue} from '../../../shared/src/json.ts';
  *
  * ## Identity vs. hash
  *
- * Identity implies an equal query hash, but not the other way around.
- * `normalizeAST` sorts `related` and `and`/`or` conditions, so
+ * Identity implies an equal query hash, but the tree alone does not give the
+ * converse. `normalizeAST` sorts `related` and `and`/`or` conditions, so
  * `q.where(a).where(b)` and `q.where(b).where(a)` hash the same while being
- * distinct nodes in this tree. Callers that need the normalizing behavior must
- * keep using the hash.
+ * distinct paths, and so distinct nodes. {@linkcode HashIndex} is the second
+ * level that folds those together once they have been hashed. Callers that
+ * need the normalizing behavior for a query that may not have been must keep
+ * using the hash.
  */
 
 /**
@@ -262,6 +264,47 @@ export class Transitions<T extends object> {
   }
 
   /**
+   * Re-points the transition that produced `from` at `to`, so the next lookup
+   * along that path yields `to` instead. This is how {@linkcode HashIndex}
+   * converges two paths on one node: `from` keeps its identity, since it has
+   * already been handed out, and its path is redirected for the rebuilds that
+   * follow.
+   *
+   * Scans rather than taking a key. This runs once per redirected path, so a
+   * walk here is cheaper than the fields every node would need to carry to
+   * name its own transition.
+   */
+  replace(from: T, to: T): boolean {
+    if (this.#first === from) {
+      this.#first = to;
+      return true;
+    }
+    const rest = this.#rest;
+    if (rest === undefined) {
+      return false;
+    }
+    for (const byValue of rest.values()) {
+      for (const [value, bucket] of byValue) {
+        if (!(bucket instanceof Set)) {
+          if (bucket.ref.deref() === from) {
+            byValue.set(value, {delta: bucket.delta, ref: new WeakRef(to)});
+            return true;
+          }
+          continue;
+        }
+        for (const entry of bucket) {
+          if (entry.ref.deref() === from) {
+            bucket.delete(entry);
+            bucket.add({delta: entry.delta, ref: new WeakRef(to)});
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * Drops entries for collected values, if the map has grown enough to be worth
    * walking.
    *
@@ -305,5 +348,71 @@ export class Transitions<T extends object> {
     }
     this.#restSize = live;
     this.#sweepAt = Math.max(SWEEP_INITIAL, live * 2);
+  }
+}
+
+/**
+ * The second level of interning: nodes keyed by *content* rather than by the
+ * path that built them.
+ *
+ * The transition tree cannot see that `q.where(a).where(b)` and
+ * `q.where(b).where(a)` are the same query. `normalizeAST` sorts conditions
+ * and `related` entries, so the two build byte-identical ASTs, but they are
+ * different paths and so different nodes. This index closes that gap, keyed by
+ * the query's hash.
+ *
+ * It is consulted when a query is *hashed*, not when it is built. Hashing on
+ * every tree miss would make a cold chain pay for a hash per node, where the
+ * uninterned code paid for one at the end, if at all -- and server-side queries
+ * are built cold, once, per request. The consumers that key by hash already
+ * hash the queries they care about, so doing the work there costs one map
+ * lookup on top of a hash that was being computed anyway, and nothing at all
+ * for a query nobody hashes.
+ *
+ * On a hit the query being hashed keeps its identity, since it has already
+ * been handed out. Its *transition* is re-pointed at the existing node instead
+ * (see {@linkcode Transitions.replace}), so the next rebuild along that path
+ * yields the shared instance. As with the tree this is a cache: the rebuild
+ * after a redirect is what converges, not the call that found the duplicate.
+ *
+ * One index per root, which is what scopes it. Two roots never share an index,
+ * so queries against different schemas or different delegates -- neither of
+ * which the hash covers -- can never be conflated. Entries are weak: a cleared
+ * one is dropped by the lookup that finds it, or by a sweep once the map has
+ * doubled since the last one.
+ */
+export class HashIndex<T extends object> {
+  readonly #byHash = new Map<string, WeakRef<T>>();
+  #sweepAt = SWEEP_INITIAL;
+
+  /** The underlying map. Exposed for tests. */
+  get map(): Map<string, WeakRef<T>> {
+    return this.#byHash;
+  }
+
+  get(hash: string): T | undefined {
+    const ref = this.#byHash.get(hash);
+    if (ref === undefined) {
+      return undefined;
+    }
+    const node = ref.deref();
+    if (node === undefined) {
+      this.#byHash.delete(hash);
+    }
+    return node;
+  }
+
+  set(hash: string, node: T): void {
+    const byHash = this.#byHash;
+    byHash.set(hash, new WeakRef(node));
+    if (byHash.size < this.#sweepAt) {
+      return;
+    }
+    for (const [h, ref] of byHash) {
+      if (ref.deref() === undefined) {
+        byHash.delete(h);
+      }
+    }
+    this.#sweepAt = Math.max(SWEEP_INITIAL, byHash.size * 2);
   }
 }

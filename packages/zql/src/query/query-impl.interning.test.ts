@@ -86,15 +86,144 @@ test('`one` and `limit(1)` differ, because their formats do', () => {
   );
 });
 
-test('interning is order sensitive even where hashing is not', () => {
-  const a = issue.where('closed', false).where('title', '=', 'x');
-  const b = issue.where('title', '=', 'x').where('closed', false);
+/**
+ * A root no other test has derived from. The interned root is shared by every
+ * test in this file, and what hangs off it -- including its hash index --
+ * survives from one test to the next, so tests about convergence start from a
+ * root of their own. A caller-supplied AST is never interned.
+ */
+function freshRoot(alias: string): AnyQuery {
+  return newQueryImpl(
+    schema,
+    'issue',
+    {table: 'issue', alias},
+    defaultFormat,
+    'client',
+  ) as unknown as AnyQuery;
+}
+
+test('paths that build the same query converge once it is hashed', () => {
+  const root = freshRoot('converge');
+  const a = root.where('closed', false).where('title', '=', 'x');
+  const b = root.where('title', '=', 'x').where('closed', false);
 
   // `normalizeAST` sorts conditions, so these two hash the same...
   expect(asQueryInternals(a).hash()).toBe(asQueryInternals(b).hash());
-  // ...but they are distinct nodes in the transition tree. Identity implies an
-  // equal hash; the converse does not hold.
+  // ...but the tree keyed them by path, so they were built as distinct nodes.
   expect(a).not.toBe(b);
+
+  // Hashing `b` found `a` in the root's hash index and re-pointed `b`'s
+  // transition at it. `b` keeps its identity, since it has been handed out,
+  // but the next rebuild along either path yields `a`.
+  expect(root.where('title', '=', 'x').where('closed', false)).toBe(a);
+  expect(root.where('closed', false).where('title', '=', 'x')).toBe(a);
+
+  // The same for anything else normalization reorders: `related` is sorted.
+  const c = root.related('comments').related('labels');
+  const d = root.related('labels').related('comments');
+  expect(c).not.toBe(d);
+  asQueryInternals(c).hash();
+  asQueryInternals(d).hash();
+  expect(root.related('labels').related('comments')).toBe(c);
+});
+
+test('convergence waits for a hash; building alone changes nothing', () => {
+  const root = freshRoot('unhashed');
+  const a = root.where('closed', false).limit(5);
+  const b = root.limit(5).where('closed', false);
+  expect(a).not.toBe(b);
+  // Nothing has been hashed, so nothing has been indexed or redirected.
+  expect(asQueryImpl(root).hashIndexForTesting).toBeUndefined();
+  expect(root.limit(5).where('closed', false)).toBe(b);
+
+  // Only the hashed query is indexed, and only under the root.
+  asQueryInternals(a).hash();
+  const index = asQueryImpl(root).hashIndexForTesting!;
+  expect(index.get(asQueryInternals(a).hash())).toBe(a);
+  expect(asQueryImpl(a).hashIndexForTesting).toBeUndefined();
+  expect(asQueryImpl(root.where('closed', false)).hashIndexForTesting).toBe(
+    undefined,
+  );
+  expect(root.limit(5).where('closed', false)).toBe(b);
+
+  // Hashing `b` is what redirects its path.
+  asQueryInternals(b).hash();
+  expect(root.limit(5).where('closed', false)).toBe(a);
+});
+
+test('a root is its own canonical form and is never indexed', () => {
+  const root = freshRoot('root-hash');
+  asQueryInternals(root).hash();
+  expect(asQueryImpl(root).hashIndexForTesting).toBeUndefined();
+});
+
+test('the hash index is scoped by root', () => {
+  // Two schema objects, structurally identical, get separate interned roots
+  // and so separate indexes. The hash does not cover the schema, so this
+  // scoping is what keeps equal-looking queries against different schemas
+  // apart.
+  const other = {...schema};
+  const a = issue.where('closed', false).where('title', '=', 'scoped');
+  const b = newQuery(other, 'issue')
+    .where('title', '=', 'scoped')
+    .where('closed', false);
+  expect(asQueryInternals(a).hash()).toBe(asQueryInternals(b).hash());
+  expect(
+    newQuery(other, 'issue')
+      .where('title', '=', 'scoped')
+      .where('closed', false),
+  ).toBe(b);
+  expect(b).not.toBe(a);
+});
+
+test('runnable queries converge per delegate', () => {
+  const d1 = new QueryDelegateImpl();
+  const d2 = new QueryDelegateImpl();
+  const r1 = newRunnableQuery(d1, schema, 'issue');
+  const r2 = newRunnableQuery(d2, schema, 'issue');
+
+  const a = r1.where('closed', false).where('title', '=', 'z');
+  const b = r1.where('title', '=', 'z').where('closed', false);
+  const c = r2.where('title', '=', 'z').where('closed', false);
+  for (const q of [a, b, c]) {
+    asQueryInternals(q).hash();
+  }
+  expect(r1.where('title', '=', 'z').where('closed', false)).toBe(a);
+  // Same hash, different delegate: a separate root, so a separate index.
+  expect(asQueryInternals(c).hash()).toBe(asQueryInternals(a).hash());
+  expect(r2.where('title', '=', 'z').where('closed', false)).toBe(c);
+  expect(c).not.toBe(a);
+});
+
+test('a hash collision is checked structurally and not adopted', () => {
+  const spy = vi
+    .spyOn(queryHash, 'hashOfQueryInternals')
+    .mockReturnValue('collision');
+  try {
+    const root = freshRoot('collision');
+    const a = root.where('closed', false);
+    const b = root.where('closed', true);
+    expect(asQueryInternals(a).hash()).toBe(asQueryInternals(b).hash());
+    // `b` is not `a`, so hashing it must not redirect its path to `a`.
+    expect(root.where('closed', true)).toBe(b);
+    expect(root.where('closed', false)).toBe(a);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('a redirected path re-points the strong first slot too', () => {
+  // The first transition out of a node is held in a field rather than the
+  // weak map; `replace` has to cover that slot as well as the map.
+  const root = freshRoot('first-slot');
+  const a = root.where('closed', false).where('title', '=', 'f');
+  const via = root.where('title', '=', 'f');
+  const b = via.where('closed', false);
+  expect(asQueryImpl(via).transitionsForTesting!.first).toBe(b);
+  asQueryInternals(a).hash();
+  asQueryInternals(b).hash();
+  expect(asQueryImpl(via).transitionsForTesting!.first).toBe(a);
+  expect(via.where('closed', false)).toBe(a);
 });
 
 test('sub-queries handed to callbacks are themselves interned', () => {

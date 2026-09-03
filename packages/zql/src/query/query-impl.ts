@@ -1,6 +1,6 @@
 // oxlint-disable no-explicit-any
 import {assert} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {deepEqual, type ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   type AST,
   type CompoundKey,
@@ -33,6 +33,7 @@ import {
 import type {CustomQueryID} from './named.ts';
 import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import {
+  HashIndex,
   Transitions,
   type Delta,
   type TransitionValue,
@@ -225,6 +226,12 @@ export class QueryImpl<
   #transitions: Transitions<QueryImpl<any, any, any>> | undefined;
 
   /**
+   * The second level of interning, keyed by hash; see `HashIndex`. Set on the
+   * root only, which is what scopes it to one schema and one delegate.
+   */
+  #byHash: HashIndex<QueryImpl<any, any, any>> | undefined;
+
+  /**
    * Memoized because a query is interned: the same node serves every rebuild of
    * a chain, so building this once rather than per `where(fn)` call takes the
    * whole thing -- the builder and the bound `#exists` -- off the repeat path.
@@ -246,6 +253,11 @@ export class QueryImpl<
     | Transitions<QueryImpl<any, any, any>>
     | undefined {
     return this.#transitions;
+  }
+
+  /** @internal Exposed for tests. Only a root has one. */
+  get hashIndexForTesting(): HashIndex<QueryImpl<any, any, any>> | undefined {
+    return this.#byHash;
   }
 
   constructor(
@@ -378,8 +390,54 @@ export class QueryImpl<
         this.customQueryID?.name,
         this.customQueryID?.args,
       );
+      this.#canonicalize();
     }
     return this.#hash;
+  }
+
+  /**
+   * Folds this query into its root's hash index, now that its hash is known.
+   *
+   * If an equal query is already indexed, the transition that produced this
+   * one is re-pointed at it, so the next rebuild along this path yields that
+   * instance rather than a second copy. This query itself is left alone: its
+   * identity has already been handed out. Content is verified with `#sameAs`
+   * before anything is redirected, so a hash collision costs nothing worse
+   * than a missed unification.
+   */
+  #canonicalize(): void {
+    const parent = this.#parent;
+    if (parent === undefined) {
+      // A root has no path to redirect and is its own canonical form.
+      return;
+    }
+    let root = parent;
+    while (root.#parent !== undefined) {
+      root = root.#parent;
+    }
+    const index = (root.#byHash ??= new HashIndex());
+    const existing = index.get(this.#hash);
+    if (existing === undefined) {
+      index.set(this.#hash, this);
+    } else if (existing !== this && this.#sameAs(existing)) {
+      parent.#transitions?.replace(this, existing);
+    }
+  }
+
+  /**
+   * Whether `other` is interchangeable with this query: everything `hash()`
+   * covers, compared structurally. Schema and delegate are not compared. Both
+   * are fixed by the root, and this only ever compares queries under one root.
+   */
+  #sameAs(other: QueryImpl<any, any, any>): boolean {
+    return (
+      this.#system === other.#system &&
+      this.#currentJunction === other.#currentJunction &&
+      this.customQueryID?.name === other.customQueryID?.name &&
+      deepEqual(this.customQueryID?.args, other.customQueryID?.args) &&
+      deepEqual(this.format, other.format) &&
+      deepEqual(this.#ast, other.#ast)
+    );
   }
 
   one(): Query<TTable, TSchema, TReturn | undefined> {
