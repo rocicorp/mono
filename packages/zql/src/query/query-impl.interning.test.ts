@@ -244,14 +244,6 @@ test('a non-deterministic callback simply misses the cache', () => {
   expect(build()).not.toBe(build());
 });
 
-test('derived queries retain their parent', () => {
-  const q = asQueryImpl(issue.where('closed', false).limit(5) as AnyQuery);
-  const parent = q.derivedFrom;
-  expect(parent).toBeDefined();
-  expect(parent!.derivedFrom).toBe(asQueryImpl(issue as AnyQuery));
-  expect(asQueryImpl(issue as AnyQuery).derivedFrom).toBe(undefined);
-});
-
 test('roots are interned per schema and system', () => {
   expect(newQuery(schema, 'issue')).toBe(newQuery(schema, 'issue'));
   expect(newQuery(schema, 'issue')).not.toBe(newQuery(schema, 'comment'));

@@ -242,16 +242,6 @@ export class QueryImpl<
    */
   #expressionBuilder: ExpressionBuilder<TTable, TSchema> | undefined;
 
-  /**
-   * The query this one was derived from, or `undefined` for a root query.
-   *
-   * @internal Exposed for tests and debugging. The field behind it exists to
-   * keep the ancestor spine alive, not to be navigated.
-   */
-  get derivedFrom(): QueryImpl<any, any, any> | undefined {
-    return this.#parent;
-  }
-
   constructor(
     schema: TSchema,
     tableName: TTable,
