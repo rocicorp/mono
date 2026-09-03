@@ -31,6 +31,7 @@ import {
 } from '../change-streamer/change-streamer.ts';
 import * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {deleteChangeLogDB} from './change-log-db.ts';
+import type {CommitResult} from './change-processor.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import {ReplicatorService} from './replicator.ts';
@@ -916,5 +917,42 @@ describe('replicator/incremental-sync', () => {
     // Should stop / resolve
     await syncing;
     expect(processMessage).not.toHaveBeenCalled();
+  });
+
+  test('stop() interrupts a run loop stuck on an in-flight processMessage', async () => {
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+
+    // Simulates a processMessage() call that never resolves on its own -- as
+    // happens when the write worker is paused inside LitestreamCheckpointer's
+    // WAL-drain poll (see litestream-checkpointer.test.ts for that piece in
+    // isolation) -- until abort() interrupts it. Mocked here at the
+    // WriteWorkerClient boundary so this test doesn't depend on a real
+    // worker thread or litestream process; it only exercises whether
+    // IncrementalSyncer actually calls abort() when asked to stop.
+    const {promise: stuck, resolve: unstick} = resolver<CommitResult | null>();
+    const processMessage = vi
+      .spyOn(worker, 'processMessage')
+      .mockReturnValue(stuck);
+    const abort = vi.spyOn(worker, 'abort').mockImplementation(() => {
+      unstick(null);
+    });
+
+    const issues = new ReplicationMessages({issues: ['issueID']});
+    const localSyncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+
+    downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
+    await vi.waitFor(() => expect(processMessage).toHaveBeenCalled());
+
+    syncer.stop(lc);
+    expect(abort).toHaveBeenCalled();
+
+    // Without stop() calling abort() to interrupt the stuck call, this would
+    // hang forever rather than resolving.
+    expect(await orTimeoutWith(localSyncing, 1000, 'timed-out')).not.toBe(
+      'timed-out',
+    );
   });
 });
