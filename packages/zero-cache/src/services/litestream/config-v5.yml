@@ -31,10 +31,7 @@ dbs:
     # ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB.
     monitor-interval: ${ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}s
     min-checkpoint-page-count: ${ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT}
-    # "Emergency break" truncates are disabled. The application instead
-    # monitors the wal and requests a checkpoint (with replication paused)
-    # if the wal reaches a certain threshold.
-    truncate-page-n: -1
+    truncate-page-n: ${ZERO_LITESTREAM_TRUNCATE_PAGE_N}
     replica:
       url: ${ZERO_LITESTREAM_BACKUP_URL}
       endpoint: ${ZERO_LITESTREAM_ENDPOINT}
