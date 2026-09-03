@@ -211,23 +211,17 @@ describe('change-streamer/pg/schema/init', () => {
       publications: [`${APP_ID}_foo`],
     };
     const schema = id(`${APP_ID}_${SHARD_NUM}`);
-    await ensureShardSchema(lc, upstream, shard, false);
+    await ensureShardSchema(lc, upstream, shard);
 
-    const [{specs: v25Specs, current: v25Current}] = (await upstream.unsafe(`
-        SELECT ${schema}.schema_specs() AS specs, current
-          FROM ${schema}."publishedSchema"`)) as unknown as {
-      specs: {indexes: {name: string; tableName: string}[]};
-      current: unknown;
-    }[];
-    expect(
-      v25Specs.indexes.filter(index => index.tableName === 'foo'),
-    ).toMatchObject([{name: 'foo_pkey'}]);
-    expect(v25Current).toEqual(v25Specs);
-    await expectTablesToMatch(upstream, {
-      [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [
-        {...CURRENT_SCHEMA_VERSIONS, dataVersion: 25, schemaVersion: 25},
-      ],
-    });
+    // Simulate a v25 shard: its schema_specs() predates partial index
+    // support, and the stored "publishedSchema" reflects that output.
+    await upstream.unsafe(`
+      CREATE OR REPLACE FUNCTION ${schema}.schema_specs() RETURNS JSON STABLE AS $$
+        SELECT '{"tables":[],"indexes":[]}'::json
+      $$ LANGUAGE sql;
+      UPDATE ${schema}."publishedSchema" SET current = ${schema}.schema_specs();
+      UPDATE ${schema}."versionHistory" SET "schemaVersion" = 25, "dataVersion" = 25;
+    `);
 
     await ensureShardSchema(lc, upstream, shard);
 

@@ -26,11 +26,9 @@ export async function ensureShardSchema(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
-  installPartialIndexTriggers = true,
 ): Promise<void> {
   const initialSetup: Migration = {
-    migrateSchema: (lc, tx) =>
-      setupTablesAndReplication(lc, tx, shard, installPartialIndexTriggers),
+    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
     minSafeVersion: 1,
   };
   await runSchemaMigrations(
@@ -42,14 +40,11 @@ export async function ensureShardSchema(
     // The incremental migration of any existing replicas will be replaced by
     // the incoming replica being synced, so the replicaVersion here is
     // unnecessary.
-    getIncrementalMigrations(shard, installPartialIndexTriggers),
+    getIncrementalMigrations(shard),
   );
 }
 
-function getIncrementalMigrations(
-  shard: ShardConfig,
-  installPartialIndexTriggers: boolean,
-): IncrementalMigrationMap {
+function getIncrementalMigrations(shard: ShardConfig): IncrementalMigrationMap {
   const shardConfigTable = `${upstreamSchema(shard)}.shardConfig`;
 
   return {
@@ -248,33 +243,26 @@ function getIncrementalMigrations(
       },
     },
 
-    ...(installPartialIndexTriggers
-      ? {
-          // v26: Upgrade the DDL event triggers to include partial indexes in
-          // schema snapshots. Note that setupTriggers() also refreshes the
-          // stored "publishedSchema" so that the change in format does not
-          // manifest as a spurious schema change.
-          26: {
-            migrateSchema: async (lc, sql) => {
-              const [{publications}] = await sql<{publications: string[]}[]>`
-                SELECT publications FROM ${sql(shardConfigTable)}`;
-              await setupTriggers(lc, sql, {...shard, publications});
-              lc.info?.(`Upgraded DDL event triggers`);
-            },
-          },
-        }
-      : {}),
+    // v26: Upgrade the DDL event triggers to include partial indexes in
+    // schema snapshots. Note that setupTriggers() also refreshes the stored
+    // "publishedSchema" so that the change in format does not manifest as a
+    // spurious schema change.
+    26: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
+      },
+    },
   };
 }
 
 // Referenced in tests.
 export const CURRENT_SCHEMA_VERSION = Object.keys(
-  getIncrementalMigrations(
-    {
-      appID: 'unused',
-      shardNum: 0,
-      publications: ['foo'],
-    },
-    true,
-  ),
+  getIncrementalMigrations({
+    appID: 'unused',
+    shardNum: 0,
+    publications: ['foo'],
+  }),
 ).reduce((prev, curr) => Math.max(prev, parseInt(curr)), 0);
