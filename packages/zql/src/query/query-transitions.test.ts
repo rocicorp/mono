@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {MAX_SCAN, Transitions} from './query-transitions.ts';
+import {HashIndex, MAX_SCAN, Transitions} from './query-transitions.ts';
 import {withStubbedWeakRef} from './test/weak-ref-stub.ts';
 
 function make(name: string): {name: string} {
@@ -212,5 +212,87 @@ test('sweeping keeps live entries', () => {
     live.forEach((v, i) => t.store('k', i, undefined, v));
 
     live.forEach((v, i) => expect(t.lookup('k', i, undefined)).toBe(v));
+  });
+});
+
+test('replace re-points the strong first slot', () => {
+  withStubbedWeakRef(weak => {
+    const t = new Transitions<object>();
+    const from = make('from');
+    const to = make('to');
+    t.store('k', 1, undefined, from);
+    expect(t.replace(from, to)).toBe(true);
+    expect(t.lookup('k', 1, undefined)).toBe(to);
+    // Still the strong slot afterwards: no WeakRef, and it survives
+    // collection.
+    expect(weak.created()).toBe(0);
+    weak.collect(to);
+    expect(t.lookup('k', 1, undefined)).toBe(to);
+  });
+});
+
+test('replace re-points a weak entry, bare or in a bucket', () => {
+  const t = new Transitions<object>();
+  fill(t);
+  const from = make('from');
+  const to = make('to');
+  t.store('k', 1, undefined, from);
+  expect(t.replace(from, to)).toBe(true);
+  expect(t.lookup('k', 1, undefined)).toBe(to);
+
+  const from2 = make('from2');
+  const to2 = make('to2');
+  const other = make('other');
+  t.store('k', 2, {d: 1}, other);
+  t.store('k', 2, {d: 2}, from2);
+  expect(t.replace(from2, to2)).toBe(true);
+  expect(t.lookup('k', 2, {d: 2})).toBe(to2);
+  // Replacing one entry of a bucket leaves its neighbour alone.
+  expect(t.lookup('k', 2, {d: 1})).toBe(other);
+});
+
+test('replace of a node this map never stored is a no-op', () => {
+  const t = new Transitions<object>();
+  expect(t.replace(make('x'), make('y'))).toBe(false);
+  fill(t);
+  const stored = make('other');
+  t.store('k', 1, undefined, stored);
+  expect(t.replace(make('x'), make('y'))).toBe(false);
+  // ...and leaves what is stored untouched.
+  expect(t.lookup('k', 1, undefined)).toBe(stored);
+});
+
+test('a hash index round trips and forgets a collected entry', () => {
+  withStubbedWeakRef(({collect}) => {
+    const h = new HashIndex<object>();
+    const a = make('a');
+    h.set('h1', a);
+    expect(h.get('h1')).toBe(a);
+    expect(h.get('h2')).toBeUndefined();
+
+    collect(a);
+    expect(h.get('h1')).toBeUndefined();
+    // A collected entry does not shadow a later one under the same hash.
+    const b = make('b');
+    h.set('h1', b);
+    expect(h.get('h1')).toBe(b);
+  });
+});
+
+test('a hash index keeps live entries through any amount of dead ones', () => {
+  withStubbedWeakRef(({collect}) => {
+    const h = new HashIndex<object>();
+    const live = Array.from({length: 300}, (_, i) => make(`live${i}`));
+    live.forEach((v, i) => h.set(`live-${i}`, v));
+    // Enough dead inserts to cross several sweeps.
+    for (let i = 0; i < 1000; i++) {
+      const v = make(`v${i}`);
+      h.set(`dead-${i}`, v);
+      collect(v);
+    }
+    live.forEach((v, i) => expect(h.get(`live-${i}`)).toBe(v));
+    for (let i = 0; i < 1000; i++) {
+      expect(h.get(`dead-${i}`)).toBeUndefined();
+    }
   });
 });
