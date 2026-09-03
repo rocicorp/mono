@@ -145,8 +145,8 @@ importers:
         specifier: ^2.5.1
         version: 2.5.1
       compare-utf8:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
       emoji-picker-element:
         specifier: ^1.22.8
         version: 1.29.1
@@ -548,8 +548,8 @@ importers:
         specifier: ^7.0.3
         version: 7.0.4
       compare-utf8:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
       esbuild:
         specifier: 0.27.7
         version: 0.27.7
@@ -654,8 +654,8 @@ importers:
         specifier: ^7.0.3
         version: 7.0.4
       compare-utf8:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
       esbuild:
         specifier: 0.27.7
         version: 0.27.7
@@ -755,8 +755,8 @@ importers:
         specifier: ^4.1.6
         version: 4.1.6
       compare-utf8:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
       fast-check:
         specifier: ^3.18.0
         version: 3.23.2
@@ -930,8 +930,8 @@ importers:
         specifier: ^7.0.3
         version: 7.0.4
       compare-utf8:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
       defu:
         specifier: ^6.1.4
         version: 6.1.7
@@ -1117,8 +1117,8 @@ importers:
         specifier: ^10.0.0
         version: 10.0.0
       compare-utf8:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
       defu:
         specifier: ^6.1.4
         version: 6.1.7
@@ -1367,8 +1367,8 @@ importers:
         specifier: 0.3.11
         version: 0.3.11
       compare-utf8:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
     devDependencies:
       fast-check:
         specifier: ^3.18.0
@@ -1578,8 +1578,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       compare-utf8:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
     devDependencies:
       '@faker-js/faker':
         specifier: ^9.6.0
@@ -7345,8 +7345,8 @@ packages:
     resolution: {integrity: sha512-gk/Z852D2Wtb//0I+kRFNKKE9dIIVirjoqPoA1wJU+XePVXZfGeBpk45+A1rKO4Q43prqWBNY/MiIeRLbPWUaA==}
     engines: {node: '>=4.0.0'}
 
-  compare-utf8@0.2.0:
-    resolution: {integrity: sha512-5BjVs4Be9AwMm4le3Qb3crp44OAn+uuJhvrjPWA8Es/DfVPq5lSc8JaRg/clrrHOMCU+CdDfv/9eBSPh6OOiUQ==}
+  compare-utf8@0.2.1:
+    resolution: {integrity: sha512-DfGo/vn6Aww3SbT1v1qvORR7Mg2P/+8fOWWvyyuiQ0ylXOyF8J6WetAkkveupnw41868OxmC93i6Q5WbNPDiwQ==}
 
   compress-commons@6.0.2:
     resolution: {integrity: sha512-6FqVXeETqWPoGcfzrXb37E50NP0LXT8kAMu5ooZayhWWdgEY4lBEEcbQNXtkuKQsGduxiIcI4gOTsxTmuq/bSg==}
@@ -20504,7 +20504,7 @@ snapshots:
 
   common-tags@1.8.2: {}
 
-  compare-utf8@0.2.0: {}
+  compare-utf8@0.2.1: {}
 
   compress-commons@6.0.2:
     dependencies:

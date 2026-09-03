@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@rocicorp/resolver": "^1.0.2",
-    "compare-utf8": "^0.2.0"
+    "compare-utf8": "^0.2.1"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
