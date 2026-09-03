@@ -731,16 +731,8 @@ export class QueryImpl<
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
   ): Query<TTable, TSchema, TReturn> {
-    // Interned like every other builder method (see `#derive`): if this query
-    // has already been paged from this row, the same query object comes back.
-    // The row is encoded into a string and looked up in a `Map`, so paging to
-    // a row never seen before costs one lookup. The alternative, keeping the
-    // row object and comparing it with `deepEqual` against every row already
-    // paged from here, made a new page slower than not interning at all.
-    //
-    // The encoding keeps property order, so `{a, b}` and `{b, a}` are looked
-    // up separately. They still end up as one object once either is hashed,
-    // since their ASTs are equal; see `#canonicalize`.
+    // The row is an object, so it is encoded to a string to serve as the
+    // lookup key. Property order is part of that string.
     return this.#derive(
       opts?.inclusive ? 'start:inclusive' : 'start:exclusive',
       valueTag(row as ReadonlyJSONValue),
