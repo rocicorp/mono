@@ -451,6 +451,7 @@ export async function setupTablesAndReplication(
   lc: LogContext,
   sql: PostgresTransaction,
   requested: ShardConfig,
+  includePartialIndexes = true,
 ) {
   const {publications} = requested;
   // Validate requested publications.
@@ -506,13 +507,14 @@ export async function setupTablesAndReplication(
   const pubs = await getPublicationInfo(sql, allPublications);
   await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(lc, sql);
 
-  await setupTriggers(lc, sql, shard);
+  await setupTriggers(lc, sql, shard, includePartialIndexes);
 }
 
 export async function setupTriggers(
   lc: LogContext,
   tx: PostgresTransaction,
   shard: ShardConfig,
+  includePartialIndexes = true,
 ) {
   const schema = upstreamSchema(shard);
   const [{ddlDetection}] = await tx<InternalShardConfig[]> /*sql*/ `
@@ -522,7 +524,7 @@ export async function setupTriggers(
   // event triggers are not supported/allowed by the db provider.
   // This allows users to manually invoke the update_schemas() function
   // as a workaround.
-  await tx.unsafe(createEventFunctionStatements(shard));
+  await tx.unsafe(createEventFunctionStatements(shard, includePartialIndexes));
   try {
     await tx.savepoint(sub => sub.unsafe(triggerSetup(shard)));
   } catch (e) {
