@@ -246,5 +246,7 @@ export class IncrementalSyncer {
 
   stop(lc: LogContext, err?: unknown) {
     this.#state.stop(lc, err);
+    // Abort any polling loop that the write worker may be in.
+    this.#worker.abort();
   }
 }
