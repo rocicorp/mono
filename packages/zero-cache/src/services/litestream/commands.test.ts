@@ -22,6 +22,7 @@ import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   getLastBackupTime,
   parseBackupCreatedTimes,
+  startReplicaBackupProcess,
   tryRestore,
 } from './commands.ts';
 import * as litestreamMetrics from './metrics.ts';
@@ -729,6 +730,37 @@ describe('litestream/commands restoreReplica', () => {
     );
     expect(paths).toEqual([replica]);
     expect(paths).not.toContain(changeLogFileName(replica));
+  });
+
+  // forceCheckpointThresholdMB and litestream's own truncate-page-n emergency
+  // break are mutually exclusive: whichever one is doing the job, the other
+  // must be off, or a stuck TRUNCATE checkpoint could still block writes for
+  // as long as the app's forced checkpoint is meant to prevent.
+  function truncatePageNForReplicate(
+    forceCheckpointThresholdMB: number,
+  ): string | undefined {
+    const spawnMock = vi.mocked(childProcess.spawn);
+    spawnMock.mockClear();
+    const {litestream, replica} = configWithFakeLitestream(
+      'exit 0',
+      undefined,
+      {forceCheckpointThresholdMB},
+    );
+
+    startReplicaBackupProcess(lc, litestream, replica.file);
+
+    const replicateCall = spawnMock.mock.calls.find(
+      call => Array.isArray(call[1]) && call[1][0] === 'replicate',
+    );
+    return replicateCall?.[2]?.env?.ZERO_LITESTREAM_TRUNCATE_PAGE_N;
+  }
+
+  test('disables litestream truncate-page-n when forceCheckpointThresholdMB is set', () => {
+    expect(truncatePageNForReplicate(256)).toBe('-1');
+  });
+
+  test('uses litestream default truncate-page-n when forceCheckpointThresholdMB is disabled', () => {
+    expect(truncatePageNForReplicate(0)).toBe('121359');
   });
 
   // Regression guard for a silent misconfiguration: `monitor-interval` is a

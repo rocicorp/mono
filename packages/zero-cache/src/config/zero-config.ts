@@ -1146,7 +1146,8 @@ export const zeroOptions = {
     },
 
     forceCheckpointThresholdMB: {
-      type: v.number().default(256),
+      // TODO: Renable to default(256) after working through litestream /sync issues
+      type: v.number().default(0),
       desc: [
         `The size of the WAL file at which to pause writes and explicitly initiate a`,
         `local litestream sync. This is a safeguard for the situation in which litestream's`,
@@ -1161,8 +1162,12 @@ export const zeroOptions = {
         `the {bold ZERO_LITESTREAM_MAX_WAL_SIZE_MB} provides an emergency break to prevent`,
         `exceeding available disk space.`,
         ``,
+        `Set this to 0 to disable and instead rely on the litestream's default {bold truncate-page-n}`,
+        `emergency break.`,
+        ``,
         `This feature is only enabled with {bold ZERO_LITESTREAM_BACKUP_USING_V5}.`,
       ],
+      hidden: true,
     },
 
     maxWalSizeMB: {
@@ -1181,6 +1186,7 @@ export const zeroOptions = {
         ``,
         `This feature is only enabled with {bold ZERO_LITESTREAM_BACKUP_USING_V5}.`,
       ],
+      hidden: true,
     },
 
     incrementalBackupIntervalMinutes: {
