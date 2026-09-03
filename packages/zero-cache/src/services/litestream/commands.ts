@@ -84,6 +84,7 @@ function getLitestream(
     // is added, this computation must be adjusted accordingly.
     minCheckpointPageCount = checkpointThresholdMB * 256, // 1 MiB / 4 KiB page size
     maxCheckpointPageCount = minCheckpointPageCount * 10,
+    forceCheckpointThresholdMB,
     incrementalBackupIntervalMinutes,
     incrementalBackupIntervalSeconds,
     snapshotBackupIntervalHours,
@@ -102,6 +103,9 @@ function getLitestream(
   const snapshotIntervalHours = v5
     ? snapshotBackupIntervalHoursV5
     : snapshotBackupIntervalHours;
+  // Disable truncate-page-n if forced checkpoints are enabled,
+  // and otherwise use litestream's default.
+  const truncatePageN = forceCheckpointThresholdMB ? -1 : 121359;
 
   return {
     litestream,
@@ -121,6 +125,7 @@ function getLitestream(
       ['ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS']: String(
         incrementalBackupIntervalSeconds, // v5 only
       ),
+      ['ZERO_LITESTREAM_TRUNCATE_PAGE_N']: String(truncatePageN),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
       ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS']: String(
         snapshotIntervalHours,
