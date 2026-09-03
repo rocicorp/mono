@@ -196,53 +196,6 @@ describe('change-streamer/pg/schema/init', () => {
     },
   ];
 
-  test('v26 upgrades DDL triggers to report partial indexes', async () => {
-    await initDB(
-      upstream,
-      `
-      CREATE TABLE foo(id TEXT PRIMARY KEY, flag INT4);
-      CREATE UNIQUE INDEX foo_live ON foo (id) WHERE flag > 0;
-      CREATE PUBLICATION ${APP_ID}_foo FOR TABLE foo;
-    `,
-    );
-    const shard = {
-      appID: APP_ID,
-      shardNum: SHARD_NUM,
-      publications: [`${APP_ID}_foo`],
-    };
-    const schema = id(`${APP_ID}_${SHARD_NUM}`);
-    await ensureShardSchema(lc, upstream, shard);
-
-    // Simulate a v25 shard: its schema_specs() predates partial index
-    // support, and the stored "publishedSchema" reflects that output.
-    await upstream.unsafe(`
-      CREATE OR REPLACE FUNCTION ${schema}.schema_specs() RETURNS JSON STABLE AS $$
-        SELECT '{"tables":[],"indexes":[]}'::json
-      $$ LANGUAGE sql;
-      UPDATE ${schema}."publishedSchema" SET current = ${schema}.schema_specs();
-      UPDATE ${schema}."versionHistory" SET "schemaVersion" = 25, "dataVersion" = 25;
-    `);
-
-    await ensureShardSchema(lc, upstream, shard);
-
-    const [{specs, current}] = (await upstream.unsafe(`
-      SELECT ${schema}.schema_specs() AS specs, current
-        FROM ${schema}."publishedSchema"`)) as unknown as {
-      specs: {indexes: {tableName: string}[]};
-      current: unknown;
-    }[];
-    expect(specs.indexes.filter(idx => idx.tableName === 'foo')).toMatchObject([
-      {name: 'foo_live', unique: false, predicateSQL: '(flag > 0)'},
-      {name: 'foo_pkey', unique: true, predicateSQL: null},
-    ]);
-    // The stored schema is refreshed along with the function so that the
-    // change in format is not reported as a schema change on the next DDL.
-    expect(current).toEqual(specs);
-    await expectTablesToMatch(upstream, {
-      [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-    });
-  });
-
   for (const c of cases) {
     test(c.name, async () => {
       await initDB(upstream, c.upstreamSetup, c.upstreamPreState);

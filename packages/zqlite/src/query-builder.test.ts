@@ -10,90 +10,6 @@ import {
   type NoSubqueryCondition,
 } from './query-builder.ts';
 
-test.each(['IS', 'IS NOT'] as const)(
-  '%s NULL filters use a literal instead of a binding',
-  op => {
-    expect(
-      format(
-        filtersToSQL({
-          type: 'simple',
-          left: {type: 'column', name: 'deleted_at'},
-          op,
-          right: {type: 'literal', value: null},
-        }),
-      ),
-    ).toEqual({text: `"deleted_at" ${op} NULL`, values: []});
-  },
-);
-
-test('a production NULL filter can use a partial index', () => {
-  const db = new Database(createSilentLogContext(), ':memory:');
-  db.exec(`
-    CREATE TABLE issue(id TEXT PRIMARY KEY, deleted_at TEXT);
-    CREATE INDEX live_issue ON issue(id) WHERE deleted_at IS NULL;
-  `);
-  const query = format(
-    buildSelectQuery(
-      'issue',
-      {id: {type: 'string'}, deleted_at: {type: 'string', optional: true}},
-      undefined,
-      {
-        type: 'simple',
-        left: {type: 'column', name: 'deleted_at'},
-        op: 'IS',
-        right: {type: 'literal', value: null},
-      },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    ),
-  );
-  const plan = db
-    .prepare(`EXPLAIN QUERY PLAN ${query.text}`)
-    .all<{detail: string}>(...query.values);
-  expect(plan.some(({detail}) => detail.includes('live_issue'))).toBe(true);
-});
-
-test('a bound equality value can use a partial index', () => {
-  const db = new Database(createSilentLogContext(), ':memory:');
-  db.exec(`
-    CREATE TABLE issue(id TEXT PRIMARY KEY, priority INTEGER);
-    CREATE INDEX urgent_issue ON issue(id) WHERE priority = 1;
-  `);
-  const query = format(
-    buildSelectQuery(
-      'issue',
-      {id: {type: 'string'}, priority: {type: 'number'}},
-      undefined,
-      {
-        type: 'simple',
-        left: {type: 'column', name: 'priority'},
-        op: '=',
-        right: {type: 'literal', value: 1},
-      },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    ),
-  );
-  expect(query.text).toContain('"priority" = ?');
-  expect(query.values).toEqual([1]);
-
-  // SQLite consults the bound value when planning, and re-plans when the
-  // value changes, so the partial index is used exactly when the bound
-  // value satisfies its predicate. (Note that this does not apply to
-  // `IS ?`, which is why NULL filters are emitted as literals.)
-  const usesIndex = (priority: number) =>
-    db
-      .prepare(`EXPLAIN QUERY PLAN ${query.text}`)
-      .all<{detail: string}>(priority)
-      .some(({detail}) => detail.includes('urgent_issue'));
-  expect(usesIndex(1)).toBe(true);
-  expect(usesIndex(2)).toBe(false);
-});
-
 test('non-nullable cursor columns use range and equality operators without IS NULL guards', () => {
   const columns = {
     id: {type: 'string'},
@@ -200,8 +116,9 @@ test('a NULL cursor bound selects the strictly-after set, with or without column
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "a","id" FROM "issues" WHERE (("a" IS NOT NULL) OR ("a" IS NULL AND "id" > ?)) ORDER BY "a" asc, "id" asc",
+      "text": "SELECT "a","id" FROM "issues" WHERE (("a" IS NOT NULL) OR ("a" IS ? AND "id" > ?)) ORDER BY "a" asc, "id" asc",
       "values": [
+        null,
         "issue-5",
       ],
     }
@@ -238,8 +155,9 @@ test('a NULL cursor bound in a reverse walk yields the empty strictly-before set
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "a","id" FROM "issues" WHERE ((FALSE) OR ("a" IS NULL AND "id" < ?)) ORDER BY "a" desc, "id" desc",
+      "text": "SELECT "a","id" FROM "issues" WHERE ((FALSE) OR ("a" IS ? AND "id" < ?)) ORDER BY "a" desc, "id" desc",
       "values": [
+        null,
         "issue-5",
       ],
     }
@@ -275,8 +193,9 @@ test('a NULL cursor bound on a descending sort yields the empty strictly-after s
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "a","id" FROM "issues" WHERE ((FALSE) OR ("a" IS NULL AND "id" < ?)) ORDER BY "a" desc, "id" desc",
+      "text": "SELECT "a","id" FROM "issues" WHERE ((FALSE) OR ("a" IS ? AND "id" < ?)) ORDER BY "a" desc, "id" desc",
       "values": [
+        null,
         "issue-5",
       ],
     }
@@ -309,9 +228,11 @@ test('basis at with a NULL bound keeps the anchor row reachable', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "a","id" FROM "issues" WHERE (("a" IS NOT NULL) OR ("a" IS NULL AND "id" > ?) OR ("a" IS NULL AND "id" = ?)) ORDER BY "a" asc, "id" asc",
+      "text": "SELECT "a","id" FROM "issues" WHERE (("a" IS NOT NULL) OR ("a" IS ? AND "id" > ?) OR ("a" IS ? AND "id" = ?)) ORDER BY "a" asc, "id" asc",
       "values": [
+        null,
         "issue-5",
+        null,
         "issue-5",
       ],
     }
@@ -441,8 +362,10 @@ test('null cursor on first column preserves compound tie-breaker ranges', () => 
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "owner","id" FROM "issues" WHERE ((FALSE) OR ("owner" IS NULL AND "id" IS NOT NULL)) ORDER BY "owner" desc, "id" asc",
-      "values": [],
+      "text": "SELECT "owner","id" FROM "issues" WHERE ((FALSE) OR ("owner" IS ? AND "id" IS NOT NULL)) ORDER BY "owner" desc, "id" asc",
+      "values": [
+        null,
+      ],
     }
   `);
 });

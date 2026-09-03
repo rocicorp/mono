@@ -434,35 +434,6 @@ describe('change-source/tables/ddl', () => {
       },
     ],
     [
-      'create partial index',
-      `CREATE UNIQUE INDEX foo_live_index on pub.foo (name) WHERE description IS NOT NULL`,
-      {
-        context: {
-          query:
-            'CREATE UNIQUE INDEX foo_live_index on pub.foo (name) WHERE description IS NOT NULL',
-        },
-        type: 'ddlUpdate',
-        version: 1,
-        event: {tag: 'CREATE INDEX'},
-        schema: {
-          tables: DDL_START.schema.tables,
-          indexes: inserted(DDL_START.schema.indexes, 3, {
-            columns: {name: 'ASC'},
-            name: 'foo_live_index',
-            schema: 'pub',
-            tableName: 'foo',
-            // Partial indexes are always reported as non-unique.
-            unique: false,
-            predicate: {
-              type: 'null-test',
-              column: 'description',
-              op: 'IS NOT NULL',
-            },
-          }),
-        },
-      },
-    ],
-    [
       'rename table',
       `ALTER TABLE pub.foo RENAME TO food`,
       {
@@ -1379,62 +1350,6 @@ describe('change-source/tables/ddl', () => {
       expect(parseDDLUpdateEvent(msg)).toMatchObject(ddlUpdate);
     },
   );
-
-  test('partial index events are readable by versions that predate them', async () => {
-    const query = `CREATE UNIQUE INDEX foo_live_index on pub.foo (name) WHERE description IS NOT NULL`;
-    await upstream.begin(async tx => {
-      await tx`INSERT INTO pub.boo(id) VALUES('1')`;
-      await tx.unsafe(query);
-    });
-
-    const messages = await expectReplicationMessagesToMatchObject([
-      {tag: 'begin'},
-      {tag: 'relation'},
-      {tag: 'insert'},
-      {tag: 'message', prefix: 'zap/0/ddl'},
-      {tag: 'message', prefix: 'zap/0/ddl'},
-      {tag: 'commit'},
-    ]);
-    const raw = JSON.parse(
-      new TextDecoder().decode((messages[4] as MessageMessage).content),
-    );
-
-    // The event format is unchanged by partial index support: the index is
-    // reported as non-unique, with its predicate in a separate field ...
-    expect(raw.version).toBe(1);
-    expect(
-      raw.schema.indexes.find(
-        (idx: {name: string}) => idx.name === 'foo_live_index',
-      ),
-    ).toMatchObject({unique: false, predicateSQL: '(description IS NOT NULL)'});
-
-    // ... so that a zero-cache that predates partial indexes (which parses
-    // events in 'passthrough' mode and ignores the predicate) creates a
-    // harmless full, non-unique index rather than a UNIQUE one.
-    const legacyEventSchema = v.object({
-      version: v.literal(1),
-      schema: v.object({
-        indexes: v.array(
-          v.object({
-            schema: v.string(),
-            tableName: v.string(),
-            name: v.string(),
-            unique: v.boolean(),
-            columns: v.record(v.string()),
-          }),
-        ),
-      }),
-    });
-    const legacy = v.parse(raw, legacyEventSchema, 'passthrough');
-    expect(
-      legacy.schema.indexes.find(idx => idx.name === 'foo_live_index'),
-    ).toMatchObject({
-      schema: 'pub',
-      tableName: 'foo',
-      unique: false,
-      columns: {name: 'ASC'},
-    });
-  });
 
   test.each([
     [

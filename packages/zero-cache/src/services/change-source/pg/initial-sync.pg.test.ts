@@ -490,11 +490,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           PRIMARY KEY ("orgID", "issueID")
         );
 
-        CREATE INDEX issues_active ON issues ("issueID")
-          WHERE "isAdmin" AND "timestamp" IS NULL;
-        CREATE UNIQUE INDEX issues_unique_admin ON issues ("orgID")
-          WHERE "isAdmin";
-
         INSERT INTO issues("orgID", "issueID", "intArray", "jsonArray", "jsonbArray")
           VALUES (1, 1, 
             ARRAY[1,2,3,4,5], 
@@ -896,27 +891,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {
-            issueID: 'ASC',
-          },
-          name: 'issues_active',
-          unique: false,
-          predicate: {
-            type: 'and',
-            conditions: [
-              {
-                type: 'comparison',
-                column: 'isAdmin',
-                op: '=',
-                value: {type: 'boolean', value: true},
-              },
-              {type: 'null-test', column: 'timestamp', op: 'IS NULL'},
-            ],
-          },
-          schema: 'public',
-          tableName: 'issues',
-        },
-        {
-          columns: {
             orgID: 'ASC',
             issueID: 'ASC',
           },
@@ -924,21 +898,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           schema: 'public',
           tableName: 'issues',
           unique: true,
-        },
-        {
-          columns: {
-            orgID: 'ASC',
-          },
-          name: 'issues_unique_admin',
-          unique: false,
-          predicate: {
-            type: 'comparison',
-            column: 'isAdmin',
-            op: '=',
-            value: {type: 'boolean', value: true},
-          },
-          schema: 'public',
-          tableName: 'issues',
         },
       ],
       upstream: {
@@ -2722,12 +2681,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         // Test stringified indexes to verify field ordering.
         expect(JSON.stringify(syncedIndexes, null, 2)).toEqual(
           JSON.stringify(
-            c.replicatedIndexes.map(idx => {
-              // The replica reports a `partial` flag rather than the
-              // structured predicate.
-              const {predicate, ...lite} = mapPostgresToLiteIndex(idx);
-              return predicate ? {...lite, partial: true} : lite;
-            }),
+            c.replicatedIndexes.map(idx => mapPostgresToLiteIndex(idx)),
             null,
             2,
           ),
