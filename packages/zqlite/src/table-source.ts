@@ -565,7 +565,8 @@ function getUniqueIndexes(
       JOIN pragma_index_info(idx.name) as col
       WHERE idx.tbl_name = ${tableName} AND
             idx.type = 'index' AND 
-            info."unique" != 0
+            info."unique" != 0 AND
+            info.partial = 0
       GROUP BY idx.name
       ORDER BY idx.name`,
   );
