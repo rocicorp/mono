@@ -8,7 +8,6 @@ import {
   startSpan,
 } from '../../../../otel/src/span.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
-import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {h64} from '../../../../shared/src/hash.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -2544,7 +2543,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           } else {
             const row = must(
               this.#pipelines.getRow(table, rowKey),
-              `Missing row ${table}:${stringify(rowKey)}`,
+              `Missing row in ${table} keyed by ${Object.keys(rowKey).join()}`,
             );
             const {contents} = contentsAndVersion(row);
             patch = {type: 'row', op: 'put', id, contents};
@@ -2970,7 +2969,8 @@ function yieldProcess(_lc: LogContext) {
 function contentsAndVersion(row: Row) {
   const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
   if (typeof version !== 'string' || version.length === 0) {
-    throw new Error(`Invalid _0_version in ${stringify(row)}`);
+    // log-leak-ignore -- _0_version is Zero's own column, not customer data
+    throw new Error(`Invalid _0_version: ${String(version)}`);
   }
   return {contents, version};
 }

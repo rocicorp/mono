@@ -1,6 +1,5 @@
 import {
   assert,
-  assertArray,
   assertNumber,
   unreachable,
 } from '../../../shared/src/asserts.ts';
@@ -823,7 +822,9 @@ function getChildEntryList<M extends Mutate>(
   relationship: string,
 ): MetaEntryList<M> {
   const view = parentEntry[relationship];
-  assertArray(view);
+  // `relationship` is a string key, so a name colliding with a column would
+  // put a row value here; the message must not repeat it back.
+  assert(Array.isArray(view), 'expected relationship array');
   return view as MetaEntryList<M>;
 }
 

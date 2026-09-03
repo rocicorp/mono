@@ -19,32 +19,28 @@ export class NameMapper {
     this.#tables = tables;
   }
 
-  #getTable(src: string, ctx?: JSONValue): DestNames {
+  #getTable(src: string): DestNames {
     const table = this.#tables.get(src);
     if (!table) {
-      throw new Error(
-        `unknown table "${src}" ${!ctx ? '' : `in ${JSON.stringify(ctx)}`}`,
-      );
+      // log-leak-ignore -- a table name is schema, not customer data
+      throw new Error(`unknown table "${src}"`);
     }
     return table;
   }
 
-  tableName(src: string, context?: JSONValue): string {
-    return this.#getTable(src, context).tableName;
+  tableName(src: string): string {
+    return this.#getTable(src).tableName;
   }
 
   tableNameIfKnown(src: string): string | undefined {
     return this.#tables.get(src)?.tableName;
   }
 
-  columnName(table: string, src: string, ctx?: JSONValue): string {
-    const dst = this.#getTable(table, ctx).columns[src];
+  columnName(table: string, src: string): string {
+    const dst = this.#getTable(table).columns[src];
     if (!dst) {
-      throw new Error(
-        `unknown column "${src}" of "${table}" table ${
-          !ctx ? '' : `in ${JSON.stringify(ctx)}`
-        }`,
-      );
+      // log-leak-ignore -- table and column names are schema, not customer data
+      throw new Error(`unknown column "${src}" of "${table}" table`);
     }
     return dst;
   }

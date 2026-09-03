@@ -614,9 +614,7 @@ function literalValueComparison(
       ) {
         return sqlConvertSingularLiteralArg(valuePos.value);
       }
-      throw new Error(
-        `Literal of unexpected type. ${valuePos.value} of type ${typeof valuePos.value}`,
-      );
+      throw new Error(`Literal of unexpected type: ${typeof valuePos.value}`);
     }
     case 'static':
       throw new Error(

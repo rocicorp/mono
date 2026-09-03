@@ -1,0 +1,65 @@
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+
+permissions: {}
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  log-leak:
+    name: Log leak analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Distinct from the workflow-level group above: a job sharing its
+    # workflow's group waits on a lock the workflow itself holds.
+    concurrency:
+      group: '${{ github.workflow }}-${{ github.job }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      security-events: write # Required to upload SARIF results.
+      contents: read # Required to check out repository contents.
+      actions: read # Required to read workflow run metadata.
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          languages: javascript-typescript
+          queries: ./tools/codeql-log-leak
+          config: |
+            disable-default-queries: true
+            paths-ignore:
+              - '**/node_modules'
+              - '**/*.test.*'
+              - '**/*.bench.*'
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          output: sarif-results
+
+      # Fails the run when a leak is found. The alert table lands in the step
+      # log and the job summary; analyze has already sent it to code scanning.
+      - name: Check alerts
+        if: always()
+        run: node tools/codeql-log-leak/summarize-sarif.ts sarif-results
