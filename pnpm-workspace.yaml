@@ -15,18 +15,7 @@ allowBuilds:
   protobufjs: true
   ssh2: false
 minimumReleaseAgeExclude:
-  - playwright@1.55.1
-  - minimatch@10.2.1
-  - minimatch@10.2.3
-  - serialize-javascript@7.0.3
-  - undici@6.24.0
-  - lodash@4.17.24
-  - ajv@8.18.0
-  - '@hono/node-server@1.19.13'
-  - postcss@8.5.10
-  - '@rocicorp/zero-sqlite3'
-  - '@rocicorp/logger@6.1.0'
-  - '@rocicorp/zero-virtual@0.6.3'
+  - compare-utf8@0.2.1
 
 # docusaurus-plugin-typedoc and typedoc-docusaurus-theme both import typedoc
 # without declaring it, so they can only resolve it through pnpm's hoisted
