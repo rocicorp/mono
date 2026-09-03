@@ -99,7 +99,13 @@ export type BestPlanSelectedEvent = v.Infer<
 export type NodeCostEvent = {
   type: 'node-cost';
   attemptNumber?: number;
-  nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
+  nodeType:
+    | 'connection'
+    | 'join'
+    | 'fan-out'
+    | 'fan-in'
+    | 'filter'
+    | 'terminus';
   node: string;
   branchPattern: number[];
   downstreamChildSelectivity: number;
