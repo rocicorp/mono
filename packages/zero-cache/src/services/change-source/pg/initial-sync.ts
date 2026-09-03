@@ -73,6 +73,7 @@ export type InitialSyncOptions = {
   profileCopy?: boolean | undefined;
   textCopy?: boolean | undefined;
   replicationSlotFailover?: boolean | undefined;
+  installPartialIndexTriggers?: boolean | undefined;
   /**
    * When set, run initial sync in "shadow" mode for verification: skip all
    * upstream mutations (no replication slot, no addReplica, no dropShard, no
@@ -123,6 +124,7 @@ export async function initialSync(
     profileCopy,
     textCopy = false,
     replicationSlotFailover = false,
+    installPartialIndexTriggers = true,
     shadow,
   } = syncOptions;
   const syncMode: InitialSyncMode = shadow ? 'shadow' : 'initial';
@@ -147,7 +149,12 @@ export async function initialSync(
     // happen during a shadow run.
     const {publications} = shadow
       ? await getInternalShardConfig(sql, shard)
-      : await ensurePublishedTables(lc, sql, shard);
+      : await ensurePublishedTables(
+          lc,
+          sql,
+          shard,
+          installPartialIndexTriggers,
+        );
     lc.info?.(`Upstream is setup with publications [${publications}]`);
 
     const {database, host} = sql.options;
@@ -479,6 +486,7 @@ async function ensurePublishedTables(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardConfig,
+  installPartialIndexTriggers: boolean,
   validate = true,
 ): Promise<{publications: string[]}> {
   const {database, host} = sql.options;
@@ -489,7 +497,7 @@ async function ensurePublishedTables(
   // but harmless. On the contrary, it makes initial sync more
   // self-contained (for test setup), and also plays a role in
   // recovering from corruption (below) after the shard is dropped.
-  await ensureShardSchema(lc, sql, shard);
+  await ensureShardSchema(lc, sql, shard, installPartialIndexTriggers);
   const {publications} = await getInternalShardConfig(sql, shard);
 
   if (validate) {
@@ -517,7 +525,13 @@ async function ensurePublishedTables(
     }
     if (!valid) {
       await sql.unsafe(dropShard(shard.appID, shard.shardNum));
-      return ensurePublishedTables(lc, sql, shard, false);
+      return ensurePublishedTables(
+        lc,
+        sql,
+        shard,
+        installPartialIndexTriggers,
+        false,
+      );
     }
   }
   return {publications};

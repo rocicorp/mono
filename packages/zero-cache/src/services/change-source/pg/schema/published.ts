@@ -23,7 +23,10 @@ import {
   type UnsupportedPredicateReason,
 } from './index-predicate.ts';
 
-export function publishedSchemaQuery(publications: readonly string[]) {
+export function publishedSchemaQuery(
+  publications: readonly string[],
+  includePartialIndexes = true,
+) {
   // Notes:
   // * There's a bug in PG15 in which generated columns are incorrectly
   //   included in pg_publication_tables.attnames, (even though the generated
@@ -167,6 +170,7 @@ tables AS (SELECT json_build_object(
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
     WHERE pb.pubname IN (${literal(publications)})
       AND pg_index.indexprs IS NULL
+      AND (${includePartialIndexes} OR pg_index.indpred IS NULL)
       AND (pg_constraint.contype IS NULL OR pg_constraint.contype IN ('p', 'u'))
       AND indexed.attnames <@ pb.attnames
       AND (current_setting('server_version_num')::int >= 160000 OR false = ALL(indexed.generated))
