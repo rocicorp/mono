@@ -942,6 +942,7 @@ describe('replicator/incremental-sync', () => {
     await versionReady.next(); // Get the initial nextStateVersion.
 
     downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
+    downstream.push(['commit', issues.commit(), {watermark: '06'}]);
     await vi.waitFor(() => expect(processMessages).toHaveBeenCalled());
 
     syncer.stop(lc);
