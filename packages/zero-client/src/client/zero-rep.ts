@@ -78,6 +78,10 @@ export class ZeroRep implements ZeroOption {
     this.#store = store;
 
     this.#context.processChanges(undefined, hash, diffs);
+    // Pipelines for queries materialized before this point were deferred so
+    // the replica above was loaded into the sources without fanning out to
+    // them. Build and hydrate them now that the sources are populated.
+    this.#context.markPipelinesReady();
   }
 
   getTxData = (

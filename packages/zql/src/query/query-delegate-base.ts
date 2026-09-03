@@ -8,6 +8,7 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {ArrayView} from '../ivm/array-view.ts';
+import {DeferredInput} from '../ivm/deferred-input.ts';
 import type {FilterInput} from '../ivm/filter-operators.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
@@ -244,6 +245,20 @@ export abstract class QueryDelegateBase implements QueryDelegate {
 
   abstract readonly defaultQueryComplete: boolean;
 
+  /**
+   * Default: pipelines can always be built immediately. Override (together
+   * with `onPipelinesReady`) to defer pipeline construction.
+   */
+  get pipelinesReady(): boolean {
+    return true;
+  }
+
+  onPipelinesReady(_cb: () => void): () => void {
+    throw new Error(
+      'onPipelinesReady called on a delegate whose pipelines are always ready',
+    );
+  }
+
   // BuilderDelegate methods - must be implemented
   abstract getSource(name: string): Source | undefined;
 }
@@ -353,11 +368,25 @@ export function materializeImpl<
     ? hashOfNameAndArgs(customQueryID.name, customQueryID.args)
     : hashOfAST(qi.ast);
   const queryCompleteResolver = resolver<true>();
-  let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
+  // When the delegate cannot build pipelines yet, the view starts over an
+  // empty DeferredInput and is hydrated later. A view must not report
+  // `complete` until it has actually been hydrated, so completion is gated on
+  // both the server's "got" and the pipeline being attached.
+  const deferPipeline = !delegate.pipelinesReady;
+  let attached = !deferPipeline;
+  let gotQueries = delegate.defaultQueryComplete;
+  let queryComplete: boolean | ErroredQuery = attached && gotQueries;
   let endToEndMetricRecorded = false;
   const updateTTL = customQueryID
     ? (newTTL: TTL) => delegate.updateCustomQuery(customQueryID, newTTL)
     : (newTTL: TTL) => delegate.updateServerQuery(ast, newTTL);
+
+  const maybeResolveComplete = () => {
+    if (attached && gotQueries && queryComplete !== true) {
+      queryComplete = true;
+      queryCompleteResolver.resolve(true);
+    }
+  };
 
   const gotCallback: GotCallback = (got, error) => {
     if (error) {
@@ -376,13 +405,16 @@ export function materializeImpl<
         );
         endToEndMetricRecorded = true;
       }
-      queryComplete = true;
-      queryCompleteResolver.resolve(true);
+      gotQueries = true;
+      maybeResolveComplete();
     }
   };
 
   let removeCommitObserver: (() => void) | undefined;
+  let removePendingAttach: (() => void) | undefined;
   const onDestroy = () => {
+    removePendingAttach?.();
+    removePendingAttach = undefined;
     input.destroy();
     removeCommitObserver?.();
     removeAddedQuery();
@@ -394,7 +426,28 @@ export function materializeImpl<
     ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
     : delegate.addServerQuery(ast, ttl, gotCallback);
 
-  const input = buildPipeline(ast, delegate, queryID);
+  let input: Input;
+  if (!deferPipeline) {
+    input = buildPipeline(ast, delegate, queryID);
+  } else {
+    const deferred = new DeferredInput();
+    input = deferred;
+    removePendingAttach = delegate.onPipelinesReady(() => {
+      removePendingAttach = undefined;
+      if (deferred.destroyed) {
+        return;
+      }
+      const t1 = performance.now();
+      deferred.attach(buildPipeline(ast, delegate, queryID));
+      attached = true;
+      delegate.addMetric(
+        'query-materialization-client',
+        performance.now() - t1,
+        queryID,
+      );
+      maybeResolveComplete();
+    });
+  }
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(
@@ -410,11 +463,13 @@ export function materializeImpl<
     ),
   );
 
-  delegate.addMetric(
-    'query-materialization-client',
-    performance.now() - t0,
-    queryID,
-  );
+  if (!deferPipeline) {
+    delegate.addMetric(
+      'query-materialization-client',
+      performance.now() - t0,
+      queryID,
+    );
+  }
 
   return view as T;
 }

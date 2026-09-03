@@ -50,7 +50,9 @@ function changeToViewChange(change: Change): ViewChange {
 export class ArrayView<V extends View> implements Output, TypedView<V> {
   readonly #input: Input;
   readonly #listeners = new Set<Listener<V>>();
-  readonly #schema: SourceSchema;
+  // Read lazily: a DeferredInput has no schema until its pipeline is attached,
+  // and the schema is only needed once there is a change to apply.
+  #schema: SourceSchema | undefined;
   readonly #format: Format;
 
   // Synthetic "root" entry that has a single "" relationship, so that we can
@@ -82,7 +84,6 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     updateTTL: (ttl: TTL) => void,
   ) {
     this.#input = input;
-    this.#schema = input.getSchema();
     this.#format = format;
     this.#updateTTL = updateTTL;
     this.#root = {'': format.singular ? undefined : []};
@@ -110,6 +111,10 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   get data() {
     return this.#root[''] as V;
+  }
+
+  #getSchema(): SourceSchema {
+    return (this.#schema ??= this.#input.getSchema());
   }
 
   addListener(listener: Listener<V>) {
@@ -143,7 +148,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       this.#root = applyChange(
         this.#root,
         {type: 'add', node},
-        this.#schema,
+        this.#getSchema(),
         '',
         this.#format,
         false /* withIDs */,
@@ -161,7 +166,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     this.#root = applyChange(
       this.#root,
       changeToViewChange(change),
-      this.#schema,
+      this.#getSchema(),
       '',
       this.#format,
       false /* withIDs */,

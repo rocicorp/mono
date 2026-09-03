@@ -44,6 +44,14 @@ export class ZeroContext extends QueryDelegateBase {
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
+  // Pipeline construction is deferred between `deferPipelines()` and
+  // `markPipelinesReady()`. Zero calls the former at construction and the
+  // latter once the replica has been loaded into the IVM sources, so cold
+  // boot loads the sources once instead of pushing every row through every
+  // already-materialized pipeline.
+  #pipelinesReady = true;
+  readonly #pendingPipelines: Set<() => void> = new Set();
+
   readonly assertValidRunOptions: (options?: RunOptions) => void;
 
   /**
@@ -85,6 +93,55 @@ export class ZeroContext extends QueryDelegateBase {
 
   getSource(name: string): Source | undefined {
     return this.#mainSources.getSource(name);
+  }
+
+  override get pipelinesReady(): boolean {
+    return this.#pipelinesReady;
+  }
+
+  override onPipelinesReady(cb: () => void): () => void {
+    assert(
+      !this.#pipelinesReady,
+      'onPipelinesReady called while pipelines are ready',
+    );
+    this.#pendingPipelines.add(cb);
+    return () => {
+      this.#pendingPipelines.delete(cb);
+    };
+  }
+
+  /**
+   * Stop building pipelines for materialized queries until
+   * {@link markPipelinesReady} is called. Views materialized in the meantime
+   * are empty and `unknown`, exactly as they would be over empty sources.
+   */
+  deferPipelines(): void {
+    this.#pipelinesReady = false;
+  }
+
+  /**
+   * Build and hydrate every pipeline deferred since {@link deferPipelines},
+   * in materialization order, as a single view-update batch.
+   */
+  markPipelinesReady(): void {
+    if (this.#pipelinesReady) {
+      return;
+    }
+    this.#pipelinesReady = true;
+    if (this.#pendingPipelines.size === 0) {
+      return;
+    }
+    const pending = [...this.#pendingPipelines];
+    this.#pendingPipelines.clear();
+    this.batchViewUpdates(() => {
+      try {
+        for (const attach of pending) {
+          attach();
+        }
+      } finally {
+        this.#endTransaction();
+      }
+    });
   }
 
   mapAst(ast: AST): AST {
