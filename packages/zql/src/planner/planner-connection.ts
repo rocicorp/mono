@@ -133,19 +133,7 @@ export class PlannerConnection {
     this.#constraints = new Map();
     this.#isRoot = isRoot;
 
-    // Compute selectivity for EXISTS child connections (baseLimit === 1)
-    // Selectivity = fraction of rows that pass filters
-    if (limit !== undefined && filters) {
-      const costWithFilters = model(table, sort, filters, undefined);
-      const costWithoutFilters = model(table, sort, undefined, undefined);
-      this.selectivity =
-        costWithoutFilters.rows > 0
-          ? costWithFilters.rows / costWithoutFilters.rows
-          : 1.0;
-    } else {
-      // Root connections or connections without filters
-      this.selectivity = 1.0;
-    }
+    this.selectivity = this.#computeSelectivity(filters);
   }
 
   setOutput(node: PlannerNode): void {
@@ -246,6 +234,9 @@ export class PlannerConnection {
       effectiveFilters,
       mergedConstraint,
     );
+    const selectivity = perBranchFilter
+      ? this.#computeSelectivity(effectiveFilters)
+      : this.selectivity;
     cost = {
       startupCost,
       scanEst:
@@ -254,7 +245,7 @@ export class PlannerConnection {
           : Math.min(rows, this.limit / downstreamChildSelectivity),
       cost: 0,
       returnedRows: rows,
-      selectivity: this.selectivity,
+      selectivity,
       limit: this.limit,
       fanout,
     };
@@ -274,6 +265,28 @@ export class PlannerConnection {
     }
 
     return cost;
+  }
+
+  #computeSelectivity(filters: Condition | undefined): number {
+    if (this.#baseLimit === undefined || filters === undefined) {
+      return 1.0;
+    }
+
+    const costWithFilters = this.#model(
+      this.table,
+      this.#sort,
+      filters,
+      undefined,
+    );
+    const costWithoutFilters = this.#model(
+      this.table,
+      this.#sort,
+      undefined,
+      undefined,
+    );
+    return costWithoutFilters.rows > 0
+      ? costWithFilters.rows / costWithoutFilters.rows
+      : 1.0;
   }
 
   /**

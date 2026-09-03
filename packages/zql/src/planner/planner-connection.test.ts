@@ -1,5 +1,6 @@
 import {expect, suite, test, vi} from 'vitest';
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import {transformFilters} from '../builder/filter.ts';
 import type {CostModelCost} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import {PlannerSource} from './planner-source.ts';
@@ -176,6 +177,66 @@ suite('PlannerConnection.setPerBranchFilter', () => {
     expect(model.mock.calls[0][2]).toEqual({
       type: 'and',
       conditions: [cmpBEq2, cmpAEq1],
+    });
+  });
+
+  test('per-branch filter recomputes selectivity for EXISTS connections', () => {
+    const connFilters: Condition = {
+      type: 'or',
+      conditions: [
+        cmpAEq1,
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['parentId'],
+            },
+            subquery: {table: 'child'},
+          },
+        },
+      ],
+    };
+    const model = vi.fn(
+      (
+        _t: string,
+        _s: Ordering,
+        filter: Condition | undefined,
+        _c: PlannerConstraint | undefined,
+      ): CostModelCost => {
+        const pushableFilter = transformFilters(filter).filters;
+        const isSimpleBranch =
+          pushableFilter?.type === 'simple' &&
+          pushableFilter.left.type === 'column' &&
+          pushableFilter.left.name === 'a';
+        return {
+          startupCost: 0,
+          rows: isSimpleBranch ? 10 : 100,
+          fanout,
+        };
+      },
+    );
+    const conn = new PlannerSource('t', model).connect(
+      [['id', 'asc']],
+      connFilters,
+      false,
+      undefined,
+      1,
+    );
+
+    // The mixed OR cannot be pushed to the source, so the connection-time
+    // selectivity is 100%. In UFI mode the simple branch is pushed alone.
+    expect(conn.selectivity).toBe(1);
+    conn.setPerBranchFilter([0], cmpAEq1);
+
+    expect(conn.estimateCost(1, [0])).toMatchObject({
+      returnedRows: 10,
+      selectivity: 0.1,
+    });
+    expect(conn.estimateCost(1, [1])).toMatchObject({
+      returnedRows: 100,
+      selectivity: 1,
     });
   });
 
