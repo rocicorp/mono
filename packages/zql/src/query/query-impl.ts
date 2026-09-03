@@ -692,16 +692,11 @@ export class QueryImpl<
     if (cond.type === 'simple' && cond.left.type === 'column') {
       key = whereKey(cond.left.name, cond.op);
       const right = cond.right;
-      if (right.type === 'literal' && isPrimitive(right.value)) {
-        tValue = right.value;
-        delta = undefined;
-      } else {
-        const tag = rightTag(right);
-        if (tag !== undefined) {
-          tValue = tag;
-          delta = undefined;
-        }
-      }
+      tValue =
+        right.type === 'literal' && isPrimitive(right.value)
+          ? right.value
+          : rightTag(right);
+      delta = undefined;
     } else {
       // A sub-query an `exists` correlates to is itself interned, so its
       // identity settles that part of the tree without walking it.
@@ -732,10 +727,15 @@ export class QueryImpl<
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
   ): Query<TTable, TSchema, TReturn> {
+    // The row is folded into the transition value so that paging to a row
+    // never seen before is one lookup, not a scan of every sibling row's
+    // delta. Key order is part of the encoding: a row spelled in another order
+    // interns separately, and the hash index folds the two together once they
+    // are hashed.
     return this.#derive(
       opts?.inclusive ? 'start:inclusive' : 'start:exclusive',
+      rowTag(row),
       undefined,
-      row,
       () =>
         this.#newQuery(
           this.#tableName,
@@ -1007,30 +1007,55 @@ function isPrimitive(v: LiteralValue): v is string | number | boolean | null {
 }
 
 /**
+ * Folds a JSON value into a self-delimiting token: strings and serialized
+ * values are length-prefixed, a number is terminated, and the rest are fixed
+ * width. Tokens can therefore be concatenated into a key with no way for one
+ * to run into the next, and the leading tag keeps `'1'` and `1` apart.
+ */
+function valueTag(v: ReadonlyJSONValue): string {
+  switch (typeof v) {
+    case 'string':
+      return `:s${enc(v)}`;
+    case 'number':
+      return `:n${v};`;
+    case 'boolean':
+      return v ? ':t' : ':f';
+    default:
+      return v === null ? ':z' : `:a${enc(JSON.stringify(v))}`;
+  }
+}
+
+/**
  * Folds the right-hand side of a simple condition into a transition value, so
  * that the transition is exact and the lookup needs no comparison at all.
  *
- * The leading tag keeps `'1'` and `1` apart. Arrays (`IN`) and parameter
- * references are serialized: that is one pass over a small value, where leaving
- * them in the delta would instead cost a `deepEqual` over the whole condition
- * for every sibling a lookup walks past.
+ * Arrays (`IN`) and parameter references are serialized: that is one pass
+ * over a small value, where leaving them in the delta would instead cost a
+ * `deepEqual` over the whole condition for every sibling a lookup walks past.
  */
-function rightTag(right: SimpleCondition['right']): string | undefined {
+function rightTag(right: SimpleCondition['right']): string {
   if (right.type !== 'literal') {
-    return `:p${JSON.stringify(right)}`;
+    return `:p${enc(JSON.stringify(right))}`;
   }
-  const v = right.value;
-  switch (typeof v) {
-    case 'string':
-      return `:s${v}`;
-    case 'number':
-      return `:n${v}`;
-    case 'boolean':
-      return `:b${v}`;
-    case 'object':
-      return v === null ? ':z' : `:a${JSON.stringify(v)}`;
+  return valueTag(right.value);
+}
+
+/**
+ * Folds a `start` row into a transition value. Keys and values are both
+ * self-delimiting, so two rows encode alike only if they are the same row. An
+ * `undefined` property is skipped, as `deepEqual` would skip it.
+ */
+function rowTag(
+  row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
+): string {
+  let out = '';
+  for (const key in row) {
+    const v = row[key];
+    if (v !== undefined && Object.hasOwn(row, key)) {
+      out += enc(key) + valueTag(v);
+    }
   }
-  return undefined;
+  return out;
 }
 
 /**
@@ -1062,10 +1087,7 @@ function condKey(cond: Condition): string | undefined {
       if (cond.left.type !== 'column') {
         return undefined;
       }
-      const tag = rightTag(cond.right);
-      return tag === undefined
-        ? undefined
-        : `S${enc(cond.left.name)}${enc(cond.op)}${tag}`;
+      return `S${enc(cond.left.name)}${enc(cond.op)}${rightTag(cond.right)}`;
     }
     case 'correlatedSubquery': {
       const id = astIDs.get(cond.related.subquery);
