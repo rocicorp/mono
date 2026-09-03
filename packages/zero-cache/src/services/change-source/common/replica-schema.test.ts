@@ -457,8 +457,8 @@ describe('replica-schema-migrations', () => {
       },
     },
     {
-      // v14 creates and seeds the change-log stream table; v16 drops it. Both
-      // run here, in that order.
+      // v14 is empty; v16's cleanup is harmless when no pre-release table
+      // exists.
       fromSchemaVersion: 13,
       fromDataVersion: 11,
       desc: 'preserves writeTimeMs after rollback and rollforward',
@@ -491,8 +491,8 @@ describe('replica-schema-migrations', () => {
       },
     },
     {
-      // A replica that a v14 zero-cache created, seed included. v16 drops the
-      // table out from under it.
+      // A replica that a pre-release v14 zero-cache created, seed included.
+      // v16 drops the table out from under it.
       fromSchemaVersion: 14,
       fromDataVersion: 14,
       desc: 'drops the change-log stream table a v14 zero-cache created',
@@ -541,11 +541,11 @@ describe('replica-schema-migrations', () => {
       },
     },
     {
-      // Rolled back to v14 code, which reset dataVersion to 14 while leaving
-      // schemaVersion at 16, then rolled forward. Migration 16 re-runs with
-      // its schema step skipped, so it must not resurrect the table.
+      // Rolled back to v13 code, which reset dataVersion to 13 while leaving
+      // schemaVersion at 16, then rolled forward. Empty migration 14 lets the
+      // data version catch up without requiring the pre-release table.
       fromSchemaVersion: 16,
-      fromDataVersion: 14,
+      fromDataVersion: 13,
       desc: 'stays dropped after rollback and rollforward',
       // writeTimeMs is NOT NULL because a v16 schema has been through v15.
       replicaSetup:

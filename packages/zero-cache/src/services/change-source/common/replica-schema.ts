@@ -1,6 +1,5 @@
 import {existsSync, renameSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../../../shared/src/asserts.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {deleteLiteDB} from '../../../db/delete-lite-db.ts';
 import {listTables} from '../../../db/lite-tables.ts';
@@ -133,16 +132,14 @@ export const CREATE_V9_TABLE_METADATA_TABLE = /*sql*/ `
 `;
 
 // Deliberately shadows the same names in `replicator/change-log-db.ts`: these
-// are the v14 replica's, that module's are the change-log database's, and the
-// two are frozen apart.
+// describe replica files created by pre-release v14 builds, while that module
+// describes the separate change-log database. The two are frozen apart.
 export const V14_CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
 const V14_CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
   '_zero.changeLogStream_writeTimeMs';
 
-// The change-log stream table, as migration 14 created it and migration 16
-// drops it. Frozen at its v14 shape: a migration is history, so this must not
-// be kept in sync with the live definition in `replicator/change-log-db.ts`,
-// which now describes a table in a different database.
+// The change-log stream table created by pre-release v14 builds and dropped by
+// migration 16. Retained at its old shape for migration tests only.
 export const CREATE_V14_CHANGE_LOG_STREAM = /*sql*/ `
   CREATE TABLE "${V14_CHANGE_LOG_STREAM_TABLE}" (
     "watermark"   TEXT NOT NULL,
@@ -157,32 +154,6 @@ export const CREATE_V14_CHANGE_LOG_STREAM = /*sql*/ `
     ON "${V14_CHANGE_LOG_STREAM_TABLE}" ("writeTimeMs", "watermark")
     WHERE "writeTimeMs" IS NOT NULL;
 `;
-
-// Idempotent because migrateData may run again after a rollback followed by a
-// roll-forward, and both rows go in with one statement so a partial seed is
-// not reachable.
-const SEED_V14_CHANGE_LOG_STREAM = /*sql*/ `
-  INSERT INTO "${V14_CHANGE_LOG_STREAM_TABLE}"
-    ("watermark", "pos", "change", "precommit", "writeTimeMs")
-  VALUES
-    (@stateVersion, 0, '{"tag":"begin"}', NULL, NULL),
-    (@stateVersion, 1, '{"tag":"commit"}', @stateVersion, @writeTimeMs)
-  ON CONFLICT ("watermark", "pos") DO NOTHING
-`;
-
-function seedV14ChangeLogStream(db: Database): void {
-  const state = db
-    .prepare(/*sql*/ `
-      SELECT "stateVersion", "writeTimeMs" FROM "_zero.replicationState"
-    `)
-    .get<{stateVersion: string; writeTimeMs: number | null} | undefined>();
-  assert(state !== undefined, 'replication state must be initialized');
-  assert(
-    state.writeTimeMs !== null,
-    'replication state writeTimeMs must be initialized',
-  );
-  db.prepare(SEED_V14_CHANGE_LOG_STREAM).run(state);
-}
 
 export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   // There's no incremental migration from v1. Just reset the replica.
@@ -311,18 +282,8 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
     },
   },
 
-  // Deliberately left as it shipped, even though v16 immediately undoes it.
-  // Rewriting it to a no-op would strand replicas already at v14: they roll
-  // back to v14 code, which expects the table this created.
-  14: {
-    migrateSchema: (_, db) => {
-      db.exec(CREATE_V14_CHANGE_LOG_STREAM);
-    },
-
-    migrateData: (_, db) => {
-      seedV14ChangeLogStream(db);
-    },
-  },
+  // The replica-local change log moved to its own database before v14 shipped.
+  14: {},
 
   15: {
     migrateSchema: (_, db) => {
@@ -351,10 +312,8 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   // every file the backup ships and every follower downloads. Nothing reads it
   // as of this version.
   //
-  // `IF EXISTS` because a fresh replica never runs the incremental migrations
-  // at all — its setup migration creates the current schema directly, which no
-  // longer includes this table — and because a rollback to v14 followed by a
-  // roll-forward re-runs `migrateData` while skipping `migrateSchema`.
+  // `IF EXISTS` because fresh and post-v13 replicas never create this table.
+  // Pre-release v14 builds did, so keep their cleanup idempotent.
   //
   // The freed pages are reclaimed by the existing `vacuumIntervalHours`
   // trigger in `workers/replicator.ts`; no special handling here.
