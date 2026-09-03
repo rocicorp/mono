@@ -1,6 +1,10 @@
 // oxlint-disable no-explicit-any
 import {assert} from '../../../shared/src/asserts.ts';
-import {deepEqual, type ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {
+  deepEqual,
+  type ReadonlyJSONObject,
+  type ReadonlyJSONValue,
+} from '../../../shared/src/json.ts';
 import {
   type AST,
   type CompoundKey,
@@ -734,7 +738,7 @@ export class QueryImpl<
     // are hashed.
     return this.#derive(
       opts?.inclusive ? 'start:inclusive' : 'start:exclusive',
-      rowTag(row),
+      valueTag(row as ReadonlyJSONValue),
       undefined,
       () =>
         this.#newQuery(
@@ -1007,10 +1011,19 @@ function isPrimitive(v: LiteralValue): v is string | number | boolean | null {
 }
 
 /**
- * Folds a JSON value into a self-delimiting token: strings and serialized
- * values are length-prefixed, a number is terminated, and the rest are fixed
+ * Folds a JSON value into a self-delimiting token: a string is
+ * length-prefixed, a number is terminated, an array or object is
+ * count-prefixed and encodes its members recursively, and the rest are fixed
  * width. Tokens can therefore be concatenated into a key with no way for one
  * to run into the next, and the leading tag keeps `'1'` and `1` apart.
+ *
+ * Not `JSON.stringify`: it writes `Infinity`, `NaN` and `null` all as `null`,
+ * and this token is trusted as exact, so a nested value that serialized like
+ * another's would hand back a query with the wrong value in its AST. Numbers
+ * are written the way `String` writes them, which keeps those apart. An
+ * `undefined` property is skipped, as `deepEqual` would skip it; property
+ * order is part of the encoding, so an object spelled in another order
+ * interns separately.
  */
 function valueTag(v: ReadonlyJSONValue): string {
   switch (typeof v) {
@@ -1020,8 +1033,30 @@ function valueTag(v: ReadonlyJSONValue): string {
       return `:n${v};`;
     case 'boolean':
       return v ? ':t' : ':f';
-    default:
-      return v === null ? ':z' : `:a${enc(JSON.stringify(v))}`;
+    default: {
+      if (v === null) {
+        return ':z';
+      }
+      if (Array.isArray(v)) {
+        let out = `:a${v.length}:`;
+        for (const e of v) {
+          out += valueTag(e);
+        }
+        return out;
+      }
+      // `Array.isArray` does not narrow a readonly array out of the union.
+      const o = v as ReadonlyJSONObject;
+      let body = '';
+      let n = 0;
+      for (const key in o) {
+        const e = o[key];
+        if (e !== undefined && Object.hasOwn(o, key)) {
+          body += enc(key) + valueTag(e);
+          n++;
+        }
+      }
+      return `:o${n}:${body}`;
+    }
   }
 }
 
@@ -1035,27 +1070,9 @@ function valueTag(v: ReadonlyJSONValue): string {
  */
 function rightTag(right: SimpleCondition['right']): string {
   if (right.type !== 'literal') {
-    return `:p${enc(JSON.stringify(right))}`;
+    return `:p${valueTag(right as unknown as ReadonlyJSONValue)}`;
   }
   return valueTag(right.value);
-}
-
-/**
- * Folds a `start` row into a transition value. Keys and values are both
- * self-delimiting, so two rows encode alike only if they are the same row. An
- * `undefined` property is skipped, as `deepEqual` would skip it.
- */
-function rowTag(
-  row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
-): string {
-  let out = '';
-  for (const key in row) {
-    const v = row[key];
-    if (v !== undefined && Object.hasOwn(row, key)) {
-      out += enc(key) + valueTag(v);
-    }
-  }
-  return out;
 }
 
 /**

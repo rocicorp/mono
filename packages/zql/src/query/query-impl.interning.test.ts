@@ -640,11 +640,39 @@ test('start rows are exact keys, so paging to a new row never scans', () => {
   );
   // An undefined property is absent, as it is to `deepEqual`.
   expect(sorted.start({id: 1, x: undefined})).toBe(sorted.start({id: 1}));
-  // Non-primitive values are serialized, so they are exact as well.
+  // Non-primitive values are encoded recursively, so they are exact as well.
   expect(sorted.start({tags: ['a', 'b']})).toBe(
     sorted.start({tags: ['a', 'b']}),
   );
   expect(sorted.start({tags: ['a', 'b']})).not.toBe(
     sorted.start({tags: ['b', 'a']}),
+  );
+  expect(sorted.start({j: {a: 1, b: 'x'}})).toBe(
+    sorted.start({j: {a: 1, b: 'x'}}),
+  );
+  expect(sorted.start({j: {a: 1}})).not.toBe(sorted.start({j: {a: '1'}}));
+  expect(sorted.start({j: [1, [2]]})).not.toBe(sorted.start({j: [1, 2]}));
+  expect(sorted.start({j: [['ab'], 'c']})).not.toBe(
+    sorted.start({j: ['a', ['bc']]}),
+  );
+});
+
+test('values that JSON would write alike are told apart', () => {
+  // `JSON.stringify` writes Infinity, NaN and null all as `null`. The encoding
+  // is trusted as exact, so it cannot lean on it: a page whose cursor had
+  // Infinity in a nested value would otherwise come back with null in its AST.
+  const root = freshRoot('lossy-json');
+  const inf = root.start({j: {x: Infinity}});
+  expect(root.start({j: {x: null}})).not.toBe(inf);
+  expect(root.start({j: {x: -Infinity}})).not.toBe(inf);
+  expect(root.start({j: {x: NaN}})).not.toBe(inf);
+  expect(asQueryImpl(inf).ast.start!.row).toEqual({j: {x: Infinity}});
+  expect(root.start({j: [Infinity]})).not.toBe(root.start({j: [null]}));
+  // The same tags key an `IN` list.
+  expect(root.where('id', 'IN', [1, Infinity])).not.toBe(
+    root.where('id', 'IN', [1, null]),
+  );
+  expect(root.where('id', 'IN', [1, Infinity])).toBe(
+    root.where('id', 'IN', [1, Infinity]),
   );
 });
