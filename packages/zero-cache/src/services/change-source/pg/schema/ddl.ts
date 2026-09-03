@@ -168,7 +168,10 @@ const DDL_SERIALIZATION_LOCK = 0x3c6b8468f1bac0b0n;
  * Instead, we opt for the simplicity and isolation of having each shard
  * completely own (and maintain) the entirety of its trigger/function stack.
  */
-export function createEventFunctionStatements(shard: ShardConfig) {
+export function createEventFunctionStatements(
+  shard: ShardConfig,
+  includePartialIndexes = true,
+) {
   const {appID, shardNum, publications} = shard;
   const schema = id(upstreamSchema(shard)); // e.g. "{APP_ID}_{SHARD_ID}"
   return /*sql*/ `
@@ -202,7 +205,7 @@ CREATE FUNCTION ${schema}.schema_specs()
 RETURNS JSON 
 STABLE
 AS $$
-  ${publishedSchemaQuery(publications)}
+  ${publishedSchemaQuery(publications, includePartialIndexes)}
 $$ LANGUAGE sql;
 
 
