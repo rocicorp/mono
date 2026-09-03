@@ -6,6 +6,7 @@ import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerFanOut} from './planner-fan-out.ts';
+import type {PlannerFilter} from './planner-filter.ts';
 import type {PlannerJoin} from './planner-join.ts';
 import {omitFanout} from './planner-node.ts';
 import type {PlannerNode} from './planner-node.ts';
@@ -51,6 +52,7 @@ export class PlannerGraph {
   fanOuts: PlannerFanOut[] = [];
   fanIns: PlannerFanIn[] = [];
   connections: PlannerConnection[] = [];
+  filters: PlannerFilter[] = [];
 
   /**
    * Reset all planning state back to initial values for another planning pass.
@@ -63,6 +65,7 @@ export class PlannerGraph {
     for (const fo of this.fanOuts) fo.reset();
     for (const fi of this.fanIns) fi.reset();
     for (const c of this.connections) c.reset();
+    for (const f of this.filters) f.reset();
   }
 
   /**

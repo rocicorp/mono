@@ -59,7 +59,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 51 changes inspector metrics fields
 // -- version 52 replaces JSON pokePart messages with binary poke chunks for
 //    clients using protocol version 52 or newer. Older clients retain pokePart.
-export const PROTOCOL_VERSION = 52;
+// -- version 53 adds 'filter' node type to AnalyzeQueryResult
+export const PROTOCOL_VERSION = 53;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

@@ -32,6 +32,7 @@ export function buildSelectQuery(
   reverse: boolean | undefined,
   start: Start | undefined,
   multiConstraints?: readonly MultiConstraint[] | undefined,
+  fetchFilters?: NoSubqueryCondition | undefined,
 ) {
   let query = sql`SELECT ${sql.join(
     Object.keys(columns).map(c => sql.ident(c)),
@@ -54,6 +55,10 @@ export function buildSelectQuery(
 
   if (filters) {
     constraints.push(filtersToSQL(filters));
+  }
+
+  if (fetchFilters) {
+    constraints.push(filtersToSQL(fetchFilters));
   }
 
   if (constraints.length > 0) {

@@ -31,6 +31,10 @@ export class PlannerFanOut {
     return this.#outputs;
   }
 
+  get input(): Exclude<PlannerNode, PlannerTerminus> {
+    return this.#input;
+  }
+
   closestJoinOrSource(): JoinOrConnection {
     return this.#input.closestJoinOrSource();
   }
