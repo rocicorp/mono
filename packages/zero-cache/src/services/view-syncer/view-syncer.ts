@@ -618,6 +618,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           // stateVersion is at or beyond CVR version for the first time.
           lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
 
+          // A validated background connection is needed to transform queries
+          // with the correct auth context. If the background connection
+          // disappeared (e.g. reconnect race where the old connection closed
+          // before the replacement validated), defer init until the next
+          // version-ready signal when the replacement has validated.
+          if (!this.connContextManager.getBackgroundConnectionContext()) {
+            lc.info?.(
+              'No validated background connection; deferring pipeline init',
+            );
+            return;
+          }
+
           const driftedQueryIDs = await this.#hydrateUnchangedQueries(lc, cvr);
           // hydrateUnchangedQueries just transformed
           // all the custom queries, this #syncQueryPipelineSet call
@@ -1590,9 +1602,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
     }
     const backgroundContext =
-      this.connContextManager.mustGetBackgroundConnectionContext();
+      this.connContextManager.getBackgroundConnectionContext();
     const customQueryTransformer = this.#customQueryTransformer;
-    if (customQueryTransformer && customQueries.size > 0) {
+    if (backgroundContext && customQueryTransformer && customQueries.size > 0) {
       // Always transform custom queries during initialization to ensure
       // authorization validation with current auth context.
       const transformedCustomQueries = await this.#runPriorityOp(
@@ -1645,7 +1657,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         must(this.#pipelines.currentPermissions()).permissions ?? {
           tables: {},
         },
-        backgroundContext.auth?.type === 'jwt'
+        backgroundContext?.auth?.type === 'jwt'
           ? backgroundContext.auth
           : undefined,
         q.type === 'internal',
@@ -2011,7 +2023,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Only background/shared sync work falls back to the selected
       // validated connection.
       const resolvedConnCtx =
-        connCtx ?? this.connContextManager.mustGetBackgroundConnectionContext();
+        connCtx ?? this.connContextManager.getBackgroundConnectionContext();
+      if (!resolvedConnCtx) {
+        lc.info?.(
+          'No validated background connection for shared pipeline sync; deferring',
+        );
+        return;
+      }
 
       for (const [id, query] of cvrQueryEntires) {
         if (query.type === 'custom') {
