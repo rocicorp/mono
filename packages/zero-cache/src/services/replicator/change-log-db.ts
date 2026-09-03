@@ -115,10 +115,10 @@ export function estimateChangeLogStreamRowBytes(
 // holds one entry per transaction rather than one per change. It is what the
 // purger scans to find transactions older than the retention window.
 //
-// The replica carried this table's original shape through versions 14 and 15;
-// see `CREATE_V14_CHANGE_LOG_STREAM` in
-// `change-source/common/replica-schema.ts`, which is frozen at the v14 shape
-// and must not be kept in sync with this one.
+// Pre-release builds briefly carried this table in the replica; see the test
+// fixture `CREATE_V14_CHANGE_LOG_STREAM` in
+// `change-source/common/replica-schema.ts`. Its old shape must not be kept in
+// sync with this one.
 export const CREATE_CHANGE_LOG_STREAM_SCHEMA = /*sql*/ `
   CREATE TABLE "${CHANGE_LOG_STREAM_TABLE}" (
     "watermark"      TEXT NOT NULL,
