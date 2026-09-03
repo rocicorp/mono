@@ -216,13 +216,19 @@ test('sweeping keeps live entries', () => {
 });
 
 test('replace re-points the strong first slot', () => {
-  const t = new Transitions<object>();
-  const from = make('from');
-  const to = make('to');
-  t.store('k', 1, undefined, from);
-  expect(t.replace(from, to)).toBe(true);
-  expect(t.first).toBe(to);
-  expect(t.lookup('k', 1, undefined)).toBe(to);
+  withStubbedWeakRef(weak => {
+    const t = new Transitions<object>();
+    const from = make('from');
+    const to = make('to');
+    t.store('k', 1, undefined, from);
+    expect(t.replace(from, to)).toBe(true);
+    expect(t.lookup('k', 1, undefined)).toBe(to);
+    // Still the strong slot afterwards: no WeakRef, and it survives
+    // collection.
+    expect(weak.created()).toBe(0);
+    weak.collect(to);
+    expect(t.lookup('k', 1, undefined)).toBe(to);
+  });
 });
 
 test('replace re-points a weak entry, bare or in a bucket', () => {
@@ -236,22 +242,24 @@ test('replace re-points a weak entry, bare or in a bucket', () => {
 
   const from2 = make('from2');
   const to2 = make('to2');
-  t.store('k', 2, {d: 1}, make('other'));
+  const other = make('other');
+  t.store('k', 2, {d: 1}, other);
   t.store('k', 2, {d: 2}, from2);
   expect(t.replace(from2, to2)).toBe(true);
   expect(t.lookup('k', 2, {d: 2})).toBe(to2);
-  expect(t.lookup('k', 2, {d: 1})).not.toBe(to2);
-  expect(bucketOf(t, 'k', 2).size).toBe(2);
-  expect(t.restSize).toBe(3);
+  // Replacing one entry of a bucket leaves its neighbour alone.
+  expect(t.lookup('k', 2, {d: 1})).toBe(other);
 });
 
 test('replace of a node this map never stored is a no-op', () => {
   const t = new Transitions<object>();
   expect(t.replace(make('x'), make('y'))).toBe(false);
   fill(t);
-  t.store('k', 1, undefined, make('other'));
+  const stored = make('other');
+  t.store('k', 1, undefined, stored);
   expect(t.replace(make('x'), make('y'))).toBe(false);
-  expect(t.restSize).toBe(1);
+  // ...and leaves what is stored untouched.
+  expect(t.lookup('k', 1, undefined)).toBe(stored);
 });
 
 test('a hash index round trips and forgets a collected entry', () => {

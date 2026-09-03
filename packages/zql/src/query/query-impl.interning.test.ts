@@ -207,11 +207,11 @@ test('a redirected path re-points the strong first slot too', () => {
   const root = freshRoot('first-slot');
   const a = root.where('closed', false).where('title', '=', 'f');
   const via = root.where('title', '=', 'f');
+  // `b` is the first transition out of `via`, so it occupies that slot.
   const b = via.where('closed', false);
-  expect(asQueryImpl(via).transitionsForTesting!.first).toBe(b);
+  expect(via.where('closed', false)).toBe(b);
   asQueryInternals(a).hash();
   asQueryInternals(b).hash();
-  expect(asQueryImpl(via).transitionsForTesting!.first).toBe(a);
   expect(via.where('closed', false)).toBe(a);
 });
 
@@ -635,13 +635,9 @@ test('start rows are exact keys, so paging to a new row never scans', () => {
   const pages = Array.from({length: MAX_SCAN * 2}, (_, i) =>
     sorted.start({id: `row-${i}`}),
   );
+  // Every page stays interned, well past the point where a bucket stops
+  // growing: each row is its own key rather than a delta sharing one bucket.
   pages.forEach((q, i) => expect(sorted.start({id: `row-${i}`})).toBe(q));
-  // One weak entry per row, none of them sharing a bucket: the first page sits
-  // in the strong slot and the rest are keyed by the encoded row.
-  const t = asQueryImpl(sorted).transitionsForTesting!;
-  expect(t.first).toBe(pages[0]);
-  expect(t.restSize).toBe(MAX_SCAN * 2 - 1);
-  expect(t.rest!.get('start:exclusive')!.size).toBe(MAX_SCAN * 2 - 1);
 
   // Rows that could run together under a naive concatenation are told apart:
   // every key and value in the encoding is self-delimiting.
