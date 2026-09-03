@@ -174,6 +174,38 @@ suite('buildPlanGraph', () => {
       expect(plans.plan.fanOuts).toHaveLength(1);
       expect(plans.plan.fanIns).toHaveLength(1);
       expect(plans.plan.joins).toHaveLength(1);
+      // Simple branch is now represented as a PlannerFilter so the cost
+      // model can see its per-branch filter in UFI mode.
+      expect(plans.plan.filters).toHaveLength(1);
+    });
+
+    test('OR with two simple branches and one CSQ creates two filters', () => {
+      const ast = getAST(
+        builder.users.where(({or, cmp, exists}) =>
+          or(cmp('admin', true), cmp('status', 'alice'), exists('posts')),
+        ),
+      );
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
+
+      expect(plans.plan.fanOuts).toHaveLength(1);
+      expect(plans.plan.fanIns).toHaveLength(1);
+      expect(plans.plan.joins).toHaveLength(1);
+      expect(plans.plan.filters).toHaveLength(2);
+    });
+
+    test('OR with only simple branches does NOT create filters', () => {
+      // No CSQ → planner skips the fan structure entirely; runtime
+      // collapses to a single Filter node.
+      const ast = getAST(
+        builder.users.where(({or, cmp}) =>
+          or(cmp('admin', true), cmp('status', 'alice')),
+        ),
+      );
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
+
+      expect(plans.plan.fanOuts).toHaveLength(0);
+      expect(plans.plan.fanIns).toHaveLength(0);
+      expect(plans.plan.filters).toHaveLength(0);
     });
 
     test('nested OR creates nested fan structures', () => {

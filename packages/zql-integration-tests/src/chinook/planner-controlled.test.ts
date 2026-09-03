@@ -1,8 +1,9 @@
 // cases with a controlled cost model
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import {transformFilters} from '../../../zql/src/builder/filter.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
@@ -197,6 +198,242 @@ describe('two joins via or', () => {
 
     expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(false);
+  });
+});
+
+describe('or(simple, exists) — predicate-pushdown planning', () => {
+  /**
+   * Cost model that mimics the production SQLite cost model: it
+   * (a) honors filter selectivity (PK-equality on `id` collapses to 1 row),
+   * (b) strips CSQs from the incoming filter via `transformFilters` (the
+   *     same function the runtime uses to decide what to push to the
+   *     source at connection time),
+   * (c) honors constraint selectivity for known FK columns.
+   *
+   * Previously, the production cost model used `removeCorrelatedSubqueries`
+   * which had wrong OR semantics (it returned just the simple branch
+   * instead of `undefined`). That bias caused the planner to think the
+   * parent connection was a 1-row PK lookup when it was actually a full
+   * table scan, biasing plan selection toward semi-join. See
+   * `packages/zqlite/src/sqlite-cost-model.ts` history.
+   */
+  function makeRealisticCostModel(tableSizes: Record<string, number>) {
+    const defaultFanout = () => ({fanout: 3, confidence: 'none' as const});
+
+    return (
+      table: string,
+      _sort: Ordering,
+      filters: Condition | undefined,
+      constraint: PlannerConstraint | undefined,
+    ): CostModelCost => {
+      const stripped = transformFilters(filters).filters;
+
+      // PK constraint from a parent join → 1-row PK lookup.
+      if (constraint && 'id' in constraint) {
+        return {startupCost: 0, rows: 1, fanout: defaultFanout};
+      }
+
+      // FK constraints we know about (low fanout per parent).
+      if (constraint && 'trackId' in constraint) {
+        return {startupCost: 0, rows: 5, fanout: defaultFanout};
+      }
+      if (constraint && 'albumId' in constraint) {
+        return {startupCost: 0, rows: 10, fanout: defaultFanout};
+      }
+
+      // Recognize a PK-equality filter (e.g. `id = ?`) and treat as 1 row.
+      if (
+        stripped &&
+        stripped.type === 'simple' &&
+        stripped.op === '=' &&
+        stripped.left.type === 'column' &&
+        stripped.left.name === 'id'
+      ) {
+        return {startupCost: 0, rows: 1, fanout: defaultFanout};
+      }
+
+      return {
+        startupCost: 0,
+        rows: must(tableSizes[table]),
+        fanout: defaultFanout,
+      };
+    };
+  }
+
+  /**
+   * Regression: `track.where(or(cmp('id', X), exists('invoiceLines')))`.
+   *
+   * Before the fix to `removeCorrelatedSubqueries`, the cost model received
+   * `cmp('id', X)` for the parent connection (because the buggy OR
+   * simplification dropped the CSQ branch) and reported it as a 1-row PK
+   * lookup. The planner therefore preferred semi-join even though semi
+   * scans the full track table at runtime.
+   *
+   * After the fix, the cost model receives `undefined` for the parent
+   * (transformFilters returns undefined for OR-with-CSQ), reflecting the
+   * runtime's actual behavior. The planner then sees:
+   *   - semi cost = 1M (full track) × 5 (invoiceLines via trackId) = 5M
+   *   - flipped cost = 100 (invoiceLines) × 1 (track by PK) = 100
+   * and correctly picks flipped.
+   */
+  test('flips EXISTS for or(cmp("id", X), exists)', () => {
+    const costModel = makeRealisticCostModel({
+      track: 1_000_000,
+      invoiceLine: 100,
+    });
+
+    const planned = planQuery(
+      ast(
+        builder.track.where(({or, cmp, exists}) =>
+          or(cmp('id', 1), exists('invoiceLines')),
+        ),
+      ),
+      costModel,
+    );
+
+    expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
+  });
+
+  /**
+   * Same shape with a non-PK simple branch. The buggy simplification didn't
+   * mis-credit cardinality here (track scan stays at 1M) so this case
+   * already passed before the fix — keeping it as a sanity check.
+   */
+  test('flips EXISTS for or(cmp(non-PK, X), exists)', () => {
+    const costModel = makeRealisticCostModel({
+      track: 1_000_000,
+      invoiceLine: 100,
+    });
+
+    const planned = planQuery(
+      ast(
+        builder.track.where(({or, cmp, exists}) =>
+          or(cmp('name', 'Outlaw Blues'), exists('invoiceLines')),
+        ),
+      ),
+      costModel,
+    );
+
+    expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
+  });
+
+  /**
+   * AND with CSQ: `track.where(cmp).whereExists('invoiceLines')`.
+   *
+   * Before AND the fix, transformFilters and removeCorrelatedSubqueries
+   * agreed for AND shapes — both kept the simple conjuncts and dropped
+   * CSQs. This test guards against regression in the AND path.
+   *
+   * The simple `cmp('id', X)` is a PK lookup → cost model reports 1 row
+   * for the parent. With only 1 parent row to scan, semi is much cheaper
+   * than flipped (1 × 5 = 5 vs 100 × 1 = 100). Planner should keep semi.
+   */
+  test('AND with PK simple branch: cost model still sees the simple filter', () => {
+    const costModel = makeRealisticCostModel({
+      track: 1_000_000,
+      invoiceLine: 100,
+    });
+
+    const planned = planQuery(
+      ast(builder.track.where('id', 1).whereExists('invoiceLines')),
+      costModel,
+    );
+
+    // `where(...).whereExists(...)` ⇒ AST shape `and(cmp, exists)`.
+    // The exists is the second conjunct. Should NOT flip — semi is cheaper.
+    expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(false);
+  });
+
+  /**
+   * End-to-end verification that the simple OR branch's per-branch filter
+   * reaches the cost model exactly when the FanIn is in UFI mode (i.e.,
+   * when at least one CSQ branch is flipped). In FI mode (no flip), the
+   * runtime fans out a single source scan to all branches, so registering
+   * the per-branch filter would mis-credit the source — the planner
+   * deliberately skips registration there.
+   */
+  test('per-branch filter reaches cost model in flipped (UFI) attempts only', () => {
+    const defaultFanout = () => ({fanout: 3, confidence: 'none' as const});
+    const costModel = vi.fn(
+      (
+        table: string,
+        _sort: Ordering,
+        filters: Condition | undefined,
+        constraint: PlannerConstraint | undefined,
+      ): CostModelCost => {
+        if (constraint && 'id' in constraint) {
+          return {startupCost: 0, rows: 1, fanout: defaultFanout};
+        }
+        if (table === 'invoiceLine' && constraint && 'trackId' in constraint) {
+          return {startupCost: 0, rows: 5, fanout: defaultFanout};
+        }
+        const stripped = transformFilters(filters).filters;
+        if (
+          stripped &&
+          stripped.type === 'simple' &&
+          stripped.op === '=' &&
+          stripped.left.type === 'column' &&
+          stripped.left.name === 'id'
+        ) {
+          return {startupCost: 0, rows: 1, fanout: defaultFanout};
+        }
+        return {
+          startupCost: 0,
+          rows: table === 'track' ? 1_000_000 : 100,
+          fanout: defaultFanout,
+        };
+      },
+    );
+
+    planQuery(
+      ast(
+        builder.track.where(({or, cmp, exists}) =>
+          or(cmp('id', 1), exists('invoiceLines')),
+        ),
+      ),
+      costModel,
+    );
+
+    // The planner runs both attempts (semi/FI and flipped/UFI). Inspect
+    // every cost-model invocation for `track` and check whether the
+    // per-branch filter (`cmp('id', X)`) was passed to it.
+    const trackFilters = costModel.mock.calls
+      .filter(c => c[0] === 'track')
+      .map(c => c[2]);
+
+    // Walks into AND/OR wrappers to find a simple cmp on `id`.
+    const containsCmpId = (f: Condition | undefined): boolean => {
+      if (f === undefined) return false;
+      if (f.type === 'simple') {
+        return f.op === '=' && f.left.type === 'column' && f.left.name === 'id';
+      }
+      if (f.type === 'and' || f.type === 'or') {
+        return f.conditions.some(containsCmpId);
+      }
+      return false;
+    };
+
+    // The cost model is also run during PlannerConnection's selectivity
+    // computation at construction (which calls `model(... ast.where ...)`).
+    // To isolate the per-branch flow, we filter to calls where the AND
+    // wrapper is present — that only happens when both #filters and a
+    // per-branch filter are AND-merged in estimateCost.
+    const sawPerBranchAnd = trackFilters.some(
+      f =>
+        f !== undefined &&
+        f.type === 'and' &&
+        f.conditions.length === 2 &&
+        containsCmpId(f),
+    );
+    expect(sawPerBranchAnd).toBe(true);
+
+    // The original ast.where (without the per-branch filter) was also
+    // passed for FI/semi attempts where the per-branch filter is
+    // suppressed. Confirm at least one such call is present.
+    const sawPlainOr = trackFilters.some(
+      f => f !== undefined && f.type === 'or',
+    );
+    expect(sawPlainOr).toBe(true);
   });
 });
 
