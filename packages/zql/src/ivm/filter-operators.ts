@@ -1,5 +1,6 @@
 import {makeEmptyIteratorWithReturn} from '../../../shared/src/iterables.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
+import type {NoSubqueryCondition} from '../builder/filter.ts';
 import type {Change} from './change.ts';
 import {type Node} from './data.ts';
 import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
@@ -63,10 +64,12 @@ export const throwFilterOutput: FilterOutput = {
 
 export class FilterStart implements FilterInput, Output {
   readonly #input: Input;
+  readonly #condition: NoSubqueryCondition | undefined;
   #output: FilterOutput = throwFilterOutput;
 
-  constructor(input: Input) {
+  constructor(input: Input, condition?: NoSubqueryCondition | undefined) {
     this.#input = input;
+    this.#condition = condition;
     input.setOutput(this);
   }
 
@@ -87,9 +90,12 @@ export class FilterStart implements FilterInput, Output {
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    const mergedFilter = mergeFilters(req.filter, this.#condition);
+    const childReq =
+      mergedFilter === req.filter ? req : {...req, filter: mergedFilter};
     this.#output.beginFilter();
     try {
-      for (const node of this.#input.fetch(req)) {
+      for (const node of this.#input.fetch(childReq)) {
         if (node === 'yield') {
           yield node;
           continue;
@@ -104,6 +110,19 @@ export class FilterStart implements FilterInput, Output {
       this.#output.endFilter();
     }
   }
+}
+
+function mergeFilters(
+  reqFilter: NoSubqueryCondition | undefined,
+  ownCondition: NoSubqueryCondition | undefined,
+): NoSubqueryCondition | undefined {
+  if (!ownCondition) {
+    return reqFilter;
+  }
+  if (!reqFilter) {
+    return ownCondition;
+  }
+  return {type: 'and', conditions: [reqFilter, ownCondition]};
 }
 
 export class FilterEnd implements Input, FilterOutput {
@@ -152,8 +171,9 @@ export function buildFilterPipeline(
   input: Input,
   delegate: BuilderDelegate,
   pipeline: (filterInput: FilterInput) => FilterInput,
+  condition?: NoSubqueryCondition | undefined,
 ): Input {
-  const filterStart = new FilterStart(input);
+  const filterStart = new FilterStart(input, condition);
   delegate.addEdge(input, filterStart);
   const middle = pipeline(filterStart);
   delegate.addEdge(filterStart, middle);
