@@ -562,7 +562,7 @@ test('hashOfQueryInternals separates queries that differ only by name or args', 
   ];
   for (const [name, args] of cases) {
     const key = `${name} ${JSON.stringify(args)}`;
-    const h = hashOfQueryInternals(a, fmt, 'client', name, args);
+    const h = hashOfQueryInternals(a, fmt, 'client', undefined, name, args);
     const existing = seen.get(h);
     expect(
       existing,
@@ -575,7 +575,7 @@ test('hashOfQueryInternals separates queries that differ only by name or args', 
 test('hashOfQueryInternals still separates every AST in the corpus', () => {
   const byHash = new Map<string, number>();
   CORPUS.forEach((a, i) => {
-    const h = hashOfQueryInternals(a, fmt, 'client', 'q', [1]);
+    const h = hashOfQueryInternals(a, fmt, 'client', undefined, 'q', [1]);
     expect(byHash.get(h), `collision at corpus ${i}`).toBeUndefined();
     byHash.set(h, i);
   });
@@ -583,21 +583,28 @@ test('hashOfQueryInternals still separates every AST in the corpus', () => {
 
 test('hashOfQueryInternals depends only on the values, not call order', () => {
   const a = CORPUS[0];
-  const h = hashOfQueryInternals(a, fmt, 'client', 'foo', [1, {b: 2}]);
+  const h = hashOfQueryInternals(a, fmt, 'client', undefined, 'foo', [
+    1,
+    {b: 2},
+  ]);
   hashAST(CORPUS[1]);
   hashNameAndArgs('other', [9]);
-  expect(hashOfQueryInternals(a, fmt, 'client', 'foo', [1, {b: 2}])).toBe(h);
+  expect(
+    hashOfQueryInternals(a, fmt, 'client', undefined, 'foo', [1, {b: 2}]),
+  ).toBe(h);
   // Structurally equal but distinct args hash the same.
-  expect(hashOfQueryInternals(a, fmt, 'client', 'foo', [1, {b: 2}])).toBe(h);
+  expect(
+    hashOfQueryInternals(a, fmt, 'client', undefined, 'foo', [1, {b: 2}]),
+  ).toBe(h);
 });
 
 test('an absent custom query is not confusable with a named one', () => {
   const a = CORPUS[0];
   // The absent case mixes its own tag rather than nothing at all, so a query
   // with no name cannot fold like some query that has one.
-  expect(hashOfQueryInternals(a, fmt, 'client', undefined, undefined)).not.toBe(
-    hashOfQueryInternals(a, fmt, 'client', '', []),
-  );
+  expect(
+    hashOfQueryInternals(a, fmt, 'client', undefined, undefined, undefined),
+  ).not.toBe(hashOfQueryInternals(a, fmt, 'client', undefined, '', []));
 });
 
 test('hashOfQueryInternals separates queries that differ only by system', () => {
@@ -605,15 +612,30 @@ test('hashOfQueryInternals separates queries that differ only by system', () => 
   // system, so the AST is identical whether it was built for the client or for
   // permissions. This is the only place system is not already covered.
   const a = CORPUS[0];
-  const client = hashOfQueryInternals(a, fmt, 'client', undefined, undefined);
+  const client = hashOfQueryInternals(
+    a,
+    fmt,
+    'client',
+    undefined,
+    undefined,
+    undefined,
+  );
   const perms = hashOfQueryInternals(
     a,
     fmt,
     'permissions',
     undefined,
     undefined,
+    undefined,
   );
-  const test_ = hashOfQueryInternals(a, fmt, 'test', undefined, undefined);
+  const test_ = hashOfQueryInternals(
+    a,
+    fmt,
+    'test',
+    undefined,
+    undefined,
+    undefined,
+  );
   expect(new Set([client, perms, test_]).size).toBe(3);
 });
 
@@ -707,4 +729,17 @@ test('every system on a correlated subquery hashes distinctly', () => {
     byHash.set(h, String(system));
   }
   expect(byHash.size).toBe(variants.length);
+});
+
+test('hashOfQueryInternals separates queries that differ only by currentJunction', () => {
+  // Set on the sub-query handed to a two-hop relationship's callback, where it
+  // makes `limit` and `orderBy` throw. It leaves no trace in the AST, so this is
+  // the only thing telling these apart.
+  const a = CORPUS[0];
+  const seen = new Set(
+    [undefined, 'labels', 'issues'].map(j =>
+      hashOfQueryInternals(a, fmt, 'client', j, undefined, undefined),
+    ),
+  );
+  expect(seen.size).toBe(3);
 });
