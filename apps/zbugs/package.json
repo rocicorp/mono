@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "check-types": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "check-types": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && tsc -p tsconfig.scripts.json",
     "check-types:client:watch": "tsc -p tsconfig.json --watch",
     "check-types:server:watch": "tsc -p tsconfig.node.json --watch",
     "db-up": "cd docker && docker compose up",
@@ -14,13 +14,15 @@
     "db-migrate": "drizzle-kit migrate",
     "db-seed": "node scripts/seed.ts",
     "change-log-traffic": "node scripts/change-log-traffic.ts",
+    "build-litestream": "bash scripts/build-litestream.sh",
+    "rmv2-soak": "node scripts/rmv2-soak.ts",
     "generate-templates": "node scripts/generate-templates.ts",
     "generate-synthetic": "NODE_OPTIONS='--max-old-space-size=8192' node scripts/generate-synthetic.ts",
     "db-seed-synthetic": "ZERO_SEED_DATA_DIR=db/seed-data/synthetic node scripts/seed.ts",
     "clean": "cd docker && docker compose down && docker volume rm docker_zbugs_pgdata_sync && docker volume rm docker_zbugs_pgdata_upstream && rm -rf /tmp/zbugs-sync-replica.db*",
     "format": "oxfmt --config ../../.oxfmtrc.json .",
     "check-format": "oxfmt --config ../../.oxfmtrc.json --check .",
-    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/ scripts/",
     "preview": "vite preview",
     "zero": "node --trace-warnings ../../packages/zero-cache/src/server/runner/main.ts",
     "zero-cache-compare": "ZERO_LOG_LEVEL=debug ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE=compare ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COMPARE_PERCENT=100 ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_RETENTION_MS=60000 node ../../packages/zero-cache/src/server/runner/main.ts",
@@ -79,6 +81,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@rocicorp/logger": "^6.1.0",
     "@tailwindcss/forms": "^0.5.0",
     "@types/hast": "^3.0.4",
     "@types/js-cookie": "^3.0.6",

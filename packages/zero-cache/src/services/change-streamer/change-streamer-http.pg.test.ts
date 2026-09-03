@@ -305,11 +305,11 @@ describe('change-streamer/http', () => {
       expect(await drain(2, sub)).toEqual([
         {
           data: ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
-          json: begin,
+          size: `{"id":1,"msg":${begin}}`.length,
         },
         {
           data: ['commit', {tag: 'commit'}, {watermark: '456'}],
-          json: commit,
+          size: `{"id":2,"msg":${commit}}`.length,
         },
       ]);
 
@@ -349,6 +349,8 @@ describe('change-streamer/http', () => {
 
     const json = BigIntJSON.stringify(['data', insert]);
     downstream.push(json);
-    expect(await drain(1, sub)).toEqual([{data: ['data', insert], json}]);
+    expect(await drain(1, sub)).toEqual([
+      {data: ['data', insert], size: `{"id":1,"msg":${json}}`.length},
+    ]);
   });
 });
