@@ -120,7 +120,8 @@ export default async function runWorker(
   const checkpoint: ForceCheckpointConfig | null =
     mode === 'backup' &&
     config.litestream.backupURL &&
-    config.litestream.backupUsingV5
+    config.litestream.backupUsingV5 &&
+    config.litestream.forceCheckpointThresholdMB
       ? {
           checkpointThresholdPages:
             (config.litestream.forceCheckpointThresholdMB * 1024 ** 2) /
