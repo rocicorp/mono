@@ -10,6 +10,7 @@ import {newRunnableQuery} from './runnable-query-impl.ts';
 import {newStaticQuery} from './static-query.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
+import {withStubbedWeakRef} from './test/weak-ref-stub.ts';
 
 let issue: ReturnType<typeof newQuery<'issue', typeof schema>>;
 
@@ -426,41 +427,68 @@ test('interning does not change the AST or format a query produces', () => {
   `);
 });
 
-test('interning holds only schema-shaped things strongly', () => {
-  // The safety property behind the strong first-child slot and the bounded
-  // store: what is retained strongly is keyed by program structure — a
-  // relationship name, one first child per node — never by data. Every axis that
-  // grows with what an app queries *for* stays weak and collectible.
-  //
-  // A non-root AST is never interned, so this starts from a node no other test
-  // has derived from.
-  const root = newQueryImpl(
-    schema,
-    'issue',
-    {table: 'issue', alias: 'retention'},
-    defaultFormat,
-    'client',
-  ) as unknown as AnyQuery;
+test('queries keyed by data are held weakly, and collectible', () => {
+  // The safety property behind the strong first-child slot: what is retained
+  // strongly is keyed by program structure — one first child per node — never
+  // by data. Every axis that grows with what an app queries *for* stays weak.
+  withStubbedWeakRef(weak => {
+    // A non-root AST is never interned, so this starts from a node no other
+    // test has derived from.
+    const root = newQueryImpl(
+      schema,
+      'issue',
+      {table: 'issue', alias: 'retention'},
+      defaultFormat,
+      'client',
+    ) as unknown as AnyQuery;
 
-  // One value-keyed sibling takes the first slot; the other 49 go to the weak
-  // store, where they can be collected.
-  const built = Array.from({length: 50}, (_, i) =>
-    root.where('id', '=', `row-${i}`),
-  );
-  const t = asQueryImpl(root).transitionsForTesting!;
-  expect(t.first).toBe(built[0]);
-  // 49 in the weak store, all under one key — the row id is the transition
-  // *value*, never concatenated into the key.
-  expect(t.restSize).toBe(49);
-  expect(t.rest!.size).toBe(1);
+    // One value-keyed sibling takes the strong first slot; the other 49 are
+    // weak, so a WeakRef is allocated for each of those and none for the first.
+    const built = Array.from({length: 50}, (_, i) =>
+      root.where('id', '=', `row-${i}`),
+    );
+    expect(weak.created()).toBe(49);
 
-  // Relationship bases are bounded by the schema, so they are strong — and they
-  // do not compete for the first slot or spill into the weak store.
-  root.related('comments');
-  root.related('labels');
-  expect(t.lookupBounded('relatedBase:comments')).toBeDefined();
-  expect(t.lookupBounded('relatedBase:labels')).toBeDefined();
-  expect(t.first).toBe(built[0]);
+    built.forEach(q => weak.collect(q));
+
+    // The first child is held in a field, so it survives...
+    expect(root.where('id', '=', 'row-0')).toBe(built[0]);
+    // ...and everything keyed by a row id is gone, rebuilt fresh rather than
+    // pinning a query per id an app has ever asked for.
+    for (let i = 1; i < built.length; i++) {
+      expect(root.where('id', '=', `row-${i}`)).not.toBe(built[i]);
+    }
+  });
+});
+
+test('relationship bases are held strongly, bounded by the schema', () => {
+  withStubbedWeakRef(weak => {
+    const root = newQueryImpl(
+      schema,
+      'issue',
+      {table: 'issue', alias: 'bounded-retention'},
+      defaultFormat,
+      'client',
+    ) as unknown as AnyQuery;
+    const bases: AnyQuery[] = [];
+    const capture = (q: AnyQuery) => {
+      bases.push(q);
+      return q;
+    };
+
+    root.related('comments', capture);
+    root.related('comments', capture);
+    // The same base comes back, and holding it costs no WeakRef: it is keyed
+    // by a relationship name, so what it retains is bounded by the schema
+    // rather than by what an app queries for.
+    expect(bases[1]).toBe(bases[0]);
+    const createdBeforeCollect = weak.created();
+
+    bases.forEach(q => weak.collect(q));
+    root.related('comments', capture);
+    expect(bases[2]).toBe(bases[0]);
+    expect(weak.created()).toBe(createdBeforeCollect);
+  });
 });
 
 test('flip and scalar options are not collapsed', () => {
