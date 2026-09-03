@@ -1064,9 +1064,10 @@ function valueTag(v: ReadonlyJSONValue): string {
  * Folds the right-hand side of a simple condition into a transition value, so
  * that the transition is exact and the lookup needs no comparison at all.
  *
- * Arrays (`IN`) and parameter references are serialized: that is one pass
- * over a small value, where leaving them in the delta would instead cost a
- * `deepEqual` over the whole condition for every sibling a lookup walks past.
+ * Arrays (`IN`) and parameter references are encoded in full: that is one
+ * pass over a small value, where leaving them in the delta would instead cost
+ * a `deepEqual` over the whole condition for every sibling a lookup walks
+ * past.
  */
 function rightTag(right: SimpleCondition['right']): string {
   if (right.type !== 'literal') {

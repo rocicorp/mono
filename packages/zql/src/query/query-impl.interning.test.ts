@@ -676,3 +676,43 @@ test('values that JSON would write alike are told apart', () => {
     root.where('id', 'IN', [1, Infinity]),
   );
 });
+
+test('condition keys cannot collide: every token is self-delimiting', () => {
+  // A non-root AST is never interned, so this starts from a node no other
+  // test has derived from.
+  const root = newQueryImpl(
+    schema,
+    'issue',
+    {table: 'issue', alias: 'collision'},
+    defaultFormat,
+    'client',
+  ) as unknown as AnyQuery;
+
+  // Two different trees whose keys ran together when a string value was
+  // written bare: the first value swallowed the start of the next condition.
+  const a = root.where(({cmp, and}) =>
+    and(cmp('title', '=', 'S2:id1:=:sfoo'), cmp('id', '=', 'bar')),
+  );
+  const b = root.where(({cmp, and}) =>
+    and(cmp('title', '=', ''), cmp('id', '=', 'fooS2:id1:=:sbar')),
+  );
+  expect(a).not.toBe(b);
+  expect(asQueryImpl(a).ast.where).not.toEqual(asQueryImpl(b).ast.where);
+  expect(
+    root.where(({cmp, and}) =>
+      and(cmp('title', '=', ''), cmp('id', '=', 'fooS2:id1:=:sbar')),
+    ),
+  ).toBe(b);
+
+  // The same holds for a value that JSON would write like another: Infinity,
+  // NaN and null all serialize as `null`.
+  expect(root.where('id', 'IN', [1, Infinity])).not.toBe(
+    root.where('id', 'IN', [1, null]),
+  );
+  expect(root.where('id', 'IN', [1, Infinity])).toBe(
+    root.where('id', 'IN', [1, Infinity]),
+  );
+  expect(root.where('id', 'IN', [[1], 2])).not.toBe(
+    root.where('id', 'IN', [1, [2]]),
+  );
+});
