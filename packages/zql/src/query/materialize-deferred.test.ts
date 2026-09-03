@@ -1,5 +1,7 @@
 import {expect, test, vi} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import {ArrayView} from '../ivm/array-view.ts';
 import {makeSourceChangeAdd, type Source} from '../ivm/source.ts';
 import {consume} from '../ivm/stream.ts';
 import type {MetricMap} from './metrics-delegate.ts';
@@ -36,6 +38,9 @@ class DeferredDelegate extends QueryDelegateImpl {
 
   override getSource(name: string): Source {
     this.getSourceCalls++;
+    if (this.failingTables.has(name)) {
+      throw new Error(`boom: ${name}`);
+    }
     return super.getSource(name);
   }
 
@@ -47,13 +52,20 @@ class DeferredDelegate extends QueryDelegateImpl {
     this.metrics.push(metric);
   }
 
+  /** Tables for which getSource throws, to simulate a pipeline build failure. */
+  readonly failingTables = new Set<string>();
+
   markReady(): void {
     this.#ready = true;
     const pending = [...this.#pending];
     this.#pending.clear();
     this.batchViewUpdates(() => {
       for (const attach of pending) {
-        attach();
+        try {
+          attach();
+        } catch {
+          // mirrors ZeroContext.markPipelinesReady: log and continue
+        }
       }
     });
     this.commit();
@@ -271,4 +283,91 @@ test('deferred pipelines attach in materialization order', () => {
 
   a.destroy();
   b.destroy();
+});
+
+test('end-to-end metric is recorded once the view is hydrated, not on got alone', () => {
+  const {delegate, addIssue} = newDelegate();
+  const view = delegate.materialize(newQuery(schema, 'issue'));
+  addIssue('i1');
+
+  delegate.callAllGotCallbacks();
+  expect(delegate.metrics).not.toContain('query-materialization-end-to-end');
+
+  delegate.markReady();
+  expect(delegate.metrics).toContain('query-materialization-end-to-end');
+
+  view.destroy();
+});
+
+test('a factory that reads the schema before ready gets a live pipeline', () => {
+  const {delegate, addIssue} = newDelegate();
+  let schemaTable: string | undefined;
+  const view = delegate.materialize(
+    newQuery(schema, 'issue'),
+    (
+      _q,
+      input,
+      format,
+      onDestroy,
+      onTransactionCommit,
+      queryComplete,
+      updateTTL,
+    ) => {
+      // Reads the schema at construction, as ArrayView did before deferral.
+      schemaTable = input.getSchema().tableName;
+      const v = new ArrayView(input, format, queryComplete, updateTTL);
+      v.onDestroy = onDestroy;
+      onTransactionCommit(() => v.flush());
+      return v;
+    },
+  );
+  expect(schemaTable).toBe('issue');
+  expect(delegate.getSourceCalls).toBeGreaterThan(0);
+
+  // The pipeline was built eagerly and is connected: rows pushed before ready
+  // arrive through the normal push path.
+  addIssue('i1');
+  delegate.commit();
+  expect(view.data).toMatchObject([{id: 'i1'}]);
+
+  // markReady is a no-op for this view.
+  delegate.markReady();
+  expect(view.data).toMatchObject([{id: 'i1'}]);
+  view.destroy();
+});
+
+test('a factory that never calls setOutput does not break the drain', () => {
+  const {delegate, addIssue} = newDelegate();
+  const view = delegate.materialize(
+    newQuery(schema, 'issue'),
+    (_q, _input, _f, onDestroy) => ({
+      destroy: onDestroy,
+    }),
+  );
+  addIssue('i1');
+  expect(() => delegate.markReady()).not.toThrow();
+  view.destroy();
+});
+
+test('a pipeline that fails to build marks its view as errored and does not block others', async () => {
+  const {delegate, addIssue} = newDelegate();
+  delegate.failingTables.add('comment');
+  const bad = delegate.materialize(newQuery(schema, 'comment'));
+  const good = delegate.materialize(newQuery(schema, 'issue'));
+  let badType: ResultType = 'unknown';
+  let badError: ErroredQuery | undefined;
+  bad.addListener((_d, type, error) => {
+    badType = type;
+    badError = error;
+  });
+  addIssue('i1');
+
+  delegate.markReady();
+
+  expect(good.data).toMatchObject([{id: 'i1'}]);
+  await vi.waitFor(() => expect(badType).toBe('error'));
+  expect(badError).toMatchObject({error: 'app', message: 'boom: comment'});
+
+  bad.destroy();
+  good.destroy();
 });

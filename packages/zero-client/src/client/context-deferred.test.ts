@@ -122,3 +122,27 @@ test('a view destroyed while deferred is not hydrated', () => {
   expect(listener).toHaveBeenCalledTimes(1);
   expect(view.data).toEqual([]);
 });
+
+test('a deferred pipeline that fails to build is logged and does not strand the others', async () => {
+  const {context} = newContext();
+  context.deferPipelines();
+  // t2 is not in the context's schema, so buildPipeline throws Source not found.
+  const otherSchema = createSchema({
+    tables: [table('t2').columns({id: string()}).primaryKey('id')],
+  });
+  const bad = context.materialize(newQuery(otherSchema, 't2'));
+  const good = context.materialize(newQuery(schema, 't1'));
+  let badType = 'unknown';
+  bad.addListener((_d, type) => {
+    badType = type;
+  });
+
+  context.processChanges(undefined, 'h1' as Hash, [add('e1', 'one')]);
+  expect(() => context.markPipelinesReady()).not.toThrow();
+
+  expect(good.data).toMatchObject([{id: 'e1'}]);
+  await vi.waitFor(() => expect(badType).toBe('error'));
+
+  bad.destroy();
+  good.destroy();
+});

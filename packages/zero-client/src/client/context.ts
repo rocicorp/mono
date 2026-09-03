@@ -121,7 +121,9 @@ export class ZeroContext extends QueryDelegateBase {
 
   /**
    * Build and hydrate every pipeline deferred since {@link deferPipelines},
-   * in materialization order, as a single view-update batch.
+   * in materialization order, as a single view-update batch. A pipeline that
+   * fails to build is logged and its view reports an error; the rest are
+   * still built.
    */
   markPipelinesReady(): void {
     if (this.#pipelinesReady) {
@@ -136,7 +138,17 @@ export class ZeroContext extends QueryDelegateBase {
     this.batchViewUpdates(() => {
       try {
         for (const attach of pending) {
-          attach();
+          try {
+            attach();
+          } catch (e) {
+            // The failing view has already been marked as errored; keep
+            // building the others rather than aborting startup.
+            this.#lc.error?.(
+              ErrorKind.Internal,
+              'Failed to build a deferred query pipeline',
+              e,
+            );
+          }
         }
       } finally {
         this.#endTransaction();

@@ -376,13 +376,20 @@ export function materializeImpl<
   let attached = !deferPipeline;
   let gotQueries = delegate.defaultQueryComplete;
   let queryComplete: boolean | ErroredQuery = attached && gotQueries;
-  let endToEndMetricRecorded = false;
   const updateTTL = customQueryID
     ? (newTTL: TTL) => delegate.updateCustomQuery(customQueryID, newTTL)
     : (newTTL: TTL) => delegate.updateServerQuery(ast, newTTL);
 
+  // Completion, and the end-to-end metric, require both the server's "got"
+  // and the pipeline being attached: until then the view is still empty.
   const maybeResolveComplete = () => {
     if (attached && gotQueries && queryComplete !== true) {
+      delegate.addMetric(
+        'query-materialization-end-to-end',
+        performance.now() - t0,
+        queryID,
+        ast,
+      );
       queryComplete = true;
       queryCompleteResolver.resolve(true);
     }
@@ -396,15 +403,6 @@ export function materializeImpl<
     }
 
     if (got) {
-      if (!endToEndMetricRecorded) {
-        delegate.addMetric(
-          'query-materialization-end-to-end',
-          performance.now() - t0,
-          queryID,
-          ast,
-        );
-        endToEndMetricRecorded = true;
-      }
       gotQueries = true;
       maybeResolveComplete();
     }
@@ -426,28 +424,10 @@ export function materializeImpl<
     ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
     : delegate.addServerQuery(ast, ttl, gotCallback);
 
-  let input: Input;
-  if (!deferPipeline) {
-    input = buildPipeline(ast, delegate, queryID);
-  } else {
-    const deferred = new DeferredInput();
-    input = deferred;
-    removePendingAttach = delegate.onPipelinesReady(() => {
-      removePendingAttach = undefined;
-      if (deferred.destroyed) {
-        return;
-      }
-      const t1 = performance.now();
-      deferred.attach(buildPipeline(ast, delegate, queryID));
-      attached = true;
-      delegate.addMetric(
-        'query-materialization-client',
-        performance.now() - t1,
-        queryID,
-      );
-      maybeResolveComplete();
-    });
-  }
+  const deferred = deferPipeline
+    ? new DeferredInput(() => buildPipeline(ast, delegate, queryID))
+    : undefined;
+  const input: Input = deferred ?? buildPipeline(ast, delegate, queryID);
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(
@@ -463,12 +443,44 @@ export function materializeImpl<
     ),
   );
 
-  if (!deferPipeline) {
+  if (!deferred) {
     delegate.addMetric(
       'query-materialization-client',
       performance.now() - t0,
       queryID,
     );
+  } else {
+    // Registered after the factory ran so a throwing factory leaves nothing
+    // behind.
+    removePendingAttach = delegate.onPipelinesReady(() => {
+      removePendingAttach = undefined;
+      if (deferred.destroyed) {
+        return;
+      }
+      const t1 = performance.now();
+      try {
+        deferred.attach();
+      } catch (e) {
+        // Surface the failure on this view and let the delegate decide how
+        // to log it. Other pending pipelines are unaffected.
+        const error: ErroredQuery = {
+          error: 'app',
+          id: queryID,
+          name: customQueryID?.name ?? '',
+          message: e instanceof Error ? e.message : String(e),
+        };
+        queryComplete = error;
+        queryCompleteResolver.reject(error);
+        throw e;
+      }
+      attached = true;
+      delegate.addMetric(
+        'query-materialization-client',
+        performance.now() - t1,
+        queryID,
+      );
+      maybeResolveComplete();
+    });
   }
 
   return view as T;
