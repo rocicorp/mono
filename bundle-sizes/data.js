@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787906192918,
+  "lastUpdate": 1788450480367,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57301,6 +57301,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33538,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "74f35fc7fd72ac08d656f5cdea14e81c387b7afa",
+          "message": "chore: Update compare-utf8 to 0.2.1 (#6473)\n\nThis is to pick up React Native/Hermes optimizations",
+          "timestamp": "2026-09-03T15:31:27Z",
+          "tree_id": "bb11c257fe8529e0c62bfcc2cd204b3a83a9fc0c",
+          "url": "https://github.com/rocicorp/mono/commit/74f35fc7fd72ac08d656f5cdea14e81c387b7afa"
+        },
+        "date": 1788450465874,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 318705,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57266,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117756,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33625,
             "unit": "bytes"
           }
         ]
