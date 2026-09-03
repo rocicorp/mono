@@ -7,11 +7,12 @@ import {
   createLiteIndexStatement,
   createLiteTableStatement,
 } from '../../db/create.ts';
+import {mapIndexPredicateColumns} from '../../db/index-predicate.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
 } from '../../db/pg-to-lite.ts';
-import type {ColumnSpec, TableSpec} from '../../db/specs.ts';
+import type {ColumnSpec, IndexPredicate, TableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {
   canonicalReplicaState,
@@ -32,6 +33,7 @@ type ModelIndex = {
   name: string;
   unique: boolean;
   columns: Record<string, 'ASC' | 'DESC'>;
+  predicate?: IndexPredicate | undefined;
 };
 type ModelRow = Record<string, number | string>;
 type SchemaModel = {
@@ -293,6 +295,11 @@ function applyOperation(
       column.name = newName;
       for (const index of model.indexes) {
         index.columns = renameKey(index.columns, old.name, newName);
+        if (index.predicate) {
+          index.predicate = mapIndexPredicateColumns(index.predicate, name =>
+            name === old.name ? newName : name,
+          );
+        }
       }
       for (const row of model.rows) {
         row[newName] = must(row[old.name]);
@@ -326,7 +333,10 @@ function applyOperation(
         break;
       }
       const referencing = model.indexes.filter(
-        index => column.name in index.columns,
+        index =>
+          column.name in index.columns ||
+          (index.predicate !== undefined &&
+            predicateReferencesColumn(index.predicate, column.name)),
       );
       for (const index of referencing) {
         changes.push({
@@ -362,6 +372,28 @@ function applyOperation(
         index.columns = Object.fromEntries(
           Object.keys(index.columns).map(name => [name, 'DESC']),
         );
+      }
+      const predicateKind = operation.secondary % 6;
+      if (predicateKind % 2 === 0) {
+        const column =
+          model.columns[operation.secondary % model.columns.length];
+        const nullTest: IndexPredicate = {
+          type: 'null-test',
+          column: column.name,
+          op: operation.secondary % 4 === 0 ? 'IS NULL' : 'IS NOT NULL',
+        };
+        index.predicate =
+          predicateKind === 0
+            ? nullTest
+            : predicateKind === 2
+              ? comparisonPredicate(column)
+              : {
+                  type: 'and',
+                  conditions: [
+                    nullTest,
+                    {type: 'not', condition: comparisonPredicate(column)},
+                  ],
+                };
       }
       model.indexes.push(index);
       changes.push({tag: 'create-index', spec: index});
@@ -410,6 +442,40 @@ function applyOperation(
   model.rows.push(newRow);
   changes.push({tag: 'insert', relation, new: newRow});
   return changes;
+}
+
+function comparisonPredicate(column: ModelColumn): IndexPredicate {
+  return /int/.test(column.spec.dataType)
+    ? {
+        type: 'comparison',
+        column: column.name,
+        op: '>',
+        value: {type: 'integer', value: '1'},
+      }
+    : {
+        type: 'comparison',
+        column: column.name,
+        op: '<>',
+        value: {type: 'string', value: 'tenant-1'},
+      };
+}
+
+function predicateReferencesColumn(
+  predicate: IndexPredicate,
+  column: string,
+): boolean {
+  switch (predicate.type) {
+    case 'and':
+    case 'or':
+      return predicate.conditions.some(condition =>
+        predicateReferencesColumn(condition, column),
+      );
+    case 'not':
+      return predicateReferencesColumn(predicate.condition, column);
+    case 'null-test':
+    case 'comparison':
+      return predicate.column === column;
+  }
 }
 
 function cloneColumn(column: ModelColumn): ModelColumn {

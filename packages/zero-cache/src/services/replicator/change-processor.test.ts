@@ -6,10 +6,10 @@ import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {
   listIndexes,
+  type ReplicaIndexSpec,
   listTables,
   type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
-import type {LiteIndexSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -59,7 +59,9 @@ describe('replicator/change-processor', () => {
     downstream: ChangeStreamData[];
     data: Record<string, Record<string, unknown>[]>;
     tableSpecs?: LiteTableSpecWithReplicationStatus[];
-    indexSpecs?: LiteIndexSpec[];
+    indexSpecs?: ReplicaIndexSpec[];
+    // Expected `sqlite_master.sql` for named indexes.
+    indexDDL?: Record<string, string>;
     expectedTablesInBackupReplicatorChangeLog?: string[];
   };
 
@@ -2249,6 +2251,7 @@ describe('replicator/change-processor', () => {
       setup: `
         CREATE TABLE foo(id INT8, numburr TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        CREATE INDEX foo_present ON foo (id) WHERE numburr IS NOT NULL;
         INSERT INTO foo(id, numburr, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
@@ -2350,7 +2353,18 @@ describe('replicator/change-processor', () => {
           unique: true,
           columns: {id: 'ASC'},
         },
+        {
+          tableName: 'foo',
+          name: 'foo_present',
+          unique: false,
+          columns: {id: 'ASC'},
+          partial: true,
+        },
       ],
+      indexDDL: {
+        foo_present:
+          'CREATE INDEX foo_present ON foo (id) WHERE "number" IS NOT NULL',
+      },
     },
     {
       name: 'drop table',
@@ -3686,6 +3700,13 @@ describe('replicator/change-processor', () => {
         }
         if (c.indexSpecs) {
           expect(listIndexes(replica)).toEqual(c.indexSpecs);
+        }
+        for (const [name, ddl] of Object.entries(c.indexDDL ?? {})) {
+          expect(
+            replica
+              .prepare(`SELECT sql FROM sqlite_master WHERE name = ?`)
+              .get<{sql: string}>(name)?.sql,
+          ).toBe(ddl);
         }
       }
     });
