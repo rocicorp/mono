@@ -19,7 +19,7 @@
     "@types/command-line-usage": "^5.0.4",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
-    "compare-utf8": "^0.2.0",
+    "compare-utf8": "^0.2.1",
     "esbuild": "0.27.7",
     "get-port": "^7.0.0",
     "hash-wasm": "^4.9.0",

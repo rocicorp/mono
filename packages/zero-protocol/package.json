@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
-    "compare-utf8": "^0.2.0"
+    "compare-utf8": "^0.2.1"
   },
   "devDependencies": {
     "fast-check": "^3.18.0",

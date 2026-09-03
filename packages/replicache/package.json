@@ -86,7 +86,7 @@
     "@vitest/runner": "^4.1.6",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
-    "compare-utf8": "^0.2.0",
+    "compare-utf8": "^0.2.1",
     "esbuild": "0.27.7",
     "expo-sqlite": ">=15",
     "hash-wasm": "^4.9.0",
