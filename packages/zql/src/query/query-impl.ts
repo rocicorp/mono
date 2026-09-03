@@ -252,13 +252,6 @@ export class QueryImpl<
     return this.#parent;
   }
 
-  /** @internal Exposed so tests can assert what is retained strongly. */
-  get transitionsForTesting():
-    | Transitions<QueryImpl<any, any, any>>
-    | undefined {
-    return this.#transitions;
-  }
-
   constructor(
     schema: TSchema,
     tableName: TTable,

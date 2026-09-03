@@ -144,21 +144,6 @@ export class Transitions<T extends object> {
   #sweepAt = SWEEP_INITIAL;
   #restSize = 0;
 
-  /** The strongly held first child. Exposed for tests. */
-  get first(): T | undefined {
-    return this.#first;
-  }
-
-  /** The weakly held remainder. Exposed for tests. */
-  get rest(): Map<string, Map<TransitionValue, Bucket<T>>> | undefined {
-    return this.#rest;
-  }
-
-  /** Total weak entries across all keys. Exposed for tests. */
-  get restSize(): number {
-    return this.#restSize;
-  }
-
   lookupBounded(key: string): T | undefined {
     return this.#bounded?.get(key);
   }
