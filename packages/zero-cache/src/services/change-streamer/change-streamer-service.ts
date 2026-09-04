@@ -38,7 +38,7 @@ import {
   RunningState,
   UnrecoverableError,
 } from '../running-state.ts';
-import {serializeChangeStreamData} from './change-log-codec.ts';
+import {serializeChangeStreamDataWithChange} from './change-log-codec.ts';
 import {
   ChangeLogInitializer,
   replicaInitializationSource,
@@ -809,9 +809,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
               break;
           }
 
-          const json = this.#pgChangeLogEnabled
-            ? this.#storer.store(watermark, change)
-            : serializeChangeStreamData(change);
+          const serialized = serializeChangeStreamDataWithChange(change);
+          const {json} = serialized;
+          if (this.#pgChangeLogEnabled) {
+            this.#storer.store(watermark, change, serialized);
+          }
           // The SQLite change log commits at transaction boundaries, and its
           // commit for this transaction lands here -- before the forward of the
           // `commit` message, and before #recordForwardedTransactionBoundary
@@ -821,7 +823,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // same loop iteration always precedes anything that can advance the
           // watermark this stream would resume from. Never throws; a write
           // failure disables the writer rather than stopping replication.
-          this.#changeLogWriter?.write(change, json);
+          this.#changeLogWriter?.write(change, json, serialized.change);
           const entry: WatermarkedChange = [watermark, change[1].tag, json];
           unflushedBytes += json.length;
           if (unflushedBytes < flushBytesThreshold) {
