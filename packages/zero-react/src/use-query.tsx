@@ -348,11 +348,18 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyViewWrapper = ViewWrapper<any, any, any, any, any>;
 
-const allViews = new WeakMap<ViewStore, Map<string, AnyViewWrapper>>();
+const allViews = new WeakMap<
+  ViewStore,
+  Map<string, Map<string, AnyViewWrapper>>
+>();
 
 export function getAllViewsSizeForTesting(store: ViewStore): number {
   if (TESTING) {
-    return allViews.get(store)?.size ?? 0;
+    let size = 0;
+    for (const byHash of allViews.get(store)?.values() ?? []) {
+      size += byHash.size;
+    }
+    return size;
   }
   return 0;
 }
@@ -406,7 +413,18 @@ export function getAllViewsSizeForTesting(store: ViewStore): number {
  * Swapping `useState` to `useRef` has similar problems.
  */
 export class ViewStore {
-  #views = new Map<string, AnyViewWrapper>();
+  /**
+   * Client id, then query hash.
+   *
+   * Nested rather than keyed by the two joined together, because this is
+   * looked up on every render of every `useQuery`. Joining them builds a
+   * string that V8 has to hash from scratch, where both halves on their own
+   * are strings it has already hashed and cached -- `hash()` is memoized on an
+   * interned query, so the same string comes back each render. Measured over a
+   * rebuild-and-look-up of one chain, that is the difference between 202ns and
+   * 123ns; the join cost more than rebuilding and hashing the whole query.
+   */
+  #views = new Map<string, Map<string, AnyViewWrapper>>();
 
   constructor() {
     if (TESTING) {
@@ -448,18 +466,30 @@ export class ViewStore {
       };
     }
 
-    const hash = qi.hash() + zero.clientID;
-    let existing = this.#views.get(hash);
+    const {clientID} = zero;
+    const hash = qi.hash();
+    let byHash = this.#views.get(clientID);
+    let existing = byHash?.get(hash);
     if (!existing) {
       existing = new ViewWrapper(q, zero, ttl, view => {
-        const currentView = this.#views.get(hash);
+        const views = this.#views.get(clientID);
+        const currentView = views?.get(hash);
         if (currentView && currentView !== view) {
           // we replaced the view with a new one already.
           return;
         }
-        this.#views.delete(hash);
+        views?.delete(hash);
+        if (views?.size === 0) {
+          // Nothing is left for this client, so drop its map rather than
+          // keeping one per client id the page has ever seen.
+          this.#views.delete(clientID);
+        }
       });
-      this.#views.set(hash, existing);
+      if (!byHash) {
+        byHash = new Map();
+        this.#views.set(clientID, byHash);
+      }
+      byHash.set(hash, existing);
     } else {
       existing.updateTTL(ttl);
     }
