@@ -20,6 +20,17 @@ import type {
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
+/**
+ * Runnable roots are interned per delegate *and* schema -- a query is only
+ * interchangeable with another if it would run against the same delegate. See
+ * `query-transitions.ts` for why roots need to be shared at all.
+ */
+const rootsByDelegate = new WeakMap<
+  QueryDelegate,
+  // oxlint-disable-next-line no-explicit-any
+  WeakMap<Schema, Map<string, WeakRef<RunnableQueryImpl<any, any, any>>>>
+>();
+
 export function newRunnableQuery<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
@@ -28,7 +39,23 @@ export function newRunnableQuery<
   schema: TSchema,
   table: TTable,
 ): Query<TTable, TSchema> {
-  return new RunnableQueryImpl(
+  let bySchema = rootsByDelegate.get(delegate);
+  if (!bySchema) {
+    bySchema = new WeakMap();
+    rootsByDelegate.set(delegate, bySchema);
+  }
+  let roots = bySchema.get(schema);
+  if (!roots) {
+    roots = new Map();
+    bySchema.set(schema, roots);
+  }
+
+  const existing = roots.get(table)?.deref();
+  if (existing) {
+    return existing as RunnableQueryImpl<TTable, TSchema>;
+  }
+
+  const created = new RunnableQueryImpl<TTable, TSchema>(
     delegate,
     schema,
     table,
@@ -36,6 +63,8 @@ export function newRunnableQuery<
     defaultFormat,
     undefined,
   );
+  roots.set(table, new WeakRef(created));
+  return created;
 }
 
 export class RunnableQueryImpl<
