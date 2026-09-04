@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788525516991,
+  "lastUpdate": 1788528733847,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57389,6 +57389,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33627,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "87caec7b10913d3ff2018bc7b1d21d57b868fd4e",
+          "message": "fix(zero-client): measure connect setup and server acknowledgement separately (#6475)\n\n## The defect\n\n`CONNECT_TIMEOUT_MS` covered an entire connection attempt: reading the\ncookie, the client group ID and the active clients from IDB, preparing\nand opening the socket, and only then waiting for the server to\nacknowledge.\n\nThose fail for unrelated reasons. Sharing one budget means local setup\nspends the server's time — on a slow cold boot the socket may not exist\nuntil most of the 10s is gone, and a perfectly healthy server is then\nreported as unreachable. The failure is indistinguishable from a real\nnetwork problem, and `Connection attempt timed out after 10 seconds` is\nwhat you get either way.\n\n## The change\n\nEach phase gets its own budget, armed and cancelled at the transition\nbetween them.\n\n- **setup** keeps a deadline, so a stuck setup still times out and\nretries rather than hanging until the 60s disconnect watchdog.\n- **ack** starts a fresh budget once setup completes, so what the server\nis given no longer depends on how slow the disk was.\n\n`#armConnectTimeout(lc, attempt, phase)` builds either one;\n`ConnectAttemptControl.clearTimeout` holds whichever is currently\nrunning and is swapped at the handover, so the run loop's `finally`\nstill has exactly one thing to cancel.\n\nThe messages name the phase that expired — `Connection setup timed out\nafter 10 seconds` versus `Server did not acknowledge the connection\nwithin 10 seconds`. The kind stays `ConnectTimeout`; a distinct kind per\nphase would be a public taxonomy change, so it isn't in this PR.\n\n**Trade-off:** an attempt that fails in both phases can now take two\nbudgets rather than one. That is the cost of not having to choose which\nof the two failures the single budget is for.\n\n## Why not simply move the deadline to socket creation\n\nThat was the first attempt, and it broke `connect timeout during setup\nretries without an unhandled rejection`, which stubs\n`ActiveClientsManager.create` to hang forever and asserts the attempt\ntimes out and retries. Moving the deadline leaves a stuck setup\nunbounded until the 60s watchdog, with no retry in between — a real\nregression that the existing test was there to catch. Splitting keeps\nthat bound and still stops setup from spending the server's time.\n\n## Setup timing\n\nThe two pieces of local setup most likely to be slow are timed, each\nwarning above 50ms. Both are measured **where the work runs**, not where\nan attempt awaits it — both start earlier and in parallel, so an\nawait-site number would usually read as zero.\n\n### Opening the database\n\nInstrumented in Replicache's `#open`, warning above 50ms.\n\nThe timer stops at the head write, immediately **before** `await\nthis.#zero?.init(headHash, this.memdag)`, so it measures getting to a\nusable database and excludes loading the replica into Zero's IVM sources\n— which is separate work and usually the larger of the two.\n\nThis has to be instrumented inside `#open`. Measuring it from Zero\ncannot work: `resolveReady()` is called *after* `#zero.init`, so nothing\nZero can await — the cookie included — resolves until hydration has\nfinished, and any number taken from that side reports a slow hydration\nas a slow disk.\n\nThe window starts at the top of `#open`, which includes waiting out a\nclosing instance of the same name. That is rare, but it does delay the\ndatabase being usable, so it is counted rather than hidden.\n\n### Creating the ActiveClientsManager\n\nThis runs at construction, so by the time `#connectAttempt` reaches\n`await this.#activeClientsManager` the wait is usually already over —\ntiming that await would measure nothing. It is timed around\n`ActiveClientsManager.create` instead, starting after the client group\nID resolves, since waiting for that is the database opening and is\nalready timed on its own.\n\nThe log names the lock backend. `navigator.locks` does not exist on\nReact Native, so `getClientLockManager` falls back to\n`MockClientLockManager`, an in-process stand-in that only ever sees the\ncurrent client. That changes both what the timing means — no real lock\nacquisition or `locks.query()` — and how much the resulting client list\ncan be trusted, so a number without the backend beside it would be\nmisleading.\n\n## Tests\n\n`slow setup does not spend the server acknowledgement budget` covers the\nbehavior change directly: setup finishing at 9s, then a full budget for\nthe server, ending in a successful connect. Under the old single budget\nthat connect failed. The existing stuck-setup retry test is unchanged\nand still passes, which is the evidence that the setup bound survived.\n\nThere is no test on the log line — making `#open` deterministically\ncross 50ms is not worth the fixture.\n\n`zero-client` 650 pass, `replicache` 798 pass; `format`, `lint` and\n`check-types` clean on both. `zero-idb.test.ts > logged-out client uses\na private storage sentinel for idb naming` fails on this branch and\nfails identically on clean `main`, so CI will be red for a reason\nunrelated to this change.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-authored-by: Claude Opus 5 <noreply@anthropic.com>",
+          "timestamp": "2026-09-04T13:23:47Z",
+          "tree_id": "0a6710a39e32ff4d3d1cbe826408a965d6d6162e",
+          "url": "https://github.com/rocicorp/mono/commit/87caec7b10913d3ff2018bc7b1d21d57b868fd4e"
+        },
+        "date": 1788528720926,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319408,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57502,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117952,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33704,
             "unit": "bytes"
           }
         ]
