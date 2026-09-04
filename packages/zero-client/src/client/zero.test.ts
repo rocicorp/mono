@@ -2924,6 +2924,37 @@ test('connect timeout retries when AbortController drops abort reasons', async (
   }
 });
 
+test('slow setup does not spend the server acknowledgement budget', async () => {
+  // Setup that finishes just inside its own deadline. Before the deadlines
+  // were split this left the server almost no time, and a healthy server was
+  // reported as unreachable.
+  const realCreate = ActiveClientsManager.create;
+  vi.spyOn(ActiveClientsManager, 'create').mockImplementation(
+    async (...args: Parameters<typeof ActiveClientsManager.create>) => {
+      await sleep(CONNECT_TIMEOUT_MS - 1_000);
+      return realCreate(...args);
+    },
+  );
+
+  const z = zeroForTest();
+  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+
+  // Wait out the slow setup.
+  await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 1_000);
+  await tickAFewTimes(vi);
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+
+  // The old single budget would have expired 1s from here. The server gets a
+  // full budget of its own instead.
+  await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 1_000);
+  await tickAFewTimes(vi);
+  expect(connectTimeoutErrors(z)).toEqual([]);
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+
+  await z.triggerConnected();
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+});
+
 test('connect timeout during setup retries without an unhandled rejection', async () => {
   const unhandledRejections: PromiseRejectionEvent[] = [];
   const onUnhandled = (event: PromiseRejectionEvent) => {

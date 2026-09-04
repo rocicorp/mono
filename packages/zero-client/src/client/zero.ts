@@ -219,6 +219,7 @@ type ConnectAttemptControl = {
   readonly controller: AbortController;
   readonly connected: Resolver<void>;
   readonly events: [date: Date, event: string][];
+
   /**
    * Cancels whichever phase deadline is currently running. Swapped when the
    * attempt stops setting up locally and starts waiting for the server.
