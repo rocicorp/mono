@@ -133,13 +133,19 @@ function createAPI(): API {
       }
     },
 
-    async processMessage(downstream: ChangeStreamData) {
+    async processMessages(downstream: readonly ChangeStreamData[]) {
       try {
-        const committed = must(processor).processMessage(must(lc), downstream);
-        if (committed && checkpointer) {
-          await checkpointer.maybeCheckpoint();
+        let commitResult = null;
+        for (const message of downstream) {
+          const committed = must(processor).processMessage(must(lc), message);
+          if (committed) {
+            commitResult = committed;
+            if (checkpointer) {
+              await checkpointer.maybeCheckpoint();
+            }
+          }
         }
-        return committed;
+        return commitResult;
       } catch (e) {
         handleCorruptedDb(e);
         throw e;
