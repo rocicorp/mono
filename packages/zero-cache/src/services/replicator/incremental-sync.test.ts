@@ -749,13 +749,20 @@ describe('replicator/incremental-sync', () => {
           rowValues: [[1, 'hello']],
         },
       ],
-      ['commit', issues.commit(), {watermark: '110.01'}],
     ] satisfies Downstream[]) {
       downstream.push(change);
     }
+    const incompleteBackfillCommit = downstream.push([
+      'commit',
+      issues.commit(),
+      {watermark: '110.01'},
+    ]).result;
 
     // Ensure no notifications have been published.
     await noNotification(next);
+
+    // Wait for the commit to be processed before inspecting the replica.
+    expect(await incompleteBackfillCommit).toBe('consumed');
 
     // And that row versions have not changed, even for backfilled rows.
     const issuesDump = mainDb.prepare(/*sql*/ `SELECT * FROM issues`);
