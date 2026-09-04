@@ -549,6 +549,7 @@ export type RowSetSignatureProvider = (queryID: string) => bigint | undefined;
  *
  * * {@link trackQueries} for queries that are being executed or removed.
  * * {@link received} for all rows received from the executed queries
+ * * {@link removeTrackedQueries} for optional queries that did not execute
  * * {@link deleteUnreferencedRows} to remove any rows that have
  *       fallen out of the query result view.
  * * {@link flush}
@@ -559,6 +560,7 @@ export type RowSetSignatureProvider = (queryID: string) => bigint | undefined;
  */
 export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #removedOrExecutedQueryIDs = new Set<string>();
+  readonly #executedQueryIDs = new Set<string>();
   readonly #receivedRows = new CustomKeyMap<RowID, RefCounts | null>(
     rowIDString,
   );
@@ -705,6 +707,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         () => `Query ${queryID} already tracked as executed or removed`,
       );
       this.#removedOrExecutedQueryIDs.add(queryID);
+      this.#executedQueryIDs.add(queryID);
 
       let gotQueryPatch: Patch | undefined;
       const query = this._cvr.queries[queryID];
@@ -727,6 +730,52 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       }
       return gotQueryPatch ? [gotQueryPatch] : [];
     });
+  }
+
+  /**
+   * Converts queries that were tracked as executed into normal query
+   * removals. This is used when a hydration budget expires after
+   * `trackQueries()` has established the final poke version but before an
+   * optional query starts hydration.
+   *
+   * The query ID remains in `#removedOrExecutedQueryIDs`, so its row
+   * references are dropped by {@link deleteUnreferencedRows} exactly as they
+   * would be for a query removed up front. Never un-track a query here: rows
+   * already flushed by {@link received} have had its refCounts stripped and
+   * cannot be restored.
+   */
+  removeTrackedQueries(queryIDs: Iterable<string>): PatchToVersion[] {
+    assert(this.#existingRows !== undefined, 'trackQueries() was not called');
+    assert(
+      cmpVersions(this._orig.version, this._cvr.version) < 0,
+      'A final CVR version must be set before removing tracked queries',
+    );
+
+    const patches: PatchToVersion[] = [];
+    for (const queryID of queryIDs) {
+      assert(
+        this.#executedQueryIDs.has(queryID),
+        () => `Query ${queryID} was not tracked as executed`,
+      );
+      const query = must(this._cvr.queries[queryID]);
+      assertNotInternal(query);
+      assert(
+        Object.values(query.clientState).every(
+          ({inactivatedAt}) => inactivatedAt !== undefined,
+        ),
+        () => `Query ${queryID} is active`,
+      );
+      assert(
+        query.patchVersion !== undefined,
+        `Query ${queryID} is not gotten`,
+      );
+
+      delete this._cvr.queries[queryID];
+      const patch = {type: 'query', op: 'del', id: queryID} as const;
+      this._cvrStore.markQueryAsDeleted(this._cvr.version, patch);
+      patches.push({patch, toVersion: this._cvr.version});
+    }
+    return patches;
   }
 
   /**
@@ -1148,6 +1197,67 @@ export function getInactiveQueries(cvr: CVR): {
       b.ttl
     );
   });
+}
+
+export type HydrationQueryGroups<T extends QueryRecord = QueryRecord> = {
+  required: T[];
+  /**
+   * Never contains an internal query: those are always required, so callers
+   * can rely on `patchVersion` being present on the type.
+   */
+  optional: Exclude<T, InternalQueryRecord>[];
+};
+
+/**
+ * Splits hydration candidates into required and optional queries. Optional
+ * queries are ordered from latest to earliest effective expiration; an
+ * ownerless query has the lowest priority.
+ */
+export function classifyQueriesForHydration<T extends QueryRecord>(
+  queries: Iterable<T>,
+): HydrationQueryGroups<T> {
+  type Optional = Exclude<T, InternalQueryRecord>;
+  const required: T[] = [];
+  const optionalWithExpiration: {
+    query: Optional;
+    expiration: number | undefined;
+  }[] = [];
+
+  for (const query of queries) {
+    if (
+      query.type === 'internal' ||
+      Object.values(query.clientState).some(
+        state => state.inactivatedAt === undefined,
+      )
+    ) {
+      required.push(query);
+      continue;
+    }
+
+    let expiration: number | undefined;
+    for (const {inactivatedAt, ttl} of Object.values(query.clientState)) {
+      assert(inactivatedAt !== undefined, 'inactive query has active client');
+      const clientExpiration = ttlClockAsNumber(inactivatedAt) + clampTTL(ttl);
+      expiration = Math.max(expiration ?? -Infinity, clientExpiration);
+    }
+    // Narrowed by the `type === 'internal'` branch above.
+    optionalWithExpiration.push({query: query as Optional, expiration});
+  }
+
+  optionalWithExpiration.sort((a, b) => {
+    if (a.expiration === undefined) {
+      return b.expiration === undefined ? 0 : 1;
+    }
+    if (b.expiration === undefined) {
+      return -1;
+    }
+    return b.expiration - a.expiration;
+  });
+
+  return {
+    required,
+    optional: optionalWithExpiration.map(({query}) => query),
+  };
 }
 
 export function nextEvictionTime(cvr: CVR): TTLClock | undefined {
