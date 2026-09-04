@@ -245,22 +245,10 @@ type HydrationQuery = {
   name?: string | undefined;
 };
 
-type DeferredOptionalQueryPreparation = {
-  trackedQueries: {id: string; transformationHash: string}[];
-  order: ReadonlyMap<string, number>;
-  prepare: () => Promise<{
-    hydrate: HydrationQuery[];
-    remove: string[];
-    retain: string[];
-  }>;
-};
-
 type HydrationPassStats = {
   activeHydratedQueries: number;
   inactiveHydratedQueries: number;
 };
-
-type ProcessChangesBoundary = () => void | Promise<void>;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -775,11 +763,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       activeHydratedQueries: 0,
       inactiveHydratedQueries: 0,
     };
+    // Note: the budget is constructed before this call, so the time
+    // spent here counts against it. Only required queries are hydrated
+    // here, so none of them are evictable; the budget takes effect in
+    // the #syncQueryPipelineSet call below.
     const driftedQueryIDs = await this.#hydrateUnchangedQueries(
       lc,
       cvr,
       connCtx,
-      hydrationBudget,
       hydrationPassStats,
     );
     // hydrateUnchangedQueries just transformed all the custom queries;
@@ -1691,7 +1682,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
     connCtx: ConnectionContext,
-    _hydrationBudget: HydrationBudget,
     hydrationPassStats: HydrationPassStats,
   ): Promise<Set<string>> {
     assert(this.#pipelines.initialized(), 'pipelines must be initialized');
@@ -2160,24 +2150,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const {required, optional} =
         classifyQueriesForHydration(hydrationCandidates);
       const requiredQueryIDs = new Set(required.map(query => query.id));
-      const optionalNotGottenQueryIDs = optional
-        .filter(
-          query =>
-            query.type !== 'internal' && query.patchVersion === undefined,
-        )
-        .map(query => query.id);
-      const optionalGotten = optional.filter(
-        query => query.type !== 'internal' && query.patchVersion !== undefined,
-      );
-      const allCustomQueries = new Map(
-        hydrationCandidates
-          .filter(
-            (query): query is CustomQueryRecord => query.type === 'custom',
-          )
-          .map(query => [query.id, query]),
-      );
+      // An inactive query that was never gotten holds no warm data, so there is
+      // nothing for its remaining TTL to preserve. Only drop it when the budget
+      // is enabled; with the budget disabled these are hydrated as before.
+      const optionalNotGottenQueryIDs =
+        hydrationBudget.limitMs === 0
+          ? []
+          : optional
+              .filter(query => query.patchVersion === undefined)
+              .map(query => query.id);
+      const optionalToHydrate =
+        hydrationBudget.limitMs === 0
+          ? optional
+          : optional.filter(query => query.patchVersion !== undefined);
 
-      if (allCustomQueries.size > 0 && !this.#customQueryTransformer) {
+      if (
+        !this.#customQueryTransformer &&
+        hydrationCandidates.some(query => query.type === 'custom')
+      ) {
         lc.warn?.(
           'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
         );
@@ -2319,29 +2309,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       };
 
-      // Required transformations always run first. Their time is part of the
-      // pass budget, but exhaustion cannot remove a required query.
-      transformOtherQueries(required);
+      // Required and optional queries are transformed together in a single
+      // batch. A transform is a cheap AST build and the custom-query remote
+      // round trip dominates its cost, so splitting the batch to save optional
+      // transforms would cost more than it saves. The budget gates hydration,
+      // which is the expensive part, at query boundaries below.
+      const queriesToTransform = [...required, ...optionalToHydrate];
+      transformOtherQueries(queriesToTransform);
       await transformCustomQueries(
-        required.filter(
+        queriesToTransform.filter(
           (query): query is CustomQueryRecord =>
             query.type === 'custom' && shouldTransformCustomQuery(query),
         ),
       );
-
-      // Local transforms are deterministic and required to decide whether an
-      // existing pipeline is still authorized. Optional remote transforms are
-      // not started once required work has exhausted the budget.
-      transformOtherQueries(optionalGotten);
-      const optionalCustomQueriesToTransform = optionalGotten.filter(
-        (query): query is CustomQueryRecord =>
-          query.type === 'custom' && shouldTransformCustomQuery(query),
-      );
-      if (hydrationBudget.limitMs === 0) {
-        // Keep the disabled path behaviorally identical: transform optional
-        // custom queries before deciding whether any reconciliation is needed.
-        await transformCustomQueries(optionalCustomQueriesToTransform);
-      }
 
       const removeQueriesQueryIds: Set<string> = new Set([
         ...naturallyExpiredQueryIDs,
@@ -2374,66 +2354,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const optionalAddQueries = addQueries.filter(
         query => !requiredQueryIDs.has(query.id),
       );
-      const optionalOrder = new Map(
-        optional.map((query, index) => [query.id, index]),
-      );
-      const deferredOptionalQueryPreparation:
-        | DeferredOptionalQueryPreparation
-        | undefined =
-        hydrationBudget.limitMs !== 0 &&
-        customQueryTransformer &&
-        optionalCustomQueriesToTransform.length > 0
-          ? {
-              trackedQueries: optionalCustomQueriesToTransform.map(query => ({
-                id: query.id,
-                transformationHash: must(query.transformationHash),
-              })),
-              order: optionalOrder,
-              prepare: async () => {
-                const transformedStart = transformedQueries.length;
-                const erroredStart = erroredQueryIDs.length;
-                await transformCustomQueries(optionalCustomQueriesToTransform);
-                const transformed = transformedQueries.splice(transformedStart);
-                const remove = erroredQueryIDs.splice(erroredStart);
-                const removed = new Set(remove);
-                const transformedByID = new Map(
-                  transformed.map(result => [result.id, result]),
-                );
-                const hydrate: HydrationQuery[] = [];
-                const retain: string[] = [];
-
-                for (const query of optionalCustomQueriesToTransform) {
-                  if (removed.has(query.id)) {
-                    continue;
-                  }
-                  const result = transformedByID.get(query.id);
-                  if (!result) {
-                    if (this.#pipelines.queries().has(query.id)) {
-                      retain.push(query.id);
-                    } else {
-                      remove.push(query.id);
-                    }
-                    continue;
-                  }
-                  if (
-                    this.#pipelines.queries().get(query.id)
-                      ?.transformationHash ===
-                    result.transformed.transformationHash
-                  ) {
-                    retain.push(query.id);
-                    continue;
-                  }
-                  hydrate.push({
-                    id: query.id,
-                    ast: result.transformed.transformedAst,
-                    transformationHash: result.transformed.transformationHash,
-                    name: query.name,
-                  });
-                }
-                return {hydrate, remove, retain};
-              },
-            }
-          : undefined;
 
       lc.info?.(
         `syncQueryPipelineSet: ${cvrQueryEntires.length} CVR queries, ` +
@@ -2453,11 +2373,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
       }
 
-      if (
-        addQueries.length > 0 ||
-        removeQueriesQueryIds.size > 0 ||
-        deferredOptionalQueryPreparation !== undefined
-      ) {
+      if (addQueries.length > 0 || removeQueriesQueryIds.size > 0) {
         await this.#addAndRemoveQueries(
           lc,
           cvr,
@@ -2465,24 +2381,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           optionalAddQueries,
           Array.from(removeQueriesQueryIds, id => ({id})),
           hydrationBudget,
-          deferredOptionalQueryPreparation,
           hydrationPassStats,
           driftedQueryIDs,
         );
-        if (
-          addQueries.length > 0 ||
-          deferredOptionalQueryPreparation !== undefined
-        ) {
+        if (addQueries.length > 0) {
           this.#viewSyncerHydration.recordMs(performance.now() - start);
         }
       } else {
-        this.#recordHydrationBudgetExhaustion(
-          lc,
-          hydrationBudget,
-          hydrationPassStats.activeHydratedQueries,
-          hydrationPassStats.inactiveHydratedQueries,
-          [],
-        );
+        // Nothing to hydrate, so nothing could have been evicted. Reporting an
+        // exhausted pass here would log and count a budget "exhaustion" that
+        // had no queries at stake.
         await this.#catchupClients(lc, cvr);
       }
     });
@@ -2527,13 +2435,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     activeHydratedQueries: number,
     inactiveHydratedQueries: number,
     inactiveEvictedQueryIDs: readonly string[],
-    exhaustedAtMs?: number | undefined,
   ): void {
-    if (hydrationBudget.limitMs === 0) {
-      return;
-    }
-    const elapsedMs = exhaustedAtMs ?? hydrationBudget.elapsedMs();
-    if (elapsedMs < hydrationBudget.limitMs) {
+    const elapsedMs = hydrationBudget.exhaustedAtMs;
+    if (elapsedMs === undefined) {
       return;
     }
 
@@ -2567,20 +2471,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     optionalQueries: HydrationQuery[],
     removeQueries: {id: string}[],
     hydrationBudget: HydrationBudget,
-    deferredOptionalQueryPreparation:
-      | DeferredOptionalQueryPreparation
-      | undefined,
     hydrationPassStats: HydrationPassStats,
     driftedQueryIDs: Set<string> = new Set(),
   ): Promise<void> {
     return startAsyncSpan(tracer, 'vs.#addAndRemoveQueries', async () => {
       const addQueries = [...requiredQueries, ...optionalQueries];
-      const trackedQueries = [
-        ...addQueries,
-        ...(deferredOptionalQueryPreparation?.trackedQueries ?? []),
-      ];
       assert(
-        trackedQueries.length > 0 || removeQueries.length > 0,
+        addQueries.length > 0 || removeQueries.length > 0,
         'Must have queries to add or remove',
       );
       const start = performance.now();
@@ -2597,7 +2494,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         queryID => this.#pipelines.rowSetSignature(queryID),
       );
 
-      const sameHashRehydratedQueryIDs = trackedQueries
+      const sameHashRehydratedQueryIDs = addQueries
         .filter(
           q => cvr.queries[q.id]?.transformationHash === q.transformationHash,
         )
@@ -2605,7 +2502,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const trackQueriesWillBumpVersion =
         stateVersion > cvr.version.stateVersion ||
         removeQueries.length > 0 ||
-        trackedQueries.some(
+        addQueries.some(
           q => cvr.queries[q.id]?.transformationHash !== q.transformationHash,
         );
 
@@ -2636,20 +2533,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // executed and removed queries.
       const {queryPatches, newVersion} = updater.trackQueries(
         lc,
-        trackedQueries,
+        addQueries,
         removeQueries,
       );
-      const trackedOptionalQueries = [
-        ...optionalQueries,
-        ...(deferredOptionalQueryPreparation?.trackedQueries ?? []),
-      ];
-      if (trackedOptionalQueries.length > 0) {
+      if (hydrationBudget.limitMs !== 0 && optionalQueries.length > 0) {
+        // An optional query can still be converted to a removal after
+        // trackQueries(), so the poke version must already be final and the
+        // query must not have been announced with a 'put' patch that a later
+        // 'del' in the same poke would have to retract.
         assert(
           cmpVersions(cvr.version, newVersion) < 0,
           'Optional hydration requires a final poke version before row processing',
         );
         const optionalQueryIDs = new Set(
-          trackedOptionalQueries.map(query => query.id),
+          optionalQueries.map(query => query.id),
         );
         assert(
           queryPatches.every(
@@ -2693,24 +2590,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       let totalHydratedQueries = 0;
       let coveredHydratedQueries = 0;
       let firstCoveredQuery: QueryCoverageShadowHit | undefined;
-      let budgetExhaustedAtMs: number | undefined;
       const hydratedQueryIDs: string[] = [];
       const budgetEvictedQueryIDs: string[] = [];
-      const otherRemovedTrackedQueryIDs: string[] = [];
       // oxlint-disable-next-line @typescript-eslint/no-this-alias
       const self = this;
-
-      const budgetIsExhausted = () => {
-        if (hydrationBudget.limitMs === 0) {
-          return false;
-        }
-        const elapsed = hydrationBudget.elapsedMs();
-        if (elapsed < hydrationBudget.limitMs) {
-          return false;
-        }
-        budgetExhaustedAtMs ??= elapsed;
-        return true;
-      };
 
       // yield at the very beginning so that the first time slice
       // is properly processed by the time-slice queue.
@@ -2722,7 +2605,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         slowHydrateThreshold: number,
       ) {
         for (let i = 0; i < queries.length; i++) {
-          if (optional && budgetIsExhausted()) {
+          // The budget is soft: it is only consulted between queries, so a
+          // query that starts before the limit always runs to completion.
+          if (optional && hydrationBudget.exhausted()) {
             budgetEvictedQueryIDs.push(
               ...queries.slice(i).map(query => query.id),
             );
@@ -2787,63 +2672,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           });
           hydrations.add(1);
           hydrationTime.recordMs(elapsed);
-          if (optional) {
-            yield () => {
-              budgetIsExhausted();
-            };
-          }
         }
       }
 
-      async function* generateRowChanges(slowHydrateThreshold: number) {
+      function* generateRowChanges(slowHydrateThreshold: number) {
         yield* hydrateQueries(requiredQueries, false, slowHydrateThreshold);
-        yield () => {
-          budgetIsExhausted();
-        };
-        let preparedOptionalQueries = optionalQueries;
-        if (deferredOptionalQueryPreparation) {
-          if (budgetIsExhausted()) {
-            budgetEvictedQueryIDs.push(
-              ...[
-                ...optionalQueries,
-                ...deferredOptionalQueryPreparation.trackedQueries,
-              ]
-                .sort(
-                  (a, b) =>
-                    must(deferredOptionalQueryPreparation.order.get(a.id)) -
-                    must(deferredOptionalQueryPreparation.order.get(b.id)),
-                )
-                .map(query => query.id),
-            );
-            return;
-          } else {
-            const prepared = await deferredOptionalQueryPreparation.prepare();
-            for (const query of prepared.hydrate) {
-              updater.updateTrackedQueryTransformation(
-                query.id,
-                query.transformationHash,
-              );
-            }
-            for (const queryID of prepared.retain) {
-              updater.untrackExecutedQuery(queryID);
-            }
-            otherRemovedTrackedQueryIDs.push(...prepared.remove);
-            budgetIsExhausted();
-            preparedOptionalQueries = [
-              ...optionalQueries,
-              ...prepared.hydrate,
-            ].sort(
-              (a, b) =>
-                must(deferredOptionalQueryPreparation.order.get(a.id)) -
-                must(deferredOptionalQueryPreparation.order.get(b.id)),
-            );
-          }
-        }
-        yield* hydrateQueries(
-          preparedOptionalQueries,
-          true,
-          slowHydrateThreshold,
-        );
+        yield* hydrateQueries(optionalQueries, true, slowHydrateThreshold);
       }
       // #processChanges does batched de-duping of rows. Wrap all pipelines in
       // a single generator in order to maximize de-duping.
@@ -2855,16 +2689,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         pokers,
       );
 
-      const removedTrackedQueryIDs = [
-        ...budgetEvictedQueryIDs,
-        ...otherRemovedTrackedQueryIDs,
-      ];
-      for (const patch of updater.removeTrackedQueries(
-        removedTrackedQueryIDs,
-      )) {
+      for (const patch of updater.removeTrackedQueries(budgetEvictedQueryIDs)) {
         await pokers.addPatch(patch);
       }
-      for (const queryID of removedTrackedQueryIDs) {
+      for (const queryID of budgetEvictedQueryIDs) {
         this.#pipelines.removeQuery(queryID);
         this.#inspectorDelegate.removeQuery(queryID);
         this.#queryReplacements.delete(queryID);
@@ -2875,7 +2703,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         hydrationPassStats.activeHydratedQueries,
         hydrationPassStats.inactiveHydratedQueries,
         budgetEvictedQueryIDs,
-        budgetExhaustedAtMs,
       );
       this.#logQueryCoverageShadowSummary(
         lc,
@@ -2897,7 +2724,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // Commit the changes and update the CVR snapshot.
       this.#cvr = await this.#flushUpdater(lc, updater);
-      if (removedTrackedQueryIDs.length > 0) {
+      if (budgetEvictedQueryIDs.length > 0) {
         this.#scheduleExpireEviction(lc, this.#cvr);
       }
 
@@ -3031,9 +2858,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #processChanges(
     lc: LogContext,
     timer: TimeSliceTimer,
-    changes:
-      | Iterable<RowChange | 'yield' | ProcessChangesBoundary>
-      | AsyncIterable<RowChange | 'yield' | ProcessChangesBoundary>,
+    changes: Iterable<RowChange | 'yield'>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler,
   ) {
@@ -3066,14 +2891,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         });
 
       await startAsyncSpan(tracer, 'loopingChanges', async span => {
-        for await (const change of changes) {
-          if (typeof change === 'function') {
-            if (rows.size > 0) {
-              await processBatch();
-            }
-            await change();
-            continue;
-          }
+        for (const change of changes) {
           if (change === 'yield') {
             await timer.yieldProcess('yield in processChanges');
             continue;
@@ -3476,10 +3294,12 @@ function isTransformFailedError(error: ProtocolError): boolean {
 }
 
 /**
- * A query must be expired for all clients in order to be considered
- * expired.
+ * Whether a query's TTL has elapsed. A query must be expired for all clients
+ * in order to be considered expired.
+ *
+ * Exported for testing.
  */
-function expired(
+export function expired(
   ttlClock: TTLClock,
   q: InternalQueryRecord | ClientQueryRecord | CustomQueryRecord,
 ): boolean {
@@ -3487,12 +3307,10 @@ function expired(
     return false;
   }
 
-  const clientStates = Object.values(q.clientState);
-  if (clientStates.length === 0) {
-    return false;
-  }
-
-  for (const clientState of clientStates) {
+  // Note: a query with no client state at all (e.g. every client that desired
+  // it sent a `clear`) is expired. It has no owner and therefore no TTL, so
+  // returning false here would leak the query and its pipeline forever.
+  for (const clientState of Object.values(q.clientState)) {
     const {ttl, inactivatedAt} = clientState;
     if (inactivatedAt === undefined) {
       return false;

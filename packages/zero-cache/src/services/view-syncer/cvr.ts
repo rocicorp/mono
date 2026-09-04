@@ -733,10 +733,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   /**
-   * Converts queries that were provisionally tracked as executed into normal
-   * query removals. This is used when a hydration budget expires after
+   * Converts queries that were tracked as executed into normal query
+   * removals. This is used when a hydration budget expires after
    * `trackQueries()` has established the final poke version but before an
    * optional query starts hydration.
+   *
+   * The query ID remains in `#removedOrExecutedQueryIDs`, so its row
+   * references are dropped by {@link deleteUnreferencedRows} exactly as they
+   * would be for a query removed up front. Never un-track a query here: rows
+   * already flushed by {@link received} have had its refCounts stripped and
+   * cannot be restored.
    */
   removeTrackedQueries(queryIDs: Iterable<string>): PatchToVersion[] {
     assert(this.#existingRows !== undefined, 'trackQueries() was not called');
@@ -770,39 +776,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       patches.push({patch, toVersion: this._cvr.version});
     }
     return patches;
-  }
-
-  /** Updates the transformation selected for a provisionally tracked query. */
-  updateTrackedQueryTransformation(
-    queryID: string,
-    transformationHash: string,
-  ): void {
-    assert(
-      this.#executedQueryIDs.has(queryID),
-      () => `Query ${queryID} was not tracked as executed`,
-    );
-    const query = must(this._cvr.queries[queryID]);
-    if (query.transformationHash === transformationHash) {
-      return;
-    }
-    query.transformationHash = transformationHash;
-    query.transformationVersion = this._cvr.version;
-    this._cvrStore.updateQuery(query);
-  }
-
-  /**
-   * Stops reconciling a provisionally tracked query whose transformation is
-   * unchanged and whose existing pipeline can therefore be retained.
-   */
-  untrackExecutedQuery(queryID: string): void {
-    assert(
-      this.#executedQueryIDs.delete(queryID),
-      () => `Query ${queryID} was not tracked as executed`,
-    );
-    assert(
-      this.#removedOrExecutedQueryIDs.delete(queryID),
-      () => `Query ${queryID} was not tracked for row reconciliation`,
-    );
   }
 
   /**
@@ -1228,7 +1201,11 @@ export function getInactiveQueries(cvr: CVR): {
 
 export type HydrationQueryGroups<T extends QueryRecord = QueryRecord> = {
   required: T[];
-  optional: T[];
+  /**
+   * Never contains an internal query: those are always required, so callers
+   * can rely on `patchVersion` being present on the type.
+   */
+  optional: Exclude<T, InternalQueryRecord>[];
 };
 
 /**
@@ -1239,9 +1216,12 @@ export type HydrationQueryGroups<T extends QueryRecord = QueryRecord> = {
 export function classifyQueriesForHydration<T extends QueryRecord>(
   queries: Iterable<T>,
 ): HydrationQueryGroups<T> {
+  type Optional = Exclude<T, InternalQueryRecord>;
   const required: T[] = [];
-  const optionalWithExpiration: {query: T; expiration: number | undefined}[] =
-    [];
+  const optionalWithExpiration: {
+    query: Optional;
+    expiration: number | undefined;
+  }[] = [];
 
   for (const query of queries) {
     if (
@@ -1260,7 +1240,8 @@ export function classifyQueriesForHydration<T extends QueryRecord>(
       const clientExpiration = ttlClockAsNumber(inactivatedAt) + clampTTL(ttl);
       expiration = Math.max(expiration ?? -Infinity, clientExpiration);
     }
-    optionalWithExpiration.push({query, expiration});
+    // Narrowed by the `type === 'internal'` branch above.
+    optionalWithExpiration.push({query: query as Optional, expiration});
   }
 
   optionalWithExpiration.sort((a, b) => {

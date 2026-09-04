@@ -1,16 +1,20 @@
 import {expect, test, vi} from 'vitest';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {rowIDString} from '../../types/row-key.ts';
 import type {CVRStore} from './cvr-store.ts';
 import {
   classifyQueriesForHydration,
   CVRQueryDrivenUpdater,
   getInactiveQueries,
   type CVR,
+  type RowUpdate,
 } from './cvr.ts';
 import type {
   ClientQueryRecord,
   InternalQueryRecord,
   QueryRecord,
+  RowID,
   RowRecord,
 } from './schema/types.ts';
 import {ttlClockFromNumber, type TTLClock} from './ttl-clock.ts';
@@ -323,15 +327,24 @@ test('classifyQueriesForHydration orders inactive queries by descending effectiv
   ]);
 });
 
-function makeQueryUpdater(query: QueryRecord, rows: RowRecord[] = []) {
+function makeQueryUpdater(
+  queries: QueryRecord | QueryRecord[],
+  rows: RowRecord[] = [],
+) {
   const cvr = makeCVR({});
-  cvr.queries[query.id] = query;
+  for (const query of Array.isArray(queries) ? queries : [queries]) {
+    cvr.queries[query.id] = query;
+  }
+  const rowRecords = new CustomKeyMap<RowID, RowRecord>(rowIDString);
+  for (const row of rows) {
+    rowRecords.set(row.id, row);
+  }
+  const puts: RowRecord[] = [];
   const store = {
-    getRowRecords: vi.fn(() =>
-      Promise.resolve(new Map(rows.map(row => [row.id, row]))),
-    ),
+    getRowRecords: vi.fn(() => Promise.resolve(rowRecords)),
     markQueryAsDeleted: vi.fn(),
-    putRowRecord: vi.fn(),
+    putRowRecord: vi.fn((row: RowRecord) => puts.push(row)),
+    delRowRecord: vi.fn(),
     updateQuery: vi.fn(),
   } as unknown as CVRStore;
   const updater = new CVRQueryDrivenUpdater(
@@ -341,7 +354,7 @@ function makeQueryUpdater(query: QueryRecord, rows: RowRecord[] = []) {
     cvr.replicaVersion!,
   );
   updater.ensureNewVersion();
-  return {store, updater};
+  return {store, updater, puts};
 }
 
 function gottenInactiveQuery(id = 'inactive'): ClientQueryRecord {
@@ -430,5 +443,116 @@ test('removeTrackedQueries rejects active, internal, and untracked queries', () 
   untrackedUpdater.trackQueries(lc, [], []);
   expect(() => untrackedUpdater.removeTrackedQueries([inactive.id])).toThrow(
     'was not tracked as executed',
+  );
+});
+
+test("removeTrackedQueries drops only the removed query's row references", async () => {
+  // A row shared by a query that stays and a query that is budget-evicted must
+  // survive with the surviving query's refCount intact.
+  const kept = {
+    ...gottenInactiveQuery('kept'),
+    clientState: {client: clientState(undefined)},
+  };
+  const evicted = gottenInactiveQuery('evicted');
+  const shared: RowRecord = {
+    id: {schema: '', table: 'issues', rowKey: {id: '1'}},
+    rowVersion: '01',
+    patchVersion: {stateVersion: '1aa'},
+    refCounts: {kept: 1, evicted: 1},
+  };
+  const onlyEvicted: RowRecord = {
+    id: {schema: '', table: 'issues', rowKey: {id: '2'}},
+    rowVersion: '01',
+    patchVersion: {stateVersion: '1aa'},
+    refCounts: {evicted: 1},
+  };
+
+  const {updater, puts} = makeQueryUpdater(
+    [kept, evicted],
+    [shared, onlyEvicted],
+  );
+  updater.trackQueries(
+    createSilentLogContext(),
+    [
+      {id: 'kept', transformationHash: 'transform'},
+      {id: 'evicted', transformationHash: 'transform'},
+    ],
+    [],
+  );
+
+  // 'kept' hydrates and re-reports the shared row; 'evicted' never starts.
+  const received = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
+  received.set(shared.id, {
+    refCounts: {kept: 1},
+    version: '01',
+    contents: {id: '1'},
+  });
+  await updater.received(createSilentLogContext(), received);
+
+  updater.removeTrackedQueries(['evicted']);
+
+  expect(await updater.deleteUnreferencedRows()).toEqual([
+    {
+      patch: {type: 'row', op: 'del', id: onlyEvicted.id},
+      toVersion: {stateVersion: '1aa', configVersion: 1},
+    },
+  ]);
+
+  const byTable = new Map(puts.map(row => [row.id.rowKey.id, row.refCounts]));
+  expect(byTable.get('1')).toEqual({kept: 1});
+  expect(byTable.get('2')).toBeNull();
+});
+
+test('removeTrackedQueries keeps the query in row reconciliation', () => {
+  // The evicted query must stay in the removed-or-executed set so that
+  // deleteUnreferencedRows() drops its references. Un-tracking it here would
+  // strip its refCounts from rows already flushed by received() with no way to
+  // put them back.
+  const query = gottenInactiveQuery();
+  const row: RowRecord = {
+    id: {schema: '', table: 'issues', rowKey: {id: '1'}},
+    rowVersion: '01',
+    patchVersion: {stateVersion: '1aa'},
+    refCounts: {[query.id]: 1},
+  };
+  const {updater} = makeQueryUpdater(query, [row]);
+  updater.trackQueries(
+    createSilentLogContext(),
+    [{id: query.id, transformationHash: 'transform'}],
+    [],
+  );
+  updater.removeTrackedQueries([query.id]);
+
+  // Removing it twice is a bug: the query is gone from the CVR snapshot.
+  expect(() => updater.removeTrackedQueries([query.id])).toThrow();
+});
+
+test('removeTrackedQueries requires a final CVR version', () => {
+  const query = gottenInactiveQuery();
+  const cvr = makeCVR({});
+  cvr.queries[query.id] = query;
+  const store = {
+    getRowRecords: vi.fn(() =>
+      Promise.resolve(new CustomKeyMap<RowID, RowRecord>(rowIDString)),
+    ),
+    markQueryAsDeleted: vi.fn(),
+    putRowRecord: vi.fn(),
+    updateQuery: vi.fn(),
+  } as unknown as CVRStore;
+  const updater = new CVRQueryDrivenUpdater(
+    store,
+    cvr,
+    cvr.version.stateVersion,
+    cvr.replicaVersion!,
+  );
+  // No ensureNewVersion() and no transformation change, so the version is
+  // unchanged: a 'del' patch emitted here would land on a stale poke version.
+  updater.trackQueries(
+    createSilentLogContext(),
+    [{id: query.id, transformationHash: 'transform'}],
+    [],
+  );
+  expect(() => updater.removeTrackedQueries([query.id])).toThrow(
+    'A final CVR version must be set before removing tracked queries',
   );
 });

@@ -12,6 +12,7 @@ export class HydrationBudget {
   readonly limitMs: number;
   readonly #now: MonotonicClock;
   readonly #startedAt: number;
+  #exhaustedAtMs: number | undefined;
 
   constructor(
     limitMs: number,
@@ -30,7 +31,25 @@ export class HydrationBudget {
     return this.#now() - this.#startedAt;
   }
 
+  /**
+   * Whether the budget is spent. A disabled budget (`limitMs === 0`) is never
+   * exhausted. The elapsed time at the first exhausted check is retained in
+   * {@link exhaustedAtMs} so that reporting does not re-read the clock.
+   */
   exhausted(): boolean {
-    return this.limitMs !== 0 && this.elapsedMs() >= this.limitMs;
+    if (this.limitMs === 0) {
+      return false;
+    }
+    const elapsed = this.elapsedMs();
+    if (elapsed < this.limitMs) {
+      return false;
+    }
+    this.#exhaustedAtMs ??= elapsed;
+    return true;
+  }
+
+  /** The elapsed time at which {@link exhausted} first returned true. */
+  get exhaustedAtMs(): number | undefined {
+    return this.#exhaustedAtMs;
   }
 }
