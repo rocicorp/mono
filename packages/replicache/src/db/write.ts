@@ -424,7 +424,7 @@ export async function createIndexBTree(
   formatVersion: FormatVersion,
 ): Promise<BTreeWrite> {
   const indexMap = new BTreeWrite(dagWrite, formatVersion);
-  for await (const entry of valueMap.scan(prefix)) {
+  for await (const entry of valueMap.scan(prefix, false)) {
     const key = entry[0];
     if (!key.startsWith(prefix)) {
       break;
