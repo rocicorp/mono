@@ -54,6 +54,7 @@ import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.ts';
 import {ConnectionContextManagerImpl} from './connection-context-manager.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
+import type {MonotonicClock} from './hydration-budget.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
@@ -586,7 +587,9 @@ export const TEST_ADMIN_PASSWORD = 'test-pwd';
 
 type SetupOptions = Readonly<{
   authConfig?: Partial<NormalizedZeroConfig['auth']> | undefined;
+  hydrationBudgetMs?: number | undefined;
   lc?: LogContext | undefined;
+  monotonicClock?: MonotonicClock | undefined;
   /**
    * Enables a default `/query` stub for PG integration tests that should still
    * exercise real auth-validation code paths without having to model full
@@ -639,7 +642,9 @@ export async function setup(
 ) {
   const {
     authConfig = {},
+    hydrationBudgetMs = 0,
     lc = createSilentLogContext(),
+    monotonicClock,
     queryFetchMode = 'none',
   } = options;
   const effectiveQueryConfig: ZeroConfig['query'] =
@@ -772,6 +777,7 @@ export async function setup(
     log: {
       level: 'error',
     },
+    viewSyncerHydrationBudgetMs: hydrationBudgetMs,
   } as NormalizedZeroConfig;
 
   // Create the custom query transformer if configured
@@ -831,6 +837,7 @@ export async function setup(
     (_lc, _description, op) => op(),
     undefined,
     setTimeoutFn,
+    monotonicClock,
   );
   if (permissions) {
     const json = JSON.stringify(permissions);
@@ -948,6 +955,7 @@ export function restartViewSyncer(params: {
   config: NormalizedZeroConfig;
   customQueryTransformer: CustomQueryTransformer | undefined;
   setTimeoutFn: Awaited<ReturnType<typeof setup>>['setTimeoutFn'];
+  monotonicClock?: MonotonicClock | undefined;
 }) {
   const {
     databaseStorage,
@@ -956,6 +964,7 @@ export function restartViewSyncer(params: {
     config,
     customQueryTransformer,
     setTimeoutFn,
+    monotonicClock,
   } = params;
   const lc = createSilentLogContext();
 
@@ -1016,6 +1025,7 @@ export function restartViewSyncer(params: {
     (_lc, _description, op) => op(),
     undefined,
     setTimeoutFn,
+    monotonicClock,
   );
   const viewSyncerDone = vs.run();
 
