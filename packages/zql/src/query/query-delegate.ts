@@ -16,7 +16,20 @@ import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 export type CommitListener = () => void;
-export type GotCallback = (got: boolean, error?: ErroredQuery) => void;
+/**
+ * `got` reports what the client knows about the query's server result:
+ * - `true`: the server confirmed the complete result on this connection.
+ * - `false`: the result is not (or no longer) known to be complete.
+ * - `'cached'`: the store holds the server-confirmed complete result from a
+ *   previous sync (the persisted got-queries key exists, pre-authoritative,
+ *   and its stored AST fingerprint matches the current registration's body).
+ *   Never satisfies complete-waiters — freshness stays a promise only the
+ *   connection can keep.
+ */
+export type GotCallback = (
+  got: boolean | 'cached',
+  error?: ErroredQuery,
+) => void;
 
 export interface NewQueryDelegate {
   newQuery<

@@ -333,6 +333,7 @@ const emptyArray: unknown[] = [];
 const disabledSubscriber = () => () => {};
 
 const resultTypeUnknown = {type: 'unknown'} as const;
+const resultTypeCached = {type: 'cached'} as const;
 const resultTypeComplete = {type: 'complete'} as const;
 const resultTypeError = {type: 'error'} as const;
 
@@ -340,9 +341,11 @@ const disabledQuerySnapshot = [undefined, resultTypeUnknown] as const;
 const getDisabledSnapshot = () => disabledQuerySnapshot;
 
 const emptySnapshotSingularUnknown = [undefined, resultTypeUnknown] as const;
+const emptySnapshotSingularCached = [undefined, resultTypeCached] as const;
 const emptySnapshotSingularComplete = [undefined, resultTypeComplete] as const;
 const emptySnapshotSingularErrorUnknown = [undefined, resultTypeError] as const;
 const emptySnapshotPluralUnknown = [emptyArray, resultTypeUnknown] as const;
+const emptySnapshotPluralCached = [emptyArray, resultTypeCached] as const;
 const emptySnapshotPluralComplete = [emptyArray, resultTypeComplete] as const;
 const emptySnapshotErrorUnknown = [emptyArray, resultTypeError] as const;
 
@@ -377,6 +380,8 @@ function getSnapshot<TReturn>(
         return emptySnapshotSingularComplete as unknown as QueryResult<TReturn>;
       case 'unknown':
         return emptySnapshotSingularUnknown as unknown as QueryResult<TReturn>;
+      case 'cached':
+        return emptySnapshotSingularCached as unknown as QueryResult<TReturn>;
     }
   }
 
@@ -394,6 +399,8 @@ function getSnapshot<TReturn>(
         return emptySnapshotPluralComplete as unknown as QueryResult<TReturn>;
       case 'unknown':
         return emptySnapshotPluralUnknown as unknown as QueryResult<TReturn>;
+      case 'cached':
+        return emptySnapshotPluralCached as unknown as QueryResult<TReturn>;
     }
   }
 
@@ -415,6 +422,8 @@ function getSnapshot<TReturn>(
       return [data, resultTypeComplete];
     case 'unknown':
       return [data, resultTypeUnknown];
+    case 'cached':
+      return [data, resultTypeCached];
   }
 }
 

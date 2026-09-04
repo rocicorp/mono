@@ -321,7 +321,9 @@ export function preloadImpl<
   const {customQueryID, ast} = qi;
   if (customQueryID) {
     const cleanup = delegate.addCustomQuery(ast, customQueryID, ttl, got => {
-      if (got) {
+      // 'cached' never satisfies complete-waiters; only a server confirmation
+      // on this connection resolves `complete`.
+      if (got === true) {
         resolve();
       }
     });
@@ -332,7 +334,7 @@ export function preloadImpl<
   }
 
   const cleanup = delegate.addServerQuery(ast, ttl, got => {
-    if (got) {
+    if (got === true) {
       resolve();
     }
   });
@@ -395,6 +397,26 @@ export function materializeImpl<
     }
   };
 
+  // The view, seen as the optional cached-marking surface. Only views that
+  // implement `markCached`/`unmarkCached` (e.g. ArrayView) surface 'cached';
+  // for any other factory the optional calls are no-ops.
+  let viewForCached: CachedMarkableView | undefined;
+  // The store holds this query's server-confirmed result from a previous
+  // session (the persisted got key exists and its fingerprint matches). The
+  // registration path can report this synchronously, before the view below
+  // exists, so it is remembered here and applied once it can be.
+  let cached = false;
+
+  // Like 'complete', 'cached' is a claim about the rows the view holds, so it
+  // waits for the view to exist and its pipeline to be attached. Once the
+  // server has confirmed the query on this connection, 'complete' supersedes
+  // it and the mark is skipped.
+  const maybeMarkCached = () => {
+    if (attached && cached && !gotQueries) {
+      viewForCached?.markCached?.();
+    }
+  };
+
   const gotCallback: GotCallback = (got, error) => {
     if (error) {
       queryCompleteResolver.reject(error);
@@ -402,10 +424,21 @@ export function materializeImpl<
       return;
     }
 
-    if (got) {
-      gotQueries = true;
-      maybeResolveComplete();
+    if (got === 'cached') {
+      cached = true;
+      maybeMarkCached();
+      return;
     }
+    if (got === false) {
+      // The got key was deleted (eviction) before the server confirmed the
+      // query on this connection.
+      cached = false;
+      viewForCached?.unmarkCached?.();
+      return;
+    }
+
+    gotQueries = true;
+    maybeResolveComplete();
   };
 
   let removeCommitObserver: (() => void) | undefined;
@@ -484,8 +517,12 @@ export function materializeImpl<
         queryID,
       );
       maybeResolveComplete();
+      maybeMarkCached();
     });
   }
+
+  viewForCached = view as CachedMarkableView;
+  maybeMarkCached();
 
   return view as T;
 }
@@ -516,6 +553,15 @@ function newDeferredInput(
     probe.destroy();
   }
 }
+
+/**
+ * The optional surface a view exposes to be marked 'cached'. Views that do
+ * not implement it (custom factories) simply never surface the state.
+ */
+type CachedMarkableView = {
+  markCached?: (() => void) | undefined;
+  unmarkCached?: (() => void) | undefined;
+};
 
 function arrayViewFactory<
   TTable extends string,
