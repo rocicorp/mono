@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788528733847,
+  "lastUpdate": 1788535251356,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57413,6 +57413,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/87caec7b10913d3ff2018bc7b1d21d57b868fd4e"
         },
         "date": 1788528720926,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319408,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57502,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117952,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33704,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "matt.wonlaw@gmail.com",
+            "name": "Matt Wonlaw",
+            "username": "tantaman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de8d93c2c34c7d2468e78b63bcf8dd88497c77cd",
+          "message": "perf(zero-cache): batch writes, stop copying json (#6478)\n\n- Before: every database change was sent to the worker one at a time.\n- Now: changes are collected into batches—up to 256 messages or about 1\nMB.\n- The batch is sent to the SQLite worker in one go, reducing\ncommunication overhead.\n- Transactions still stay safe: batches are always flushed at commit or\nrollback, so acknowledgements only happen after SQLite finishes.\n- The code stops carrying around duplicate JSON strings. It keeps only\nthe parsed change plus an approximate message size, which is enough to\ndecide when a batch is full.\n- The worker still processes each message in order, so behavior should\nremain the same.\n\nNet effect: faster replication, less memory copying, and less\ncross-thread/worker overhead—especially when many changes arrive\nquickly. The\nuntracked .litestream/ and .soak/ directories are unrelated local files.\n\n<img width=\"400\" height=\"223\" alt=\"CleanShot 2026-09-03 at 15 11 12\"\nsrc=\"https://github.com/user-attachments/assets/f0631ee8-6e52-45b4-8a35-4ed3eb5b3a05\"\n/>",
+          "timestamp": "2026-09-04T15:11:42Z",
+          "tree_id": "47c0caf300fc0d586397072bc02e52305cd1346c",
+          "url": "https://github.com/rocicorp/mono/commit/de8d93c2c34c7d2468e78b63bcf8dd88497c77cd"
+        },
+        "date": 1788535238199,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
