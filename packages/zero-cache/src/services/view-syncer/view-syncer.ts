@@ -296,7 +296,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #initialized = resolver<'initialized'>();
 
   #cvr: CVRSnapshot | undefined;
-  #pipelinesSynced = false;
+  /**
+   * Indicates whether the query pipelines have completed initial catch-up and
+   * hydration with the CVR snapshot, and are ready for steady-state operation.
+   *
+   * - When `false`: The syncer is in its initial catch-up phase. The replica
+   *   advances without diffs until it reaches `cvr.version.stateVersion`,
+   *   after which `#maybeInitPipelines` hydrates queries.
+   * - When `true`: Pipelines are fully populated and in steady-state; replica
+   *   changes advance incrementally via `#advancePipelines`, and client query
+   *   updates are processed via `#syncQueryPipelineSet`.
+   *
+   * Resets to `false` if `#advancePipelines` returns a `ResetPipelinesSignal`
+   * and pipelines must be reset and rehydrated.
+   */
+  #pipelinesReady = false;
   #servedVersion: LexiVersion | null = null;
   readonly #e2eServingLagTracker = new E2EServingLagTracker();
 
@@ -594,7 +608,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             throw new ClientNotFoundError(message);
           }
 
-          if (this.#pipelinesSynced) {
+          if (this.#pipelinesReady) {
             const result = await this.#advancePipelines(lc, cvr);
             if (result === 'success') {
               return;
@@ -602,7 +616,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             lc.info?.(`resetting pipelines: ${result.message}`);
             this.#pipelineResets.add(1, {reason: result.reason});
             this.#pipelines.reset(clientSchema);
-            this.#pipelinesSynced = false;
+            this.#pipelinesReady = false;
             this.connContextManager.setSharedRetransformReady(false);
           }
 
@@ -637,25 +651,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * Initializes and syncs pipelines when the snapshotter is initialized
    * and a validated connection context is available.
    *
-   * Returns true if pipelines were successfully initialized and synced,
-   * or false if initialization was deferred (e.g. replica behind CVR, or no
-   * validated connection available).
-   *
    * Must be called from within the #lock.
    */
   async #maybeInitPipelines(
     lc: LogContext,
     cvr: CVRSnapshot,
     connCtx?: ConnectionContext,
-  ): Promise<boolean> {
+  ): Promise<void> {
     if (!this.#pipelines.initialized()) {
-      return false;
+      return;
     }
     const resolvedConnCtx =
       connCtx ?? this.connContextManager.getBackgroundConnectionContext();
     if (!resolvedConnCtx) {
       lc.info?.('No validated background connection; deferring pipeline init');
-      return false;
+      return;
     }
 
     const version = this.#pipelines.advanceWithoutDiff();
@@ -663,7 +673,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     if (version < cvr.version.stateVersion) {
       lc.debug?.(`replica@${version} is behind cvr@${cvrVer}`);
-      return false; // Wait for the next advancement.
+      return; // Wait for the next advancement.
     }
 
     lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
@@ -676,21 +686,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // hydrateUnchangedQueries just transformed all the custom queries;
     // this #syncQueryPipelineSet call should retransform those that are
     // missing from #pipelines (errored, changed transform hash, or drifted).
-    const synced = await this.#syncQueryPipelineSet(
+    await this.#syncQueryPipelineSet(
       lc,
       cvr,
       'missing',
       resolvedConnCtx,
       driftedQueryIDs,
     );
-    if (!synced) {
-      lc.info?.('Pipeline sync deferred; waiting for validated connection');
-      return false;
-    }
 
-    this.#pipelinesSynced = true;
+    this.#pipelinesReady = true;
     this.connContextManager.setSharedRetransformReady(true);
-    return true;
   }
 
   // must be called from within #lock
@@ -702,8 +707,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc = lc.withContext('method', '#removeExpiredQueries');
       lc.debug?.('Queries have expired');
       // #syncQueryPipelineSet() will remove the expired queries.
-      if (this.#pipelinesSynced) {
-        await this.#syncQueryPipelineSet(lc, cvr, 'missing', undefined);
+      if (this.#pipelinesReady) {
+        const connCtx =
+          this.connContextManager.getBackgroundConnectionContext();
+        if (connCtx) {
+          await this.#syncQueryPipelineSet(lc, cvr, 'missing', connCtx);
+        } else {
+          lc.info?.(
+            'No validated background connection to remove expired queries; deferring',
+          );
+        }
       }
     }
 
@@ -1131,9 +1144,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const connCtx =
           this.connContextManager.mustGetConnectionContext(selector);
 
-        // If pipelines are not yet synced, there is no transform request that
+        // If pipelines are not yet ready, there is no transform request that
         // can absorb validation, so validate immediately.
-        if (!this.#pipelinesSynced) {
+        if (!this.#pipelinesReady) {
           if (!(await this.#validateConnection(connCtx))) {
             return;
           }
@@ -1251,7 +1264,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
     clientID: string,
     customQueryTransformMode: CustomQueryTransformMode,
-    connCtx: ConnectionContext | undefined,
+    connCtx: ConnectionContext,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
   ): Promise<CVRSnapshot> {
     const updater = new CVRConfigDrivenUpdater(
@@ -1285,10 +1298,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
     }
 
-    if (!this.#pipelinesSynced) {
-      if (this.#pipelines.initialized()) {
-        await this.#maybeInitPipelines(lc, this.#cvr, connCtx);
-      }
+    if (!this.#pipelinesReady) {
+      await this.#maybeInitPipelines(lc, this.#cvr, connCtx);
     } else {
       await this.#syncQueryPipelineSet(
         lc,
@@ -1578,7 +1589,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #hydrateUnchangedQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
-    connCtx?: ConnectionContext,
+    connCtx: ConnectionContext,
   ): Promise<Set<string>> {
     assert(this.#pipelines.initialized(), 'pipelines must be initialized');
 
@@ -1627,20 +1638,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    const backgroundContext =
-      connCtx ?? this.connContextManager.getBackgroundConnectionContext();
     const customQueryTransformer = this.#customQueryTransformer;
-    if (backgroundContext && customQueryTransformer && customQueries.size > 0) {
+    if (customQueryTransformer && customQueries.size > 0) {
       // Always transform custom queries during initialization to ensure
       // authorization validation with current auth context.
       const transformedCustomQueries = await this.#runPriorityOp(
         lc,
         '#hydrateUnchangedQueries transforming custom queries',
-        () =>
-          customQueryTransformer.transform(
-            backgroundContext,
-            customQueries.values(),
-          ),
+        () => customQueryTransformer.transform(connCtx, customQueries.values()),
       );
       // Uncached results can also return the authoritative server userID
       // for that snapshot.
@@ -1649,8 +1654,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         !transformedCustomQueries.cached
       ) {
         this.connContextManager.validateConnection(
-          backgroundContext,
-          backgroundContext.revision,
+          connCtx,
+          connCtx.revision,
           transformedCustomQueries.validation,
         );
       }
@@ -1683,9 +1688,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         must(this.#pipelines.currentPermissions()).permissions ?? {
           tables: {},
         },
-        backgroundContext?.auth?.type === 'jwt'
-          ? backgroundContext.auth
-          : undefined,
+        connCtx.auth?.type === 'jwt' ? connCtx.auth : undefined,
         q.type === 'internal',
       );
       if (transformed.transformationHash === q.transformationHash) {
@@ -2011,9 +2014,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
     customQueryTransformMode: CustomQueryTransformMode,
-    connCtx: ConnectionContext | undefined,
+    connCtx: ConnectionContext,
     driftedQueryIDs: Set<string> = new Set(),
-  ): Promise<boolean> {
+  ): Promise<void> {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
       const start = performance.now();
       span.setAttribute('clientGroupID', this.id);
@@ -2045,17 +2048,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         origQuery: QueryRecord;
         transformed: TransformedAndHashed;
       }[] = [];
-      // When a specific connection triggered this work, use its context.
-      // Only background/shared sync work falls back to the selected
-      // validated connection.
-      const resolvedConnCtx =
-        connCtx ?? this.connContextManager.getBackgroundConnectionContext();
-      if (!resolvedConnCtx) {
-        lc.info?.(
-          'No validated background connection for shared pipeline sync; deferring',
-        );
-        return false;
-      }
 
       for (const [id, query] of cvrQueryEntires) {
         if (query.type === 'custom') {
@@ -2077,9 +2069,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           must(this.#pipelines.currentPermissions()).permissions ?? {
             tables: {},
           },
-          resolvedConnCtx.auth?.type === 'jwt'
-            ? resolvedConnCtx.auth
-            : undefined,
+          connCtx.auth?.type === 'jwt' ? connCtx.auth : undefined,
           origQuery.type === 'internal',
         );
         transformedQueries.push({
@@ -2116,7 +2106,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             '#syncQueryPipelineSet transforming custom queries',
             () =>
               customQueryTransformer.transform(
-                resolvedConnCtx,
+                connCtx,
                 customQueriesToTransform,
               ),
           );
@@ -2134,8 +2124,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             // revision check so auth races do not validate stale credentials.
             if (!transformedCustomQueries.cached) {
               this.connContextManager.validateConnection(
-                resolvedConnCtx,
-                resolvedConnCtx.revision,
+                connCtx,
+                connCtx.revision,
                 transformedCustomQueries.validation,
               );
             }
@@ -2255,7 +2245,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } else {
         await this.#catchupClients(lc, cvr);
       }
-      return true;
     });
   }
 
@@ -2709,7 +2698,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * Must be called from within the #lock.
    *
-   * Returns false if the advancement failed due to a schema change.
+   * Returns 'success' if changes were successfully processed and poked,
+   * or a `ResetPipelinesSignal` if advancement aborted (e.g. schema change,
+   * timeout) and pipelines need to be reset and rehydrated.
    */
   #advancePipelines(
     lc: LogContext,
