@@ -238,9 +238,12 @@ test('zero-cache --help', () => {
                                                                                    Note that this number must allow for at least one connection per                                                           
                                                                                    sync worker, or zero-cache will fail to start. See num-sync-workers                                                        
                                                                                                                                                                                                               
-     --cvr-garbage-collection-inactivity-threshold-hours number                    default: 48                                                                                                                
+     --cvr-garbage-collection-inactivity-threshold-hours number                    default: 168                                                                                                               
        ZERO_CVR_GARBAGE_COLLECTION_INACTIVITY_THRESHOLD_HOURS env                                                                                                                                             
                                                                                    The duration after which an inactive CVR is eligible for garbage collection.                                               
+                                                                                   Purging a CVR forces the next connection from that client group to                                                         
+                                                                                   re-sync from scratch, so this should comfortably exceed how long a                                                         
+                                                                                   typical user goes between sessions.                                                                                        
                                                                                    Note that garbage collection is an incremental, periodic process which does not                                            
                                                                                    necessarily purge all eligible CVRs immediately.                                                                           
                                                                                                                                                                                                               
