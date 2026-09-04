@@ -67,6 +67,7 @@ export default async function runWorker(
       backPressureLimitHeapProportion,
       flowControlConsensusTimeoutProportion,
       flowControlSlowSubscriberGracePeriodSeconds,
+      pgChangeLogEnabled,
       sqliteChangeLogMode,
       sqliteChangeLogReadPercent,
       sqliteChangeLogColdReadPercent,
@@ -123,7 +124,7 @@ export default async function runWorker(
   // purges. This ensures that (this) change-streamer will be able to resume
   // from the backup.
   let purgeLock =
-    litestream.backupURL && litestream.executable
+    pgChangeLogEnabled && litestream.backupURL && litestream.executable
       ? await new PurgeLocker(lc, shard, changeDB).acquire()
       : null;
   const restoreOptions = {litestream, constraints: purgeLock ?? undefined};
@@ -220,6 +221,7 @@ export default async function runWorker(
         purgeLock,
         autoReset ?? false,
         {
+          pgChangeLogEnabled,
           backPressureLimitHeapProportion,
           flowControlConsensusTimeoutProportion,
           flowControlSlowSubscriberGracePeriodMs:
@@ -258,14 +260,15 @@ export default async function runWorker(
               }
             : undefined,
           // Compare mode runs both advisory checks. Postgres remains authoritative.
-          sqliteChangeLogCompare: sqliteChangeLogComparing
-            ? {
-                replicaFile: replica.file,
-                comparePercent: sqliteChangeLogComparePercent,
-                retentionMs: sqliteChangeLogRetentionMs,
-                readBatchRows: sqliteChangeLogReadBatchRows,
-              }
-            : undefined,
+          sqliteChangeLogCompare:
+            pgChangeLogEnabled && sqliteChangeLogComparing
+              ? {
+                  replicaFile: replica.file,
+                  comparePercent: sqliteChangeLogComparePercent,
+                  retentionMs: sqliteChangeLogRetentionMs,
+                  readBatchRows: sqliteChangeLogReadBatchRows,
+                }
+              : undefined,
           // Slice 11 lands dark by default: serve mode constructs the stable
           // router, while readPercent=0 keeps every catchup on PG and emits
           // eligibility metrics before any canary traffic is enabled.
