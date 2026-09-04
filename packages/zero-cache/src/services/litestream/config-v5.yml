@@ -39,6 +39,8 @@ dbs:
       auto-recover: true
       concurrency: ${ZERO_LITESTREAM_MULTIPART_CONCURRENCY}
       part-size: ${ZERO_LITESTREAM_MULTIPART_SIZE}
+      download-concurrency: ${ZERO_LITESTREAM_MULTIPART_CONCURRENCY}
+      download-part-size: ${ZERO_LITESTREAM_MULTIPART_SIZE}
 
 logging:
   level: ${ZERO_LITESTREAM_LOG_LEVEL}
