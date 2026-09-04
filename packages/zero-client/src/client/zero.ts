@@ -75,6 +75,7 @@ import type {
 } from '../../../zero-protocol/src/pull.ts';
 import type {PushMessage} from '../../../zero-protocol/src/push.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
@@ -158,6 +159,7 @@ import {
 } from './http-string.ts';
 import {Inspector} from './inspector/inspector.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
+import {toGotQueriesKey} from './keys.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import type {MakeMutatePropertyType} from './make-mutate-property.ts';
 import {addCustomMutatorsProperties} from './make-mutate-property.ts';
@@ -864,6 +866,8 @@ export class Zero<
       schema,
       this.#lc,
       this.#mutationTracker,
+      hash => this.#queryManager.astFingerprintForHash(hash),
+      () => this.#queryManager.gotFingerprintRefreshEntries(),
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
@@ -978,6 +982,32 @@ export class Zero<
       }
     }
     return createLogOptions(options);
+  }
+
+  /**
+   * Reports whether the store CURRENTLY holds the server-confirmed complete
+   * result of the named query (name + args) on this client group — i.e.
+   * whether the persisted got-queries key exists. Readable at construction,
+   * before any connection. Eviction (deregistration + TTL expiry),
+   * client-group reset, and resync delete the key, reverting the answer to
+   * false — the "never asked" reading, which is the safe direction. The key
+   * and its rows only change together inside applied-poke transactions, and
+   * eviction deletes them together, so a `true` never vouches for torn local
+   * data.
+   *
+   * Materialized views surface the same fact natively — and STRONGER: a view
+   * additionally verifies the stored body fingerprint, so after a query-body
+   * edit this existence read can be true while views correctly hold at
+   * 'unknown'. Gate rendering on the view's resultType; use this for boot
+   * probes and diagnostics.
+   */
+  hasCachedResult(
+    name: string,
+    args: readonly ReadonlyJSONValue[],
+  ): Promise<boolean> {
+    return this.#rep.query(tx =>
+      tx.has(toGotQueriesKey(hashOfNameAndArgs(name, args))),
+    );
   }
 
   /**

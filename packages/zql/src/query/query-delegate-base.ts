@@ -306,7 +306,9 @@ export function preloadImpl<
   const {customQueryID, ast} = qi;
   if (customQueryID) {
     const cleanup = delegate.addCustomQuery(ast, customQueryID, ttl, got => {
-      if (got) {
+      // 'cached' never satisfies complete-waiters; only a server confirmation
+      // on this connection resolves `complete`.
+      if (got === true) {
         resolve();
       }
     });
@@ -317,7 +319,7 @@ export function preloadImpl<
   }
 
   const cleanup = delegate.addServerQuery(ast, ttl, got => {
-    if (got) {
+    if (got === true) {
       resolve();
     }
   });
@@ -366,6 +368,23 @@ export function materializeImpl<
       return;
     }
 
+    if (got === 'cached') {
+      // The registration path fires this SYNCHRONOUSLY when the got set is
+      // already loaded (a view materialized mid-session), before the view
+      // below exists — buffer it, and apply it right after construction.
+      if (viewForCached === undefined) {
+        isCachedPending = true;
+      } else {
+        viewForCached.markCached?.();
+      }
+      return;
+    }
+    if (got === false) {
+      isCachedPending = false;
+      viewForCached?.unmarkCached?.();
+      return;
+    }
+
     if (got) {
       if (!endToEndMetricRecorded) {
         delegate.addMetric(
@@ -382,6 +401,11 @@ export function materializeImpl<
   };
 
   let removeCommitObserver: (() => void) | undefined;
+  // The view, seen as the optional cached-marking surface. Only views that
+  // implement `markCached`/`unmarkCached` (e.g. ArrayView) surface 'cached';
+  // for any other factory the optional calls are no-ops.
+  let viewForCached: CachedMarkableView | undefined;
+  let isCachedPending = false;
   const onDestroy = () => {
     input.destroy();
     removeCommitObserver?.();
@@ -416,8 +440,23 @@ export function materializeImpl<
     queryID,
   );
 
+  viewForCached = view as CachedMarkableView;
+  if (isCachedPending) {
+    isCachedPending = false;
+    viewForCached.markCached?.();
+  }
+
   return view as T;
 }
+
+/**
+ * The optional surface a view exposes to be marked 'cached'. Views that do
+ * not implement it (custom factories) simply never surface the state.
+ */
+type CachedMarkableView = {
+  markCached?: (() => void) | undefined;
+  unmarkCached?: (() => void) | undefined;
+};
 
 function arrayViewFactory<
   TTable extends string,
