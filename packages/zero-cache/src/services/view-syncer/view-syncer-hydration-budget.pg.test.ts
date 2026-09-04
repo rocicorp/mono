@@ -1,10 +1,10 @@
 import {afterEach, expect, vi} from 'vitest';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
+import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {MonotonicClock} from './hydration-budget.ts';
 import {
-  addQuery,
   expectDesiredDel,
   expectDesiredPut,
   expectGotPut,
@@ -87,6 +87,56 @@ afterEach(() => {
 });
 
 /**
+ * Custom (named) queries are the production path; plain-AST client queries are
+ * deprecated. Tests default to `'custom'` and cover `'legacy'` only as a
+ * regression guard.
+ */
+type QueryKind = 'custom' | 'legacy';
+
+/** The transform responses backing the three custom queries. */
+const TRANSFORMED = [
+  {id: ACTIVE, name: 'named-active', ast: ISSUES_QUERY},
+  {id: LATER_EXPIRY, name: 'named-later', ast: ISSUES_QUERY_WITH_RELATED},
+  {id: EARLIER_EXPIRY, name: 'named-earlier', ast: USERS_QUERY},
+] as const;
+
+function desiredQueries(kind: QueryKind): UpQueriesPatch {
+  if (kind === 'legacy') {
+    return TRANSFORMED.map(({id, ast}) => ({
+      op: 'put' as const,
+      hash: id,
+      ast,
+      ttl: id === EARLIER_EXPIRY ? 30_000 : 60_000,
+    }));
+  }
+  return TRANSFORMED.map(({id, name}) => ({
+    op: 'put' as const,
+    hash: id,
+    name,
+    args: [],
+    ttl: id === EARLIER_EXPIRY ? 30_000 : 60_000,
+  }));
+}
+
+async function setupHarness(
+  testDBs: PgTest['testDBs'],
+  dbName: string,
+  hydrationBudgetMs: number,
+  kind: QueryKind,
+) {
+  const initial = await setup(testDBs, dbName, permissionsAll, {
+    hydrationBudgetMs,
+    ...(kind === 'custom' && {queryFetchMode: 'empty-validation' as const}),
+  });
+  if (kind === 'custom') {
+    // The transformer is asked for whichever subset a pass needs; responding
+    // with all three is fine because unrequested ids are ignored.
+    initial.queryFetch.respond([...TRANSFORMED]);
+  }
+  return initial;
+}
+
+/**
  * Hydrates all three queries, then inactivates the two optional ones so that a
  * restarted view-syncer sees them as gotten-but-inactive hydration candidates.
  */
@@ -94,20 +144,10 @@ async function seedInactiveQueries(
   testDBs: PgTest['testDBs'],
   dbName: string,
   hydrationBudgetMs: number,
+  kind: QueryKind = 'custom',
 ) {
-  const initial = await setup(testDBs, dbName, permissionsAll, {
-    hydrationBudgetMs,
-  });
-  const client = initial.connect(SYNC_CONTEXT, [
-    {op: 'put', hash: ACTIVE, ast: ISSUES_QUERY, ttl: 60_000},
-    {
-      op: 'put',
-      hash: LATER_EXPIRY,
-      ast: ISSUES_QUERY_WITH_RELATED,
-      ttl: 60_000,
-    },
-    {op: 'put', hash: EARLIER_EXPIRY, ast: USERS_QUERY, ttl: 30_000},
-  ]);
+  const initial = await setupHarness(testDBs, dbName, hydrationBudgetMs, kind);
+  const client = initial.connect(SYNC_CONTEXT, desiredQueries(kind));
 
   await nextPoke(client); // desired queries
   initial.stateChanges.push({state: 'version-ready'});
@@ -126,6 +166,21 @@ async function seedInactiveQueries(
   ).toEqual([{op: 'del', hash: EARLIER_EXPIRY}]);
   // The cookie this client last saw, for the reconnect test below.
   const lastCookie = lastPokeCookie(lastPokes);
+
+  if (kind === 'custom') {
+    // Guard against a silent fallback to the legacy path: these queries must
+    // really be going through the custom-query transformer.
+    expect(initial.queryFetch.transformCalls.length).toBeGreaterThan(0);
+    const names = await initial.cvrDB<{queryName: string | null}[]>`
+      SELECT "queryName" FROM "this_app_2/cvr".queries
+       WHERE "clientGroupID" = ${serviceID}
+         AND "queryHash" IN (${ACTIVE}, ${LATER_EXPIRY}, ${EARLIER_EXPIRY})`;
+    expect(names.map(({queryName}) => queryName).sort()).toEqual([
+      'named-active',
+      'named-earlier',
+      'named-later',
+    ]);
+  }
 
   await initial.vs.stop();
   await initial.viewSyncerDone;
@@ -332,14 +387,22 @@ test<PgTest>('stops optional hydration at a query boundary and permits a re-requ
       (await rowsReferencing(initial, LATER_EXPIRY)).length,
     ).toBeGreaterThan(0);
 
-    // A re-request hydrates the evicted query again, now as an active query.
-    await addQuery(
-      restarted.vs,
-      RESTARTED_CONTEXT,
-      EARLIER_EXPIRY,
-      USERS_QUERY,
-      30_000,
-    );
+    // A re-request of the same named query hydrates it again, now as an
+    // active query.
+    await restarted.vs.changeDesiredQueries(RESTARTED_CONTEXT, [
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {
+            op: 'put',
+            hash: EARLIER_EXPIRY,
+            name: 'named-earlier',
+            args: [],
+            ttl: 30_000,
+          },
+        ],
+      },
+    ]);
     await expectDesiredPut(client, 'bar', EARLIER_EXPIRY);
     await expectGotPut(client, EARLIER_EXPIRY);
 
@@ -364,25 +427,35 @@ test<PgTest>('an active query is never evicted, even when another client inactiv
 }) => {
   // `shared` is inactivated by client `foo` but still desired by client
   // `keeper`, so the client group must keep treating it as required.
-  const initial = await setup(
+  const initial = await setupHarness(
     testDBs,
     'vs_hydration_budget_multi_client',
-    permissionsAll,
-    {hydrationBudgetMs: 150},
+    150,
+    'custom',
   );
   const KEEPER_CONTEXT = {...SYNC_CONTEXT, clientID: 'keeper', wsID: 'ws-k'};
   let restarted: ReturnType<typeof restartViewSyncer> | undefined;
   try {
+    initial.queryFetch.respond([
+      {id: 'shared', name: 'named-shared', ast: ISSUES_QUERY},
+      {id: EARLIER_EXPIRY, name: 'named-earlier', ast: USERS_QUERY},
+    ]);
     const foo = initial.connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'shared', ast: ISSUES_QUERY, ttl: 60_000},
-      {op: 'put', hash: EARLIER_EXPIRY, ast: USERS_QUERY, ttl: 30_000},
+      {op: 'put', hash: 'shared', name: 'named-shared', args: [], ttl: 60_000},
+      {
+        op: 'put',
+        hash: EARLIER_EXPIRY,
+        name: 'named-earlier',
+        args: [],
+        ttl: 30_000,
+      },
     ]);
     await nextPoke(foo); // desired queries
     initial.stateChanges.push({state: 'version-ready'});
     await nextPoke(foo); // initial hydration
 
     const keeper = initial.connect(KEEPER_CONTEXT, [
-      {op: 'put', hash: 'shared', ast: ISSUES_QUERY, ttl: 60_000},
+      {op: 'put', hash: 'shared', name: 'named-shared', args: [], ttl: 60_000},
     ]);
     await nextPoke(keeper); // catchup
     await nextPoke(foo); // keeper's desired queries
@@ -432,15 +505,21 @@ test<PgTest>('a never-gotten inactive query is hydrated when the budget is disab
   // Inactivated before the first hydration, so it is inactive with no gotten
   // state. With the budget disabled this must behave as it always has: the
   // query is hydrated and kept for the rest of its TTL.
-  const initial = await setup(
+  const initial = await setupHarness(
     testDBs,
     'vs_hydration_budget_never_gotten_off',
-    permissionsAll,
-    {hydrationBudgetMs: 0},
+    0,
+    'custom',
   );
   try {
     const client = initial.connect(SYNC_CONTEXT, [
-      {op: 'put', hash: EARLIER_EXPIRY, ast: USERS_QUERY, ttl: 30_000},
+      {
+        op: 'put',
+        hash: EARLIER_EXPIRY,
+        name: 'named-earlier',
+        args: [],
+        ttl: 30_000,
+      },
     ]);
     await nextPoke(client); // desired queries; no hydration yet
     await inactivateQuery(initial.vs, SYNC_CONTEXT, EARLIER_EXPIRY);
@@ -467,15 +546,21 @@ test<PgTest>('a never-gotten inactive query is hydrated when the budget is disab
 test<PgTest>('a never-gotten inactive query is dropped when the budget is enabled', async ({
   testDBs,
 }) => {
-  const initial = await setup(
+  const initial = await setupHarness(
     testDBs,
     'vs_hydration_budget_never_gotten_on',
-    permissionsAll,
-    {hydrationBudgetMs: 150},
+    150,
+    'custom',
   );
   try {
     const client = initial.connect(SYNC_CONTEXT, [
-      {op: 'put', hash: EARLIER_EXPIRY, ast: USERS_QUERY, ttl: 30_000},
+      {
+        op: 'put',
+        hash: EARLIER_EXPIRY,
+        name: 'named-earlier',
+        args: [],
+        ttl: 30_000,
+      },
     ]);
     await nextPoke(client);
     await inactivateQuery(initial.vs, SYNC_CONTEXT, EARLIER_EXPIRY);
@@ -503,45 +588,22 @@ test<PgTest>('required and optional custom queries are transformed in one round 
   // A fresh connection re-transforms every custom query for authorization.
   // Required and optional queries must go out in a single request: splitting
   // them would double the round trips to the user's query endpoint.
-  const initial = await setup(
+  const initial = await setupHarness(
     testDBs,
     'vs_hydration_budget_one_batch',
-    permissionsAll,
-    {hydrationBudgetMs: 150, queryFetchMode: 'empty-validation'},
+    150,
+    'custom',
   );
   try {
-    initial.queryFetch.respond([
-      {id: 'custom-active', name: 'named-active', ast: ISSUES_QUERY},
-      {id: 'custom-inactive-1', name: 'named-inactive-1', ast: USERS_QUERY},
-      {
-        id: 'custom-inactive-2',
-        name: 'named-inactive-2',
-        ast: ISSUES_QUERY_WITH_RELATED,
-      },
-    ]);
-    const foo = initial.connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'custom-active', name: 'named-active', args: []},
-      {
-        op: 'put',
-        hash: 'custom-inactive-1',
-        name: 'named-inactive-1',
-        args: [],
-      },
-      {
-        op: 'put',
-        hash: 'custom-inactive-2',
-        name: 'named-inactive-2',
-        args: [],
-      },
-    ]);
+    const foo = initial.connect(SYNC_CONTEXT, desiredQueries('custom'));
     await nextPoke(foo);
     initial.stateChanges.push({state: 'version-ready'});
     await nextPoke(foo);
 
-    await inactivateQuery(initial.vs, SYNC_CONTEXT, 'custom-inactive-1');
-    await expectDesiredDel(foo, 'foo', 'custom-inactive-1');
-    await inactivateQuery(initial.vs, SYNC_CONTEXT, 'custom-inactive-2');
-    await expectDesiredDel(foo, 'foo', 'custom-inactive-2');
+    await inactivateQuery(initial.vs, SYNC_CONTEXT, LATER_EXPIRY);
+    await expectDesiredDel(foo, 'foo', LATER_EXPIRY);
+    await inactivateQuery(initial.vs, SYNC_CONTEXT, EARLIER_EXPIRY);
+    await expectDesiredDel(foo, 'foo', EARLIER_EXPIRY);
 
     // A second connection re-transforms all custom queries for authorization:
     // one required (still desired by `foo`) and two optional. Spy on the
@@ -557,7 +619,7 @@ test<PgTest>('required and optional custom queries are transformed in one round 
 
     expect(transformSpy).toHaveBeenCalledTimes(1);
     expect(Array.from(transformSpy.mock.calls[0][1], q => q.id).sort()).toEqual(
-      ['custom-active', 'custom-inactive-1', 'custom-inactive-2'],
+      [ACTIVE, EARLIER_EXPIRY, LATER_EXPIRY],
     );
   } finally {
     initial.clearMocks();
@@ -612,6 +674,88 @@ test<PgTest>('a client reconnecting at its old cookie is told the evicted query 
     expect(
       rowPatches.filter(p => p.op === 'del' && p.tableName === 'issues'),
     ).toEqual([]);
+  } finally {
+    initial.clearMocks();
+    await (restarted ?? initial).vs.stop();
+    await (restarted ?? initial).viewSyncerDone;
+    await testDBs.drop(initial.cvrDB, initial.upstreamDb);
+    initial.replicaDbFile.delete();
+  }
+});
+
+test<PgTest>('an optional custom query that fails to transform is removed, not evicted', async ({
+  testDBs,
+}) => {
+  // A per-query transform error and a budget eviction both end in a query
+  // removal, and both can land in the same pass. The errored query must be
+  // removed even though the budget still has time for it.
+  const initial = await seedInactiveQueries(
+    testDBs,
+    'vs_hydration_budget_transform_error',
+    150,
+  );
+  let restarted: ReturnType<typeof restartViewSyncer> | undefined;
+  try {
+    // LATER_EXPIRY (the first optional query) now fails to transform.
+    initial.queryFetch.respond([
+      {id: ACTIVE, name: 'named-active', ast: ISSUES_QUERY},
+      {
+        error: 'app',
+        id: LATER_EXPIRY,
+        name: 'named-later',
+        message: 'not authorized',
+      },
+      {id: EARLIER_EXPIRY, name: 'named-earlier', ast: USERS_QUERY},
+    ]);
+
+    restarted = restartWithClock(initial, NEVER_EXHAUSTED);
+    const client = restarted.connect(RESTARTED_CONTEXT, []);
+    restarted.stateChanges.push({state: 'version-ready'});
+    await nextPokeParts(client);
+
+    await vi.waitFor(async () => {
+      // The errored query is gone; the other optional query still hydrates
+      // because the budget was never spent.
+      expect(await liveQueries(initial)).toEqual([ACTIVE, EARLIER_EXPIRY]);
+    });
+    expect(await rowsReferencing(initial, LATER_EXPIRY)).toEqual([]);
+    expect((await rowsReferencing(initial, ACTIVE)).length).toBeGreaterThan(0);
+  } finally {
+    initial.clearMocks();
+    await (restarted ?? initial).vs.stop();
+    await (restarted ?? initial).viewSyncerDone;
+    await testDBs.drop(initial.cvrDB, initial.upstreamDb);
+    initial.replicaDbFile.delete();
+  }
+});
+
+test<PgTest>('legacy client queries still follow the budget', async ({
+  testDBs,
+}) => {
+  // Plain-AST client queries are deprecated in favour of custom queries, but
+  // they must keep working while they exist.
+  const initial = await seedInactiveQueries(
+    testDBs,
+    'vs_hydration_budget_legacy',
+    150,
+    'legacy',
+  );
+  let restarted: ReturnType<typeof restartViewSyncer> | undefined;
+  try {
+    restarted = restartWithClock(initial, alwaysExhausted());
+    const client = restarted.connect(RESTARTED_CONTEXT, []);
+    restarted.stateChanges.push({state: 'version-ready'});
+
+    const poke = await nextPokeParts(client);
+    expect(poke[0].gotQueriesPatch).toEqual(
+      expect.arrayContaining([
+        {hash: LATER_EXPIRY, op: 'del'},
+        {hash: EARLIER_EXPIRY, op: 'del'},
+      ]),
+    );
+    await vi.waitFor(async () => {
+      expect(await liveQueries(initial)).toEqual([ACTIVE]);
+    });
   } finally {
     initial.clearMocks();
     await (restarted ?? initial).vs.stop();
