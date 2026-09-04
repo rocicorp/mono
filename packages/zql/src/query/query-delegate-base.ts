@@ -8,6 +8,7 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {ArrayView} from '../ivm/array-view.ts';
+import {DeferredInput} from '../ivm/deferred-input.ts';
 import type {FilterInput} from '../ivm/filter-operators.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
@@ -244,6 +245,20 @@ export abstract class QueryDelegateBase implements QueryDelegate {
 
   abstract readonly defaultQueryComplete: boolean;
 
+  /**
+   * Default: pipelines can always be built immediately. Override (together
+   * with `onPipelinesReady`) to defer pipeline construction.
+   */
+  get pipelinesReady(): boolean {
+    return true;
+  }
+
+  onPipelinesReady(_cb: () => void): () => void {
+    throw new Error(
+      'onPipelinesReady called on a delegate whose pipelines are always ready',
+    );
+  }
+
   // BuilderDelegate methods - must be implemented
   abstract getSource(name: string): Source | undefined;
 }
@@ -353,11 +368,32 @@ export function materializeImpl<
     ? hashOfNameAndArgs(customQueryID.name, customQueryID.args)
     : hashOfAST(qi.ast);
   const queryCompleteResolver = resolver<true>();
-  let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
-  let endToEndMetricRecorded = false;
+  // When the delegate cannot build pipelines yet, the view starts over an
+  // empty DeferredInput and is hydrated later. A view must not report
+  // `complete` until it has actually been hydrated, so completion is gated on
+  // both the server's "got" and the pipeline being attached.
+  const deferPipeline = !delegate.pipelinesReady;
+  let attached = !deferPipeline;
+  let gotQueries = delegate.defaultQueryComplete;
+  let queryComplete: boolean | ErroredQuery = attached && gotQueries;
   const updateTTL = customQueryID
     ? (newTTL: TTL) => delegate.updateCustomQuery(customQueryID, newTTL)
     : (newTTL: TTL) => delegate.updateServerQuery(ast, newTTL);
+
+  // Completion, and the end-to-end metric, require both the server's "got"
+  // and the pipeline being attached: until then the view is still empty.
+  const maybeResolveComplete = () => {
+    if (attached && gotQueries && queryComplete !== true) {
+      delegate.addMetric(
+        'query-materialization-end-to-end',
+        performance.now() - t0,
+        queryID,
+        ast,
+      );
+      queryComplete = true;
+      queryCompleteResolver.resolve(true);
+    }
+  };
 
   const gotCallback: GotCallback = (got, error) => {
     if (error) {
@@ -367,22 +403,16 @@ export function materializeImpl<
     }
 
     if (got) {
-      if (!endToEndMetricRecorded) {
-        delegate.addMetric(
-          'query-materialization-end-to-end',
-          performance.now() - t0,
-          queryID,
-          ast,
-        );
-        endToEndMetricRecorded = true;
-      }
-      queryComplete = true;
-      queryCompleteResolver.resolve(true);
+      gotQueries = true;
+      maybeResolveComplete();
     }
   };
 
   let removeCommitObserver: (() => void) | undefined;
+  let removePendingAttach: (() => void) | undefined;
   const onDestroy = () => {
+    removePendingAttach?.();
+    removePendingAttach = undefined;
     input.destroy();
     removeCommitObserver?.();
     removeAddedQuery();
@@ -394,7 +424,14 @@ export function materializeImpl<
     ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
     : delegate.addServerQuery(ast, ttl, gotCallback);
 
-  const input = buildPipeline(ast, delegate, queryID);
+  const deferred = deferPipeline
+    ? newDeferredInput(ast, delegate, queryID)
+    : undefined;
+  // No type annotation here: annotating this as `Input` widens it enough that
+  // the view type loses the pipeline's concrete schema, and `Zero.run` then
+  // stops rejecting a query built from a schema with legacy queries enabled
+  // (custom.test.ts covers that rejection).
+  const input = deferred ?? buildPipeline(ast, delegate, queryID);
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(
@@ -410,13 +447,74 @@ export function materializeImpl<
     ),
   );
 
-  delegate.addMetric(
-    'query-materialization-client',
-    performance.now() - t0,
-    queryID,
-  );
+  if (!deferred) {
+    delegate.addMetric(
+      'query-materialization-client',
+      performance.now() - t0,
+      queryID,
+    );
+  } else {
+    // Registered after the factory ran so a throwing factory leaves nothing
+    // behind.
+    removePendingAttach = delegate.onPipelinesReady(() => {
+      removePendingAttach = undefined;
+      if (deferred.destroyed) {
+        return;
+      }
+      const t1 = performance.now();
+      try {
+        deferred.attach();
+      } catch (e) {
+        // Surface the failure on this view and let the delegate decide how
+        // to log it. Other pending pipelines are unaffected.
+        const error: ErroredQuery = {
+          error: 'app',
+          id: queryID,
+          name: customQueryID?.name ?? '',
+          message: e instanceof Error ? e.message : String(e),
+        };
+        queryComplete = error;
+        queryCompleteResolver.reject(error);
+        throw e;
+      }
+      attached = true;
+      delegate.addMetric(
+        'query-materialization-client',
+        performance.now() - t1,
+        queryID,
+      );
+      maybeResolveComplete();
+    });
+  }
 
   return view as T;
+}
+
+/**
+ * Creates the placeholder input for a query whose pipeline cannot be built yet.
+ *
+ * `Input.getSchema()` is unconditional, so the placeholder needs the schema up
+ * front. It is captured by building a pipeline and immediately destroying it:
+ * building only connects to the sources, while the indexes and rows -- the
+ * expensive part this deferral exists to postpone -- are read on the first
+ * fetch. Measured at ~5us against ~500us for a single 100 row fetch.
+ *
+ * Building here also means a query that cannot be built at all (an unknown
+ * table, `not(exists())` on the client) still throws from `materialize()`,
+ * as it did before hydration was deferred.
+ */
+function newDeferredInput(
+  ast: AST,
+  delegate: QueryDelegate,
+  queryID: string,
+): DeferredInput {
+  const build = () => buildPipeline(ast, delegate, queryID);
+  const probe = build();
+  try {
+    return new DeferredInput(probe.getSchema(), build);
+  } finally {
+    probe.destroy();
+  }
 }
 
 function arrayViewFactory<
