@@ -69,7 +69,6 @@ export type Overlays = {
 type Index = {
   comparator: Comparator;
   data: BTreeSet<Row>;
-  usedBy: Set<Connection>;
 };
 
 export type Connection = {
@@ -120,7 +119,6 @@ export class MemorySource implements Source {
     this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
       comparator,
       data: primaryIndexData ?? new BTreeSet<Row>(comparator),
-      usedBy: new Set(),
     });
   }
 
@@ -207,6 +205,13 @@ export class MemorySource implements Source {
     assert(idx !== -1, 'Connection not found');
     this.#connections.splice(idx, 1);
 
+    // Indexes deliberately hold no reference back to the connections that use
+    // them. They used to, to support deleting an index once its last user went
+    // away. That deletion is gone (see below) but the `usedBy` set outlived it,
+    // so an index kept every `Connection` — and through its `input` and
+    // `output`, the whole torn-down pipeline — reachable for as long as the
+    // source lived.
+    //
     // TODO: We used to delete unused indexes here. But in common cases like
     // navigating into issue detail pages it caused a ton of constantly
     // building and destroying indexes.
@@ -222,13 +227,12 @@ export class MemorySource implements Source {
     return index;
   }
 
-  #getOrCreateIndex(sort: Ordering, usedBy: Connection): Index {
+  #getOrCreateIndex(sort: Ordering): Index {
     const key = JSON.stringify(sort);
     const index = this.#indexes.get(key);
     // Future optimization could use existing index if it's the same just sorted
     // in reverse of needed.
     if (index) {
-      index.usedBy.add(usedBy);
       return index;
     }
 
@@ -244,7 +248,7 @@ export class MemorySource implements Source {
     const rows = toSorted(this.#getPrimaryIndex().data, comparator);
     const data = BTreeSet.fromSorted(comparator, rows);
 
-    const newIndex = {comparator, data, usedBy: new Set([usedBy])};
+    const newIndex = {comparator, data};
     this.#indexes.set(key, newIndex);
     return newIndex;
   }
@@ -313,7 +317,7 @@ export class MemorySource implements Source {
       indexSort.push(...requestedSort);
     }
 
-    const index = this.#getOrCreateIndex(indexSort, conn);
+    const index = this.#getOrCreateIndex(indexSort);
     const {data, comparator: compare} = index;
     // Avoid allocating a new closure when not reversing (the common case).
     const indexComparator: Comparator = req.reverse
