@@ -141,6 +141,13 @@ const REFRESH_IDLE_TIMEOUT_MS = 1000;
 const PERSIST_THROTTLE_MS = 500;
 const REFRESH_THROTTLE_MS = 500;
 
+/**
+ * Opening the database blocks everything Replicache does, including Zero's
+ * first connect attempt, so a slow open is worth a warning rather than a
+ * debug line.
+ */
+const SLOW_DB_OPEN_THRESHOLD_MS = 50;
+
 const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
 
 const RECOVER_MUTATIONS_INTERVAL_MS = 5 * 60 * 1000; // 5 mins
@@ -558,6 +565,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     onClientsDeleted: OnClientsDeleted,
   ): Promise<void> {
     const {clientID} = this;
+    // Everything up to the head write is what it takes to have a usable
+    // database, including waiting out a previous instance of the same name.
+    // The timer stops before the replica is loaded into Zero's IVM sources,
+    // which is separate work and usually the larger of the two: a number that
+    // spanned both would report a slow hydration as a slow disk.
+    const openStart = performance.now();
     // If we are currently closing a Replicache instance with the same name,
     // wait for it to finish closing.
     await closingInstances.get(this.name);
@@ -579,6 +592,15 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     );
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
+    const dbOpenMs = performance.now() - openStart;
+    if (dbOpenMs > SLOW_DB_OPEN_THRESHOLD_MS) {
+      this.#lc.warn?.(`Opening the database took ${Math.round(dbOpenMs)}ms`, {
+        name: this.idbName,
+      });
+    } else {
+      this.#lc.debug?.('Opened the database in', Math.round(dbOpenMs), 'ms');
+    }
+
     await this.#zero?.init(headHash, this.memdag);
     resolveReady();
 
