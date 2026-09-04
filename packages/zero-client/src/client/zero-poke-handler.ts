@@ -72,6 +72,8 @@ export class PokeHandler {
   readonly #schema: Schema;
   readonly #serverToClient: NameMapper;
   readonly #mutationTracker: MutationTracker;
+  readonly #gotValueForHash: GotValueForHash | undefined;
+  readonly #gotRefreshEntries: GotRefreshEntries | undefined;
 
   constructor(
     replicachePoke: (poke: PokeInternal) => Promise<void>,
@@ -80,7 +82,11 @@ export class PokeHandler {
     schema: Schema,
     lc: LogContext,
     mutationTracker: MutationTracker,
+    gotValueForHash?: GotValueForHash,
+    gotRefreshEntries?: GotRefreshEntries,
   ) {
+    this.#gotValueForHash = gotValueForHash;
+    this.#gotRefreshEntries = gotRefreshEntries;
     this.#replicachePoke = replicachePoke;
     this.#onPokeError = onPokeError;
     this.#clientID = clientID;
@@ -216,6 +222,8 @@ export class PokeHandler {
           this.#pokeBuffer,
           this.#schema,
           this.#serverToClient,
+          this.#gotValueForHash,
+          this.#gotRefreshEntries,
         );
         this.#pokeBuffer.length = 0;
         if (merged === undefined) {
@@ -286,13 +294,31 @@ function summarizePoke(
   return {lastMutationIDChangeForSelf, hasRows};
 }
 
+/**
+ * The current registration's AST fingerprint for a got-queries hash, or null
+ * when the query is not registered — the value written into the got-queries
+ * key so a later boot can tell whether the bit was earned by the SAME body it
+ * is about to vouch for.
+ */
+export type GotValueForHash = (hash: string) => string | null;
+
+/**
+ * Fingerprint-refresh entries to append to a poke being applied; see
+ * `QueryManager.gotFingerprintRefreshEntries`.
+ */
+export type GotRefreshEntries = () => {hash: string; value: string}[];
+
 export function mergePokes(
   pokeBuffer: PokeAccumulator[],
   schema: Schema,
   serverToClient: NameMapper,
+  gotValueForHash?: GotValueForHash,
+  gotRefreshEntries?: GotRefreshEntries,
 ):
   | (PokeInternal & {mutationResults?: MutationPatch[] | undefined})
   | undefined {
+  const deletedGotHashes = new Set<string>();
+  let sawGotClear = false;
   if (pokeBuffer.length === 0) {
     return undefined;
   }
@@ -341,6 +367,22 @@ export function mergePokes(
       }
       if (pokePart.gotQueriesPatch) {
         for (const op of pokePart.gotQueriesPatch) {
+          if (op.op === 'put') {
+            // The got key's value carries the registered body's AST
+            // fingerprint (null when unknown), so the 'cached' claim can
+            // require body identity, not just key existence.
+            mergedPatch.push({
+              op: 'put',
+              key: toGotQueriesKey(op.hash),
+              value: gotValueForHash?.(op.hash) ?? null,
+            });
+            continue;
+          }
+          if (op.op === 'del') {
+            deletedGotHashes.add(op.hash);
+          } else if (op.op === 'clear') {
+            sawGotClear = true;
+          }
           mergedPatch.push(
             queryPatchOpToReplicachePatchOp(op, toGotQueriesKey),
           );
@@ -365,6 +407,25 @@ export function mergePokes(
       }
     }
   }
+  // Converge stale body fingerprints inside a real poke transaction, so the
+  // value only ever changes with the same atomicity the bit itself has. Never
+  // for a hash THIS merged poke deletes or clears — the entries were computed
+  // from pre-poke state, and a refresh put appended after the del would
+  // reinsert the bit while the rows delete, the exact torn state the design
+  // forbids.
+  if (gotRefreshEntries && !sawGotClear) {
+    for (const entry of gotRefreshEntries()) {
+      if (deletedGotHashes.has(entry.hash)) {
+        continue;
+      }
+      mergedPatch.push({
+        op: 'put',
+        key: toGotQueriesKey(entry.hash),
+        value: entry.value,
+      });
+    }
+  }
+
   const ret: PokeInternal & {mutationResults?: MutationPatch[] | undefined} = {
     baseCookie,
     pullResponse: {

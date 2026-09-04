@@ -185,4 +185,28 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   updateTTL(ttl: TTL) {
     this.#updateTTL(ttl);
   }
+
+  /**
+   * The store holds the server-confirmed complete result of this query from a
+   * previous sync (the persisted got-queries key exists, pre-authoritative).
+   * Never downgrades 'complete'/'error', and never resolves anything that
+   * waits on 'complete' — freshness stays a promise only the connection can
+   * keep.
+   */
+  markCached(): void {
+    if (this.#resultType !== 'unknown') {
+      return;
+    }
+    this.#resultType = 'cached';
+    this.#fireListeners();
+  }
+
+  /** The got key was deleted (eviction) while still pre-authoritative. */
+  unmarkCached(): void {
+    if (this.#resultType !== 'cached') {
+      return;
+    }
+    this.#resultType = 'unknown';
+    this.#fireListeners();
+  }
 }
