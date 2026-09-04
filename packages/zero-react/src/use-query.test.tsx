@@ -340,6 +340,54 @@ describe('ViewStore', () => {
 
       expect(view1).not.toBe(view2);
     });
+
+    test('one client’s views are destroyed without disturbing another’s', () => {
+      const viewStore = new ViewStore();
+
+      const zero1 = newMockZero('client1');
+      const view1 = viewStore.getView(
+        zero1,
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      const zero2 = newMockZero('client2');
+      const view2 = viewStore.getView(
+        zero2,
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(2);
+
+      const cleanup1 = view1.subscribeReactInternals(() => {});
+      const cleanup2 = view2.subscribeReactInternals(() => {});
+
+      cleanup1();
+      vi.advanceTimersByTime(100);
+
+      // The other client keeps its view, and asking again returns that same
+      // one rather than building a second.
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+      expect(
+        viewStore.getView(zero2, newMockQuery('query1'), true, 'forever'),
+      ).toBe(view2);
+
+      cleanup2();
+      vi.advanceTimersByTime(100);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+
+      // ...and the store still works afterwards, having dropped the per-client
+      // entry it no longer needs.
+      const view3 = viewStore.getView(
+        zero1,
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      expect(view3).not.toBe(view1);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+    });
   });
 
   describe('singular vs plural', () => {

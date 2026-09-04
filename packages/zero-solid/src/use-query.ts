@@ -149,7 +149,15 @@ export function useQuery<
     return asQueryInternals(query);
   });
 
-  const hash = createMemo(() => qi()?.hash() + zero().clientID);
+  // Undefined rather than the string `undefined` + the client id: this feeds
+  // the guard below, and concatenating a missing hash produced a string that
+  // was never equal to undefined, leaving that guard unreachable.
+  const hash = createMemo(() => {
+    const internals = qi();
+    return internals === undefined
+      ? undefined
+      : internals.hash() + zero().clientID;
+  });
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
 
   const initialTTL = ttl();
