@@ -2844,6 +2844,55 @@ test('Connect timeout', async () => {
   connectionStatusCleanup();
 });
 
+test('connect timeout retries when AbortController drops abort reasons', async () => {
+  // React Native's bundled `abort-controller@3` polyfill predates the 2021
+  // `signal.reason` spec addition: `abort(reason)` silently discards the
+  // reason and `signal.reason` reads `undefined`. The run loop used to read
+  // the abort reason exclusively off the signal, so on such runtimes every
+  // retryable connect failure surfaced as `undefined`, was wrapped as a
+  // non-retryable internal error, and permanently paused the run loop.
+  // The polyfill leaves `signal.reason` undefined; a spec `abort()` with no
+  // argument leaves a generic AbortError. Either way the typed retryable
+  // error passed to `abort(reason)` is lost, which is the mechanism under
+  // test. Subclassing keeps `signal` a real AbortSignal so DOM listeners
+  // that take `{signal}` still work.
+  class LegacyAbortController extends AbortController {
+    override abort(): void {
+      super.abort();
+    }
+  }
+  vi.stubGlobal('AbortController', LegacyAbortController);
+
+  try {
+    const z = zeroForTest({logLevel: 'debug'});
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+    const firstSocket = await z.socket;
+    for (let i = 0; i < 10; i++) {
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    // Time out the first connect attempt.
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
+    expectLogMessages(z).contain(connectTimeoutMessage);
+
+    // The timeout is retryable: the run loop must schedule another attempt
+    // rather than pausing in the error state.
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+    const nextSocketPromise = z.socket;
+    await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
+    for (let i = 0; i < 10; i++) {
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(await nextSocketPromise).not.equal(firstSocket);
+
+    // And the retried attempt can then succeed.
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 test('slow setup does not spend the server acknowledgement budget', async () => {
   // Setup that finishes just inside its own deadline. Before the deadlines
   // were split this left the server almost no time, and a healthy server was
