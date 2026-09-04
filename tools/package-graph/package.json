@@ -1,0 +1,25 @@
+{
+  "name": "package-graph",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Generates the workspace package dependency map (`pnpm graph`)",
+  "type": "module",
+  "scripts": {
+    "check-format": "oxfmt --check .",
+    "check-fmt": "oxfmt --check .",
+    "check-types": "tsc",
+    "fmt": "oxfmt .",
+    "format": "oxfmt .",
+    "graph": "node src/main.ts",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "oxfmt": "^0.65.0",
+    "typescript": "~7.0.2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.11.0"
+}

@@ -1890,6 +1890,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
 
+  tools/package-graph:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      oxfmt:
+        specifier: ^0.65.0
+        version: 0.65.0
+      typescript:
+        specifier: ~7.0.2
+        version: 7.0.2
+
   tools/process-tracker:
     dependencies:
       '@rocicorp/logger':

@@ -179,7 +179,37 @@ const user = table('user')
   - `zero-client`, `zero-server`, `zero-cache` (higher level - can use zql/schema)
   - `zero` (highest - re-exports for convenience, user-facing only)
 
+  `pnpm graph` renders this hierarchy from the manifests and reports every
+  dependency that points the wrong way up it. See "Package graph" below.
+
 - Re-exports are acceptable in **user-facing packages** for convenience (e.g., `packages/zero/src/mod.ts` → exports from `zero-client`, `zero-server`), but avoid re-exports between internal packages
+
+## Package graph
+
+`pnpm graph` builds a map of the workspace from pnpm membership plus the curated
+layers in `tools/package-graph/src/workspace.ts`, and writes three things:
+
+- `docs/PACKAGE-GRAPH.md` — committed. Mermaid diagrams, the full direct
+  dependency inventory, and a **Layer inversions** table: every dependency that
+  points up the layer stack, i.e. where an abstraction boundary is being broken.
+  A new row here is worth a question in review.
+- `docs/graph/model.json` — gitignored. The extracted model. Read this rather
+  than re-walking pnpm.
+- `docs/graph/index.html` — gitignored. Interactive view: pan/zoom, per-package
+  metrics (fan-in/out, cone, blast radius, instability), dependency and
+  dependent cones, layer filtering, and an inversions-only filter.
+
+```bash
+pnpm graph          # regenerate all three
+pnpm graph:check    # fail if the committed Markdown is stale
+pnpm graph:open     # regenerate and open the interactive view
+```
+
+Adding or renaming a workspace package makes `pnpm graph` fail until the package
+is placed in `LAYERS`. Internal dependencies here are usually `devDependencies`
+(packages import each other's TypeScript source over relative paths), so the
+graph includes them; `pnpm verify-deps` is what keeps those manifests honest
+against the actual imports.
 
 ## Database
 
