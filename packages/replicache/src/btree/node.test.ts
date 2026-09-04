@@ -315,7 +315,7 @@ describe('btree node', () => {
         const r = new BTreeRead(dagRead, formatVersion);
         expect(await r.get('a')).toBeUndefined();
         expect(await r.has('b')).toBe(false);
-        expect(await asyncIterToArray(r.scan(''))).toEqual([]);
+        expect(await asyncIterToArray(r.scan('', false))).toEqual([]);
       });
     });
 
@@ -337,7 +337,7 @@ describe('btree node', () => {
         );
         expect(await w.get('a')).toBeUndefined();
         expect(await w.has('b')).toBe(false);
-        expect(await asyncIterToArray(w.scan(''))).toEqual([]);
+        expect(await asyncIterToArray(w.scan('', false))).toEqual([]);
 
         const h = await w.flush();
         expect(h).toBe(fakeHash('1'));
@@ -1271,7 +1271,7 @@ describe('btree node', () => {
 
         await doRead(rootHash, dagStore, formatVersion, async r => {
           const res: Entry<FrozenJSONValue>[] = [];
-          const scanResult = r.scan(fromKey);
+          const scanResult = r.scan(fromKey, false);
           for await (const e of scanResult) {
             res.push(e);
           }

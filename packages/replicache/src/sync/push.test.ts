@@ -248,7 +248,7 @@ test.for(cases)('try push [DD31] $name', async c => {
 
       const indexMap = read.getMapForIndex('2');
 
-      for await (const _ of indexMap.scan('')) {
+      for await (const _ of indexMap.scan('', false)) {
         got = true;
         break;
       }

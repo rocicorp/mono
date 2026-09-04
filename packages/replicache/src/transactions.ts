@@ -368,9 +368,10 @@ function getScanIterator<Options extends ScanOptions, V>(
     >;
   }
 
-  return dbRead.map.scan(fromKeyForNonIndexScan(options)) as AsyncIterable<
-    EntryForOptions<Options, V>
-  >;
+  return dbRead.map.scan(
+    fromKeyForNonIndexScan(options),
+    false,
+  ) as AsyncIterable<EntryForOptions<Options, V>>;
 }
 
 export function fromKeyForNonIndexScan(
@@ -410,7 +411,10 @@ async function* getScanIteratorForIndexMap(
     throw new Error(`Unknown index name: ${options.indexName}`);
   }
   const map = dbRead.getMapForIndex(options.indexName);
-  for await (const entry of map.scan(fromKeyForIndexScanInternal(options))) {
+  for await (const entry of map.scan(
+    fromKeyForIndexScanInternal(options),
+    false,
+  )) {
     yield [decodeIndexKey(entry[0]), entry[1]];
   }
 }

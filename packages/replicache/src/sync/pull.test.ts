@@ -469,7 +469,7 @@ test('begin try pull DD31', async () => {
         let got = false;
 
         const indexMap = read.getMapForIndex('2');
-        for await (const _ of indexMap.scan('')) {
+        for await (const _ of indexMap.scan('', false)) {
           got = true;
           break;
         }
@@ -559,7 +559,7 @@ test('begin try pull DD31', async () => {
               formatVersion,
             );
             const indexMap = read.getMapForIndex('2');
-            for await (const _ of indexMap.scan('')) {
+            for await (const _ of indexMap.scan('', false)) {
               expect(false).toBe(true);
             }
           });
