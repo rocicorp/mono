@@ -2027,10 +2027,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       if (this.#ttlClock === undefined) {
         // Get it from the CVR or initialize it to now.
-        const now = Date.now();
-        this.#ttlClock = this.#getTTLClock(now);
+        this.#ttlClock = cvr.ttlClock;
       }
-      const ttlClock = this.#ttlClock;
+      const now = Date.now();
+      const ttlClock = this.#getTTLClock(now);
 
       // group cvr queries into:
       // 1. custom queries
