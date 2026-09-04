@@ -427,7 +427,11 @@ export function materializeImpl<
   const deferred = deferPipeline
     ? newDeferredInput(ast, delegate, queryID)
     : undefined;
-  const input: Input = deferred ?? buildPipeline(ast, delegate, queryID);
+  // No type annotation here: annotating this as `Input` widens it enough that
+  // the view type loses the pipeline's concrete schema, and `Zero.run` then
+  // stops rejecting a query built from a schema with legacy queries enabled
+  // (custom.test.ts covers that rejection).
+  const input = deferred ?? buildPipeline(ast, delegate, queryID);
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(
