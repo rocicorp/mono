@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788450480367,
+  "lastUpdate": 1788525516991,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57345,6 +57345,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33625,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "94fadd463ee309b08beb9c51592e66c7ad778b10",
+          "message": "perf(zql): intern Query objects with a V8-style transition tree (#6469)\n\nBuilding the same query twice allocated two structurally identical\nobjects, so `#hash` -- and every other per-instance memo -- never hit.\n`useQuery` rebuilds its whole chain on every render, so it paid for a\nfresh AST and a fresh hash each time.\n\nEach node now keys the queries derived from it by the operation that\nproduced them, the way V8 keys hidden-class transitions, so applying the\nsame operation twice returns the same object and no AST is built at all\non the second pass. A transition is identified by a memoized key naming\nthe operation, the varying argument as a `Map` key rather than\nconcatenated into a string, and -- only where those two do not settle it\n-- a small delta compared with `deepEqual`. Never the whole AST: the\nparent is already canonical, so two of its children are equal exactly\nwhen the operations that produced them are.\n\nChildren hold their parent strongly and parents hold children weakly, so\nholding a query holds its ancestor spine and re-deriving it gives the\nsame object back. The first transition out of a node is held strongly\ninstead, in fields: `new WeakRef` costs more than everything else a\ntransition does, and strong first-children form a path rather than a\ntree, so what is retained is bounded by the depth of a builder chain.\nRelationship bases get a separate strong store, bounded by the schema.\nNothing keyed by data is ever held strongly. No `FinalizationRegistry`:\ncleared entries are dropped by the lookup that walks past them and by a\nsweep once a node's weak store has doubled.\n\nInterning is by construction path, so `q.where(a).where(b)` and\n`q.where(b).where(a)` are still distinct instances here; the next PR in\nthe stack folds those together.\n\nMeasured in plain node, per query. \"Warm\" is a rebuild of a chain that\nalready exists, which is what every render does; \"cold\" is a new value\nunder a warm root, the weak path.\n\n| | before | after |\n|---|---|---|\n| warm chain, build + hash | 2564 ns | 446 ns |\n| warm 200-row list, build + hash | 124,753 ns | 12,266 ns |\n| warm chain, build only | 982 ns | 447 ns |\n| cold row, build only | 124 ns | 350 ns |\n| cold row, build + hash | 636 ns | 872 ns |\n| fresh root chain, build + hash | 1509 ns | 1332 ns |\n\nCold numbers are with the event loop yielding and GC running; a\nsynchronous loop overstates the weak path, because `new WeakRef` keeps\nits target alive for the rest of the job.\n\nStacked on #6464.",
+          "timestamp": "2026-09-04T12:24:00Z",
+          "tree_id": "949930e4dadeaad8eb5ef147b74bf71147eb1e4e",
+          "url": "https://github.com/rocicorp/mono/commit/94fadd463ee309b08beb9c51592e66c7ad778b10"
+        },
+        "date": 1788525504325,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319018,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57398,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117751,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33627,
             "unit": "bytes"
           }
         ]
