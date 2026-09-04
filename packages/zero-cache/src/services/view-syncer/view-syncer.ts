@@ -2553,21 +2553,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // 'del' in the same poke would have to retract.
         assert(
           cmpVersions(cvr.version, newVersion) < 0,
-          'Optional hydration requires a final poke version before row processing',
-        );
-        const optionalQueryIDs = new Set(
-          optionalQueries.map(query => query.id),
-        );
-        assert(
-          queryPatches.every(
-            ({patch}) =>
-              !(
-                patch.type === 'query' &&
-                patch.op === 'put' &&
-                optionalQueryIDs.has(patch.id)
-              ),
-          ),
-          'Optional hydration candidates must already be gotten',
+          'Optional hydration requires a final poke version before row processing so a removal is actually poked',
         );
       }
 
