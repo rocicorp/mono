@@ -477,9 +477,12 @@ export const zeroOptions = {
     },
 
     garbageCollectionInactivityThresholdHours: {
-      type: v.number().default(48),
+      type: v.number().default(24 * 7),
       desc: [
         `The duration after which an inactive CVR is eligible for garbage collection.`,
+        `Purging a CVR forces the next connection from that client group to`,
+        `re-sync from scratch, so this should comfortably exceed how long a`,
+        `typical user goes between sessions.`,
         `Note that garbage collection is an incremental, periodic process which does not`,
         `necessarily purge all eligible CVRs immediately.`,
       ],
