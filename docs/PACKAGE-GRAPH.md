@@ -215,6 +215,19 @@ flowchart BT
 | Apps, tools & harnesses | [`zql-viz`](../apps/zql-viz) | app | `zero-types` _(dev)_, `zql` _(dev)_ |
 | Apps, tools & harnesses | [`zqlite-zql-test`](../packages/zqlite-zql-test) | internal package | `shared` _(dev)_, `zqlite` |
 
+## Exported metrics
+
+1 of these 39 packages exports an OpenTelemetry scrape, 162 series in all, read off the declaration sites in its source.
+
+| Package | Series | Shape |
+| --- | --- | --- |
+| `zero-cache` | 162 | 73 counter, 45 gauge, 41 histogram, 3 updowncounter |
+
+The names, types, units and descriptions are in [`docs/METRICS.md`](./METRICS.md), written by the same
+`pnpm graph` run and gated by the same `--check`. The
+interactive view renders them per package and in one sortable table, and
+colouring by **Metric families** shows which packages export at all.
+
 ## Regenerate
 
 From the repository root:
@@ -229,4 +242,5 @@ pnpm graph:open     # regenerate and open the interactive view
 committed: `docs/graph/model.json` (the extracted workspace model — every renderer,
 script, and agent query should read this rather than re-walking pnpm) and
 `docs/graph/index.html` (an interactive view of the same model, with per-package
-metrics, dependency/dependent cones, and layer filtering).
+metrics, dependency/dependent cones, and layer filtering). It also writes the
+committed [`docs/METRICS.md`](./METRICS.md).

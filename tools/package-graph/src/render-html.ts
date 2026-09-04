@@ -71,6 +71,17 @@ const METRICS = [
 ];
 
 /**
+ * Offered only when the metrics overlay is present. Unlike a coverage overlay,
+ * 0 here is a true reading -- most packages export nothing -- so this one paints
+ * the whole workspace rather than greying it out.
+ */
+const FAMILIES_METRIC = {
+  id: 'families',
+  label: 'Exported metric families',
+  short: 'Metric families',
+};
+
+/**
  * The model is inert data in a JSON script block; escaping `<` is what keeps a
  * package description from being able to close the block early.
  */
@@ -170,7 +181,7 @@ h1 { font-size: 13.5px; font-weight: 650; margin: 0; letter-spacing: -0.01em; wh
 
 button { font: inherit; cursor: pointer; color: var(--ink); }
 select { font: inherit; color: var(--ink); }
-.field, .toggle, .search, .icon-btn {
+.field, .toggle, .search, .icon-btn, .tabs {
   height: 28px;
   border: 1px solid var(--rule);
   border-radius: 8px;
@@ -253,6 +264,23 @@ select { font: inherit; color: var(--ink); }
 .chip:hover { border-color: var(--rule); }
 .chip[aria-pressed="true"] { border-color: var(--ink-muted); color: var(--ink); background: var(--band); }
 .chip .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+/* The same chip the nodes wear, at legend size: a mark nobody can decode is
+   worse than no mark. */
+.chip .badge-key {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ink-muted);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-2);
+}
 .chip .arrow { color: var(--edge-rev); font-weight: 700; }
 .legend-sep { width: 1px; height: 15px; background: var(--rule); flex: none; margin: 0 3px; }
 .chip .count { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
@@ -439,6 +467,83 @@ ul.inversions button { border: none; background: none; padding: 0; font: inherit
 ul.inversions button:hover .pair { text-decoration: underline; }
 .hint { color: var(--ink-muted); font-size: 11.5px; }
 
+/* The flat catalog: every series in the workspace in one table. The per-package
+   panel answers "what does this package serve"; this answers "how is this
+   workspace named", which is only legible when the series are sorted across
+   packages rather than grouped by owner. */
+.tabs { padding: 2px; gap: 2px; background: var(--plane); }
+.tabs button {
+  border: 0;
+  border-radius: 6px;
+  padding: 0 11px;
+  height: 22px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  background: transparent;
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px var(--shadow);
+}
+#catalog { display: none; flex: 1 1 auto; overflow: auto; padding: 14px 16px 40px; }
+body[data-view="catalog"] #catalog { display: block; }
+body[data-view="catalog"] #canvas, body[data-view="catalog"] aside,
+body[data-view="catalog"] .legend, body[data-view="catalog"] .graph-only { display: none; }
+.catalog-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 0 0 10px; }
+.catalog-head .count { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.catalog-head .by-type { color: var(--ink-muted); font-size: 11.5px; }
+table.catalog { border-collapse: collapse; width: 100%; font-size: 12px; }
+table.catalog th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  text-align: left; font-weight: 500; font-size: 10.5px; letter-spacing: 0.03em;
+  text-transform: uppercase; color: var(--ink-muted); padding: 6px 10px 5px; white-space: nowrap;
+}
+table.catalog td { border-bottom: 1px solid var(--hairline); padding: 6px 10px; vertical-align: top; }
+table.catalog tr:hover td { background: var(--raised); }
+table.catalog .series { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; white-space: nowrap; }
+table.catalog .t-type, table.catalog .t-unit { color: var(--ink-2); white-space: nowrap; }
+table.catalog .t-attrs { color: var(--ink-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; }
+table.catalog .t-help { color: var(--ink-2); line-height: 1.45; min-width: 22em; }
+table.catalog .t-owner button {
+  border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: var(--ink-2); white-space: nowrap;
+}
+table.catalog .t-owner button:hover { color: var(--ink); border-color: var(--ink-muted); }
+table.catalog .unknown { color: var(--ink-muted); font-style: italic; font-family: system-ui, sans-serif; }
+table.catalog tr.hidden { display: none; }
+.catalog-empty { color: var(--ink-muted); padding: 20px 2px; }
+
+/* Exported series. One row per family: the name a scraper stores, its type, its
+   unit, what it is dimensioned by, and its help text. Dense on purpose. */
+.families { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); border-radius: 7px; overflow: hidden; }
+.families li { background: var(--surface); padding: 7px 9px; }
+.families .head { display: flex; align-items: baseline; gap: 6px; justify-content: space-between; }
+.families .series { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--ink); word-break: break-all; }
+.families .kind { font-size: 10px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; flex: none; }
+.families .help { margin: 3px 0 0; font-size: 11.5px; color: var(--ink-2); line-height: 1.45; }
+.families .facets { margin: 3px 0 0; font-size: 10.5px; color: var(--ink-muted); }
+.families .facets b { font-weight: 500; color: var(--ink-2); }
+.node .badge rect {
+  fill: var(--node-ink, var(--ink));
+  fill-opacity: 0.12;
+  stroke: var(--node-ink, var(--ink));
+  stroke-opacity: 0.42;
+  stroke-width: 1;
+}
+.node .badge text {
+  fill: var(--node-ink, var(--ink));
+  fill-opacity: 0.8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.stamp { color: var(--ink-muted); font-size: 10.5px; }
+
 @media (max-width: 1180px) { aside { width: 300px; } }
 @media (max-width: 900px) {
   /* Stacked, the panel must not eat the canvas: the graph keeps the larger share
@@ -459,6 +564,7 @@ ul.inversions button:hover .pair { text-decoration: underline; }
   .pan-hint { display: none; }
   header { gap: 5px; }
   .field { padding: 0 3px 0 7px; gap: 5px; }
+  .tabs button { padding: 0 8px; }
   .tools { display: contents; }
 }
 `;
@@ -501,6 +607,12 @@ const SCRIPT = String.raw`
     layerMeta[layer.id] = { index: i, label: layer.label, count: layer.packages.length };
     layer.packages.forEach(function (n) { layerIndexOf[n] = i; });
   });
+
+  var CATALOG = MODEL.metricsCatalog;
+  function isEmitter(name) {
+    var exported = pkgByName[name].exports;
+    return !!exported && exported.families.length > 0;
+  }
 
   // An edge whose dependency sits in a HIGHER band: the architecture inverted.
   function isInverted(edge) {
@@ -676,6 +788,7 @@ const SCRIPT = String.raw`
     focus: "both",
     layer: null,
     inversionsOnly: false,
+    emittersOnly: false,
   };
 
   function metricValue(pkg) { return pkg.metrics[state.colorBy]; }
@@ -794,6 +907,38 @@ const SCRIPT = String.raw`
     title.textContent = pkg.name + " — " + layerMeta[pkg.layer].label;
     g.appendChild(title);
 
+    // One package in this workspace serves a scrape, so this is a sparse mark,
+    // not a column. It is drawn in the LABEL's ink rather than the node colour,
+    // which is the only paint that survives both colour modes: the metric ramp
+    // repaints the box fill, and inkOn() is what guarantees contrast against it.
+    if (isEmitter(pkg.name)) {
+      var badge = document.createElementNS(SVGNS, "g");
+      badge.setAttribute("class", "badge");
+      badge.setAttribute("transform", "translate(" + (box.w - 11) + ",11)");
+
+      // First child, so this is the tooltip for the chip rather than the node's.
+      var badgeTitle = document.createElementNS(SVGNS, "title");
+      badgeTitle.textContent =
+        pkg.name + " exports metrics — " + pkg.exports.families.length + " series";
+      badge.appendChild(badgeTitle);
+
+      var chip = document.createElementNS(SVGNS, "rect");
+      chip.setAttribute("x", -5.5);
+      chip.setAttribute("y", -5.5);
+      chip.setAttribute("width", 11);
+      chip.setAttribute("height", 11);
+      chip.setAttribute("rx", 3.5);
+      badge.appendChild(chip);
+
+      var mark = document.createElementNS(SVGNS, "text");
+      mark.setAttribute("x", 0);
+      mark.setAttribute("y", 0.5);
+      mark.textContent = "m";
+      badge.appendChild(mark);
+
+      g.appendChild(badge);
+    }
+
     // No click listener: while the <svg> holds the pointer capture it opened on
     // pointerdown, the click event is dispatched to the <svg>, not here.
     // endDrag does the selection instead.
@@ -848,10 +993,22 @@ const SCRIPT = String.raw`
     var anchor = state.selected || state.hovered;
     var sets = anchor ? focusSets(anchor) : null;
 
+    // A query matches a package by NAME or by a series it exports, so pasting a
+    // metric name off a dashboard or an alert rule finds the package that
+    // serves it.
+    function matchesQuery(name) {
+      if (name.toLowerCase().indexOf(query) !== -1) return true;
+      var exported = pkgByName[name].exports;
+      return !!exported && exported.families.some(function (f) {
+        return f.name.indexOf(query) !== -1;
+      });
+    }
+
     function nodeState(name) {
-      if (query) return name.toLowerCase().indexOf(query) !== -1 ? "match" : "dim";
+      if (query) return matchesQuery(name) ? "match" : "dim";
       if (state.layer && pkgByName[name].layer !== state.layer) return "dim";
       if (state.inversionsOnly && !invertedEnds.has(name)) return "dim";
+      if (state.emittersOnly && !isEmitter(name)) return "dim";
       if (!anchor) return "plain";
       if (name === anchor) return "anchor";
       if (sets.down.has(name) || sets.up.has(name)) return "near";
@@ -896,7 +1053,7 @@ const SCRIPT = String.raw`
       if (!anchor) {
         // An edge is only as bright as its dimmer end, which covers every
         // standing filter at once.
-        if (state.layer &&
+        if ((state.layer || state.emittersOnly) &&
             (nodeState(edge.from) === "dim" || nodeState(edge.to) === "dim")) {
           el.classList.add("dim");
         }
@@ -952,6 +1109,68 @@ const SCRIPT = String.raw`
       list.appendChild(el("li", {}, [button, el("span", { class: "n", text: "  " + value })]));
     });
     return list;
+  }
+
+  // ---- exported metrics ---------------------------------------------------
+  // Attributes are attached when an observation is RECORDED, not when the
+  // instrument is declared, so the extractor reports how much of that story it
+  // could see. Three readings, three renderings: "none" is a claim, and the
+  // panel only makes it when every record site was actually readable.
+  function attributeFacet(family) {
+    if (family.attributeConfidence === "unseen") {
+      return el("span", {}, [
+        el("b", { text: "attributes " }),
+        el("span", { text: "unknown — no record site in the declaring file" }),
+      ]);
+    }
+    var keys = family.attributes.join(", ");
+    var suffix = family.attributeConfidence === "partial" ? " (and more this pass could not read)" : "";
+    return el("span", {}, [
+      el("b", { text: "attributes " }),
+      el("span", { text: (keys || "none") + suffix }),
+    ]);
+  }
+
+  function metricsDetail(pkg) {
+    if (!pkg.exports) {
+      panel.appendChild(el("h3", { text: "Metrics exported" }));
+      panel.appendChild(el("p", { class: "hint", text:
+        "None. This package exports no metrics — only " + CATALOG.emitters.length +
+        " of the " + MODEL.totals.packages + " workspace packages do." }));
+      return;
+    }
+    var families = pkg.exports.families;
+    panel.appendChild(el("h3", { text: "Metrics exported · " + families.length }));
+    panel.appendChild(el("p", { class: "hint", text:
+      "Read off the declaration sites in this package's source. Series are named " +
+      "zero.<category>.<name> by the helpers in observability/metrics.ts." }));
+
+    var list = el("ul", { class: "families" });
+    families.forEach(function (family) {
+      var facets = [attributeFacet(family)];
+      if (family.unit) {
+        facets.unshift(el("span", {}, [
+          el("b", { text: "unit " }),
+          el("span", { text: family.unit }),
+        ]));
+      }
+      var parts = [
+        el("div", { class: "head" }, [
+          el("span", { class: "series", text: family.name }),
+          el("span", { class: "kind", text: family.type }),
+        ]),
+      ];
+      if (family.description) parts.push(el("p", { class: "help", text: family.description }));
+      var line = el("p", { class: "facets" });
+      facets.forEach(function (facet, i) {
+        if (i) line.appendChild(document.createTextNode("  ·  "));
+        line.appendChild(facet);
+      });
+      parts.push(line);
+      parts.push(el("p", { class: "stamp", text: family.file + ":" + family.line }));
+      list.appendChild(el("li", {}, parts));
+    });
+    panel.appendChild(list);
   }
 
   function renderOverview() {
@@ -1022,6 +1241,22 @@ const SCRIPT = String.raw`
     });
     panel.appendChild(table);
 
+    if (CATALOG) {
+      panel.appendChild(el("h3", { text: "Exported metrics" }));
+      panel.appendChild(el("p", { class: "hint", text:
+        CATALOG.totals.families + " series across " + CATALOG.totals.emitters +
+        " package(s), read off their declaration sites. Search matches series names " +
+        "too, so typing part of a metric name selects the package that serves it. " +
+        "Open the Metrics tab for all of them in one table." }));
+      if (CATALOG.unresolved.length) {
+        panel.appendChild(el("div", { class: "warn", text:
+          CATALOG.unresolved.length + " declaration site(s) could not be resolved, so " +
+          "this catalog is a floor: " +
+          CATALOG.unresolved.map(function (u) { return u.file + ":" + u.line; }).join(", ") }));
+      }
+      panel.appendChild(rank("families", 4));
+    }
+
     panel.appendChild(el("h3", { text: "Most depended upon (fan-in)" }));
     panel.appendChild(rank("fanIn", 6));
     panel.appendChild(el("h3", { text: "Widest blast radius" }));
@@ -1057,6 +1292,8 @@ const SCRIPT = String.raw`
       ]));
     });
     panel.appendChild(grid);
+
+    if (CATALOG) metricsDetail(pkg);
 
     var qualifiers = {}, climbs = {};
     MODEL.edges.forEach(function (e) {
@@ -1254,11 +1491,160 @@ const SCRIPT = String.raw`
   document.getElementById("zoom-in").addEventListener("click", function () { zoomCentre(1.25); });
   document.getElementById("zoom-out").addEventListener("click", function () { zoomCentre(1 / 1.25); });
 
+  // ---- flat catalog ------------------------------------------------------
+  // Every series in the workspace, one table. Sorted by NAME across packages by
+  // default, which is the only arrangement that shows naming drift:
+  // zero.replica.* and zero.replication.* are different halves of the same
+  // subsystem, and whether they read as one scheme is invisible while each
+  // declaring file is read on its own.
+  var catalogRows = [];
+  MODEL.packages.forEach(function (pkg) {
+    if (!pkg.exports) return;
+    pkg.exports.families.forEach(function (family) {
+      catalogRows.push({
+        name: family.name,
+        type: family.type,
+        category: family.category || "—",
+        unit: family.unit || "",
+        attributes: family.attributes,
+        confidence: family.attributeConfidence,
+        help: family.description || "",
+        owner: pkg.name,
+        file: family.file,
+        haystack: (family.name + " " + (family.description || "") + " " + pkg.name + " " +
+          family.attributes.join(" ")).toLowerCase(),
+      });
+    });
+  });
+
+  var catalogSort = "name";
+  var CATALOG_COLUMNS = [
+    { key: "name", label: "Series" },
+    { key: "type", label: "Type" },
+    { key: "unit", label: "Unit" },
+    { key: "attributes", label: "Attributes" },
+    { key: "owner", label: "Package" },
+    { key: "help", label: "Measures" },
+  ];
+
+  function byName(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; }
+  function sortedCatalog() {
+    return catalogRows.slice().sort(function (a, b) {
+      if (catalogSort === "unit") {
+        // Unitless last: most series carry no unit, and sorting the empty string
+        // first would bury the ones this column exists to compare.
+        if (!a.unit !== !b.unit) return a.unit ? -1 : 1;
+        return (a.unit < b.unit ? -1 : a.unit > b.unit ? 1 : 0) || byName(a, b);
+      }
+      var key = catalogSort;
+      if (key === "type" || key === "owner") {
+        return (a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0) || byName(a, b);
+      }
+      return byName(a, b);
+    });
+  }
+
+  function attributeCell(row) {
+    if (row.confidence === "unseen") {
+      return el("span", { class: "unknown", text: "unknown" });
+    }
+    if (!row.attributes.length) {
+      return el("span", { class: "unknown", text: row.confidence === "partial" ? "…" : "none" });
+    }
+    return el("span", { text: row.attributes.join(", ") + (row.confidence === "partial" ? ", …" : "") });
+  }
+
+  function renderCatalog() {
+    var host = document.getElementById("catalog");
+    host.replaceChildren();
+    var query = state.query.trim().toLowerCase();
+    var rows = sortedCatalog().filter(function (row) {
+      return !query || row.haystack.indexOf(query) !== -1;
+    });
+
+    var byType = {};
+    rows.forEach(function (row) { byType[row.type] = (byType[row.type] || 0) + 1; });
+    var typeSummary = Object.keys(byType).sort().map(function (t) {
+      return byType[t] + " " + t;
+    }).join("  ·  ");
+
+    host.appendChild(el("div", { class: "catalog-head" }, [
+      el("span", { class: "count", text: rows.length + (query ? " of " + catalogRows.length : "") + " series" }),
+      el("span", { class: "by-type", text: typeSummary }),
+    ]));
+    host.appendChild(el("p", { class: "hint", text:
+      "Every metric this workspace can export, read off its declaration site. Click a " +
+      "column to re-sort, a package to open it in the graph. Attributes are the keys " +
+      "seen at record sites in the declaring file: “unknown” means none was visible, " +
+      "which is not the same as “none”." }));
+
+    if (!rows.length) {
+      host.appendChild(el("p", { class: "catalog-empty", text: "No series matches " + state.query + "." }));
+      return;
+    }
+
+    var table = el("table", { class: "catalog" });
+    var header = el("tr");
+    CATALOG_COLUMNS.forEach(function (column) {
+      var sortable = column.key !== "attributes" && column.key !== "help";
+      var th = el("th", {
+        text: column.label + (sortable && catalogSort === column.key ? " ↓" : ""),
+        title: sortable ? "Sort by " + column.label.toLowerCase() : "",
+      });
+      if (sortable) {
+        th.style.cursor = "pointer";
+        th.addEventListener("click", function () {
+          catalogSort = column.key;
+          renderCatalog();
+        });
+      }
+      header.appendChild(th);
+    });
+    table.appendChild(header);
+
+    rows.forEach(function (row) {
+      var owner = el("button", { type: "button", text: row.owner });
+      owner.addEventListener("click", function () {
+        setTab("graph");
+        select(row.owner);
+      });
+      table.appendChild(el("tr", {}, [
+        el("td", { class: "series", text: row.name }),
+        el("td", { class: "t-type", text: row.type }),
+        el("td", { class: "t-unit", text: row.unit || "—" }),
+        el("td", { class: "t-attrs" }, [attributeCell(row)]),
+        el("td", { class: "t-owner" }, [owner]),
+        el("td", { class: "t-help", text: row.help }),
+      ]));
+    });
+    host.appendChild(table);
+  }
+
+  // Named activeTab, NOT view: "var view" is the camera, and a second "var view"
+  // here would be one binding in this function scope, silently overwriting
+  // {x, y, k} with a string and leaving the graph unfitted and unpannable.
+  var activeTab = "graph";
+  function setTab(next) {
+    if (activeTab === next) return;
+    activeTab = next;
+    document.body.setAttribute("data-view", next);
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (tab) {
+      tab.setAttribute("aria-selected", String(tab.dataset.view === next));
+    });
+    if (next === "catalog") renderCatalog();
+    else if (viewTouched) commitView(false); // keep the camera the user set
+    else fit(); // the svg had no box to measure while it was hidden
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (tab) {
+    tab.addEventListener("click", function () { setTab(tab.dataset.view); });
+  });
+
   // ---- controls ----------------------------------------------------------
   document.getElementById("search").addEventListener("input", function (event) {
     state.query = event.target.value;
     if (state.query) state.selected = null;
     paint();
+    if (activeTab === "catalog") renderCatalog();
   });
   document.getElementById("edge-set").addEventListener("change", function (event) {
     state.edgeSet = event.target.value;
@@ -1312,23 +1698,34 @@ const SCRIPT = String.raw`
     });
   }
 
+  var emitters = document.getElementById("emitters");
+  if (emitters) {
+    emitters.addEventListener("click", function () {
+      state.emittersOnly = !state.emittersOnly;
+      emitters.setAttribute("aria-pressed", state.emittersOnly ? "true" : "false");
+      paint();
+    });
+  }
+
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") {
       state.query = "";
       state.layer = null;
       state.inversionsOnly = false;
+      state.emittersOnly = false;
       document.getElementById("search").value = "";
       Array.prototype.forEach.call(document.querySelectorAll(".legend .chip"), function (chip) {
         chip.setAttribute("aria-pressed", "false");
       });
       select(null);
+      if (activeTab === "catalog") renderCatalog();
     }
     var typing = document.activeElement === document.getElementById("search");
     if (event.key === "/" && !typing) {
       event.preventDefault();
       document.getElementById("search").focus();
     }
-    if (typing) return;
+    if (typing || activeTab !== "graph") return;
     if (event.key === "0") { event.preventDefault(); fit(); }
     else if (event.key === "+" || event.key === "=") { event.preventDefault(); zoomCentre(1.25); }
     else if (event.key === "-" || event.key === "_") { event.preventDefault(); zoomCentre(1 / 1.25); }
@@ -1354,12 +1751,16 @@ const SCRIPT = String.raw`
 `;
 
 export function renderHtml(model: Model): string {
-  const metricOptions = METRICS.map(
-    metric =>
-      `<option value="${metric.id}"${metric.id === 'layer' ? ' selected' : ''}>${
-        metric.short ?? metric.label
-      }</option>`,
-  ).join('\n            ');
+  const catalog = model.metricsCatalog;
+  const metrics = [...METRICS, ...(catalog ? [FAMILIES_METRIC] : [])];
+  const metricOptions = metrics
+    .map(
+      metric =>
+        `<option value="${metric.id}"${metric.id === 'layer' ? ' selected' : ''}>${
+          metric.short ?? metric.label
+        }</option>`,
+    )
+    .join('\n            ');
   const inversions = model.layerViolations.length;
 
   return `<!doctype html>
@@ -1370,18 +1771,34 @@ export function renderHtml(model: Model): string {
 <title>${model.meta.title} · ${model.totals.packages} packages</title>
 <style>${STYLE}</style>
 </head>
-<body data-color-mode="layer">
+<body data-color-mode="layer" data-view="graph">
   <header>
     <span class="brand">
       <h1>${model.meta.title}</h1>
-      <span class="totals">${model.totals.packages} packages · ${model.totals.edges} deps · ${model.totals.structuralEdges} structural</span>
-    </span>
+      <span class="totals">${model.totals.packages} packages · ${model.totals.edges} deps · ${model.totals.structuralEdges} structural${
+        catalog ? ` · ${catalog.totals.families} metrics` : ''
+      }</span>
+    </span>${
+      catalog
+        ? `
+    <span class="tabs" role="tablist">
+      <button type="button" role="tab" data-view="graph" aria-selected="true">Graph</button>
+      <button type="button" role="tab" data-view="catalog" aria-selected="false">Metrics · ${catalog.totals.families}</button>
+    </span>`
+        : ''
+    }
     <span class="spacer"></span>
     <span class="search">
       ${SEARCH_ICON}
-      <input id="search" type="search" placeholder="Filter packages  (/)" aria-label="Filter packages">
+      <input id="search" type="search" placeholder="${
+        catalog ? 'Filter packages or metrics  (/)' : 'Filter packages  (/)'
+      }" aria-label="${
+        catalog
+          ? 'Filter packages by name or exported metric'
+          : 'Filter packages'
+      }">
     </span>
-    <span class="tools">
+    <span class="tools graph-only">
       <label class="field"><span class="k">Edges</span>
         <select id="edge-set" aria-label="Which dependency edges to draw">
           <option value="structural" selected>Structural</option>
@@ -1420,6 +1837,17 @@ export function renderHtml(model: Model): string {
       <span class="count">${inversions}</span>
     </button>`
         : ''
+    }${
+      catalog && catalog.totals.emitters
+        ? `
+    <span class="legend-sep"></span>
+    <button id="emitters" type="button" class="chip" aria-pressed="false"
+            title="Show only the packages that export metrics">
+      <span class="badge-key" aria-hidden="true">m</span>
+      <span>Exports metrics</span>
+      <span class="count">${catalog.totals.emitters}</span>
+    </button>`
+        : ''
     }
     <span class="spacer"></span>
     <span class="ramp">
@@ -1442,13 +1870,17 @@ export function renderHtml(model: Model): string {
         <button id="fit" type="button" title="Fit the whole graph (0)">Fit</button>
       </div>
     </div>
-    <aside id="panel"></aside>
+    <aside id="panel"></aside>${
+      catalog
+        ? `\n    <section id="catalog" role="tabpanel" aria-label="Metric catalog"></section>`
+        : ''
+    }
   </main>
 
 <script type="application/json" id="workspace-model">${embedJson(model)}</script>
 <script type="application/json" id="layer-colors">${embedJson(LAYER_COLORS)}</script>
 <script type="application/json" id="sequential-ramp">${embedJson(SEQUENTIAL)}</script>
-<script type="application/json" id="metric-labels">${embedJson(METRICS)}</script>
+<script type="application/json" id="metric-labels">${embedJson(metrics)}</script>
 <script>${SCRIPT}</script>
 </body>
 </html>

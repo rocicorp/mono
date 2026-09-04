@@ -1,0 +1,173 @@
+/**
+ * The committed metric catalog (`docs/METRICS.md`).
+ *
+ * The package graph's own Markdown carries only the counts; the ~160 series
+ * belong in a document of their own, which is also the closest thing the repo
+ * has to metric documentation. `--check` gates it, so adding, renaming, or
+ * re-describing an instrument shows up as a diff in review.
+ *
+ * Grouped by zero's own category (the `zero.<category>.<name>` segment), which
+ * is the taxonomy the code already commits to, rather than by declaring file.
+ *
+ * The series name links to the file that declares it, WITHOUT a line anchor:
+ * paths are stable, line numbers churn on every edit above them and would make
+ * this file stale for reasons that have nothing to do with metrics.
+ */
+
+import {dirname, relative, resolve} from 'node:path';
+import {
+  compareText,
+  REPO_ROOT,
+  type MetricFamily,
+  type Model,
+} from './model.ts';
+
+const CATEGORY_ORDER = ['replication', 'replica', 'sync', 'mutation', 'server'];
+
+const CATEGORY_BLURB: Record<string, string> = {
+  replication: 'Postgres → replica: the change stream, initial sync, and lag.',
+  replica: 'Health of the SQLite replica and its litestream backups.',
+  sync: 'Replica → client: view syncing, CVRs, and query pipelines.',
+  mutation: 'Mutations arriving from clients, CRUD and custom.',
+  server: 'Process-level and API-surface readings.',
+};
+
+const TYPE_LABEL: Record<string, string> = {
+  counter: 'counter',
+  updowncounter: 'updowncounter',
+  gauge: 'gauge',
+  histogram: 'histogram',
+};
+
+function escapeCell(value: string): string {
+  return value.replaceAll('|', '\\|').replaceAll('\n', ' ');
+}
+
+function fileLink(family: MetricFamily, outputPath: string): string {
+  let path = relative(
+    dirname(outputPath),
+    resolve(REPO_ROOT, family.file),
+  ).replaceAll('\\', '/');
+  if (!path.startsWith('.')) path = `./${path}`;
+  return path;
+}
+
+// Three readings, three renderings. Printing "—" for a series nobody could read
+// would be a claim the extractor has not earned.
+function attributeCell(family: MetricFamily): string {
+  const keys = family.attributes.map(a => `\`${a}\``).join(', ');
+  if (family.attributeConfidence === 'unseen') return '_unknown_';
+  if (family.attributeConfidence === 'partial') {
+    return keys ? `${keys}, _…_` : '_…_';
+  }
+  return keys || '—';
+}
+
+function table(families: readonly MetricFamily[], outputPath: string): string {
+  const rows = families.map(family => {
+    const link = fileLink(family, outputPath);
+    return `| [\`${family.name}\`](${link}) | ${TYPE_LABEL[family.type]} | ${
+      family.unit ? `\`${family.unit}\`` : '—'
+    } | ${attributeCell(family)} | ${escapeCell(family.description ?? '—')} |`;
+  });
+  return `| Series | Type | Unit | Attributes | Measures |
+| --- | --- | --- | --- | --- |
+${rows.join('\n')}`;
+}
+
+export function renderMetrics(model: Model, outputPath: string): string {
+  const catalog = model.metricsCatalog;
+  const meta = model.meta;
+  if (!catalog) {
+    throw new Error(
+      'renderMetrics needs a model built with the metrics overlay',
+    );
+  }
+
+  const families = model.packages.flatMap(pkg => pkg.exports?.families ?? []);
+  const categories: (string | null)[] = [
+    ...new Set(families.map(f => f.category)),
+  ].toSorted((a, b) => {
+    const ia = a === null ? Infinity : CATEGORY_ORDER.indexOf(a);
+    const ib = b === null ? Infinity : CATEGORY_ORDER.indexOf(b);
+    return ia - ib || compareText(a ?? '', b ?? '');
+  });
+
+  const sections = categories.map(category => {
+    const inCategory = families
+      .filter(f => f.category === category)
+      .sort((a, b) => compareText(a.name, b.name));
+    const heading =
+      category === null
+        ? 'Uncategorised'
+        : `\`zero.${category}.*\` — ${category}`;
+    const blurb =
+      category === null
+        ? 'Created straight off the OpenTelemetry meter rather than through the ' +
+          '`getOrCreate*` helpers, so these carry no category segment.'
+        : (CATEGORY_BLURB[category] ?? '');
+    return `### ${heading}
+
+${blurb ? `${blurb}\n\n` : ''}${inCategory.length} ${
+      inCategory.length === 1 ? 'series' : 'series'
+    }.
+
+${table(inCategory, outputPath)}`;
+  });
+
+  const typeSummary = (Object.entries(catalog.byType) as [string, number][])
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1] || compareText(a[0], b[0]))
+    .map(([type, count]) => `${count} ${type}`)
+    .join(' · ');
+
+  const unresolved = catalog.unresolved.length
+    ? `
+> [!WARNING]
+> ${catalog.unresolved.length} declaration ${
+        catalog.unresolved.length === 1 ? 'site' : 'sites'
+      } could not be resolved to a series name, so this catalog is
+> incomplete. Each one is a \`getOrCreate*\` call whose name is neither a literal
+> nor a one-hop wrapper parameter:
+>
+${catalog.unresolved.map(u => `> - \`${u.file}:${u.line}\` (via \`${u.via}\`)`).join('\n')}
+`
+    : '';
+
+  const emitters = catalog.emitters.map(e => `\`${e}\``).join(', ');
+
+  return `<!-- Generated by \`pnpm ${meta.command}\`; do not edit by hand. -->
+
+# Exported metrics
+
+Every metric ${emitters} can export, read off the declaration sites in its
+source. ${catalog.totals.families} series: ${typeSummary}.
+
+Instruments are declared through the helpers in
+\`packages/zero-cache/src/observability/metrics.ts\`, which publish a series as
+\`zero.<category>.<name>\` — so the category segment below is the code's own
+taxonomy, not a grouping invented here. Each series links to the file that
+declares it.
+${unresolved}
+**Attributes** are the dimensions a series is broken down by. They are attached
+when an observation is recorded, not when the instrument is declared, so this
+column reports the keys seen at record sites **in the declaring file**. A series
+marked _not observed_ has no visible record site — it may still carry
+attributes. ${catalog.totals.withAttributes} of the ${
+    catalog.totals.families
+  } series have attributes recorded here.
+
+${sections.join('\n\n')}
+
+## Regenerate
+
+\`\`\`sh
+pnpm ${meta.command}          # this file, plus the package graph and its build products
+pnpm ${meta.command}:check    # fail if this file is stale
+\`\`\`
+
+The interactive view (\`${meta.htmlPath}\`) carries the same catalog in a
+sortable table, and colouring the package graph by **Metric families** shows
+which packages export a scrape at all.
+`;
+}
