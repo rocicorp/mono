@@ -921,7 +921,7 @@ describe('view-syncer/auth maintenance', () => {
         }
       })();
 
-      // Wait for async initConnection validation to complete.
+      // Wait for async initConnection validation and pipeline init to complete.
       await vi.waitFor(() => {
         expect(validateSpy).toHaveBeenCalledTimes(2);
         expect(
@@ -932,11 +932,11 @@ describe('view-syncer/auth maintenance', () => {
         });
       });
 
-      // 6. Next version-ready arrives now that replacement connection is validated.
-      stateChanges.push({state: 'version-ready'});
+      // Pipeline init and catchup ran immediately during initConnection,
+      // delivering both the config patch and query rows in a single catchup poke.
+      const pokes = await nextPoke(client2);
+      expect(pokes).toBeDefined();
 
-      // Pipeline init now completes successfully, transforming custom queries using replacement credentials.
-      await nextPoke(client2);
       expect(transformSpy).toHaveBeenCalledTimes(1);
       expect(transformSpy.mock.calls[0][0].auth?.raw).toBe('token-2');
     });
