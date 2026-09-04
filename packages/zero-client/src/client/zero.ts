@@ -219,6 +219,11 @@ type ConnectAttemptControl = {
   readonly controller: AbortController;
   readonly connected: Resolver<void>;
   readonly events: [date: Date, event: string][];
+  /**
+   * Cancels whichever phase deadline is currently running. Swapped when the
+   * attempt stops setting up locally and starts waiting for the server.
+   */
+  clearTimeout?: (() => void) | undefined;
 };
 
 function connectionReadyResolver(): Resolver<void> {
@@ -267,6 +272,12 @@ export const DEFAULT_DISCONNECT_TIMEOUT_MS = 60 * 1_000;
  * consider it timed out.
  */
 export const CONNECT_TIMEOUT_MS = 10_000;
+
+/**
+ * Setting up active-client tracking blocks the first connect attempt. Above
+ * this, say so.
+ */
+const SLOW_ACTIVE_CLIENTS_THRESHOLD_MS = 50;
 
 const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
@@ -719,6 +730,7 @@ export class Zero<
         this.#deleteClientsManager.onClientsDeleted([
           {clientGroupID, clientID},
         ]),
+      this.#lc,
     );
 
     const onUpdateNeededCallback = (reason: UpdateNeededReason) => {
@@ -1820,6 +1832,10 @@ export class Zero<
       'waiting for the server acknowledgement',
     );
     lc.debug?.('Waiting for connection to be acknowledged');
+    // Local setup is done; the rest of the wait is the server's, and gets its
+    // own budget rather than whatever the setup left over.
+    attempt.clearTimeout?.();
+    attempt.clearTimeout = this.#armConnectTimeout(lc, attempt, 'ack');
     await attempt.connected.promise;
     if (signal.aborted) {
       throw signal.reason;
@@ -1827,6 +1843,59 @@ export class Zero<
     this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
     // push any outstanding mutations on reconnect.
     this.#rep.push().catch(() => {});
+  }
+
+  /**
+   * Starts the deadline for one phase of a connection attempt, and returns a
+   * function that cancels it.
+   *
+   * The two phases are measured separately because they fail for unrelated
+   * reasons. `setup` covers local work — reading the cookie, the client group
+   * ID and the active clients from IDB, then preparing and opening the socket
+   * — whose duration says nothing about whether the server is reachable.
+   * `ack` covers the wait for the server's response. Running them on one
+   * budget meant a slow cold boot spent the server's time before the socket
+   * existed, and reported a healthy server as unreachable.
+   */
+  #armConnectTimeout(
+    lc: LogContext,
+    attempt: ConnectAttemptControl,
+    phase: 'setup' | 'ack',
+  ): () => void {
+    const {signal} = attempt.controller;
+
+    // A deadline outlives the caller that armed it. The run loop stops waiting
+    // on a canceled attempt and clears whatever deadline was running, but
+    // #connectAttempt keeps going — its in-flight awaits do not all honor the
+    // abort — so it can reach the setup-to-ack handover afterwards. A timer
+    // armed at that point would have no owner left to clear it, and would
+    // disconnect whichever attempt came next. Tying it to the signal means it
+    // is cleared by any abort, whenever it happens and whoever holds it.
+    if (signal.aborted) {
+      return () => {};
+    }
+
+    const timeoutID = setTimeout(() => {
+      lc.debug?.('Connection attempt timed out');
+      this.#disconnect(
+        lc,
+        new ClientError({
+          kind: ClientErrorKind.ConnectTimeout,
+          message:
+            (phase === 'setup'
+              ? `Connection setup timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds. `
+              : `Server did not acknowledge the connection within ${CONNECT_TIMEOUT_MS / 1000} seconds. `) +
+            `Connect events: ${JSON.stringify(attempt.events)}`,
+        }),
+      );
+    }, CONNECT_TIMEOUT_MS);
+
+    const clear = () => {
+      clearTimeout(timeoutID);
+      signal.removeEventListener('abort', clear);
+    };
+    signal.addEventListener('abort', clear, {once: true});
+    return clear;
   }
 
   #addConnectEvent(
@@ -2157,24 +2226,17 @@ export class Zero<
             };
             this.#currentConnectAttempt = attempt;
             this.#addConnectEvent(lc, attempt, 'starting the connection');
+            attempt.clearTimeout = this.#armConnectTimeout(
+              lc,
+              attempt,
+              'setup',
+            );
             const canceled = resolver<never>();
             const abortHandler = () =>
               canceled.reject(attempt.controller.signal.reason);
             attempt.controller.signal.addEventListener('abort', abortHandler, {
               once: true,
             });
-            const timeoutID = setTimeout(() => {
-              lc.debug?.('Connection attempt timed out');
-              this.#disconnect(
-                lc,
-                new ClientError({
-                  kind: ClientErrorKind.ConnectTimeout,
-                  message:
-                    `Connection attempt timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds. ` +
-                    `Connect events: ${JSON.stringify(attempt.events)}`,
-                }),
-              );
-            }, CONNECT_TIMEOUT_MS);
             try {
               try {
                 await Promise.race([
@@ -2203,7 +2265,7 @@ export class Zero<
               ready.resolve();
               additionalConnectParams = undefined;
             } finally {
-              clearTimeout(timeoutID);
+              attempt.clearTimeout?.();
               attempt.controller.signal.removeEventListener(
                 'abort',
                 abortHandler,
@@ -2960,12 +3022,32 @@ async function makeActiveClientsManager(
   clientID: string,
   signal: AbortSignal,
   onDelete: ActiveClientsManager['onDelete'],
+  lc: LogContext,
 ): Promise<ActiveClientsManager> {
-  const manager = await ActiveClientsManager.create(
-    await clientGroupID,
-    clientID,
-    signal,
-  );
+  // Timed from here rather than from the await in #connectAttempt: this runs
+  // at construction, in parallel with everything else, so by the time an
+  // attempt asks for it the wait is usually already over. Waiting for the
+  // client group ID is the database opening, which is timed on its own.
+  const groupID = await clientGroupID;
+  const start = performance.now();
+  const manager = await ActiveClientsManager.create(groupID, clientID, signal);
+  const elapsed = performance.now() - start;
+
+  // navigator.locks does not exist on React Native, where this falls back to
+  // an in-process stand-in that only ever sees this client. That changes both
+  // what the timing means and how much the client list can be trusted, so say
+  // which one produced the number.
+  const locks = getBrowserGlobal('navigator')?.locks ? 'native' : 'fallback';
+  if (elapsed > SLOW_ACTIVE_CLIENTS_THRESHOLD_MS) {
+    lc.warn?.(`Initializing active clients took ${Math.round(elapsed)}ms`, {
+      locks,
+    });
+  } else {
+    lc.debug?.('Initialized active clients in', Math.round(elapsed), 'ms', {
+      locks,
+    });
+  }
+
   manager.onDelete = onDelete;
   return manager;
 }
