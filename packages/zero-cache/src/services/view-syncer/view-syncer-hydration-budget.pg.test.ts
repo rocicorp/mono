@@ -67,11 +67,33 @@ function alwaysExhausted(): MonotonicClock {
 }
 
 /**
+ * A clock that spends a full hour inside each of the two transform round trips
+ * of a restart pass and no time at all anywhere else.
+ *
+ * The readings follow the pass's read order: construction, then the start and
+ * end of each `excluding()` round trip, then one read per optional query
+ * boundary. Both hours therefore fall between an `excluding()` pair and are
+ * discounted, leaving zero elapsed hydration time.
+ */
+function slowTransforms(): MonotonicClock {
+  const hour = 3_600_000;
+  const readings = [0, 0, hour, hour, 2 * hour];
+  let i = 0;
+  return () => readings[i++] ?? 2 * hour;
+}
+
+/**
  * A clock that advances `stepMs` per read. `HydrationBudget` reads it once when
- * it is created and once per `exhausted()` call, and `exhausted()` is called
- * exactly once immediately before each optional query. So with `stepMs` of 100
- * and a budget of 150ms the first optional query runs (elapsed 100) and the
- * second is evicted (elapsed 200).
+ * it is created, twice per `excluding()` call, and once per `exhausted()` call;
+ * `exhausted()` runs exactly once immediately before each optional query. An
+ * `excluding()` call discounts the step between its own two reads, so each of
+ * them nets out to one step of elapsed time.
+ *
+ * A restart pass makes two excluded transform round trips (one in
+ * `#hydrateUnchangedQueries`, one in `#syncQueryPipelineSet`), so the first
+ * `exhausted()` sees `3 * stepMs` and the second `4 * stepMs`. With `stepMs` of
+ * 40 and a budget of 150ms the first optional query runs (elapsed 120) and the
+ * second is evicted (elapsed 160).
  */
 function steppingClock(stepMs: number): MonotonicClock {
   let now = 0;
@@ -227,6 +249,37 @@ async function liveQueries(initial: Harness): Promise<string[]> {
   return rows.map(({queryHash}) => queryHash);
 }
 
+/**
+ * The persisted CVR state of `queryHash`: whether its record survives, whether
+ * it has been gotten, and the per-client desired rows that carry its remaining
+ * TTL.
+ */
+async function persistedQueryState(initial: Harness, queryHash: string) {
+  const [query] = await initial.cvrDB<{transformationHash: string | null}[]>`
+    SELECT "transformationHash"
+      FROM "this_app_2/cvr".queries
+     WHERE "clientGroupID" = ${serviceID}
+       AND "queryHash" = ${queryHash}
+       AND deleted = false`;
+  const desires = await initial.cvrDB<
+    {inactivatedAtMs: number | null; ttlMs: number | null}[]
+  >`
+    SELECT "inactivatedAtMs", "ttlMs"
+      FROM "this_app_2/cvr".desires
+     WHERE "clientGroupID" = ${serviceID}
+       AND "queryHash" = ${queryHash}
+     ORDER BY "clientID"`;
+  const transformationHash = query?.transformationHash ?? null;
+  return {
+    present: query !== undefined,
+    gotten: transformationHash !== null,
+    desires: desires.map(({inactivatedAtMs, ttlMs}) => ({
+      inactivated: inactivatedAtMs !== null,
+      ttlMs,
+    })),
+  };
+}
+
 /** Row keys in the persisted CVR that still reference `queryHash`. */
 function rowsReferencing(
   initial: Harness,
@@ -325,6 +378,45 @@ test<PgTest>('retains every optional query when the budget is not spent', async 
   }
 });
 
+test<PgTest>('transform round trips do not spend the budget', async ({
+  testDBs,
+}) => {
+  // The budget bounds hydration, not the latency of the user's query endpoint.
+  // Two hour-long transform round trips must leave a 150ms budget untouched:
+  // evicting inactive queries cannot recover remote latency, so charging it to
+  // the budget would evict every optional query on every pass of any
+  // deployment whose endpoint is slower than the budget.
+  const initial = await seedInactiveQueries(
+    testDBs,
+    'vs_hydration_budget_slow_transform',
+    150,
+  );
+  let restarted: ReturnType<typeof restartViewSyncer> | undefined;
+  try {
+    restarted = restartWithClock(initial, slowTransforms());
+    const client = restarted.connect(RESTARTED_CONTEXT, []);
+    restarted.stateChanges.push({state: 'version-ready'});
+    await nextPokeParts(client);
+
+    await vi.waitFor(async () => {
+      expect(await liveQueries(initial)).toEqual([
+        ACTIVE,
+        EARLIER_EXPIRY,
+        LATER_EXPIRY,
+      ]);
+    });
+    expect(restarted.vs.pipelineHashes().filter(q => !q.internal)).toHaveLength(
+      3,
+    );
+  } finally {
+    initial.clearMocks();
+    await (restarted ?? initial).vs.stop();
+    await (restarted ?? initial).viewSyncerDone;
+    await testDBs.drop(initial.cvrDB, initial.upstreamDb);
+    initial.replicaDbFile.delete();
+  }
+});
+
 test<PgTest>('a disabled budget never evicts an optional query', async ({
   testDBs,
 }) => {
@@ -367,7 +459,7 @@ test<PgTest>('stops optional hydration at a query boundary and permits a re-requ
   );
   let restarted: ReturnType<typeof restartViewSyncer> | undefined;
   try {
-    restarted = restartWithClock(initial, steppingClock(100));
+    restarted = restartWithClock(initial, steppingClock(40));
     const client = restarted.connect(RESTARTED_CONTEXT, []);
     restarted.stateChanges.push({state: 'version-ready'});
 
@@ -543,9 +635,15 @@ test<PgTest>('a never-gotten inactive query is hydrated when the budget is disab
   }
 });
 
-test<PgTest>('a never-gotten inactive query is dropped when the budget is enabled', async ({
+test<PgTest>('a never-gotten inactive query is left intact when the budget is enabled', async ({
   testDBs,
 }) => {
+  // A query inactivated before it was ever gotten cannot be an optional
+  // hydration candidate: a budget eviction converts the query to a removal
+  // after trackQueries(), which for a never-gotten query would mean retracting
+  // a 'put' with a 'del' in the same poke. So it is skipped -- but skipping
+  // must not destroy it. Its record, its desired row and its remaining TTL all
+  // survive for a later pass, or a re-desiring client, to pick up.
   const initial = await setupHarness(
     testDBs,
     'vs_hydration_budget_never_gotten_on',
@@ -570,9 +668,17 @@ test<PgTest>('a never-gotten inactive query is dropped when the budget is enable
     await nextPokeParts(client);
 
     await vi.waitFor(async () => {
-      expect(await liveQueries(initial)).toEqual([]);
+      // Not hydrated: the budget is enabled, so it was never a candidate.
+      expect(await rowsReferencing(initial, EARLIER_EXPIRY)).toEqual([]);
+      // Not dropped either: the record survives, still not gotten, with the
+      // client's inactivation and its 30s TTL intact.
+      expect(await liveQueries(initial)).toEqual([EARLIER_EXPIRY]);
+      expect(await persistedQueryState(initial, EARLIER_EXPIRY)).toEqual({
+        present: true,
+        gotten: false,
+        desires: [{inactivated: true, ttlMs: 30_000}],
+      });
     });
-    expect(await rowsReferencing(initial, EARLIER_EXPIRY)).toEqual([]);
   } finally {
     initial.clearMocks();
     await initial.vs.stop();

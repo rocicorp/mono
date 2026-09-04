@@ -763,15 +763,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       activeHydratedQueries: 0,
       inactiveHydratedQueries: 0,
     };
-    // Note: the budget is constructed before this call, so the time
-    // spent here counts against it. Only required queries are hydrated
-    // here, so none of them are evictable; the budget takes effect in
-    // the #syncQueryPipelineSet call below.
+    // Note: the budget is constructed before this call, so the hydration
+    // performed here counts against it -- deliberately, since a pass that has
+    // already spent its budget on active queries should not go on to hydrate
+    // inactive ones. The transform round trip it makes is discounted via
+    // excluding(). Only required queries are hydrated here, so none of them
+    // are evictable; the budget takes effect in the #syncQueryPipelineSet
+    // call below.
     const driftedQueryIDs = await this.#hydrateUnchangedQueries(
       lc,
       cvr,
       connCtx,
       hydrationPassStats,
+      hydrationBudget,
     );
     // hydrateUnchangedQueries just transformed all the custom queries;
     // this #syncQueryPipelineSet call should retransform those that are
@@ -1683,6 +1687,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
     connCtx: ConnectionContext,
     hydrationPassStats: HydrationPassStats,
+    hydrationBudget: HydrationBudget,
   ): Promise<Set<string>> {
     assert(this.#pipelines.initialized(), 'pipelines must be initialized');
 
@@ -1728,10 +1733,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (customQueryTransformer && customQueries.size > 0) {
       // Always transform custom queries during initialization to ensure
       // authorization validation with current auth context.
-      const transformedCustomQueries = await this.#runPriorityOp(
-        lc,
-        '#hydrateUnchangedQueries transforming custom queries',
-        () => customQueryTransformer.transform(connCtx, customQueries.values()),
+      // The round trip is remote latency, not hydration, so it must not spend
+      // the budget. See HydrationBudget.excluding.
+      const transformedCustomQueries = await hydrationBudget.excluding(() =>
+        this.#runPriorityOp(
+          lc,
+          '#hydrateUnchangedQueries transforming custom queries',
+          () =>
+            customQueryTransformer.transform(connCtx, customQueries.values()),
+        ),
       );
       // Uncached results can also return the authoritative server userID
       // for that snapshot.
@@ -2150,15 +2160,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const {required, optional} =
         classifyQueriesForHydration(hydrationCandidates);
       const requiredQueryIDs = new Set(required.map(query => query.id));
-      // An inactive query that was never gotten holds no warm data, so there is
-      // nothing for its remaining TTL to preserve. Only drop it when the budget
-      // is enabled; with the budget disabled these are hydrated as before.
-      const optionalNotGottenQueryIDs =
-        hydrationBudget.limitMs === 0
-          ? []
-          : optional
-              .filter(query => query.patchVersion === undefined)
-              .map(query => query.id);
+      // A budget-evicted query is converted to a removal after trackQueries(),
+      // so an optional candidate must already be gotten: otherwise
+      // #trackExecuted would announce it with a 'put' that the eviction's 'del'
+      // would have to retract within the same poke. See the assertion in
+      // #addAndRemoveQueries. Never-gotten inactive queries are therefore left
+      // untouched while the budget is enabled -- not hydrated, but not removed
+      // either, so their remaining TTL and desired state survive.
       const optionalToHydrate =
         hydrationBudget.limitMs === 0
           ? optional
@@ -2218,10 +2226,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const transformStart = performance.now();
         let transformedCustomQueries: HashedTransformResponse;
         try {
-          transformedCustomQueries = await this.#runPriorityOp(
-            lc,
-            '#syncQueryPipelineSet transforming custom queries',
-            () => customQueryTransformer.transform(connCtx, queries),
+          // Remote latency, not hydration. See HydrationBudget.excluding.
+          transformedCustomQueries = await hydrationBudget.excluding(() =>
+            this.#runPriorityOp(
+              lc,
+              '#syncQueryPipelineSet transforming custom queries',
+              () => customQueryTransformer.transform(connCtx, queries),
+            ),
           );
 
           // Check if transform failed entirely (HTTP error or server-side failure).
@@ -2325,7 +2336,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       const removeQueriesQueryIds: Set<string> = new Set([
         ...naturallyExpiredQueryIDs,
-        ...optionalNotGottenQueryIDs,
         ...erroredQueryIDs,
       ]);
       const addQueries = transformedQueries

@@ -572,7 +572,11 @@ export const zeroOptions = {
     desc: [
       `The soft time budget in milliseconds for hydrating inactive queries`,
       `during a view-syncer hydration pass. Active and internal queries always`,
-      `finish. A value of 0 disables hydration-budget eviction.`,
+      `finish, and time spent in custom-query transform round trips is not`,
+      `charged to the budget. An inactive query not reached before the budget`,
+      `is spent is evicted: its CVR record and the remaining TTL that would`,
+      `have kept it warm are both dropped. A value of 0 disables`,
+      `hydration-budget eviction.`,
     ],
   },
 

@@ -7,11 +7,17 @@ export type MonotonicClock = () => number;
  *
  * Callers check the budget only at query boundaries. Consequently, a query
  * that starts before the limit is reached is always allowed to finish.
+ *
+ * The budget measures hydration work. Intervals that are not hydration --
+ * notably the remote custom-query transform round trips -- are discounted via
+ * {@link excluding}, so that endpoint latency cannot spend a budget that only
+ * evicting queries could recover.
  */
 export class HydrationBudget {
   readonly limitMs: number;
   readonly #now: MonotonicClock;
   readonly #startedAt: number;
+  #excludedMs = 0;
   #exhaustedAtMs: number | undefined;
 
   constructor(
@@ -27,8 +33,22 @@ export class HydrationBudget {
     this.#startedAt = now();
   }
 
+  /**
+   * Runs `fn`, discounting the time it takes as non-hydration work. The
+   * interval is measured with this budget's own clock, so an injected clock
+   * governs both the elapsed time and what is excluded from it.
+   */
+  async excluding<T>(fn: () => Promise<T>): Promise<T> {
+    const start = this.#now();
+    try {
+      return await fn();
+    } finally {
+      this.#excludedMs += this.#now() - start;
+    }
+  }
+
   elapsedMs(): number {
-    return this.#now() - this.#startedAt;
+    return this.#now() - this.#startedAt - this.#excludedMs;
   }
 
   /**
