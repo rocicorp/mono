@@ -9,12 +9,13 @@ import {
 import {OTelMetricsCollector} from './metrics.ts';
 import {
   analyzeProfileQueries,
-  deployPermissions,
   queryPlanAnalysisLogPath,
   removeReplicaFiles,
+  startAppServer,
   startPostgres,
   startZeroTopology,
   stopPostgres,
+  waitForAppServer,
   waitForZeroCache,
   type ProcessCommand,
 } from './processes.ts';
@@ -76,8 +77,16 @@ async function main(): Promise<void> {
       await removeReplicaFiles(config.zero.replicaFile);
     }
 
-    log('Deploying benchmark permissions...');
-    processes.push(await deployPermissions(config));
+    if (config.zero.start) {
+      log(`Starting app server on port ${config.appServerPort}...`);
+      const appServer = startAppServer(config);
+      processes.push(appServer);
+      cleanup.push(() => appServer.stop());
+      if (appServer.logPath !== undefined) {
+        log(`app-server logs: ${appServer.logPath}`);
+      }
+      await waitForAppServer(config.appServerPort, 30_000, appServer);
+    }
 
     if (config.zero.start) {
       log(

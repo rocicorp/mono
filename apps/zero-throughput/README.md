@@ -6,7 +6,7 @@ The default run:
 
 1. Starts a dedicated PostgreSQL 16 Docker container on port `6436`.
 2. Resets the benchmark table and Zero metadata for app id `zero_throughput`.
-3. Deploys allow-read permissions for the benchmark table.
+3. Starts the Fastify app server on port `3000` for query transformations.
 4. Starts `zero-cache` on port `4848`.
 5. Runs analyze-query for each distinct live query shape in the selected profile.
 6. Starts synthetic Zero clients with live queries for the selected profile.
@@ -294,11 +294,12 @@ pnpm --filter zero-throughput run sweep:write-rates -- \
 
 ### Options Reference
 
-| CLI Option            | Environment Variable         | Default                 | Description                                                        |
-| :-------------------- | :--------------------------- | :---------------------- | :----------------------------------------------------------------- |
-| `--cache-url <url>`   | `ZERO_THROUGHPUT_CACHE_URL`  | `http://127.0.0.1:4848` | Primary Zero cache endpoint or load balancer (disables local Zero) |
-| `--cache-urls <urls>` | `ZERO_THROUGHPUT_CACHE_URLS` | `undefined`             | Comma-separated View-Syncer URLs for client partitioning           |
-| `--pg-url <url>`      | `ZERO_THROUGHPUT_PG_URL`     | `postgresql://...:6436` | Upstream database connection string (disables local Postgres)      |
-| `--reset <bool>`      | `ZERO_THROUGHPUT_RESET`      | `true`                  | When `false`, skips dropping/resetting the benchmark table         |
+| CLI Option                | Environment Variable              | Default                 | Description                                                        |
+| :------------------------ | :-------------------------------- | :---------------------- | :----------------------------------------------------------------- |
+| `--cache-url <url>`       | `ZERO_THROUGHPUT_CACHE_URL`       | `http://127.0.0.1:4848` | Primary Zero cache endpoint or load balancer (disables local Zero) |
+| `--cache-urls <urls>`     | `ZERO_THROUGHPUT_CACHE_URLS`      | `undefined`             | Comma-separated View-Syncer URLs for client partitioning           |
+| `--pg-url <url>`          | `ZERO_THROUGHPUT_PG_URL`          | `postgresql://...:6436` | Upstream database connection string (disables local Postgres)      |
+| `--app-server-port <num>` | `ZERO_THROUGHPUT_APP_SERVER_PORT` | `3000`                  | Local query-transform app server port                              |
+| `--reset <bool>`          | `ZERO_THROUGHPUT_RESET`           | `true`                  | When `false`, skips dropping/resetting the benchmark table         |
 
 Run `pnpm --filter zero-throughput start -- --help` for all options.

@@ -12,6 +12,8 @@
     "sweep:num-view-syncers": "node src/linear-sweep.ts --topology distributed --num-view-syncers 1,2,3 --sync-workers 2 --write-rates 300 --users 12 --profiles forum --duration-ms 15000",
     "sweep:users": "node src/linear-sweep.ts --users 5,10,20,50 --sync-workers 2 --write-rates 200 --profiles forum --duration-ms 15000",
     "go": "node src/main.ts",
+    "server": "node src/server.ts",
+    "start:server": "node src/server.ts",
     "db-up": "cd docker && docker compose up",
     "db-down": "cd docker && docker compose down",
     "check-types": "tsc",
@@ -24,8 +26,10 @@
   "dependencies": {
     "@dotenvx/dotenvx": "^1.39.0",
     "@rocicorp/zero": "workspace:*",
+    "fastify": "^5.0.0",
     "postgres": "3.4.7",
-    "ws": "^8.18.1"
+    "ws": "^8.18.1",
+    "zod": "^4.1.11"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

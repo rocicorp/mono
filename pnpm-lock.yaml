@@ -292,12 +292,18 @@ importers:
       '@rocicorp/zero':
         specifier: workspace:*
         version: link:../../packages/zero
+      fastify:
+        specifier: ^5.0.0
+        version: 5.8.5
       postgres:
         specifier: 3.4.7
         version: 3.4.7(patch_hash=2bd119d361250d5ee010b23af4c98504e9c6861b692d2e2ae23b9a9e5de4dbce)
       ws:
         specifier: ^8.18.1
         version: 8.20.1
+      zod:
+        specifier: ^4.1.11
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.10.5
