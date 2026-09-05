@@ -36,6 +36,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {installProfileHandler} from '../types/profiler.ts';
 import {getShardID} from '../types/shards.ts';
 import type {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
@@ -79,6 +80,7 @@ export default async function runWorker(
   assert(args.length >= 2, `expected [fileMode, workerIndex, ...flags]`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
   const workerIndex = Number(args[1]);
+  installProfileHandler(parent, `syncer-${workerIndex}`, workerIndex);
   const config = getNormalizedZeroConfig({env, argv: args.slice(2)});
 
   startOtelAuto(
