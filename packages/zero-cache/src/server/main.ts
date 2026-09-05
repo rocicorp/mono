@@ -17,6 +17,8 @@ import {
   childWorker,
   parentWorker,
   singleProcessMode,
+  type ProfileMessage,
+  type ProfileResponseMessage,
   type Worker,
 } from '../types/processes.ts';
 import {
@@ -90,6 +92,7 @@ export default async function runWorker(
           String(Math.floor(config.cvr.maxConns / numSyncers)),
         ];
 
+  const allSubWorkers: Worker[] = [];
   function loadWorker(
     moduleUrl: URL,
     type: WorkerType,
@@ -98,7 +101,12 @@ export default async function runWorker(
   ): Worker {
     const worker = childWorker(moduleUrl, env, ...args, ...internalFlags);
     const name = path.basename(moduleUrl.pathname) + (id ? ` (${id})` : '');
-    return processes.addWorker(worker, type, name);
+    const w = processes.addWorker(worker, type, name);
+    allSubWorkers.push(w);
+    w.onMessageType<ProfileResponseMessage>('profileResponse', res =>
+      parent.send(['profileResponse', res]),
+    );
+    return w;
   }
 
   const {taskID, litestream} = config;
@@ -190,6 +198,11 @@ export default async function runWorker(
   recordStartupDurationMs(startupDurationMs);
 
   parent.send(['ready', {ready: true}]);
+  parent.onMessageType<ProfileMessage>('profile', req => {
+    for (const w of allSubWorkers) {
+      w.send(['profile', req]);
+    }
+  });
 
   try {
     await runUntilKilled(

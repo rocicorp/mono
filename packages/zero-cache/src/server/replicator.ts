@@ -41,6 +41,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {installProfileHandler} from '../types/profiler.ts';
 import {getShardConfig} from '../types/shards.ts';
 import {
   deleteStaleChangeLog,
@@ -69,6 +70,7 @@ export default async function runWorker(
   const runningLocalChangeStreamer =
     config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
   const workerName = `${mode}-replicator`;
+  installProfileHandler(parent, workerName);
   startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
   lc = createLogContext(config, workerName);
   const unregisterInitialCorruptionDiagnosticTarget =
