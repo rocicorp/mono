@@ -1,4 +1,4 @@
-import type {Query} from '@rocicorp/zero';
+import type {Query} from '../../../packages/zql/src/query/query.ts';
 import type {BenchmarkModel, BenchmarkProfile} from './config.ts';
 import {queries} from './queries.ts';
 import type {schema} from './schema.ts';
