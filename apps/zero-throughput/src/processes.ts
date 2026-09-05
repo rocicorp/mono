@@ -244,7 +244,6 @@ export async function startZeroTopology(
       numSyncWorkers: config.zero.numSyncWorkers,
       replicaFile: config.zero.replicaFile,
       metricsEndpoint,
-      profile: config.profileVS,
     });
     return {
       processes: [singleProc],
@@ -269,7 +268,6 @@ export async function startZeroTopology(
     numSyncWorkers: 0,
     replicaFile: `${config.zero.replicaFile}-rm`,
     metricsEndpoint,
-    profile: config.profileRM,
   });
   processes.push(rmProcess);
 
@@ -300,7 +298,6 @@ export async function startZeroTopology(
       numSyncWorkers: config.zero.numSyncWorkers,
       replicaFile: `${config.zero.replicaFile}-vs${i}`,
       metricsEndpoint,
-      profile: config.profileVS && i === 0,
     });
     processes.push(vs);
   }
@@ -334,7 +331,6 @@ function spawnZeroProcess(args: {
   readonly changeStreamerPort?: number | undefined;
   readonly changeStreamerMode?: string | undefined;
   readonly metricsEndpoint?: string | undefined;
-  readonly profile?: boolean | undefined;
 }): ManagedProcess {
   const {config, name, port, numSyncWorkers, replicaFile} = args;
   const zeroCacheMain = fileURLToPath(
@@ -366,6 +362,10 @@ function spawnZeroProcess(args: {
     ZERO_MUTATE_URL: `http://127.0.0.1:${config.appServerPort}/api/mutate`,
   };
 
+  if (config.adminPassword) {
+    env.ZERO_ADMIN_PASSWORD = config.adminPassword;
+  }
+
   if (args.changeStreamerURI) {
     env.ZERO_CHANGE_STREAMER_URI = args.changeStreamerURI;
   }
@@ -384,12 +384,6 @@ function spawnZeroProcess(args: {
     env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
     env.OTEL_METRIC_EXPORT_INTERVAL = '500';
     env.OTEL_METRIC_EXPORT_TIMEOUT = '500';
-  }
-
-  if (args.profile) {
-    const profDir = appPath(config.profileDir);
-    mkdirSync(profDir, {recursive: true});
-    env.NODE_OPTIONS = `--cpu-prof --cpu-prof-dir="${profDir}" ${process.env.NODE_OPTIONS ?? ''}`;
   }
 
   const logPath =

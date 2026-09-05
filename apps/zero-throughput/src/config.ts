@@ -46,6 +46,8 @@ const options = {
   numSyncWorkers: v.number().optional(),
   profileRM: v.boolean().default(false),
   profileVS: v.boolean().default(false),
+  profileDurationSec: v.number().default(5),
+  adminPassword: v.string().optional(),
 
   pg: {
     url: v.string().optional(),
@@ -96,6 +98,8 @@ export type BenchmarkConfig = {
   readonly profileDir: string;
   readonly profileRM: boolean;
   readonly profileVS: boolean;
+  readonly profileDurationSec: number;
+  readonly adminPassword?: string | undefined;
   readonly processLogMode: 'file' | 'inherit' | 'ignore';
   readonly reset: boolean;
   readonly appServerPort: number;
@@ -196,6 +200,11 @@ export function loadConfig(): BenchmarkConfig {
     profileDir: parsed.profileDir,
     profileRM: parsed.profileRM,
     profileVS: parsed.profileVS,
+    profileDurationSec: parsed.profileDurationSec,
+    adminPassword:
+      parsed.adminPassword ??
+      process.env.ZERO_ADMIN_PASSWORD ??
+      process.env.ADMIN_PASSWORD,
     processLogMode: parsed.processLogMode,
     reset: parsed.reset,
     appServerPort: parsed.appServerPort,

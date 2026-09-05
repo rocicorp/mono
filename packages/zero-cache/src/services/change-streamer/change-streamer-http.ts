@@ -4,6 +4,7 @@ import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
@@ -19,6 +20,7 @@ import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService, type Options as HttpOptions} from '../http-service.ts';
+import {handleProfzRequest} from '../profz.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
@@ -41,6 +43,8 @@ const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 type Options = HttpOptions & {
   startupDelayMs: number;
+  config?: Pick<NormalizedZeroConfig, 'adminPassword'> | undefined;
+  getProfileWorker?: (() => Promise<Worker>) | undefined;
 };
 
 export class ChangeStreamerHttpServer extends HttpService {
@@ -63,6 +67,18 @@ export class ChangeStreamerHttpServer extends HttpService {
         SNAPSHOT_PATH_PATTERN,
         {websocket: true},
         this.#reserveSnapshot,
+      );
+
+      fastify.get('/profz', (req, res) =>
+        handleProfzRequest(
+          lc,
+          opts.config ?? {adminPassword: undefined},
+          req,
+          res,
+          opts.getProfileWorker,
+          undefined,
+          'change-streamer',
+        ),
       );
 
       installWebSocketReceiver<'snapshot' | 'changes'>(

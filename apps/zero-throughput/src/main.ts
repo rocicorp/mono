@@ -1,6 +1,9 @@
+import {mkdirSync} from 'node:fs';
+import {writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
 import {inspect} from 'node:util';
 import {startSyntheticClients, type SyntheticClient} from './client.ts';
-import {loadConfig} from './config.ts';
+import {appPath, loadConfig, type BenchmarkConfig} from './config.ts';
 import {
   connectBenchmarkDB,
   resetBenchmarkDatabase,
@@ -148,6 +151,8 @@ async function main(): Promise<void> {
     };
     const sampler = setInterval(recordSample, config.sampleIntervalMs);
 
+    const profiling = startSteadyStateProfiling(config);
+
     let writerStats: WriterStats;
     try {
       writerStats = await writer.run(config.durationMs);
@@ -155,6 +160,8 @@ async function main(): Promise<void> {
     } finally {
       clearInterval(sampler);
     }
+
+    await profiling;
 
     if (config.settleMs > 0) {
       log(
@@ -287,6 +294,88 @@ function formatError(error: unknown): string {
     return error;
   }
   return inspect(error);
+}
+
+async function startSteadyStateProfiling(
+  config: BenchmarkConfig,
+): Promise<void> {
+  if (!config.profileVS && !config.profileRM) {
+    return;
+  }
+
+  const profileDir = appPath(config.profileDir);
+  mkdirSync(profileDir, {recursive: true});
+
+  const warmupDelay = Math.min(
+    2000,
+    Math.max(500, Math.floor(config.durationMs / 4)),
+  );
+  await sleep(warmupDelay);
+
+  const durationSec = Math.min(
+    config.profileDurationSec,
+    Math.max(1, Math.floor((config.durationMs - warmupDelay) / 1000)),
+  );
+
+  const targets = [
+    ...(config.profileVS
+      ? [{endpoint: 'profz', label: 'View-Syncer', prefix: 'vs'}]
+      : []),
+    ...(config.profileRM
+      ? [{endpoint: 'profrmz', label: 'RM', prefix: 'rm'}]
+      : []),
+  ];
+
+  const headers: Record<string, string> = {};
+  if (config.adminPassword) {
+    headers.authorization = `Basic ${Buffer.from(`admin:${config.adminPassword}`).toString('base64')}`;
+  }
+
+  await Promise.all(
+    targets.map(async ({endpoint, label, prefix}) => {
+      const url = `${config.cacheURL}/${endpoint}?duration=${durationSec}`;
+      try {
+        log(`Triggering ${label} CPU profile (${durationSec}s) via ${url}...`);
+        const res = await fetch(url, {headers});
+        if (!res.ok) {
+          warn(`Failed to fetch ${label} profile: HTTP ${res.status}`);
+          return;
+        }
+        const data = await res.json();
+        await unpackProfiles(data, `${config.runID}-${prefix}`, profileDir);
+      } catch (err) {
+        warn(`Error capturing ${label} profile: ${String(err)}`);
+      }
+    }),
+  );
+}
+
+async function unpackProfiles(
+  data: unknown,
+  prefix: string,
+  outDir: string,
+): Promise<void> {
+  if (typeof data !== 'object' || data === null) {
+    return;
+  }
+
+  const record = data as Record<string, unknown>;
+  // Single profile with nodes array
+  if ('nodes' in record && Array.isArray(record.nodes)) {
+    const filename = `${prefix}.cpuprofile`;
+    const outPath = join(outDir, filename);
+    await writeFile(outPath, JSON.stringify(data, null, 2));
+    log(`Saved CPU profile to ${outPath}`);
+    return;
+  }
+
+  // Multi-process bundle: { [processName]: CpuProfile }
+  for (const [name, prof] of Object.entries(record)) {
+    const filename = `${prefix}-${name}.cpuprofile`;
+    const outPath = join(outDir, filename);
+    await writeFile(outPath, JSON.stringify(prof, null, 2));
+    log(`Saved ${name} CPU profile to ${outPath}`);
+  }
 }
 
 await main();
