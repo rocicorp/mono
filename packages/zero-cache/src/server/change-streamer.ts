@@ -37,11 +37,14 @@ import {
 import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
 import {connectPgClient} from '../types/pg.ts';
 import {
+  broadcastWorker,
   childWorker,
   parentWorker,
   singleProcessMode,
+  type ProfileResponseMessage,
   type Worker,
 } from '../types/processes.ts';
+import {installProfileHandler} from '../types/profiler.ts';
 import {getShardConfig} from '../types/shards.ts';
 import type {ReplicaFileMode} from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
@@ -56,6 +59,7 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
   ...argv: string[]
 ): Promise<void> {
+  installProfileHandler(parent, 'change-streamer');
   const config = getNormalizedZeroConfig({env, argv});
   const {
     taskID,
@@ -323,13 +327,14 @@ export default async function runWorker(
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
   const processes = new ProcessManager(lc, parent);
+  const profileSubWorkers: Worker[] = [];
   if (backupURL) {
     lc.info?.('setting up backup to', backupURL);
     litestream.backupURL = backupURL;
     const {promise: backupStarted, resolve} = resolver();
 
     // Start a backup replicator and corresponding litestream backup process.
-    processes
+    const backupReplicator = processes
       .addWorker(
         childWorker(REPLICATOR_URL, env, 'backup' satisfies ReplicaFileMode),
         'supporting',
@@ -346,6 +351,12 @@ export default async function runWorker(
         );
         resolve();
       });
+    profileSubWorkers.push(backupReplicator);
+    // Relay profileResponse messages from backup-replicator up to parent
+    backupReplicator.onMessageType<ProfileResponseMessage>(
+      'profileResponse',
+      res => parent.send(['profileResponse', res]),
+    );
     await backupStarted;
   }
 
@@ -367,9 +378,21 @@ export default async function runWorker(
     });
   }
 
+  const getProfileWorker =
+    profileSubWorkers.length > 0
+      ? () => Promise.resolve(broadcastWorker(profileSubWorkers))
+      : undefined;
+
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
-    {port, keepaliveTimeoutMs, startupDelayMs, readinessGate},
+    {
+      port,
+      keepaliveTimeoutMs,
+      startupDelayMs,
+      readinessGate,
+      config,
+      getProfileWorker,
+    },
     parent,
     changeStreamer,
   );

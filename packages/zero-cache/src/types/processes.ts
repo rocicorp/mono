@@ -24,7 +24,26 @@ export const MESSAGE_TYPES = {
   notify: 'notify',
   ready: 'ready',
   backupWatermarkUpdate: 'backupWatermakUpdate',
+  profile: 'profile',
+  profileResponse: 'profileResponse',
 } as const;
+
+export type ProfileRequest = {
+  readonly id: string;
+  readonly durationMs: number;
+  readonly worker?: string | undefined;
+  readonly workerIndex?: number | undefined;
+};
+
+export type ProfileResponse = {
+  readonly id: string;
+  readonly name: string;
+  readonly profile?: unknown | undefined;
+  readonly error?: string | undefined;
+};
+
+export type ProfileMessage = ['profile', ProfileRequest];
+export type ProfileResponseMessage = ['profileResponse', ProfileResponse];
 
 export type Message<Payload> = [keyof typeof MESSAGE_TYPES, Payload];
 
@@ -281,4 +300,43 @@ export function inProcChannel(): [Worker, Worker] {
       Object.assign(worker2, {send: sendTo(worker1), kill: kill(worker1), pid}),
     ),
   ];
+}
+
+/**
+ * Creates a {@link Worker} facade that broadcasts `send()` to all provided
+ * workers and aggregates their `'message'` events into one stream.
+ *
+ * This is useful for code that expects a single Worker for IPC (e.g.
+ * `handleProfzRequest`) but needs to reach multiple child workers.
+ */
+export function broadcastWorker(workers: Worker[]): Worker {
+  const emitter = new EventEmitter();
+
+  for (const w of workers) {
+    w.on('message', (message: Serializable, sendHandle?: SendHandle) =>
+      emitter.emit('message', message, sendHandle),
+    );
+  }
+
+  const send = <M extends Message<unknown>>(
+    message: M,
+    sendHandle?: SendHandle,
+    callback?: (error: Error | null) => void,
+  ) => {
+    for (const w of workers) {
+      w.send(message, sendHandle);
+    }
+    if (callback) {
+      callback(null);
+    }
+    return true;
+  };
+
+  const kill = (signal: NodeJS.Signals = 'SIGTERM') => {
+    for (const w of workers) {
+      w.kill(signal);
+    }
+  };
+
+  return wrap(Object.assign(emitter, {send, kill, pid}));
 }

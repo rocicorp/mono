@@ -12,6 +12,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {installProfileHandler} from '../types/profiler.ts';
 import {getShardID} from '../types/shards.ts';
 import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 import {createLogContext} from './logging.ts';
@@ -27,6 +28,7 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
   ...argv: string[]
 ): Promise<void> {
+  installProfileHandler(parent, 'reaper');
   const config = getNormalizedZeroConfig({env, argv});
 
   startOtelAuto(createLogContext(config, 'reaper', 0, false), 'reaper', 0);
