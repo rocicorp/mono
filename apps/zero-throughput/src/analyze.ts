@@ -1,7 +1,6 @@
 import {mapAST, type AST} from '../../../packages/zero-protocol/src/ast.ts';
 import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
 import {runAnalyzeCLI} from '../../../packages/zero/src/analyze.ts';
-import {createBuilder} from '../../../packages/zql/src/query/create-builder.ts';
 import type {BenchmarkModel, BenchmarkProfile} from './config.ts';
 import {
   buildProfileQuery,
@@ -53,7 +52,6 @@ if (config.help) {
 } else {
   const {profile, queryIndex} = resolveProfileQuery(config);
   const {name, query} = buildProfileQuery(
-    createBuilder(schema),
     profile,
     config.model,
     queryIndex,
@@ -176,10 +174,23 @@ function parseArgs(argv: readonly string[]): AnalyzeConfig {
 }
 
 function queryAST(query: unknown): AST {
-  if (query === null || typeof query !== 'object' || !('ast' in query)) {
-    throw new Error('Profile query did not expose an AST');
+  if (query !== null && typeof query === 'object') {
+    if ('ast' in query) {
+      return (query as {readonly ast: AST}).ast;
+    }
+    if (
+      'query' in query &&
+      typeof (query as {query: unknown}).query === 'function' &&
+      'fn' in (query as {query: {fn?: unknown}}).query
+    ) {
+      const q = query as {
+        args: unknown;
+        query: {fn: (opts: {args: unknown; ctx: unknown}) => {ast: AST}};
+      };
+      return q.query.fn({args: q.args, ctx: undefined}).ast;
+    }
   }
-  return (query as {readonly ast: AST}).ast;
+  throw new Error('Profile query did not expose an AST');
 }
 
 function parseOption(arg: string): {

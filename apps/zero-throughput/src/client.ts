@@ -62,6 +62,7 @@ export class SyntheticClient {
       schema,
       cacheURL: targetCacheURL,
       userID,
+      auth: userID,
       storageKey: `${config.runID}-${clientIndex}`,
       kvStore: 'mem',
       logLevel: 'error',
@@ -81,7 +82,6 @@ export class SyntheticClient {
 
   #registerProfileQuery(config: BenchmarkConfig, queryIndex: number): void {
     const {name, query} = buildProfileQuery(
-      this.#zero.query,
       config.profile,
       config.model,
       queryIndex,

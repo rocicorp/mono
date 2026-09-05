@@ -32,33 +32,73 @@ export type ManagedProcess = ProcessCommand & {
   stop(): Promise<void>;
 };
 
-export async function deployPermissions(
-  config: BenchmarkConfig,
-): Promise<ProcessCommand> {
-  const deployPermissionsMain = fileURLToPath(
-    new URL(
-      '../../../packages/zero-cache/src/scripts/deploy-permissions.ts',
-      import.meta.url,
-    ),
-  );
-  const schemaPath = join(appRoot, 'src/permissions.ts');
+export function startAppServer(config: BenchmarkConfig): ManagedProcess {
+  const serverMain = fileURLToPath(new URL('server.ts', import.meta.url));
   const command = [
     process.execPath,
-    deployPermissionsMain,
-    '--schema-path',
-    schemaPath,
-    '--upstream-db',
-    config.pg.url,
-    '--app-id',
-    config.zero.appID,
-    '--force',
+    serverMain,
+    `--port=${config.appServerPort}`,
   ];
-  await runCommand(command[0], command.slice(1), repoRoot);
+  const logPath =
+    config.processLogMode === 'file'
+      ? join(processLogsDir(config), `${config.runID}-app-server.log`)
+      : undefined;
+  const logStream =
+    logPath === undefined ? undefined : createWriteStream(logPath);
+  const child = spawn(command[0], command.slice(1), {
+    cwd: appRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: 'development',
+    },
+    stdio:
+      config.processLogMode === 'inherit'
+        ? 'inherit'
+        : [
+            'ignore',
+            config.processLogMode === 'file' ? 'pipe' : 'ignore',
+            config.processLogMode === 'file' ? 'pipe' : 'ignore',
+          ],
+  });
+  pipeProcessLogs(child, logStream);
+
   return {
-    name: 'zero-deploy-permissions',
+    name: 'app-server',
     command,
-    cwd: repoRoot,
+    cwd: appRoot,
+    logPath,
+    child,
+    stop: () => stopChild(child, 'SIGTERM'),
   };
+}
+
+export async function waitForAppServer(
+  port: number,
+  timeoutMs: number,
+  processContext?: ProcessCommand,
+): Promise<void> {
+  const url = `http://127.0.0.1:${port}/health`;
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        return;
+      }
+      lastError = new Error(`Health returned status ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await sleep(200);
+  }
+  const procDetails =
+    processContext?.logPath !== undefined
+      ? ` (check logs: ${processContext.logPath})`
+      : '';
+  throw new Error(
+    `Timed out waiting for app-server at ${url} after ${timeoutMs}ms: ${String(lastError)}${procDetails}`,
+  );
 }
 
 export async function startPostgres(): Promise<ProcessCommand> {
@@ -322,8 +362,14 @@ function spawnZeroProcess(args: {
     ZERO_CHANGE_MAX_CONNS: String(config.zero.changeMaxConns),
     ZERO_LOG_LEVEL: config.zero.logLevel,
     ZERO_LOG_FORMAT: 'text',
-    ZERO_ALLOW_LEGACY_QUERIES: 'true',
   };
+
+  if (config.queryURL) {
+    env.ZERO_QUERY_URL = config.queryURL;
+  }
+  if (config.mutateURL) {
+    env.ZERO_MUTATE_URL = config.mutateURL;
+  }
 
   if (args.changeStreamerURI) {
     env.ZERO_CHANGE_STREAMER_URI = args.changeStreamerURI;

@@ -39,6 +39,9 @@ const options = {
   reset: v.boolean().default(true),
   cacheURL: v.string().optional(),
   cacheURLs: v.string().optional(),
+  appServerPort: v.number().default(3_000),
+  queryURL: v.string().optional(),
+  mutateURL: v.string().optional(),
 
   topology: v.literalUnion('single', 'distributed').default('single'),
   numViewSyncers: v.number().default(1),
@@ -97,6 +100,9 @@ export type BenchmarkConfig = {
   readonly profileVS: boolean;
   readonly processLogMode: 'file' | 'inherit' | 'ignore';
   readonly reset: boolean;
+  readonly appServerPort: number;
+  readonly queryURL: string | undefined;
+  readonly mutateURL: string | undefined;
   readonly cacheURL: string;
   readonly cacheURLs: readonly string[];
   readonly pg: {
@@ -196,6 +202,19 @@ export function loadConfig(): BenchmarkConfig {
     profileVS: parsed.profileVS,
     processLogMode: parsed.processLogMode,
     reset: parsed.reset,
+    appServerPort: parsed.appServerPort,
+    queryURL:
+      parsed.queryURL ??
+      process.env.ZERO_QUERY_URL ??
+      (isZeroManaged
+        ? `http://127.0.0.1:${parsed.appServerPort}/api/query`
+        : undefined),
+    mutateURL:
+      parsed.mutateURL ??
+      process.env.ZERO_MUTATE_URL ??
+      (isZeroManaged
+        ? `http://127.0.0.1:${parsed.appServerPort}/api/mutate`
+        : undefined),
     cacheURL: cacheURLs[0],
     cacheURLs,
     pg: {
