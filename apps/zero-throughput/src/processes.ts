@@ -362,14 +362,9 @@ function spawnZeroProcess(args: {
     ZERO_CHANGE_MAX_CONNS: String(config.zero.changeMaxConns),
     ZERO_LOG_LEVEL: config.zero.logLevel,
     ZERO_LOG_FORMAT: 'text',
+    ZERO_QUERY_URL: `http://127.0.0.1:${config.appServerPort}/api/query`,
+    ZERO_MUTATE_URL: `http://127.0.0.1:${config.appServerPort}/api/mutate`,
   };
-
-  if (config.queryURL) {
-    env.ZERO_QUERY_URL = config.queryURL;
-  }
-  if (config.mutateURL) {
-    env.ZERO_MUTATE_URL = config.mutateURL;
-  }
 
   if (args.changeStreamerURI) {
     env.ZERO_CHANGE_STREAMER_URI = args.changeStreamerURI;
