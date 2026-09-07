@@ -552,6 +552,10 @@ export class PipelineDriver {
         },
         'scalar-subquery',
       );
+      // Tracked before it is fetched so that a failure in this or a later
+      // subquery can tear it down below. A companion with no result is kept
+      // alive too: it detects a future insert that creates the row.
+      companionInputs.push(input);
       // Consume the full stream rather than using first() to avoid
       // triggering early return on Take's #initialFetch assertion.
       // The subquery AST already has limit: 1, so at most one row is produced.
@@ -560,21 +564,27 @@ export class PipelineDriver {
         node ??= n;
       }
       if (!node) {
-        // Keep the companion alive even with no results — it will
-        // detect a future insert that creates the row.
-        companionInputs.push(input);
         return undefined;
       }
       companionRows.push({table: subqueryAST.table, row: node.row as Row});
-      companionInputs.push(input);
       return (node.row[childField] as LiteralValue) ?? null;
     };
 
-    const {
-      ast: resolved,
-      companions,
-      ignoredScalarHints,
-    } = resolveSimpleScalarSubqueries(ast, this.#tableSpecs, executor);
+    let resolved: AST;
+    let companions: CompanionSubquery[];
+    let ignoredScalarHints: IgnoredScalarHint[];
+    try {
+      ({
+        ast: resolved,
+        companions,
+        ignoredScalarHints,
+      } = resolveSimpleScalarSubqueries(ast, this.#tableSpecs, executor));
+    } catch (e) {
+      for (const input of companionInputs) {
+        input.destroy();
+      }
+      throw e;
+    }
     return {
       ast: resolved,
       companionRows,
@@ -864,6 +874,10 @@ export class PipelineDriver {
         for (const input of builtInputs) {
           input.destroy();
         }
+        // Rows may already have been yielded through #trackRowSetSignatures,
+        // and rowSetSignature() must not report a signature for a query
+        // without an active pipeline.
+        this.#rowSetSignatures.delete(queryID);
       }
       this.#hydrateContext = null;
     }
