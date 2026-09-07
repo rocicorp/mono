@@ -160,8 +160,6 @@ export function useQuery<
   });
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
 
-  const initialTTL = ttl();
-
   const view = createMemo(() => {
     // Depend on hash instead of query to avoid recreating the view when the
     // query object changes but the hash is the same.
@@ -184,7 +182,13 @@ export function useQuery<
       untrackedQuery,
       createSolidViewFactory(setState, refetch),
       {
-        ttl: initialTTL,
+        // Untracked: a ttl change updates the live view through the effect
+        // below, and depending on it here would tear the view down and build
+        // a new one instead. Read at materialize time rather than once at
+        // setup, so a view built later -- because the query changed -- gets
+        // the ttl in effect by then rather than the one this hook started
+        // with.
+        ttl: untrack(ttl),
       },
     );
 
