@@ -4778,6 +4778,29 @@ describe('WebSocket event error handling', () => {
       ),
     ).toBe(true);
 
+    // The run loop wraps the original TypeError as the cause of an Internal
+    // ClientError. Console sinks on some runtimes print only the outer error,
+    // so both run loop log lines must carry the original error as its own
+    // argument.
+    const {cause} = reason;
+    expect(cause).toBeInstanceOf(TypeError);
+    // The state transition happens synchronously in #disconnect; the run loop
+    // logs once it observes the aborted attempt.
+    const findLog = (prefix: string) =>
+      z.testLogSink.messages.find(
+        ([_level, _context, args]) =>
+          typeof args[0] === 'string' && args[0].startsWith(prefix),
+      );
+    await vi.waitUntil(() => findLog('Run loop paused in error state'));
+    expect(findLog('Failed to connect')?.[2].slice(1, 3)).toEqual([
+      reason,
+      cause,
+    ]);
+    expect(findLog('Run loop paused in error state')?.[2].slice(1)).toEqual([
+      reason,
+      cause,
+    ]);
+
     await z.close().catch(() => {});
   });
 
