@@ -302,6 +302,16 @@ test('zero-cache --help', () => {
                                                                                    have kept it warm are both dropped. A value of 0 disables                                                                  
                                                                                    hydration-budget eviction.                                                                                                 
                                                                                                                                                                                                               
+     --view-syncer-query-hydration-timeout-ms number                               default: 0                                                                                                                 
+       ZERO_VIEW_SYNCER_QUERY_HYDRATION_TIMEOUT_MS env                                                                                                                                                        
+                                                                                   The maximum processing time in milliseconds that a view-syncer spends                                                      
+                                                                                   hydrating a single client query. Time spent yielding to other work is                                                      
+                                                                                   not counted. A query whose hydration exceeds this limit is aborted and                                                     
+                                                                                   removed from the client's view, and affected clients receive an error                                                      
+                                                                                   for the query. The query is then rejected without being run again for                                                      
+                                                                                   a cooldown period, after which a retry is allowed. Internal queries are                                                    
+                                                                                   never aborted. A value of 0 disables the limit.                                                                            
+                                                                                                                                                                                                              
      --change-db string                                                            optional                                                                                                                   
        ZERO_CHANGE_DB env                                                                                                                                                                                     
                                                                                    The Postgres database used to store recent replication log entries, in order                                               
@@ -931,6 +941,39 @@ test('view-syncer hydration budget defaults to disabled and accepts milliseconds
   });
   expect(configured.config.viewSyncerHydrationBudgetMs).toBe(250);
 });
+
+test('view-syncer query hydration timeout', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+  expect(defaults.config.viewSyncerQueryHydrationTimeoutMs).toBe(0);
+
+  const configured = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_VIEW_SYNCER_QUERY_HYDRATION_TIMEOUT_MS: '5000'},
+  });
+  expect(configured.config.viewSyncerQueryHydrationTimeoutMs).toBe(5000);
+});
+
+test.each(['-1', '1.5'])(
+  'view-syncer query hydration timeout rejects %s',
+  queryHydrationTimeoutMs => {
+    expect(() =>
+      parseOptionsAdvanced(zeroOptions, {
+        envNamePrefix: 'ZERO_',
+        allowUnknown: false,
+        allowPartial: true,
+        env: {
+          ZERO_VIEW_SYNCER_QUERY_HYDRATION_TIMEOUT_MS: queryHydrationTimeoutMs,
+        },
+      }),
+    ).toThrow();
+  },
+);
 
 test.each(['-1', '1.5'])(
   'view-syncer hydration budget rejects %s',
