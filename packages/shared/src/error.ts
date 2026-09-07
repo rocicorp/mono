@@ -53,6 +53,34 @@ function getErrorMessageInternal(error: unknown, seen: Set<unknown>): string {
   return `Unknown error of type ${typeof error} was thrown and the message could not be determined. See cause for details.`;
 }
 
+/**
+ * Returns the chain of `cause` values hanging off `error`, outermost first.
+ *
+ * Errors that Zero raises on a fatal path wrap the original exception as
+ * `cause`. Console sinks on some runtimes (React Native's Hermes among them)
+ * print only the outer error's message and stack, so the original error's
+ * name, message and stack are lost unless they are logged as separate
+ * arguments. Spread the result of this function into a log call to keep them
+ * visible.
+ */
+export function getErrorCauses(error: unknown): unknown[] {
+  const causes: unknown[] = [];
+  const seen = new Set<unknown>([error]);
+  let current = error;
+  while (
+    typeof current === 'object' &&
+    current !== null &&
+    'cause' in current &&
+    (current as {cause: unknown}).cause !== undefined &&
+    !seen.has((current as {cause: unknown}).cause)
+  ) {
+    current = (current as {cause: unknown}).cause;
+    seen.add(current);
+    causes.push(current);
+  }
+  return causes;
+}
+
 export function getErrorDetails(error: unknown): ReadonlyJSONValue | undefined {
   if (error instanceof Error) {
     if ('details' in error) {
