@@ -67,18 +67,30 @@ export function getErrorCauses(error: unknown): unknown[] {
   const causes: unknown[] = [];
   const seen = new Set<unknown>([error]);
   let current = error;
-  while (
-    typeof current === 'object' &&
-    current !== null &&
-    'cause' in current &&
-    (current as {cause: unknown}).cause !== undefined &&
-    !seen.has((current as {cause: unknown}).cause)
-  ) {
-    current = (current as {cause: unknown}).cause;
-    seen.add(current);
-    causes.push(current);
+  for (;;) {
+    const cause = readCause(current);
+    if (cause === undefined || seen.has(cause)) {
+      return causes;
+    }
+    seen.add(cause);
+    causes.push(cause);
+    current = cause;
   }
-  return causes;
+}
+
+/**
+ * Reads `cause` exactly once. `error` is `unknown`, so `cause` may be an
+ * accessor or proxy trap: a stateful getter must not be consulted twice per
+ * hop, and a throwing one must not escape from a log call in an error handler.
+ */
+function readCause(error: unknown): unknown {
+  try {
+    return typeof error === 'object' && error !== null && 'cause' in error
+      ? (error as {cause: unknown}).cause
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function getErrorDetails(error: unknown): ReadonlyJSONValue | undefined {

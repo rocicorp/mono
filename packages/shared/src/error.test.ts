@@ -193,4 +193,30 @@ describe('getErrorCauses', () => {
     (a as {cause?: unknown}).cause = b;
     expect(getErrorCauses(a)).toEqual([b]);
   });
+
+  test('reads a cause getter exactly once per hop', () => {
+    const root = new Error('root');
+    let reads = 0;
+    const outer = new Error('outer');
+    Object.defineProperty(outer, 'cause', {
+      get() {
+        reads++;
+        return reads === 1 ? root : new Error('a different cause');
+      },
+    });
+    expect(getErrorCauses(outer)).toEqual([root]);
+    expect(reads).toBe(1);
+  });
+
+  test('stops traversal when reading a cause throws', () => {
+    const middle = new Error('middle');
+    Object.defineProperty(middle, 'cause', {
+      get() {
+        throw new Error('getter exploded');
+      },
+    });
+    const outer = new Error('outer', {cause: middle});
+    expect(getErrorCauses(outer)).toEqual([middle]);
+    expect(getErrorCauses(middle)).toEqual([]);
+  });
 });
