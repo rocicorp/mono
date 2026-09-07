@@ -659,6 +659,10 @@ export class PipelineDriver {
     let hydrationFinished = false;
     let hydrationFailed = false;
     let hydrationRowCount = 0;
+    // The inputs built so far, held outside the try so that a hydration that
+    // does not finish (aborted by the consumer or failed) can tear them down.
+    // Only a finished hydration hands them over to #pipelines.
+    let builtInputs: Input[] = [];
     try {
       const {
         ast: resolvedQuery,
@@ -667,6 +671,7 @@ export class PipelineDriver {
         companionInputs,
         ignoredScalarHints,
       } = this.#resolveScalarSubqueries(query);
+      builtInputs = [...companionInputs];
 
       this.#warnIgnoredScalarHints(queryID, ignoredScalarHints);
 
@@ -697,6 +702,7 @@ export class PipelineDriver {
         queryID,
         costModel,
       );
+      builtInputs.push(input);
       const schema = input.getSchema();
       input.setOutput({
         push: change => {
@@ -853,6 +859,11 @@ export class PipelineDriver {
           hydrationTimeMs: timer.totalElapsed(),
           hydrationRowCount,
         });
+      }
+      if (!hydrationFinished) {
+        for (const input of builtInputs) {
+          input.destroy();
+        }
       }
       this.#hydrateContext = null;
     }

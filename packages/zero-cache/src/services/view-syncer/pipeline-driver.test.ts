@@ -818,6 +818,27 @@ describe('view-syncer/pipeline-driver', () => {
     });
   });
 
+  test('abandoned hydration tears down its pipeline', () => {
+    pipelines.init(clientSchema);
+    const hydration = pipelines
+      .addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, startTimer())
+      [Symbol.iterator]();
+    // Consume the first row, then abandon the hydration, as a consumer that
+    // stops iterating early does.
+    expect(hydration.next().done).toBe(false);
+    hydration.return?.();
+
+    expect(pipelines.queries().has('queryID1')).toBe(false);
+
+    // The abandoned pipeline is disconnected from its sources, so a change to
+    // a table it was reading no longer produces output for it.
+    replicator.processTransaction(
+      '134',
+      messages.insert('issues', {id: '4', closed: 0}),
+    );
+    expect(changes()).toEqual([]);
+  });
+
   test('insert', () => {
     pipelines.init(clientSchema);
     [
