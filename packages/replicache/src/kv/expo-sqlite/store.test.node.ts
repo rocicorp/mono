@@ -27,51 +27,77 @@ vi.mock('expo-sqlite', () => ({
       execSync: (sql: string) => db.exec(sql),
       prepareSync: (sql: string) => {
         const stmt = db.prepare(sql);
+        const isSelectQuery = /^\s*select/i.test(sql);
+
+        // Model expo-sqlite's stateful native statement. In expo-sqlite the
+        // bindings and cursor position live on the single sqlite3_stmt, and
+        // are shared by every result object created from it:
+        // - `executeForRawResultAsync` is one native round trip that resets
+        //   the statement, binds params and steps the first row (cached in JS).
+        // - the result's `getAllAsync` is a second native round trip that
+        //   steps the *remaining* rows of whatever the statement is currently
+        //   bound to, with no check that the binding still belongs to this
+        //   result.
+        // The store must therefore not let two callers interleave these two
+        // calls on the same statement.
+        let rows: unknown[][] = [];
+        let pos = 0;
+        const bridgeHop = () => new Promise(resolve => setImmediate(resolve));
+
+        const run = (params: unknown[]) => {
+          if (isSelectQuery) {
+            rows = stmt.raw(true).all(...params) as unknown[][];
+          } else {
+            stmt.run(...params);
+            rows = [];
+          }
+          pos = 0;
+          return rows.length > 0 ? rows[pos++] : null;
+        };
+
+        const makeResult = (firstRow: unknown[] | null, async: boolean) => {
+          let stepped = false;
+          const getAll = () => {
+            if (stepped) {
+              throw new Error('The SQLite cursor has been shifted');
+            }
+            stepped = true;
+            if (firstRow === null) {
+              return [];
+            }
+            const rest = rows.slice(pos);
+            pos = rows.length;
+            return [firstRow, ...rest];
+          };
+          return async
+            ? {
+                getFirstAsync: () => Promise.resolve(firstRow),
+                getAllAsync: async () => {
+                  if (firstRow !== null) {
+                    await bridgeHop();
+                  }
+                  return getAll();
+                },
+              }
+            : {
+                getFirstSync: () => firstRow,
+                getAllSync: getAll,
+              };
+        };
+
         return {
-          executeAsync: (params: unknown[] = []) => {
-            try {
-              let result: unknown[];
-              const isSelectQuery = /^\s*select/i.test(sql);
-              if (isSelectQuery) {
-                result = params.length ? stmt.all(...params) : stmt.all();
-              } else {
-                stmt.run(...params);
-                result = [];
-              }
-              return Promise.resolve({
-                getAllAsync: () => Promise.resolve(result),
-              });
-            } catch (error) {
-              return Promise.reject(error);
-            }
+          executeAsync: async (params: unknown[] = []) => {
+            await bridgeHop();
+            return makeResult(run(params), true);
           },
-          executeForRawResultAsync: (params: unknown[] = []) => {
-            try {
-              const isSelectQuery = /^\s*select/i.test(sql);
-              if (isSelectQuery) {
-                const rows = stmt.raw(true).all(...params) as unknown[][];
-                return Promise.resolve({
-                  getFirstAsync: () =>
-                    Promise.resolve(rows.length > 0 ? rows[0] : null),
-                  getAllAsync: () => Promise.resolve(rows),
-                });
-              }
-              stmt.run(...params);
-              return Promise.resolve({
-                getFirstAsync: () => Promise.resolve(null),
-                getAllAsync: () => Promise.resolve([]),
-              });
-            } catch (error) {
-              return Promise.reject(error);
-            }
+          executeForRawResultAsync: async (params: unknown[] = []) => {
+            await bridgeHop();
+            return makeResult(run(params), true);
           },
-          executeSync: (params: unknown[] = []) => {
-            const isSelectQuery = /^\s*select/i.test(sql);
-            if (isSelectQuery) {
-              return stmt.all(...params);
-            }
-            return stmt.run(...params);
-          },
+          executeSync: (params: unknown[] = []) =>
+            makeResult(run(params), false),
+          executeForRawResultSync: (params: unknown[] = []) =>
+            makeResult(run(params), false),
           finalizeSync: () => {
             // SQLite3 statements don't need explicit finalization
           },

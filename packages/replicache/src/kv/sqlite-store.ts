@@ -11,6 +11,13 @@ import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
 
 /**
  * A SQLite prepared statement.
+ *
+ * `SQLiteStore` prepares one statement per SQL and shares it across all
+ * concurrent readers, so implementations must make each call atomic with
+ * respect to other callers of the same statement: `all()` must not let another
+ * `exec()`/`all()` rebind or reset the underlying statement between executing
+ * it and fetching its rows. Delegates whose native API splits execute and fetch
+ * into separate round trips (e.g. expo-sqlite) must serialize per statement.
  */
 export interface PreparedStatement {
   exec(params: string[]): Promise<void>;
