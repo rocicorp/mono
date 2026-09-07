@@ -588,6 +588,7 @@ export const TEST_ADMIN_PASSWORD = 'test-pwd';
 type SetupOptions = Readonly<{
   authConfig?: Partial<NormalizedZeroConfig['auth']> | undefined;
   hydrationBudgetMs?: number | undefined;
+  queryHydrationTimeoutMs?: number | undefined;
   lc?: LogContext | undefined;
   monotonicClock?: MonotonicClock | undefined;
   /**
@@ -643,6 +644,7 @@ export async function setup(
   const {
     authConfig = {},
     hydrationBudgetMs = 0,
+    queryHydrationTimeoutMs = 0,
     lc = createSilentLogContext(),
     monotonicClock,
     queryFetchMode = 'none',
@@ -778,6 +780,7 @@ export async function setup(
       level: 'error',
     },
     viewSyncerHydrationBudgetMs: hydrationBudgetMs,
+    viewSyncerQueryHydrationTimeoutMs: queryHydrationTimeoutMs,
   } as NormalizedZeroConfig;
 
   // Create the custom query transformer if configured
