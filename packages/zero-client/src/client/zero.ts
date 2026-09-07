@@ -28,7 +28,7 @@ import {
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
-import {getErrorMessage} from '../../../shared/src/error.ts';
+import {getErrorCauses, getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -2393,6 +2393,7 @@ export class Zero<
             lc.info?.(
               `Run loop paused in error state. Call zero.connection.connect() to resume.`,
               currentState.reason,
+              ...getErrorCauses(currentState.reason),
             );
             const resumeResult = await promiseRace({
               connectRequest: this.#connectionManager.waitForConnectRequest(),
@@ -2421,7 +2422,7 @@ export class Zero<
         ) {
           const level = isAuthError(ex) ? 'warn' : 'error';
           const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
-          lc[level]?.('Failed to connect', ex, kind, {
+          lc[level]?.('Failed to connect', ex, ...getErrorCauses(ex), kind, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
           });
