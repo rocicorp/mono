@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
 
-import {getErrorDetails, getErrorMessage} from './error.ts';
+import {getErrorCauses, getErrorDetails, getErrorMessage} from './error.ts';
 import type {ReadonlyJSONValue} from './json.ts';
 
 const UNKNOWN_ERROR_MESSAGE =
@@ -164,5 +164,59 @@ describe('getErrorDetails', () => {
     expect(getErrorDetails(new ErrorWithInvalidDetails('test'))).toEqual({
       name: 'ErrorWithInvalidDetails',
     });
+  });
+});
+
+describe('getErrorCauses', () => {
+  test('returns nothing for errors without a cause', () => {
+    expect(getErrorCauses(new Error('boom'))).toEqual([]);
+    expect(getErrorCauses(undefined)).toEqual([]);
+    expect(getErrorCauses('string')).toEqual([]);
+    expect(getErrorCauses(new Error('boom', {cause: undefined}))).toEqual([]);
+  });
+
+  test('returns the cause chain outermost first', () => {
+    const root = new TypeError('root');
+    const middle = new Error('middle', {cause: root});
+    const outer = new Error('outer', {cause: middle});
+    expect(getErrorCauses(outer)).toEqual([middle, root]);
+  });
+
+  test('includes non-Error causes', () => {
+    const outer = new Error('outer', {cause: 'plain string'});
+    expect(getErrorCauses(outer)).toEqual(['plain string']);
+  });
+
+  test('stops on cycles', () => {
+    const a = new Error('a');
+    const b = new Error('b', {cause: a});
+    (a as {cause?: unknown}).cause = b;
+    expect(getErrorCauses(a)).toEqual([b]);
+  });
+
+  test('reads a cause getter exactly once per hop', () => {
+    const root = new Error('root');
+    let reads = 0;
+    const outer = new Error('outer');
+    Object.defineProperty(outer, 'cause', {
+      get() {
+        reads++;
+        return reads === 1 ? root : new Error('a different cause');
+      },
+    });
+    expect(getErrorCauses(outer)).toEqual([root]);
+    expect(reads).toBe(1);
+  });
+
+  test('stops traversal when reading a cause throws', () => {
+    const middle = new Error('middle');
+    Object.defineProperty(middle, 'cause', {
+      get() {
+        throw new Error('getter exploded');
+      },
+    });
+    const outer = new Error('outer', {cause: middle});
+    expect(getErrorCauses(outer)).toEqual([middle]);
+    expect(getErrorCauses(middle)).toEqual([]);
   });
 });
