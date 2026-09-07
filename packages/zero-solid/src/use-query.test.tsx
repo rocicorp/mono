@@ -191,6 +191,36 @@ test('useQuery with ttl', () => {
   expect(materializeSpy).toHaveBeenCalledTimes(0);
 });
 
+test('a view materialized after a ttl change uses the current ttl', () => {
+  // The ttl the hook starts with is read once. A view built later -- because
+  // the query changed -- must still be materialized with whatever ttl is in
+  // effect by then, not the one the hook happened to start with.
+  const {tableQuery, queryDelegate} = setupTestEnvironment();
+  const [ttl, setTTL] = createSignal<TTL>('1m');
+  const [query, setQuery] = createSignal(tableQuery);
+
+  const zero = newMockZero('solid-ttl-on-rematerialize', queryDelegate);
+  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+  useQueryWithZeroProvider(
+    zero,
+    () => query(),
+    () => ({ttl: ttl()}),
+  );
+
+  expect(materializeSpy).toHaveBeenCalledTimes(1);
+  expect(materializeSpy.mock.calls[0][2]).toEqual({ttl: '1m'});
+
+  // Changing the ttl updates the live view rather than building a new one.
+  setTTL('10m');
+  expect(materializeSpy).toHaveBeenCalledTimes(1);
+
+  // Changing the query does build a new one, which must carry '10m'.
+  setQuery(() => tableQuery.where('a', 1));
+  expect(materializeSpy).toHaveBeenCalledTimes(2);
+  expect(materializeSpy.mock.calls[1][2]).toEqual({ttl: '10m'});
+});
+
 test('useQuery gets an error', async () => {
   const {tableQuery, queryDelegate} = setupTestEnvironment();
   const querySignal = vi.fn(() => tableQuery);
