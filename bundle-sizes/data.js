@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788535251356,
+  "lastUpdate": 1788777089606,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57457,6 +57457,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/de8d93c2c34c7d2468e78b63bcf8dd88497c77cd"
         },
         "date": 1788535238199,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319408,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57502,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117952,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33704,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49c22bccae2957e2e211bba7104b5d109593ead1",
+          "message": "fix(replicache): serialize expo-sqlite prepared statement calls to prevent corrupted reads (#6495)\n\n## What\n\nEvery call on an `ExpoSQLitePreparedStatement` now runs under a\nper-statement `Lock`, with the row fetch awaited inside the lock, so the\nexecute + fetch pair is atomic with respect to other users of that\nstatement.\n\n## Why\n\nexpo-sqlite's `executeForRawResultAsync` and the result's `getAllAsync`\nare two separate native round trips on one stateful `sqlite3_stmt`. The\nfirst resets, rebinds and steps the first row; the second steps the\n*remaining* rows of whatever the statement is currently bound to.\n`SQLiteStore` shares one prepared statement per SQL across all\nconcurrent readers (which `RWLock.read()` deliberately allows), so\nreader B's execute could rebind the statement inside reader A's await\ngap, and A's fetch then returned B's rows while B was starved of them.\n\nSymptoms: keys read back as `undefined` or as another key's value\n(`Invalid type: null, expected number`, `Refs must be an array`,\n`ChunkNotFoundError`), and when a ref count delta computed from such a\nread was written, the store was persistently corrupted (`Invalid ref\ncount -N`). This is the bug Margins hit on their Android launch day (64\ndevices in one hour); their repro and analysis are on the Margins\nburndown page in Notion.\n\nOnly the expo-sqlite delegate is affected. op-sqlite's `executeRaw` is a\nsingle native call and zero-sqlite is synchronous, so both were already\natomic.\n\n## Why a per-statement lock rather than per-transaction statements\n\n- Per-statement scope is the narrowest fix: reads never wait on writes\n(already ordered by the `RWLock`), and nothing awaits another\nstatement's turn while holding one, so no deadlock path.\n- All calls go through one SQLite connection and Expo Modules dispatch\nasync native functions serially, so concurrent readers were already\nqueueing natively. The lock only moves the queueing to a point where the\ncursor cannot be clobbered. Uncontended cost is two microtask hops per\ncall.\n- Preparing statements per read transaction would add four synchronous\n`prepareSync`/`finalizeSync` JNI calls per transaction on the JS thread,\nwhich is worse for hydration.\n\n## Also in this PR\n\n- Documents the atomicity requirement on the `PreparedStatement`\ninterface so future delegates don't repeat this.\n- Rewrites the expo-sqlite test mock to model the shared native cursor\nwith an async hop between execute and fetch. The old mock captured all\nrows synchronously at execute time and could never expose this class of\nbug.\n- Adds a shared regression test (runs for expo-sqlite and op-sqlite)\nwith several concurrent readers each batching multiple keys so the store\nuses `getMany`/`hasMany`. It fails on the old code with the reported\nsignature (`['value-r0/k0', undefined, undefined]`) and passes with the\nfix.\n\n## Verification\n\n- `pnpm --filter replicache run test kv/`: 171 passed. Lint, format, and\ncheck-types clean.\n- Real device: Expo 57 app with expo-sqlite 57.0.2 on an Android 16\nemulator, four concurrent readers × 20 rounds.",
+          "timestamp": "2026-09-07T10:22:05Z",
+          "tree_id": "83e4a08cce35dfc13228ab39d6fb653191357922",
+          "url": "https://github.com/rocicorp/mono/commit/49c22bccae2957e2e211bba7104b5d109593ead1"
+        },
+        "date": 1788777076601,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
