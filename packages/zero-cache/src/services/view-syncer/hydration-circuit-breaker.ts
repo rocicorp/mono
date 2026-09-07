@@ -62,15 +62,24 @@ export class HydrationCircuitBreaker {
     return this.enabled && elapsedMs >= this.timeoutMs;
   }
 
-  /** Records that hydrating `transformationHash` was aborted. */
+  /**
+   * Records that hydrating `transformationHash` was aborted.
+   *
+   * Trips are rare, so this is also when expired entries are swept, which
+   * keeps the map bounded by the number of hashes tripped within one cooldown
+   * rather than by every hash ever tripped.
+   */
   trip(transformationHash: string): void {
-    this.#openedAt.set(transformationHash, this.#now());
+    const now = this.#now();
+    for (const [hash, openedAt] of this.#openedAt) {
+      if (now - openedAt >= this.openMs) {
+        this.#openedAt.delete(hash);
+      }
+    }
+    this.#openedAt.set(transformationHash, now);
   }
 
-  /**
-   * Whether `transformationHash` is currently rejected. Expired entries are
-   * dropped as they are encountered so the map does not grow without bound.
-   */
+  /** Whether `transformationHash` is currently rejected. */
   isOpen(transformationHash: string): boolean {
     const openedAt = this.#openedAt.get(transformationHash);
     if (openedAt === undefined) {

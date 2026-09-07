@@ -1845,6 +1845,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     } of transformedQueries) {
       const query = cvr.queries[queryID];
       const queryName = query.type === 'custom' ? query.name : undefined;
+      if (
+        query.type !== 'internal' &&
+        this.#hydrationCircuitBreaker.isOpen(transformationHash)
+      ) {
+        // The breaker is open for this transformation (typically tripped by a
+        // query earlier in this loop that shares it). Not hydrating leaves the
+        // pipeline missing, so #syncQueryPipelineSet removes and errors the
+        // query like any circuit-broken query, without burning a timeout.
+        lc.info?.(
+          `skipping hydration of ${queryID}: hydration circuit breaker open`,
+        );
+        continue;
+      }
       const covered = queryCoveringIndex
         ? this.#findQueryCoverageShadowHit(
             queryCoveringIndex,
@@ -1886,8 +1899,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 this.#hydrationCircuitBreaker.exceeded(timer.totalElapsed())
               ) {
                 // Breaking out returns the addQuery generator, which tears
-                // down the partially built pipeline.
+                // down the partially built pipeline. The time slice that
+                // exposed the timeout still ends with a yield.
                 timedOut = true;
+                await timer.yieldProcess('yield in hydrateUnchangedQueries');
                 break;
               }
               await timer.yieldProcess('yield in hydrateUnchangedQueries');
@@ -2384,10 +2399,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Queries whose hydration circuit breaker is open are not hydrated.
       // They are removed from the CVR like transform-errored queries, and the
       // affected clients receive an error for them.
+      // Only queries that would otherwise be hydrated are subject to the
+      // breaker; a query whose pipeline is already running with this
+      // transformation needs no hydration and is left alone.
       const circuitBrokenQueries = transformedQueries
         .filter(
-          ({origQuery, transformed}) =>
+          ({id, origQuery, transformed}) =>
             origQuery.type !== 'internal' &&
+            this.#pipelines.queries().get(id)?.transformationHash !==
+              transformed.transformationHash &&
             this.#hydrationCircuitBreaker.isOpen(
               transformed.transformationHash,
             ),
@@ -2520,7 +2540,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): void {
     this.#hydrationCircuitBreaker.trip(query.transformationHash);
     this.#hydrationTimeouts.add(1);
-    this.#queryEvictions.add(1, {reason: 'hydration-timeout'});
     lc.warn?.('Query hydration aborted for exceeding the hydration timeout', {
       clientGroupID: this.id,
       queryHash: query.id,
@@ -2529,6 +2548,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       hydrationTimeoutMs: this.#hydrationCircuitBreaker.timeoutMs,
       hydrationElapsedMs: elapsedMs,
       ...(rowCount !== undefined && {hydrationRowCount: rowCount}),
+      circuitBreakerOpenMs: this.#hydrationCircuitBreaker.openMs,
+    });
+  }
+
+  /** Records that `query` was rejected without hydration by its open breaker. */
+  #recordCircuitBreakerRejection(
+    lc: LogContext,
+    query: {id: string; transformationHash: string; name?: string | undefined},
+  ): void {
+    this.#hydrationCircuitBreakerRejections.add(1);
+    lc.warn?.('Query rejected by its open hydration circuit breaker', {
+      clientGroupID: this.id,
+      queryHash: query.id,
+      transformationHash: query.transformationHash,
+      ...(query.name !== undefined && {queryName: query.name}),
+      hydrationTimeoutMs: this.#hydrationCircuitBreaker.timeoutMs,
       circuitBreakerOpenMs: this.#hydrationCircuitBreaker.openMs,
     });
   }
@@ -2547,20 +2582,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       name?: string | undefined;
     }[],
   ): void {
-    this.#hydrationCircuitBreakerRejections.add(queries.length);
+    for (const query of queries) {
+      this.#recordCircuitBreakerRejection(lc, query);
+    }
     this.#queryEvictions.add(queries.length, {
       reason: 'hydration-circuit-breaker',
     });
-    for (const query of queries) {
-      lc.warn?.('Query rejected by its open hydration circuit breaker', {
-        clientGroupID: this.id,
-        queryHash: query.id,
-        transformationHash: query.transformationHash,
-        ...(query.name !== undefined && {queryName: query.name}),
-        hydrationTimeoutMs: this.#hydrationCircuitBreaker.timeoutMs,
-        circuitBreakerOpenMs: this.#hydrationCircuitBreaker.openMs,
-      });
-    }
     this.#sendHydrationTimeoutErrors(cvr, queries);
   }
 
@@ -2754,6 +2781,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const hydratedQueryIDs: string[] = [];
       const budgetEvictedQueryIDs: string[] = [];
       const timedOutQueries: HydrationQuery[] = [];
+      const rejectedQueries: HydrationQuery[] = [];
       const circuitBreaker = this.#hydrationCircuitBreaker;
       // oxlint-disable-next-line @typescript-eslint/no-this-alias
       const self = this;
@@ -2786,6 +2814,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
           queryLC.debug?.(`adding pipeline for query`, q.ast);
 
+          // Internal queries are never aborted.
+          const breakable = cvr.queries[q.id]?.type !== 'internal';
+          if (breakable && circuitBreaker.isOpen(q.transformationHash)) {
+            // The breaker was opened by a query earlier in this pass that
+            // shares this transformation. The query is aborted without
+            // hydrating, so one transformation burns at most one timeout.
+            rejectedQueries.push(q);
+            self.#recordCircuitBreakerRejection(queryLC, q);
+            continue;
+          }
+
           const covered = queryCoveringIndex
             ? self.#findQueryCoverageShadowHit(
                 queryCoveringIndex,
@@ -2800,8 +2839,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             coveredHydratedQueries++;
             firstCoveredQuery ??= covered;
           }
-          // Internal queries are never aborted.
-          const breakable = cvr.queries[q.id]?.type !== 'internal';
           let timedOut = false;
           for (const change of pipelines.addQuery(
             q.transformationHash,
@@ -2818,8 +2855,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             ) {
               // Breaking out returns the addQuery generator, which tears down
               // the partially built pipeline. The rows already streamed for
-              // the query are unreferenced after #processChanges.
+              // the query are unreferenced after #processChanges. The time
+              // slice that exposed the timeout still ends with a yield.
               timedOut = true;
+              yield change;
               break;
             }
             yield change;
@@ -2873,20 +2912,31 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         pokers,
       );
 
-      if (timedOutQueries.length > 0) {
-        const timedOutQueryIDs = timedOutQueries.map(({id}) => id);
+      const abortedQueries = [...timedOutQueries, ...rejectedQueries];
+      if (abortedQueries.length > 0) {
+        const abortedQueryIDs = abortedQueries.map(({id}) => id);
         for (const patch of await updater.abortExecutedQueries(
           lc,
-          timedOutQueryIDs,
+          abortedQueryIDs,
         )) {
           await pokers.addPatch(patch);
         }
-        for (const queryID of timedOutQueryIDs) {
+        for (const queryID of abortedQueryIDs) {
           this.#pipelines.removeQuery(queryID);
           this.#inspectorDelegate.removeQuery(queryID);
           this.#queryReplacements.delete(queryID);
         }
-        this.#sendHydrationTimeoutErrors(cvr, timedOutQueries);
+        if (timedOutQueries.length > 0) {
+          this.#queryEvictions.add(timedOutQueries.length, {
+            reason: 'hydration-timeout',
+          });
+        }
+        if (rejectedQueries.length > 0) {
+          this.#queryEvictions.add(rejectedQueries.length, {
+            reason: 'hydration-circuit-breaker',
+          });
+        }
+        this.#sendHydrationTimeoutErrors(cvr, abortedQueries);
       }
 
       for (const patch of updater.removeTrackedQueries(budgetEvictedQueryIDs)) {

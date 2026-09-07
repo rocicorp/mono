@@ -6,6 +6,7 @@ import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.t
 import {type PgTest, test} from '../../test/db.ts';
 import type {MonotonicClock} from './hydration-budget.ts';
 import {DEFAULT_CIRCUIT_BREAKER_OPEN_MS} from './hydration-circuit-breaker.ts';
+import {PipelineDriver} from './pipeline-driver.ts';
 import {
   addQuery,
   ALL_ISSUES_QUERY,
@@ -47,6 +48,8 @@ const SYNC_CONTEXT: SyncContext = {
 const FAST = 'fast';
 const SLOW = 'slow';
 const FAST2 = 'fast2';
+/** A second query with the same AST as `SLOW`, so the same transformation. */
+const SLOW2 = 'slow2';
 
 const TIMEOUT_MS = 450;
 const SLOW_ROW_MS = 100;
@@ -109,7 +112,7 @@ async function liveQueries(initial: Harness): Promise<string[]> {
       FROM "this_app_2/cvr".queries
      WHERE "clientGroupID" = ${serviceID}
        AND deleted = false
-       AND "queryHash" IN (${FAST}, ${SLOW}, ${FAST2})
+       AND "queryHash" IN (${FAST}, ${SLOW}, ${SLOW2}, ${FAST2})
      ORDER BY "queryHash"`;
   return rows.map(({queryHash}) => queryHash);
 }
@@ -190,6 +193,16 @@ function hasTransformError(messages: Downstream[]): boolean {
 const slowEvicted = (messages: Downstream[]) =>
   hasGot('del', SLOW)(messages) && hasTransformError(messages);
 
+const bothSlowEvicted = (messages: Downstream[]) =>
+  hasGot('del', SLOW)(messages) &&
+  hasGot('del', SLOW2)(messages) &&
+  transformErrors(messages).length >= 2;
+
+/** The query IDs that `PipelineDriver.addQuery` was called with. */
+function hydratedQueryIDs(spy: {mock: {calls: unknown[][]}}): string[] {
+  return spy.mock.calls.map(call => call[1] as string);
+}
+
 function pokeParts(messages: Downstream[]): PokePartBody[] {
   return messages
     .filter(msg => msg[0] === 'pokePart')
@@ -221,13 +234,17 @@ function issueIDsAfter(messages: Downstream[]): string[] {
   return [...ids].toSorted();
 }
 
-const HYDRATION_TIMEOUT_ERROR = {
-  error: 'app',
-  id: SLOW,
-  name: 'legacy',
-  message: expect.stringContaining(`${TIMEOUT_MS}ms`),
-  details: {kind: 'HydrationTimeout', timeoutMs: TIMEOUT_MS},
-};
+function hydrationTimeoutError(id: string) {
+  return {
+    error: 'app',
+    id,
+    name: 'legacy',
+    message: expect.stringContaining(`${TIMEOUT_MS}ms`),
+    details: {kind: 'HydrationTimeout', timeoutMs: TIMEOUT_MS},
+  };
+}
+
+const HYDRATION_TIMEOUT_ERROR = hydrationTimeoutError(SLOW);
 
 test<PgTest>('aborts a slow hydration, evicts the query, and errors it to the client', async ({
   testDBs,
@@ -377,6 +394,126 @@ test<PgTest>('aborts a slow rehydration of an unchanged query on restart', async
       {id: '3'},
       {id: '4'},
     ]);
+    expect(restarted.vs.pipelineHashes().filter(q => !q.internal)).toHaveLength(
+      2,
+    );
+  } finally {
+    initial.clearMocks();
+    await (restarted ?? initial).vs.stop();
+    await (restarted ?? initial).viewSyncerDone;
+    await testDBs.drop(initial.cvrDB, initial.upstreamDb);
+    initial.replicaDbFile.delete();
+  }
+});
+
+test<PgTest>('a query sharing a tripped transformation is rejected in the same pass', async ({
+  testDBs,
+}) => {
+  const initial = await setup(
+    testDBs,
+    'vs_hydration_timeout_shared_hash',
+    permissionsAll,
+    {queryHydrationTimeoutMs: TIMEOUT_MS},
+  );
+  slowRows({rowMs: SLOW_ROW_MS});
+  const addQuerySpy = vi.spyOn(PipelineDriver.prototype, 'addQuery');
+  try {
+    const client = initial.connect(SYNC_CONTEXT, [
+      ...DESIRED,
+      {op: 'put', hash: SLOW2, ast: ALL_ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desired queries
+    initial.stateChanges.push({state: 'version-ready'});
+    const messages = await collectUntil(client, bothSlowEvicted);
+
+    // Whichever of the two came first tripped the breaker; the other was
+    // never hydrated at all.
+    const slowHydrations = hydratedQueryIDs(addQuerySpy).filter(
+      id => id === SLOW || id === SLOW2,
+    );
+    expect(slowHydrations).toHaveLength(1);
+
+    expect(transformErrors(messages)).toEqual(
+      expect.arrayContaining([
+        hydrationTimeoutError(SLOW),
+        hydrationTimeoutError(SLOW2),
+      ]),
+    );
+    expect(issueIDsAfter(messages)).toEqual(['1', '2', '3', '4']);
+    await vi.waitFor(async () => {
+      expect(await liveQueries(initial)).toEqual([FAST, FAST2]);
+    });
+    expect(await rowsReferencing(initial, SLOW)).toEqual([]);
+    expect(await rowsReferencing(initial, SLOW2)).toEqual([]);
+    expect(initial.vs.pipelineHashes().filter(q => !q.internal)).toHaveLength(
+      2,
+    );
+  } finally {
+    initial.clearMocks();
+    await initial.vs.stop();
+    await initial.viewSyncerDone;
+    await testDBs.drop(initial.cvrDB, initial.upstreamDb);
+    initial.replicaDbFile.delete();
+  }
+});
+
+test<PgTest>('a gotten query sharing a tripped transformation is not rehydrated on restart', async ({
+  testDBs,
+}) => {
+  const initial = await setup(
+    testDBs,
+    'vs_hydration_timeout_shared_hash_restart',
+    permissionsAll,
+    {queryHydrationTimeoutMs: TIMEOUT_MS},
+  );
+  let restarted: ReturnType<typeof restartViewSyncer> | undefined;
+  try {
+    const client = initial.connect(SYNC_CONTEXT, [
+      ...DESIRED,
+      {op: 'put', hash: SLOW2, ast: ALL_ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desired queries
+    initial.stateChanges.push({state: 'version-ready'});
+    await collectUntil(
+      client,
+      m => hasGot('put', SLOW)(m) && hasGot('put', SLOW2)(m),
+    );
+    await vi.waitFor(async () => {
+      expect(await liveQueries(initial)).toEqual([FAST, FAST2, SLOW, SLOW2]);
+    });
+    await initial.vs.stop();
+    await initial.viewSyncerDone;
+
+    slowRows({rowMs: SLOW_ROW_MS});
+    const addQuerySpy = vi.spyOn(PipelineDriver.prototype, 'addQuery');
+    restarted = restartViewSyncer({
+      databaseStorage: initial.databaseStorage,
+      replicaDbFile: initial.replicaDbFile,
+      cvrDB: initial.cvrDB,
+      config: initial.config,
+      customQueryTransformer: initial.customQueryTransformer,
+      setTimeoutFn: initial.setTimeoutFn,
+    });
+    const reconnected = restarted.connect({...SYNC_CONTEXT, wsID: 'ws2'}, []);
+    restarted.stateChanges.push({state: 'version-ready'});
+    const afterRestart = await collectUntil(reconnected, bothSlowEvicted);
+
+    // Only one of the two shared-transformation queries burned a timeout.
+    const slowHydrations = hydratedQueryIDs(addQuerySpy).filter(
+      id => id === SLOW || id === SLOW2,
+    );
+    expect(slowHydrations).toHaveLength(1);
+
+    expect(transformErrors(afterRestart)).toEqual(
+      expect.arrayContaining([
+        hydrationTimeoutError(SLOW),
+        hydrationTimeoutError(SLOW2),
+      ]),
+    );
+    expect(issueIDsAfter(afterRestart)).toEqual(['1', '2', '3', '4']);
+    await vi.waitFor(async () => {
+      expect(await liveQueries(initial)).toEqual([FAST, FAST2]);
+    });
     expect(restarted.vs.pipelineHashes().filter(q => !q.internal)).toHaveLength(
       2,
     );

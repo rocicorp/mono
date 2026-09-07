@@ -56,6 +56,20 @@ test('tripping again restarts the cooldown', () => {
   expect(breaker.isOpen('h1')).toBe(false);
 });
 
+test('tripping sweeps expired entries', () => {
+  let now = 0;
+  const breaker = new HydrationCircuitBreaker(100, 1000, () => now);
+
+  breaker.trip('h1');
+  now = 1000;
+  breaker.trip('h2');
+  // h1 expired and was swept by the trip of h2: winding the clock back would
+  // otherwise make it look open again.
+  now = 0;
+  expect(breaker.isOpen('h1')).toBe(false);
+  expect(breaker.isOpen('h2')).toBe(true);
+});
+
 test('defaults to a five minute cooldown', () => {
   expect(DEFAULT_CIRCUIT_BREAKER_OPEN_MS).toBe(300_000);
   expect(new HydrationCircuitBreaker(100).openMs).toBe(300_000);
