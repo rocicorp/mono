@@ -489,7 +489,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     },
   );
   readonly #queryEvictions = getOrCreateCounter('sync', 'query_evictions', {
-    description: 'Number of inactive queries evicted, grouped by reason.',
+    description:
+      'Number of queries evicted from the CVR ahead of their removal by the ' +
+      'client, grouped by reason. Inactive queries are evicted by ttl and ' +
+      'hydration-budget; hydration-timeout and hydration-circuit-breaker ' +
+      'evict active queries as well.',
     unit: '{query}',
   });
   readonly #hydrationTimeouts = getOrCreateCounter(
