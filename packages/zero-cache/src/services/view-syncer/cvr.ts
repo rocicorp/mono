@@ -807,7 +807,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     for (const queryID of aborted) {
       assert(
         this.#executedQueryIDs.has(queryID),
-        () => `Query ${queryID} was not tracked as executed`,
+        `Query ${queryID} was not tracked as executed`,
       );
       const query = must(this._cvr.queries[queryID]);
       assertNotInternal(query);
