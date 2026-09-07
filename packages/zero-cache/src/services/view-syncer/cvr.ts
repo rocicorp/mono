@@ -779,6 +779,80 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   /**
+   * Aborts queries that were tracked as executed but whose hydration was cut
+   * short (see the view-syncer's hydration circuit breaker).
+   *
+   * Rows received for an aborted query in this update have that query's
+   * references stripped: a row left with no references is deleted, and the
+   * 'del' patch cancels the 'put' the client has already received, while a
+   * row still referenced by other queries keeps its patch version. The query
+   * is then removed from the CVR. It stays tracked as executed, so
+   * {@link deleteUnreferencedRows} also drops the references held by rows that
+   * were synced for it before this update, exactly as for a removed query.
+   *
+   * Like {@link removeTrackedQueries}, this must be called after
+   * {@link trackQueries} has established the final version, and after all
+   * rows of the aborted queries have been {@link received}.
+   */
+  async abortExecutedQueries(
+    lc: LogContext,
+    queryIDs: readonly string[],
+  ): Promise<PatchToVersion[]> {
+    assert(this.#existingRows !== undefined, 'trackQueries() was not called');
+    assert(
+      cmpVersions(this._orig.version, this._cvr.version) < 0,
+      'A final CVR version must be set before aborting executed queries',
+    );
+    const aborted = new Set(queryIDs);
+    for (const queryID of aborted) {
+      assert(
+        this.#executedQueryIDs.has(queryID),
+        () => `Query ${queryID} was not tracked as executed`,
+      );
+      const query = must(this._cvr.queries[queryID]);
+      assertNotInternal(query);
+    }
+
+    // Unref the rows received for the aborted queries. The version of each
+    // unref is the version the row currently has in this update, so a row that
+    // stays referenced does not get a spurious patch version bump.
+    const existingRows = await this._cvrStore.getRowRecords();
+    const unrefs = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
+    for (const [id, refCounts] of this.#receivedRows) {
+      if (refCounts === null) {
+        continue;
+      }
+      let unref: RowUpdate | undefined;
+      for (const queryID of aborted) {
+        const count = refCounts[queryID];
+        if (!count) {
+          continue;
+        }
+        if (!unref) {
+          const version =
+            this.#lastPatches.get(id)?.rowVersion ??
+            existingRows.get(id)?.rowVersion;
+          unref = {refCounts: {}, ...(version && {version})};
+          unrefs.set(id, unref);
+        }
+        unref.refCounts[queryID] = -count;
+      }
+    }
+    const patches =
+      unrefs.size > 0
+        ? await this.received(lc, unrefs)
+        : ([] as PatchToVersion[]);
+
+    for (const queryID of aborted) {
+      delete this._cvr.queries[queryID];
+      const patch = {type: 'query', op: 'del', id: queryID} as const;
+      this._cvrStore.markQueryAsDeleted(this._cvr.version, patch);
+      patches.push({patch, toVersion: this._cvr.version});
+    }
+    return patches;
+  }
+
+  /**
    * Tracks a query removed from the "gotten" set. In addition to producing the
    * appropriate patches for deleting the query, the removed query is taken into
    * account when computing the final row records in

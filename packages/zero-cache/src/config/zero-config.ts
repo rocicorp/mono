@@ -580,6 +580,25 @@ export const zeroOptions = {
     ],
   },
 
+  viewSyncerQueryHydrationTimeoutMs: {
+    type: v
+      .number()
+      .assert(
+        value => Number.isSafeInteger(value) && value >= 0,
+        'must be a nonnegative integer',
+      )
+      .default(0),
+    desc: [
+      `The maximum processing time in milliseconds that a view-syncer spends`,
+      `hydrating a single client query. Time spent yielding to other work is`,
+      `not counted. A query whose hydration exceeds this limit is aborted and`,
+      `removed from the client's view, and affected clients receive an error`,
+      `for the query. The query is then rejected without being run again for`,
+      `a cooldown period, after which a retry is allowed. Internal queries are`,
+      `never aborted. A value of 0 disables the limit.`,
+    ],
+  },
+
   change: {
     db: {
       type: v.string().optional(),
