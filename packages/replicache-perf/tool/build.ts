@@ -46,6 +46,16 @@ async function buildRN(): Promise<void> {
     external: ['node:*', 'expo-sqlite', '@op-engineering/op-sqlite'],
     format: 'esm',
     platform: 'neutral',
+    // 'neutral' resolves no main fields at all, so any dependency that ships
+    // only a legacy entry (rather than an `exports` map esbuild can follow)
+    // fails to resolve outright.
+    //
+    // Metro resolves `react-native`, `browser`, `main`. We keep that order so a
+    // dependency picks the same entry here as it would if Metro had bundled it,
+    // and add `module` ahead of `main` only: where Metro would fall back to a
+    // CommonJS `main`, esbuild prefers the ESM build so it can tree-shake. A
+    // package that ships `browser` still gets it, as under Metro.
+    mainFields: ['react-native', 'browser', 'module', 'main'],
     splitting: false,
     define,
     outfile: path.join(dirname, '..', 'out', 'rn.js'),
