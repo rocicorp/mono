@@ -568,64 +568,87 @@ describe('ConnectionManager', () => {
   });
 
   describe('frozen event loop', () => {
-    // Simulates the event loop not running: wall-clock jumps forward but no
-    // timer callbacks fire, which is what a suspended React Native app, a
-    // sleeping laptop or a throttled background tab looks like from JS.
-    const freeze = (ms: number) => {
-      vi.setSystemTime(Date.now() + ms);
+    const CHECK_INTERVAL_MS = 100;
+    const FREEZE_MS = 60_000;
+
+    const newManager = () =>
+      new ConnectionManager({
+        disconnectTimeout: 1_000,
+        timeoutCheckIntervalMs: CHECK_INTERVAL_MS,
+      });
+
+    // Simulates the event loop not running for `ms`: wall-clock jumps forward
+    // with no reconnect attempt able to run, which is what a suspended React
+    // Native app, a sleeping laptop or a throttled background tab looks like
+    // from JS.
+    //
+    // Advancing timers is what fires the overdue interval callback, and that
+    // necessarily moves the fake clock by one period. So hold a period back out
+    // of the jump, leaving the callback to observe exactly `ms` of elapsed
+    // wall-clock --- an overdue `setInterval` fires as soon as the loop resumes
+    // rather than waiting out another period.
+    const freezeAndResume = (ms: number) => {
+      vi.setSystemTime(Date.now() + ms - CHECK_INTERVAL_MS);
+      vi.advanceTimersByTime(CHECK_INTERVAL_MS);
     };
 
     test('does not count frozen time against the disconnect deadline', () => {
-      const manager = new ConnectionManager({
-        disconnectTimeout: 1_000,
-        timeoutCheckIntervalMs: 100,
-      });
+      const manager = newManager();
       const listener = subscribe(manager);
 
       // Frozen far longer than the whole disconnect window.
-      freeze(60_000);
-      vi.advanceTimersByTime(100);
+      freezeAndResume(FREEZE_MS);
 
       // The client never got a live chance to retry, so it must not be
       // declared offline.
       expect(manager.is(ConnectionStatus.Connecting)).toBe(true);
       expect(listener).not.toHaveBeenCalled();
 
-      // ...and it still gets the rest of its budget in live time afterwards.
-      vi.advanceTimersByTime(800);
+      // ...and it still gets its whole budget in live time afterwards.
+      vi.advanceTimersByTime(900);
       expect(manager.is(ConnectionStatus.Connecting)).toBe(true);
 
-      vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(100);
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
     });
 
-    test('pushes disconnectAt forward by the frozen duration', () => {
+    test('pushes disconnectAt forward by the whole frozen duration', () => {
       vi.setSystemTime(0);
-      const manager = new ConnectionManager({
-        disconnectTimeout: 1_000,
-        timeoutCheckIntervalMs: 100,
-      });
+      const manager = newManager();
       assert(
         manager.state.name === ConnectionStatus.Connecting,
         'Expected to start out connecting',
       );
       expect(manager.state.disconnectAt).toBe(1_000);
 
-      freeze(60_000);
-      vi.advanceTimersByTime(100);
+      freezeAndResume(FREEZE_MS);
 
       assert(
         manager.state.name === ConnectionStatus.Connecting,
         'Expected to still be connecting after the freeze',
       );
-      expect(manager.state.disconnectAt).toBe(1_000 + 60_000);
+      expect(manager.state.disconnectAt).toBe(1_000 + FREEZE_MS);
+    });
+
+    test('preserves the remaining budget when frozen right after a tick', () => {
+      const manager = newManager();
+
+      // Burn all but the last period of live budget, so that the freeze starts
+      // immediately after a tick. Netting a period off the credited gap would
+      // put the deadline exactly on `now` here and disconnect on resume ---
+      // the very thing this is meant to prevent.
+      vi.advanceTimersByTime(900);
+      expect(manager.is(ConnectionStatus.Connecting)).toBe(true);
+
+      freezeAndResume(FREEZE_MS);
+      expect(manager.is(ConnectionStatus.Connecting)).toBe(true);
+
+      vi.advanceTimersByTime(100);
+      expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
     });
 
     test('ordinary ticks are not treated as a freeze', () => {
-      const manager = new ConnectionManager({
-        disconnectTimeout: 1_000,
-        timeoutCheckIntervalMs: 100,
-      });
+      const manager = newManager();
 
       // No jump: the deadline must still fire on schedule.
       vi.advanceTimersByTime(1_100);

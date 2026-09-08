@@ -474,6 +474,14 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    * alone, but the costs are asymmetric --- crediting a busy period back just
    * grants a bit more time to connect, whereas failing to credit a real freeze
    * produces a user-visible bogus disconnect --- so we credit.
+   *
+   * The whole gap is credited, not `elapsed` minus a period. An overdue
+   * `setInterval` callback runs as soon as the loop resumes rather than waiting
+   * out another period, so `elapsed` is already about the frozen duration;
+   * netting off a period would charge up to a full period of frozen time
+   * against the deadline. Freezing just after a tick would then leave the
+   * deadline exactly at `now` on resume and disconnect immediately, which is
+   * the very thing this is here to prevent.
    */
   #creditFrozenTime(): void {
     const now = Date.now();
@@ -484,7 +492,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
     if (elapsed <= 2 * this.#timeoutCheckIntervalMs) {
       return;
     }
-    const frozenMs = elapsed - this.#timeoutCheckIntervalMs;
+    const frozenMs = elapsed;
 
     // Advance the window's origin so that a later `connecting()` that starts a
     // fresh session recomputes a deadline that also excludes the frozen time.
