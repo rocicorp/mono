@@ -109,11 +109,16 @@ export function bench(
       const produced = fn();
 
       if (!isGenerator(produced)) {
-        // Plain function form. `fn()` has already run once, so account for it
-        // and run the rest, keeping every benchmark on the same scale.
-        bencher.reset();
+        // Plain function form. The call above was only a probe to tell the two
+        // forms apart, and a synchronous body has already run to completion by
+        // the time we get here -- so let it settle outside the timed region and
+        // then measure a full `iterations` runs. Counting the probe as the
+        // first iteration instead would leave a synchronous benchmark
+        // reporting `iterations - 1` executions while the generator form
+        // reports `iterations`.
         await produced;
-        for (let i = 1; i < iterations; i++) {
+        bencher.reset();
+        for (let i = 0; i < iterations; i++) {
           await (fn as () => unknown)();
         }
         bencher.stop();

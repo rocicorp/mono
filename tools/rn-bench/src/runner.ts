@@ -60,7 +60,7 @@ export type RnBenchConfig = {
    * it with PERF_RN_NO_MINIFY=1, without which every Hermes frame is a mangled
    * one-or-two-letter name.
    */
-  buildScript?: string;
+  buildScript?: string | undefined;
   /** The global the host app publishes its harness on, e.g. `__zqlPerf`. */
   globalName: string;
   /**
@@ -75,21 +75,27 @@ export type RnBenchConfig = {
    * An optional second axis to run every benchmark across — Replicache uses it
    * for its key/value backends. Omitted for a single-variant suite.
    */
-  variants?: {
-    /** CLI flag name, e.g. `backend`. */
-    flag: string;
-    values: readonly string[];
-    describe: string;
-  };
+  variants?:
+    | {
+        /** CLI flag name, e.g. `backend`. */
+        flag: string;
+        values: readonly string[];
+        describe: string;
+      }
+    | undefined;
   /** Extra fields merged into each `/next` payload. */
-  nextExtras?: (controlPort: number) => Record<string, unknown>;
+  nextExtras?: ((controlPort: number) => Record<string, unknown>) | undefined;
   /** Extra routes on the control server, e.g. a large fixture to stream. */
-  extraRoutes?: Record<
-    string,
-    (req: http.IncomingMessage, res: http.ServerResponse) => void
-  >;
+  extraRoutes?:
+    | Record<
+        string,
+        (req: http.IncomingMessage, res: http.ServerResponse) => void
+      >
+    | undefined;
   /** Expression evaluated in the app to configure it before a profiled run. */
-  configureExpr?: (variant: string | undefined, controlPort: number) => string;
+  configureExpr?:
+    | ((variant: string | undefined, controlPort: number) => string)
+    | undefined;
 };
 
 /** Metro's default 8081 is often taken (Docker), so default one above it. */
@@ -542,19 +548,19 @@ type Options = {
   'platform': Platform | 'all';
   /** Present only when the config declares a variant axis. */
   [variantFlag: string]: unknown;
-  'device'?: string;
-  'run'?: RegExp;
+  'device'?: string | undefined;
+  'run'?: RegExp | undefined;
   'format': Format;
-  'list'?: boolean;
+  'list'?: boolean | undefined;
   'app': string;
   'port': number;
   'metro-port': number;
   'idle-timeout': number;
   'repeat': number;
-  'release'?: boolean;
-  'profile'?: string;
+  'release'?: boolean | undefined;
+  'profile'?: string | undefined;
   'verbose': boolean;
-  'help'?: boolean;
+  'help'?: boolean | undefined;
 };
 
 function logLine(s: string, options: Options) {

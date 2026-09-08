@@ -28,6 +28,7 @@ export async function runBenchmark(
   const minTime = 500;
   const maxTotalTime = 5000;
   const times: number[] = [];
+  /** Total measured time so far; the loop below runs until it hits minTime. */
   let sum = 0;
 
   if (benchmark.skip && (await benchmark.skip())) {
@@ -94,13 +95,17 @@ export async function runBenchmark(
     times[Math.floor((runCount * percentile) / 100)];
   const runCount = times.length;
   const medianMs = calcPercentile(50);
+  // Sum the samples that survived the discard above. `sum` accumulated every
+  // run, so dividing it by the post-discard `runCount` reported a mean that
+  // was not the mean of anything -- it came out above p95 on every benchmark.
+  const retainedSum = times.reduce((a, b) => a + b, 0);
   return {
     name: benchmark.name,
     group: benchmark.group,
     byteSize: benchmark.byteSize,
     sortedRunTimesMs: times,
     runTimesStatistics: {
-      meanMs: sum / runCount,
+      meanMs: retainedSum / runCount,
       medianMs,
       p75Ms: calcPercentile(75),
       p90Ms: calcPercentile(90),
