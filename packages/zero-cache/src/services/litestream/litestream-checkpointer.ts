@@ -8,7 +8,18 @@ import type {
   SyncResponse,
 } from './litestream-controller.ts';
 
-const LITESTREAM_SYNC_TIMEOUT_MS = 10_000;
+// How long the soft path blocks the write path waiting for an in-flight sync
+// before letting the writer proceed. This is a backpressure knob, *not* a
+// request timeout: letting it elapse leaves the sync running (see #pendingSync)
+// rather than abandoning it. In normal operation litestream seals + runs its
+// PASSIVE checkpoint well within this budget; a sync that regularly exceeds it
+// indicates a litestream-side problem to fix (e.g. unintended snapshot), not a
+// value to raise.
+export const SOFT_CHECKPOINT_WAIT_MS = 10_000;
+// Liveness bound on the /sync request itself, well above the soft wait budget.
+// It exists only to recover from a genuinely wedged litestream (so #pendingSync
+// can't hang forever).
+const LITESTREAM_SYNC_TIMEOUT_MS = 5 * 60_000;
 const PAUSE_POLL_INTERVAL_MS = 1_000;
 const PAUSE_LOG_INTERVAL_POLLS = 30;
 
@@ -21,11 +32,17 @@ const PAUSE_LOG_INTERVAL_POLLS = 30;
  *  - Soft (`checkpointThresholdPages`): after each committed transaction,
  *    once the un-checkpointed WAL backlog reaches the threshold, force an
  *    immediate litestream sync (which seals the WAL to LTX and attempts
- *    litestream's own PASSIVE checkpoint). Non-blocking beyond the sync call
- *    itself. Backs off by a full threshold's worth of WAL growth whenever an
- *    attempt fails to drain the WAL (e.g. litestream is mid-snapshot and its
- *    checkpoints are being skipped), so repeated failures don't reattempt on
- *    every commit.
+ *    litestream's own PASSIVE checkpoint) and block the write path until it
+ *    completes, but only up to {@link SOFT_CHECKPOINT_WAIT_MS}. Waiting is the
+ *    backpressure: it throttles upstream reads to litestream's WAL-seal rate
+ *    and, in the common case, gives litestream a window to checkpoint without
+ *    writer interference. A single sync is kept in flight at a time
+ *    (`#pendingSync`): if one is still running when the budget elapses, the
+ *    writer proceeds and the next commit waits for that sync rather than
+ *    issuing (and orphaning) another. Backs off by a full threshold's worth of
+ *    WAL growth whenever an attempt fails to drain the WAL (e.g. litestream
+ *    is mid-snapshot and its checkpoints are being skipped), so repeated
+ *    failures don't reattempt on every commit.
  *  - Hard (`walMaxPages`, optional): if the WAL still exceeds this cap after
  *    a soft attempt, pause (block the caller) polling litestream until the
  *    WAL drains below it. This is the fail-safe against unbounded WAL growth
@@ -41,6 +58,7 @@ export class LitestreamCheckpointer {
   readonly #maxWalPages: number | undefined;
   readonly #state = new RunningState('litestream-checkpointer');
   #nextWalThreshold: number;
+  #pendingSync: Promise<void> | undefined;
 
   constructor(
     lc: LogContext,
@@ -79,60 +97,92 @@ export class LitestreamCheckpointer {
    * that litestream's (disabled) truncate-page-n would have served.
    */
   async maybeCheckpoint(): Promise<void> {
-    const walPages = this.#getNumWalPages();
+    let walPages = this.#getNumWalPages();
     if (walPages < this.#nextWalThreshold) {
       return;
     }
 
-    const start = performance.now();
-    let result: SyncResponse | undefined;
-    let err: unknown;
-    try {
-      result = await this.#litestream.sync(
-        {
-          wait: false,
-          timeoutMs: LITESTREAM_SYNC_TIMEOUT_MS,
-        },
-        this.#state.signal,
-      );
-    } catch (e) {
-      err = e;
-    }
+    // Single-flight: reuse the outstanding sync if one is already running.
+    this.#pendingSync ??= this.#sync(walPages);
 
-    const elapsed = performance.now() - start;
-    let newWalPages = this.#getNumWalPages();
-    if (newWalPages < this.#nextWalThreshold) {
-      this.#lc.info?.(
-        `checkpointed ${walPages} -> ${newWalPages} wal pages (${elapsed.toFixed(2)} ms)`,
-        result,
-      );
-    } else if (result) {
-      this.#lc.warn?.(
-        `checkpoint skipped ${walPages} -> ${newWalPages}. a snapshot may be in progress (${elapsed.toFixed(2)} ms)`,
-        result,
-      );
-    } else {
-      this.#lc.warn?.(
-        `checkpoint failed ${walPages} -> ${newWalPages} (${elapsed.toFixed(2)} ms)`,
-        err,
-      );
-    }
+    // Soft backpressure: block the write path until the sync completes, but no
+    // longer than the wait budget. Letting the budget elapse lets the writer
+    // proceed *without* cancelling the sync (it keeps running, tracked by
+    // #pendingSync); unbounded WAL growth is caught by the hard cap below.
+    await this.#waitFor(this.#pendingSync, SOFT_CHECKPOINT_WAIT_MS);
 
-    if (this.#maxWalPages !== undefined && newWalPages > this.#maxWalPages) {
+    walPages = this.#getNumWalPages();
+    if (this.#maxWalPages !== undefined && walPages > this.#maxWalPages) {
       // Emergency brake when best-effort checkpoints are being skipped
       // (i.e. during a snapshot) and the WAL is approaching disk capacity.
       // Pausing replication is favorable to litestream's truncate-page-n
       // because the latter involves re-encoding the database under the lock
       // (https://github.com/benbjohnson/litestream/issues/1332), which would
       // incur the full latency of an additional snapshot.
-      newWalPages = await this.#pauseUntilWalDrained(this.#maxWalPages);
+      walPages = await this.#pauseUntilWalDrained(this.#maxWalPages);
     }
 
     // In the common case where checkpoints are successful, this is always
     // just `attemptChunk`. When a checkpoint doesn't drain the WAL (e.g.
     // litestream is performing a snapshot), wait for another chunk of growth
     // before the next attempt.
-    this.#nextWalThreshold = newWalPages + this.#attemptChunk;
+    this.#nextWalThreshold = walPages + this.#attemptChunk;
+  }
+
+  async #waitFor(p: Promise<void>, timeoutMs: number): Promise<void> {
+    const result = await Promise.race([
+      p,
+      this.#state.sleep(timeoutMs).then(() => 'timed-out' as const),
+    ]);
+    if (result === 'timed-out') {
+      this.#lc.warn?.(`timed out waiting for /sync result (${timeoutMs}ms)`);
+    }
+  }
+
+  /**
+   * Runs a single litestream sync, logs its outcome, and clears
+   * {@link #pendingSync} when it settles. Never rejects: sync failures and
+   * post-sync bookkeeping errors (e.g. the db being closed during shutdown)
+   * are caught and logged, so the shared promise can be awaited from multiple
+   * places without risking an unhandled rejection.
+   */
+  async #sync(walPagesBefore: number): Promise<void> {
+    const start = performance.now();
+    let result: SyncResponse | undefined;
+    let err: unknown;
+    try {
+      try {
+        result = await this.#litestream.sync(
+          {wait: false, timeoutMs: LITESTREAM_SYNC_TIMEOUT_MS},
+          this.#state.signal,
+        );
+      } catch (e) {
+        err = e;
+      }
+
+      const elapsed = performance.now() - start;
+      const newWalPages = this.#getNumWalPages();
+      if (newWalPages < this.#nextWalThreshold) {
+        this.#lc.info?.(
+          `checkpointed ${walPagesBefore} -> ${newWalPages} wal pages (${elapsed.toFixed(2)} ms)`,
+          result,
+        );
+      } else if (result) {
+        this.#lc.warn?.(
+          `checkpoint skipped ${walPagesBefore} -> ${newWalPages}. a snapshot may be in progress (${elapsed.toFixed(2)} ms)`,
+          result,
+        );
+      } else {
+        this.#lc.warn?.(
+          `checkpoint failed ${walPagesBefore} -> ${newWalPages} (${elapsed.toFixed(2)} ms)`,
+          err,
+        );
+      }
+    } catch (e) {
+      this.#lc.warn?.('litestream-checkpointer sync post-processing failed', e);
+    } finally {
+      this.#pendingSync = undefined;
+    }
   }
 
   async #pauseUntilWalDrained(maxWalPages: number): Promise<number> {
@@ -152,12 +202,10 @@ export class LitestreamCheckpointer {
         );
       }
       await this.#state.sleep(PAUSE_POLL_INTERVAL_MS);
-      await this.#litestream
-        .sync(
-          {wait: false, timeoutMs: LITESTREAM_SYNC_TIMEOUT_MS},
-          this.#state.signal,
-        )
-        .catch(e => this.#lc.warn?.(`litestream /sync failed`, e));
+      // Single-flight: reuse the outstanding sync if one is already running.
+      this.#pendingSync ??= this.#sync(this.#getNumWalPages());
+      // await the full liveness timeout configured in #sync()
+      await this.#pendingSync;
     }
     throw new AbortError('litestream-controller stopped');
   }
