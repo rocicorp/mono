@@ -94,6 +94,107 @@ export type Connection = {
  * This data is kept in sorted order as downstream pipelines will always expect
  * the data they receive from `pull` to be in sorted order.
  */
+const DONE: IteratorReturnResult<undefined> = {done: true, value: undefined};
+
+/**
+ * A stream whose work starts on the first `next()`, like a generator body.
+ *
+ * Chained generators are the most expensive way to move a row on Hermes: a
+ * four-deep pipeline measured ~2x a hand-written iterator chain and ~30x a
+ * plain loop. This is the shim that lets `#fetch` stop being a generator
+ * without moving its setup earlier -- setup still runs on first `next()`, the
+ * stream is still single-use, and `[Symbol.iterator]()` still returns itself.
+ */
+class LazyStream<T> implements IterableIterator<T> {
+  #start: (() => Iterator<T>) | undefined;
+  #inner: Iterator<T> | undefined;
+
+  constructor(start: () => Iterator<T>) {
+    this.#start = start;
+  }
+
+  next(): IteratorResult<T> {
+    let inner = this.#inner;
+    if (inner === undefined) {
+      const start = this.#start;
+      if (start === undefined) {
+        return DONE;
+      }
+      this.#start = undefined;
+      inner = this.#inner = start();
+    }
+    return inner.next();
+  }
+
+  /**
+   * Propagates early termination, as `yield*` does. Sources hold real
+   * resources -- SQLite cursors -- and leaking one leaves later writes on the
+   * same connection failing with "database connection is busy".
+   */
+  return(value?: unknown): IteratorResult<T> {
+    this.#start = undefined;
+    const inner = this.#inner;
+    this.#inner = undefined;
+    return inner?.return?.(value) ?? DONE;
+  }
+
+  [Symbol.iterator](): IterableIterator<T> {
+    return this;
+  }
+}
+
+/**
+ * Rows from an index scan, wrapped as Nodes, stopping at the first row that
+ * fails `constraint`.
+ *
+ * Rows are sorted by the constraint key first, so matches are contiguous and
+ * the first miss ends the scan. This is `#fetch`'s hot path -- no overlay, no
+ * `start`, no filters -- which is what a plain scan and every join
+ * child-lookup take.
+ */
+class ConstrainedRowIterator implements Iterator<Node> {
+  readonly #rows: Iterator<Row>;
+  readonly #constraint: Constraint | undefined;
+  #done = false;
+
+  constructor(rows: Iterator<Row>, constraint: Constraint | undefined) {
+    this.#rows = rows;
+    this.#constraint = constraint;
+  }
+
+  next(): IteratorResult<Node> {
+    if (this.#done) {
+      return DONE;
+    }
+    const result = this.#rows.next();
+    if (result.done) {
+      this.#done = true;
+      return DONE;
+    }
+    const row = result.value;
+    const constraint = this.#constraint;
+    if (constraint !== undefined && !constraintMatchesRow(constraint, row)) {
+      // `break` out of the old `for...of` closed the underlying scan; do the
+      // same explicitly.
+      this.#done = true;
+      this.#rows.return?.();
+      return DONE;
+    }
+    return {done: false, value: {row, relationships: {}}};
+  }
+
+  return(value?: unknown): IteratorResult<Node> {
+    this.#done = true;
+    // Close the scan for its side effect; its result is a Row, not a Node.
+    this.#rows.return?.(value);
+    return DONE;
+  }
+
+  [Symbol.iterator](): Iterator<Node> {
+    return this;
+  }
+}
+
 export class MemorySource implements Source {
   readonly #tableName: string;
   readonly #columns: Record<string, SchemaValue>;
@@ -258,7 +359,16 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+  #fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+    // A generator body does not run until the first `next()`, and this one
+    // reads `#overlay` and `conn.lastPushedEpoch` -- a caller may legitimately
+    // call `fetch()` and only iterate after a push. `LazyStream` keeps that
+    // exact timing while letting the branches below return hand-written
+    // iterators instead of generators.
+    return new LazyStream(() => this.#startFetch(req, conn));
+  }
+
+  #startFetch(req: FetchRequest, conn: Connection): Iterator<Node | 'yield'> {
     // multiConstraints is handled by driving sub-fetches off the first
     // entry's values and post-filtering matches against any remaining
     // entries. TableSource implements multi-IN natively via SQL `AND` of
@@ -269,8 +379,7 @@ export class MemorySource implements Source {
       req.multiConstraints &&
       req.multiConstraints.some(mc => mc.length > 0)
     ) {
-      yield* this.#fetchMulti(req, conn);
-      return;
+      return this.#fetchMulti(req, conn)[Symbol.iterator]();
     }
     const requestedSort = must(conn.sort);
     const {compareRows} = conn;
@@ -369,14 +478,7 @@ export class MemorySource implements Source {
     const overlayActive =
       this.#overlay && conn.lastPushedEpoch >= this.#overlay.epoch;
     if (!overlayActive && !req.start && !conn.filters && !req.filter) {
-      const {constraint} = req;
-      for (const row of rowsIterable) {
-        if (constraint && !constraintMatchesRow(constraint, row)) {
-          break;
-        }
-        yield {row, relationships: {}};
-      }
-      return;
+      return new ConstrainedRowIterator(rowsIterable, req.constraint);
     }
 
     const withOverlay = generateWithOverlay(
@@ -419,9 +521,11 @@ export class MemorySource implements Source {
       req.constraint,
     );
 
-    yield* mergedFilterPredicate
-      ? generateWithFilter(withConstraint, mergedFilterPredicate)
-      : withConstraint;
+    return (
+      mergedFilterPredicate
+        ? generateWithFilter(withConstraint, mergedFilterPredicate)
+        : withConstraint
+    )[Symbol.iterator]();
   }
 
   *#fetchMulti(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
@@ -1086,14 +1190,23 @@ function compareBounds(a: Bound, b: Bound): number {
   return compareValues(a, b);
 }
 
-function* generateRows(
+/**
+ * Rows from `scanStart` onwards.
+ *
+ * Returns the BTree's own iterator rather than delegating to it from a
+ * generator. `yield*` over an iterable that is already an `IterableIterator`
+ * buys nothing and costs a generator resume per row, which on Hermes is the
+ * most expensive way to move a value. Single-use semantics are unchanged: an
+ * `IterableIterator` returns itself from `[Symbol.iterator]()`, exactly as a
+ * generator does.
+ */
+function generateRows(
   data: BTreeSet<Row>,
   scanStart: RowBound | undefined,
   reverse: boolean | undefined,
-) {
-  yield* data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
-    scanStart as Row | undefined,
-  );
+): IterableIterator<Row> {
+  const from = scanStart as Row | undefined;
+  return reverse ? data.valuesFromReversed(from) : data.valuesFrom(from);
 }
 
 export function stringify(change: SourceChange) {
