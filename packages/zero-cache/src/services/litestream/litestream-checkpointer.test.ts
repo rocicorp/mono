@@ -1,10 +1,14 @@
+import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {ForceCheckpointConfig} from '../replicator/write-worker-client.ts';
-import {LitestreamCheckpointer} from './litestream-checkpointer.ts';
+import {
+  LitestreamCheckpointer,
+  SOFT_CHECKPOINT_WAIT_MS,
+} from './litestream-checkpointer.ts';
 import type {
   LitestreamController,
   SyncResponse,
@@ -160,6 +164,47 @@ describe('litestream/litestream-checkpointer', () => {
     insertRows(1, 14);
     await checkpointer.maybeCheckpoint();
     expect(litestream.sync).toHaveBeenCalledTimes(2);
+  });
+
+  test('releases the writer after the soft wait budget without abandoning or re-issuing a slow sync', async () => {
+    vi.useFakeTimers();
+
+    // A sync that only completes (and drains) once the test opens the gate,
+    // simulating litestream being slow to seal the WAL.
+    const gate = resolver<void>();
+    const litestream = fakeController(async () => {
+      await gate.promise;
+      drainWal();
+      return SYNC_RESPONSE;
+    });
+    const checkpointer = new LitestreamCheckpointer(
+      lc,
+      db,
+      litestream,
+      config(),
+    );
+
+    insertRows(10); // over the threshold (5)
+    const first = checkpointer.maybeCheckpoint();
+    // The budget elapses before the sync completes, so the writer is released
+    // while the sync keeps running (not cancelled, not drained).
+    await vi.advanceTimersByTimeAsync(SOFT_CHECKPOINT_WAIT_MS);
+    await first;
+    expect(litestream.sync).toHaveBeenCalledTimes(1);
+    expect(numWalPages(db)).toBe(10);
+
+    // A second attempt while that sync is still in flight reuses it rather than
+    // stacking another /sync (which would just pile up in litestream).
+    insertRows(6, 10); // crosses the backed-off threshold (10 + 5 = 15)
+    const second = checkpointer.maybeCheckpoint();
+    await vi.advanceTimersByTimeAsync(SOFT_CHECKPOINT_WAIT_MS);
+    await second;
+    expect(litestream.sync).toHaveBeenCalledTimes(1);
+
+    // When the single in-flight sync finally completes, it drains the WAL.
+    gate.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(numWalPages(db)).toBe(0);
   });
 
   test('backs off the same way when sync() rejects', async () => {
