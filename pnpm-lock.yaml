@@ -683,6 +683,9 @@ importers:
       replicache:
         specifier: workspace:*
         version: link:../replicache
+      rn-bench:
+        specifier: workspace:*
+        version: link:../../tools/rn-bench
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1635,6 +1638,9 @@ importers:
       '@types/tmp':
         specifier: ^0.2.6
         version: 0.2.6
+      esbuild:
+        specifier: 0.27.7
+        version: 0.27.7
       js-xxhash:
         specifier: ^4.0.0
         version: 4.0.0
@@ -1647,6 +1653,9 @@ importers:
       oxfmt:
         specifier: ^0.65.0
         version: 0.65.0
+      rn-bench:
+        specifier: workspace:*
+        version: link:../../tools/rn-bench
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1923,6 +1932,37 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
+
+  tools/rn-bench:
+    dependencies:
+      '@types/command-line-args':
+        specifier: ^5.2.3
+        version: 5.2.3
+      '@types/command-line-usage':
+        specifier: ^5.0.4
+        version: 5.0.4
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      '@types/ws':
+        specifier: ^8.5.12
+        version: 8.18.1
+      command-line-args:
+        specifier: ^6.0.1
+        version: 6.0.2
+      command-line-usage:
+        specifier: ^7.0.3
+        version: 7.0.4
+      typescript:
+        specifier: ~7.0.2
+        version: 7.0.2
+      ws:
+        specifier: ^8.18.1
+        version: 8.20.1
+    devDependencies:
+      oxfmt:
+        specifier: ^0.65.0
+        version: 0.65.0
 
   tools/sqlite-io-yield-simulator:
     dependencies:

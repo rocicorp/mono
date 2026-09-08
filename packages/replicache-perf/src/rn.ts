@@ -1,3 +1,4 @@
+import {makeHarness} from '../../../tools/rn-bench/src/harness.ts';
 /**
  * React Native entry point for the perf harness.
  *
@@ -13,11 +14,13 @@ import type {StoreProvider} from '../../replicache/src/kv/store.ts';
 import {benchmarks as mapLoopBenchmarks} from './benchmarks/map-loop.ts';
 import {benchmarks as replicacheBenchmarks} from './benchmarks/replicache.ts';
 import {setTmcwUrl} from './data.ts';
-import {makeHarness} from './harness.ts';
 
-export type {BenchmarkResult} from './benchmark.ts';
+export type {BenchmarkResult} from '../../../tools/rn-bench/src/benchmark.ts';
 export {setTmcwUrl};
-export {formatAsBenchmarkJS, formatAsReplicache} from './format.ts';
+export {
+  formatAsBenchmarkJS,
+  formatAsReplicache,
+} from '../../../tools/rn-bench/src/format.ts';
 
 // `replicache` plus the pure-JS `map-loop` group, which is useful for
 // separating JS-engine cost from storage cost on a device. The rest are out:

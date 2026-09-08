@@ -1,4 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
+import type {
+  Bencher,
+  Benchmark,
+} from '../../../../tools/rn-bench/src/benchmark.ts';
 import {
   closeAndCleanupRep,
   createIndexDefinitions,
@@ -24,7 +28,6 @@ import type {
 } from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../shared/src/json.ts';
-import type {Bencher, Benchmark} from '../benchmark.ts';
 import {
   getTmcwData,
   jsonArrayTestData,

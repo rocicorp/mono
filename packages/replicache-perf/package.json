@@ -28,6 +28,7 @@
     "playwright": "^1.60.0",
     "playwright-core": "1.53.2",
     "replicache": "workspace:*",
+    "rn-bench": "workspace:*",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
     "vite": "^8.0.13",
