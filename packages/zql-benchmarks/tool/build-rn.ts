@@ -64,6 +64,12 @@ async function buildRN(): Promise<void> {
     external: ['node:*'],
     format: 'esm',
     platform: 'neutral',
+    // 'neutral' resolves no main fields at all, so any dependency that ships
+    // only a legacy entry (rather than an `exports` map esbuild can follow)
+    // fails to resolve outright. Same order replicache-perf uses: what Metro
+    // would pick, with `module` ahead of `main` so an ESM build wins where
+    // Metro would have fallen back to CommonJS.
+    mainFields: ['react-native', 'browser', 'module', 'main'],
     splitting: false,
     plugins: [benchShimPlugin],
     define: {
