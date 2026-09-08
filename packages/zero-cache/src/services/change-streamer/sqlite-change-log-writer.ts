@@ -1,5 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {h32} from '../../../../shared/src/hash.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {
@@ -35,6 +37,7 @@ import {
   type ChangeLogCommit,
   type SQLiteChangeLogObservabilityState,
 } from '../replicator/sqlite-change-log-observability.ts';
+import {extractChangeSubstring} from './change-log-codec.ts';
 
 export type SQLiteChangeLogWriterOptions = {
   /** The replica file the log is named after, i.e. `${replicaFile}-change-log`. */
@@ -58,7 +61,14 @@ export type SQLiteChangeLogWriterOptions = {
   onRebuilt?: (() => void) | undefined;
   /** Overridable for tests. */
   now?: (() => number) | undefined;
+  /**
+   * Percentage of transactions that retain the rollout-only per-message
+   * timing and source-vs-stored hash validation. Defaults to 1.
+   */
+  shadowValidationPercent?: number | undefined;
 };
+
+const DEFAULT_SHADOW_VALIDATION_PERCENT = 1;
 
 /**
  * Appends the canonical change stream to the SQLite change log, from the
@@ -94,16 +104,26 @@ export class SQLiteChangeLogWriter {
   readonly #lc: LogContext;
   readonly #opts: SQLiteChangeLogWriterOptions;
   readonly #now: () => number;
+  readonly #shadowValidationPercent: number;
 
   #db: Database | undefined;
   #writer: ChangeLogStreamWriter | undefined;
   #observer: SQLiteChangeLogObserver | undefined;
   #disabled = false;
+  #validateTransaction = false;
 
   constructor(lc: LogContext, opts: SQLiteChangeLogWriterOptions) {
     this.#lc = lc.withContext('component', 'sqlite-change-log-writer');
     this.#opts = opts;
     this.#now = opts.now ?? Date.now;
+    this.#shadowValidationPercent =
+      opts.shadowValidationPercent ?? DEFAULT_SHADOW_VALIDATION_PERCENT;
+    assert(
+      Number.isInteger(this.#shadowValidationPercent) &&
+        this.#shadowValidationPercent >= 0 &&
+        this.#shadowValidationPercent <= 100,
+      'SQLite change-log shadow validation percentage must be an integer between 0 and 100',
+    );
   }
 
   /** False once the writer has failed soft, or after {@link close}. */
@@ -269,26 +289,46 @@ export class SQLiteChangeLogWriter {
    * Writes one stream message, committing at transaction boundaries. Never
    * throws: a write failure disables the writer instead of failing the stream.
    */
-  write(change: ChangeStreamData, json: string): void {
+  write(
+    change: ChangeStreamData,
+    json: string,
+    storedChange = extractChangeSubstring(json, change[1].tag),
+  ): void {
     const writer = this.#writer;
     const db = this.#db;
     if (this.#disabled || writer === undefined || db === undefined) {
       return;
     }
-    const observer = this.#observer;
-    observer?.messageReceived(change, json);
     const [type, msg] = change;
-    const startedAt = performance.now();
+    if (type === 'begin') {
+      this.#validateTransaction = this.#isSelectedForShadowValidation(
+        change[2].commitWatermark,
+      );
+    }
+    const validateTransaction = this.#validateTransaction;
+    const observer = this.#observer;
+    observer?.messageReceived(change, json, validateTransaction, storedChange);
+    const startedAt = validateTransaction ? performance.now() : undefined;
     try {
       let commit: ChangeLogCommit | null = null;
       switch (type) {
         case 'begin':
-          writer.begin(change[2].commitWatermark, json);
+          writer.begin(
+            change[2].commitWatermark,
+            json,
+            storedChange,
+            validateTransaction,
+          );
           break;
         case 'commit': {
           const {watermark} = change[2];
           const commitStart = performance.now();
-          const stats = writer.commit(watermark, json, this.#now());
+          const stats = writer.commit(
+            watermark,
+            json,
+            this.#now(),
+            storedChange,
+          );
           commit = {
             watermark,
             stats,
@@ -300,10 +340,14 @@ export class SQLiteChangeLogWriter {
           writer.rollback();
           break;
         default:
-          writer.append(json, msg);
+          writer.append(json, msg, storedChange);
           break;
       }
-      observer?.messageProcessed(change, commit, performance.now() - startedAt);
+      observer?.messageProcessed(
+        change,
+        commit,
+        startedAt === undefined ? undefined : performance.now() - startedAt,
+      );
       if (commit !== null && commit.stats.cookieMutations.length > 0) {
         // Only re-counted when a schema change actually moved the cookie jar,
         // which keeps the count off the forward path of every other
@@ -319,8 +363,16 @@ export class SQLiteChangeLogWriter {
         // what makes its poll interval a backstop rather than the mechanism.
         this.#opts.onCommit?.(commit.watermark);
       }
+      if (type === 'commit' || type === 'rollback') {
+        this.#validateTransaction = false;
+      }
     } catch (e) {
-      observer?.messageFailed(change, e, performance.now() - startedAt);
+      observer?.messageFailed(
+        change,
+        e,
+        startedAt === undefined ? undefined : performance.now() - startedAt,
+      );
+      this.#validateTransaction = false;
       if (isConstraintViolation(e)) {
         // Reconciliation should have truncated whatever this collided with.
         // Report it as an invariant failure before failing soft, so that a
@@ -335,12 +387,26 @@ export class SQLiteChangeLogWriter {
     }
   }
 
+  #isSelectedForShadowValidation(watermark: string): boolean {
+    const percent = this.#shadowValidationPercent;
+    return (
+      percent >= 100 ||
+      (percent > 0 &&
+        h32(
+          `${this.#opts.identity.generation}/${this.#opts.identity.replicaID ?? ''}:${watermark}`,
+        ) %
+          100 <
+          percent)
+    );
+  }
+
   /**
    * Discards the open transaction, if any. Called when the change stream is
    * interrupted mid-transaction.
    */
   abort(): void {
     const writer = this.#writer;
+    this.#validateTransaction = false;
     if (this.#disabled || writer === undefined) {
       return;
     }
@@ -354,6 +420,7 @@ export class SQLiteChangeLogWriter {
 
   close(): void {
     this.#disabled = true;
+    this.#validateTransaction = false;
     this.#writer = undefined;
     this.#observer = undefined;
     const db = this.#db;

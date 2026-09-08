@@ -44,10 +44,10 @@ import {
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import {
-  extractChangeSubstring,
   reconstructWatermarkedChange,
-  serializeChangeStreamData,
+  serializeChangeStreamDataWithChange,
   type ChangeLogEntry,
+  type SerializedChangeStreamData,
 } from './change-log-codec.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {
@@ -77,6 +77,7 @@ type QueueEntry =
       'change',
       watermark: string,
       json: string,
+      storedChange: string,
       orig: Exclude<Change, DataChange> | null, // null for DataChanges
     ]
   | ['ready', callback: () => void]
@@ -488,11 +489,17 @@ export class Storer implements Service {
   /**
    * @returns The JSON stringified stream message to be sent downstream.
    */
-  store(watermark: string, data: ChangeStreamData) {
+  store(
+    watermark: string,
+    data: ChangeStreamData,
+    serialized: SerializedChangeStreamData = serializeChangeStreamDataWithChange(
+      data,
+    ),
+  ) {
     // Eagerly stringify the JSON payload to:
     // - avoid redundant stringification when fanning out to subscribers
     // - efficiently estimate the amount of memory the payload consumes
-    const json = serializeChangeStreamData(data);
+    const {json, change: storedChange} = serialized;
     this.#approximateQueuedBytes += json.length;
 
     const change = data[1];
@@ -500,6 +507,7 @@ export class Storer implements Service {
       'change',
       watermark,
       json,
+      storedChange,
       isDataChange(change) ? null : change, // drop DataChanges to save memory
     ]);
 
@@ -703,7 +711,7 @@ export class Storer implements Service {
           }
         }
         // msgType === 'change'
-        const [_, watermark, json, change] = msg;
+        const [_, watermark, json, storedChange, change] = msg;
         const tag = change?.tag;
         this.#approximateQueuedBytes -= json.length;
 
@@ -744,8 +752,9 @@ export class Storer implements Service {
           precommit: tag === 'commit' ? tx.preCommitWatermark : null,
           pos: tx.pos,
           // For backwards compatibility, only the change message is stored
-          // in the cdc changeLog.
-          change: extractChangeSubstring(json, tag),
+          // in the cdc changeLog. It was serialized separately with the
+          // downstream envelope, so no full-message scan is needed here.
+          change: storedChange,
         };
 
         if (change !== null && isSchemaChange(change)) {
