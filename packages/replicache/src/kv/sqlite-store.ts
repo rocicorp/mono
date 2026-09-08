@@ -1,5 +1,6 @@
 import {RWLock} from '@rocicorp/lock';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {Read, Store, Write} from './store.ts';
 import {
@@ -171,14 +172,8 @@ function batchStatements(
   sqlFor: (n: number) => string,
 ): (n: number) => PreparedStatement {
   const cache = new Map<number, PreparedStatement>();
-  return (n: number) => {
-    let stmt = cache.get(n);
-    if (!stmt) {
-      stmt = delegate.prepare(sqlFor(n));
-      cache.set(n, stmt);
-    }
-    return stmt;
-  };
+  return (n: number) =>
+    getOrInsertComputed(cache, n, () => delegate.prepare(sqlFor(n)));
 }
 
 /**
