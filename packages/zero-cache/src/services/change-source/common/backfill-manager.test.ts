@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
@@ -26,6 +26,7 @@ describe('backfill-manager', () => {
   let backfillRequests: BackfillRequest[];
   let testStreams: (TestStreamItem[] | Error)[];
   let changes: Queue<ChangeStreamMessage>;
+  let finalizedStreams: number;
   let lc: LogContext;
 
   function initBackfillManager(commitThresholdBytes?: number) {
@@ -54,6 +55,7 @@ describe('backfill-manager', () => {
     lc = createSilentLogContext();
     backfillRequests = [];
     testStreams = [];
+    finalizedStreams = 0;
     initBackfillManager();
   });
 
@@ -71,8 +73,15 @@ describe('backfill-manager', () => {
       throw stream; // For testing backfill errors
     }
 
-    for (const item of stream) {
-      yield 'message' in item ? item : {message: item, byteSize: 0};
+    try {
+      for (const item of stream) {
+        yield 'message' in item ? item : {message: item, byteSize: 0};
+      }
+    } finally {
+      // Tracks that the stream was finalized, i.e. that the consumer either
+      // exhausted it or exited early (via `return()`), which is what releases
+      // the upstream resources held by real backfill streams.
+      finalizedStreams++;
     }
   }
 
@@ -2081,5 +2090,113 @@ describe('backfill-manager', () => {
         },
       },
     ]);
+  });
+
+  test('change stream cancelation unblocks a backfill awaiting a reservation', async () => {
+    testStreams.push([
+      {
+        tag: 'backfill',
+        relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+        watermark: '130',
+        columns: ['b'],
+        rowValues: [[1, 2]],
+      },
+      {
+        tag: 'backfill-completed',
+        relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+        columns: ['b'],
+        watermark: '130',
+      },
+    ]);
+
+    // The main stream holds the reservation for the rest of the test,
+    // simulating a stream that was canceled in the middle of a transaction.
+    await changeStream.reserve('main');
+
+    backfillManager.run('123', [
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {
+          metadata: {rowKey: {a: 123}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+    ]);
+
+    // Let the backfill start and block on the reservation.
+    await sleep(10);
+    expect(backfillRequests).toHaveLength(1);
+    expect(finalizedStreams).toBe(0);
+
+    // Canceling the change stream must unblock the backfill so that its
+    // stream (and the upstream resources it holds) is finalized.
+    changeStream.asSource().cancel();
+    await vi.waitFor(() => expect(finalizedStreams).toBe(1));
+
+    // The backfill must not be retried after cancelation.
+    await sleep(100);
+    expect(backfillRequests).toHaveLength(1);
+  });
+
+  test('change stream cancelation unblocks a backfill awaiting the stream watermark', async () => {
+    testStreams.push([
+      {
+        tag: 'backfill',
+        relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+        watermark: '130',
+        columns: ['b'],
+        rowValues: [[1, 2]],
+      },
+      {
+        tag: 'backfill-completed',
+        relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+        columns: ['b'],
+        watermark: '130',
+      },
+    ]);
+
+    backfillManager.run('123', [
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {
+          metadata: {rowKey: {a: 123}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+    ]);
+
+    // The first message is streamed, after which the backfill waits for
+    // the change stream (at '123') to reach the backfill watermark ('130')
+    // before sending the `backfill-completed` message.
+    await expectChanges([
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.01'},
+      ],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          watermark: '130',
+          columns: ['b'],
+          rowValues: [[1, 2]],
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+    ]);
+    expect(finalizedStreams).toBe(0);
+
+    // The change stream never reaches the watermark. Canceling it must
+    // unblock the backfill so that its stream is finalized.
+    changeStream.asSource().cancel();
+    await vi.waitFor(() => expect(finalizedStreams).toBe(1));
+
+    // The backfill must not be retried after cancelation.
+    await sleep(100);
+    expect(backfillRequests).toHaveLength(1);
   });
 });
