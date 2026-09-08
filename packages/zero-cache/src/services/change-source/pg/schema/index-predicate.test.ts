@@ -137,14 +137,41 @@ describe('PostgreSQL partial-index predicate translation', () => {
   });
 
   test.each([
+    `status IN ('in_progress', 'want_to_read')`,
+    `status = ANY (ARRAY['in_progress'::character varying, ` +
+      `'want_to_read'::character varying]::character varying[])`,
+  ])('translates a literal list: %s', sql => {
+    expect(translatePostgresIndexPredicate(sql, supportedTable)).toEqual({
+      supported: true,
+      predicate: {
+        type: 'or',
+        conditions: [
+          {
+            type: 'comparison',
+            column: 'status',
+            op: '=',
+            value: {type: 'string', value: 'in_progress'},
+          },
+          {
+            type: 'comparison',
+            column: 'status',
+            op: '=',
+            value: {type: 'string', value: 'want_to_read'},
+          },
+        ],
+      },
+    });
+  });
+
+  test.each([
     [`missing = 1`, 'unpublished-column'],
     [`lower(status) = 'open'`, 'unsupported-function'],
     [`coalesce(status, 'open') = 'x'`, 'unsupported-function'],
-    [`attempts IN (1, 2)`, 'unsupported-operator'],
     [`attempts = large`, 'unsupported-syntax'],
     [`attempts::int2 = 1`, 'unsupported-cast'],
     [`status < 'open'`, 'unsupported-operator'],
     [`status COLLATE "C" = 'open'`, 'non-deterministic-collation'],
+    [`status ~ '^open'`, 'unsupported-operator'],
   ] as const)('rejects %s as %s', (sql, reason) => {
     expect(translatePostgresIndexPredicate(sql, supportedTable)).toEqual({
       supported: false,
