@@ -503,6 +503,13 @@ function makeOptionDefinitions(config: RnBenchConfig) {
         'Seconds without a request from the app before giving up (default 900; the first native build is slow)',
     },
     {
+      name: 'repeat',
+      type: Number,
+      defaultValue: 1,
+      description:
+        'Run the whole queue N times and report the median per benchmark plus the spread. A single run on an emulator is worth about +/-3%, so a smaller difference than that cannot be resolved without this.',
+    },
+    {
       name: 'release',
       type: Boolean,
       defaultValue: false,
@@ -543,6 +550,7 @@ type Options = {
   'port': number;
   'metro-port': number;
   'idle-timeout': number;
+  'repeat': number;
   'release'?: boolean;
   'profile'?: string;
   'verbose': boolean;
@@ -708,6 +716,54 @@ async function profileOnDevice(
   } finally {
     session.close();
   }
+}
+
+/**
+ * Collapses N runs of the same queue into one outcome per benchmark, taking the
+ * median run so a single unlucky one cannot dominate, and reporting the spread
+ * so it is obvious when a difference is smaller than the noise.
+ *
+ * An error in any repeat is kept: a benchmark that fails intermittently is a
+ * real result, not something to average away.
+ */
+function summarizeRepeats(repeats: Outcome[][], options: Options): Outcome[] {
+  const byKey = new Map<string, Outcome[]>();
+  for (const run of repeats) {
+    for (const o of run) {
+      const key = `${o.item.variant ?? ''}\u0000${o.item.group}\u0000${o.item.name}`;
+      (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(o);
+    }
+  }
+
+  const summarized: Outcome[] = [];
+  for (const group of byKey.values()) {
+    const failure = group.find(o => 'error' in o);
+    if (failure) {
+      summarized.push(failure);
+      continue;
+    }
+    const ok = group as {item: QueueItem; result: BenchmarkResult}[];
+    const sorted = ok.toSorted(
+      (a, b) =>
+        a.result.runTimesStatistics.medianMs -
+        b.result.runTimesStatistics.medianMs,
+    );
+    const median = sorted[sorted.length >> 1];
+    const lo = sorted[0].result.runTimesStatistics.medianMs;
+    const hi = sorted.at(-1)!.result.runTimesStatistics.medianMs;
+    const mid = median.result.runTimesStatistics.medianMs;
+    logLine(
+      `  ${median.item.name}: median ${mid.toFixed(2)} ms over ${
+        ok.length
+      } runs, spread ${lo.toFixed(2)}-${hi.toFixed(2)} ms (${(
+        (100 * (hi - lo)) /
+        (mid || 1)
+      ).toFixed(1)}%)`,
+      options,
+    );
+    summarized.push(median);
+  }
+  return summarized;
 }
 
 async function runPlatform(
@@ -904,6 +960,14 @@ export async function runRnBench(config: RnBenchConfig): Promise<void> {
     process.exit(1);
   }
 
+  if (options.profile && options.repeat > 1) {
+    // oxlint-disable-next-line no-console
+    console.error(
+      '--profile captures one trace; --repeat has nothing to average.',
+    );
+    process.exit(1);
+  }
+
   if (options.profile && options.release) {
     // oxlint-disable-next-line no-console
     console.error(
@@ -933,7 +997,15 @@ export async function runRnBench(config: RnBenchConfig): Promise<void> {
     }
     first = false;
 
-    const outcomes = await runPlatform(config, p, [...queue], options);
+    const repeats: Outcome[][] = [];
+    for (let rep = 0; rep < options.repeat; rep++) {
+      if (options.repeat > 1) {
+        logLine(`\n-- repeat ${rep + 1}/${options.repeat} --`, options);
+      }
+      repeats.push(await runPlatform(config, p, [...queue], options));
+    }
+    const outcomes =
+      options.repeat > 1 ? summarizeRepeats(repeats, options) : repeats[0];
 
     for (const outcome of outcomes) {
       if ('error' in outcome) {
