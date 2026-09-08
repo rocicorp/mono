@@ -1,6 +1,13 @@
 {
   "versionGroups": [
     {
+      "label": "packages/zql-benchmarks/rn is an Expo app that is deliberately not a pnpm workspace member (see packages/replicache-perf/rn/README.md). It pins the React, TypeScript and Expo versions its React Native release needs, independently of the workspace's.",
+      "packages": [
+        "zql-benchmarks-rn"
+      ],
+      "isIgnored": true
+    },
+    {
       "label": "packages/replicache-perf/rn is an Expo app that is deliberately not a pnpm workspace member (see its README). It pins the React, TypeScript and Expo versions its React Native release needs, independently of the workspace's.",
       "packages": [
         "replicache-perf-rn"

@@ -31,6 +31,7 @@ export const baseConfig = {
     // expo/tsconfig.base from its own node_modules, which type-aware linting
     // cannot resolve from the repo root.
     'packages/replicache-perf/rn',
+    'packages/zql-benchmarks/rn',
   ],
   rules: {
     // Disable unsafe optional chaining - many legitimate patterns in codebase
