@@ -2,6 +2,8 @@ node_modules/
 .expo/
 android/
 ios/
-# Copied in by `pnpm --filter replicache-perf run perf:rn`.
+# Copied in by `pnpm --filter replicache-perf run perf:rn`; generated from
+# src/rn.ts by tool/build.ts.
 benchmarks.js
 benchmarks.js.map
+benchmarks.d.ts

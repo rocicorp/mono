@@ -60,7 +60,8 @@ gradle compiles op-sqlite's native code without special configuration, so no
 
 The benchmarks themselves live in `mono/packages/replicache-perf`. They are
 bundled by `tool/build.ts` into a single self-contained `out/rn.js`, which the
-runner copies here as `benchmarks.js` (gitignored — it is build output).
+runner copies here as `benchmarks.js`, together with its `benchmarks.d.ts`.
+Both are gitignored: they are build output, generated from `src/rn.ts`.
 
 ## Running
 

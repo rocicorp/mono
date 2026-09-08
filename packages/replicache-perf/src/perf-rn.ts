@@ -531,6 +531,10 @@ async function installBundle(appDir: string): Promise<void> {
     path.join(rootDir, 'out', 'rn.js.map'),
     path.join(appDir, 'benchmarks.js.map'),
   );
+  await fs.copyFile(
+    path.join(rootDir, 'out', 'rn.d.ts'),
+    path.join(appDir, 'benchmarks.d.ts'),
+  );
 }
 
 async function nudgeUntilContact(
