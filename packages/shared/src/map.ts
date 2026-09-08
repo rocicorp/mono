@@ -1,5 +1,11 @@
+/**
+ * A value that {@link Map.get} can distinguish from a missing entry.  `undefined`
+ * is excluded because these helpers use `get() !== undefined` to detect absence.
+ */
+type Defined = {} | null;
+
 const nativeSupport =
-  typeof (Map.prototype as unknown as MapES2026<unknown, unknown>)
+  typeof (Map.prototype as unknown as MapES2026<unknown, Defined>)
     .getOrInsert === 'function';
 
 interface MapES2026<K, V> {
@@ -13,7 +19,11 @@ interface MapES2026<K, V> {
  *
  * Mirrors the ES2026 `Map.prototype.getOrInsert` proposal.
  */
-function getOrInsertPolyfill<K, V>(map: Map<K, V>, key: K, defaultValue: V): V {
+function getOrInsertPolyfill<K, V extends Defined>(
+  map: Map<K, V>,
+  key: K,
+  defaultValue: V,
+): V {
   const existing = map.get(key);
   if (existing !== undefined) {
     return existing;
@@ -28,7 +38,7 @@ function getOrInsertPolyfill<K, V>(map: Map<K, V>, key: K, defaultValue: V): V {
  *
  * Mirrors the ES2026 `Map.prototype.getOrInsertComputed` proposal.
  */
-function getOrInsertComputedPolyfill<K, V>(
+function getOrInsertComputedPolyfill<K, V extends Defined>(
   map: Map<K, V>,
   key: K,
   compute: (key: K) => V,
@@ -42,11 +52,15 @@ function getOrInsertComputedPolyfill<K, V>(
   return value;
 }
 
-function getOrInsertNative<K, V>(map: Map<K, V>, key: K, defaultValue: V): V {
+function getOrInsertNative<K, V extends Defined>(
+  map: Map<K, V>,
+  key: K,
+  defaultValue: V,
+): V {
   return (map as unknown as MapES2026<K, V>).getOrInsert(key, defaultValue);
 }
 
-function getOrInsertComputedNative<K, V>(
+function getOrInsertComputedNative<K, V extends Defined>(
   map: Map<K, V>,
   key: K,
   compute: (key: K) => V,
