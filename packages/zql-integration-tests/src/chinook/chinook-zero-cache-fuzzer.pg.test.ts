@@ -7,7 +7,10 @@ import {Queue} from '../../../shared/src/queue.ts';
 import type {NormalizedZeroConfig} from '../../../zero-cache/src/config/normalize.ts';
 import {InspectorDelegate} from '../../../zero-cache/src/server/inspector-delegate.ts';
 import {initializePostgresChangeSource} from '../../../zero-cache/src/services/change-source/pg/change-source.ts';
-import {initializeStreamer} from '../../../zero-cache/src/services/change-streamer/change-streamer-service.ts';
+import {
+  initializeStreamer,
+  type TuningOptions,
+} from '../../../zero-cache/src/services/change-streamer/change-streamer-service.ts';
 import type {
   ChangeStreamer,
   ChangeStreamerService,
@@ -142,7 +145,8 @@ const shard = {
   publications: [],
 };
 
-const streamerOptions = {
+const streamerOptions: TuningOptions = {
+  pgChangeLogEnabled: true,
   backPressureLimitHeapProportion: 0.04,
   flowControlConsensusTimeoutProportion: 2,
   statementTimeoutMs: 20_000,

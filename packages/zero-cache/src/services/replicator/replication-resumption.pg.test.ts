@@ -51,6 +51,7 @@ const shard = {
 };
 
 const streamerOptions: TuningOptions = {
+  pgChangeLogEnabled: true,
   backPressureLimitHeapProportion: 0.04,
   flowControlConsensusTimeoutProportion: 2,
   statementTimeoutMs: 20_000,
