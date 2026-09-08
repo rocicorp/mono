@@ -1,4 +1,5 @@
 import {expect, test, vi} from 'vitest';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {
   SQLiteWrite,
   SQLiteStoreRead,
@@ -16,14 +17,8 @@ function makePreparedStatement() {
 /** One shared statement per width, so assertions can inspect a stable object. */
 function makeBatchStatement() {
   const cache = new Map<number, ReturnType<typeof makePreparedStatement>>();
-  return (n: number) => {
-    let s = cache.get(n);
-    if (!s) {
-      s = makePreparedStatement();
-      cache.set(n, s);
-    }
-    return s;
-  };
+  return (n: number) =>
+    getOrInsertComputed(cache, n, () => makePreparedStatement());
 }
 
 function makePreparedStatements(): PreparedStatements {
