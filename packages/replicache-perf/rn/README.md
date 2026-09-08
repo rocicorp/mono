@@ -26,8 +26,17 @@ Metro (Expo auto-detects the monorepo and needs no `metro.config.js`) and
 cost of coupling replicache's test dependencies to a benchmark app.
 
 It has its own lockfile and needs `pnpm install` here once before the harness
-can drive it. Nothing in the workspace toolchain (turbo, vitest, oxlint, the
-package tsconfig) reaches into this directory.
+can drive it.
+
+Most of the workspace toolchain skips it for free, because turbo and vitest only
+traverse workspace members and `replicache-perf`'s own tsconfig and oxlint task
+cover `src/` only. The two root-level checks that walk the tree by path rather
+than by workspace membership each needed an explicit exclusion:
+
+- `oxlint --type-aware` at the repo root, which cannot resolve this app's
+  `extends: expo/tsconfig.base` — ignored via `oxlint.base.ts`.
+- `syncpack`, which would otherwise demand this app match the workspace's React
+  and TypeScript versions — ignored via a version group in `.syncpackrc`.
 
 The empty `pnpm-workspace.yaml` here is deliberate: without it, `pnpm install`
 run from this directory walks up, reinstalls the entire monorepo, and installs

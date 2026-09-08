@@ -697,13 +697,13 @@ importers:
         version: 1.9.1
     devDependencies:
       '@types/ws':
-        specifier: ^8.18.1
+        specifier: ^8.5.12
         version: 8.18.1
       oxfmt:
         specifier: ^0.65.0
         version: 0.65.0
       ws:
-        specifier: ^8.20.1
+        specifier: ^8.18.1
         version: 8.20.1
 
   packages/shared:

@@ -328,10 +328,22 @@ function startControlServer(
         req.on('data', c => chunks.push(c as Buffer));
         req.on('end', () => {
           lastActivity = Date.now();
-          const body = JSON.parse(Buffer.concat(chunks).toString()) as
-            | {result: BenchmarkResult}
-            | {error: string};
           const item = queue[index];
+          if (!item) {
+            // A late or duplicate post, e.g. the app reloaded after we had
+            // already recorded its result. Nothing left to attribute it to.
+            res.writeHead(409, {'content-type': 'application/json'});
+            res.end(JSON.stringify({error: 'no benchmark in flight'}));
+            return;
+          }
+          let body: {result: BenchmarkResult} | {error: string};
+          try {
+            body = JSON.parse(Buffer.concat(chunks).toString());
+          } catch (e) {
+            // Record it as a failed benchmark rather than taking the runner
+            // down with it, so the rest of the queue still runs.
+            body = {error: `malformed /result body: ${String(e)}`};
+          }
           const outcome: Outcome =
             'result' in body
               ? {item, result: body.result}

@@ -27,6 +27,10 @@ export const baseConfig = {
     'prod/sst/sst-env.d.ts',
     '**/um.js',
     '**/__snapshots__/**',
+    // Expo app, deliberately not a workspace member: its tsconfig extends
+    // expo/tsconfig.base from its own node_modules, which type-aware linting
+    // cannot resolve from the repo root.
+    'packages/replicache-perf/rn',
   ],
   rules: {
     // Disable unsafe optional chaining - many legitimate patterns in codebase

@@ -12,9 +12,10 @@ export type Harness = {
 
 /**
  * The platform-neutral core shared by the browser entry point (perf.ts, which
- * registers every group) and the React Native one (rn.ts, which registers only
- * the `replicache` group — the others need IndexedDB, localStorage or
- * `crypto.subtle`).
+ * registers every group) and the React Native one (rn.ts, which registers the
+ * groups that run without a browser: `replicache` and `map-loop`). A group
+ * belongs here only if it avoids IndexedDB, localStorage, `crypto.subtle` and
+ * `TextEncoder`; see rn.ts for which of the remaining groups each rules out.
  */
 export function makeHarness(benchmarks: Benchmark[]): Harness {
   function findBenchmark(name: string, group: string): Benchmark {

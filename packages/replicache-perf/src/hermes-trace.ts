@@ -159,15 +159,23 @@ export async function connectSession(
     const myId = ++id;
     ws.send(JSON.stringify({id: myId, method, params}));
     return new Promise<T>((resolve, reject) => {
-      pending.set(myId, {
-        resolve: resolve as (v: never) => void,
-        reject,
-      });
-      setTimeout(() => {
+      // Profiling polls once a second for the length of a benchmark, so the
+      // timer has to be cleared on response rather than left to expire.
+      const timer = setTimeout(() => {
         if (pending.delete(myId)) {
           reject(new Error(`${method} timed out`));
         }
       }, 60_000);
+      pending.set(myId, {
+        resolve: (v: never) => {
+          clearTimeout(timer);
+          resolve(v);
+        },
+        reject: (e: unknown) => {
+          clearTimeout(timer);
+          reject(e);
+        },
+      });
     });
   }
 
