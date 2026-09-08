@@ -70,6 +70,53 @@ test('SQLiteWrite batches deletes and upserts into one bound statement each', as
   expect(release).toHaveBeenCalledTimes(1);
 });
 
+test('SQLiteWrite splits a commit wider than MAX_BATCH across statement widths', async () => {
+  const release = vi.fn();
+  const db: SQLiteDatabase = {
+    close: vi.fn(),
+    destroy: vi.fn(),
+    prepare: vi.fn(),
+    execSync: vi.fn(),
+  };
+  const preparedStatements = makePreparedStatements();
+  const write = new SQLiteWrite(release, db, preparedStatements);
+
+  // 129 is deliberately just past MAX_BATCH and not a power of two, so it has
+  // to split into a full 128-wide statement plus a 1-wide remainder.
+  const n = 129;
+  for (let i = 0; i < n; i++) {
+    await write.put(`put-${i}`, i);
+    await write.del(`del-${i}`);
+  }
+  await write.commit();
+  write.release();
+
+  for (const [width, calls] of [
+    [128, 1],
+    [1, 1],
+  ] as const) {
+    expect(preparedStatements.putN(width).exec).toHaveBeenCalledTimes(calls);
+    expect(preparedStatements.delN(width).exec).toHaveBeenCalledTimes(calls);
+  }
+
+  // Every key reaches SQLite exactly once, in order, with its value alongside.
+  const putParams = [128, 1].flatMap(
+    w => vi.mocked(preparedStatements.putN(w).exec).mock.calls[0][0],
+  );
+  expect(putParams).toEqual(
+    Array.from({length: n}, (_, i) => [`put-${i}`, String(i)]).flat(),
+  );
+
+  const delParams = [128, 1].flatMap(
+    w => vi.mocked(preparedStatements.delN(w).exec).mock.calls[0][0],
+  );
+  expect(delParams).toEqual(Array.from({length: n}, (_, i) => `del-${i}`));
+
+  // The single-shot json_each statements are no longer used at all.
+  expect(preparedStatements.put.exec).not.toHaveBeenCalled();
+  expect(preparedStatements.del.exec).not.toHaveBeenCalled();
+});
+
 test('SQLiteStoreRead rejects pending get and has operations when closed', async () => {
   const release = vi.fn();
   const preparedStatements = makePreparedStatements();

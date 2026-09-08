@@ -162,6 +162,11 @@ export type PreparedStatements = {
  */
 const MAX_BATCH = 128;
 
+/** `repeatList('?', 3)` -> `'?,?,?'`. */
+function repeatList(item: string, n: number): string {
+  return `${item},`.repeat(n).slice(0, -1);
+}
+
 /**
  * Prepares (and caches) a statement of each width on demand. Callers only ever
  * ask for powers of two, so the cache holds at most log2(MAX_BATCH)+1 entries
@@ -252,18 +257,11 @@ export function setupDatabase(
     putN: batchStatements(
       delegate,
       n =>
-        `INSERT OR REPLACE INTO entry (key, value) VALUES ${Array.from({
-          length: n,
-        })
-          .fill('(?,?)')
-          .join(',')}`,
+        `INSERT OR REPLACE INTO entry (key, value) VALUES ${repeatList('(?,?)', n)}`,
     ),
     delN: batchStatements(
       delegate,
-      n =>
-        `DELETE FROM entry WHERE key IN (${Array.from({length: n})
-          .fill('?')
-          .join(',')})`,
+      n => `DELETE FROM entry WHERE key IN (${repeatList('?', n)})`,
     ),
   };
 }
@@ -475,27 +473,40 @@ export class SQLiteWrite extends WriteImplBase implements Write {
     }
 
     // Bind real parameters rather than serializing the whole pending set into
-    // one JSON document for json_each() to parse back out. That serialize, and
+    // one JSON document for json_each() to parse back out. Serializing it, and
     // pushing the resulting (often megabyte-scale) string across the native
     // bridge, measured as roughly a quarter of persist on device.
-    if (this._pending.size > 0) {
-      await execInBatches(
-        [...this._pending] as [string, ReadonlyJSONValue][],
-        this.#preparedStatements.putN,
-        ([key, value], out) => {
-          out.push(key, JSON.stringify(value));
-        },
-      );
-    }
-    if (deleteKeys.length > 0) {
-      await execInBatches(
-        deleteKeys,
-        this.#preparedStatements.delN,
-        (key, out) => {
-          out.push(key);
-        },
-      );
-    }
+    //
+    // Puts and deletes use different statements over disjoint keys (deletes
+    // were removed from _pending above), so they overlap. The batches *within*
+    // each must not: the power-of-two split reuses a width when a commit is
+    // wide enough (300 rows -> 128, 128, 32, 8, 4), and running two of those
+    // concurrently would have two callers on one prepared statement — the
+    // rebind-during-execute hazard described in kv/expo-sqlite/store.ts, which
+    // op-sqlite has no per-statement lock to absorb.
+    const putP =
+      this._pending.size > 0
+        ? execInBatches(
+            [...this._pending] as [string, ReadonlyJSONValue][],
+            this.#preparedStatements.putN,
+            ([key, value], out) => {
+              out.push(key, JSON.stringify(value));
+            },
+          )
+        : undefined;
+    const delP =
+      deleteKeys.length > 0
+        ? execInBatches(
+            deleteKeys,
+            this.#preparedStatements.delN,
+            (key, out) => {
+              out.push(key);
+            },
+          )
+        : undefined;
+
+    if (putP) await putP;
+    if (delP) await delP;
 
     this.#dbDelegate.execSync('COMMIT');
     this._pending.clear();
