@@ -6,24 +6,35 @@ It is a plain Expo project that is **deliberately not a pnpm workspace package**
 `pnpm-workspace.yaml` globs one path segment (`packages/*`), so nesting it here
 keeps it in git while leaving it out of the workspace.
 
-The reason is a native version collision, and it was measured rather than
-assumed. `packages/replicache` declares `expo-sqlite: ">=15"` as a
-devDependency (for its `vi.mock`-based store tests), which resolves to 55.x and
-brings `expo-modules-core@55`. This app needs `expo-sqlite@~57`, which brings
-`expo-modules-core@57`. Nested, the app has its own isolated `node_modules` and
-only ever sees 57. As a workspace member both versions land in the shared store,
-Expo autolinking and gradle produce a single Android classpath, and the app dies
-on launch with:
+As a workspace member the Android app crashes on launch with:
 
     java.lang.NoClassDefFoundError: Failed resolution of:
       Lexpo/modules/kotlin/types/AnyTypeProvider;
+      at expo.modules.webview.DomWebViewModule.definition
 
-Everything else about workspace membership is fine — `pnpm install`, gradle,
-Metro (Expo auto-detects the monorepo and needs no `metro.config.js`) and
-`check-types` all work, and `replicache` stays a single instance. It is only the
-`expo-modules-core` major mismatch that breaks. Aligning replicache's
-`expo-sqlite` devDependency with this app's would remove the blocker, at the
-cost of coupling replicache's test dependencies to a benchmark app.
+an expo-modules-core class that autolinking resolved to a different copy than
+the one the app was compiled against. Nested, the app has its own isolated
+`node_modules` and the crash does not happen.
+
+What has been ruled out, by trying it:
+
+- It is not `replicache` being split into multiple instances by its optional
+  expo-sqlite/op-sqlite peers. The app does not depend on `replicache` at all
+  (it imports the prebuilt bundle), and as a workspace member `replicache`
+  stays a single instance.
+- It is not a version skew between `packages/replicache`'s `expo-sqlite`
+  devDependency and this app's. Aligning both (plus `@op-engineering/op-sqlite`
+  and `packages/zero`) on the latest did not fix the crash.
+- It is not a stale native build. Deleting `android/` for a full regeneration
+  did not fix it either.
+- It is not Metro or the build: `pnpm install`, gradle and `check-types` all
+  succeed as a workspace member, and Expo auto-detects the monorepo with no
+  `metro.config.js`.
+
+The root cause is not yet identified. The leading suspect is duplicate
+`expo-modules-core` copies left in the shared `.pnpm` store — Expo autolinking
+scans the store rather than the resolved graph — but that has not been
+confirmed. Until it is, this app stays out of the workspace.
 
 It has its own lockfile and needs `pnpm install` here once before the harness
 can drive it.
@@ -68,9 +79,9 @@ from `page.reload()`.
 
 ## Standalone
 
-Started by hand (`npx expo run:android --port 8082`) with no control server
-answering, the app falls back to a manual mode: pick a backend, tap Run, and it
-runs the whole `replicache` group in one JS context, printing to the screen.
+The app has no UI of its own beyond a status line and the result log — the
+runner is the interface. Started by hand with no control server answering, it
+just reports that and stops.
 
 ## Gotchas
 

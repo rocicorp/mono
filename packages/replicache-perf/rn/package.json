@@ -13,7 +13,6 @@
     "expo": "~57.0.0",
     "expo-build-properties": "~57.0.17",
     "expo-sqlite": "~57.0.2",
-    "expo-status-bar": "~57.0.0",
     "react": "19.2.3",
     "react-native": "0.86.0"
   },

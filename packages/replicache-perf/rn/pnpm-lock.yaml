@@ -20,9 +20,6 @@ importers:
       expo-sqlite:
         specifier: ~57.0.2
         version: 57.0.2(expo@57.0.20)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
-      expo-status-bar:
-        specifier: ~57.0.0
-        version: 57.0.1(expo@57.0.20)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -1117,13 +1114,6 @@ packages:
 
   expo-sqlite@57.0.2:
     resolution: {integrity: sha512-5KVbT7BQFZlIcQBXKWvwBERK3ODF6PSqct27GQKukZzAjsx2B97R+mwtYqrTUtUbw71VJrQrdr9Yl2OWYC7UpA==}
-    peerDependencies:
-      expo: '*'
-      react: '*'
-      react-native: '*'
-
-  expo-status-bar@57.0.1:
-    resolution: {integrity: sha512-Xwaq1gAoVRWx5dPG5VhT5RSbnI9OilhZnO5qoPBnUaBAa5VzRzfdS8q0/bsPt0jR2DKLtGuP0bQ6efMJ4RIMDg==}
     peerDependencies:
       expo: '*'
       react: '*'
@@ -3556,12 +3546,6 @@ snapshots:
   expo-sqlite@57.0.2(expo@57.0.20)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
     dependencies:
       await-lock: 2.2.2
-      expo: 57.0.20(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
-      react: 19.2.3
-      react-native: 0.86.0(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3)
-
-  expo-status-bar@57.0.1(expo@57.0.20)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
-    dependencies:
       expo: 57.0.20(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
       react: 19.2.3
       react-native: 0.86.0(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3)
