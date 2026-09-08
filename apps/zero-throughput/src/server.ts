@@ -79,7 +79,13 @@ async function queryHandler(
   reply.send(response);
 }
 
-export default fastify;
+export default async function handler(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  await fastify.ready();
+  fastify.server.emit('request', req, reply);
+}
 
 function parsePortArg(args: readonly string[]): number | undefined {
   for (let i = 0; i < args.length; i++) {
