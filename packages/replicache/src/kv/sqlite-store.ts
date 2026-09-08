@@ -148,7 +148,59 @@ export type PreparedStatements = {
   getMany: PreparedStatement;
   put: PreparedStatement;
   del: PreparedStatement;
+  /** Multi-row INSERT with the values bound as parameters, n rows wide. */
+  putN: (n: number) => PreparedStatement;
+  /** Multi-key DELETE with the keys bound as parameters, n keys wide. */
+  delN: (n: number) => PreparedStatement;
 };
+
+/**
+ * Widest batch we bind in one statement. SQLite's SQLITE_MAX_VARIABLE_NUMBER is
+ * 32766, and a put costs two parameters per row, so this is far below the cap;
+ * it exists to bound how many distinct statements we prepare and cache.
+ */
+const MAX_BATCH = 128;
+
+/**
+ * Prepares (and caches) a statement of each width on demand. Callers only ever
+ * ask for powers of two, so the cache holds at most log2(MAX_BATCH)+1 entries
+ * however many rows a commit turns out to have.
+ */
+function batchStatements(
+  delegate: SQLiteDatabase,
+  sqlFor: (n: number) => string,
+): (n: number) => PreparedStatement {
+  const cache = new Map<number, PreparedStatement>();
+  return (n: number) => {
+    let stmt = cache.get(n);
+    if (!stmt) {
+      stmt = delegate.prepare(sqlFor(n));
+      cache.set(n, stmt);
+    }
+    return stmt;
+  };
+}
+
+/**
+ * Runs `items` through `getStatement` in power-of-two sized batches, so any
+ * length is covered by a handful of cached statement widths.
+ */
+async function execInBatches<T>(
+  items: readonly T[],
+  getStatement: (n: number) => PreparedStatement,
+  toParams: (item: T, out: string[]) => void,
+): Promise<void> {
+  for (let i = 0; i < items.length;) {
+    const remaining = Math.min(MAX_BATCH, items.length - i);
+    const n = 1 << (31 - Math.clz32(remaining));
+    const params: string[] = [];
+    for (let j = 0; j < n; j++) {
+      toParams(items[i + j], params);
+    }
+    await getStatement(n).exec(params);
+    i += n;
+  }
+}
 
 export interface SQLiteStoreOptions {
   // Common options
@@ -201,6 +253,22 @@ export function setupDatabase(
     ),
     del: delegate.prepare(
       `DELETE FROM entry WHERE key IN (SELECT value FROM json_each(?))`,
+    ),
+    putN: batchStatements(
+      delegate,
+      n =>
+        `INSERT OR REPLACE INTO entry (key, value) VALUES ${Array.from({
+          length: n,
+        })
+          .fill('(?,?)')
+          .join(',')}`,
+    ),
+    delN: batchStatements(
+      delegate,
+      n =>
+        `DELETE FROM entry WHERE key IN (${Array.from({length: n})
+          .fill('?')
+          .join(',')})`,
     ),
   };
 }
@@ -411,19 +479,28 @@ export class SQLiteWrite extends WriteImplBase implements Write {
       }
     }
 
-    const delP =
-      deleteKeys.length > 0
-        ? this.#preparedStatements.del.exec([JSON.stringify(deleteKeys)])
-        : undefined;
-    const putP =
-      this._pending.size > 0
-        ? this.#preparedStatements.put.exec([
-            JSON.stringify([...this._pending]),
-          ])
-        : undefined;
-
-    if (putP) await putP;
-    if (delP) await delP;
+    // Bind real parameters rather than serializing the whole pending set into
+    // one JSON document for json_each() to parse back out. That serialize, and
+    // pushing the resulting (often megabyte-scale) string across the native
+    // bridge, measured as roughly a quarter of persist on device.
+    if (this._pending.size > 0) {
+      await execInBatches(
+        [...this._pending] as [string, ReadonlyJSONValue][],
+        this.#preparedStatements.putN,
+        ([key, value], out) => {
+          out.push(key, JSON.stringify(value));
+        },
+      );
+    }
+    if (deleteKeys.length > 0) {
+      await execInBatches(
+        deleteKeys,
+        this.#preparedStatements.delN,
+        (key, out) => {
+          out.push(key);
+        },
+      );
+    }
 
     this.#dbDelegate.execSync('COMMIT');
     this._pending.clear();

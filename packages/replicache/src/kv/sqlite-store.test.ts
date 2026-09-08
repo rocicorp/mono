@@ -13,6 +13,19 @@ function makePreparedStatement() {
   };
 }
 
+/** One shared statement per width, so assertions can inspect a stable object. */
+function makeBatchStatement() {
+  const cache = new Map<number, ReturnType<typeof makePreparedStatement>>();
+  return (n: number) => {
+    let s = cache.get(n);
+    if (!s) {
+      s = makePreparedStatement();
+      cache.set(n, s);
+    }
+    return s;
+  };
+}
+
 function makePreparedStatements(): PreparedStatements {
   return {
     has: makePreparedStatement(),
@@ -21,10 +34,12 @@ function makePreparedStatements(): PreparedStatements {
     getMany: makePreparedStatement(),
     del: makePreparedStatement(),
     put: makePreparedStatement(),
+    putN: makeBatchStatement(),
+    delN: makeBatchStatement(),
   };
 }
 
-test('SQLiteWrite batches deletes and upserts into one statement each', async () => {
+test('SQLiteWrite batches deletes and upserts into one bound statement each', async () => {
   const release = vi.fn();
   const db: SQLiteDatabase = {
     close: vi.fn(),
@@ -43,13 +58,18 @@ test('SQLiteWrite batches deletes and upserts into one statement each', async ()
   await write.commit();
   write.release();
 
-  // 2 deletes → cached del[1]
-  expect(preparedStatements.del.exec).toHaveBeenCalledWith([
-    '["delete-1","delete-2"]',
+  // Both pairs go out as one 2-wide statement each, with the key and the
+  // JSON-encoded value bound as real parameters rather than routed through a
+  // single JSON document for json_each() to parse back out.
+  expect(preparedStatements.putN(2).exec).toHaveBeenCalledWith([
+    'upsert-1',
+    '"value-1"',
+    'upsert-2',
+    '{"nested":true}',
   ]);
-  // 2 upserts → cached upserts[1]
-  expect(preparedStatements.put.exec).toHaveBeenCalledWith([
-    '[["upsert-1","value-1"],["upsert-2",{"nested":true}]]',
+  expect(preparedStatements.delN(2).exec).toHaveBeenCalledWith([
+    'delete-1',
+    'delete-2',
   ]);
   expect(db.execSync).toHaveBeenCalledWith('COMMIT');
   expect(release).toHaveBeenCalledTimes(1);
