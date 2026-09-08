@@ -170,6 +170,9 @@ export async function analyzeProfileQueries(
         String(config.rowsPerQuery),
         '--join-plans',
       ];
+      if (config.adminPassword) {
+        args.push('--admin-password', config.adminPassword);
+      }
       await writeLog(
         logStream,
         [

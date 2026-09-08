@@ -163,6 +163,11 @@ export async function handleProfrmzRequest(
   // In distributed mode, proxy to the upstream Replication Manager
   if (config.changeStreamer.uri) {
     const upstreamURL = new URL('/profz', config.changeStreamer.uri);
+    if (upstreamURL.protocol === 'ws:') {
+      upstreamURL.protocol = 'http:';
+    } else if (upstreamURL.protocol === 'wss:') {
+      upstreamURL.protocol = 'https:';
+    }
     const incomingURL = new URL(req.url, 'http://localhost');
     for (const [key, value] of incomingURL.searchParams.entries()) {
       upstreamURL.searchParams.set(key, value);

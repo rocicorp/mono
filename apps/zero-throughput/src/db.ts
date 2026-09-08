@@ -82,11 +82,13 @@ export async function resetBenchmarkDatabase(
   sql: BenchmarkDB,
   config: BenchmarkConfig,
 ): Promise<void> {
-  const appID = config.zero.appID;
-  const schemas = [appID, `${appID}_0`, `${appID}_0/cvr`, `${appID}_0/cdc`];
+  if (config.resetMode === 'all') {
+    const appID = config.zero.appID;
+    const schemas = [appID, `${appID}_0`, `${appID}_0/cvr`, `${appID}_0/cdc`];
 
-  for (const schema of schemas) {
-    await sql`DROP SCHEMA IF EXISTS ${sql(schema)} CASCADE`;
+    for (const schema of schemas) {
+      await sql`DROP SCHEMA IF EXISTS ${sql(schema)} CASCADE`;
+    }
   }
 
   await sql`DROP TABLE IF EXISTS zero_throughput_event CASCADE`;

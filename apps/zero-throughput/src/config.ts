@@ -37,6 +37,7 @@ const options = {
   profileDir: v.string().default('results/profiles'),
   processLogMode: v.literalUnion('file', 'inherit', 'ignore').default('file'),
   reset: v.boolean().default(true),
+  resetMode: v.literalUnion('all', 'data-only', 'none').optional(),
   cacheURL: v.string().optional(),
   cacheURLs: v.string().optional(),
   appServerPort: v.number().default(3_000),
@@ -71,6 +72,7 @@ const options = {
 export type BenchmarkProfile = 'feed-append' | 'email' | 'forum' | 'relational';
 export type BenchmarkModel = 'hot' | 'realistic';
 export type BenchmarkTopology = 'single' | 'distributed';
+export type BenchmarkResetMode = 'all' | 'data-only' | 'none';
 
 export type BenchmarkConfig = {
   readonly runID: string;
@@ -102,6 +104,7 @@ export type BenchmarkConfig = {
   readonly adminPassword?: string | undefined;
   readonly processLogMode: 'file' | 'inherit' | 'ignore';
   readonly reset: boolean;
+  readonly resetMode: BenchmarkResetMode;
   readonly appServerPort: number;
   readonly cacheURL: string;
   readonly cacheURLs: readonly string[];
@@ -174,6 +177,10 @@ export function loadConfig(): BenchmarkConfig {
   const isPgManaged = parsed.pg.url === undefined;
   const pgURL = parsed.pg.url ?? DEFAULT_PG_URL;
 
+  const resetMode: BenchmarkResetMode =
+    parsed.resetMode ??
+    (!parsed.reset ? 'none' : isZeroManaged ? 'all' : 'data-only');
+
   return {
     runID: new Date().toISOString().replace(/[:.]/g, '-'),
     profile: parsed.profile,
@@ -206,7 +213,8 @@ export function loadConfig(): BenchmarkConfig {
       process.env.ZERO_ADMIN_PASSWORD ??
       process.env.ADMIN_PASSWORD,
     processLogMode: parsed.processLogMode,
-    reset: parsed.reset,
+    reset: resetMode !== 'none',
+    resetMode,
     appServerPort: parsed.appServerPort,
     cacheURL: cacheURLs[0],
     cacheURLs,

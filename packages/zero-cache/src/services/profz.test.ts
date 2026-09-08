@@ -118,11 +118,11 @@ describe('profz', () => {
     expect(body).toEqual(mockProfile);
   });
 
-  test('profrmz in distributed mode proxies to changeStreamer.uri', async () => {
+  test('profrmz in distributed mode proxies to changeStreamer.uri (converting ws:// to http://)', async () => {
     const distributedConfig = {
       adminPassword: 'secret',
       changeStreamer: {
-        uri: 'http://127.0.0.1:4849',
+        uri: 'ws://127.0.0.1:4849',
       },
     } as unknown as NormalizedZeroConfig;
 
