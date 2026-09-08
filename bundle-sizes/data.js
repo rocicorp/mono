@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788862449282,
+  "lastUpdate": 1788871134913,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57545,6 +57545,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/f571bbd152fab861add7deba911440914df7fa5b"
         },
         "date": 1788862436113,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319408,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57502,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117952,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33704,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "776a2342d2090037c67d436c3cd358408dafe37d",
+          "message": "fix(replicache-perf): stop the benchmarks passing their dataset as mutator args (#6505)\n\n## The bug\n\n`populate` took `{numKeys, randomValues}` and `putMap` took the whole\nmap, so the benchmarks handed their test data to the mutator **as\narguments**. A local mutation stores its arguments in the commit as\n`mutatorArgsJSON` so it can be rebased, and `persist` then serializes\nthat to disk.\n\nSo every benchmark wrote its own test data a second time, and `persist`\nwas measuring it.\n\n## How much\n\nInstrumenting `JSON.stringify` during a real persist:\n\n```\none persist: 277 calls, 3501 KB serialized\n  array    145 calls   1766 KB  (50.4%)   BTree nodes — real work\n  object     2 calls   1735 KB  (49.5%)   <-- ?\n  number   129 calls      0.1 KB           refcounts\n```\n\nTwo calls carrying 1.7 MB, when a BTree node caps at 16 KB. They were\ncommit chunks:\n\n```\n{\"meta\":{\"type\":4,\"basisHash\":…,\"mutationID\":1,\"mutatorArgsJSON\":…\n```\n\n— the whole 1 MB dataset, embedded in the commit. At the 12.2 ms/2 MB\nthat `JSON.stringify` costs on this device, that's ~10 ms of a 77 ms\nresult.\n\n## The fix\n\nBoth mutators take their payload out of band via `setPopulateValues` /\n`setPutMapEntries`, registered exactly where the data used to be\ngenerated so it still lands **outside** the timed region. Real mutations\ntake small arguments; these now do too.\n\n## Effect\n\n`persist 1024x1000 (indexes: 0)`, p50, Android release, 8-core/8 GB\nemulator:\n\n| backend | before | after |\n|---|---|---|\n| expo-sqlite | 77.4 ms | **49.5 ms** |\n| op-sqlite | 52.8 ms | **33.2 ms** |\n| mem | 16.0 ms | 16.7 ms |\n\n**These are not a speedup** — nothing got faster. The benchmark stopped\nmeasuring itself. `mem` is unchanged, which is the control: `MemStore`\ndoesn't serialize, so it never paid the cost. `populate` and `scan` are\nunchanged.\n\nThe practical consequence is that persist optimisations were being\nevaluated against a workload that was ~50% harness overhead, so any\nmeasured win was diluted by roughly half.\n\n## Scope\n\nBoth consumers of `bench-util`: `replicache-perf` (device + browser) and\n`replicache.bench.ts` (vitest/mitata).\n\n## Testing\n\n807/807 replicache tests pass; `check-types`, `lint`, `oxfmt` clean on\nboth packages; the numbers above are from a device run on a freshly\ncleared emulator.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-authored-by: Claude Opus 5 <noreply@anthropic.com>",
+          "timestamp": "2026-09-08T12:27:01Z",
+          "tree_id": "b6360477047d286a4356927e21f301ca7d81d2b2",
+          "url": "https://github.com/rocicorp/mono/commit/776a2342d2090037c67d436c3cd358408dafe37d"
+        },
+        "date": 1788871122476,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
