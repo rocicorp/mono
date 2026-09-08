@@ -6476,9 +6476,7 @@ describe('view-syncer/service', () => {
       // fired after teardown.
       await vs.stop();
       await viewSyncerDone;
-      expect(clearTimeoutSpy.mock.calls.some(([t]) => t === handle)).toBe(
-        true,
-      );
+      expect(clearTimeoutSpy.mock.calls.some(([t]) => t === handle)).toBe(true);
     } finally {
       clearTimeoutSpy.mockRestore();
     }
