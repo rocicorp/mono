@@ -1,5 +1,5 @@
-import {runBenchmark} from './benchmark.ts';
-import {formatAsReplicache} from './format.ts';
+import {runBenchmark} from '../../../tools/rn-bench/src/benchmark.ts';
+import {formatAsReplicache} from '../../../tools/rn-bench/src/format.ts';
 import * as m from './perf.ts';
 import {benchmarks, findBenchmarks} from './perf.ts';
 

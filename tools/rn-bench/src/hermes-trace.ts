@@ -111,6 +111,8 @@ export async function connectSession(
   metroPort: number,
   appId: string,
   deviceMatch: string,
+  /** The global the host app publishes its harness on. */
+  globalName: string,
 ): Promise<Session> {
   const url = await targetWebSocketUrl(metroPort, appId, deviceMatch);
   const ws = new WebSocket(url, {
@@ -199,14 +201,14 @@ export async function connectSession(
       const deadline = Date.now() + 60_000;
       for (;;) {
         const t = await evaluate<string>(
-          'typeof globalThis.__replicachePerf',
+          `typeof globalThis.${globalName}`,
         ).catch(() => 'undefined');
         if (t === 'object') {
           return;
         }
         if (Date.now() > deadline) {
           throw new Error(
-            'The app never published globalThis.__replicachePerf. It is set in ' +
+            `The app never published globalThis.${globalName}. It is set in ` +
               "the Expo app's App.tsx; make sure Metro rebundled after any edit " +
               '(a CI=1 Metro does not watch for changes).',
           );
@@ -244,14 +246,15 @@ export async function runBenchmarkInApp(
   name: string,
   group: string,
   timeoutMs: number,
+  globalName: string,
 ): Promise<string> {
   await session.evaluate(`(globalThis.__perfDone = false,
     globalThis.__perfOut = null,
-    __replicachePerf.runBenchmarkByNameAndGroup(${JSON.stringify(
+    ${globalName}.runBenchmarkByNameAndGroup(${JSON.stringify(
       name,
     )}, ${JSON.stringify(group)})
       .then(r => { globalThis.__perfOut = r && r[0] === 'result'
-        ? __replicachePerf.formatAsReplicache(r[1])
+        ? ${globalName}.formatAsReplicache(r[1])
         : 'ERROR ' + String(r && r[1]); })
       .catch(e => { globalThis.__perfOut = 'THREW ' + String((e && e.message) || e); })
       .then(() => { globalThis.__perfDone = true; }), 'started')`);
