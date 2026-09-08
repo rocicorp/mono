@@ -980,8 +980,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return true;
   }
 
-  // oxlint-disable-next-line no-unused-private-class-members -- False positive, used in #scheduleShutdown
   #shutdownTimer: NodeJS.Timeout | null = null;
+
+  #stopShutdownTimer() {
+    if (this.#shutdownTimer !== null) {
+      clearTimeout(this.#shutdownTimer);
+      this.#shutdownTimer = null;
+    }
+  }
 
   #scheduleShutdown(delayMs = 0) {
     this.#shutdownTimer ??= this.#setTimeout(() => {
@@ -3467,6 +3473,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
     this.#stopAuthMaintenanceTimer();
+    this.#stopShutdownTimer();
     // The InspectorDelegate shares this transformer and may still use it
     // after cleanup; a destroyed transformer is safe to use (it just stops
     // caching and never restarts its cleanup interval).

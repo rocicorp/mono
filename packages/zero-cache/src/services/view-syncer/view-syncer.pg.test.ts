@@ -6454,4 +6454,33 @@ describe('view-syncer/service', () => {
     // Verify that #cleanup ran (pipelines destroyed).
     expect(destroySpy).toHaveBeenCalled();
   });
+
+  test('stopping before the shutdown check fires clears the pending timer', async () => {
+    // Hand out a recognizable handle for timers scheduled from here on, so
+    // that clearing the pending shutdown timer can be observed.
+    const handle = {} as unknown as NodeJS.Timeout;
+    setTimeoutFn.mockReturnValue(handle);
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      // A client connects and disconnects, which schedules the shutdown
+      // check (without firing it).
+      const {source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      ]);
+      source.cancel();
+      await sleep(100);
+      expect(setTimeoutFn).toHaveBeenCalled();
+
+      // Stopping the view-syncer before the check fires must clear the
+      // pending timer, which would otherwise retain the service until it
+      // fired after teardown.
+      await vs.stop();
+      await viewSyncerDone;
+      expect(clearTimeoutSpy.mock.calls.some(([t]) => t === handle)).toBe(
+        true,
+      );
+    } finally {
+      clearTimeoutSpy.mockRestore();
+    }
+  });
 });
