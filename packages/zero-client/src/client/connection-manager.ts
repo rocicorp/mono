@@ -93,6 +93,12 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   #timeoutCheckIntervalMs: number;
 
   /**
+   * `Date.now()` at the last timeout-interval tick, used to notice that the
+   * JavaScript event loop was not running. See {@linkcode #creditFrozenTime}.
+   */
+  #lastTimeoutCheckAt: number;
+
+  /**
    * Resolver used to signal waiting callers when the state changes.
    */
   #stateChangeResolver: Resolver<ConnectionManagerState> = resolver();
@@ -111,6 +117,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
       disconnectAt: now + this.#disconnectTimeout,
     };
     this.#connectingStartedAt = now;
+    this.#lastTimeoutCheckAt = now;
     this.#maybeStartTimeoutInterval();
   }
 
@@ -451,6 +458,53 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   }
 
   /**
+   * Pushes the disconnect deadline forward by however long the event loop was
+   * not running.
+   *
+   * `disconnectAt` is an absolute wall-clock instant, but what it is meant to
+   * bound is time spent *actually retrying*. Whenever the loop is frozen --- a
+   * suspended React Native app, a sleeping laptop, a throttled background tab
+   * --- wall-clock keeps advancing while no reconnect attempt can run, so
+   * without this the first tick after resume reports `Offline` having given the
+   * client zero live seconds to connect.
+   *
+   * This interval is its own detector: a tick that lands late by more than a
+   * full period means we were not running in between. A merely busy JS thread
+   * can also delay a tick, and we cannot tell the two apart from lateness
+   * alone, but the costs are asymmetric --- crediting a busy period back just
+   * grants a bit more time to connect, whereas failing to credit a real freeze
+   * produces a user-visible bogus disconnect --- so we credit.
+   */
+  #creditFrozenTime(): void {
+    const now = Date.now();
+    const elapsed = now - this.#lastTimeoutCheckAt;
+    this.#lastTimeoutCheckAt = now;
+
+    // Ordinary scheduling jitter, not a freeze.
+    if (elapsed <= 2 * this.#timeoutCheckIntervalMs) {
+      return;
+    }
+    const frozenMs = elapsed - this.#timeoutCheckIntervalMs;
+
+    // Advance the window's origin so that a later `connecting()` that starts a
+    // fresh session recomputes a deadline that also excludes the frozen time.
+    if (this.#connectingStartedAt !== undefined) {
+      this.#connectingStartedAt += frozenMs;
+    }
+
+    if (this.#state.name === ConnectionStatus.Connecting) {
+      // Deliberately not published: the status has not changed, and waking the
+      // run loop's `waitForStateChange` racers here would interrupt an
+      // in-flight connect attempt for no reason. Readers of `state` still see
+      // the corrected deadline.
+      this.#state = {
+        ...this.#state,
+        disconnectAt: this.#state.disconnectAt + frozenMs,
+      };
+    }
+  }
+
+  /**
    * Check if we should transition from connecting to disconnected due to timeout.
    * Returns true if the transition happened.
    */
@@ -477,7 +531,9 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
     if (this.#timeoutInterval !== undefined) {
       return;
     }
+    this.#lastTimeoutCheckAt = Date.now();
     this.#timeoutInterval = setInterval(() => {
+      this.#creditFrozenTime();
       this.#checkTimeout();
     }, this.#timeoutCheckIntervalMs);
   }

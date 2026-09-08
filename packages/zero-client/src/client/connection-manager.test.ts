@@ -567,6 +567,72 @@ describe('ConnectionManager', () => {
     });
   });
 
+  describe('frozen event loop', () => {
+    // Simulates the event loop not running: wall-clock jumps forward but no
+    // timer callbacks fire, which is what a suspended React Native app, a
+    // sleeping laptop or a throttled background tab looks like from JS.
+    const freeze = (ms: number) => {
+      vi.setSystemTime(Date.now() + ms);
+    };
+
+    test('does not count frozen time against the disconnect deadline', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: 1_000,
+        timeoutCheckIntervalMs: 100,
+      });
+      const listener = subscribe(manager);
+
+      // Frozen far longer than the whole disconnect window.
+      freeze(60_000);
+      vi.advanceTimersByTime(100);
+
+      // The client never got a live chance to retry, so it must not be
+      // declared offline.
+      expect(manager.is(ConnectionStatus.Connecting)).toBe(true);
+      expect(listener).not.toHaveBeenCalled();
+
+      // ...and it still gets the rest of its budget in live time afterwards.
+      vi.advanceTimersByTime(800);
+      expect(manager.is(ConnectionStatus.Connecting)).toBe(true);
+
+      vi.advanceTimersByTime(200);
+      expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
+    });
+
+    test('pushes disconnectAt forward by the frozen duration', () => {
+      vi.setSystemTime(0);
+      const manager = new ConnectionManager({
+        disconnectTimeout: 1_000,
+        timeoutCheckIntervalMs: 100,
+      });
+      assert(
+        manager.state.name === ConnectionStatus.Connecting,
+        'Expected to start out connecting',
+      );
+      expect(manager.state.disconnectAt).toBe(1_000);
+
+      freeze(60_000);
+      vi.advanceTimersByTime(100);
+
+      assert(
+        manager.state.name === ConnectionStatus.Connecting,
+        'Expected to still be connecting after the freeze',
+      );
+      expect(manager.state.disconnectAt).toBe(1_000 + 60_000);
+    });
+
+    test('ordinary ticks are not treated as a freeze', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: 1_000,
+        timeoutCheckIntervalMs: 100,
+      });
+
+      // No jump: the deadline must still fire on schedule.
+      vi.advanceTimersByTime(1_100);
+      expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
+    });
+  });
+
   describe('shouldContinueRunLoop', () => {
     test('is true until the manager is closed', () => {
       const manager = new ConnectionManager({
