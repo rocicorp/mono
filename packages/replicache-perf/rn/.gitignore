@@ -1,0 +1,7 @@
+node_modules/
+.expo/
+android/
+ios/
+# Copied in by `pnpm --filter replicache-perf run perf:rn`.
+benchmarks.js
+benchmarks.js.map

@@ -56,10 +56,8 @@ type Format = 'benchmarkJS' | 'json' | 'replicache' | 'bmf';
 /** Metro's default 8081 is often taken (Docker), so default one above it. */
 const DEFAULT_METRO_PORT = 8082;
 const DEFAULT_CONTROL_PORT = 9099;
-const DEFAULT_APP_DIR = path.join(
-  os.homedir(),
-  'src/rocicorp/replicache-perf-rn',
-);
+/** The Expo host app, checked in beside the harness it runs. */
+const DEFAULT_APP_DIR = path.join(rootDir, 'rn');
 
 class UnknownValueError extends Error {
   name = 'UNKNOWN_VALUE';
@@ -423,7 +421,8 @@ const optionDefinitions = [
     name: 'app',
     type: String,
     defaultValue: DEFAULT_APP_DIR,
-    description: `Path to the Expo app (default ${DEFAULT_APP_DIR})`,
+    description:
+      'Path to the Expo host app (default: the rn/ directory beside this package)',
   },
   {
     name: 'port',
