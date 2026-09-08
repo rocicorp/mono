@@ -12,12 +12,21 @@ reasons:
   workspace package supplying them would get a *different* instance of
   `replicache` than the rest of the repo, and type identity would stop unifying
   across the workspace. See the comment in `packages/zero/tool/build.ts`.
-- Metro never has to resolve a pnpm symlink, because this directory has its own
-  plain npm `node_modules`.
+- It keeps a separate lockfile and dependency graph, so the app's Expo and React
+  Native versions move independently of the workspace's.
 
-It therefore has its own `package-lock.json` and needs `npm install` here once
-before the harness can drive it. Nothing in the workspace toolchain (turbo,
-vitest, oxlint, the package tsconfig) reaches into this directory.
+It has its own lockfile and needs `pnpm install` here once before the harness
+can drive it. Nothing in the workspace toolchain (turbo, vitest, oxlint, the
+package tsconfig) reaches into this directory.
+
+The empty `pnpm-workspace.yaml` here is deliberate: without it, `pnpm install`
+run from this directory walks up, reinstalls the entire monorepo, and installs
+none of this app's dependencies. Declaring a workspace root stops that walk.
+
+pnpm's isolated (symlinked) `node_modules` works fine for Expo and React
+Native here — autolinking resolves both SQLite modules through the symlinks and
+gradle compiles op-sqlite's native code without special configuration, so no
+`node-linker=hoisted` is needed.
 
 The benchmarks themselves live in `mono/packages/replicache-perf`. They are
 bundled by `tool/build.ts` into a single self-contained `out/rn.js`, which the
