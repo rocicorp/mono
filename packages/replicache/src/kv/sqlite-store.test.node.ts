@@ -23,6 +23,8 @@ function makeMockStatements(
   const stmts: PreparedStatements = {
     put: {async exec() {}, all: () => Promise.resolve([])},
     del: {async exec() {}, all: () => Promise.resolve([])},
+    putN: () => ({async exec() {}, all: () => Promise.resolve([])}),
+    delN: () => ({async exec() {}, all: () => Promise.resolve([])}),
     get: {
       async exec() {},
       // oxlint-disable-next-line require-await
