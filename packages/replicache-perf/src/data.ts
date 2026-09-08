@@ -42,9 +42,20 @@ type TmcwData = {
   }[];
 };
 
+let tmcwUrl: string | URL | undefined;
+
+/**
+ * Overrides where {@link getTmcwData} loads its 9.7 MB fixture from. React
+ * Native cannot resolve `import.meta.url` and the file is far too large to
+ * bundle, so the RN runner serves it over HTTP and points us at it.
+ */
+export function setTmcwUrl(url: string | URL): void {
+  tmcwUrl = url;
+}
+
 export async function getTmcwData(): Promise<TmcwData> {
   const response = await fetch(
-    new URL('../resources/tmcw.json', import.meta.url),
+    tmcwUrl ?? new URL('../resources/tmcw.json', import.meta.url),
   );
   return response.json();
 }

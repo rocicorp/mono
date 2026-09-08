@@ -1,10 +1,35 @@
+import {runBenchmark} from './benchmark.ts';
+import {formatAsReplicache} from './format.ts';
 import * as m from './perf.ts';
-import {benchmarks, runAll} from './perf.ts';
+import {benchmarks, findBenchmarks} from './perf.ts';
+
+// Lives here rather than in perf.ts so that perf.ts stays DOM-free and can be
+// reused by the React Native entry point (rn.ts).
+async function runAll(groups: string[], runs: string[]): Promise<void> {
+  const out: HTMLElement | null = document.getElementById('out');
+  if (!out) {
+    return;
+  }
+  for (const b of findBenchmarks(groups, runs)) {
+    try {
+      const result = await runBenchmark(b);
+      if (result) {
+        out.textContent += formatAsReplicache(result) + '\n';
+      }
+    } catch (e) {
+      out.textContent += `${b.name} had an error: ${e}\n`;
+    }
+  }
+  out.textContent += 'Done!\n';
+}
 
 // export all as globals
 for (const [n, v] of Object.entries(m)) {
   (globalThis as Record<string, unknown>)[n] = v;
 }
+// runAll used to be exported from perf.ts and hoisted by the loop above; keep
+// it on the global for `--devtools` users.
+(globalThis as Record<string, unknown>).runAll = runAll;
 
 const {searchParams} = new URL(location.href);
 const selected = searchParams.getAll('group');

@@ -1,3 +1,4 @@
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {randomUint64} from '../../shared/src/random-uint64.ts';
 import {
@@ -5,9 +6,10 @@ import {
   type TestDataObject,
 } from '../../shared/src/test-data.ts';
 import type {Writable} from '../../shared/src/writable.ts';
+import {getKVStoreProvider} from './get-kv-store-provider.ts';
 import {ReplicacheImpl} from './impl.ts';
 import type {IndexDefinitions} from './index-defs.ts';
-import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
+import type {StoreProvider} from './kv/store.ts';
 import type {PatchOperation} from './patch-operation.ts';
 import type {ReplicacheOptions} from './replicache-options.ts';
 import type {WriteTransaction} from './transactions.ts';
@@ -17,12 +19,33 @@ export {ReplicacheImpl};
 
 export const valSize = 1024;
 
+/**
+ * The key/value store every benchmark rep is created with. Defaults to `'idb'`
+ * so the browser perf harness is unchanged; React Native sets an
+ * expo-sqlite/op-sqlite {@link StoreProvider} (or `'mem'`) before running.
+ */
+let benchKVStore: 'mem' | 'idb' | StoreProvider | undefined = 'idb';
+
+export function setBenchKVStore(
+  kvStore: 'mem' | 'idb' | StoreProvider | undefined,
+): void {
+  benchKVStore = kvStore;
+}
+
+export function getBenchKVStore(): 'mem' | 'idb' | StoreProvider | undefined {
+  return benchKVStore;
+}
+
+function benchKVStoreProvider(): StoreProvider {
+  return getKVStoreProvider(new LogContext(), benchKVStore);
+}
+
 export class ReplicachePerfTest<
   MD extends MutatorDefs,
 > extends ReplicacheImpl<MD> {
   constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
     super(
-      {...options},
+      {...options, kvStore: options.kvStore ?? benchKVStore},
       {
         enableMutationRecovery: false,
         enableScheduledRefresh: false,
@@ -96,7 +119,7 @@ export async function closeAndCleanupRep(
 ): Promise<void> {
   if (rep) {
     await rep.close();
-    await dropIDBStoreWithMemFallback(rep.idbName);
+    await benchKVStoreProvider().drop(rep.idbName);
   }
 }
 
