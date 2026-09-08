@@ -89,8 +89,10 @@ export async function runBenchmark(
   }
 
   times.sort((a, b) => a - b);
-  // Remove two slowest. Treat them as JIT warmup.
-  times.splice(0, 2);
+  // Remove the two slowest, treating them as JIT warmup. `times` is sorted
+  // ascending, so that is the tail -- `splice(0, 2)` dropped the two *fastest*
+  // instead, which can only bias every statistic upward.
+  times.splice(-2);
   const calcPercentile = (percentile: number): number =>
     times[Math.floor((runCount * percentile) / 100)];
   const runCount = times.length;
