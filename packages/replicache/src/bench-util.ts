@@ -71,20 +71,44 @@ export function makeRep<MD extends MutatorDefs>(
   } as Omit<ReplicacheOptions<MD>, 'licenseKey'>);
 }
 
+/**
+ * Payload for the benchmark mutators, handed over out of band rather than as
+ * mutator arguments.
+ *
+ * A local mutation stores its arguments in the commit as `mutatorArgsJSON` so
+ * the mutation can be rebased, and `persist` then serializes that to disk.
+ * Passing the dataset as an argument therefore made every benchmark write its
+ * own test data twice — measured on device, roughly half of what
+ * `persist 1024x1000` serialized was the harness handing itself its data, not
+ * storage work. Real mutations take small arguments; these now do too.
+ *
+ * Set these outside the timed region, exactly where the data used to be
+ * generated.
+ */
+let populateValues: readonly TestDataObject[] = [];
+
+export function setPopulateValues(values: readonly TestDataObject[]): void {
+  populateValues = values;
+}
+
 export async function populate(
   tx: WriteTransaction,
-  {numKeys, randomValues}: {numKeys: number; randomValues: TestDataObject[]},
+  {numKeys}: {numKeys: number},
 ): Promise<void> {
   for (let i = 0; i < numKeys; i++) {
-    await tx.set(`key${i}`, randomValues[i]);
+    await tx.set(`key${i}`, populateValues[i]);
   }
 }
 
-export async function putMap(
-  tx: WriteTransaction,
-  map: Record<string, TestDataObject>,
-): Promise<void> {
-  for (const [key, value] of Object.entries(map)) {
+/** See {@link setPopulateValues} for why this is not a mutator argument. */
+let putMapEntries: Record<string, TestDataObject> = {};
+
+export function setPutMapEntries(map: Record<string, TestDataObject>): void {
+  putMapEntries = map;
+}
+
+export async function putMap(tx: WriteTransaction): Promise<void> {
+  for (const [key, value] of Object.entries(putMapEntries)) {
     await tx.set(key, value);
   }
 }
