@@ -919,29 +919,34 @@ export async function runRnBench(config: RnBenchConfig): Promise<void> {
   const platforms: Platform[] =
     options.platform === 'all' ? [...allPlatforms] : [options.platform];
 
-  if (options.profile) {
-    // Hermes frames are just `Ys`/`ie`/`dr` against the shipped bundle, so
-    // rebuild without minification before installing it.
-    logLine(
-      'Rebuilding the RN bundle unminified for readable frames...',
-      options,
+  // Always rebuild. Measuring a stale bundle silently reports the previous
+  // revision's numbers, which looks exactly like "the change did nothing" --
+  // and a null result is the one outcome nobody re-checks.
+  logLine(
+    options.profile
+      ? // Hermes frames are just `Ys`/`ie`/`dr` against the shipped bundle, so
+        // rebuild without minification before installing it.
+        'Rebuilding the RN bundle unminified for readable frames...'
+      : 'Rebuilding the RN bundle...',
+    options,
+  );
+  await new Promise<void>((resolve, reject) => {
+    const build = spawn(
+      'node',
+      [path.join(config.rootDir, config.buildScript ?? 'tool/build.ts')],
+      {
+        cwd: config.rootDir,
+        env: options.profile
+          ? {...process.env, PERF_RN_NO_MINIFY: '1'}
+          : process.env,
+        stdio: options.verbose ? 'inherit' : 'ignore',
+      },
     );
-    await new Promise<void>((resolve, reject) => {
-      const build = spawn(
-        'node',
-        [path.join(config.rootDir, config.buildScript ?? 'tool/build.ts')],
-        {
-          cwd: config.rootDir,
-          env: {...process.env, PERF_RN_NO_MINIFY: '1'},
-          stdio: options.verbose ? 'inherit' : 'ignore',
-        },
-      );
-      build.on('exit', code =>
-        code === 0 ? resolve() : reject(new Error(`build exited ${code}`)),
-      );
-      build.on('error', reject);
-    });
-  }
+    build.on('exit', code =>
+      code === 0 ? resolve() : reject(new Error(`build exited ${code}`)),
+    );
+    build.on('error', reject);
+  });
 
   await installBundle(options.app, config.rootDir);
 
