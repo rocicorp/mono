@@ -12,6 +12,7 @@
 
 import {dirname, relative, resolve} from 'node:path';
 import {
+  compareText,
   REPO_ROOT,
   structuralEdges,
   type Model,
@@ -134,6 +135,55 @@ ${rows.join('\n')}
 `;
 }
 
+/**
+ * Counts, not names: the ~160 series live in their own committed document,
+ * which diffs on the same commit. What belongs here is the fact that a package
+ * serves a scrape at all, which is a property of the architecture.
+ */
+function metricsSection(model: Model): string {
+  const catalog = model.metricsCatalog;
+  if (!catalog || !catalog.totals.emitters) return '';
+
+  const rows = catalog.emitters.map(name => {
+    const pkg = model.packages.find(candidate => candidate.name === name)!;
+    const byType = new Map<string, number>();
+    for (const family of pkg.exports?.families ?? []) {
+      byType.set(family.type, (byType.get(family.type) ?? 0) + 1);
+    }
+    const shape = [...byType.entries()]
+      .toSorted((a, b) => b[1] - a[1] || compareText(a[0], b[0]))
+      .map(([type, count]) => `${count} ${type}`)
+      .join(', ');
+    return `| \`${name}\` | ${pkg.metrics.families} | ${shape} |`;
+  });
+
+  const warning = catalog.unresolved.length
+    ? `\n${catalog.unresolved.length} declaration site(s) could not be resolved to a series name, so\nthese counts are a floor — see the warning in \`${model.meta.metricsPath}\`.\n`
+    : '';
+
+  const one = catalog.totals.emitters === 1;
+  const link = `[\`${model.meta.metricsPath}\`](./${model.meta.metricsPath.replace('docs/', '')})`;
+
+  return `
+## Exported metrics
+
+${catalog.totals.emitters} of these ${model.totals.packages} packages ${
+    one ? 'exports' : 'export'
+  } an OpenTelemetry scrape, ${catalog.totals.families} series ${
+    one ? 'in all' : 'between them'
+  }, read off the declaration sites in ${one ? 'its' : 'their'} source.
+
+| Package | Series | Shape |
+| --- | --- | --- |
+${rows.join('\n')}
+${warning}
+The names, types, units and descriptions are in ${link}, written by the same
+\`pnpm ${model.meta.command}\` run and gated by the same \`--check\`. The
+interactive view renders them per package and in one sortable table, and
+colouring by **Metric families** shows which packages export at all.
+`;
+}
+
 export function renderMarkdown(model: Model, outputPath: string): string {
   const meta = model.meta;
   const devEdges = model.totals.edges - model.totals.runtimeEdges;
@@ -193,7 +243,7 @@ ${packageGraph(model)}
 | Layer | Package | Kind | Direct workspace dependencies |
 | --- | --- | --- | --- |
 ${rows.join('\n')}
-
+${metricsSection(model)}
 ## Regenerate
 
 From the repository root:
@@ -208,6 +258,7 @@ pnpm ${meta.command}:open     # regenerate and open the interactive view
 committed: \`${meta.modelPath}\` (the extracted workspace model — every renderer,
 script, and agent query should read this rather than re-walking pnpm) and
 \`${meta.htmlPath}\` (an interactive view of the same model, with per-package
-metrics, dependency/dependent cones, and layer filtering).
+metrics, dependency/dependent cones, and layer filtering). It also writes the
+committed [\`${meta.metricsPath}\`](./${meta.metricsPath.replace('docs/', '')}).
 `;
 }

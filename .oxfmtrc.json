@@ -32,6 +32,7 @@
     "apps/zbugs/db/migrations/",
     "**/__snapshots__/**",
     "docs/PACKAGE-GRAPH.md",
+    "docs/METRICS.md",
     "packages/zero-client/src/client/zero-stress-queries-test.ts",
     "packages/zql-benchmarks/src/planner-cost.bench.ts"
   ]

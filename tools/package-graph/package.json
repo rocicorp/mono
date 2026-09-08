@@ -13,6 +13,9 @@
     "graph": "node src/main.ts",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
+  "dependencies": {
+    "oxc-parser": "^0.129.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "oxfmt": "^0.65.0",
