@@ -14,6 +14,7 @@
     "go": "node src/main.ts",
     "server": "node src/server.ts",
     "start:server": "node src/server.ts",
+    "build": "pnpm --filter @rocicorp/zero run build",
     "db-up": "cd docker && docker compose up",
     "db-down": "cd docker && docker compose down",
     "check-types": "tsc",
