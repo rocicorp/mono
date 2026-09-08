@@ -53,6 +53,7 @@ export function assertNormalized(
   assert(config.changeStreamer.port, 'missing --change-streamer-port');
   assert(config.changeStreamer.address, 'missing --change-streamer-address');
   const {
+    pgChangeLogEnabled,
     sqliteChangeLogMode,
     sqliteChangeLogReadPercent,
     sqliteChangeLogColdReadPercent,
@@ -97,6 +98,24 @@ export function assertNormalized(
     sqliteChangeLogReadPercent > 0 || sqliteChangeLogColdReadPercent === 0,
     '--change-streamer-sqlite-change-log-cold-read-percent must be 0 when --change-streamer-sqlite-change-log-read-percent is 0',
   );
+  if (!pgChangeLogEnabled) {
+    assert(
+      sqliteChangeLogMode === 'serve',
+      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-mode=serve',
+    );
+    assert(
+      sqliteChangeLogReadPercent === 100,
+      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-read-percent=100',
+    );
+    assert(
+      sqliteChangeLogColdReadPercent === 100,
+      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-cold-read-percent=100',
+    );
+    assert(
+      config.litestream.backupURL && config.litestream.backupUsingV5,
+      '--change-streamer-pg-change-log-enabled=false requires a litestream v5 backup',
+    );
+  }
   for (const [flag, value] of [
     ['retention-ms', sqliteChangeLogRetentionMs],
     ['read-batch-rows', sqliteChangeLogReadBatchRows],
