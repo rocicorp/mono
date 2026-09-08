@@ -1,6 +1,13 @@
 {
   "versionGroups": [
     {
+      "label": "packages/replicache-perf/rn is an Expo app that is deliberately not a pnpm workspace member (see its README). It pins the React, TypeScript and Expo versions its React Native release needs, independently of the workspace's.",
+      "packages": [
+        "replicache-perf-rn"
+      ],
+      "isIgnored": true
+    },
+    {
       "label": "replicache-doc stays on TypeScript 6 because typedoc does not support TypeScript 7",
       "dependencies": [
         "typescript"

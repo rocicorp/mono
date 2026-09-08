@@ -50,13 +50,15 @@ export async function runBenchmark(
         let t1 = 0;
         let subtracted = 0;
         const reset = () => {
-          performance.mark('mark-' + i);
+          // performance.mark/measure are not available on all React Native
+          // JS engines; performance.now() is.
+          performance.mark?.('mark-' + i);
           t0 = performance.now();
           subtracted = 0;
         };
         const stop = () => {
           t1 = performance.now();
-          performance.measure(benchmark.name, 'mark-' + i);
+          performance.measure?.(benchmark.name, 'mark-' + i);
         };
         const subtract = (n: number) => {
           subtracted += n;
