@@ -4,9 +4,10 @@
     "declaration": false,
     "declarationMap": false,
     "paths": {
-      "@rocicorp/zero": ["../../packages/zero/src/zero.ts"]
+      "@rocicorp/zero": ["../../packages/zero/src/zero.ts"],
+      "@rocicorp/zero/server": ["../../packages/zero/src/server.ts"]
     },
     "types": ["node"]
   },
-  "include": ["src", "api"]
+  "include": ["src"]
 }
