@@ -15,7 +15,7 @@ allowBuilds:
   protobufjs: true
   ssh2: false
 minimumReleaseAgeExclude:
-  - compare-utf8@0.2.1
+  - compare-utf8@0.2.1 || 0.2.3
 
 # docusaurus-plugin-typedoc and typedoc-docusaurus-theme both import typedoc
 # without declaring it, so they can only resolve it through pnpm's hoisted
