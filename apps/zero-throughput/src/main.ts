@@ -74,10 +74,12 @@ async function main(): Promise<void> {
     );
     cleanup.push(() => sql.end());
 
-    if (config.reset) {
-      log('Resetting benchmark database...');
+    if (config.resetMode !== 'none') {
+      log(`Resetting benchmark database (${config.resetMode})...`);
       await resetBenchmarkDatabase(sql, config);
-      await removeReplicaFiles(config.zero.replicaFile);
+      if (config.resetMode === 'all') {
+        await removeReplicaFiles(config.zero.replicaFile);
+      }
     }
 
     if (config.zero.start) {
@@ -120,8 +122,14 @@ async function main(): Promise<void> {
     if (config.topology === 'single') {
       log('Analyzing profile query plans...');
       log(`query-plan logs: ${queryPlanAnalysisLogPath(config)}`);
-      const queryPlanAnalysis = await analyzeProfileQueries(config);
-      processes.push(queryPlanAnalysis);
+      try {
+        const queryPlanAnalysis = await analyzeProfileQueries(config);
+        processes.push(queryPlanAnalysis);
+      } catch (err) {
+        warn(
+          `Query plan analysis skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     log(`Starting ${config.users} synthetic clients...`);
