@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788777089606,
+  "lastUpdate": 1788862449282,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57501,6 +57501,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/49c22bccae2957e2e211bba7104b5d109593ead1"
         },
         "date": 1788777076601,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319408,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57502,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117952,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33704,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f571bbd152fab861add7deba911440914df7fa5b",
+          "message": "perf(replicache): bind commit parameters instead of routing writes through json_each (#6502)\n\n## What\n\n`SQLiteStore.commit()` serialized the entire pending write set into one\nJSON document and let SQLite parse it back out via `json_each(?)`. One\nstatement regardless of key count is the right instinct, but it means a\ncommit's whole payload — often megabyte-scale — is built as a JS string\nand pushed across the native bridge, then re-parsed as JSON on the other\nside.\n\nThis binds keys and JSON-encoded values as real parameters instead, in\npower-of-two batches up to 128 rows.\n\n## Why\n\nA Hermes CPU profile of `persist 1024x1000` on an Android emulator\n(release build, expo-sqlite), windowed to the region the bencher\nactually times:\n\n| frame | share |\n|---|---|\n| `(idle)` — genuinely waiting on SQLite | 31.7% |\n| `runAsync` **self** time — marshalling on the JS thread | 22.3% |\n| `jsonStringify` | 9.5% |\n| `execSync` (pragmas, BEGIN/COMMIT) | 8.1% |\n| BTree work, combined | ~4% |\n\nOnly the first is database work. `jsonStringify` plus a large share of\n`runAsync`'s self time is the cost of getting the data *to* SQLite, and\nboth scale with that one JSON string.\n\n## Numbers\n\n`persist 1024x1000 (indexes: 0)`, p50, Android release build, 8-core/8\nGB emulator:\n\n| backend | before | after | |\n|---|---|---|---|\n| expo-sqlite | 85.6 ms | **77.4 ms** | −10% |\n| op-sqlite | 66.4 ms | **52.8 ms** | −20% |\n\n`populate` and `scan` are unchanged, as expected — they don't commit\nlarge sets. op-sqlite gains more because once the JSON document is gone,\nwhat's left is each binding's own marshalling, and its bridge is\ncheaper.\n\n## Details\n\n- 128 rows costs 256 variables, far below SQLite's\n`SQLITE_MAX_VARIABLE_NUMBER` of 32766. The width is bounded to limit how\nmany distinct statements get prepared and cached, not to satisfy SQLite.\n- Power-of-two decomposition means any commit size is covered by at most\n8 cached statement widths.\n- `sqlite-store.test.ts` asserted the `json_each` payload shape\ndirectly, so it now asserts the bound parameters. The two mock statement\nbags gain `putN`/`delN`.\n\n## Testing\n\n806/806 replicache tests pass (browser + node), plus lint, format and\ncheck-types. Measured on device via the harness in the companion PR.\n\n## Caveat\n\nMeasured on one emulator with one commit shape (1000×1 KB → a few\nhundred chunks). The win should grow with commit size and shrink toward\nnothing for small commits, where a single `json_each` call was already\ncheap — I have not measured the small-commit case, and it's the one\nwhere this could plausibly be marginally worse.\n\n---------\n\nCo-authored-by: Claude Opus 5 <noreply@anthropic.com>",
+          "timestamp": "2026-09-08T10:04:16Z",
+          "tree_id": "e6d510159b96b8e3084e7b9815bffcf5aad01e66",
+          "url": "https://github.com/rocicorp/mono/commit/f571bbd152fab861add7deba911440914df7fa5b"
+        },
+        "date": 1788862436113,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
