@@ -46,6 +46,10 @@ async function buildRN(): Promise<void> {
     external: ['node:*', 'expo-sqlite', '@op-engineering/op-sqlite'],
     format: 'esm',
     platform: 'neutral',
+    // 'neutral' resolves no main fields at all, so any dependency that ships
+    // only `module`/`main` (rather than an `exports` map esbuild can follow)
+    // fails to resolve. Metro's own order, minus react-native-specific entries.
+    mainFields: ['module', 'main'],
     splitting: false,
     define,
     outfile: path.join(dirname, '..', 'out', 'rn.js'),
