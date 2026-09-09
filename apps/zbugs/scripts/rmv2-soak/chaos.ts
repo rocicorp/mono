@@ -1,10 +1,12 @@
 import {stat} from 'node:fs/promises';
+import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import type {TrafficDriver} from '../change-log-traffic.ts';
 import type {SoakCluster} from './cluster.ts';
 import type {SoakConfig} from './config.ts';
 import {backupGenerations, sleep, startMinio, stopMinio} from './infra.ts';
 import type {SoakEvent, SoakLog} from './logs.ts';
+import {readBackfillState, readTableRowCount} from './oracle.ts';
 import type {MetricStore} from './otlp.ts';
 import type {ResourceSample, ResourceSampler} from './resources.ts';
 
@@ -24,6 +26,8 @@ import type {ResourceSample, ResourceSampler} from './resources.ts';
 export type ChaosContext = {
   readonly config: SoakConfig;
   readonly cluster: SoakCluster;
+  /** For the oracle's replica readers, which open SQLite directly. */
+  readonly lc: LogContext;
   readonly log: SoakLog;
   readonly metrics: MetricStore;
   readonly sql: postgres.Sql;
@@ -400,6 +404,248 @@ async function restartViewSyncer(
   out.measurements[`restartMs.${vs.name}`] = Date.now() - since;
   measureReservationHold(ctx.log, since, vs.name, out);
   recordConfirmationEvidence(ctx.log, since, out);
+}
+
+/**
+ * C15's fixture size. Backfill transactions are cut at 8MB
+ * (`COMMIT_THRESHOLD_BYTES` in `backfill-manager.ts`), so the table has to be
+ * several times that for the run to have committed a mark *and* still have
+ * work left when the RM is killed. 200k rows at ~200 bytes is ~40MB, i.e.
+ * about five backfill transactions.
+ *
+ * `scale` shrinks it for a smoke run, but only to a floor: below a couple of
+ * commit thresholds there is no mark to resume from and the action can only
+ * report that its own fixture was too small.
+ */
+const BACKFILL_FIXTURE_MAX_ROWS = 200_000;
+const BACKFILL_FIXTURE_MIN_ROWS = 100_000;
+const BACKFILL_FIXTURE_PAYLOAD_BYTES = 200;
+
+function backfillFixtureRows(config: SoakConfig): number {
+  return Math.max(
+    BACKFILL_FIXTURE_MIN_ROWS,
+    Math.round(BACKFILL_FIXTURE_MAX_ROWS * config.scale),
+  );
+}
+const BACKFILL_START_TIMEOUT_MS = 120_000;
+const BACKFILL_RESUME_TIMEOUT_MS = 120_000;
+const BACKFILL_COMPLETION_TIMEOUT_MS = 300_000;
+/**
+ * A table the change source will want to backfill, with a key it can actually
+ * resume from.
+ *
+ * Two properties matter and neither is incidental. The key is `int4`, which is
+ * on the resumable-literal allowlist; and the rows are inserted in key order
+ * and then `ANALYZE`d, so `pg_stats.correlation` is 1 and the run clears the
+ * `backfillResumeMinCorrelation` gate. The zbugs `issue` table satisfies
+ * neither -- its ids are `change-log-traffic-<run>-<n>`, whose text order and
+ * insertion order diverge as soon as the sequence crosses a decade -- so C15
+ * brings its own table rather than borrowing the workload's.
+ */
+async function createBackfillFixture(
+  ctx: ChaosContext,
+  table: string,
+  out: MutableOutcome,
+): Promise<number> {
+  const rows = backfillFixtureRows(ctx.config);
+  const started = Date.now();
+  await ctx.sql.unsafe(`
+    CREATE TABLE "${table}" (
+      "id" int4 PRIMARY KEY,
+      "payload" text NOT NULL
+    )`);
+  await ctx.sql.unsafe(`
+    INSERT INTO "${table}" ("id", "payload")
+      SELECT g, repeat('x', ${BACKFILL_FIXTURE_PAYLOAD_BYTES})
+        FROM generate_series(1, ${rows}) g`);
+  await ctx.sql.unsafe(`ANALYZE "${table}"`);
+  out.measurements['fixtureRows'] = rows;
+  out.measurements['fixtureBuildMs'] = Date.now() - started;
+  const [{correlation}] = await ctx.sql.unsafe<{correlation: number}[]>(`
+    SELECT correlation FROM pg_stats
+      WHERE tablename = '${table}' AND attname = 'id'`);
+  out.measurements['fixtureKeyCorrelation'] = correlation;
+  out.notes.push(
+    `created ${table} with ${rows} rows (key correlation ${correlation})`,
+  );
+  return rows;
+}
+
+async function dropBackfillFixture(
+  ctx: ChaosContext,
+  table: string,
+): Promise<void> {
+  await ctx.sql.unsafe(`DROP TABLE IF EXISTS "${table}"`);
+}
+
+/** One replica's row count for the fixture table. */
+export type FixtureRowCount = {readonly node: string; readonly rows: number};
+
+export type C15Observations = {
+  readonly table: string;
+  readonly fixtureRows: number;
+  /** Did any run announce itself for the table at all? */
+  readonly runAnnounced: boolean;
+  /** Had the replica recorded a mark when the RM was killed? */
+  readonly markedBeforeRestart: boolean;
+  readonly rowsBeforeRestart: number;
+  /** `zero`, `resumed`, or `none-observed`. */
+  readonly resumedStart: string;
+  readonly demotions: number;
+  readonly restores: number;
+  readonly rowsAfterResume: readonly FixtureRowCount[];
+};
+
+/**
+ * C15's verdict, separated from the driving so that each way it can fail is
+ * a case rather than a run.
+ *
+ * The ordering is deliberate: a run that never announced itself, or a fixture
+ * too small to interrupt, makes the resume verdict meaningless, so those are
+ * reported *instead of* it rather than alongside it. Only the demotion,
+ * restore and completeness checks always apply -- they are about the rest of
+ * the system's reaction, which is worth judging even when the backfill itself
+ * did something unexpected.
+ */
+export function c15Findings({
+  table,
+  fixtureRows,
+  runAnnounced,
+  markedBeforeRestart,
+  rowsBeforeRestart,
+  resumedStart,
+  demotions,
+  restores,
+  rowsAfterResume,
+}: C15Observations): string[] {
+  const findings: string[] = [];
+  if (!runAnnounced) {
+    findings.push(
+      `C15 created ${table} with ${fixtureRows} rows but no backfill run ` +
+        'announced itself; either the change source did not pick the table ' +
+        'up, or run announcements are not being logged',
+    );
+  } else if (!markedBeforeRestart) {
+    findings.push(
+      `C15 could not observe a mark for ${table} before the run finished ` +
+        `(${rowsBeforeRestart} of ${fixtureRows} rows replicated); the ` +
+        'fixture is too small to interrupt, so the restart proved nothing',
+    );
+  } else if (resumedStart === 'none-observed') {
+    findings.push(
+      `C15 restarted the RM mid-backfill but ${table} never announced ` +
+        'another run; the backfill was dropped rather than resumed',
+    );
+  } else if (resumedStart !== 'resumed') {
+    findings.push(
+      `C15's restarted run of ${table} started from ${resumedStart} rather ` +
+        "than resuming from the replica's mark; the whole table is being " +
+        'copied again',
+    );
+  }
+  if (demotions > 0) {
+    findings.push(
+      `C15 demoted ${demotions} follower(s) to PG after a backfill was ` +
+        'interrupted; a backfill restart is not a replication gap',
+    );
+  }
+  if (restores > 0) {
+    findings.push(
+      `C15 sent ${restores} follower(s) back to a litestream restore after ` +
+        'a backfill was interrupted; a backfill restart is not a ' +
+        'replication gap',
+    );
+  }
+  const short = rowsAfterResume.filter(c => c.rows !== fixtureRows);
+  if (short.length > 0) {
+    // A resume that skipped its suffix would satisfy every check above.
+    findings.push(
+      `C15's resumed backfill of ${table} left ${short.length} replica(s) ` +
+        `short of ${fixtureRows} rows: ` +
+        short.map(c => `${c.node}=${c.rows}`).join(', '),
+    );
+  }
+  return findings;
+}
+
+/** The run announcement for `table` at or after `sinceMs`, if one arrives. */
+function waitForRunAnnouncement(
+  ctx: ChaosContext,
+  table: string,
+  sinceMs: number,
+  timeoutMs: number,
+): Promise<SoakEvent | undefined> {
+  return ctx.log
+    .waitFor(
+      `a backfill run announcement for ${table}`,
+      e => e.kind === 'backfill-run-started' && e.detail.table === table,
+      timeoutMs,
+      sinceMs,
+    )
+    .catch(() => undefined);
+}
+
+/**
+ * Waits until the RM's own replica has recorded a mark for `table` -- which is
+ * what a restarted manager resumes from -- while the run still has rows left.
+ */
+async function waitForBackfillProgress(
+  ctx: ChaosContext,
+  table: string,
+  fixtureRows: number,
+  out: MutableOutcome,
+): Promise<{marked: boolean; rows: number}> {
+  const replicaFile = ctx.cluster.rm.replicaFile;
+  const deadline = Date.now() + BACKFILL_START_TIMEOUT_MS;
+  let rows = -1;
+  for (;;) {
+    const state = readBackfillState(ctx.lc, replicaFile, table);
+    rows = readTableRowCount(ctx.lc, replicaFile, table);
+    // `mark` is `null` when the run is unordered and `undefined` when the
+    // row is gone, and only a real mark counts.
+    if (
+      state?.mark !== null &&
+      state?.mark !== undefined &&
+      rows > 0 &&
+      rows < fixtureRows
+    ) {
+      out.measurements['rowsBeforeRestart'] = rows;
+      out.measurements['markBeforeRestart'] = state.mark;
+      out.measurements['runIDBeforeRestart'] = str(state.runID);
+      return {marked: true, rows};
+    }
+    // The `_zero.backfilling` row is deleted on completion, so a missing row
+    // beside a full table means the run finished before we could interrupt it.
+    if (state === undefined && rows >= fixtureRows) {
+      break;
+    }
+    if (Date.now() >= deadline) {
+      break;
+    }
+    await sleep(200);
+  }
+  out.measurements['rowsBeforeRestart'] = rows;
+  return {marked: false, rows};
+}
+
+/** Every replica's row count for `table`, once they settle or time out. */
+async function waitForBackfillCompletion(
+  ctx: ChaosContext,
+  table: string,
+  fixtureRows: number,
+): Promise<FixtureRowCount[]> {
+  const deadline = Date.now() + BACKFILL_COMPLETION_TIMEOUT_MS;
+  const handles = ctx.cluster.replicaHandles();
+  for (;;) {
+    const counts = handles.map(h => ({
+      node: h.node,
+      rows: readTableRowCount(ctx.lc, h.replicaFile, table),
+    }));
+    if (counts.every(c => c.rows === fixtureRows) || Date.now() >= deadline) {
+      return counts;
+    }
+    await sleep(500);
+  }
 }
 
 export const CHAOS_ACTIONS: readonly ChaosAction[] = [
@@ -923,6 +1169,104 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
         );
       }
       await load;
+    },
+  },
+  {
+    id: 'C15',
+    title: 'Interrupt a backfill mid-run by restarting the replication-manager',
+    expected:
+      "the run resumes from the replica's mark rather than starting over, and nobody is demoted or restored",
+    async run(ctx, out) {
+      // The other actions all interrupt *replication*. This one interrupts a
+      // *backfill*, which is the one piece of RM state a restart cannot resume
+      // from the change log: the run lives in a snapshot transaction that dies
+      // with the process. What survives is the mark the replica recorded, and
+      // the whole point of R7 is that the next run picks up from it.
+      const table = `c15_backfill_${ctx.config.runID.replace(/[^a-z0-9]/gi, '')}`;
+      const windowStart = Date.now();
+      const fixtureRows = await createBackfillFixture(ctx, table, out);
+      try {
+        // The fixture appears in the `FOR TABLES IN SCHEMA public` publication
+        // as soon as it exists, so the change source picks it up and starts a
+        // run without anything else being asked of it.
+        const announced = await waitForRunAnnouncement(
+          ctx,
+          table,
+          windowStart,
+          BACKFILL_START_TIMEOUT_MS,
+        );
+        out.measurements['firstRunStart'] = str(
+          announced?.detail.start,
+          'none-observed',
+        );
+
+        // A mark exists only once a backfill transaction has landed, so this
+        // is what makes the restart interesting rather than a no-op.
+        const progress = await waitForBackfillProgress(
+          ctx,
+          table,
+          fixtureRows,
+          out,
+        );
+
+        const since = Date.now();
+        await ctx.cluster.rm.stop('SIGTERM');
+        out.notes.push('SIGTERM rm mid-backfill');
+        await ctx.cluster.startReplicationManager();
+        out.measurements['rmRestartMs'] = Date.now() - since;
+
+        const resumed = await waitForRunAnnouncement(
+          ctx,
+          table,
+          since,
+          BACKFILL_RESUME_TIMEOUT_MS,
+        );
+        out.measurements['resumedRunStart'] = str(
+          resumed?.detail.start,
+          'none-observed',
+        );
+        out.measurements['resumedFrom'] = JSON.stringify(
+          resumed?.detail.resumeFrom ?? null,
+        );
+
+        const rowsAfter = await waitForBackfillCompletion(
+          ctx,
+          table,
+          fixtureRows,
+        );
+        out.measurements['rowsAfterResume'] = rowsAfter
+          .map(c => `${c.node}=${c.rows}`)
+          .join(',');
+
+        // A backfill restart must not look like a replication gap to anyone:
+        // no follower demoted to PG, and none thrown back to a restore.
+        const demotions = ctx.log.events.filter(
+          e => e.tsMs >= since && e.kind === 'reservation-demoted',
+        ).length;
+        const restores = ctx.log.events.filter(
+          e => e.tsMs >= since && e.kind === 'restore-started',
+        ).length;
+        out.measurements['demotions'] = demotions;
+        out.measurements['restoresAfterBackfillRestart'] = restores;
+
+        out.findings.push(
+          ...c15Findings({
+            table,
+            fixtureRows,
+            runAnnounced: announced !== undefined,
+            markedBeforeRestart: progress.marked,
+            rowsBeforeRestart: progress.rows,
+            resumedStart: resumed
+              ? str(resumed.detail.start, 'unknown')
+              : 'none-observed',
+            demotions,
+            restores,
+            rowsAfterResume: rowsAfter,
+          }),
+        );
+      } finally {
+        await dropBackfillFixture(ctx, table);
+      }
     },
   },
 ];

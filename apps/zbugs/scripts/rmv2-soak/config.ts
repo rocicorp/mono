@@ -190,6 +190,12 @@ export function replicationManagerEnv(
       config.snapshotBackupIntervalHours,
     ),
     ZERO_LITESTREAM_VFS_POLL_INTERVAL_MS: String(config.vfsPollIntervalMs),
+    // Resumable backfills, which C15 is the test of. The flag ships `off`
+    // and the soak is where the decision to ship it `on` gets its evidence,
+    // so the harness always runs it on. The correlation gate still applies:
+    // only C15's own fixture table clears it, so the zbugs tables keep
+    // today's unordered behavior either way.
+    ZERO_BACKFILL_RESUME: 'on',
     ...changeLogEnv({...config.changeLog, ...overrides}),
   };
 }

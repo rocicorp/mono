@@ -42,7 +42,15 @@ export type SoakEventKind =
   // reservation's `minWatermark` was above it, and restored instead.
   | 'replica-discarded'
   | 'barrier-timeout'
-  | 'registration-failed';
+  | 'registration-failed'
+  // A backfill run announced itself on the change stream, from the beginning
+  // or from a mark. C15 is entirely about which of the two.
+  | 'backfill-run-started'
+  // A subscriber's declared backfill progress that catchup did not cover, so
+  // the change-streamer asked the change source to do something about it.
+  | 'backfill-declarations-forwarded'
+  // A row key change voided the marks on a table.
+  | 'backfill-marks-invalidated';
 
 export type SoakEvent = {
   readonly kind: SoakEventKind;
@@ -285,6 +293,32 @@ export class SoakLog {
       this.#emit('change-log-startup', record, {
         ...(fields.sqliteChangeLog as Record<string, unknown>),
       });
+      return;
+    }
+
+    const backfillRun = fields.backfillRun as
+      | Record<string, unknown>
+      | undefined;
+    if (backfillRun) {
+      this.#emit('backfill-run-started', record, {...backfillRun});
+      return;
+    }
+
+    const backfillDeclarations = fields.backfillDeclarations as
+      | Record<string, unknown>[]
+      | undefined;
+    if (backfillDeclarations) {
+      this.#emit('backfill-declarations-forwarded', record, {
+        declarations: backfillDeclarations,
+      });
+      return;
+    }
+
+    const minSnapshot = fields.minSnapshot as
+      | Record<string, unknown>
+      | undefined;
+    if (minSnapshot) {
+      this.#emit('backfill-marks-invalidated', record, {...minSnapshot});
       return;
     }
 
