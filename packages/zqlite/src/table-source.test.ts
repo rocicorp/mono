@@ -22,7 +22,7 @@ import {
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from '../../zql/src/ivm/source.ts';
-import {consume} from '../../zql/src/ivm/stream.ts';
+import {consume, drainPull, drainPullMap} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
 import {explainQueries} from './explain-queries.ts';
 import {format} from './internal/sql.ts';
@@ -494,12 +494,12 @@ describe('fetched value types', () => {
 
       if (c.output) {
         expect(
-          Array.from(input.fetch({}), node =>
+          drainPullMap(input.fetch({}), node =>
             node === 'yield' ? node : node.row,
           ),
         ).toEqual([c.output]);
       } else {
-        expect(() => [...input.fetch({})]).toThrow(UnsupportedValueError);
+        expect(() => drainPull(input.fetch({}))).toThrow(UnsupportedValueError);
       }
     });
   }
@@ -1087,7 +1087,7 @@ describe('fromSQLiteTypes error messages', () => {
     );
     const input = source.connect([['id', 'asc']]);
 
-    expect(() => [...input.fetch({})]).toThrow(
+    expect(() => drainPull(input.fetch({}))).toThrow(
       /value .* \(in test_table\.big_value\) is outside of supported bounds/,
     );
   });
@@ -1114,7 +1114,7 @@ describe('fromSQLiteTypes error messages', () => {
     );
     const input = source.connect([['id', 'asc']]);
 
-    expect(() => [...input.fetch({})]).toThrow(
+    expect(() => drainPull(input.fetch({}))).toThrow(
       /Failed to parse JSON for test_table\.json_data/,
     );
   });
@@ -1143,7 +1143,8 @@ describe('fromSQLiteTypes error messages', () => {
 
     let caughtError: unknown;
     try {
-      for (const _ of input.fetch({})) {
+      const stream = input.fetch({});
+      for (let _ = stream.next(); _ !== undefined; _ = stream.next()) {
         // Consume the iterator to trigger the error
       }
     } catch (error) {
@@ -1182,7 +1183,7 @@ test('debug.recordExplain captures the plan SQLite picked for the real bindings'
   const input = source.connect([['id', 'asc']], undefined, undefined, debug);
 
   // Drain the iterator with a constraint that uses the email index.
-  [...input.fetch({constraint: {email: 'a@b'}})];
+  drainPull(input.fetch({constraint: {email: 'a@b'}}));
 
   const plans = debug.getSQLitePlans();
   const entries = Object.entries(plans);
@@ -1237,7 +1238,7 @@ test('captured plan diverges from substituted-literal plan when bindings affect 
   const debug = new Debug();
   const input = source.connect([['id', 'asc']], likeFilter, undefined, debug);
 
-  [...input.fetch({})];
+  drainPull(input.fetch({}));
 
   const plans = debug.getSQLitePlans();
   const entries = Object.entries(plans);
@@ -1319,7 +1320,7 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
       throwingDebug,
     );
 
-    expect(() => [...input.fetch({})]).toThrow('initQuery error');
+    expect(() => drainPull(input.fetch({}))).toThrow('initQuery error');
     expect(iteratorReturnCalled).toBe(true);
   } finally {
     Statement.prototype.iterate = origIterate;
