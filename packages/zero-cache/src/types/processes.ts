@@ -57,17 +57,37 @@ function getMessage<M extends Message<unknown>>(
   return null;
 }
 
+/**
+ * Subscribes the `handler` to messages of the given `type` and returns a
+ * function that unsubscribes it. Use this (rather than
+ * {@link Receiver.onMessageType()}) for handlers scoped to a request or
+ * operation rather than to the lifetime of the {@link Worker}; the
+ * `'message'` listener is otherwise retained by the Worker forever.
+ */
+export function subscribeToMessageType<M extends Message<unknown>>(
+  e: EventEmitter,
+  type: M[0],
+  handler: (msg: M[1], sendHandle?: SendHandle) => void,
+): () => void {
+  const listener = (data: unknown, sendHandle?: SendHandle) => {
+    const msg = getMessage(type, data);
+    if (msg) {
+      handler(msg, sendHandle);
+    }
+  };
+  e.on('message', listener);
+  return () => {
+    e.off('message', listener);
+  };
+}
+
 function onMessageType<M extends Message<unknown>>(
   e: EventEmitter,
   type: M[0],
   handler: (msg: M[1], sendHandle?: SendHandle) => void,
 ) {
-  return e.on('message', (data, sendHandle) => {
-    const msg = getMessage(type, data);
-    if (msg) {
-      handler(msg, sendHandle);
-    }
-  });
+  subscribeToMessageType(e, type, handler);
+  return e;
 }
 
 function onceMessageType<M extends Message<unknown>>(

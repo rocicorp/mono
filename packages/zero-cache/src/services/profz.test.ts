@@ -2,6 +2,11 @@ import fastify, {type FastifyInstance} from 'fastify';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
+import {
+  inProcChannel,
+  type ProfileMessage,
+  type ProfileResponseMessage,
+} from '../types/processes.ts';
 import {CpuProfiler} from '../types/profiler.ts';
 import {handleProfrmzRequest, handleProfzRequest} from './profz.ts';
 
@@ -69,6 +74,42 @@ describe('profz', () => {
     expect(body).toHaveProperty('dispatcher');
     expect(body.dispatcher).toEqual(mockProfile);
     expect(profileSpy).toHaveBeenCalledWith(1000);
+  });
+
+  test('worker message listener is removed after the request', async () => {
+    const [dispatcherSide, workerSide] = inProcChannel();
+    workerSide.onMessageType<ProfileMessage>('profile', ({id}) =>
+      workerSide.send<ProfileResponseMessage>([
+        'profileResponse',
+        {id, name: 'syncer-0', profile: mockProfile},
+      ]),
+    );
+    const workerApp = fastify();
+    workerApp.get('/profz', (req, res) =>
+      handleProfzRequest(lc, config, req, res, () =>
+        Promise.resolve(dispatcherSide),
+      ),
+    );
+    await workerApp.ready();
+    try {
+      const before = dispatcherSide.listenerCount('message');
+
+      for (let i = 0; i < 2; i++) {
+        const res = await workerApp.inject({
+          method: 'GET',
+          url: '/profz?duration=1&worker=syncer',
+          headers: authHeader,
+        });
+        expect(res.statusCode).toBe(200);
+        expect(JSON.parse(res.body)).toEqual(mockProfile);
+      }
+
+      // Each request subscribes to the (long-lived) worker's messages for
+      // its own responses; the subscription must not outlive the request.
+      expect(dispatcherSide.listenerCount('message')).toBe(before);
+    } finally {
+      await workerApp.close();
+    }
   });
 
   test('returns single profile when specific worker is requested', async () => {

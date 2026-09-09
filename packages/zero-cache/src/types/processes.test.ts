@@ -1,6 +1,11 @@
 import type {SendHandle} from 'child_process';
 import {describe, expect, test, vi} from 'vitest';
-import {inProcChannel, shouldStartWorker, type Worker} from './processes.ts';
+import {
+  inProcChannel,
+  shouldStartWorker,
+  subscribeToMessageType,
+  type Worker,
+} from './processes.ts';
 
 describe('types/processes', () => {
   test('in-proc channel', () => {
@@ -88,6 +93,29 @@ describe('types/processes', () => {
       [{foo: 'bar'}, 'sendHandle'],
       [{foo: 'baz'}, undefined],
     ]);
+  });
+
+  test('subscribeToMessageType', () => {
+    const [port1, port2] = inProcChannel();
+    const before = port2.listenerCount('message');
+
+    const handler = vi.fn();
+    const unsubscribe = subscribeToMessageType<NotifyMessage>(
+      port2,
+      'notify',
+      handler,
+    );
+    expect(port2.listenerCount('message')).toBe(before + 1);
+
+    port1.send<NotifyMessage>(['notify', {uuid: 'one'}]);
+    port1.send<SubscribeMessage>(['subscribe', {foo: 'bar'}]);
+    expect(handler.mock.calls).toEqual([[{uuid: 'one'}, undefined]]);
+
+    unsubscribe();
+    expect(port2.listenerCount('message')).toBe(before);
+
+    port1.send<NotifyMessage>(['notify', {uuid: 'two'}]);
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 
   describe('shouldStartWorker', () => {
