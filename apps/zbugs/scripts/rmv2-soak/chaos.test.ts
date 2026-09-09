@@ -53,9 +53,10 @@ test('reports an unavailable C9 live-page sample and an unpinned slot', () => {
 const c15 = (overrides: Partial<C15Observations> = {}): C15Observations => ({
   table: 'c15_backfill_run1',
   fixtureRows: 200_000,
+  fixtureRowsSettled: true,
   runAnnounced: true,
   markedBeforeRestart: true,
-  rowsBeforeRestart: 40_000,
+  rowsFilledBeforeRestart: 40_000,
   resumedStart: 'resumed',
   demotions: 0,
   restores: 0,
@@ -84,21 +85,24 @@ test('reports a backfill that was dropped rather than resumed', () => {
   ]);
 });
 
-test('reports a fixture too small to interrupt instead of judging the resume', () => {
+test('reports a missing mark as unordered-or-too-small, not as a resume failure', () => {
   // The run finished before the RM was killed, so `resumedStart` says
   // nothing -- reporting it as a resume failure would be a false negative.
   expect(
     c15Findings(
       c15({
         markedBeforeRestart: false,
-        rowsBeforeRestart: 200_000,
+        rowsFilledBeforeRestart: 200_000,
         resumedStart: 'none-observed',
       }),
     ),
   ).toEqual([
-    'C15 could not observe a mark for c15_backfill_run1 before the run ' +
-      'finished (200000 of 200000 rows replicated); the fixture is too small ' +
-      'to interrupt, so the restart proved nothing',
+    'C15 never saw a mark for c15_backfill_run1 (200000 of 200000 rows ' +
+      'backfilled). Either the run was not ordered -- check that ' +
+      '`ZERO_CHANGE_STREAMER_BACKFILL_RESUME=on` reached the RM and that the ' +
+      'key cleared the correlation gate -- or it finished before the restart, ' +
+      'which makes the fixture too small. The restart proved nothing either ' +
+      'way.',
   ]);
 });
 
@@ -131,5 +135,23 @@ test('reports demotions, restores and a short replica alongside the resume', () 
       'was interrupted; a backfill restart is not a replication gap',
     "C15's resumed backfill of c15_backfill_run1 left 1 replica(s) short of " +
       '200000 rows: vs-0=199998',
+  ]);
+});
+
+test('reports an unsettled fixture instead of judging the run', () => {
+  // The column was added while the rows were still arriving, so nothing after
+  // that is worth reading: report the setup, not a resume verdict.
+  expect(
+    c15Findings(
+      c15({
+        fixtureRowsSettled: false,
+        runAnnounced: false,
+        markedBeforeRestart: false,
+        resumedStart: 'none-observed',
+      }),
+    ),
+  ).toEqual([
+    "C15's 200000 fixture rows did not reach every replica before the column " +
+      'was added; the run it measured started from an unsettled table',
   ]);
 });
