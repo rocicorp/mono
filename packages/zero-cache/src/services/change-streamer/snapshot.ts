@@ -54,54 +54,68 @@ export const snapshotMessageSchema = v.union(statusMessageSchema);
 
 export type SnapshotMessage = v.Infer<typeof statusMessageSchema>;
 
+export type ReserveSnapshot = (
+  lc: LogContext,
+  config: NormalizedZeroConfig,
+) => Promise<Source<SnapshotMessage>>;
+
 export function reserveAndGetSnapshotStatus(
   lc: LogContext,
   config: NormalizedZeroConfig,
+  reserve: ReserveSnapshot = reserveSnapshot, // for testing
 ): Promise<SnapshotStatus> {
   const {promise: status, resolve, reject} = resolver<SnapshotStatus>();
 
   void (async function () {
     const abort = new AbortController();
-    process.on('SIGINT', () => abort.abort());
-    process.on('SIGTERM', () => abort.abort());
+    const onSignal = () => abort.abort();
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
 
-    for (let i = 0; ; i++) {
-      let err: unknown;
-      try {
-        let resolved = false;
-        const stream = await reserveSnapshot(lc, config);
-        for await (const msg of stream) {
-          // Capture the value of the status message that the change-streamer
-          // backup monitor returns, and hold the connection open to
-          // "reserve" the snapshot and prevent change log cleanup.
-          resolve(msg[1]);
-          resolved = true;
+    try {
+      for (let i = 0; ; i++) {
+        let err: unknown;
+        try {
+          let resolved = false;
+          const stream = await reserve(lc, config);
+          for await (const msg of stream) {
+            // Capture the value of the status message that the change-streamer
+            // backup monitor returns, and hold the connection open to
+            // "reserve" the snapshot and prevent change log cleanup.
+            resolve(msg[1]);
+            resolved = true;
+          }
+          // The change-streamer itself closes the connection when the
+          // subscription is started (or the reservation retried).
+          if (resolved) {
+            break;
+          }
+        } catch (e) {
+          err = e;
         }
-        // The change-streamer itself closes the connection when the
-        // subscription is started (or the reservation retried).
-        if (resolved) {
-          break;
+        // Retry in the view-syncer since it cannot proceed until it connects
+        // to a (compatible) replication-manager. In particular, a
+        // replication-manager that does not support the view-syncer's
+        // change-streamer protocol will close the stream with an error; this
+        // retry logic essentially delays the startup of a view-syncer until
+        // a compatible replication-manager has been rolled out, allowing
+        // replication-manager and view-syncer services to be updated in
+        // parallel.
+        lc.warn?.(
+          `Unable to reserve snapshot (attempt ${i + 1}). Retrying in 5 seconds.`,
+          String(err),
+        );
+        try {
+          await sleep(5000, abort.signal);
+        } catch (e) {
+          return reject(e);
         }
-      } catch (e) {
-        err = e;
       }
-      // Retry in the view-syncer since it cannot proceed until it connects
-      // to a (compatible) replication-manager. In particular, a
-      // replication-manager that does not support the view-syncer's
-      // change-streamer protocol will close the stream with an error; this
-      // retry logic essentially delays the startup of a view-syncer until
-      // a compatible replication-manager has been rolled out, allowing
-      // replication-manager and view-syncer services to be updated in
-      // parallel.
-      lc.warn?.(
-        `Unable to reserve snapshot (attempt ${i + 1}). Retrying in 5 seconds.`,
-        String(err),
-      );
-      try {
-        await sleep(5000, abort.signal);
-      } catch (e) {
-        return reject(e);
-      }
+    } finally {
+      // This function is called repeatedly (e.g. by the replicator's restore
+      // loop), so the signal handlers must not outlive the reservation.
+      process.off('SIGINT', onSignal);
+      process.off('SIGTERM', onSignal);
     }
   })();
 
