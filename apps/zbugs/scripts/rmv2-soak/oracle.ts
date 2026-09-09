@@ -362,17 +362,26 @@ export function readBackfillState(
   }
 }
 
-/** A replica's row count for `table`, or -1 if it does not have it yet. */
+/**
+ * A replica's row count for `table`, or -1 if it does not have the table (or
+ * the column) yet -- which is itself an answer while a backfill is in flight.
+ *
+ * `column`, when given, counts only the rows that have a value for it. That is
+ * how C15 tells a finished backfill from a table that merely exists: the
+ * column is added NULL and filled as the run's rows arrive.
+ */
 export function readTableRowCount(
   lc: LogContext,
   replicaFile: string,
   table: string,
+  column?: string,
 ): number {
   let db: Database | undefined;
   try {
     db = openReplica(lc, replicaFile);
+    const where = column === undefined ? '' : ` WHERE "${column}" IS NOT NULL`;
     const row = db
-      .prepare(`SELECT COUNT(*) AS "rows" FROM "${table}"`)
+      .prepare(`SELECT COUNT(*) AS "rows" FROM "${table}"${where}`)
       .get<{rows: number} | undefined>();
     return row?.rows ?? -1;
   } catch {

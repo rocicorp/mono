@@ -195,7 +195,12 @@ export function replicationManagerEnv(
     // so the harness always runs it on. The correlation gate still applies:
     // only C15's own fixture table clears it, so the zbugs tables keep
     // today's unordered behavior either way.
-    ZERO_BACKFILL_RESUME: 'on',
+    //
+    // The option lives under `changeStreamer`, so the prefix is not optional:
+    // `ZERO_BACKFILL_RESUME` is silently ignored and every run comes out
+    // unordered, which looks exactly like a backfill that was too fast to
+    // interrupt.
+    ZERO_CHANGE_STREAMER_BACKFILL_RESUME: 'on',
     ...changeLogEnv({...config.changeLog, ...overrides}),
   };
 }
