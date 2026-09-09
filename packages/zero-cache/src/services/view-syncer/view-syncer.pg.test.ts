@@ -1305,7 +1305,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 52,
+            "protocolVersion": 53,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -1595,7 +1595,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 52,
+            "protocolVersion": 53,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2273,7 +2273,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 52,
+            "protocolVersion": 53,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2492,7 +2492,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 52,
+            "protocolVersion": 53,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -5085,14 +5085,19 @@ describe('view-syncer/service', () => {
       // deployment would see a spurious re-send of every row.
       expect(await drainUntilRowsPatchOrQuiet(queue)).toBeUndefined();
 
-      // The sig *does* get initialized on this cycle — but through
-      // CVRQueryDrivenUpdater.flush's opportunistic pass over all queries
-      // (triggered by the normal add of internal queries on restart), not
-      // through drift re-execution. That's the intended "sigs get initialized
-      // whenever they next re-execute via the normal path" behavior.
-      expect(await loadStoredSig('query-hash1')).toEqual(
-        expectedIssuesSig(issueRowID('2'), issueRowID('6')),
-      );
+      // The sig stays uninitialized. Nothing re-executes on this restart:
+      // every query re-hashes to its stored transformationHash and is hydrated
+      // as unchanged, which does not go through CVRQueryDrivenUpdater and its
+      // opportunistic sig pass. It gets initialized whenever the query next
+      // re-executes for a real reason (transformation hash change, etc.).
+      //
+      // This assertion used to expect the sig to be written here — but only
+      // because normalization passed condition objects through with whatever
+      // key order they arrived with, and Postgres jsonb reorders keys, so the
+      // internal queries spuriously hash-mismatched on every restart and
+      // dragged hydration through the updater path. Now that normalization is
+      // canonical, the spurious re-execution (and this side effect) is gone.
+      expect(await loadStoredSig('query-hash1')).toBeNull();
     } finally {
       await cleanup();
     }
@@ -6309,6 +6314,7 @@ describe('view-syncer/service', () => {
     ]);
 
     await flushStarted;
+    const timersScheduledBeforeStop = setTimeoutFn.mock.calls.length;
     const stopPromise = vs.stop();
     flushReleased = true;
     allowFlush.resolve();
@@ -6318,6 +6324,13 @@ describe('view-syncer/service', () => {
     expect(failSpy).not.toHaveBeenCalled();
     expect(destroySpy).toHaveBeenCalled();
     expect(destroyCalledAfterRelease).toBe(true);
+
+    // The in-flight update flushes the CVR after the view-syncer has been
+    // stopped. It must not re-arm any timers (e.g. the ttlClock interval),
+    // which would outlive the service, retain it, and keep updating the CVR.
+    expect(
+      setTimeoutFn.mock.calls.slice(timersScheduledBeforeStop),
+    ).toHaveLength(0);
   });
 
   // Regression test: a client that disconnects before initConnection's async
@@ -6401,5 +6414,79 @@ describe('view-syncer/service', () => {
 
     // Verify that #cleanup ran (pipelines destroyed).
     expect(destroySpy).toHaveBeenCalled();
+  });
+
+  // Regression test: a ViewSyncer is created as soon as a client connects to
+  // its client group, but it is only initialized by the client's
+  // `initConnection` message. If that message never arrived (e.g. the socket
+  // closed during connection setup), run() blocked on readyState() forever
+  // and nothing scheduled the idle shutdown, leaving a zombie service in the
+  // ServiceRunner. The fix schedules the idle-shutdown check when run()
+  // starts.
+  test('view-syncer run completes when no client ever initializes it', async () => {
+    const destroySpy = vi.spyOn(PipelineDriver.prototype, 'destroy');
+
+    // Use fake timers starting from *now* so that advancing past the
+    // keepalive window (DEFAULT_KEEPALIVE_MS = 5000, set at construction
+    // time using real Date.now()) works correctly.
+    vi.setSystemTime(vi.getRealSystemTime());
+
+    // No client connects. The idle-shutdown check must still have been
+    // scheduled when run() started.
+    expect(setTimeoutFn).toHaveBeenCalled();
+
+    // Advance time past the keepalive window so that
+    // #checkForShutdownConditionsInLock returns true, and fire all pending
+    // timer callbacks (setTimeout is mocked).
+    vi.setSystemTime(Date.now() + 6000);
+    for (const call of setTimeoutFn.mock.calls) {
+      call[0]();
+    }
+    await sleep(100);
+
+    // Fire any newly scheduled callbacks (shutdown may reschedule).
+    vi.setSystemTime(Date.now() + 6000);
+    for (const call of setTimeoutFn.mock.calls) {
+      call[0]();
+    }
+    await sleep(100);
+
+    // Without the fix, viewSyncerDone would never resolve here.
+    const timeout = sleep(5000).then(() => 'timeout' as const);
+    const result = await Promise.race([
+      viewSyncerDone.then(() => 'done' as const),
+      timeout,
+    ]);
+    expect(result).toBe('done');
+
+    // Verify that #cleanup ran (pipelines destroyed).
+    expect(destroySpy).toHaveBeenCalled();
+  });
+
+  test('stopping before the shutdown check fires clears the pending timer', async () => {
+    // Hand out a recognizable handle for timers scheduled from here on, so
+    // that clearing the pending shutdown timer can be observed.
+    const handle = {} as unknown as NodeJS.Timeout;
+    setTimeoutFn.mockReturnValue(handle);
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      // A client connects and disconnects, which schedules the shutdown
+      // check (without firing it).
+      const {source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      ]);
+      source.cancel();
+      await sleep(100);
+      expect(setTimeoutFn).toHaveBeenCalled();
+
+      // Stopping the view-syncer before the check fires must clear the
+      // pending timer, which would otherwise retain the service until it
+      // fired after teardown.
+      await vs.stop();
+      await viewSyncerDone;
+      expect(clearTimeoutSpy.mock.calls.some(([t]) => t === handle)).toBe(true);
+    } finally {
+      clearTimeoutSpy.mockRestore();
+    }
   });
 });

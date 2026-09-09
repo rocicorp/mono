@@ -240,14 +240,14 @@ jobs:
         run: TEST_PG_MODE=nopg pnpm run test --shard="$SHARD"/3
 
   test-pg:
-    name: Test PG ${{ matrix.pg-version }} (Shard ${{ matrix.shard }}/2)
+    name: Test PG ${{ matrix.pg-version }} (Shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     needs: [syncpack, verify-deps, format, lint]
     strategy:
       fail-fast: false
       matrix:
         pg-version: [18, 17, 16, 15]
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -276,4 +276,4 @@ jobs:
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: TEST_PG_MODE=pg-${{ matrix.pg-version }} pnpm run test --shard=${{ matrix.shard }}/2
+          command: TEST_PG_MODE=pg-${{ matrix.pg-version }} pnpm run test --shard=${{ matrix.shard }}/3

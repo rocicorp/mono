@@ -238,9 +238,12 @@ test('zero-cache --help', () => {
                                                                                    Note that this number must allow for at least one connection per                                                           
                                                                                    sync worker, or zero-cache will fail to start. See num-sync-workers                                                        
                                                                                                                                                                                                               
-     --cvr-garbage-collection-inactivity-threshold-hours number                    default: 48                                                                                                                
+     --cvr-garbage-collection-inactivity-threshold-hours number                    default: 168                                                                                                               
        ZERO_CVR_GARBAGE_COLLECTION_INACTIVITY_THRESHOLD_HOURS env                                                                                                                                             
                                                                                    The duration after which an inactive CVR is eligible for garbage collection.                                               
+                                                                                   Purging a CVR forces the next connection from that client group to                                                         
+                                                                                   re-sync from scratch, so this should comfortably exceed how long a                                                         
+                                                                                   typical user goes between sessions.                                                                                        
                                                                                    Note that garbage collection is an incremental, periodic process which does not                                            
                                                                                    necessarily purge all eligible CVRs immediately.                                                                           
                                                                                                                                                                                                               
@@ -289,17 +292,31 @@ test('zero-cache --help', () => {
                                                                                    to the event loop. Lower values increase responsiveness and fairness at                                                    
                                                                                    the cost of reduced throughput.                                                                                            
                                                                                                                                                                                                               
+     --view-syncer-hydration-budget-ms number                                      default: 0                                                                                                                 
+       ZERO_VIEW_SYNCER_HYDRATION_BUDGET_MS env                                                                                                                                                               
+                                                                                   The soft time budget in milliseconds for hydrating inactive queries                                                        
+                                                                                   during a view-syncer hydration pass. Active and internal queries always                                                    
+                                                                                   finish, and time spent in custom-query transform round trips is not                                                        
+                                                                                   charged to the budget. An inactive query not reached before the budget                                                     
+                                                                                   is spent is evicted: its CVR record and the remaining TTL that would                                                       
+                                                                                   have kept it warm are both dropped. A value of 0 disables                                                                  
+                                                                                   hydration-budget eviction.                                                                                                 
+                                                                                                                                                                                                              
+     --view-syncer-query-hydration-timeout-ms number                               default: 0                                                                                                                 
+       ZERO_VIEW_SYNCER_QUERY_HYDRATION_TIMEOUT_MS env                                                                                                                                                        
+                                                                                   The maximum processing time in milliseconds that a view-syncer spends                                                      
+                                                                                   hydrating a single client query. Time spent yielding to other work is                                                      
+                                                                                   not counted. A query whose hydration exceeds this limit is aborted and                                                     
+                                                                                   removed from the client's view, and affected clients receive an error                                                      
+                                                                                   for the query. The query is then rejected without being run again for                                                      
+                                                                                   a cooldown period, after which a retry is allowed. Internal queries are                                                    
+                                                                                   never aborted. A value of 0 disables the limit.                                                                            
+                                                                                                                                                                                                              
      --change-db string                                                            optional                                                                                                                   
        ZERO_CHANGE_DB env                                                                                                                                                                                     
                                                                                    The Postgres database used to store recent replication log entries, in order                                               
                                                                                    to sync multiple view-syncers without requiring multiple replication slots on                                              
                                                                                    the upstream database. If unspecified, the upstream-db will be used.                                                       
-                                                                                                                                                                                                              
-     --change-max-conns number                                                     default: 5                                                                                                                 
-       ZERO_CHANGE_MAX_CONNS env                                                                                                                                                                              
-                                                                                   The maximum number of connections to open to the change database.                                                          
-                                                                                   This is used by the change-streamer for catching up                                                                        
-                                                                                   zero-cache replication subscriptions.                                                                                      
                                                                                                                                                                                                               
      --replica-file string                                                         default: "zero.db"                                                                                                         
        ZERO_REPLICA_FILE env                                                                                                                                                                                  
@@ -460,7 +477,7 @@ test('zero-cache --help', () => {
                                                                                    rather, it protects the system when the upstream throughput exceeds the downstream                                         
                                                                                    throughput.                                                                                                                
                                                                                                                                                                                                               
-     --change-streamer-flow-control-consensus-timeout-proportion number            default: 2                                                                                                                 
+     --change-streamer-flow-control-consensus-timeout-proportion number            default: 4                                                                                                                 
        ZERO_CHANGE_STREAMER_FLOW_CONTROL_CONSENSUS_TIMEOUT_PROPORTION env                                                                                                                                     
                                                                                    During periodic flow control checks (every 64kb), the amount of time to wait after the majority                            
                                                                                    of subscribers have acked, proportional to that interval, after which replication will continue                            
@@ -474,7 +491,7 @@ test('zero-cache --help', () => {
                                                                                                                                                                                                               
                                                                                    For example, if the majority of subscribers ack a message in 2.5ms, a padding proportion of                                
                                                                                    1.0 instructs replication to continue after an additional 2.5ms; for a proportion of 2.0, an                               
-                                                                                   additional 5.0ms, etc. The default value of 2.0 allows for a subscriber to be 3x slower than the                           
+                                                                                   additional 5.0ms, etc. The default value of 4.0 allows for a subscriber to be 5x slower than the                           
                                                                                    majority in the steady state, while similarly bounding the extent to which a temporarily lagging                           
                                                                                    subscriber (e.g. due to catchup) slows down the fleet.                                                                     
                                                                                                                                                                                                               
@@ -688,23 +705,12 @@ test('zero-cache --help', () => {
                                                                                                                                                                                                               
      --litestream-checkpoint-threshold-mb number                                   default: 40                                                                                                                
        ZERO_LITESTREAM_CHECKPOINT_THRESHOLD_MB env                                                                                                                                                            
-                                                                                   The size of the WAL file at which to perform an SQlite checkpoint to apply                                                 
-                                                                                   the writes in the WAL to the main database file. Each checkpoint creates                                                   
-                                                                                   a new WAL segment file that will be backed up by litestream (v3). Smaller thresholds                                       
-                                                                                   may improve read performance, at the expense of creating more files to download                                            
-                                                                                   when restoring the replica from the backup.                                                                                
+                                                                                   The size of the WAL file at which litestream performs background, best-effort (PASSIVE)                                    
+                                                                                   SQLite checkpoints to apply the writes in the WAL to the main database file. Checkpoints                                   
+                                                                                   result in new WAL (v3) or LTS (v5) files that are then backed up asynchronously.                                           
                                                                                                                                                                                                               
-                                                                                   This setting is only relevant when replicating with litestream v3, and is ignored                                          
-                                                                                   when replicating with litestream v5.                                                                                       
-                                                                                                                                                                                                              
-     --litestream-min-checkpoint-page-count number                                 optional                                                                                                                   
-       ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT env                                                                                                                                                          
-                                                                                   The WAL page count at which SQLite attempts a PASSIVE checkpoint, which                                                    
-                                                                                   transfers pages to the main database file without blocking writers.                                                        
-                                                                                   Defaults to checkpointThresholdMB * 250 (since SQLite page size is 4KB).                                                   
-                                                                                                                                                                                                              
-                                                                                   This setting is only relevant when replicating with litestream v3, and is ignored                                          
-                                                                                   when replicating with litestream v5.                                                                                       
+                                                                                   Note that these PASSIVE checkpoints are skipped if a write is in progress, so high writes rates                            
+                                                                                   can precipitate runaway wal growth. Also see ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB                                 
                                                                                                                                                                                                               
      --litestream-max-checkpoint-page-count number                                 optional                                                                                                                   
        ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT env                                                                                                                                                          
@@ -726,6 +732,18 @@ test('zero-cache --help', () => {
                                                                                    once the zero-cache is transitioned to litestream v5. For configuring v5 backup                                            
                                                                                    frequency, use ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS.                                                        
                                                                                                                                                                                                               
+     --litestream-snapshot-backup-interval-hours number                            default: 4                                                                                                                 
+       ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS env                                                                                                                                                     
+                                                                                   The interval between snapshot backups of the replica. Snapshot backups                                                     
+                                                                                   make a full copy of the database to a new litestream generation. This                                                      
+                                                                                   improves restore time at the expense of bandwidth. Applications with a                                                     
+                                                                                   large database and low write rate can increase this interval to reduce                                                     
+                                                                                   network usage for backups (litestream defaults to 24 hours).                                                               
+                                                                                                                                                                                                              
+                                                                                   This option only applies to litestream v3 backups and will be deprecated/removed                                           
+                                                                                   once the zero-cache is transitioned to litestream v5. For configuring v5 backup                                            
+                                                                                   frequency, use ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS_V5.                                                          
+                                                                                                                                                                                                              
      --litestream-incremental-backup-interval-seconds number                       default: 15                                                                                                                
        ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS env                                                                                                                                                
                                                                                    The interval between incremental v5 backups of the replica. With litestream v5                                             
@@ -739,17 +757,27 @@ test('zero-cache --help', () => {
                                                                                    This option only applies to litestream v5 backups. For v3 backups, use                                                     
                                                                                    ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES.                                                                       
                                                                                                                                                                                                               
-     --litestream-snapshot-backup-interval-hours number                            default: 4                                                                                                                 
-       ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS env                                                                                                                                                     
-                                                                                   The interval between snapshot backups of the replica. Snapshot backups                                                     
-                                                                                   make a full copy of the database to a new litestream generation. This                                                      
-                                                                                   improves restore time at the expense of bandwidth. Applications with a                                                     
-                                                                                   large database and low write rate can increase this interval to reduce                                                     
-                                                                                   network usage for backups (litestream defaults to 24 hours).                                                               
+     --litestream-snapshot-backup-interval-hours-v5 number                         default: 720                                                                                                               
+       ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS_V5 env                                                                                                                                                  
+                                                                                   The interval between snapshot backups of the replica when                                                                  
+                                                                                   ZERO_LITESTREAM_BACKUP_USING_V5 is enabled.                                                                                
                                                                                                                                                                                                               
-                                                                                   This setting is applied when replicating with either litestream v3 or v5.                                                  
-                                                                                   Note, however, that snapshots are generally not needed to improve restore time                                             
-                                                                                   with v5, and so a longer interval (e.g. the litestream default of 24h) is fine.                                            
+                                                                                   By default, snapshots are effectively disabled (i.e. every 30 days)                                                        
+                                                                                   because v5 compaction fulfills the role that snapshots played in v3                                                        
+                                                                                   (i.e. because of litestream v5 compaction, restores will generally involve                                                 
+                                                                                   O(db-size) bytes.                                                                                                          
+                                                                                                                                                                                                              
+                                                                                   Snapshots are disabled by default because they hold a read-lock on                                                         
+                                                                                   the database and prevent wal checkpoints, introducing the risk of large wal                                                
+                                                                                   files for large databases with a high write rate.                                                                          
+                                                                                                                                                                                                              
+                                                                                   If configuring the zero-cache to actually perform v5 snapshots, the                                                        
+                                                                                   ZERO_LITESTREAM_MAX_WAL_SIZE_MB option can be used to pause replication                                                    
+                                                                                   if the wal reaches a certain size and cannot be checkpointed because of an                                                 
+                                                                                   in-progress snapshot.                                                                                                      
+                                                                                                                                                                                                              
+                                                                                   This option only applies to litestream v5 backups. For v3 backups, use                                                     
+                                                                                   ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS.                                                                            
                                                                                                                                                                                                               
      --litestream-restore-parallelism number                                       default: 48                                                                                                                
        ZERO_LITESTREAM_RESTORE_PARALLELISM env                                                                                                                                                                
@@ -897,6 +925,90 @@ test('--enable-query-covering can be disabled', () => {
   expect(config.enableQueryCovering).toBe(false);
 });
 
+test('view-syncer hydration budget defaults to disabled and accepts milliseconds', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+  expect(defaults.config.viewSyncerHydrationBudgetMs).toBe(0);
+
+  const configured = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_VIEW_SYNCER_HYDRATION_BUDGET_MS: '250'},
+  });
+  expect(configured.config.viewSyncerHydrationBudgetMs).toBe(250);
+});
+
+test('view-syncer query hydration timeout', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+  expect(defaults.config.viewSyncerQueryHydrationTimeoutMs).toBe(0);
+
+  const configured = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_VIEW_SYNCER_QUERY_HYDRATION_TIMEOUT_MS: '5000'},
+  });
+  expect(configured.config.viewSyncerQueryHydrationTimeoutMs).toBe(5000);
+});
+
+test.each(['-1', '1.5'])(
+  'view-syncer query hydration timeout rejects %s',
+  queryHydrationTimeoutMs => {
+    expect(() =>
+      parseOptionsAdvanced(zeroOptions, {
+        envNamePrefix: 'ZERO_',
+        allowUnknown: false,
+        allowPartial: true,
+        env: {
+          ZERO_VIEW_SYNCER_QUERY_HYDRATION_TIMEOUT_MS: queryHydrationTimeoutMs,
+        },
+      }),
+    ).toThrow();
+  },
+);
+
+test.each(['-1', '1.5'])(
+  'view-syncer hydration budget rejects %s',
+  hydrationBudgetMs => {
+    expect(() =>
+      parseOptionsAdvanced(zeroOptions, {
+        envNamePrefix: 'ZERO_',
+        allowUnknown: false,
+        allowPartial: true,
+        env: {
+          ZERO_VIEW_SYNCER_HYDRATION_BUDGET_MS: hydrationBudgetMs,
+        },
+      }),
+    ).toThrow();
+  },
+);
+
+test('PG change log is enabled by default and can be disabled by env', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {},
+  }).config;
+  const disabled = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED: 'false'},
+  }).config;
+
+  expect(defaults.changeStreamer.pgChangeLogEnabled).toBe(true);
+  expect(disabled.changeStreamer.pgChangeLogEnabled).toBe(false);
+});
+
 test('legacy queries are disabled by default', () => {
   const {config} = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: 'ZERO_',
@@ -916,6 +1028,23 @@ test('ZERO_ALLOW_LEGACY_QUERIES enables legacy queries', () => {
   });
 
   expect(config.allowLegacyQueries).toBe(true);
+});
+
+test('partial-index trigger migration defaults off and can be enabled', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+  expect(defaults.config.upstream.pgPartialIndexTriggers).toBe(false);
+
+  const enabled = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_UPSTREAM_PG_PARTIAL_INDEX_TRIGGERS: 'true'},
+  });
+  expect(enabled.config.upstream.pgPartialIndexTriggers).toBe(true);
 });
 
 test('--shard-id disallowed', () => {

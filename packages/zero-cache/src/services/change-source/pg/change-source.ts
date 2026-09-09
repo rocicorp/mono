@@ -18,6 +18,7 @@ import {
 } from '../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
+import {mapIndexPredicateColumns} from '../../../db/index-predicate.ts';
 import {
   mapPostgresToLiteColumn,
   UnsupportedColumnDefaultError,
@@ -104,6 +105,7 @@ import {
   getPublicationInfo,
   type PublishedSchema,
   type PublishedTableWithReplicaIdentity,
+  warnForSkippedIndexes,
 } from './schema/published.ts';
 import {
   dropShard,
@@ -146,7 +148,12 @@ export async function initializePostgresChangeSource(
 ): Promise<InitializeResult> {
   const db = await connectPgClient(lc, upstreamURI, 'change-source-init');
   try {
-    await ensureShardSchema(lc, db, shard);
+    await ensureShardSchema(
+      lc,
+      db,
+      shard,
+      syncOptions.installPartialIndexTriggers,
+    );
 
     const restoredReplica = await selectAndRestoreReplica(
       lc,
@@ -367,7 +374,7 @@ type ReservationState = {
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.
  */
-class PostgresChangeSource implements ChangeSource {
+export class PostgresChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
   readonly #upstreamUri: string;
@@ -378,6 +385,8 @@ class PostgresChangeSource implements ChangeSource {
   readonly #lagReporter: LagReporter | null;
   readonly #textCopy: boolean;
   readonly #streamInboundTimeoutMs: number | undefined;
+  readonly #subscribe: typeof subscribe;
+  readonly #streamBackfill: typeof streamBackfill;
   #stopped = false;
 
   constructor(
@@ -390,8 +399,16 @@ class PostgresChangeSource implements ChangeSource {
     lagReportIntervalMs: number,
     textCopy?: boolean | undefined,
     streamInboundTimeoutMs?: number | undefined,
+    // Injectable dependencies, overridable in tests. Default to the production
+    // implementations.
+    deps: {
+      subscribe?: typeof subscribe;
+      streamBackfill?: typeof streamBackfill;
+    } = {},
   ) {
     this.#lc = lc.withContext('component', 'change-source');
+    this.#subscribe = deps.subscribe ?? subscribe;
+    this.#streamBackfill = deps.streamBackfill ?? streamBackfill;
     this.#db = pgClient(lc, upstreamUri, 'replication-monitor', {
       max: 1,
       // used occasionally for schema changes, periodically for lag reporting
@@ -463,17 +480,23 @@ class PostgresChangeSource implements ChangeSource {
     const config = await getInternalShardConfig(this.#db, this.#shard);
     const {slot} = this.#replica;
     this.#lc.info?.(`starting replication stream@${slot}`);
-    return this.#startStream(slot, clientWatermark, config, backfillRequests);
+    return this.startStreamInternal(
+      slot,
+      clientWatermark,
+      config,
+      backfillRequests,
+    );
   }
 
-  async #startStream(
+  // Exported for testing.
+  async startStreamInternal(
     slot: string,
     clientWatermark: string,
     shardConfig: InternalShardConfig,
     backfillRequests: BackfillRequest[],
   ): Promise<ChangeStream> {
     const clientStart = majorVersionFromString(clientWatermark) + 1n;
-    const {messages, acks} = await subscribe(
+    const {messages, acks} = await this.#subscribe(
       this.#lc,
       this.#db,
       slot,
@@ -490,7 +513,7 @@ class PostgresChangeSource implements ChangeSource {
     // BackfillManager.
     const changes = new ChangeStreamMultiplexer(this.#lc, clientWatermark);
     const backfillManager = new BackfillManager(this.#lc, changes, req =>
-      streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
+      this.#streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
         textCopy: this.#textCopy,
       }),
     );
@@ -536,6 +559,20 @@ class PostgresChangeSource implements ChangeSource {
         ]);
         return false;
       }
+
+      // The only non-transaction "message" we process is our own lagReporter's
+      // message (handled above). Non-transactional messages from other shards
+      // (e.g. lag reports), should be ignored but properly classified as
+      // non-transactional, so as not to incorrectly request a stream
+      // reservation.
+      if (msg.tag === 'message' && !msg.transactional) {
+        this.#lc.debug?.(
+          'ignoring non-transactional message for different shard',
+          msg.prefix,
+        );
+        return false;
+      }
+
       return true;
     };
 
@@ -558,8 +595,8 @@ class PostgresChangeSource implements ChangeSource {
 
           if (!reservation) {
             const res = changes.reserve('replication');
-            typeof res === 'string' || (await res); // awaits should be uncommon
-            reservation = {};
+            const lastWatermark = typeof res === 'string' ? res : await res;
+            reservation = {lastWatermark};
           }
 
           let lastChange: ChangeStreamMessage | undefined;
@@ -1062,6 +1099,7 @@ class ChangeMaker {
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
   #error: ReplicationError | undefined;
+  readonly #skippedIndexWarnings = new Set<string>();
 
   constructor(
     {appID, shardNum}: ShardID,
@@ -1205,6 +1243,18 @@ class ChangeMaker {
         }
 
       case 'commit':
+        // The DDL event that provides command-tag context for a subsequent
+        // event (see #handleDdlMessage) is only meaningful within a single
+        // (upstream) transaction, since related ddl events (e.g. the nested
+        // start->start->end->end sequence) are always emitted together. Clear
+        // it at the transaction boundary so that a lingering event (e.g. a
+        // `CREATE TABLE` ddlStart) is not misattributed as the context for an
+        // unrelated event in a later transaction. Note that this is safe for
+        // the one type of DDL event that spans multiple transactions,
+        // `CREATE INDEX CONCURRENTLY`, because that change is self declaring
+        // in the `ddlUpdate` and does not depend on the value of the preceding
+        // event.
+        this.#lastReplicationEvent = undefined;
         return [
           [
             'commit',
@@ -1244,6 +1294,17 @@ class ChangeMaker {
       .withContext('lsn', fromBigInt(lsn))
       .withContext('tag', event.event.tag)
       .withContext('query', event.context.query);
+
+    if (event.previousSchema) {
+      warnForSkippedIndexes(
+        lc,
+        event.previousSchema,
+        this.#skippedIndexWarnings,
+      );
+    }
+    if (event.schema) {
+      warnForSkippedIndexes(lc, event.schema, this.#skippedIndexWarnings);
+    }
 
     // Cancel manual schema adjustment timeouts when an upstream schema change
     // is about to happen, so as to avoid interfering / redundant work.
@@ -1302,12 +1363,24 @@ class ChangeMaker {
     // ddl_start (e.g. cases 1, 2, and 4), and from the current event
     // if it is a ddl_end (case 5), and 'UNKNOWN' otherwise (case 3 and
     // 'schemaSnapshot' workarounds).
+    //
+    // A 'schemaSnapshot' is special: it is a standalone hook (emitted by the
+    // COMMENT ON PUBLICATION workaround, or a MANUAL update_schemas() call)
+    // that substitutes for a missing ALTER PUBLICATION event on databases
+    // (e.g. supabase) that do not fire event triggers for it. It must never
+    // adopt the command tag of a preceding ddlStart (e.g. a `CREATE TABLE`
+    // in the same transaction), as that would cause a newly *published*
+    // table to be misclassified as a freshly *created* one and skip the
+    // backfill of its pre-existing rows. It therefore always falls back to
+    // 'UNKNOWN', which conservatively initiates a backfill.
     const effectiveTag =
-      prevEvent?.type === 'ddlStart'
-        ? prevEvent.event.tag
-        : event.type === 'ddlUpdate'
-          ? event.event.tag
-          : 'UNKNOWN';
+      event.type === 'schemaSnapshot'
+        ? 'UNKNOWN'
+        : prevEvent?.type === 'ddlStart'
+          ? prevEvent.event.tag
+          : event.type === 'ddlUpdate'
+            ? event.event.tag
+            : 'UNKNOWN';
     lc.info?.(`processing ${effectiveTag} command from ${msg.prefix}/${type}`, {
       event: summarizeReplicationEventForLog(event),
     });
@@ -1728,7 +1801,7 @@ function specsByID(published: PublishedSchema) {
  * Compares boolean properties directly and resolves column names to their
  * stable attnums (pg_attribute `attnum`) for the column comparison.
  */
-function isIndexStructurallyChanged(
+export function isIndexStructurallyChanged(
   prev: PublishedIndexSpec,
   next: PublishedIndexSpec,
   prevTables: Map<number, PublishedTableWithReplicaIdentity>,
@@ -1756,6 +1829,26 @@ function isIndexStructurallyChanged(
   if (!prevTable || !nextTable) {
     // Can't resolve tables; conservatively treat as changed.
     return true;
+  }
+
+  if ((prev.predicate === undefined) !== (next.predicate === undefined)) {
+    return true;
+  }
+  if (prev.predicate && next.predicate) {
+    let unresolved = false;
+    const prevPredicate = mapIndexPredicateColumns(prev.predicate, name => {
+      const pos = prevTable.columns[name]?.pos;
+      if (pos === undefined) unresolved = true;
+      return String(pos);
+    });
+    const nextPredicate = mapIndexPredicateColumns(next.predicate, name => {
+      const pos = nextTable.columns[name]?.pos;
+      if (pos === undefined) unresolved = true;
+      return String(pos);
+    });
+    if (unresolved || !deepEqual(prevPredicate, nextPredicate)) {
+      return true;
+    }
   }
 
   const prevEntries = Object.entries(prev.columns);

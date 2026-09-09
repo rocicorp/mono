@@ -1,0 +1,29 @@
+{
+  "name": "rn-bench",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared harness for running benchmarks on React Native devices",
+  "type": "module",
+  "scripts": {
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
+    "check-types": "tsc",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
+  },
+  "dependencies": {
+    "@types/command-line-args": "^5.2.3",
+    "@types/command-line-usage": "^5.0.4",
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.12",
+    "command-line-args": "^6.0.1",
+    "command-line-usage": "^7.0.3",
+    "typescript": "~7.0.2",
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.65.0"
+  },
+  "packageManager": "pnpm@11.11.0"
+}

@@ -17,6 +17,7 @@ import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
 import {
   createPredicate,
   transformFilters,
+  type NoSubqueryCondition as StrictNoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
@@ -304,6 +305,10 @@ export class TableSource implements Source {
     const rowIterator = cachedStatement.statement.iterate<Row>(
       ...sqlAndBindings.values,
     );
+    const overlayPredicate = mergeOverlayPredicate(
+      connection.filters?.predicate,
+      req.filter,
+    );
     try {
       debug?.initQuery(this.#table, sqlAndBindings.text);
 
@@ -322,7 +327,7 @@ export class TableSource implements Source {
               // already in the connection's sort order: the splice comparator
               // and the `startAt` comparator coincide here.
               comparator,
-              connection.filters?.predicate,
+              overlayPredicate,
               req.multiConstraints,
             ),
             this.#shouldYield,
@@ -338,7 +343,7 @@ export class TableSource implements Source {
             this.#overlay,
             connection.lastPushedEpoch,
             this.#primaryKey,
-            connection.filters?.predicate,
+            overlayPredicate,
             req.multiConstraints,
           ),
           this.#shouldYield,
@@ -568,6 +573,7 @@ export class TableSource implements Source {
       request.reverse,
       request.start,
       request.multiConstraints,
+      request.filter,
     );
   }
 
@@ -753,6 +759,20 @@ function countConstraintBindings(request: FetchRequest): number {
   return count;
 }
 
+function mergeOverlayPredicate(
+  connPredicate: ((row: Row) => boolean) | undefined,
+  reqFilter: StrictNoSubqueryCondition | undefined,
+): ((row: Row) => boolean) | undefined {
+  if (!reqFilter) {
+    return connPredicate;
+  }
+  const reqPredicate = createPredicate(reqFilter);
+  if (!connPredicate) {
+    return reqPredicate;
+  }
+  return row => connPredicate(row) && reqPredicate(row);
+}
+
 function getUniqueIndexes(
   db: Database,
   tableName: string,
@@ -765,7 +785,8 @@ function getUniqueIndexes(
       JOIN pragma_index_info(idx.name) as col
       WHERE idx.tbl_name = ${tableName} AND
             idx.type = 'index' AND 
-            info."unique" != 0
+            info."unique" != 0 AND
+            info.partial = 0
       GROUP BY idx.name
       ORDER BY idx.name`,
   );

@@ -10,6 +10,7 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
     changeStreamer: {
       port: 4849,
       address: 'localhost',
+      pgChangeLogEnabled: true,
       sqliteChangeLogMode: 'off',
       sqliteChangeLogReadPercent: 0,
       sqliteChangeLogColdReadPercent: 0,
@@ -128,6 +129,46 @@ describe('config/normalize litestream v5 gating', () => {
 });
 
 describe('config/normalize SQLite change log', () => {
+  test('PG change log is enabled by default configuration', () => {
+    const config = configWith({});
+
+    expect(config.changeStreamer.pgChangeLogEnabled).toBe(true);
+    expect(() => assertNormalized(config)).not.toThrow();
+  });
+
+  test('disabling the PG change log requires authoritative SQLite and v5 backup settings', () => {
+    const config = configWith({});
+    config.changeStreamer.pgChangeLogEnabled = false;
+
+    expect(() => assertNormalized(config)).toThrow(
+      'requires --change-streamer-sqlite-change-log-mode=serve',
+    );
+
+    config.changeStreamer.sqliteChangeLogMode = 'serve';
+    expect(() => assertNormalized(config)).toThrow(
+      'requires --change-streamer-sqlite-change-log-read-percent=100',
+    );
+
+    config.changeStreamer.sqliteChangeLogReadPercent = 100;
+    expect(() => assertNormalized(config)).toThrow(
+      'requires --change-streamer-sqlite-change-log-cold-read-percent=100',
+    );
+
+    config.changeStreamer.sqliteChangeLogColdReadPercent = 100;
+    expect(() => assertNormalized(config)).toThrow(
+      'requires a litestream v5 backup',
+    );
+
+    Object.assign(config.litestream, {
+      backupURL: 's3://bucket/replica',
+      backupUsingV5: true,
+      restoreUsingV5: true,
+      executableV5: '/bin/litestream-v5',
+      vfsQueryExecutable: '/bin/vfs-query',
+    });
+    expect(() => assertNormalized(config)).not.toThrow();
+  });
+
   test('read percentage is only allowed in serve mode', () => {
     const config = configWith({});
     config.changeStreamer.sqliteChangeLogMode = 'compare';

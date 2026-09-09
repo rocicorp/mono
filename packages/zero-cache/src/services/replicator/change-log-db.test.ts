@@ -303,9 +303,9 @@ describe('replicator/change-log-db', () => {
       ]);
     });
 
-    // The replica's migration is history and must not acquire columns added to
-    // the separate, disposable change-log database after the split.
-    test('keeps the replica migration 14 shape frozen apart', () => {
+    // The pre-release replica shape must not acquire columns added to the
+    // separate, disposable change-log database after the split.
+    test('keeps the pre-release replica shape frozen apart', () => {
       using changeLog = new Database(lc, ':memory:');
       changeLog.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
       using replica = new Database(lc, ':memory:');

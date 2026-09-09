@@ -1,6 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, vi} from 'vitest';
-import type {Queue} from '../../../../shared/src/queue.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
@@ -13,7 +14,9 @@ import type {
 } from '../../custom-queries/transform-query.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import type {Source} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import type {ConnectionValidation} from './connection-context-manager.ts';
@@ -21,6 +24,7 @@ import {
   ISSUES_QUERY,
   nextPoke,
   permissionsAll,
+  serviceID,
   setup,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
@@ -720,6 +724,289 @@ describe('view-syncer/auth maintenance', () => {
         timeout: 2_000,
       });
       expect(client.size()).toBe(0);
+    });
+  });
+
+  describe('background connection unavailable during pipeline sync', () => {
+    let replicaDbFile: DbFile;
+    let cvrDB: PostgresDB;
+    let upstreamDb: PostgresDB;
+    let stateChanges: Subscription<ReplicaState>;
+    let vs: ViewSyncerService;
+    let viewSyncerDone: Promise<void>;
+    let connectWithQueueAndSource: (
+      ctx: SyncContext,
+      desiredQueriesPatch: UpQueriesPatch,
+    ) => {
+      queue: Queue<Downstream>;
+      source: Source<ViewSyncerDownstream>;
+    };
+    let clearMocks: () => void;
+    let customQueryTransformer: Awaited<
+      ReturnType<typeof setup>
+    >['customQueryTransformer'];
+
+    beforeEach<PgTest>(async ({testDBs}) => {
+      vi.setSystemTime(Date.UTC(2025, 0, 1));
+      ({
+        replicaDbFile,
+        cvrDB,
+        upstreamDb,
+        stateChanges,
+        vs,
+        viewSyncerDone,
+        connectWithQueueAndSource,
+        customQueryTransformer,
+        clearMocks,
+      } = await setup(
+        testDBs,
+        'view_syncer_auth_maintenance_reconnect_race_test',
+        permissionsAll,
+        {
+          authConfig: {
+            retransformIntervalSeconds: MAINTENANCE_INTERVAL_MS / 1000,
+          },
+          queryFetchMode: 'empty-validation',
+        },
+      ));
+
+      return async () => {
+        clearMocks();
+        await vs.stop();
+        await viewSyncerDone;
+        await testDBs.drop(cvrDB, upstreamDb);
+        replicaDbFile.delete();
+      };
+    });
+
+    test('defers pipeline init when background connection disconnects and replacement is not yet validated', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValue(validationSuccess('user-1'));
+      using transformSpy = vi
+        .spyOn(transformer!, 'transform')
+        .mockResolvedValue(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const ctx1: SyncContext = {
+        ...SYNC_CONTEXT,
+        clientID: 'foo',
+        wsID: 'ws1',
+        auth: {type: 'opaque', raw: 'token-1'},
+      };
+
+      // 1. Client 1 connects and receives config poke.
+      const {queue: client1, source: source1} = connectWithQueueAndSource(
+        ctx1,
+        [
+          {
+            op: 'put',
+            hash: 'custom-1',
+            name: 'named-query-1',
+            args: ['thing'],
+          },
+        ],
+      );
+      await nextPoke(client1);
+
+      // Client 1 has validated and is now the background connection.
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+      expect(
+        vs.connContextManager.getBackgroundConnectionContext(),
+      ).toMatchObject({
+        clientID: 'foo',
+        wsID: 'ws1',
+      });
+
+      // 2. Client 1 disconnects.
+      source1.cancel();
+      // Disconnect cleanup closes the connection in connContextManager.
+      await vi.waitFor(() => {
+        expect(
+          vs.connContextManager.getBackgroundConnectionContext(),
+        ).toBeUndefined();
+      });
+
+      // 3. Replacement connection registers on connContextManager, but has NOT
+      // validated yet (remains in provisional state).
+      const ctx2: SyncContext = {
+        ...SYNC_CONTEXT,
+        clientID: 'foo',
+        wsID: 'ws2',
+        auth: {type: 'opaque', raw: 'token-2'},
+      };
+      const selector2 = {clientID: ctx2.clientID, wsID: ctx2.wsID};
+      vs.connContextManager.registerConnection(
+        selector2,
+        {
+          protocolVersion: ctx2.protocolVersion,
+          clientID: ctx2.clientID,
+          clientGroupID: serviceID,
+          profileID: ctx2.profileID,
+          baseCookie: ctx2.baseCookie,
+          timestamp: Date.now(),
+          lmID: 0,
+          wsID: ctx2.wsID,
+          debugPerf: false,
+          auth: ctx2.auth?.raw,
+          userID: ctx2.userID,
+          initConnectionMsg: undefined,
+          httpCookie: ctx2.httpCookie,
+          origin: ctx2.origin,
+        },
+        ctx2.auth,
+      );
+
+      // Verify replacement is registered in provisional state without a background connection.
+      expect(vs.connContextManager.getConnectionContext(selector2)?.state).toBe(
+        'provisional',
+      );
+      expect(
+        vs.connContextManager.getBackgroundConnectionContext(),
+      ).toBeUndefined();
+
+      // 4. Version-ready arrives while background connection is unavailable.
+      // Before the fix, run() would call mustGetBackgroundConnectionContext()
+      // and crash the entire ViewSyncer with "No validated connection is available for shared query work."
+      stateChanges.push({state: 'version-ready'});
+
+      // Give run() a moment to acquire the lock and execute.
+      await sleep(50);
+
+      // Verify pipeline init was deferred: custom queries were not transformed,
+      // and the service is still running without crashing.
+      expect(transformSpy).toHaveBeenCalledTimes(0);
+
+      // 5. Replacement connection completes initConnection and validates.
+      vs.connContextManager.initConnection(selector2, {
+        desiredQueriesPatch: [
+          {
+            op: 'put',
+            hash: 'custom-1',
+            name: 'named-query-1',
+            args: ['thing'],
+          },
+        ],
+      });
+      const source2 = vs.initConnection(selector2, [
+        'initConnection',
+        {
+          desiredQueriesPatch: [
+            {
+              op: 'put',
+              hash: 'custom-1',
+              name: 'named-query-1',
+              args: ['thing'],
+            },
+          ],
+        },
+      ]);
+      const client2 = new Queue<Downstream>();
+      void (async function () {
+        try {
+          for await (const {message} of source2) {
+            client2.enqueue(message);
+          }
+        } catch (e) {
+          client2.enqueueRejection(e);
+        }
+      })();
+
+      // Wait for async initConnection validation and pipeline init to complete.
+      await vi.waitFor(() => {
+        expect(validateSpy).toHaveBeenCalledTimes(2);
+        expect(
+          vs.connContextManager.getBackgroundConnectionContext(),
+        ).toMatchObject({
+          clientID: 'foo',
+          wsID: 'ws2',
+        });
+      });
+
+      // Pipeline init and catchup ran immediately during initConnection,
+      // delivering both the config patch and query rows in a single catchup poke.
+      const pokes = await nextPoke(client2);
+      expect(pokes).toBeDefined();
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy.mock.calls[0][0].auth?.raw).toBe('token-2');
+    });
+
+    test('does not crash when version-ready arrives after all clients disconnect', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValue(validationSuccess('user-1'));
+      using transformSpy = vi
+        .spyOn(transformer!, 'transform')
+        .mockResolvedValue(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const ctx1: SyncContext = {
+        ...SYNC_CONTEXT,
+        clientID: 'foo',
+        wsID: 'ws1',
+        auth: {type: 'opaque', raw: 'token-1'},
+      };
+
+      // 1. Client connects and receives config poke.
+      const {queue: client1, source: source1} = connectWithQueueAndSource(
+        ctx1,
+        [
+          {
+            op: 'put',
+            hash: 'custom-1',
+            name: 'named-query-1',
+            args: ['thing'],
+          },
+        ],
+      );
+      await nextPoke(client1);
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Client disconnects and NO replacement arrives.
+      source1.cancel();
+      await vi.waitFor(() => {
+        expect(
+          vs.connContextManager.getBackgroundConnectionContext(),
+        ).toBeUndefined();
+      });
+
+      // 3. Version-ready arrives while no clients are connected.
+      // Before the fix, run() would call mustGetBackgroundConnectionContext()
+      // and crash with "No validated connection is available for shared query work."
+      stateChanges.push({state: 'version-ready'});
+
+      // Give run() a moment to process the version-ready.
+      await sleep(50);
+
+      // The service must not crash and custom query transforms must not run without credentials.
+      expect(transformSpy).toHaveBeenCalledTimes(0);
+
+      // Verify that viewSyncerDone is still pending (not crashed or failed).
+      const timeout = sleep(50).then(() => 'still-running' as const);
+      const status = await Promise.race([
+        viewSyncerDone.then(() => 'stopped' as const),
+        timeout,
+      ]);
+      expect(status).toBe('still-running');
     });
   });
 });

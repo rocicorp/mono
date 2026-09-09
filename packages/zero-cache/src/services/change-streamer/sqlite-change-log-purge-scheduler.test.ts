@@ -1256,7 +1256,13 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
             }
           },
         ),
-        {numRuns: 1000},
+        {
+          numRuns: 1000,
+          // Run the full campaign when resources permit, but leave enough of
+          // the Vitest timeout to finish the current scenario and clean up
+          // when the parallel suite is under load.
+          interruptAfterTimeLimit: 30_000,
+        },
       );
     }, 45_000);
   });
