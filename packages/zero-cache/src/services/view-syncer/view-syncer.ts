@@ -665,6 +665,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   async run(): Promise<void> {
     try {
+      // The service is created when a client connects to its client group,
+      // but it is only initialized by that client's `initConnection`
+      // message. If the message never arrives (e.g. the socket closed during
+      // connection setup, or the protocol version was rejected), nothing
+      // else schedules the idle-shutdown check, and the service would wait
+      // for initialization forever. Schedule the check up front so that the
+      // service shuts down after the keepalive window if no client
+      // initializes it.
+      this.#scheduleShutdown(this.#keepaliveMs);
+
       // Wait for initialization if we need to process queries.
       // This ensures authData and cvr.clientSchema are available before
       // transforming custom queries (dependency on authData) and building
