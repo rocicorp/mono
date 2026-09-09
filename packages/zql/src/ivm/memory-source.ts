@@ -1,7 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet, type ValueIterator} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
-import {toSorted} from '../../../shared/src/iterables.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {
   Condition,
@@ -266,7 +265,7 @@ export class MemorySource implements Source {
     // a different library.)
     // 3. We could even theoretically do (2) on multiple threads and then merge the
     // results!
-    const rows = toSorted(this.#getPrimaryIndex().data, comparator);
+    const rows = this.#getPrimaryIndex().data.toArray().sort(comparator);
     const data = BTreeSet.fromSorted(comparator, rows);
 
     const newIndex = {comparator, data};

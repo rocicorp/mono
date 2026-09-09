@@ -5,33 +5,26 @@ import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.ts';
 import type {InputBase, Output} from './operator.ts';
-import type {Stream} from './stream.ts';
+import {EMPTY_YIELDS, type Stream} from './stream.ts';
 
-export function* filterPush(
+export function filterPush(
   change: Change,
   output: Output,
   pusher: InputBase,
   predicate?: (row: Row) => boolean,
 ): Stream<'yield'> {
   if (!predicate) {
-    yield* output.push(change, pusher);
-    return;
+    return output.push(change, pusher);
   }
   switch (change[ChangeIndex.TYPE]) {
     case ChangeType.ADD:
     case ChangeType.REMOVE:
-      if (predicate(change[ChangeIndex.NODE].row)) {
-        yield* output.push(change, pusher);
-      }
-      break;
     case ChangeType.CHILD:
-      if (predicate(change[ChangeIndex.NODE].row)) {
-        yield* output.push(change, pusher);
-      }
-      break;
+      return predicate(change[ChangeIndex.NODE].row)
+        ? output.push(change, pusher)
+        : EMPTY_YIELDS;
     case ChangeType.EDIT:
-      yield* maybeSplitAndPushEditChange(change, predicate, output, pusher);
-      break;
+      return maybeSplitAndPushEditChange(change, predicate, output, pusher);
     default:
       unreachable(change);
   }

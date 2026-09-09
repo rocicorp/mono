@@ -45,6 +45,6 @@ export class MemoryStorage implements Storage {
   }
 
   cloneData(): Record<string, JSONValue> {
-    return structuredClone(Object.fromEntries(this.#data.values()));
+    return structuredClone(Object.fromEntries(this.#data.toArray()));
   }
 }

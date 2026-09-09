@@ -9,6 +9,7 @@ import {
 } from './filter-operators.ts';
 import {filterPush} from './filter-push.ts';
 import type {SourceSchema} from './schema.ts';
+import type {Stream} from './stream.ts';
 
 /**
  * The Filter operator filters data through a predicate. It is stateless.
@@ -51,7 +52,7 @@ export class Filter implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  *push(change: Change) {
-    yield* filterPush(change, this.#output, this, this.#predicate);
+  push(change: Change): Stream<'yield'> {
+    return filterPush(change, this.#output, this, this.#predicate);
   }
 }

@@ -275,6 +275,13 @@ export function pullOf<T>(items: readonly T[]): PullStream<T> {
   return items.length === 0 ? emptyPullStream<T>() : new ArrayPull(items);
 }
 
+/**
+ * The empty push stream. `push` returns `Stream<'yield'>` purely so a slow push
+ * can suspend; the operators that never suspend on their own share this one
+ * frozen array rather than each allocating a generator.
+ */
+export const EMPTY_YIELDS: Stream<'yield'> = Object.freeze([]);
+
 export function emptyPullStream<T>(): PullStream<T> {
   return EMPTY;
 }

@@ -59,7 +59,7 @@ export interface FilterOperator extends FilterInput, FilterOutput {}
  * set.
  */
 export const throwFilterOutput: FilterOutput = {
-  *push(_change: Change): Stream<'yield'> {
+  push(_change: Change): Stream<'yield'> {
     throw new Error('Output not set');
   },
 
@@ -94,8 +94,8 @@ export class FilterStart implements FilterInput, Output {
     return this.#input.getSchema();
   }
 
-  *push(change: Change) {
-    yield* this.#output.push(change, this);
+  push(change: Change): Stream<'yield'> {
+    return this.#output.push(change, this);
   }
 
   fetch(req: FetchRequest): PullStream<Node | 'yield'> {
@@ -158,8 +158,8 @@ export class FilterEnd implements Input, FilterOutput {
     return this.#input.getSchema();
   }
 
-  *push(change: Change) {
-    yield* this.#output.push(change, this);
+  push(change: Change): Stream<'yield'> {
+    return this.#output.push(change, this);
   }
 }
 

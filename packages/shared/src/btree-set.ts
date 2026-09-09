@@ -133,6 +133,19 @@ export class BTreeSet<K> {
   }
 
   /**
+   * Collects every key into an array without going through the iterator
+   * protocol, so building an index does not allocate a result object per row.
+   */
+  toArray(): K[] {
+    const result: K[] = [];
+    const it = this.valuesFrom();
+    for (let v = it.nextValue(); v !== undefined; v = it.nextValue()) {
+      result.push(v);
+    }
+    return result;
+  }
+
+  /**
    * Builds a BTreeSet from a pre-sorted iterable in O(N) by constructing
    * the tree bottom-up. The caller must ensure entries are sorted by
    * `comparator`; violating this produces an invalid tree.
