@@ -41,8 +41,9 @@ import {mixedPhase, workloadPhases} from './rmv2-soak/workload.ts';
 const ROLLBACK_DRILLS = new Set(['C10', 'C11', 'C12']);
 
 /**
- * Everything except C9 (a five-minute minio outage) and the rollback drills,
- * which leave the change log rolled back to `off`. `--chaos all` adds them.
+ * Everything except the two five-minute actions -- C9 (a minio outage) and C16
+ * (a held snapshot reservation) -- and the rollback drills, which leave the
+ * change log rolled back to `off`. `--chaos all` adds them.
  */
 const DEFAULT_CHAOS = 'C1,C2,C3,C4,C5,C6,C7,C8,C13,C14,C15';
 
