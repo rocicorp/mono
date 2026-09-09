@@ -6314,6 +6314,7 @@ describe('view-syncer/service', () => {
     ]);
 
     await flushStarted;
+    const timersScheduledBeforeStop = setTimeoutFn.mock.calls.length;
     const stopPromise = vs.stop();
     flushReleased = true;
     allowFlush.resolve();
@@ -6323,6 +6324,13 @@ describe('view-syncer/service', () => {
     expect(failSpy).not.toHaveBeenCalled();
     expect(destroySpy).toHaveBeenCalled();
     expect(destroyCalledAfterRelease).toBe(true);
+
+    // The in-flight update flushes the CVR after the view-syncer has been
+    // stopped. It must not re-arm any timers (e.g. the ttlClock interval),
+    // which would outlive the service, retain it, and keep updating the CVR.
+    expect(
+      setTimeoutFn.mock.calls.slice(timersScheduledBeforeStop),
+    ).toHaveLength(0);
   });
 
   // Regression test: a client that disconnects before initConnection's async
