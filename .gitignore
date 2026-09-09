@@ -111,3 +111,7 @@ packages/zql-integration-tests/Pagila_PostgreSql-5ba5a57aeb15.sql
 
 apps/zbugs/.litestream/
 apps/zbugs/.soak/
+
+# TLA+ model checker, fetched by packages/zero-cache/specs/check.sh
+.tla2tools.jar
+packages/zero-cache/specs/states/
