@@ -435,6 +435,12 @@ test('makeSchemaQuery', () => {
   );
   expect(q1.ast).toMatchInlineSnapshot(`
     {
+      "alias": undefined,
+      "limit": undefined,
+      "orderBy": undefined,
+      "related": undefined,
+      "schema": undefined,
+      "start": undefined,
       "table": "issue",
       "where": {
         "left": {

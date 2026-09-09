@@ -17,7 +17,7 @@ import * as v from '../../../shared/src/valita.ts';
 import {
   stream,
   streamIn,
-  streamInStringified,
+  streamInWithSize,
   streamOut,
   streamOutStringified,
   type Sink,
@@ -269,11 +269,11 @@ describe('streams with internal acks', () => {
     };
   }
 
-  async function startStringifiedReceiver() {
+  async function startSizedReceiver() {
     ws = new WebSocket(`http://localhost:${port}/`);
     return {
       ws,
-      consumer: await streamInStringified(lc, ws, messageSchema),
+      consumer: await streamInWithSize(lc, ws, messageSchema),
     };
   }
 
@@ -477,12 +477,12 @@ describe('streams with internal acks', () => {
     ]);
   });
 
-  test('stringified source', async () => {
+  test('sized source', async () => {
     const json =
       '{"from":1,"to":2,"str":"before\\u0000after","big":9007199254740993}';
     stringifiedProducer.push(json);
 
-    const {consumer} = await startStringifiedReceiver();
+    const {consumer} = await startSizedReceiver();
     expect(await drain(1, consumer)).toEqual([
       {
         data: {
@@ -491,7 +491,7 @@ describe('streams with internal acks', () => {
           str: 'before\0after',
           big: 9007199254740993n,
         },
-        json,
+        size: `{"id":1,"msg":${json}}`.length,
       },
     ]);
   });

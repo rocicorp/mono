@@ -96,9 +96,16 @@ test('log_warm is recorded per catchup, not per coordinator', async () => {
       ['cold-subscriber', false],
     ] as const) {
       const downstream = Subscription.create<string>();
-      const subscriber = new Subscriber(5, id, '01', downstream, () => ({
-        tag: 'status',
-      }));
+      const subscriber = new Subscriber(
+        5,
+        id,
+        'serving',
+        '01',
+        downstream,
+        () => ({
+          tag: 'status',
+        }),
+      );
       expect(
         await coordinator.catchup(subscriber, () => '06', {logWarm}),
       ).toEqual({kind: 'registered'});

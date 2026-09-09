@@ -486,6 +486,20 @@ describe('SQLite change-log observability on disk', () => {
     expect(expected).toBeGreaterThan(statSync(log).size);
   });
 
+  // The warnings these tests are about, and only those. The sink also picks
+  // up the Database wrapper's load-dependent "Slow SQLite query" warning
+  // (zqlite/src/db.ts fires it past a 100ms threshold), which has failed CI on
+  // busy runners three separate times; asserting on every warn level message
+  // made that noise a test failure.
+  function fileBytesWarnings(
+    messages: readonly (readonly [string, unknown, readonly unknown[]])[],
+  ): string[] {
+    return messages
+      .filter(([level]) => level === 'warn')
+      .map(([, , args]) => String(args[0]))
+      .filter(m => m.startsWith('unable to stat '));
+  }
+
   test('file bytes count an absent database as zero, silently', async () => {
     using files = setupFiles();
 
@@ -494,9 +508,7 @@ describe('SQLite change-log observability on disk', () => {
     expect(await sqliteFileBytes(files.lc, `${files.file}-nonexistent`)).toBe(
       0,
     );
-    expect(files.sink.messages.filter(([level]) => level === 'warn')).toEqual(
-      [],
-    );
+    expect(fileBytesWarnings(files.sink.messages)).toEqual([]);
   });
 
   test('file bytes warn on a stat failure that is not a missing file', async () => {
@@ -508,10 +520,9 @@ describe('SQLite change-log observability on disk', () => {
     expect(await sqliteFileBytes(files.lc, bad)).toBe(0);
     // Unordered: the three files are stat'd concurrently.
     expect(
-      files.sink.messages
-        .filter(([level]) => level === 'warn')
-        .map(([, , args]) => String(args[0]))
-        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+      fileBytesWarnings(files.sink.messages).sort((a, b) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      ),
     ).toEqual([
       `unable to stat ${bad} for size metrics`,
       `unable to stat ${bad}-wal for size metrics`,

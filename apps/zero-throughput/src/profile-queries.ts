@@ -1,5 +1,6 @@
-import type {Query, SchemaQuery} from '@rocicorp/zero';
+import type {Query} from '../../../packages/zql/src/query/query.ts';
 import type {BenchmarkModel, BenchmarkProfile} from './config.ts';
+import {queries} from './queries.ts';
 import type {schema} from './schema.ts';
 import {
   emailOwnerIDForClient,
@@ -37,7 +38,6 @@ export const PROFILE_QUERY_NAMES = {
 } as const satisfies Record<BenchmarkProfile, readonly string[]>;
 
 export function buildProfileQuery(
-  builder: SchemaQuery<ThroughputSchema>,
   profile: BenchmarkProfile,
   model: BenchmarkModel,
   queryIndex: number,
@@ -48,38 +48,20 @@ export function buildProfileQuery(
     case 'feed-append':
       return {
         name: profileQueryName(profile, queryIndex),
-        query: builder.event
-          .where('bucket', feedBucketForClient(model, clientIndex))
-          .orderBy('seq', 'desc')
-          .limit(rowsPerQuery) as ThroughputQuery,
+        query: queries.feedRecentEvents({
+          bucket: feedBucketForClient(model, clientIndex),
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
 
     case 'email':
-      return buildEmailQuery(
-        builder,
-        model,
-        queryIndex,
-        rowsPerQuery,
-        clientIndex,
-      );
+      return buildEmailQuery(model, queryIndex, rowsPerQuery, clientIndex);
 
     case 'forum':
-      return buildForumQuery(
-        builder,
-        model,
-        queryIndex,
-        rowsPerQuery,
-        clientIndex,
-      );
+      return buildForumQuery(model, queryIndex, rowsPerQuery, clientIndex);
 
     case 'relational':
-      return buildRelationalQuery(
-        builder,
-        model,
-        queryIndex,
-        rowsPerQuery,
-        clientIndex,
-      );
+      return buildRelationalQuery(model, queryIndex, rowsPerQuery, clientIndex);
   }
 }
 
@@ -131,7 +113,6 @@ export function findProfileQuery(
 }
 
 function buildEmailQuery(
-  builder: SchemaQuery<ThroughputSchema>,
   model: BenchmarkModel,
   queryIndex: number,
   rowsPerQuery: number,
@@ -143,43 +124,34 @@ function buildEmailQuery(
     case 0:
       return {
         name,
-        query: builder.emailThread
-          .where('ownerID', ownerID)
-          .where('mailbox', 'inbox')
-          .related('messages', q => q.orderBy('seq', 'desc').limit(5))
-          .orderBy('seq', 'desc')
-          .limit(rowsPerQuery) as ThroughputQuery,
+        query: queries.emailThreadListWithMessages({
+          ownerID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
 
     case 1:
       return {
         name,
-        query: builder.emailMessage
-          .where('ownerID', ownerID)
-          .where('mailbox', 'inbox')
-          .related('thread')
-          .orderBy('seq', 'desc')
-          .limit(rowsPerQuery) as ThroughputQuery,
+        query: queries.emailMessageListWithThread({
+          ownerID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
 
     case 2:
       return {
         name,
-        query: builder.emailThread
-          .where('ownerID', ownerID)
-          .where('mailbox', 'inbox')
-          .related('messages', q =>
-            q.where('unread', true).orderBy('seq', 'desc').limit(10),
-          )
-          .orderBy('seq', 'desc')
-          .limit(rowsPerQuery) as ThroughputQuery,
+        query: queries.emailUnreadThreadList({
+          ownerID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
   }
   throw new Error(`Invalid email query index: ${queryIndex}`);
 }
 
 function buildForumQuery(
-  builder: SchemaQuery<ThroughputSchema>,
   model: BenchmarkModel,
   queryIndex: number,
   rowsPerQuery: number,
@@ -191,49 +163,34 @@ function buildForumQuery(
     case 0:
       return {
         name,
-        query: builder.forumCategory
-          .where('id', categoryID)
-          .related('threads', q =>
-            q
-              .orderBy('seq', 'desc')
-              .limit(rowsPerQuery)
-              .related('author')
-              .related('posts', p =>
-                p.orderBy('seq', 'desc').limit(3).related('author'),
-              ),
-          ) as ThroughputQuery,
+        query: queries.forumCategoryThreadTree({
+          categoryID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
 
     case 1:
       return {
         name,
-        query: builder.forumThread
-          .where('categoryID', categoryID)
-          .related('category')
-          .related('author')
-          .related('posts', q =>
-            q.orderBy('seq', 'desc').limit(5).related('author'),
-          )
-          .orderBy('seq', 'desc')
-          .limit(rowsPerQuery) as ThroughputQuery,
+        query: queries.forumThreadListWithPosts({
+          categoryID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
 
     case 2:
       return {
         name,
-        query: builder.forumPost
-          .where('categoryID', categoryID)
-          .related('thread', q => q.related('author').related('category'))
-          .related('author')
-          .orderBy('seq', 'desc')
-          .limit(rowsPerQuery) as ThroughputQuery,
+        query: queries.forumPostListWithThread({
+          categoryID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
   }
   throw new Error(`Invalid forum query index: ${queryIndex}`);
 }
 
 function buildRelationalQuery(
-  builder: SchemaQuery<ThroughputSchema>,
   model: BenchmarkModel,
   queryIndex: number,
   rowsPerQuery: number,
@@ -245,46 +202,28 @@ function buildRelationalQuery(
     case 0:
       return {
         name,
-        query: builder.relOrg
-          .where('id', orgID)
-          .related('accounts', q =>
-            q
-              .orderBy('seq', 'desc')
-              .limit(rowsPerQuery)
-              .related('contacts')
-              .related('activities', a =>
-                a.orderBy('seq', 'desc').limit(5).related('contact'),
-              ),
-          )
-          .related('activities', q =>
-            q.orderBy('seq', 'desc').limit(rowsPerQuery),
-          ) as ThroughputQuery,
+        query: queries.relationalOrgAccountTree({
+          orgID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
 
     case 1:
       return {
         name,
-        query: builder.relAccount
-          .where('orgID', orgID)
-          .related('org')
-          .related('contacts')
-          .related('activities', q =>
-            q.orderBy('seq', 'desc').limit(5).related('contact'),
-          )
-          .orderBy('seq', 'desc')
-          .limit(rowsPerQuery) as ThroughputQuery,
+        query: queries.relationalAccountList({
+          orgID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
 
     case 2:
       return {
         name,
-        query: builder.relActivity
-          .where('orgID', orgID)
-          .related('org')
-          .related('account', q => q.related('contacts'))
-          .related('contact')
-          .orderBy('seq', 'desc')
-          .limit(rowsPerQuery) as ThroughputQuery,
+        query: queries.relationalActivityList({
+          orgID,
+          limit: rowsPerQuery,
+        }) as unknown as ThroughputQuery,
       };
   }
   throw new Error(`Invalid relational query index: ${queryIndex}`);

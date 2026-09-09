@@ -7,12 +7,15 @@ import {Queue} from '../../../shared/src/queue.ts';
 import type {NormalizedZeroConfig} from '../../../zero-cache/src/config/normalize.ts';
 import {InspectorDelegate} from '../../../zero-cache/src/server/inspector-delegate.ts';
 import {initializePostgresChangeSource} from '../../../zero-cache/src/services/change-source/pg/change-source.ts';
-import {initializeStreamer} from '../../../zero-cache/src/services/change-streamer/change-streamer-service.ts';
+import {
+  initializeStreamer,
+  type TuningOptions,
+} from '../../../zero-cache/src/services/change-streamer/change-streamer-service.ts';
 import type {
   ChangeStreamer,
   ChangeStreamerService,
   Downstream,
-  SerializedDownstream,
+  SizedDownstream,
 } from '../../../zero-cache/src/services/change-streamer/change-streamer.ts';
 import {initChangeStreamerSchema} from '../../../zero-cache/src/services/change-streamer/schema/init.ts';
 import {ReplicationStatusPublisher} from '../../../zero-cache/src/services/replicator/replication-status.ts';
@@ -142,7 +145,8 @@ const shard = {
   publications: [],
 };
 
-const streamerOptions = {
+const streamerOptions: TuningOptions = {
+  pgChangeLogEnabled: true,
   backPressureLimitHeapProportion: 0.04,
   flowControlConsensusTimeoutProportion: 2,
   statementTimeoutMs: 20_000,
@@ -250,13 +254,13 @@ function selectWriteFuzzSkeletons(
 
 function parseStringifiedSource(
   source: Source<string>,
-): Source<SerializedDownstream> {
+): Source<SizedDownstream> {
   return {
     cancel: err => source.cancel(err),
     signal: source.signal,
     async *[Symbol.asyncIterator]() {
       for await (const json of source) {
-        yield {data: BigIntJSON.parse(json) as Downstream, json};
+        yield {data: BigIntJSON.parse(json) as Downstream, size: json.length};
       }
     },
   };
@@ -375,7 +379,6 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
       TASK_ID,
       'chinook-zero-cache-fuzzer-replicator',
       'serving',
-      replicaDbFile.path,
       parseStringifiedChangeStreamer(changeStreamer),
       worker,
       null,

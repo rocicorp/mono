@@ -823,6 +823,94 @@ describe('jwt auth missing options and missing endpoints', () => {
   });
 });
 
+describe('websocket closed while resolving auth', () => {
+  let syncer: Syncer;
+  let mutagens: MutagenService[];
+  let pushers: PusherService[];
+  let contextManagers: Map<string, ConnectionContextManagerImpl>;
+  let verifySpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    verifySpy = vi.spyOn(jwt, 'verifyToken');
+    verifySpy.mockReset();
+    const env = setupSyncer(lc, {
+      auth: {
+        secret: 'test-secret',
+      },
+    } as ZeroConfig);
+    syncer = env.syncer;
+    mutagens = env.mutagens;
+    pushers = env.pushers;
+    contextManagers = env.contextManagers;
+  });
+
+  afterEach(async () => {
+    await syncer.stop();
+  });
+
+  test('does not create a connection or services for the closed socket', async () => {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+
+    // The client disconnects while its token is being verified.
+    verifySpy.mockImplementationOnce(() => {
+      (ws as unknown as MockWebSocket).close();
+      return Promise.resolve({sub: 'user-1'});
+    });
+
+    await receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: 'client-1',
+        userID: 'user-1',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+        auth: 'dummy-token',
+      },
+      {} as any,
+    );
+
+    expect(verifySpy).toHaveBeenCalledOnce();
+    expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
+
+    // No per-client-group services are created, and no connection is
+    // registered, for the socket that closed during auth resolution.
+    expect(mutagens).toHaveLength(0);
+    expect(pushers).toHaveLength(0);
+    expect(contextManagers.size).toBe(0);
+  });
+
+  test('registers the connection when the socket is still open', async () => {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+    verifySpy.mockResolvedValueOnce({sub: 'user-1'});
+
+    await receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: 'client-1',
+        userID: 'user-1',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+        auth: 'dummy-token',
+      },
+      {} as any,
+    );
+
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledOnce();
+    expect(mutagens).toHaveLength(1);
+    expect(pushers).toHaveLength(1);
+    expect(mutagens[0].hasRefs()).toBe(true);
+    expect(pushers[0].hasRefs()).toBe(true);
+    expect(
+      contextManagers
+        .get('1')
+        ?.getConnectionContext({clientID: 'client-1', wsID: 'ws-1'}),
+    ).toBeDefined();
+  });
+});
+
 describe('connection hijacking prevention', () => {
   let syncer: Syncer;
   let contextManagers: Map<string, ConnectionContextManagerImpl>;

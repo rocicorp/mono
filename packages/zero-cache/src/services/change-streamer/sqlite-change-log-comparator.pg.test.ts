@@ -13,9 +13,9 @@ import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {EMPTY_COOKIE_SET} from '../replicator/change-log-cookies.ts';
 import {
-  changeLogFileName,
   CHANGE_LOG_META_TABLE,
   CHANGE_LOG_STREAM_TABLE,
+  changeLogFileName,
   deleteChangeLogDB,
   estimateChangeLogStreamRowBytes,
   type ChangeLogIdentity,
@@ -80,7 +80,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       'task-id',
       'change.streamer:12345',
       'ws',
-      sql,
+      () => sql,
       REPLICA_VERSION,
       () => {},
       vi.fn(),

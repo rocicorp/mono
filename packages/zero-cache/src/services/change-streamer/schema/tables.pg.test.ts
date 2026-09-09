@@ -268,6 +268,53 @@ describe('change-streamer/schema/tables', () => {
     expect(purgeLock.release).not.toHaveBeenCalled();
   });
 
+  test('disabled PG change log is neither initialized nor reset', async () => {
+    await ensureReplicationConfig(
+      lc,
+      sql,
+      {
+        replicaVersion: '183',
+        publications: ['zero_data'],
+        watermark: '183',
+      },
+      shard,
+      true,
+      undefined,
+      undefined,
+      false,
+    );
+    expect(
+      await sql`SELECT watermark, pos FROM "rezo_8/cdc"."changeLog"`,
+    ).toEqual([]);
+
+    await sql`
+      INSERT INTO "rezo_8/cdc"."changeLog" (watermark, pos, change)
+        VALUES ('stale', 0, '{"tag":"begin"}'::json)`;
+
+    await ensureReplicationConfig(
+      lc,
+      sql,
+      {
+        replicaVersion: '1g8',
+        publications: ['zero_data'],
+        watermark: '1g8',
+      },
+      shard,
+      true,
+      undefined,
+      undefined,
+      false,
+    );
+
+    expect(
+      await sql`SELECT watermark, pos FROM "rezo_8/cdc"."changeLog"`,
+    ).toEqual([{watermark: 'stale', pos: 0n}]);
+    expect(
+      await sql`
+        SELECT "lastWatermark" FROM "rezo_8/cdc"."replicationState"`,
+    ).toEqual([{lastWatermark: '1g8'}]);
+  });
+
   test('no deadlocks when table is reset', async () => {
     // Set up initial replication config.
     await ensureReplicationConfig(

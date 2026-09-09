@@ -1,4 +1,3 @@
-import {existsSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
@@ -10,10 +9,7 @@ import {
   vi,
   type MockedFunction,
 } from 'vitest';
-import {
-  BigIntJSON,
-  type JSONObject,
-} from '../../../../shared/src/bigint-json.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../zero-events/src/index.ts';
@@ -27,11 +23,12 @@ import {orTimeoutWith} from '../../types/timeout.ts';
 import {
   PROTOCOL_VERSION,
   type Downstream,
-  type SerializedDownstream,
+  type SizedDownstream,
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {deleteChangeLogDB} from './change-log-db.ts';
+import type {CommitResult} from './change-processor.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import {ReplicatorService} from './replicator.ts';
@@ -55,10 +52,10 @@ describe('replicator/incremental-sync', () => {
   let worker: ThreadWriteWorkerClient;
   let syncer: IncrementalSyncer;
   let syncing: Promise<void> | undefined;
-  let downstream: Subscription<SerializedDownstream, Downstream>;
+  let downstream: Subscription<SizedDownstream, Downstream>;
   let eventSink: ZeroEvent[];
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Promise<Source<SerializedDownstream>>
+    (ctx: SubscriberContext) => Promise<Source<SizedDownstream>>
   >;
 
   beforeEach(async () => {
@@ -68,10 +65,7 @@ describe('replicator/incremental-sync', () => {
     mainDb.pragma('journal_mode = wal');
     createReplicationStateTables(mainDb);
 
-    downstream = new Subscription({}, data => ({
-      data,
-      json: BigIntJSON.stringify(data),
-    }));
+    downstream = new Subscription({}, data => ({data, size: 1}));
     eventSink = [];
     initEventSinkForTesting(
       eventSink,
@@ -95,7 +89,6 @@ describe('replicator/incremental-sync', () => {
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       worker,
       'serving',
-      dbFile.path,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
   });
@@ -134,7 +127,7 @@ describe('replicator/incremental-sync', () => {
     // making the write async would break both callers here.
     const replica = new StatementRunner(mainDb);
     const acked: {watermark: string; stateVersion: string}[] = [];
-    downstream = new Subscription<SerializedDownstream, Downstream>(
+    downstream = new Subscription<SizedDownstream, Downstream>(
       {
         consumed: message => {
           if (message[0] === 'commit') {
@@ -145,7 +138,7 @@ describe('replicator/incremental-sync', () => {
           }
         },
       },
-      data => ({data, json: BigIntJSON.stringify(data)}),
+      data => ({data, size: 1}),
     );
     subscribeFn.mockResolvedValue(downstream);
 
@@ -181,7 +174,7 @@ describe('replicator/incremental-sync', () => {
 
   test('replicates transactions', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
-    const processMessage = vi.spyOn(worker, 'processMessage');
+    const processMessages = vi.spyOn(worker, 'processMessages');
 
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
 
@@ -473,10 +466,14 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
-    expect(processMessage).toHaveBeenCalledTimes(11);
-    // The parsed change, and nothing else: the canonical JSON went to the write
-    // worker only for the change log, which the change-streamer now writes.
-    expect(processMessage).toHaveBeenNthCalledWith(1, firstBegin);
+    expect(processMessages).toHaveBeenCalledTimes(3);
+    expect(processMessages.mock.calls.flatMap(([batch]) => batch)).toHaveLength(
+      11,
+    );
+    expect(processMessages).toHaveBeenNthCalledWith(
+      1,
+      expect.arrayContaining([firstBegin]),
+    );
   });
 
   test('replicates schema changes', async () => {
@@ -656,7 +653,6 @@ describe('replicator/incremental-sync', () => {
       TASK_ID,
       REPLICA_ID,
       'backup',
-      dbFile.path,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       worker,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
@@ -753,13 +749,20 @@ describe('replicator/incremental-sync', () => {
           rowValues: [[1, 'hello']],
         },
       ],
-      ['commit', issues.commit(), {watermark: '110.01'}],
     ] satisfies Downstream[]) {
       downstream.push(change);
     }
+    const incompleteBackfillCommit = downstream.push([
+      'commit',
+      issues.commit(),
+      {watermark: '110.01'},
+    ]).result;
 
     // Ensure no notifications have been published.
     await noNotification(next);
+
+    // Wait for the commit to be processed before inspecting the replica.
+    expect(await incompleteBackfillCommit).toBe('consumed');
 
     // And that row versions have not changed, even for backfilled rows.
     const issuesDump = mainDb.prepare(/*sql*/ `SELECT * FROM issues`);
@@ -862,7 +865,6 @@ describe('replicator/incremental-sync', () => {
       },
       worker,
       'serving',
-      dbFile.path,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
 
@@ -893,7 +895,6 @@ describe('replicator/incremental-sync', () => {
       },
       worker,
       'serving',
-      dbFile.path,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
 
@@ -909,7 +910,7 @@ describe('replicator/incremental-sync', () => {
 
   test('shut down on change-streamer error message', async () => {
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
-    const processMessage = vi.spyOn(worker, 'processMessage');
+    const processMessages = vi.spyOn(worker, 'processMessages');
 
     const syncing = syncer.run();
 
@@ -920,8 +921,44 @@ describe('replicator/incremental-sync', () => {
 
     // Should stop / resolve
     await syncing;
-    expect(processMessage).not.toHaveBeenCalled();
+    expect(processMessages).not.toHaveBeenCalled();
+  });
 
-    expect(existsSync(dbFile.path)).toBe(false);
+  test('stop() interrupts a run loop stuck on an in-flight processMessages', async () => {
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+
+    // Simulates a processMessages() call that never resolves on its own -- as
+    // happens when the write worker is paused inside LitestreamCheckpointer's
+    // WAL-drain poll (see litestream-checkpointer.test.ts for that piece in
+    // isolation) -- until abort() interrupts it. Mocked here at the
+    // WriteWorkerClient boundary so this test doesn't depend on a real
+    // worker thread or litestream process; it only exercises whether
+    // IncrementalSyncer actually calls abort() when asked to stop.
+    const {promise: stuck, resolve: unstick} = resolver<CommitResult | null>();
+    const processMessages = vi
+      .spyOn(worker, 'processMessages')
+      .mockReturnValue(stuck);
+    const abort = vi.spyOn(worker, 'abort').mockImplementation(() => {
+      unstick(null);
+    });
+
+    const issues = new ReplicationMessages({issues: ['issueID']});
+    const localSyncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+
+    downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
+    downstream.push(['commit', issues.commit(), {watermark: '06'}]);
+    await vi.waitFor(() => expect(processMessages).toHaveBeenCalled());
+
+    syncer.stop(lc);
+    expect(abort).toHaveBeenCalled();
+
+    // Without stop() calling abort() to interrupt the stuck call, this would
+    // hang forever rather than resolving.
+    expect(await orTimeoutWith(localSyncing, 1000, 'timed-out')).not.toBe(
+      'timed-out',
+    );
   });
 });

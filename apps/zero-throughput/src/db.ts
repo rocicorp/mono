@@ -37,8 +37,12 @@ import {
 
 export type BenchmarkDB = postgres.Sql;
 
-export function connectBenchmarkDB(url: string): BenchmarkDB {
+export function connectBenchmarkDB(
+  url: string,
+  maxConnections = 20,
+): BenchmarkDB {
   return postgres(url, {
+    max: maxConnections,
     idle_timeout: 0,
     connect_timeout: 30,
     max_lifetime: null,
@@ -78,11 +82,13 @@ export async function resetBenchmarkDatabase(
   sql: BenchmarkDB,
   config: BenchmarkConfig,
 ): Promise<void> {
-  const appID = config.zero.appID;
-  const schemas = [appID, `${appID}_0`, `${appID}_0/cvr`, `${appID}_0/cdc`];
+  if (config.resetMode === 'all') {
+    const appID = config.zero.appID;
+    const schemas = [appID, `${appID}_0`, `${appID}_0/cvr`, `${appID}_0/cdc`];
 
-  for (const schema of schemas) {
-    await sql`DROP SCHEMA IF EXISTS ${sql(schema)} CASCADE`;
+    for (const schema of schemas) {
+      await sql`DROP SCHEMA IF EXISTS ${sql(schema)} CASCADE`;
+    }
   }
 
   await sql`DROP TABLE IF EXISTS zero_throughput_event CASCADE`;

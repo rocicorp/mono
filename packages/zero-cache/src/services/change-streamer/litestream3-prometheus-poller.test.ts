@@ -106,6 +106,30 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     await vi.waitFor(() => expect(scheduled).toEqual(['618ocqq8', '618p0bw8']));
   });
 
+  test('ignores an invalid watermark reported by litestream metrics', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    // Real-world garbage watermark observed in production: not a valid
+    // lexicographic version, so it must be dropped rather than crash the
+    // poller or get scheduled for publishing.
+    const t1 = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('cms7batsx004004l2w8i5gtks', t1);
+
+    await poller.checkVerifyAndPublishWatermarks();
+    await Promise.resolve();
+    expect(scheduled).toEqual([]);
+    expect(consumeError).toBeUndefined();
+
+    // A subsequent, valid watermark is still processed normally.
+    vi.setSystemTime(time + 10_000);
+    const t2 = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618p0bw8', t2);
+
+    await poller.checkVerifyAndPublishWatermarks();
+    await vi.waitFor(() => expect(scheduled).toEqual(['618p0bw8']));
+  });
+
   test('blocks publish when actual backup is older than claimed', async () => {
     const time = Date.UTC(2025, 3, 24);
     vi.setSystemTime(time);

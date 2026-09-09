@@ -109,9 +109,9 @@ describe('backfill-stream', () => {
   });
 
   test.each([
-    {mode: 'binary', textCopy: false},
-    {mode: 'text', textCopy: true},
-  ])(`column backfill ($mode)`, async ({textCopy}) => {
+    {mode: 'binary', textCopy: false, dataBytes: 922},
+    {mode: 'text', textCopy: true, dataBytes: 474},
+  ])(`column backfill ($mode)`, async ({textCopy, dataBytes}) => {
     const stream = streamBackfill(
       lc,
       upstreamURI,
@@ -130,45 +130,51 @@ describe('backfill-stream', () => {
 
     expect(results).toMatchObject([
       {
-        tag: 'backfill',
-        watermark: expect.any(String),
-        relation: {
-          schema: 'public',
-          name: 'foo',
-          rowKey: {columns: ['id1', 'id2']},
+        byteSize: dataBytes,
+        message: {
+          tag: 'backfill',
+          watermark: expect.any(String),
+          relation: {
+            schema: 'public',
+            name: 'foo',
+            rowKey: {columns: ['id1', 'id2']},
+          },
+          columns: ['c', 'b'],
+          rowValues: [
+            [1n, 2, arr([1, 2, '3', {e: 4}]), '{"d" : 1}'],
+            [2n, 3, arr([2, 3, '4', {e: 5}]), '{"d" : 2}'],
+            [3n, 4, arr([3, 4, '5', {e: 6}]), '{"d" : 3}'],
+            [4n, 5, arr([4, 5, '6', {e: 7}]), '{"d" : 4}'],
+            [5n, 6, arr([5, 6, '7', {e: 8}]), '{"d" : 5}'],
+            [6n, 7, arr([6, 7, '8', {e: 9}]), '{"d" : 6}'],
+            [7n, 8, arr([7, 8, '9', {e: 10}]), '{"d" : 7}'],
+            [8n, 9, arr([8, 9, '10', {e: 11}]), '{"d" : 8}'],
+            [9n, 10, arr([9, 10, '11', {e: 12}]), '{"d" : 9}'],
+            [10n, 11, arr([10, 11, '12', {e: 13}]), '{"d" : 10}'],
+          ],
+          status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
         },
-        columns: ['c', 'b'],
-        rowValues: [
-          [1n, 2, arr([1, 2, '3', {e: 4}]), '{"d" : 1}'],
-          [2n, 3, arr([2, 3, '4', {e: 5}]), '{"d" : 2}'],
-          [3n, 4, arr([3, 4, '5', {e: 6}]), '{"d" : 3}'],
-          [4n, 5, arr([4, 5, '6', {e: 7}]), '{"d" : 4}'],
-          [5n, 6, arr([5, 6, '7', {e: 8}]), '{"d" : 5}'],
-          [6n, 7, arr([6, 7, '8', {e: 9}]), '{"d" : 6}'],
-          [7n, 8, arr([7, 8, '9', {e: 10}]), '{"d" : 7}'],
-          [8n, 9, arr([8, 9, '10', {e: 11}]), '{"d" : 8}'],
-          [9n, 10, arr([9, 10, '11', {e: 12}]), '{"d" : 9}'],
-          [10n, 11, arr([10, 11, '12', {e: 13}]), '{"d" : 10}'],
-        ],
-        status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
       },
       {
-        tag: 'backfill-completed',
-        relation: {
-          schema: 'public',
-          name: 'foo',
-          rowKey: {columns: ['id1', 'id2']},
+        byteSize: 0,
+        message: {
+          tag: 'backfill-completed',
+          relation: {
+            schema: 'public',
+            name: 'foo',
+            rowKey: {columns: ['id1', 'id2']},
+          },
+          columns: ['c', 'b'],
+          status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
         },
-        columns: ['c', 'b'],
-        status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
       },
     ]);
   });
 
   test.each([
-    {mode: 'binary', textCopy: false},
-    {mode: 'text', textCopy: true},
-  ])(`table backfill ($mode)`, async ({textCopy}) => {
+    {mode: 'binary', textCopy: false, dataBytes: 1072},
+    {mode: 'text', textCopy: true, dataBytes: 594},
+  ])(`table backfill ($mode)`, async ({textCopy, dataBytes}) => {
     const stream = streamBackfill(
       lc,
       upstreamURI,
@@ -186,43 +192,49 @@ describe('backfill-stream', () => {
     // Columns should deduped and ordered: [id2, id1, a, c, b]
     expect(results).toMatchObject([
       {
-        tag: 'backfill',
-        watermark: expect.any(String),
-        relation: {
-          schema: 'public',
-          name: 'foo',
-          rowKey: {columns: ['id2', 'id1']},
-        },
-        columns: ['a', 'c', 'b'],
-        rowValues: [
-          [2, 1n, '1111111111', arr([1, 2, '3', {e: 4}]), '{"d" : 1}'],
-          [3, 2n, '2222222222', arr([2, 3, '4', {e: 5}]), '{"d" : 2}'],
-          [4, 3n, '3333333333', arr([3, 4, '5', {e: 6}]), '{"d" : 3}'],
-          [5, 4n, '4444444444', arr([4, 5, '6', {e: 7}]), '{"d" : 4}'],
-          [6, 5n, '5555555555', arr([5, 6, '7', {e: 8}]), '{"d" : 5}'],
-          [7, 6n, '6666666666', arr([6, 7, '8', {e: 9}]), '{"d" : 6}'],
-          [8, 7n, '7777777777', arr([7, 8, '9', {e: 10}]), '{"d" : 7}'],
-          [9, 8n, '8888888888', arr([8, 9, '10', {e: 11}]), '{"d" : 8}'],
-          [10, 9n, '9999999999', arr([9, 10, '11', {e: 12}]), '{"d" : 9}'],
-          [
-            11,
-            10n,
-            '10101010101010101010',
-            arr([10, 11, '12', {e: 13}]),
-            '{"d" : 10}',
+        byteSize: dataBytes,
+        message: {
+          tag: 'backfill',
+          watermark: expect.any(String),
+          relation: {
+            schema: 'public',
+            name: 'foo',
+            rowKey: {columns: ['id2', 'id1']},
+          },
+          columns: ['a', 'c', 'b'],
+          rowValues: [
+            [2, 1n, '1111111111', arr([1, 2, '3', {e: 4}]), '{"d" : 1}'],
+            [3, 2n, '2222222222', arr([2, 3, '4', {e: 5}]), '{"d" : 2}'],
+            [4, 3n, '3333333333', arr([3, 4, '5', {e: 6}]), '{"d" : 3}'],
+            [5, 4n, '4444444444', arr([4, 5, '6', {e: 7}]), '{"d" : 4}'],
+            [6, 5n, '5555555555', arr([5, 6, '7', {e: 8}]), '{"d" : 5}'],
+            [7, 6n, '6666666666', arr([6, 7, '8', {e: 9}]), '{"d" : 6}'],
+            [8, 7n, '7777777777', arr([7, 8, '9', {e: 10}]), '{"d" : 7}'],
+            [9, 8n, '8888888888', arr([8, 9, '10', {e: 11}]), '{"d" : 8}'],
+            [10, 9n, '9999999999', arr([9, 10, '11', {e: 12}]), '{"d" : 9}'],
+            [
+              11,
+              10n,
+              '10101010101010101010',
+              arr([10, 11, '12', {e: 13}]),
+              '{"d" : 10}',
+            ],
           ],
-        ],
-        status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+          status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+        },
       },
       {
-        tag: 'backfill-completed',
-        relation: {
-          schema: 'public',
-          name: 'foo',
-          rowKey: {columns: ['id2', 'id1']},
+        byteSize: 0,
+        message: {
+          tag: 'backfill-completed',
+          relation: {
+            schema: 'public',
+            name: 'foo',
+            rowKey: {columns: ['id2', 'id1']},
+          },
+          columns: ['a', 'c', 'b'],
+          status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
         },
-        columns: ['a', 'c', 'b'],
-        status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
       },
     ]);
   });

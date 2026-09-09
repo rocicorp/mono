@@ -76,6 +76,30 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
    */
   readonly defaultQueryComplete: boolean;
 
+  /**
+   * Whether query pipelines can be built against the sources right now.
+   *
+   * When `false`, `materialize` registers the query with the server as usual
+   * but returns a view over an empty placeholder input. The pipeline is built
+   * and the view hydrated when the delegate invokes the callbacks registered
+   * with {@link onPipelinesReady}. Zero uses this during cold boot so the
+   * replica is loaded into the IVM sources once, instead of being pushed row
+   * by row through every already-materialized pipeline.
+   *
+   */
+  readonly pipelinesReady: boolean;
+
+  /**
+   * Register a callback to build a deferred pipeline once
+   * {@link pipelinesReady} becomes `true`. Callbacks are invoked in
+   * registration order inside `batchViewUpdates`, and the delegate notifies
+   * its commit listeners after the batch so views flush.
+   *
+   * Returns a function that unregisters the callback (used when the view is
+   * destroyed before the pipeline is built).
+   */
+  onPipelinesReady(cb: () => void): () => void;
+
   /** Using the default view factory creates a TypedView */
   materialize<
     TTable extends keyof TSchema['tables'] & string,

@@ -15,7 +15,8 @@ import {
 export type ChangeLogStreamTransactionStats = {
   readonly rows: number;
   readonly estimatedBytes: number;
-  readonly hash: string;
+  /** Present only for transactions selected for shadow-write validation. */
+  readonly hash?: string | undefined;
   /**
    * The cookie mutations this transaction's schema changes folded in, in stream
    * order. Empty for the overwhelming majority of transactions.
@@ -79,7 +80,12 @@ export class ChangeLogStreamWriter {
     this.#cookies = new ChangeLogCookieWriter(db.db);
   }
 
-  begin(watermark: string, json: string): void {
+  begin(
+    watermark: string,
+    json: string,
+    storedChange = extractChangeSubstring(json, 'begin'),
+    hash = true,
+  ): void {
     assertInvariant(
       this.#watermark === undefined,
       `change-log stream transaction already open at ${this.#watermark}`,
@@ -90,7 +96,7 @@ export class ChangeLogStreamWriter {
     this.#db.beginImmediate();
     this.#watermark = watermark;
     this.#pos = 0;
-    const change = extractChangeSubstring(json, 'begin');
+    const change = storedChange;
     const estimatedBytes = estimateChangeLogStreamRowBytes(
       watermark,
       'begin',
@@ -103,14 +109,16 @@ export class ChangeLogStreamWriter {
       estimatedBytes,
       change,
     );
-    this.#hasher = new ChangeLogTransactionHasher();
-    this.#hasher.add({
-      watermark,
-      pos: this.#pos,
-      tag: 'begin',
-      change,
-      precommit: null,
-    });
+    if (hash) {
+      this.#hasher = new ChangeLogTransactionHasher();
+      this.#hasher.add({
+        watermark,
+        pos: this.#pos,
+        tag: 'begin',
+        change,
+        precommit: null,
+      });
+    }
     this.#estimatedBytes = estimatedBytes;
   }
 
@@ -124,17 +132,21 @@ export class ChangeLogStreamWriter {
    * has to flush its buffered batch to get the same ordering
    * (`Storer.#processQueue()`); SQLite gets it from statement order.
    */
-  append(json: string, change: DataOrSchemaChange): void {
+  append(
+    json: string,
+    change: DataOrSchemaChange,
+    storedChange = extractChangeSubstring(json, change.tag),
+  ): void {
     const watermark = this.#requireWatermark();
     const {tag} = change;
-    const stored = extractChangeSubstring(json, tag);
+    const stored = storedChange;
     const estimatedBytes = estimateChangeLogStreamRowBytes(
       watermark,
       tag,
       stored,
     );
     this.#insertChange.run(watermark, ++this.#pos, tag, estimatedBytes, stored);
-    this.#requireHasher().add({
+    this.#hasher?.add({
       watermark,
       pos: this.#pos,
       tag,
@@ -154,13 +166,14 @@ export class ChangeLogStreamWriter {
     watermark: string,
     json: string,
     writeTimeMs: number,
+    storedChange = extractChangeSubstring(json, 'commit'),
   ): ChangeLogStreamTransactionStats {
     const precommit = this.#requireWatermark();
     assertInvariant(
       watermark === precommit,
       `change-log stream commit ${watermark} does not match begin ${precommit}`,
     );
-    const change = extractChangeSubstring(json, 'commit');
+    const change = storedChange;
     const estimatedBytes = estimateChangeLogStreamRowBytes(
       watermark,
       'commit',
@@ -176,8 +189,8 @@ export class ChangeLogStreamWriter {
       precommit,
       writeTimeMs,
     );
-    const hasher = this.#requireHasher();
-    hasher.add({
+    const hasher = this.#hasher;
+    hasher?.add({
       watermark,
       pos: this.#pos,
       tag: 'commit',
@@ -187,7 +200,7 @@ export class ChangeLogStreamWriter {
     const stats = {
       rows: this.#pos + 1,
       estimatedBytes: this.#estimatedBytes + estimatedBytes,
-      hash: hasher.digest(),
+      hash: hasher?.digest(),
       cookieMutations: this.#cookieMutations,
     };
     // The log is durable at `watermark` from here on, and nothing that can
@@ -228,13 +241,5 @@ export class ChangeLogStreamWriter {
       'change-log stream message received outside of a transaction',
     );
     return this.#watermark;
-  }
-
-  #requireHasher(): ChangeLogTransactionHasher {
-    assertInvariant(
-      this.#hasher !== undefined,
-      'change-log stream hash received outside of a transaction',
-    );
-    return this.#hasher;
   }
 }

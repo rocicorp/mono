@@ -19,69 +19,102 @@ describe('completeOrdering', () => {
     const issueQuery = newQuery(schema, 'issue');
     expect(ast(issueQuery)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
+        "where": undefined,
       }
     `);
     expect(completeOrdering(ast(issueQuery), getPrimaryKey))
       .toMatchInlineSnapshot(`
-      {
-        "orderBy": [
-          [
-            "id",
-            "asc",
+        {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
           ],
-        ],
-        "table": "issue",
-      }
-    `);
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
+          "table": "issue",
+          "where": undefined,
+        }
+      `);
   });
 
   test('basic, ordered on non primary key', () => {
     const issueQuery = newQuery(schema, 'issue').orderBy('title', 'asc');
     expect(ast(issueQuery)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
         "orderBy": [
           [
             "title",
             "asc",
           ],
         ],
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
+        "where": undefined,
       }
     `);
     expect(completeOrdering(ast(issueQuery), getPrimaryKey))
       .toMatchInlineSnapshot(`
-      {
-        "orderBy": [
-          [
-            "title",
-            "asc",
+        {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": [
+            [
+              "title",
+              "asc",
+            ],
+            [
+              "id",
+              "asc",
+            ],
           ],
-          [
-            "id",
-            "asc",
-          ],
-        ],
-        "table": "issue",
-      }
-    `);
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
+          "table": "issue",
+          "where": undefined,
+        }
+      `);
   });
 
   test('basic, partial order', () => {
     const q = newQuery(schema, 'issueLabel').orderBy('labelId', 'asc');
     expect(ast(q)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
         "orderBy": [
           [
             "labelId",
             "asc",
           ],
         ],
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issueLabel",
+        "where": undefined,
       }
     `);
     expect(completeOrdering(ast(q), getPrimaryKey)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
         "orderBy": [
           [
             "labelId",
@@ -92,24 +125,36 @@ describe('completeOrdering', () => {
             "asc",
           ],
         ],
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issueLabel",
+        "where": undefined,
       }
     `);
 
     const q2 = newQuery(schema, 'issueLabel').orderBy('issueId', 'asc');
     expect(ast(q2)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
         "orderBy": [
           [
             "issueId",
             "asc",
           ],
         ],
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issueLabel",
+        "where": undefined,
       }
     `);
     expect(completeOrdering(ast(q2), getPrimaryKey)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
         "orderBy": [
           [
             "issueId",
@@ -120,7 +165,11 @@ describe('completeOrdering', () => {
             "asc",
           ],
         ],
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issueLabel",
+        "where": undefined,
       }
     `);
   });
@@ -129,6 +178,9 @@ describe('completeOrdering', () => {
     const issueQuery = newQuery(schema, 'issue').related('labels');
     expect(ast(issueQuery)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
         "related": [
           {
             "correlation": {
@@ -142,6 +194,8 @@ describe('completeOrdering', () => {
             "hidden": true,
             "subquery": {
               "alias": "labels",
+              "limit": undefined,
+              "orderBy": undefined,
               "related": [
                 {
                   "correlation": {
@@ -152,144 +206,47 @@ describe('completeOrdering', () => {
                       "labelId",
                     ],
                   },
+                  "hidden": undefined,
                   "subquery": {
                     "alias": "labels",
+                    "limit": undefined,
+                    "orderBy": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
                     "table": "label",
+                    "where": undefined,
                   },
                   "system": "client",
                 },
               ],
+              "schema": undefined,
+              "start": undefined,
               "table": "issueLabel",
+              "where": undefined,
             },
             "system": "client",
           },
         ],
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
-      }
-    `);
-    expect(completeOrdering(ast(issueQuery), getPrimaryKey))
-      .toMatchInlineSnapshot(`
-      {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
-        "related": [
-          {
-            "correlation": {
-              "childField": [
-                "issueId",
-              ],
-              "parentField": [
-                "id",
-              ],
-            },
-            "hidden": true,
-            "subquery": {
-              "alias": "labels",
-              "orderBy": [
-                [
-                  "issueId",
-                  "asc",
-                ],
-                [
-                  "labelId",
-                  "asc",
-                ],
-              ],
-              "related": [
-                {
-                  "correlation": {
-                    "childField": [
-                      "id",
-                    ],
-                    "parentField": [
-                      "labelId",
-                    ],
-                  },
-                  "subquery": {
-                    "alias": "labels",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "label",
-                  },
-                  "system": "client",
-                },
-              ],
-              "table": "issueLabel",
-            },
-            "system": "client",
-          },
-        ],
-        "table": "issue",
-      }
-    `);
-  });
-
-  test('exists', () => {
-    const issueQuery = newQuery(schema, 'issue').whereExists('labels');
-    expect(ast(issueQuery)).toMatchInlineSnapshot(`
-      {
-        "table": "issue",
-        "where": {
-          "op": "EXISTS",
-          "related": {
-            "correlation": {
-              "childField": [
-                "issueId",
-              ],
-              "parentField": [
-                "id",
-              ],
-            },
-            "subquery": {
-              "alias": "zsubq_labels",
-              "table": "issueLabel",
-              "where": {
-                "op": "EXISTS",
-                "related": {
-                  "correlation": {
-                    "childField": [
-                      "id",
-                    ],
-                    "parentField": [
-                      "labelId",
-                    ],
-                  },
-                  "subquery": {
-                    "alias": "zsubq_zhidden_labels",
-                    "table": "label",
-                  },
-                  "system": "client",
-                },
-                "type": "correlatedSubquery",
-              },
-            },
-            "system": "client",
-          },
-          "type": "correlatedSubquery",
-        },
+        "where": undefined,
       }
     `);
     expect(completeOrdering(ast(issueQuery), getPrimaryKey))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
           "orderBy": [
             [
               "id",
               "asc",
             ],
           ],
-          "table": "issue",
-          "where": {
-            "op": "EXISTS",
-            "related": {
+          "related": [
+            {
               "correlation": {
                 "childField": [
                   "issueId",
@@ -298,8 +255,10 @@ describe('completeOrdering', () => {
                   "id",
                 ],
               },
+              "hidden": true,
               "subquery": {
-                "alias": "zsubq_labels",
+                "alias": "labels",
+                "limit": undefined,
                 "orderBy": [
                   [
                     "issueId",
@@ -310,8 +269,166 @@ describe('completeOrdering', () => {
                     "asc",
                   ],
                 ],
+                "related": [
+                  {
+                    "correlation": {
+                      "childField": [
+                        "id",
+                      ],
+                      "parentField": [
+                        "labelId",
+                      ],
+                    },
+                    "hidden": undefined,
+                    "subquery": {
+                      "alias": "labels",
+                      "limit": undefined,
+                      "orderBy": [
+                        [
+                          "id",
+                          "asc",
+                        ],
+                      ],
+                      "related": undefined,
+                      "schema": undefined,
+                      "start": undefined,
+                      "table": "label",
+                      "where": undefined,
+                    },
+                    "system": "client",
+                  },
+                ],
+                "schema": undefined,
+                "start": undefined,
+                "table": "issueLabel",
+                "where": undefined,
+              },
+              "system": "client",
+            },
+          ],
+          "schema": undefined,
+          "start": undefined,
+          "table": "issue",
+          "where": undefined,
+        }
+      `);
+  });
+
+  test('exists', () => {
+    const issueQuery = newQuery(schema, 'issue').whereExists('labels');
+    expect(ast(issueQuery)).toMatchInlineSnapshot(`
+      {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
+        "table": "issue",
+        "where": {
+          "flip": undefined,
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "issueId",
+              ],
+              "parentField": [
+                "id",
+              ],
+            },
+            "hidden": undefined,
+            "subquery": {
+              "alias": "zsubq_labels",
+              "limit": undefined,
+              "orderBy": undefined,
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
+              "table": "issueLabel",
+              "where": {
+                "flip": undefined,
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "labelId",
+                    ],
+                  },
+                  "hidden": undefined,
+                  "subquery": {
+                    "alias": "zsubq_zhidden_labels",
+                    "limit": undefined,
+                    "orderBy": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "label",
+                    "where": undefined,
+                  },
+                  "system": "client",
+                },
+                "scalar": undefined,
+                "type": "correlatedSubquery",
+              },
+            },
+            "system": "client",
+          },
+          "scalar": undefined,
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+    expect(completeOrdering(ast(issueQuery), getPrimaryKey))
+      .toMatchInlineSnapshot(`
+        {
+          "alias": undefined,
+          "limit": undefined,
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
+          "table": "issue",
+          "where": {
+            "flip": undefined,
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
+                  "issueId",
+                ],
+                "parentField": [
+                  "id",
+                ],
+              },
+              "hidden": undefined,
+              "subquery": {
+                "alias": "zsubq_labels",
+                "limit": undefined,
+                "orderBy": [
+                  [
+                    "issueId",
+                    "asc",
+                  ],
+                  [
+                    "labelId",
+                    "asc",
+                  ],
+                ],
+                "related": undefined,
+                "schema": undefined,
+                "start": undefined,
                 "table": "issueLabel",
                 "where": {
+                  "flip": undefined,
                   "op": "EXISTS",
                   "related": {
                     "correlation": {
@@ -322,23 +439,31 @@ describe('completeOrdering', () => {
                         "labelId",
                       ],
                     },
+                    "hidden": undefined,
                     "subquery": {
                       "alias": "zsubq_zhidden_labels",
+                      "limit": undefined,
                       "orderBy": [
                         [
                           "id",
                           "asc",
                         ],
                       ],
+                      "related": undefined,
+                      "schema": undefined,
+                      "start": undefined,
                       "table": "label",
+                      "where": undefined,
                     },
                     "system": "client",
                   },
+                  "scalar": undefined,
                   "type": "correlatedSubquery",
                 },
               },
               "system": "client",
             },
+            "scalar": undefined,
             "type": "correlatedSubquery",
           },
         }
@@ -357,6 +482,12 @@ describe('completeOrdering', () => {
 
     expect(ast(issueQuery)).toMatchInlineSnapshot(`
       {
+        "alias": undefined,
+        "limit": undefined,
+        "orderBy": undefined,
+        "related": undefined,
+        "schema": undefined,
+        "start": undefined,
         "table": "issue",
         "where": {
           "conditions": [
@@ -373,25 +504,6 @@ describe('completeOrdering', () => {
               "type": "simple",
             },
             {
-              "op": "EXISTS",
-              "related": {
-                "correlation": {
-                  "childField": [
-                    "id",
-                  ],
-                  "parentField": [
-                    "ownerId",
-                  ],
-                },
-                "subquery": {
-                  "alias": "zsubq_owner",
-                  "table": "user",
-                },
-                "system": "client",
-              },
-              "type": "correlatedSubquery",
-            },
-            {
               "conditions": [
                 {
                   "left": {
@@ -406,6 +518,7 @@ describe('completeOrdering', () => {
                   "type": "simple",
                 },
                 {
+                  "flip": undefined,
                   "op": "EXISTS",
                   "related": {
                     "correlation": {
@@ -416,16 +529,52 @@ describe('completeOrdering', () => {
                         "id",
                       ],
                     },
+                    "hidden": undefined,
                     "subquery": {
                       "alias": "zsubq_comments",
+                      "limit": undefined,
+                      "orderBy": undefined,
+                      "related": undefined,
+                      "schema": undefined,
+                      "start": undefined,
                       "table": "comment",
+                      "where": undefined,
                     },
                     "system": "client",
                   },
+                  "scalar": undefined,
                   "type": "correlatedSubquery",
                 },
               ],
               "type": "or",
+            },
+            {
+              "flip": undefined,
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "ownerId",
+                  ],
+                },
+                "hidden": undefined,
+                "subquery": {
+                  "alias": "zsubq_owner",
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "user",
+                  "where": undefined,
+                },
+                "system": "client",
+              },
+              "scalar": undefined,
+              "type": "correlatedSubquery",
             },
           ],
           "type": "and",
@@ -435,12 +584,17 @@ describe('completeOrdering', () => {
     expect(completeOrdering(ast(issueQuery), getPrimaryKey))
       .toMatchInlineSnapshot(`
         {
+          "alias": undefined,
+          "limit": undefined,
           "orderBy": [
             [
               "id",
               "asc",
             ],
           ],
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
           "table": "issue",
           "where": {
             "conditions": [
@@ -457,31 +611,6 @@ describe('completeOrdering', () => {
                 "type": "simple",
               },
               {
-                "op": "EXISTS",
-                "related": {
-                  "correlation": {
-                    "childField": [
-                      "id",
-                    ],
-                    "parentField": [
-                      "ownerId",
-                    ],
-                  },
-                  "subquery": {
-                    "alias": "zsubq_owner",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "user",
-                  },
-                  "system": "client",
-                },
-                "type": "correlatedSubquery",
-              },
-              {
                 "conditions": [
                   {
                     "left": {
@@ -496,6 +625,7 @@ describe('completeOrdering', () => {
                     "type": "simple",
                   },
                   {
+                    "flip": undefined,
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
@@ -506,22 +636,62 @@ describe('completeOrdering', () => {
                           "id",
                         ],
                       },
+                      "hidden": undefined,
                       "subquery": {
                         "alias": "zsubq_comments",
+                        "limit": undefined,
                         "orderBy": [
                           [
                             "id",
                             "asc",
                           ],
                         ],
+                        "related": undefined,
+                        "schema": undefined,
+                        "start": undefined,
                         "table": "comment",
+                        "where": undefined,
                       },
                       "system": "client",
                     },
+                    "scalar": undefined,
                     "type": "correlatedSubquery",
                   },
                 ],
                 "type": "or",
+              },
+              {
+                "flip": undefined,
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "ownerId",
+                    ],
+                  },
+                  "hidden": undefined,
+                  "subquery": {
+                    "alias": "zsubq_owner",
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "user",
+                    "where": undefined,
+                  },
+                  "system": "client",
+                },
+                "scalar": undefined,
+                "type": "correlatedSubquery",
               },
             ],
             "type": "and",
