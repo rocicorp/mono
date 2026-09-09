@@ -173,9 +173,5 @@ export interface Operator extends Input, Output {}
 export interface Storage {
   set(key: string, value: JSONValue): void;
   get(key: string, def?: JSONValue): JSONValue | undefined;
-  /**
-   * If options is not specified, defaults to scanning all entries.
-   */
-  scan(options?: {prefix: string}): Stream<[string, JSONValue]>;
   del(key: string): void;
 }

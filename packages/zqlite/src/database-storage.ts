@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {JSONValue} from '../../shared/src/json.ts';
 import type {Storage} from '../../zql/src/ivm/operator.ts';
-import type {Stream} from '../../zql/src/ivm/stream.ts';
 import type {Statement} from './db.ts';
 import {Database} from './db.ts';
 
@@ -144,23 +143,6 @@ export class DatabaseStorage {
     this.#numWrites = 0;
   }
 
-  *#scan(
-    cgID: string,
-    opID: number,
-    opts: {prefix: string} = {prefix: ''},
-  ): Stream<[string, JSONValue]> {
-    const {prefix} = opts;
-    for (const {key, val} of this.#stmts.scan.iterate<{
-      key: string;
-      val: string;
-    }>(cgID, opID, prefix)) {
-      if (!key.startsWith(prefix)) {
-        return;
-      }
-      yield [key, JSON.parse(val)];
-    }
-  }
-
   createClientGroupStorage(cgID: string): ClientGroupStorage {
     const destroy = () => {
       this.#stmts.clear.run(cgID);
@@ -177,7 +159,6 @@ export class DatabaseStorage {
           get: (key, def?) => this.#get(cgID, opID, key, def),
           set: (key, val) => this.#set(cgID, opID, key, val),
           del: key => this.#del(cgID, opID, key),
-          scan: opts => this.#scan(cgID, opID, opts),
         };
       },
 

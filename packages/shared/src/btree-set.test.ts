@@ -1,7 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import fc, {assert, property} from 'fast-check';
 import {describe, expect, test} from 'vitest';
-import {BTreeSet} from './btree-set.ts';
+import {BTreeSet, drainValues} from './btree-set.ts';
 
 test('delete', () => {
   const t = new BTreeSet<number>((a, b) => a - b);
@@ -64,41 +64,41 @@ describe('iterators', () => {
   t.add(2);
 
   test('values', () => {
-    expect([...t.values()]).toEqual([2, 5, 10, 15]);
+    expect(drainValues(t.values())).toEqual([2, 5, 10, 15]);
   });
 
   test('valuesReversed', () => {
-    expect([...t.valuesReversed()]).toEqual([15, 10, 5, 2]);
+    expect(drainValues(t.valuesReversed())).toEqual([15, 10, 5, 2]);
   });
 
   test('valuesFrom 5', () => {
-    expect([...t.valuesFrom(5)]).toEqual([5, 10, 15]);
-    expect([...t.valuesFrom(5, false)]).toEqual([10, 15]);
+    expect(drainValues(t.valuesFrom(5))).toEqual([5, 10, 15]);
+    expect(drainValues(t.valuesFrom(5, false))).toEqual([10, 15]);
   });
 
   test('valuesFrom 6', () => {
-    expect([...t.valuesFrom(6)]).toEqual([10, 15]);
-    expect([...t.valuesFrom(6, false)]).toEqual([10, 15]);
+    expect(drainValues(t.valuesFrom(6))).toEqual([10, 15]);
+    expect(drainValues(t.valuesFrom(6, false))).toEqual([10, 15]);
   });
 
   test('valuesFrom 4', () => {
-    expect([...t.valuesFrom(4)]).toEqual([5, 10, 15]);
-    expect([...t.valuesFrom(4, false)]).toEqual([5, 10, 15]);
+    expect(drainValues(t.valuesFrom(4))).toEqual([5, 10, 15]);
+    expect(drainValues(t.valuesFrom(4, false))).toEqual([5, 10, 15]);
   });
 
   test('valuesFromReversed 10', () => {
-    expect([...t.valuesFromReversed(10)]).toEqual([10, 5, 2]);
-    expect([...t.valuesFromReversed(10, false)]).toEqual([5, 2]);
+    expect(drainValues(t.valuesFromReversed(10))).toEqual([10, 5, 2]);
+    expect(drainValues(t.valuesFromReversed(10, false))).toEqual([5, 2]);
   });
 
   test('valuesFromReversed 6', () => {
-    expect([...t.valuesFromReversed(6)]).toEqual([5, 2]);
-    expect([...t.valuesFromReversed(6, false)]).toEqual([5, 2]);
+    expect(drainValues(t.valuesFromReversed(6))).toEqual([5, 2]);
+    expect(drainValues(t.valuesFromReversed(6, false))).toEqual([5, 2]);
   });
 
   test('valuesFromReversed 11', () => {
-    expect([...t.valuesFromReversed(11)]).toEqual([10, 5, 2]);
-    expect([...t.valuesFromReversed(11, false)]).toEqual([10, 5, 2]);
+    expect(drainValues(t.valuesFromReversed(11))).toEqual([10, 5, 2]);
+    expect(drainValues(t.valuesFromReversed(11, false))).toEqual([10, 5, 2]);
   });
 });
 
@@ -168,14 +168,14 @@ test('add should allow replacing equal entry', () => {
   t.add(['b', 2]);
   t.add(['c', 3]);
 
-  expect([...t]).toEqual([
+  expect(t.toArray()).toEqual([
     ['a', 1],
     ['b', 2],
     ['c', 3],
   ]);
 
   t.add(['b', 4]);
-  expect([...t]).toEqual([
+  expect(t.toArray()).toEqual([
     ['a', 1],
     ['b', 4],
     ['c', 3],
@@ -188,7 +188,7 @@ describe('class-based iterators', () => {
     for (let i = 0; i < 100; i++) {
       t.add(i);
     }
-    const forward = [...t.valuesFrom()];
+    const forward = drainValues(t.valuesFrom());
     expect(forward).toEqual(Array.from({length: 100}, (_, i) => i));
   });
 
@@ -197,33 +197,21 @@ describe('class-based iterators', () => {
     for (let i = 0; i < 100; i++) {
       t.add(i);
     }
-    const reversed = [...t.valuesReversed()];
+    const reversed = drainValues(t.valuesReversed());
     expect(reversed).toEqual(Array.from({length: 100}, (_, i) => 99 - i));
   });
 
-  test('empty tree iterator returns done immediately', () => {
+  test('empty tree iterator is exhausted immediately', () => {
     const t = new BTreeSet<number>((a, b) => a - b);
-    const fwd = t.values();
-    expect(fwd.next()).toEqual({done: true, value: undefined});
-    const rev = t.valuesReversed();
-    expect(rev.next()).toEqual({done: true, value: undefined});
+    expect(t.values().nextValue()).toBeUndefined();
+    expect(t.valuesReversed().nextValue()).toBeUndefined();
   });
 
   test('single element tree works', () => {
     const t = new BTreeSet<number>((a, b) => a - b);
     t.add(42);
-    expect([...t.values()]).toEqual([42]);
-    expect([...t.valuesReversed()]).toEqual([42]);
-  });
-
-  test('iterator protocol: [Symbol.iterator] returns self', () => {
-    const t = new BTreeSet<number>((a, b) => a - b);
-    t.add(1);
-    t.add(2);
-    const fwd = t.values();
-    expect(fwd[Symbol.iterator]()).toBe(fwd);
-    const rev = t.valuesReversed();
-    expect(rev[Symbol.iterator]()).toBe(rev);
+    expect(drainValues(t.values())).toEqual([42]);
+    expect(drainValues(t.valuesReversed())).toEqual([42]);
   });
 });
 
@@ -276,7 +264,7 @@ describe('fast-check', () => {
 
     for (const [operation, value] of operations) {
       const oldOrderedSet = orderedSet;
-      const oldOrderedSetValues = [...oldOrderedSet];
+      const oldOrderedSetValues = oldOrderedSet.toArray();
       switch (operation) {
         case 'insert':
           orderedSet.add(value);
@@ -298,7 +286,7 @@ describe('fast-check', () => {
           set.add(value);
           break;
       }
-      const oldOrderedSetValuesPostModification = [...oldOrderedSet];
+      const oldOrderedSetValuesPostModification = oldOrderedSet.toArray();
 
       // immutable OrderedSet should not be modified in place.
       if (!mutable) {
@@ -315,7 +303,7 @@ describe('fast-check', () => {
 
     // 2. The OrderedSet returns items in sorted order when iterating.
     let lastValue = Number.NEGATIVE_INFINITY;
-    for (const value of orderedSet) {
+    for (const value of orderedSet.toArray()) {
       expect(value).toBeGreaterThan(lastValue);
       lastValue = value;
     }

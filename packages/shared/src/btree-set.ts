@@ -88,11 +88,11 @@ export class BTreeSet<K> {
     }
   }
 
-  keys(): IterableIterator<K> {
+  keys(): ValueIterator<K> {
     return valuesFrom(this.#root, this.comparator, undefined, true);
   }
 
-  values(): IterableIterator<K> {
+  values(): ValueIterator<K> {
     return valuesFrom(this.#root, this.comparator, undefined, true);
   }
 
@@ -100,7 +100,7 @@ export class BTreeSet<K> {
     return valuesFrom(this.#root, this.comparator, lowestKey, inclusive);
   }
 
-  valuesReversed(): IterableIterator<K> {
+  valuesReversed(): ValueIterator<K> {
     return valuesFromReversed(
       this.#maxKey(),
       this.#root,
@@ -128,21 +128,14 @@ export class BTreeSet<K> {
     return this.#root.maxKey();
   }
 
-  [Symbol.iterator](): IterableIterator<K> {
-    return this.keys();
-  }
-
   /**
-   * Collects every key into an array without going through the iterator
-   * protocol, so building an index does not allocate a result object per row.
+   * Collects every key into an array. BTreeSet is deliberately not iterable:
+   * the iterator protocol allocates a result object per value, which is the
+   * cost the IVM fetch path exists to avoid, and an iterable API is an easy
+   * way to reintroduce it by accident.
    */
   toArray(): K[] {
-    const result: K[] = [];
-    const it = this.valuesFrom();
-    for (let v = it.nextValue(); v !== undefined; v = it.nextValue()) {
-      result.push(v);
-    }
-    return result;
+    return drainValues(this.valuesFrom());
   }
 
   /**
@@ -205,8 +198,17 @@ export class BTreeSet<K> {
  * per-value result object. `nextValue()` returns `undefined` once exhausted,
  * so it is only meaningful for sets whose keys are never `undefined`.
  */
-export interface ValueIterator<K> extends IterableIterator<K> {
+export interface ValueIterator<K> {
   nextValue(): K | undefined;
+}
+
+/** Collects the rest of `it` into an array. */
+export function drainValues<K>(it: ValueIterator<K>): K[] {
+  const result: K[] = [];
+  for (let v = it.nextValue(); v !== undefined; v = it.nextValue()) {
+    result.push(v);
+  }
+  return result;
 }
 
 class BTreeForwardIterator<K> implements ValueIterator<K> {
@@ -254,18 +256,8 @@ class BTreeForwardIterator<K> implements ValueIterator<K> {
     }
   }
 
-  next(): IteratorResult<K> {
-    return this.#advance()
-      ? {done: false, value: this.#leaf.keys[this.#i]}
-      : {done: true, value: undefined as unknown as K};
-  }
-
   nextValue(): K | undefined {
     return this.#advance() ? this.#leaf.keys[this.#i] : undefined;
-  }
-
-  [Symbol.iterator]() {
-    return this;
   }
 }
 
@@ -315,18 +307,8 @@ class BTreeReverseIterator<K> implements ValueIterator<K> {
     }
   }
 
-  next(): IteratorResult<K> {
-    return this.#advance()
-      ? {done: false, value: this.#leaf.keys[this.#i]}
-      : {done: true, value: undefined as unknown as K};
-  }
-
   nextValue(): K | undefined {
     return this.#advance() ? this.#leaf.keys[this.#i] : undefined;
-  }
-
-  [Symbol.iterator]() {
-    return this;
   }
 }
 
@@ -416,13 +398,7 @@ function findPath<K>(
 }
 
 function emptyValueIterator<K>(): ValueIterator<K> {
-  return {
-    next: () => ({done: true, value: undefined as unknown as K}),
-    nextValue: () => undefined,
-    [Symbol.iterator]() {
-      return this;
-    },
-  };
+  return {nextValue: () => undefined};
 }
 
 /** Leaf node / base class. **************************************************/

@@ -96,31 +96,9 @@ describe('view-syncer/database-storage', () => {
 
     store.del('bar');
     store.del('bo'); // non-existent
-    expect([...store.scan()]).toEqual([
-      ['boo', 'doo'],
-      ['foo', 'bar'],
-    ]);
-  });
-
-  test('scan prefix', () => {
-    const store = storage.createClientGroupStorage('foo-bar').createStorage();
-    store.set('c/', 1);
-    store.set('ba/7', 2);
-    store.set('b/7', 3);
-    store.set('b/5/6', 4);
-    store.set('b/4', 5);
-    store.set('b/', 6);
-    store.set('b', 7);
-    store.set('a/2/3', 8);
-    store.set('a/1', 9);
-    store.set('a/', 10);
-
-    expect([...store.scan({prefix: 'b/'})]).toEqual([
-      ['b/', 6],
-      ['b/4', 5],
-      ['b/5/6', 4],
-      ['b/7', 3],
-    ]);
+    expect(store.get('bar')).toBeUndefined();
+    expect(store.get('boo')).toBe('doo');
+    expect(store.get('foo')).toBe('bar');
   });
 
   test('client group / operator isolation and destroy', () => {

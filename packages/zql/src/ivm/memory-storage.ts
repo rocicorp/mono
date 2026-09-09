@@ -2,7 +2,6 @@ import {compareUTF8} from 'compare-utf8';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {Storage} from './operator.ts';
-import type {Stream} from './stream.ts';
 
 type Entry = [key: string, value: JSONValue];
 
@@ -31,17 +30,6 @@ export class MemoryStorage implements Storage {
 
   del(key: string) {
     this.#data.delete([key, null]);
-  }
-
-  *scan(options?: {prefix: string}): Stream<[string, JSONValue]> {
-    for (const entry of this.#data.valuesFrom(
-      options && [options.prefix, null],
-    )) {
-      if (options && !entry[0].startsWith(options.prefix)) {
-        return;
-      }
-      yield entry;
-    }
   }
 
   cloneData(): Record<string, JSONValue> {

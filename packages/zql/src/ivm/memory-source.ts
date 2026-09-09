@@ -639,10 +639,7 @@ class RowScan implements PullStream<Row> {
   }
 
   close(): void {
-    if (!this.#done) {
-      this.#done = true;
-      this.#rows.return?.();
-    }
+    this.#done = true;
   }
 }
 

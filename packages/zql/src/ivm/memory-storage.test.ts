@@ -45,31 +45,3 @@ test('other types', () => {
   expect(ms.get('qux')).toStrictEqual({a: 1});
   expect(ms.get('quux')).toStrictEqual([1, 2, 3]);
 });
-
-test('scan', () => {
-  const ms = new MemoryStorage();
-  ms.set('foo', 1);
-  ms.set('bar', true);
-  ms.set('baz', null);
-  ms.set('qux', {a: 1});
-  ms.set('quux', [1, 2, 3]);
-
-  expect([...ms.scan()]).toEqual([
-    ['bar', true],
-    ['baz', null],
-    ['foo', 1],
-    ['quux', [1, 2, 3]],
-    ['qux', {a: 1}],
-  ]);
-  expect([...ms.scan({prefix: 'ba'})]).toEqual([
-    ['bar', true],
-    ['baz', null],
-  ]);
-
-  expect([...ms.scan({prefix: 'qu'})]).toEqual([
-    ['quux', [1, 2, 3]],
-    ['qux', {a: 1}],
-  ]);
-
-  expect([...ms.scan({prefix: 'quu'})]).toEqual([['quux', [1, 2, 3]]]);
-});

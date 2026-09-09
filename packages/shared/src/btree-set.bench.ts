@@ -19,7 +19,8 @@ const midKey = NUM_ENTRIES / 2;
 describe('BTreeSet iterators', () => {
   bench('values() full scan', () => {
     let sum = 0;
-    for (const v of tree.values()) {
+    const it = tree.values();
+    for (let v = it.nextValue(); v !== undefined; v = it.nextValue()) {
       sum += v;
     }
     use(sum);
@@ -27,7 +28,8 @@ describe('BTreeSet iterators', () => {
 
   bench('valuesFrom() from mid', () => {
     let sum = 0;
-    for (const v of tree.valuesFrom(midKey)) {
+    const it = tree.valuesFrom(midKey);
+    for (let v = it.nextValue(); v !== undefined; v = it.nextValue()) {
       sum += v;
     }
     use(sum);
@@ -35,7 +37,8 @@ describe('BTreeSet iterators', () => {
 
   bench('valuesReversed() full scan', () => {
     let sum = 0;
-    for (const v of tree.valuesReversed()) {
+    const it = tree.valuesReversed();
+    for (let v = it.nextValue(); v !== undefined; v = it.nextValue()) {
       sum += v;
     }
     use(sum);
@@ -43,64 +46,17 @@ describe('BTreeSet iterators', () => {
 
   bench('valuesFromReversed() from mid', () => {
     let sum = 0;
-    for (const v of tree.valuesFromReversed(midKey)) {
+    const it = tree.valuesFromReversed(midKey);
+    for (let v = it.nextValue(); v !== undefined; v = it.nextValue()) {
       sum += v;
     }
     use(sum);
   });
 
-  bench('[Symbol.iterator]() full scan', () => {
+  bench('toArray() full scan', () => {
     let sum = 0;
-    for (const v of tree) {
+    for (const v of tree.toArray()) {
       sum += v;
-    }
-    use(sum);
-  });
-});
-
-// Isolate just the iterator step cost by calling next() directly,
-// with no work in the "loop body" beyond consuming the value.
-describe('BTreeSet iterator next() in isolation', () => {
-  bench('forward iterator next()', () => {
-    const iter = tree.values();
-    let result = iter.next();
-    let sum = 0;
-    while (!result.done) {
-      sum += result.value;
-      result = iter.next();
-    }
-    use(sum);
-  });
-
-  bench('forward iterator next() from mid', () => {
-    const iter = tree.valuesFrom(midKey);
-    let result = iter.next();
-    let sum = 0;
-    while (!result.done) {
-      sum += result.value;
-      result = iter.next();
-    }
-    use(sum);
-  });
-
-  bench('reverse iterator next()', () => {
-    const iter = tree.valuesReversed();
-    let result = iter.next();
-    let sum = 0;
-    while (!result.done) {
-      sum += result.value;
-      result = iter.next();
-    }
-    use(sum);
-  });
-
-  bench('reverse iterator next() from mid', () => {
-    const iter = tree.valuesFromReversed(midKey);
-    let result = iter.next();
-    let sum = 0;
-    while (!result.done) {
-      sum += result.value;
-      result = iter.next();
     }
     use(sum);
   });
