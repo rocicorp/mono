@@ -7,6 +7,7 @@ import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import {type FetchRequest, type Input, type Output} from './operator.ts';
+import {drainPullMap} from './stream.ts';
 
 export type CaughtNode =
   | {
@@ -63,12 +64,12 @@ export class Catch implements Output {
   }
 
   fetch(req: FetchRequest = {}) {
-    return Array.from(this.#input.fetch(req), expandNode);
+    return drainPullMap(this.#input.fetch(req), expandNode);
   }
 
   push(change: Change) {
     const fetch = this.#fetchOnPush
-      ? Array.from(this.#input.fetch({}), expandNode)
+      ? drainPullMap(this.#input.fetch({}), expandNode)
       : [];
     const expandedChange = expandChange(change);
     if (this.#fetchOnPush) {
@@ -129,8 +130,19 @@ export function expandNode(node: Node | 'yield'): CaughtNode {
         row: node.row,
         relationships: mapValues(node.relationships, getChildren => {
           const children: CaughtNode[] = [];
-          for (const child of getChildren()) {
-            children.push(expandNode(child));
+          {
+            const __pull132 = getChildren();
+            try {
+              for (
+                let child = __pull132.next();
+                child !== undefined;
+                child = __pull132.next()
+              ) {
+                children.push(expandNode(child));
+              }
+            } finally {
+              __pull132.close();
+            }
           }
           return children;
         }),

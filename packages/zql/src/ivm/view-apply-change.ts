@@ -8,7 +8,8 @@ import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {type Comparator, type Node} from './data.ts';
-import {skipYields} from './operator.ts';
+import {PullStreamBase, type PullStream} from './stream.ts';
+
 import type {SourceSchema} from './schema.ts';
 import type {Entry, Format} from './view.ts';
 
@@ -104,17 +105,55 @@ export interface RefCountMap {
 /**
  * Get child nodes from a relationship, handling both lazy (Node) and expanded (ExpandedNode).
  */
-function* getChildNodes(
+/**
+ * Reads a relationship in the pull protocol, skipping 'yield'. Returns the
+ * children as a PullStream for ExpandedNode arrays and adapted streams too, so
+ * the three call sites have one loop shape and the hot case -- a native
+ * PullStream from a Join -- pays no iterator, no generator and no result
+ * object per child.
+ */
+function childNodes(
   node: ViewNode,
   relationship: string,
-): Generator<ViewNode> {
+): PullStream<ViewNode> {
   const children = node.relationships[relationship];
   if (Array.isArray(children)) {
-    // ExpandedNode: already an array
-    yield* children;
-  } else {
-    // Node: lazy generator function
-    yield* skipYields(children());
+    return new ArrayPullStream(children);
+  }
+  return new SkipYieldsPull(children());
+}
+
+class ArrayPullStream extends PullStreamBase<ViewNode> {
+  readonly #a: readonly ViewNode[];
+  #i = 0;
+  constructor(a: readonly ViewNode[]) {
+    super();
+    this.#a = a;
+  }
+  next(): ViewNode | undefined {
+    return this.#i < this.#a.length ? this.#a[this.#i++] : undefined;
+  }
+  close(): void {
+    this.#i = this.#a.length;
+  }
+}
+
+class SkipYieldsPull extends PullStreamBase<ViewNode> {
+  readonly #s: PullStream<Node | 'yield'>;
+  constructor(s: PullStream<Node | 'yield'>) {
+    super();
+    this.#s = s;
+  }
+  next(): Node | undefined {
+    for (;;) {
+      const v = this.#s.next();
+      if (v !== 'yield') {
+        return v;
+      }
+    }
+  }
+  close(): void {
+    this.#s.close();
   }
 }
 
@@ -225,7 +264,12 @@ export function applyChangeInternal<M extends Mutate>(
         let currentParent = parentEntry;
         for (const relationship of Object.keys(change.node.relationships)) {
           const childSchema = must(schema.relationships[relationship]);
-          for (const node of getChildNodes(change.node, relationship)) {
+          const children = childNodes(change.node, relationship);
+          for (
+            let node = children.next();
+            node !== undefined;
+            node = children.next()
+          ) {
             currentParent = applyChangeInternal(
               currentParent,
               {type: change.type, node},
@@ -643,7 +687,12 @@ function initializeRelationshipsForNewEntryIfAny(
         : track([] as MutableMetaEntryList);
       result[relationship] = newView;
 
-      for (const childNode of getChildNodes(node, relationship)) {
+      const children = childNodes(node, relationship);
+      for (
+        let childNode = children.next();
+        childNode !== undefined;
+        childNode = children.next()
+      ) {
         applyChangeInternal(
           result,
           {type: 'add', node: childNode},
@@ -658,7 +707,12 @@ function initializeRelationshipsForNewEntryIfAny(
       // Plural non-hidden: build array in-place for efficiency
       const childArray: MutableMetaEntryList = track([]);
 
-      for (const childNode of getChildNodes(node, relationship)) {
+      const children = childNodes(node, relationship);
+      for (
+        let childNode = children.next();
+        childNode !== undefined;
+        childNode = children.next()
+      ) {
         const newEntry = makeNewMetaEntry(
           childNode.row,
           childSchema,

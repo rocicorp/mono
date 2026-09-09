@@ -60,15 +60,24 @@ export class FanOut implements FilterOperator {
     }
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
-    let result = false;
-    for (const output of this.#outputs) {
-      result = (yield* output.filter(node)) || result;
-      if (result) {
+  /** Which output suspended on 'yield', so re-entry resumes there. */
+  #filterIndex = 0;
+
+  filterPull(node: Node): boolean | 'yield' {
+    const outputs = this.#outputs;
+    for (let i = this.#filterIndex; i < outputs.length; i++) {
+      const r = outputs[i].filterPull(node);
+      if (r === 'yield') {
+        this.#filterIndex = i;
+        return 'yield';
+      }
+      if (r) {
+        this.#filterIndex = 0;
         return true;
       }
     }
-    return result;
+    this.#filterIndex = 0;
+    return false;
   }
 
   *push(change: Change) {

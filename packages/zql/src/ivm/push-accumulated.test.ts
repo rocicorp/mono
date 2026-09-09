@@ -13,6 +13,7 @@ import {
   type EditChange,
   type RemoveChange,
 } from './change.js';
+import type {RelationshipStream} from './data.ts';
 import type {InputBase, Output} from './operator.js';
 import {
   pushAccumulatedChanges as genPushAccumulatedChanges,
@@ -21,6 +22,7 @@ import {
   mergeRelationships,
 } from './push-accumulated.js';
 import type {SourceSchema} from './schema.js';
+import {drainPull, emptyPullStream, pullOf} from './stream.ts';
 
 const mockPusher: InputBase = {
   getSchema: () => mockSchema as any,
@@ -104,8 +106,14 @@ describe('pushAccumulatedChanges', () => {
 
     test('multiple add changes collapse to single add', () => {
       const accumulatedPushes: Change[] = [
-        makeAddChange({row: {id: 1}, relationships: {rel1: () => []}}),
-        makeAddChange({row: {id: 1}, relationships: {rel2: () => []}}),
+        makeAddChange({
+          row: {id: 1},
+          relationships: {rel1: () => emptyPullStream()},
+        }),
+        makeAddChange({
+          row: {id: 1},
+          relationships: {rel2: () => emptyPullStream()},
+        }),
       ];
 
       pushAccumulatedChanges(
@@ -161,8 +169,14 @@ describe('pushAccumulatedChanges', () => {
 
     test('multiple remove changes collapse to single remove', () => {
       const accumulatedPushes: Change[] = [
-        makeRemoveChange({row: {id: 1}, relationships: {rel1: () => []}}),
-        makeRemoveChange({row: {id: 1}, relationships: {rel2: () => []}}),
+        makeRemoveChange({
+          row: {id: 1},
+          relationships: {rel1: () => emptyPullStream()},
+        }),
+        makeRemoveChange({
+          row: {id: 1},
+          relationships: {rel2: () => emptyPullStream()},
+        }),
       ];
 
       pushAccumulatedChanges(
@@ -268,16 +282,19 @@ describe('pushAccumulatedChanges', () => {
     test('edit supersedes add and remove when all three present', () => {
       const accumulatedPushes: Change[] = [
         makeEditChange(
-          {row: {id: 1, value: 3}, relationships: {editRel: () => []}},
+          {
+            row: {id: 1, value: 3},
+            relationships: {editRel: () => emptyPullStream()},
+          },
           {row: {id: 1, value: 0}, relationships: {}},
         ),
         makeAddChange({
           row: {id: 1, value: 2},
-          relationships: {addRel: () => []},
+          relationships: {addRel: () => emptyPullStream()},
         }),
         makeRemoveChange({
           row: {id: 1, value: 1},
-          relationships: {removeRel: () => []},
+          relationships: {removeRel: () => emptyPullStream()},
         }),
       ];
 
@@ -399,11 +416,11 @@ describe('mergeRelationships', () => {
   test('merges relationships from add changes', () => {
     const left: Change = makeAddChange({
       row: {id: 1},
-      relationships: {rel1: () => []},
+      relationships: {rel1: () => emptyPullStream()},
     });
     const right: Change = makeAddChange({
       row: {id: 1},
-      relationships: {rel2: () => []},
+      relationships: {rel2: () => emptyPullStream()},
     });
 
     const result = mergeRelationships(left, right);
@@ -417,11 +434,11 @@ describe('mergeRelationships', () => {
   test('merges relationships from remove changes', () => {
     const left: Change = makeRemoveChange({
       row: {id: 1},
-      relationships: {rel1: () => []},
+      relationships: {rel1: () => emptyPullStream()},
     });
     const right: Change = makeRemoveChange({
       row: {id: 1},
-      relationships: {rel2: () => []},
+      relationships: {rel2: () => emptyPullStream()},
     });
 
     const result = mergeRelationships(left, right);
@@ -434,12 +451,12 @@ describe('mergeRelationships', () => {
 
   test('merges relationships from edit changes', () => {
     const left: Change = makeEditChange(
-      {row: {id: 1}, relationships: {rel1: () => []}},
-      {row: {id: 1}, relationships: {oldRel1: () => []}},
+      {row: {id: 1}, relationships: {rel1: () => emptyPullStream()}},
+      {row: {id: 1}, relationships: {oldRel1: () => emptyPullStream()}},
     );
     const right: Change = makeEditChange(
-      {row: {id: 1}, relationships: {rel2: () => []}},
-      {row: {id: 1}, relationships: {oldRel2: () => []}},
+      {row: {id: 1}, relationships: {rel2: () => emptyPullStream()}},
+      {row: {id: 1}, relationships: {oldRel2: () => emptyPullStream()}},
     );
 
     const result = mergeRelationships(left, right) as EditChange;
@@ -454,8 +471,8 @@ describe('mergeRelationships', () => {
   });
 
   test('left takes precedence when same relationship exists', () => {
-    const rel1Left = () => [];
-    const rel1Right = () => [];
+    const rel1Left = () => pullOf([]);
+    const rel1Right = () => pullOf([]);
 
     const left: Change = makeAddChange({
       row: {id: 1},
@@ -473,12 +490,12 @@ describe('mergeRelationships', () => {
 
   test('merges edit with add', () => {
     const left: Change = makeEditChange(
-      {row: {id: 1}, relationships: {editRel: () => []}},
+      {row: {id: 1}, relationships: {editRel: () => emptyPullStream()}},
       {row: {id: 1}, relationships: {}},
     );
     const right: Change = makeAddChange({
       row: {id: 1},
-      relationships: {addRel: () => []},
+      relationships: {addRel: () => emptyPullStream()},
     });
 
     const result = mergeRelationships(left, right) as EditChange;
@@ -492,11 +509,11 @@ describe('mergeRelationships', () => {
   test('merges edit with remove', () => {
     const left: Change = makeEditChange(
       {row: {id: 1}, relationships: {}},
-      {row: {id: 1}, relationships: {editOldRel: () => []}},
+      {row: {id: 1}, relationships: {editOldRel: () => emptyPullStream()}},
     );
     const right: Change = makeRemoveChange({
       row: {id: 1},
-      relationships: {removeRel: () => []},
+      relationships: {removeRel: () => emptyPullStream()},
     });
 
     const result = mergeRelationships(left, right) as EditChange;
@@ -513,11 +530,11 @@ describe('mergeRelationships', () => {
       relationshipName: 'childRel',
     };
     const left: Change = makeChildChange(
-      {row: {id: 1}, relationships: {rel1: () => []}},
+      {row: {id: 1}, relationships: {rel1: () => emptyPullStream()}},
       childInfo,
     );
     const right: Change = makeChildChange(
-      {row: {id: 1}, relationships: {rel2: () => []}},
+      {row: {id: 1}, relationships: {rel2: () => emptyPullStream()}},
       childInfo,
     );
 
@@ -543,8 +560,12 @@ describe('makeAddEmptyRelationships', () => {
     expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
-    expect(result[ChangeIndex.NODE].relationships.rel1?.()).toEqual([]);
-    expect(result[ChangeIndex.NODE].relationships.rel2?.()).toEqual([]);
+    expect(drainPull(result[ChangeIndex.NODE].relationships.rel1?.()!)).toEqual(
+      [],
+    );
+    expect(drainPull(result[ChangeIndex.NODE].relationships.rel2?.()!)).toEqual(
+      [],
+    );
   });
 
   test('adds empty relationships for remove change', () => {
@@ -586,7 +607,7 @@ describe('makeAddEmptyRelationships', () => {
 
     const addEmptyRelationships = makeAddEmptyRelationships(schema);
 
-    const existingRel = () => [{row: {id: 2}, relationships: {}}];
+    const existingRel = () => pullOf([{row: {id: 2}, relationships: {}}]);
     const change: Change = makeAddChange({
       row: {id: 1},
       relationships: {rel1: existingRel},
@@ -595,7 +616,9 @@ describe('makeAddEmptyRelationships', () => {
     const result = addEmptyRelationships(change) as AddChange;
 
     expect(result[ChangeIndex.NODE].relationships.rel1).toBe(existingRel);
-    expect(result[ChangeIndex.NODE].relationships.rel2?.()).toEqual([]);
+    expect(drainPull(result[ChangeIndex.NODE].relationships.rel2?.()!)).toEqual(
+      [],
+    );
   });
 
   test('does not modify child changes', () => {
@@ -634,8 +657,8 @@ describe('makeAddEmptyRelationships', () => {
 
 describe('mergeEmpty', () => {
   test('adds empty streams for missing relationships', () => {
-    const relationships: Record<string, () => any[]> = {
-      existing: () => [{id: 1}],
+    const relationships: Record<string, () => RelationshipStream> = {
+      existing: () => pullOf([{row: {id: 1}, relationships: {}}]),
     };
 
     mergeEmpty(relationships, ['existing', 'new1', 'new2']);
@@ -643,20 +666,22 @@ describe('mergeEmpty', () => {
     expect(Object.keys(relationships)).toEqual(
       expect.arrayContaining(['existing', 'new1', 'new2']),
     );
-    expect(relationships.existing()).toEqual([{id: 1}]);
-    expect(relationships.new1()).toEqual([]);
-    expect(relationships.new2()).toEqual([]);
+    expect(drainPull(relationships.existing())).toEqual([
+      {row: {id: 1}, relationships: {}},
+    ]);
+    expect(drainPull(relationships.new1())).toEqual([]);
+    expect(drainPull(relationships.new2())).toEqual([]);
   });
 
   test('does not overwrite existing relationships', () => {
-    const existingFn = () => [{id: 1}];
-    const relationships: Record<string, () => any[]> = {
+    const existingFn = () => pullOf([{row: {id: 1}, relationships: {}}]);
+    const relationships: Record<string, () => RelationshipStream> = {
       rel1: existingFn,
     };
 
     mergeEmpty(relationships, ['rel1', 'rel2']);
 
     expect(relationships.rel1).toBe(existingFn);
-    expect(relationships.rel2()).toEqual([]);
+    expect(drainPull(relationships.rel2())).toEqual([]);
   });
 });

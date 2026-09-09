@@ -1,7 +1,14 @@
 import {compareUTF8} from 'compare-utf8';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {Stream} from './stream.ts';
+import type {PullStream} from './stream.ts';
+
+/**
+ * What a relationship closure returns. The pull protocol only -- a relationship
+ * read is the hottest path in hydration, and accepting an iterable here would
+ * let a producer put the per-row result object back.
+ */
+export type RelationshipStream = PullStream<Node | 'yield'>;
 
 /**
  * A row flowing through the pipeline, plus its relationships.
@@ -14,7 +21,7 @@ export type Node = {
    * The stream may contain 'yield' to indicate the operator has yielded control.
    * See {@linkcode Operator.fetch} for more details about yields.
    */
-  relationships: Record<string, () => Stream<Node | 'yield'>>;
+  relationships: Record<string, () => RelationshipStream>;
 };
 
 /**
@@ -135,8 +142,19 @@ export function drainStreams(node: Node | 'yield') {
     return;
   }
   for (const stream of Object.values(node.relationships)) {
-    for (const node of stream()) {
-      drainStreams(node);
+    {
+      const __pull149 = stream();
+      try {
+        for (
+          let node = __pull149.next();
+          node !== undefined;
+          node = __pull149.next()
+        ) {
+          drainStreams(node);
+        }
+      } finally {
+        __pull149.close();
+      }
     }
   }
 }

@@ -8,7 +8,7 @@ import {
   type Output,
 } from '../ivm/operator.ts';
 import type {SourceSchema} from '../ivm/schema.ts';
-import type {Stream} from '../ivm/stream.ts';
+import {type Stream, type PullStream} from '../ivm/stream.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
 
 type MetricName = 'query-update-client' | 'query-update-server';
@@ -38,7 +38,7 @@ export class MeasurePushOperator implements Operator {
     this.#output = output;
   }
 
-  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
     return this.#input.fetch(req);
   }
 

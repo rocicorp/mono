@@ -2,9 +2,19 @@ import type {BuilderDelegate} from '../builder/builder.ts';
 import type {NoSubqueryCondition} from '../builder/filter.ts';
 import type {Change} from './change.ts';
 import {type Node} from './data.ts';
-import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
+import {
+  type FetchRequest,
+  type Input,
+  type InputBase,
+  type Output,
+} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream} from './stream.ts';
+import {
+  LazyPullStream,
+  PullStreamBase,
+  type PullStream,
+  type Stream,
+} from './stream.ts';
 
 /**
  * The `where` clause of a ZQL query is implemented using a sub-graph of
@@ -35,7 +45,14 @@ export interface FilterOutput extends Output {
   // nodes. E.g., so the operator can cache results for the
   // duration of the loop.
   beginFilter(): void;
-  filter(node: Node): Generator<'yield', boolean>;
+  /**
+   * The verdict, or 'yield' to hand control back -- the caller must then call
+   * again with the same node until it gets a boolean. Delegates that never
+   * suspend return the boolean directly, so a chain of them costs no
+   * allocation per node. `Exists` is the one that does suspend, and holds its
+   * position in explicit state rather than in a generator.
+   */
+  filterPull(node: Node): boolean | 'yield';
   endFilter(): void;
 }
 
@@ -51,7 +68,7 @@ export const throwFilterOutput: FilterOutput = {
     throw new Error('Output not set');
   },
 
-  *filter(_node: Node): Generator<'yield', boolean> {
+  filterPull(): boolean | 'yield' {
     throw new Error('Output not set');
   },
 
@@ -86,26 +103,15 @@ export class FilterStart implements FilterInput, Output {
     yield* this.#output.push(change, this);
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
     const mergedFilter = mergeFilters(req.filter, this.#condition);
     const childReq =
       mergedFilter === req.filter ? req : {...req, filter: mergedFilter};
-    this.#output.beginFilter();
-    try {
-      for (const node of this.#input.fetch(childReq)) {
-        if (node === 'yield') {
-          yield node;
-          continue;
-        }
-        if (yield* this.#output.filter(node)) {
-          yield node;
-        }
-      }
-    } finally {
-      // finally is important if an exception is thrown or
-      // if the stream is not fully consumed.
-      this.#output.endFilter();
-    }
+    // Lazy so beginFilter() runs when iteration starts, as the generator did.
+    return new LazyPullStream(() => {
+      this.#output.beginFilter();
+      return new FilterStartPull(this.#input.fetch(childReq), this.#output);
+    });
   }
 }
 
@@ -134,16 +140,14 @@ export class FilterEnd implements Input, FilterOutput {
     input.setFilterOutput(this);
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    for (const node of this.#start.fetch(req)) {
-      yield node;
-    }
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
+    return this.#start.fetch(req);
   }
 
   beginFilter() {}
   endFilter() {}
 
-  *filter(_node: Node) {
+  filterPull(_node: Node): boolean {
     return true;
   }
 
@@ -177,4 +181,73 @@ export function buildFilterPipeline(
   const filterEnd = new FilterEnd(filterStart, middle);
   delegate.addEdge(middle, filterEnd);
   return filterEnd;
+}
+
+/**
+ * FilterStart's fetch in the pull protocol. Holds the node a delegate has
+ * suspended on so the same node is offered again after a 'yield'; calls
+ * endFilter() exactly once, on exhaustion, close, or throw.
+ */
+class FilterStartPull extends PullStreamBase<Node | 'yield'> {
+  readonly #input: PullStream<Node | 'yield'>;
+  readonly #output: FilterOutput;
+  #pending: Node | undefined;
+  #ended = false;
+
+  constructor(input: PullStream<Node | 'yield'>, output: FilterOutput) {
+    super();
+    this.#input = input;
+    this.#output = output;
+  }
+
+  next(): Node | 'yield' | undefined {
+    if (this.#ended) {
+      return undefined;
+    }
+    try {
+      for (;;) {
+        let node: Node;
+        const pending = this.#pending;
+        if (pending !== undefined) {
+          node = pending;
+        } else {
+          const v = this.#input.next();
+          if (v === undefined) {
+            this.#end();
+            return undefined;
+          }
+          if (v === 'yield') {
+            return v;
+          }
+          node = v;
+        }
+        const verdict = this.#output.filterPull(node);
+        if (verdict === 'yield') {
+          this.#pending = node;
+          return 'yield';
+        }
+        this.#pending = undefined;
+        if (verdict) {
+          return node;
+        }
+      }
+    } catch (e) {
+      this.#end();
+      throw e;
+    }
+  }
+
+  #end(): void {
+    if (!this.#ended) {
+      this.#ended = true;
+      this.#output.endFilter();
+    }
+  }
+
+  close(): void {
+    if (!this.#ended) {
+      this.#input.close();
+      this.#end();
+    }
+  }
 }

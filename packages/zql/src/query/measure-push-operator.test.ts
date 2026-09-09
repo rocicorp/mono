@@ -5,6 +5,7 @@ import {makeAddChange} from '../ivm/change.ts';
 import type {Node} from '../ivm/data.ts';
 import type {FetchRequest, Input, Output} from '../ivm/operator.ts';
 import type {SourceSchema} from '../ivm/schema.ts';
+import {emptyPullStream} from '../ivm/stream.ts';
 import {MeasurePushOperator} from './measure-push-operator.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
 
@@ -12,7 +13,7 @@ describe('MeasurePushOperator', () => {
   test('should pass through fetch calls', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
-      fetch: vi.fn(() => []),
+      fetch: vi.fn(() => emptyPullStream<Node | 'yield'>()),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -38,7 +39,7 @@ describe('MeasurePushOperator', () => {
     const schema = {} as SourceSchema;
     const mockInput: Input = {
       setOutput: vi.fn(),
-      fetch: vi.fn(() => []),
+      fetch: vi.fn(() => emptyPullStream<Node | 'yield'>()),
       getSchema: vi.fn(() => schema),
       destroy: vi.fn(),
     };
@@ -63,7 +64,7 @@ describe('MeasurePushOperator', () => {
   test('should pass through destroy calls', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
-      fetch: vi.fn(() => []),
+      fetch: vi.fn(() => emptyPullStream<Node | 'yield'>()),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -87,7 +88,7 @@ describe('MeasurePushOperator', () => {
   test('should measure push timing and record metric', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
-      fetch: vi.fn(() => []),
+      fetch: vi.fn(() => emptyPullStream<Node | 'yield'>()),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -123,7 +124,7 @@ describe('MeasurePushOperator', () => {
   test('should not record metric when output.push throws', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
-      fetch: vi.fn(() => []),
+      fetch: vi.fn(() => emptyPullStream<Node | 'yield'>()),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };

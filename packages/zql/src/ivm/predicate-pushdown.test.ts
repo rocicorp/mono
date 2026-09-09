@@ -4,6 +4,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import type {SimpleCondition} from '../../../zero-protocol/src/ast.ts';
 import type {NoSubqueryCondition} from '../builder/filter.ts';
 import {Catch} from './catch.ts';
+import type {Node} from './data.ts';
 import {FilterEnd, FilterStart} from './filter-operators.ts';
 import {FlippedJoin} from './flipped-join.ts';
 import {Join} from './join.ts';
@@ -12,8 +13,7 @@ import {type FetchRequest, type Input, type Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Skip} from './skip.ts';
 import {makeSourceChangeAdd} from './source.ts';
-import {consume} from './stream.ts';
-import type {Stream} from './stream.ts';
+import {consume, drainPull, type PullStream} from './stream.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 import {UnionFanIn} from './union-fan-in.ts';
@@ -40,13 +40,9 @@ class RecordingInput implements Input {
     this.#wrapped = wrapped;
   }
 
-  fetch(
-    req: FetchRequest,
-  ): Stream<ReturnType<Input['fetch']> extends Stream<infer T> ? T : never> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
     this.received.push(req);
-    return this.#wrapped.fetch(req) as Stream<
-      ReturnType<Input['fetch']> extends Stream<infer T> ? T : never
-    >;
+    return this.#wrapped.fetch(req);
   }
 
   setOutput(output: Output): void {
@@ -79,14 +75,14 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
     const filterEnd = new FilterEnd(filterStart, filterStart);
 
     // Bare consumer fetch: req.filter is undefined.
-    [...filterEnd.fetch({})];
+    drainPull(filterEnd.fetch({}));
     expect(recorder.received).toHaveLength(1);
     expect(recorder.received[0].filter).toEqual(filterCondition);
 
     // Consumer-provided req.filter should be AND-merged with FilterStart's
     // own condition.
     const incomingFilter: NoSubqueryCondition = cmpEq('a', 'y');
-    [...filterEnd.fetch({filter: incomingFilter})];
+    drainPull(filterEnd.fetch({filter: incomingFilter}));
     expect(recorder.received).toHaveLength(2);
     expect(recorder.received[1].filter).toEqual({
       type: 'and',
@@ -108,7 +104,7 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
     const filterEnd = new FilterEnd(filterStart, filterStart);
 
     const incomingFilter: NoSubqueryCondition = cmpEq('a', 'y');
-    [...filterEnd.fetch({filter: incomingFilter})];
+    drainPull(filterEnd.fetch({filter: incomingFilter}));
     expect(recorder.received).toHaveLength(1);
     // The FetchRequest object itself should be passed through unchanged
     // (no clone/spread needed) when no merge happens.
@@ -130,7 +126,7 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
     const skip = new Skip(recorder, {row: {a: 'a0'}, exclusive: false});
 
     const incomingFilter: NoSubqueryCondition = cmpEq('b', 'x');
-    [...skip.fetch({filter: incomingFilter})];
+    drainPull(skip.fetch({filter: incomingFilter}));
     expect(recorder.received).toHaveLength(1);
     expect(recorder.received[0].filter).toBe(incomingFilter);
 
@@ -155,7 +151,7 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
     const ufi = new UnionFanIn(ufo, [branch1, branch2]);
 
     const incomingFilter: NoSubqueryCondition = cmpEq('b', 'x');
-    [...ufi.fetch({filter: incomingFilter})];
+    drainPull(ufi.fetch({filter: incomingFilter}));
 
     // Each branch should have triggered a fetch with the same req.filter.
     expect(recorder.received.length).toBeGreaterThanOrEqual(2);
@@ -179,7 +175,7 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
     const take = new Take(recorder, new MemoryStorage(), 10);
 
     const incomingFilter: NoSubqueryCondition = cmpEq('b', 'x');
-    [...take.fetch({filter: incomingFilter})];
+    drainPull(take.fetch({filter: incomingFilter}));
     expect(recorder.received).toHaveLength(1);
     expect(recorder.received[0].filter).toBe(incomingFilter);
 
@@ -224,7 +220,7 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
 
     const incomingFilter: NoSubqueryCondition = cmpEq('status', 'open');
     const sink = new Catch(join);
-    [...sink.fetch({filter: incomingFilter})];
+    sink.fetch({filter: incomingFilter});
 
     // Exactly one parent fetch, and it must carry the original filter.
     expect(recorder.received).toHaveLength(1);
@@ -271,7 +267,7 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
 
     const incomingFilter: NoSubqueryCondition = cmpEq('status', 'open');
     const sink = new Catch(flippedJoin);
-    [...sink.fetch({filter: incomingFilter})];
+    sink.fetch({filter: incomingFilter});
 
     // FlippedJoin should have invoked at least one parent fetch with
     // child-derived multiConstraints AND the original req.filter intact.

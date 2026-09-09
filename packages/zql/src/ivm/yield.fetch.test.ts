@@ -10,7 +10,7 @@ import type {FetchRequest, Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Skip} from './skip.ts';
 import {Snitch} from './snitch.ts';
-import type {Stream} from './stream.ts';
+import {pullOf, type PullStream} from './stream.ts';
 import {Take} from './take.ts';
 import {UnionFanIn} from './union-fan-in.ts';
 import {UnionFanOut} from './union-fan-out.ts';
@@ -41,11 +41,13 @@ class YieldSource implements Input {
     return this.#schema;
   }
 
-  *fetch(_req: FetchRequest): Stream<Node | 'yield'> {
-    yield 'yield';
-    yield {row: {id: '1'}, relationships: {}};
-    yield 'yield';
-    yield {row: {id: '2'}, relationships: {}};
+  fetch(_req: FetchRequest): PullStream<Node | 'yield'> {
+    return pullOf<Node | 'yield'>([
+      'yield',
+      {row: {id: '1'}, relationships: {}},
+      'yield',
+      {row: {id: '2'}, relationships: {}},
+    ]);
   }
 
   destroy(): void {}
@@ -376,9 +378,18 @@ describe('Yield Propagation', () => {
   test('Error propagation during fetch', () => {
     const source = new YieldSource();
     const error = new Error('Fetch failed');
-    source.fetch = function* (_req: FetchRequest) {
-      yield 'yield';
-      throw error;
+    source.fetch = (_req: FetchRequest) => {
+      let first = true;
+      return {
+        next: () => {
+          if (first) {
+            first = false;
+            return 'yield' as const;
+          }
+          throw error;
+        },
+        close: () => {},
+      };
     };
 
     const catchOp = new Catch(source);

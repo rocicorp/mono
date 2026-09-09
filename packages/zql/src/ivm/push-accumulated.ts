@@ -1,6 +1,5 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import {emptyArray} from '../../../shared/src/sentinels.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {
@@ -10,10 +9,10 @@ import {
   makeRemoveChange,
   type Change,
 } from './change.ts';
-import type {Node} from './data.ts';
+import type {RelationshipStream} from './data.ts';
 import type {InputBase, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {type Stream, emptyPullStream} from './stream.ts';
 
 /**
  * # pushAccumulatedChanges
@@ -419,12 +418,12 @@ export function makeAddEmptyRelationships(
  * This modifies the `relationships` object in place.
  */
 export function mergeEmpty(
-  relationships: Record<string, () => Stream<Node | 'yield'>>,
+  relationships: Record<string, () => RelationshipStream>,
   relationshipNames: string[],
 ) {
   for (const relName of relationshipNames) {
     if (relationships[relName] === undefined) {
-      relationships[relName] = () => emptyArray;
+      relationships[relName] = () => emptyPullStream();
     }
   }
 }

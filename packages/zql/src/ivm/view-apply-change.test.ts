@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {makeComparator} from './data.ts';
 import type {SourceSchema} from './schema.ts';
+import {emptyPullStream, pullOf} from './stream.ts';
 import {
   applyChange,
   idSymbol,
@@ -109,7 +110,7 @@ describe('applyChange', () => {
                 name: 'Buffalo Big Board Classic',
               },
               relationships: {
-                athletes: () => [],
+                athletes: () => emptyPullStream(),
               },
             },
           },
@@ -133,16 +134,17 @@ describe('applyChange', () => {
                     disciplineID: 'd1',
                   },
                   relationships: {
-                    athletes: () => [
-                      {
-                        row: {
-                          country: 'USA',
-                          id: 'a1',
-                          name: 'Mason Ho',
+                    athletes: () =>
+                      pullOf([
+                        {
+                          row: {
+                            country: 'USA',
+                            id: 'a1',
+                            name: 'Mason Ho',
+                          },
+                          relationships: {},
                         },
-                        relationships: {},
-                      },
-                    ],
+                      ]),
                   },
                 },
               },
@@ -168,16 +170,17 @@ describe('applyChange', () => {
                     disciplineID: 'd2',
                   },
                   relationships: {
-                    athletes: () => [
-                      {
-                        row: {
-                          country: 'USA',
-                          id: 'a1',
-                          name: 'Mason Ho',
+                    athletes: () =>
+                      pullOf([
+                        {
+                          row: {
+                            country: 'USA',
+                            id: 'a1',
+                            name: 'Mason Ho',
+                          },
+                          relationships: {},
                         },
-                        relationships: {},
-                      },
-                    ],
+                      ]),
                   },
                 },
               },
@@ -232,16 +235,17 @@ describe('applyChange', () => {
                     disciplineID: 'd1',
                   },
                   relationships: {
-                    athletes: () => [
-                      {
-                        row: {
-                          country: 'USA',
-                          id: 'a1',
-                          name: 'Mason Ho',
+                    athletes: () =>
+                      pullOf([
+                        {
+                          row: {
+                            country: 'USA',
+                            id: 'a1',
+                            name: 'Mason Ho',
+                          },
+                          relationships: {},
                         },
-                        relationships: {},
-                      },
-                    ],
+                      ]),
                   },
                 },
               },
@@ -296,16 +300,17 @@ describe('applyChange', () => {
                     disciplineID: 'd2',
                   },
                   relationships: {
-                    athletes: () => [
-                      {
-                        row: {
-                          country: 'USA',
-                          id: 'a1',
-                          name: 'Mason Ho',
+                    athletes: () =>
+                      pullOf([
+                        {
+                          row: {
+                            country: 'USA',
+                            id: 'a1',
+                            name: 'Mason Ho',
+                          },
+                          relationships: {},
                         },
-                        relationships: {},
-                      },
-                    ],
+                      ]),
                   },
                 },
               },
@@ -366,7 +371,7 @@ describe('applyChange', () => {
                 name: 'Buffalo Big Board Classic',
               },
               relationships: {
-                athletes: () => [],
+                athletes: () => emptyPullStream(),
               },
             },
           },
@@ -390,16 +395,17 @@ describe('applyChange', () => {
                     disciplineID: 'd1',
                   },
                   relationships: {
-                    athletes: () => [
-                      {
-                        row: {
-                          country: 'USA',
-                          id: 'a1',
-                          name: 'Mason Ho',
+                    athletes: () =>
+                      pullOf([
+                        {
+                          row: {
+                            country: 'USA',
+                            id: 'a1',
+                            name: 'Mason Ho',
+                          },
+                          relationships: {},
                         },
-                        relationships: {},
-                      },
-                    ],
+                      ]),
                   },
                 },
               },
@@ -425,16 +431,17 @@ describe('applyChange', () => {
                     disciplineID: 'd2',
                   },
                   relationships: {
-                    athletes: () => [
-                      {
-                        row: {
-                          country: 'USA',
-                          id: 'a1',
-                          name: 'Mason Ho',
+                    athletes: () =>
+                      pullOf([
+                        {
+                          row: {
+                            country: 'USA',
+                            id: 'a1',
+                            name: 'Mason Ho',
+                          },
+                          relationships: {},
                         },
-                        relationships: {},
-                      },
-                    ],
+                      ]),
                   },
                 },
               },
@@ -487,16 +494,17 @@ describe('applyChange', () => {
                     disciplineID: 'd1',
                   },
                   relationships: {
-                    athletes: () => [
-                      {
-                        row: {
-                          country: 'USA',
-                          id: 'a1',
-                          name: 'Mason Ho',
+                    athletes: () =>
+                      pullOf([
+                        {
+                          row: {
+                            country: 'USA',
+                            id: 'a1',
+                            name: 'Mason Ho',
+                          },
+                          relationships: {},
                         },
-                        relationships: {},
-                      },
-                    ],
+                      ]),
                   },
                 },
               },
@@ -549,16 +557,17 @@ describe('applyChange', () => {
                     disciplineID: 'd2',
                   },
                   relationships: {
-                    athletes: () => [
-                      {
-                        row: {
-                          country: 'USA',
-                          id: 'a1',
-                          name: 'Mason Ho',
+                    athletes: () =>
+                      pullOf([
+                        {
+                          row: {
+                            country: 'USA',
+                            id: 'a1',
+                            name: 'Mason Ho',
+                          },
+                          relationships: {},
                         },
-                        relationships: {},
-                      },
-                    ],
+                      ]),
                   },
                 },
               },
@@ -870,7 +879,7 @@ describe('applyChange', () => {
           type: 'add',
           node: {
             row: {id: '1', name: 'Aaron'},
-            relationships: makeProtoRelationships(() => []),
+            relationships: makeProtoRelationships(() => pullOf([])),
           },
         },
         schema,
@@ -1716,9 +1725,8 @@ describe('applyChange', () => {
         node: {
           row: {id: 'b', name: 'Bob'},
           relationships: {
-            children: () => [
-              {row: {id: 'c1', parentId: 'b'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([{row: {id: 'c1', parentId: 'b'}, relationships: {}}]),
           },
         },
       });
@@ -1728,9 +1736,8 @@ describe('applyChange', () => {
         node: {
           row: {id: 'd', name: 'Dave'},
           relationships: {
-            children: () => [
-              {row: {id: 'c2', parentId: 'd'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([{row: {id: 'c2', parentId: 'd'}, relationships: {}}]),
           },
         },
       });
@@ -1742,9 +1749,8 @@ describe('applyChange', () => {
         node: {
           row: {id: 'a', name: 'Alice'},
           relationships: {
-            children: () => [
-              {row: {id: 'c3', parentId: 'a'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([{row: {id: 'c3', parentId: 'a'}, relationships: {}}]),
           },
         },
       });
@@ -1808,7 +1814,7 @@ describe('applyChange', () => {
         type: 'add',
         node: {
           row: {id: 'a', name: 'Alice'},
-          relationships: {children: () => []},
+          relationships: {children: () => emptyPullStream()},
         },
       });
 
@@ -1816,7 +1822,7 @@ describe('applyChange', () => {
         type: 'add',
         node: {
           row: {id: 'c', name: 'Charlie'},
-          relationships: {children: () => []},
+          relationships: {children: () => emptyPullStream()},
         },
       });
 
@@ -1826,10 +1832,11 @@ describe('applyChange', () => {
         node: {
           row: {id: 'b', name: 'Bob'},
           relationships: {
-            children: () => [
-              {row: {id: 'child1', parentId: 'b'}, relationships: {}},
-              {row: {id: 'child2', parentId: 'b'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([
+                {row: {id: 'child1', parentId: 'b'}, relationships: {}},
+                {row: {id: 'child2', parentId: 'b'}, relationships: {}},
+              ]),
           },
         },
       });
@@ -2067,10 +2074,11 @@ describe('applyChange', () => {
         node: {
           row: {id: 'p1', name: 'Parent1'},
           relationships: {
-            children: () => [
-              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
-              {row: {id: 'c2', parentId: 'p1'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([
+                {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
+                {row: {id: 'c2', parentId: 'p1'}, relationships: {}},
+              ]),
           },
         },
       });
@@ -2193,9 +2201,8 @@ describe('applyChange', () => {
         node: {
           row: {id: 'p1', name: 'Parent1'},
           relationships: {
-            children: () => [
-              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([{row: {id: 'c1', parentId: 'p1'}, relationships: {}}]),
           },
         },
       });
@@ -2205,9 +2212,8 @@ describe('applyChange', () => {
         node: {
           row: {id: 'p2', name: 'Parent2'},
           relationships: {
-            children: () => [
-              {row: {id: 'c2', parentId: 'p2'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([{row: {id: 'c2', parentId: 'p2'}, relationships: {}}]),
           },
         },
       });
@@ -2536,10 +2542,11 @@ describe('applyChange', () => {
         node: {
           row: {id: 'p1', name: 'Parent1'},
           relationships: {
-            children: () => [
-              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
-              {row: {id: 'c2', parentId: 'p1'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([
+                {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
+                {row: {id: 'c2', parentId: 'p1'}, relationships: {}},
+              ]),
           },
         },
       });
@@ -2674,9 +2681,8 @@ describe('applyChange', () => {
         node: {
           row: {id: 'p1', name: 'Parent1'},
           relationships: {
-            children: () => [
-              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([{row: {id: 'c1', parentId: 'p1'}, relationships: {}}]),
           },
         },
       });
@@ -2686,9 +2692,8 @@ describe('applyChange', () => {
         node: {
           row: {id: 'p2', name: 'Parent2'},
           relationships: {
-            children: () => [
-              {row: {id: 'c2', parentId: 'p2'}, relationships: {}},
-            ],
+            children: () =>
+              pullOf([{row: {id: 'c2', parentId: 'p2'}, relationships: {}}]),
           },
         },
       });

@@ -6,66 +6,90 @@ import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import {compareValues, valuesEqual, type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {PullStreamBase, type PullStream} from './stream.ts';
 
 export function generateWithOverlayNoYield(
-  stream: Stream<Node>,
+  stream: PullStream<Node>,
   overlay: Change,
   schema: SourceSchema,
-): Stream<Node> {
-  return generateWithOverlay(stream, overlay, schema) as Stream<Node>;
+): PullStream<Node> {
+  return generateWithOverlay(
+    stream as PullStream<Node | 'yield'>,
+    overlay,
+    schema,
+  ) as PullStream<Node>;
 }
 
-export function* generateWithOverlay(
-  stream: Stream<Node | 'yield'>,
-  overlay: Change,
-  schema: SourceSchema,
-): Stream<Node | 'yield'> {
-  let applied = false;
-  let editOldApplied = false;
-  let editNewApplied = false;
-  for (const node of stream) {
-    if (node === 'yield') {
-      yield node;
-      continue;
-    }
+/**
+ * Splices a pending change into a node stream, as a pull stream.
+ *
+ * One input node can produce two outputs -- the overlay and the node itself --
+ * which the generator expressed as two `yield`s in one loop iteration. `#q`
+ * holds those so `next()` can hand them back one at a time.
+ */
+class JoinOverlay extends PullStreamBase<Node | 'yield'> {
+  readonly #stream: PullStream<Node | 'yield'>;
+  readonly #overlay: Change;
+  readonly #schema: SourceSchema;
+  readonly #q: (Node | 'yield')[] = [];
+  #applied = false;
+  #editOldApplied = false;
+  #editNewApplied = false;
+  #exhausted = false;
+  #tailDone = false;
+
+  constructor(
+    stream: PullStream<Node | 'yield'>,
+    overlay: Change,
+    schema: SourceSchema,
+  ) {
+    super();
+    this.#stream = stream;
+    this.#overlay = overlay;
+    this.#schema = schema;
+  }
+
+  #step(node: Node): void {
+    const overlay = this.#overlay;
+    const schema = this.#schema;
+    const q = this.#q;
     let yieldNode = true;
-    if (!applied) {
+    if (!this.#applied) {
       switch (overlay[ChangeIndex.TYPE]) {
         case ChangeType.ADD: {
           if (
             schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
           ) {
-            applied = true;
+            this.#applied = true;
             yieldNode = false;
           }
           break;
         }
         case ChangeType.REMOVE: {
           if (schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) < 0) {
-            applied = true;
-            yield overlay[ChangeIndex.NODE];
+            this.#applied = true;
+            q.push(overlay[ChangeIndex.NODE]);
           }
           break;
         }
         case ChangeType.EDIT: {
           if (
-            !editOldApplied &&
+            !this.#editOldApplied &&
             schema.compareRows(overlay[ChangeIndex.OLD_NODE].row, node.row) < 0
           ) {
-            editOldApplied = true;
-            if (editNewApplied) {
-              applied = true;
+            this.#editOldApplied = true;
+            if (this.#editNewApplied) {
+              this.#applied = true;
             }
-            yield overlay[ChangeIndex.OLD_NODE];
+            q.push(overlay[ChangeIndex.OLD_NODE]);
           }
           if (
-            !editNewApplied &&
+            !this.#editNewApplied &&
             schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
           ) {
-            editNewApplied = true;
-            if (editOldApplied) {
-              applied = true;
+            this.#editNewApplied = true;
+            if (this.#editOldApplied) {
+              this.#applied = true;
             }
             yieldNode = false;
           }
@@ -75,8 +99,8 @@ export function* generateWithOverlay(
           if (
             schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
           ) {
-            applied = true;
-            yield {
+            this.#applied = true;
+            q.push({
               row: node.row,
               relationships: {
                 ...node.relationships,
@@ -91,7 +115,7 @@ export function* generateWithOverlay(
                     ],
                   ),
               },
-            };
+            });
             yieldNode = false;
           }
           break;
@@ -99,58 +123,110 @@ export function* generateWithOverlay(
       }
     }
     if (yieldNode) {
-      yield node;
-    }
-  }
-  if (!applied) {
-    if (overlay[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-      applied = true;
-      yield overlay[ChangeIndex.NODE];
-    } else if (overlay[ChangeIndex.TYPE] === ChangeType.EDIT) {
-      assert(
-        editNewApplied,
-        'edit overlay: new node must be applied before old node',
-      );
-      editOldApplied = true;
-      applied = true;
-      yield overlay[ChangeIndex.OLD_NODE];
+      q.push(node);
     }
   }
 
-  assert(
-    applied,
-    'overlayGenerator: overlay was never applied to any fetched node',
-  );
+  #tail(): void {
+    const overlay = this.#overlay;
+    if (!this.#applied) {
+      if (overlay[ChangeIndex.TYPE] === ChangeType.REMOVE) {
+        this.#applied = true;
+        this.#q.push(overlay[ChangeIndex.NODE]);
+      } else if (overlay[ChangeIndex.TYPE] === ChangeType.EDIT) {
+        assert(
+          this.#editNewApplied,
+          'edit overlay: new node must be applied before old node',
+        );
+        this.#editOldApplied = true;
+        this.#applied = true;
+        this.#q.push(overlay[ChangeIndex.OLD_NODE]);
+      }
+    }
+    assert(
+      this.#applied,
+      'overlayGenerator: overlay was never applied to any fetched node',
+    );
+  }
+
+  next(): Node | 'yield' | undefined {
+    for (;;) {
+      if (this.#q.length > 0) {
+        return this.#q.shift();
+      }
+      if (this.#exhausted) {
+        if (!this.#tailDone) {
+          this.#tailDone = true;
+          this.#tail();
+          continue;
+        }
+        return undefined;
+      }
+      const node = this.#stream.next();
+      if (node === undefined) {
+        this.#exhausted = true;
+        continue;
+      }
+      if (node === 'yield') {
+        return node;
+      }
+      this.#step(node);
+    }
+  }
+
+  close(): void {
+    this.#exhausted = true;
+    this.#tailDone = true;
+    this.#q.length = 0;
+    this.#stream.close();
+  }
+}
+
+export function generateWithOverlay(
+  stream: PullStream<Node | 'yield'>,
+  overlay: Change,
+  schema: SourceSchema,
+): PullStream<Node | 'yield'> {
+  return new JoinOverlay(stream, overlay, schema);
 }
 
 export function generateWithOverlayNoYieldUnordered(
-  stream: Stream<Node>,
+  stream: PullStream<Node>,
   overlay: Change,
   schema: SourceSchema,
-): Stream<Node> {
-  return generateWithOverlayUnordered(stream, overlay, schema) as Stream<Node>;
+): PullStream<Node> {
+  return generateWithOverlayUnordered(
+    stream as PullStream<Node | 'yield'>,
+    overlay,
+    schema,
+  ) as PullStream<Node>;
 }
 
-export function* generateWithOverlayUnordered(
-  stream: Stream<Node | 'yield'>,
-  overlay: Change,
-  schema: SourceSchema,
-): Stream<Node | 'yield'> {
-  // Eager inject
-  if (overlay[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-    yield overlay[ChangeIndex.NODE];
-  } else if (overlay[ChangeIndex.TYPE] === ChangeType.EDIT) {
-    yield overlay[ChangeIndex.OLD_NODE];
+/** {@link JoinOverlay} for unordered streams: eager inject, inline suppress. */
+class JoinOverlayUnordered extends PullStreamBase<Node | 'yield'> {
+  readonly #stream: PullStream<Node | 'yield'>;
+  readonly #overlay: Change;
+  readonly #schema: SourceSchema;
+  readonly #q: (Node | 'yield')[] = [];
+  #injected = false;
+  #suppressed = false;
+  #done = false;
+
+  constructor(
+    stream: PullStream<Node | 'yield'>,
+    overlay: Change,
+    schema: SourceSchema,
+  ) {
+    super();
+    this.#stream = stream;
+    this.#overlay = overlay;
+    this.#schema = schema;
   }
 
-  // Stream with inline suppress
-  let suppressed = false;
-  for (const node of stream) {
-    if (node === 'yield') {
-      yield node;
-      continue;
-    }
-    if (!suppressed) {
+  #step(node: Node): void {
+    const overlay = this.#overlay;
+    const schema = this.#schema;
+    if (!this.#suppressed) {
       if (
         overlay[ChangeIndex.TYPE] === ChangeType.ADD ||
         overlay[ChangeIndex.TYPE] === ChangeType.EDIT
@@ -162,8 +238,8 @@ export function* generateWithOverlayUnordered(
             schema.primaryKey,
           )
         ) {
-          suppressed = true;
-          continue;
+          this.#suppressed = true;
+          return;
         }
       }
       if (overlay[ChangeIndex.TYPE] === ChangeType.CHILD) {
@@ -174,8 +250,8 @@ export function* generateWithOverlayUnordered(
             schema.primaryKey,
           )
         ) {
-          suppressed = true;
-          yield {
+          this.#suppressed = true;
+          this.#q.push({
             row: node.row,
             relationships: {
               ...node.relationships,
@@ -190,17 +266,61 @@ export function* generateWithOverlayUnordered(
                   ],
                 ),
             },
-          };
-          continue;
+          });
+          return;
         }
       }
     }
-    yield node;
+    this.#q.push(node);
   }
-  assert(
-    suppressed || overlay[ChangeIndex.TYPE] === ChangeType.REMOVE,
-    'overlayGenerator: overlay was never applied to any fetched node',
-  );
+
+  next(): Node | 'yield' | undefined {
+    if (!this.#injected) {
+      this.#injected = true;
+      const overlay = this.#overlay;
+      if (overlay[ChangeIndex.TYPE] === ChangeType.REMOVE) {
+        this.#q.push(overlay[ChangeIndex.NODE]);
+      } else if (overlay[ChangeIndex.TYPE] === ChangeType.EDIT) {
+        this.#q.push(overlay[ChangeIndex.OLD_NODE]);
+      }
+    }
+    for (;;) {
+      if (this.#q.length > 0) {
+        return this.#q.shift();
+      }
+      if (this.#done) {
+        return undefined;
+      }
+      const node = this.#stream.next();
+      if (node === undefined) {
+        this.#done = true;
+        assert(
+          this.#suppressed ||
+            this.#overlay[ChangeIndex.TYPE] === ChangeType.REMOVE,
+          'overlayGenerator: overlay was never applied to any fetched node',
+        );
+        return undefined;
+      }
+      if (node === 'yield') {
+        return node;
+      }
+      this.#step(node);
+    }
+  }
+
+  close(): void {
+    this.#done = true;
+    this.#q.length = 0;
+    this.#stream.close();
+  }
+}
+
+export function generateWithOverlayUnordered(
+  stream: PullStream<Node | 'yield'>,
+  overlay: Change,
+  schema: SourceSchema,
+): PullStream<Node | 'yield'> {
+  return new JoinOverlayUnordered(stream, overlay, schema);
 }
 
 export function rowEqualsForCompoundKey(

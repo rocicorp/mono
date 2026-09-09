@@ -13,7 +13,7 @@ import type {DebugDelegate} from '../../builder/debug-delegate.ts';
 import type {Node} from '../data.ts';
 import type {FetchRequest} from '../operator.ts';
 import type {Source, SourceChange, SourceInput} from '../source.ts';
-import type {Stream} from '../stream.ts';
+import type {PullStream, Stream} from '../stream.ts';
 
 export type YieldMode = 'fetch' | 'push' | 'both';
 
@@ -67,16 +67,50 @@ export class ModeYieldSource implements Source {
     const originalFetch = sourceInput.fetch.bind(sourceInput);
     return {
       ...sourceInput,
-      *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-        for (const item of originalFetch(req)) {
-          if (rng() < p) {
-            yield 'yield';
+      fetch: (req: FetchRequest): PullStream<Node | 'yield'> => {
+        const src = originalFetch(req);
+        // A 'yield' is emitted before an item, so the item is held until the
+        // marker has been handed back; one more may follow the last item.
+        let pending: Node | 'yield' | undefined;
+        let exhausted = false;
+        let tailDone = false;
+        const tail = (): 'yield' | undefined => {
+          if (!tailDone) {
+            tailDone = true;
+            if (rng() < p) {
+              return 'yield';
+            }
           }
-          yield item;
-        }
-        if (rng() < p) {
-          yield 'yield';
-        }
+          return undefined;
+        };
+        return {
+          next(): Node | 'yield' | undefined {
+            if (pending !== undefined) {
+              const held = pending;
+              pending = undefined;
+              return held;
+            }
+            if (exhausted) {
+              return tail();
+            }
+            const item = src.next();
+            if (item === undefined) {
+              exhausted = true;
+              return tail();
+            }
+            if (rng() < p) {
+              pending = item;
+              return 'yield';
+            }
+            return item;
+          },
+          close() {
+            exhausted = true;
+            tailDone = true;
+            pending = undefined;
+            src.close();
+          },
+        };
       },
     };
   }

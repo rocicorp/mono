@@ -4,10 +4,10 @@ import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
-import type {
-  FilterInput,
-  FilterOperator,
-  FilterOutput,
+import {
+  type FilterInput,
+  type FilterOperator,
+  type FilterOutput,
 } from './filter-operators.ts';
 import {
   type FetchRequest,
@@ -16,7 +16,7 @@ import {
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import type {PullStream, Stream} from './stream.ts';
 
 /**
  * Snitch is an Operator that records all messages it receives. Useful for
@@ -62,25 +62,43 @@ export class Snitch implements Operator {
     this.log.push(message);
   }
 
-  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
     this.#log([this.#name, 'fetch', req]);
-    return this.fetchGenerator(req);
-  }
-
-  *fetchGenerator(req: FetchRequest): Stream<Node | 'yield'> {
+    const input = this.#input.fetch(req);
     let count = 0;
-    try {
-      for (const node of this.#input.fetch(req)) {
-        if (node === 'yield') {
-          yield node;
-          continue;
-        }
-        count++;
-        yield node;
+    let done = false;
+    const finish = () => {
+      if (!done) {
+        done = true;
+        input.close();
+        this.#log([this.#name, 'fetchCount', req, count]);
       }
-    } finally {
-      this.#log([this.#name, 'fetchCount', req, count]);
-    }
+    };
+    return {
+      next: (): Node | 'yield' | undefined => {
+        if (done) {
+          return undefined;
+        }
+        let node: Node | 'yield' | undefined;
+        try {
+          node = input.next();
+        } catch (e) {
+          // The generator logged the count from a `finally`, so a throw
+          // mid-scan still recorded what had been read.
+          finish();
+          throw e;
+        }
+        if (node === undefined) {
+          finish();
+          return undefined;
+        }
+        if (node !== 'yield') {
+          count++;
+        }
+        return node;
+      },
+      close: finish,
+    };
   }
 
   *push(change: Change): Stream<'yield'> {
@@ -151,10 +169,20 @@ export class FilterSnitch implements FilterOperator {
     this.#output?.endFilter();
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
-    this.#log([this.#name, 'filter', node.row]);
+  /** The node whose 'filter' has been logged but not yet resolved. */
+  #logged: Node | undefined;
+
+  filterPull(node: Node): boolean | 'yield' {
+    if (this.#logged !== node) {
+      this.#log([this.#name, 'filter', node.row]);
+      this.#logged = node;
+    }
     assert(this.#output, 'Snitch: output must be set before filter is called');
-    return yield* this.#output.filter(node);
+    const r = this.#output.filterPull(node);
+    if (r !== 'yield') {
+      this.#logged = undefined;
+    }
+    return r;
   }
 
   destroy(): void {

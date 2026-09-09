@@ -7,7 +7,7 @@ import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
-import {skipYields, type Input, type Output} from './operator.ts';
+import type {Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {applyChange, type ViewChange} from './view-apply-change.ts';
 import type {Entry, Format, View} from './view.ts';
@@ -144,19 +144,33 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #hydrate() {
     this.#dirty = true;
-    for (const node of skipYields(this.#input.fetch({}))) {
-      this.#root = applyChange(
-        this.#root,
-        {type: 'add', node},
-        this.#getSchema(),
-        '',
-        this.#format,
-        false /* withIDs */,
-        true /* mutate: #root is freshly created and not yet observed by any
-                 consumer, so build it in place to avoid O(N^2) array copies.
-                 Every later push() is immutable, preserving reference
-                 stability for unchanged subtrees. */,
-      );
+    // Pull protocol: no result object per node. 'yield' is skipped inline
+    // rather than through skipYields, which would put an iterator back.
+    const stream = this.#input.fetch({});
+    try {
+      for (;;) {
+        const node = stream.next();
+        if (node === undefined) {
+          break;
+        }
+        if (node === 'yield') {
+          continue;
+        }
+        this.#root = applyChange(
+          this.#root,
+          {type: 'add', node},
+          this.#getSchema(),
+          '',
+          this.#format,
+          false /* withIDs */,
+          true /* mutate: #root is freshly created and not yet observed by any
+                   consumer, so build it in place to avoid O(N^2) array copies.
+                   Every later push() is immutable, preserving reference
+                   stability for unchanged subtrees. */,
+        );
+      }
+    } finally {
+      stream.close();
     }
     this.flush();
   }

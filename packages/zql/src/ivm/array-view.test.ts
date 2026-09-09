@@ -17,16 +17,17 @@ import {
   makeEditChange,
   makeRemoveChange,
 } from './change.ts';
+import type {Node} from './data.ts';
 import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
-import type {Input} from './operator.ts';
+import type {FetchRequest, Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from './source.ts';
-import {consume} from './stream.ts';
+import {consume, emptyPullStream, pullOf} from './stream.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 import {refCountSymbol} from './view-apply-change.ts';
@@ -653,8 +654,8 @@ test('collapse', () => {
   };
 
   const input: Input = {
-    fetch() {
-      return [];
+    fetch(_req: FetchRequest) {
+      return emptyPullStream<Node | 'yield'>();
     },
     destroy() {},
     getSchema() {
@@ -685,27 +686,29 @@ test('collapse', () => {
         name: 'issue',
       },
       relationships: {
-        labels: () => [
-          {
-            row: {
-              id: 1,
-              issueId: 1,
-              labelId: 1,
-              extra: 'a',
+        labels: () =>
+          pullOf([
+            {
+              row: {
+                id: 1,
+                issueId: 1,
+                labelId: 1,
+                extra: 'a',
+              },
+              relationships: {
+                labels: () =>
+                  pullOf([
+                    {
+                      row: {
+                        id: 1,
+                        name: 'label',
+                      },
+                      relationships: {},
+                    },
+                  ]),
+              },
             },
-            relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 1,
-                    name: 'label',
-                  },
-                  relationships: {},
-                },
-              ],
-            },
-          },
-        ],
+          ]),
       },
     },
   } as const;
@@ -747,46 +750,49 @@ test('collapse', () => {
             name: 'issue',
           },
           relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 1,
-                  issueId: 1,
-                  labelId: 1,
-                  extra: 'a',
+            labels: () =>
+              pullOf([
+                {
+                  row: {
+                    id: 1,
+                    issueId: 1,
+                    labelId: 1,
+                    extra: 'a',
+                  },
+                  relationships: {
+                    labels: () =>
+                      pullOf([
+                        {
+                          row: {
+                            id: 1,
+                            name: 'label',
+                          },
+                          relationships: {},
+                        },
+                      ]),
+                  },
                 },
-                relationships: {
-                  labels: () => [
-                    {
-                      row: {
-                        id: 1,
-                        name: 'label',
-                      },
-                      relationships: {},
-                    },
-                  ],
+                {
+                  row: {
+                    id: 2,
+                    issueId: 1,
+                    labelId: 2,
+                    extra: 'b',
+                  },
+                  relationships: {
+                    labels: () =>
+                      pullOf([
+                        {
+                          row: {
+                            id: 2,
+                            name: 'label2',
+                          },
+                          relationships: {},
+                        },
+                      ]),
+                  },
                 },
-              },
-              {
-                row: {
-                  id: 2,
-                  issueId: 1,
-                  labelId: 2,
-                  extra: 'b',
-                },
-                relationships: {
-                  labels: () => [
-                    {
-                      row: {
-                        id: 2,
-                        name: 'label2',
-                      },
-                      relationships: {},
-                    },
-                  ],
-                },
-              },
-            ],
+              ]),
           },
         },
         {
@@ -799,15 +805,16 @@ test('collapse', () => {
               extra: 'b',
             },
             relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 2,
-                    name: 'label2',
+              labels: () =>
+                pullOf([
+                  {
+                    row: {
+                      id: 2,
+                      name: 'label2',
+                    },
+                    relationships: {},
                   },
-                  relationships: {},
-                },
-              ],
+                ]),
             },
           }),
         },
@@ -848,46 +855,49 @@ test('collapse', () => {
             name: 'issue',
           },
           relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 1,
-                  issueId: 1,
-                  labelId: 1,
-                  extra: 'a',
+            labels: () =>
+              pullOf([
+                {
+                  row: {
+                    id: 1,
+                    issueId: 1,
+                    labelId: 1,
+                    extra: 'a',
+                  },
+                  relationships: {
+                    labels: () =>
+                      pullOf([
+                        {
+                          row: {
+                            id: 1,
+                            name: 'label',
+                          },
+                          relationships: {},
+                        },
+                      ]),
+                  },
                 },
-                relationships: {
-                  labels: () => [
-                    {
-                      row: {
-                        id: 1,
-                        name: 'label',
-                      },
-                      relationships: {},
-                    },
-                  ],
+                {
+                  row: {
+                    id: 2,
+                    issueId: 1,
+                    labelId: 2,
+                    extra: 'b2',
+                  },
+                  relationships: {
+                    labels: () =>
+                      pullOf([
+                        {
+                          row: {
+                            id: 2,
+                            name: 'label2',
+                          },
+                          relationships: {},
+                        },
+                      ]),
+                  },
                 },
-              },
-              {
-                row: {
-                  id: 2,
-                  issueId: 1,
-                  labelId: 2,
-                  extra: 'b2',
-                },
-                relationships: {
-                  labels: () => [
-                    {
-                      row: {
-                        id: 2,
-                        name: 'label2',
-                      },
-                      relationships: {},
-                    },
-                  ],
-                },
-              },
-            ],
+              ]),
           },
         },
         {
@@ -901,15 +911,16 @@ test('collapse', () => {
                 extra: 'b2',
               },
               relationships: {
-                labels: () => [
-                  {
-                    row: {
-                      id: 2,
-                      name: 'label2',
+                labels: () =>
+                  pullOf([
+                    {
+                      row: {
+                        id: 2,
+                        name: 'label2',
+                      },
+                      relationships: {},
                     },
-                    relationships: {},
-                  },
-                ],
+                  ]),
               },
             },
             {
@@ -920,15 +931,16 @@ test('collapse', () => {
                 extra: 'b',
               },
               relationships: {
-                labels: () => [
-                  {
-                    row: {
-                      id: 2,
-                      name: 'label2',
+                labels: () =>
+                  pullOf([
+                    {
+                      row: {
+                        id: 2,
+                        name: 'label2',
+                      },
+                      relationships: {},
                     },
-                    relationships: {},
-                  },
-                ],
+                  ]),
               },
             },
           ),
@@ -970,46 +982,49 @@ test('collapse', () => {
             name: 'issue',
           },
           relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 1,
-                  issueId: 1,
-                  labelId: 1,
-                  extra: 'a',
+            labels: () =>
+              pullOf([
+                {
+                  row: {
+                    id: 1,
+                    issueId: 1,
+                    labelId: 1,
+                    extra: 'a',
+                  },
+                  relationships: {
+                    labels: () =>
+                      pullOf([
+                        {
+                          row: {
+                            id: 1,
+                            name: 'label',
+                          },
+                          relationships: {},
+                        },
+                      ]),
+                  },
                 },
-                relationships: {
-                  labels: () => [
-                    {
-                      row: {
-                        id: 1,
-                        name: 'label',
-                      },
-                      relationships: {},
-                    },
-                  ],
+                {
+                  row: {
+                    id: 2,
+                    issueId: 1,
+                    labelId: 2,
+                    extra: 'b2',
+                  },
+                  relationships: {
+                    labels: () =>
+                      pullOf([
+                        {
+                          row: {
+                            id: 2,
+                            name: 'label2x',
+                          },
+                          relationships: {},
+                        },
+                      ]),
+                  },
                 },
-              },
-              {
-                row: {
-                  id: 2,
-                  issueId: 1,
-                  labelId: 2,
-                  extra: 'b2',
-                },
-                relationships: {
-                  labels: () => [
-                    {
-                      row: {
-                        id: 2,
-                        name: 'label2x',
-                      },
-                      relationships: {},
-                    },
-                  ],
-                },
-              },
-            ],
+              ]),
           },
         },
         {
@@ -1023,15 +1038,16 @@ test('collapse', () => {
                 extra: 'b2',
               },
               relationships: {
-                labels: () => [
-                  {
-                    row: {
-                      id: 2,
-                      name: 'label2x',
+                labels: () =>
+                  pullOf([
+                    {
+                      row: {
+                        id: 2,
+                        name: 'label2x',
+                      },
+                      relationships: {},
                     },
-                    relationships: {},
-                  },
-                ],
+                  ]),
               },
             },
             {
@@ -1128,8 +1144,8 @@ test('collapse-single', () => {
   };
 
   const input = {
-    fetch() {
-      return [];
+    fetch(_req: FetchRequest) {
+      return emptyPullStream<Node | 'yield'>();
     },
     destroy() {},
     getSchema() {
@@ -1162,26 +1178,28 @@ test('collapse-single', () => {
         name: 'issue',
       },
       relationships: {
-        labels: () => [
-          {
-            row: {
-              id: 1,
-              issueId: 1,
-              labelId: 1,
+        labels: () =>
+          pullOf([
+            {
+              row: {
+                id: 1,
+                issueId: 1,
+                labelId: 1,
+              },
+              relationships: {
+                labels: () =>
+                  pullOf([
+                    {
+                      row: {
+                        id: 1,
+                        name: 'label',
+                      },
+                      relationships: {},
+                    },
+                  ]),
+              },
             },
-            relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 1,
-                    name: 'label',
-                  },
-                  relationships: {},
-                },
-              ],
-            },
-          },
-        ],
+          ]),
       },
     },
   } as const;
@@ -1601,8 +1619,8 @@ test('edit to preserve relationships', () => {
     getSchema() {
       return schema;
     },
-    fetch() {
-      return [];
+    fetch(_req: FetchRequest) {
+      return emptyPullStream<Node | 'yield'>();
     },
     setOutput() {},
     destroy() {
@@ -1624,12 +1642,13 @@ test('edit to preserve relationships', () => {
       makeAddChange({
         row: {id: 1, title: 'issue1'},
         relationships: {
-          labels: () => [
-            {
-              row: {id: 1, name: 'label1'},
-              relationships: {},
-            },
-          ],
+          labels: () =>
+            pullOf([
+              {
+                row: {id: 1, name: 'label1'},
+                relationships: {},
+              },
+            ]),
         },
       }),
     ),
@@ -1639,12 +1658,13 @@ test('edit to preserve relationships', () => {
       makeAddChange({
         row: {id: 2, title: 'issue2'},
         relationships: {
-          labels: () => [
-            {
-              row: {id: 2, name: 'label2'},
-              relationships: {},
-            },
-          ],
+          labels: () =>
+            pullOf([
+              {
+                row: {id: 2, name: 'label2'},
+                relationships: {},
+              },
+            ]),
         },
       }),
     ),

@@ -15,8 +15,7 @@ import {
 import type {FetchRequest, Input, Output} from './operator.ts';
 import {Snitch, type FetchMessage, type SnitchMessage} from './snitch.ts';
 import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
-import type {Stream} from './stream.ts';
-import {consume} from './stream.ts';
+import {consume, type PullStream} from './stream.ts';
 import {createSource} from './test/source-factory.ts';
 
 type CaughtRow = Exclude<CaughtNode, 'yield'>;
@@ -193,23 +192,14 @@ test('chunked fetch propagates .return() to sub-streams on early termination', (
       getSchema: () => parentInput.getSchema(),
       setOutput: (o: Output) => parentInput.setOutput(o),
       destroy: () => parentInput.destroy(),
-      fetch: (req: FetchRequest): Stream<Node | 'yield'> => {
+      fetch: (req: FetchRequest): PullStream<Node | 'yield'> => {
         const idx = nextStreamIdx++;
         const inner = parentInput.fetch(req);
         return {
-          [Symbol.iterator]() {
-            const it = inner[Symbol.iterator]();
-            const wrapped: IterableIterator<Node | 'yield'> = {
-              next: () => it.next(),
-              return(value?: unknown): IteratorResult<Node | 'yield'> {
-                returnCalls.push(idx);
-                return it.return?.(value) ?? {done: true, value: undefined};
-              },
-              [Symbol.iterator]() {
-                return wrapped;
-              },
-            };
-            return wrapped;
+          next: () => inner.next(),
+          close: () => {
+            returnCalls.push(idx);
+            inner.close();
           },
         };
       },
@@ -219,12 +209,9 @@ test('chunked fetch propagates .return() to sub-streams on early termination', (
   // Manually pull from the generator and break early, so .return() is
   // invoked (the for-of doesn't optimize this away).
   const stream = fj.fetch({});
-  const it = stream[Symbol.iterator]();
-  const first = it.next();
-  expect(first.done).toBe(false);
-  // Early termination — JS calls it.return() under the hood for break in
-  // a for-of, but here we invoke it manually.
-  it.return?.();
+  expect(stream.next()).toBeDefined();
+  // Early termination is explicit under the pull protocol.
+  stream.close();
 
   // 3 chunks → 3 sub-streams. The first one we partially consumed; the
   // remaining 2 were primed but not advanced past their first row. All
@@ -244,11 +231,27 @@ test('chunked fetch forwards yields from parent and child sub-streams', () => {
       getSchema: () => inner.getSchema(),
       setOutput: (o: Output) => inner.setOutput(o),
       destroy: () => inner.destroy(),
-      *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-        for (const node of inner.fetch(req)) {
-          yield 'yield';
-          yield node;
-        }
+      fetch(req: FetchRequest): PullStream<Node | 'yield'> {
+        const src = inner.fetch(req);
+        // Emit 'yield' before each row: hold the row until the marker has
+        // been handed back.
+        let pending: Node | 'yield' | undefined;
+        return {
+          next() {
+            if (pending !== undefined) {
+              const p = pending;
+              pending = undefined;
+              return p;
+            }
+            const node = src.next();
+            if (node === undefined) {
+              return undefined;
+            }
+            pending = node;
+            return 'yield';
+          },
+          close: () => src.close(),
+        };
       },
     };
   }
@@ -262,7 +265,8 @@ test('chunked fetch forwards yields from parent and child sub-streams', () => {
 
   // Collect both yields and rows so we can prove yields are forwarded.
   const yieldsAndRows: ('yield' | string)[] = [];
-  for (const node of fj.fetch({})) {
+  const fjStream = fj.fetch({});
+  for (let node = fjStream.next(); node !== undefined; node = fjStream.next()) {
     yieldsAndRows.push(node === 'yield' ? 'yield' : String(node.row.id));
   }
 

@@ -24,7 +24,7 @@ import {
   makeSourceChangeRemove,
   type SourceChange,
 } from './source.ts';
-import {consume} from './stream.ts';
+import {consume, drainPull} from './stream.ts';
 import {createSource} from './test/source-factory.ts';
 
 const lc = createSilentLogContext();
@@ -63,7 +63,7 @@ class OverlaySpy implements Output {
   }
 
   fetch(req: FetchRequest) {
-    this.fetches.push(Array.from(this.#input.fetch(req), expandNode));
+    this.fetches.push(drainPull(this.#input.fetch(req)).map(expandNode));
   }
 
   push() {
@@ -3707,25 +3707,14 @@ test('streams-are-one-time-only', () => {
 
   const conn = source.connect([['a', 'asc']]);
   const stream = conn.fetch({});
-  const it1 = stream[Symbol.iterator]();
-  const it2 = stream[Symbol.iterator]();
-  expect(it1.next()).toEqual({
-    done: false,
-    value: {row: {a: 1}, relationships: {}},
-  });
-  expect(it2.next()).toEqual({
-    done: false,
-    value: {row: {a: 2}, relationships: {}},
-  });
-  expect(it1.next()).toEqual({
-    done: false,
-    value: {row: {a: 3}, relationships: {}},
-  });
-  expect(it2.next()).toEqual({done: true, value: undefined});
-  expect(it1.next()).toEqual({done: true, value: undefined});
-
-  const it3 = stream[Symbol.iterator]();
-  expect(it3.next()).toEqual({done: true, value: undefined});
+  // A pull stream *is* the cursor: there is no way to obtain a second,
+  // independent reader, so interleaved reads share one position and the
+  // stream stays exhausted once it ends.
+  expect(stream.next()).toEqual({row: {a: 1}, relationships: {}});
+  expect(stream.next()).toEqual({row: {a: 2}, relationships: {}});
+  expect(stream.next()).toEqual({row: {a: 3}, relationships: {}});
+  expect(stream.next()).toBeUndefined();
+  expect(stream.next()).toBeUndefined();
 });
 
 test('json is a valid type to read and write to/from a source', () => {

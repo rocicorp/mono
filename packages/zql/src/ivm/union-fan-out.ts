@@ -5,7 +5,7 @@ import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import type {FetchRequest, Input, Operator, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import type {PullStream, Stream} from './stream.ts';
 import type {UnionFanIn} from './union-fan-in.ts';
 
 export class UnionFanOut implements Operator {
@@ -40,7 +40,7 @@ export class UnionFanOut implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
     return this.#input.fetch(req);
   }
 

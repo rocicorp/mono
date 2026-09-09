@@ -35,8 +35,8 @@ export class Filter implements FilterOperator {
     this.#output.endFilter();
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
-    return this.#predicate(node.row) && (yield* this.#output.filter(node));
+  filterPull(node: Node): boolean | 'yield' {
+    return this.#predicate(node.row) && this.#output.filterPull(node);
   }
 
   setFilterOutput(output: FilterOutput) {

@@ -22,8 +22,8 @@ import {
   type Overlay,
 } from './memory-source.ts';
 import type {MultiConstraint} from './operator.ts';
-import type {Stream} from './stream.ts';
-import {consume} from './stream.ts';
+import type {PullStream} from './stream.ts';
+import {consume, drainPull, pullOf} from './stream.ts';
 import {compareRowsTest} from './test/compare-rows-test.ts';
 import {createSource} from './test/source-factory.ts';
 
@@ -217,7 +217,7 @@ test('fetch during push edit change', () => {
         row: {a: 'a', b: 'b', c: 'c'},
         relationships: {},
       });
-      fetchDuringPush = [...conn.fetch({})];
+      fetchDuringPush = drainPull(conn.fetch({}));
       return emptyArray;
     },
   });
@@ -258,8 +258,8 @@ describe('fetch with req.filter', () => {
     consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
 
     const conn = ms.connect([['a', 'asc']]);
-    const rows = [
-      ...conn.fetch({
+    const rows = drainPull(
+      conn.fetch({
         filter: {
           type: 'simple',
           op: '=',
@@ -267,7 +267,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'x'},
         },
       }),
-    ].filter(n => n !== 'yield');
+    ).filter(n => n !== 'yield');
 
     expect(rows.map(n => n.row)).toEqual([
       {a: 'a1', b: 'x'},
@@ -289,8 +289,8 @@ describe('fetch with req.filter', () => {
     }
 
     const conn = ms.connect([['a', 'asc']]);
-    const rows = [
-      ...conn.fetch({
+    const rows = drainPull(
+      conn.fetch({
         filter: {
           type: 'simple',
           op: '=',
@@ -298,7 +298,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'id-42'},
         },
       }),
-    ].filter(n => n !== 'yield');
+    ).filter(n => n !== 'yield');
 
     expect(rows.map(n => n.row)).toEqual([{a: 'id-42', b: 'val-42'}]);
     conn.destroy();
@@ -327,8 +327,8 @@ describe('fetch with req.filter', () => {
       right: {type: 'literal', value: 'x'},
     });
 
-    const rows = [
-      ...conn.fetch({
+    const rows = drainPull(
+      conn.fetch({
         filter: {
           type: 'simple',
           op: '=',
@@ -336,7 +336,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'p'},
         },
       }),
-    ].filter(n => n !== 'yield');
+    ).filter(n => n !== 'yield');
 
     expect(rows.map(n => n.row)).toEqual([{a: '1', b: 'x', c: 'p'}]);
     conn.destroy();
@@ -357,8 +357,8 @@ describe('fetch with req.filter', () => {
     consume(ms.push(makeSourceChangeAdd({a: 'a5', b: 'x'})));
 
     const conn = ms.connect([['a', 'asc']]);
-    const rows = [
-      ...conn.fetch({
+    const rows = drainPull(
+      conn.fetch({
         reverse: true,
         filter: {
           type: 'simple',
@@ -367,7 +367,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'x'},
         },
       }),
-    ].filter(n => n !== 'yield');
+    ).filter(n => n !== 'yield');
 
     expect(rows.map(n => n.row)).toEqual([
       {a: 'a5', b: 'x'},
@@ -392,8 +392,8 @@ describe('fetch with req.filter', () => {
     consume(ms.push(makeSourceChangeAdd({a: 'a5', b: 'x'})));
 
     const conn = ms.connect([['a', 'asc']]);
-    const rows = [
-      ...conn.fetch({
+    const rows = drainPull(
+      conn.fetch({
         start: {row: {a: 'a2', b: 'y'}, basis: 'after'},
         filter: {
           type: 'simple',
@@ -402,7 +402,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'x'},
         },
       }),
-    ].filter(n => n !== 'yield');
+    ).filter(n => n !== 'yield');
 
     expect(rows.map(n => n.row)).toEqual([
       {a: 'a3', b: 'x'},
@@ -430,8 +430,8 @@ describe('fetch with req.filter', () => {
     consume(ms.push(makeSourceChangeAdd({a: 'a4', b: 'x'})));
 
     const conn = ms.connect([['a', 'asc']]);
-    const rows = [
-      ...conn.fetch({
+    const rows = drainPull(
+      conn.fetch({
         multiConstraints: [[{a: 'a1'}, {a: 'a2'}, {a: 'a3'}]],
         filter: {
           type: 'simple',
@@ -440,7 +440,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'x'},
         },
       }),
-    ].filter(n => n !== 'yield');
+    ).filter(n => n !== 'yield');
 
     // a1 (IN-list ✓, b=x ✓), a2 (IN-list ✓, b=y ✗), a3 (IN-list ✓, b=x ✓),
     // a4 (IN-list ✗) → expect [a1, a3].
@@ -472,7 +472,7 @@ describe('fetch with req.filter during push (overlay)', () => {
     let captured: (Node | 'yield')[] = [];
     conn.setOutput({
       push(_change: Change) {
-        captured = [...conn.fetch({filter: bEqX})];
+        captured = drainPull(conn.fetch({filter: bEqX}));
         return emptyArray;
       },
     });
@@ -869,8 +869,8 @@ describe('generateWithOverlayInner', () => {
       expected: [rows[0], rows[1], {id: 2.5, s: 'c', n: 33}],
     },
   ] as const)('$name', ({overlays, expected}) => {
-    const actual = generateWithOverlayInner(rows, overlays, compare);
-    expect(Array.from(actual, ({row}) => row)).toEqual(expected);
+    const actual = generateWithOverlayInner(pullOf(rows), overlays, compare);
+    expect(drainPull(actual).map(({row}) => row)).toEqual(expected);
   });
 });
 
@@ -1115,10 +1115,9 @@ describe('generateWithOverlayInnerUnordered', () => {
     },
   ] as const)('$name', c => {
     const input = 'rows' in c ? c.rows : rows;
-    const actual = Array.from(
-      generateWithOverlayInnerUnordered(input, c.overlays, pk),
-      ({row}) => row,
-    );
+    const actual = drainPull(
+      generateWithOverlayInnerUnordered(pullOf(input), c.overlays, pk),
+    ).map(({row}) => row);
     expect(actual).toEqual(c.expected);
   });
 
@@ -1129,14 +1128,13 @@ describe('generateWithOverlayInnerUnordered', () => {
       {a: 2, b: 'x', v: 30},
     ];
     const compoundPK = ['a', 'b'] as const;
-    const actual = Array.from(
+    const actual = drainPull(
       generateWithOverlayInnerUnordered(
-        compoundRows,
+        pullOf(compoundRows),
         {add: undefined, remove: {a: 1, b: 'y', v: 20}},
         compoundPK,
       ),
-      ({row}) => row,
-    );
+    ).map(({row}) => row);
     expect(actual).toEqual([compoundRows[0], compoundRows[2]]);
   });
 
@@ -1147,14 +1145,13 @@ describe('generateWithOverlayInnerUnordered', () => {
       {a: 2, b: 'x', v: 30},
     ];
     const compoundPK = ['a', 'b'] as const;
-    const actual = Array.from(
+    const actual = drainPull(
       generateWithOverlayInnerUnordered(
-        compoundRows,
+        pullOf(compoundRows),
         {add: undefined, remove: {a: 1, b: 'z', v: 0}},
         compoundPK,
       ),
-      ({row}) => row,
-    );
+    ).map(({row}) => row);
     expect(actual).toEqual(compoundRows);
   });
 });
@@ -1173,10 +1170,9 @@ describe('generateWithOverlayUnordered', () => {
       epoch: 5,
       change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
-    const actual = Array.from(
-      generateWithOverlayUnordered(rows, undefined, overlay, 4, pk),
-      ({row}) => row,
-    );
+    const actual = drainPull(
+      generateWithOverlayUnordered(pullOf(rows), undefined, overlay, 4, pk),
+    ).map(({row}) => row);
     expect(actual).toEqual(rows);
   });
 
@@ -1185,10 +1181,9 @@ describe('generateWithOverlayUnordered', () => {
       epoch: 5,
       change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
-    const actual = Array.from(
-      generateWithOverlayUnordered(rows, undefined, overlay, 5, pk),
-      ({row}) => row,
-    );
+    const actual = drainPull(
+      generateWithOverlayUnordered(pullOf(rows), undefined, overlay, 5, pk),
+    ).map(({row}) => row);
     expect(actual).toEqual([{id: 4, s: 'd', n: 44}, ...rows]);
   });
 
@@ -1197,10 +1192,9 @@ describe('generateWithOverlayUnordered', () => {
       epoch: 1,
       change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
-    const actual = Array.from(
-      generateWithOverlayUnordered(rows, {s: 'a'}, overlay, 1, pk),
-      ({row}) => row,
-    );
+    const actual = drainPull(
+      generateWithOverlayUnordered(pullOf(rows), {s: 'a'}, overlay, 1, pk),
+    ).map(({row}) => row);
     expect(actual).toEqual(rows);
   });
 
@@ -1209,17 +1203,16 @@ describe('generateWithOverlayUnordered', () => {
       epoch: 1,
       change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
-    const actual = Array.from(
+    const actual = drainPull(
       generateWithOverlayUnordered(
-        rows,
+        pullOf(rows),
         undefined,
         overlay,
         1,
         pk,
         (row: Row) => (row.n as number) < 40,
       ),
-      ({row}) => row,
-    );
+    ).map(({row}) => row);
     expect(actual).toEqual(rows);
   });
 
@@ -1228,10 +1221,9 @@ describe('generateWithOverlayUnordered', () => {
       epoch: 1,
       change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
-    const actual = Array.from(
-      generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),
-      ({row}) => row,
-    );
+    const actual = drainPull(
+      generateWithOverlayUnordered(pullOf(rows), undefined, overlay, 1, pk),
+    ).map(({row}) => row);
     expect(actual).toEqual([{id: 4, s: 'd', n: 44}, ...rows]);
   });
 
@@ -1240,10 +1232,9 @@ describe('generateWithOverlayUnordered', () => {
       epoch: 1,
       change: makeSourceChangeRemove({id: 2, s: 'b', n: 22}),
     };
-    const actual = Array.from(
-      generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),
-      ({row}) => row,
-    );
+    const actual = drainPull(
+      generateWithOverlayUnordered(pullOf(rows), undefined, overlay, 1, pk),
+    ).map(({row}) => row);
     expect(actual).toEqual([rows[0], rows[2]]);
   });
 
@@ -1255,10 +1246,9 @@ describe('generateWithOverlayUnordered', () => {
         {id: 2, s: 'b', n: 22},
       ),
     };
-    const actual = Array.from(
-      generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),
-      ({row}) => row,
-    );
+    const actual = drainPull(
+      generateWithOverlayUnordered(pullOf(rows), undefined, overlay, 1, pk),
+    ).map(({row}) => row);
     expect(actual).toEqual([{id: 2, s: 'b2', n: 225}, rows[0], rows[2]]);
   });
 });
@@ -1380,9 +1370,9 @@ describe('multiConstraints overlay handling — both helpers', () => {
       const input = iteratorRows ?? rows;
 
       test('unordered', () => {
-        const actual = Array.from(
+        const actual = drainPull(
           generateWithOverlayUnordered(
-            input,
+            pullOf(input),
             undefined,
             overlay,
             1,
@@ -1390,16 +1380,15 @@ describe('multiConstraints overlay handling — both helpers', () => {
             undefined,
             multiConstraints,
           ),
-          ({row}) => row,
-        );
+        ).map(({row}) => row);
         expect(actual).toEqual(expectedUnordered);
       });
 
       test('ordered', () => {
-        const actual = Array.from(
+        const actual = drainPull(
           generateWithOverlay(
             undefined,
-            input,
+            pullOf(input),
             undefined,
             overlay,
             1,
@@ -1408,8 +1397,7 @@ describe('multiConstraints overlay handling — both helpers', () => {
             undefined,
             multiConstraints,
           ),
-          ({row}) => row,
-        );
+        ).map(({row}) => row);
         expect(actual).toEqual(expectedOrdered);
       });
     },
@@ -1418,15 +1406,15 @@ describe('multiConstraints overlay handling — both helpers', () => {
 
 describe('mergeSortedStreams', () => {
   const node = (id: number): Node => ({row: {id}, relationships: {}});
-  const ids = (xs: Iterable<Node | 'yield'>): (number | 'yield')[] =>
-    Array.from(xs, x => (x === 'yield' ? 'yield' : (x.row.id as number)));
+  const ids = (xs: PullStream<Node | 'yield'>): (number | 'yield')[] =>
+    drainPull(xs).map(x => (x === 'yield' ? 'yield' : (x.row.id as number)));
   const byId = (a: Node, b: Node) =>
     (a.row.id as number) - (b.row.id as number);
 
-  function* gen(values: readonly (Node | 'yield')[]): Stream<Node | 'yield'> {
-    for (const v of values) {
-      yield v;
-    }
+  function gen(
+    values: readonly (Node | 'yield')[],
+  ): PullStream<Node | 'yield'> {
+    return pullOf(values);
   }
 
   test('no streams yields nothing', () => {
@@ -1548,84 +1536,61 @@ describe('mergeSortedStreams', () => {
 
   test('.return() propagates to un-exhausted sub-iterators on early termination', () => {
     // Build streams that record whether .return() was invoked.
-    const returned: boolean[] = [false, false, false];
-    const trackable = (i: number, values: readonly Node[]): Stream<Node> => ({
-      [Symbol.iterator]() {
-        let idx = 0;
-        return {
-          next() {
-            if (idx < values.length) {
-              return {value: values[idx++], done: false};
-            }
-            return {value: undefined, done: true};
-          },
-          return(v?: unknown) {
-            returned[i] = true;
-            return {value: v, done: true};
-          },
-          [Symbol.iterator]() {
-            return this;
-          },
-        };
-      },
-    });
+    const closed: boolean[] = [false, false, false];
+    const trackable = (
+      i: number,
+      values: readonly Node[],
+    ): PullStream<Node> => {
+      let idx = 0;
+      return {
+        next: () => (idx < values.length ? values[idx++] : undefined),
+        close: () => {
+          closed[i] = true;
+        },
+      };
+    };
 
     const a = trackable(0, [node(1), node(4), node(7)]);
     const b = trackable(1, [node(2), node(5), node(8)]);
     const c = trackable(2, [node(3), node(6), node(9)]);
 
     const merged = mergeSortedStreams([a, b, c], byId);
-    const it = merged[Symbol.iterator]();
-    // Pull a couple values then break — JS would call .return() under
-    // for-of `break`; we invoke explicitly.
-    expect(it.next().value).toEqual(node(1));
-    expect(it.next().value).toEqual(node(2));
-    it.return?.();
+    // Take a couple of values, then stop early. Under the iterator protocol a
+    // `break` triggered `.return()`; the pull protocol makes that explicit.
+    expect(merged.next()).toEqual(node(1));
+    expect(merged.next()).toEqual(node(2));
+    merged.close();
 
-    // All three sub-iterators still had un-yielded rows, so all should
-    // have been .return()-d via mergeSortedStreams's finally block.
-    expect(returned).toEqual([true, true, true]);
+    // All three sub-streams still had unread rows, so all must be closed.
+    expect(closed).toEqual([true, true, true]);
   });
 
-  test('.return() not called on already-exhausted sub-iterators', () => {
-    let aReturned = false;
-    let bReturned = false;
+  test('close() not called on already-exhausted sub-streams', () => {
+    let aClosed = false;
+    let bClosed = false;
     const trackable = (
       values: readonly Node[],
-      onReturn: () => void,
-    ): Stream<Node> => ({
-      [Symbol.iterator]() {
-        let idx = 0;
-        return {
-          next() {
-            if (idx < values.length) {
-              return {value: values[idx++], done: false};
-            }
-            return {value: undefined, done: true};
-          },
-          return(v?: unknown) {
-            onReturn();
-            return {value: v, done: true};
-          },
-          [Symbol.iterator]() {
-            return this;
-          },
-        };
-      },
-    });
+      onClose: () => void,
+    ): PullStream<Node> => {
+      let idx = 0;
+      return {
+        next: () => (idx < values.length ? values[idx++] : undefined),
+        close: onClose,
+      };
+    };
 
-    // `a` will be drained; `b` will still have rows when we early-exit.
-    const a = trackable([node(1)], () => (aReturned = true));
-    const b = trackable([node(2), node(3), node(4)], () => (bReturned = true));
+    // `a` will be drained; `b` will still have rows when we stop early.
+    const a = trackable([node(1)], () => (aClosed = true));
+    const b = trackable([node(2), node(3), node(4)], () => (bClosed = true));
 
-    const it = mergeSortedStreams([a, b], byId)[Symbol.iterator]();
-    expect(it.next().value).toEqual(node(1)); // from a — exhausts a
-    expect(it.next().value).toEqual(node(2)); // from b
-    it.return?.();
+    const merged = mergeSortedStreams([a, b], byId);
+    expect(merged.next()).toEqual(node(1)); // from a -- exhausts a
+    expect(merged.next()).toEqual(node(2)); // from b
+    merged.close();
 
-    // a was exhausted naturally; the merge marks heads[0]=null and skips
-    // .return() on it. b still had rows, so it must be .return()'d.
-    expect(aReturned).toBe(false);
-    expect(bReturned).toBe(true);
+    // `a` ran out on its own, so the merge marks it inactive and skips it;
+    // `b` still had rows, so it must be closed.
+    expect(aClosed).toBe(false);
+    expect(bClosed).toBe(true);
   });
 });
