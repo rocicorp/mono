@@ -381,10 +381,16 @@ export default async function runWorker(
     });
   }
 
-  const getProfileWorker =
+  // Create the broadcast facade once: each broadcastWorker() adds permanent
+  // 'message' forwarders to every sub worker, so creating one per /profz
+  // request would leak a forwarder per request.
+  const profileWorker =
     profileSubWorkers.length > 0
-      ? () => Promise.resolve(broadcastWorker(profileSubWorkers))
+      ? broadcastWorker(profileSubWorkers)
       : undefined;
+  const getProfileWorker = profileWorker
+    ? () => Promise.resolve(profileWorker)
+    : undefined;
 
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
