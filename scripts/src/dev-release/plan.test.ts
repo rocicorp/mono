@@ -2,6 +2,7 @@ import {expect, test} from 'vitest';
 import {type Command, type Exec, type ExecOptions} from '../shared.ts';
 import {
   deriveDefaultTag,
+  normalizeDevImageTag,
   planDevRelease,
   sanitizeBranchName,
   validateImageTag,
@@ -25,34 +26,64 @@ function makeMockExec(resolvedSha = dummySha) {
   return {calls, exec};
 }
 
-test('sanitizeBranchName strips refs prefix and sanitizes special characters', () => {
+test('sanitizeBranchName strips refs prefix and sanitizes special characters to hyphens', () => {
   expect(sanitizeBranchName('refs/heads/greg/sync-opt')).toBe('greg-sync-opt');
   expect(sanitizeBranchName('refs/pull/123/head')).toBe('123-head');
   expect(sanitizeBranchName('feat/my_cool.branch!')).toBe(
-    'feat-my_cool.branch',
+    'feat-my-cool-branch',
   );
   expect(sanitizeBranchName('---messy--branch---')).toBe('messy-branch');
 });
 
-test('deriveDefaultTag generates pr- or dev- prefixed tags', () => {
-  expect(deriveDefaultTag(dummySha, dummySha)).toBe('dev-e8cc6889');
-  expect(deriveDefaultTag('greg/sync-opt', dummySha)).toBe('pr-greg-sync-opt');
-  expect(deriveDefaultTag('pr-1234', dummySha)).toBe('pr-1234');
-  expect(deriveDefaultTag('dev-test', dummySha)).toBe('dev-test');
+test('deriveDefaultTag generates 0.0.0-pr-* or 0.0.0-dev-* SemVer tags', () => {
+  expect(deriveDefaultTag(dummySha, dummySha)).toBe('0.0.0-dev-e8cc6889');
+  expect(deriveDefaultTag('greg/sync-opt', dummySha)).toBe(
+    '0.0.0-pr-greg-sync-opt',
+  );
+  expect(deriveDefaultTag('pr-1234', dummySha)).toBe('0.0.0-pr-1234');
+  expect(deriveDefaultTag('dev-test', dummySha)).toBe('0.0.0-dev-test');
+  expect(deriveDefaultTag('0.0.0-pr-test', dummySha)).toBe('0.0.0-pr-test');
 });
 
-test('validateImageTag accepts valid tags and blocks protected/semver tags', () => {
-  expect(() => validateImageTag('pr-1234')).not.toThrow();
-  expect(() => validateImageTag('bench_view-syncer.v1')).not.toThrow();
+test('normalizeDevImageTag ensures 0.0.0- prefix for custom tags', () => {
+  expect(normalizeDevImageTag('custom-bench-1')).toBe(
+    '0.0.0-dev-custom-bench-1',
+  );
+  expect(normalizeDevImageTag('dev-bench-1')).toBe('0.0.0-dev-bench-1');
+  expect(normalizeDevImageTag('pr-1234')).toBe('0.0.0-pr-1234');
+  expect(normalizeDevImageTag('0.0.0-dev-mytest')).toBe('0.0.0-dev-mytest');
+});
+
+test('validateImageTag accepts valid 0.0.0- SemVer tags and blocks invalid/protected tags', () => {
+  expect(() => validateImageTag('0.0.0-pr-1234')).not.toThrow();
+  expect(() => validateImageTag('0.0.0-dev-e8cc6889')).not.toThrow();
+  expect(() => validateImageTag('0.0.0-pr-greg-sync-opt')).not.toThrow();
+  expect(() => validateImageTag('0.0.0-dev-custom-bench-1')).not.toThrow();
 
   expect(() => validateImageTag('latest')).toThrowError(/protected/);
   expect(() => validateImageTag('HEAD')).toThrowError(/protected/);
   expect(() => validateImageTag('staging')).toThrowError(/protected/);
   expect(() => validateImageTag('canary')).toThrowError(/protected/);
 
-  expect(() => validateImageTag('1.8.0')).toThrowError(/semantic version/);
-  expect(() => validateImageTag('v1.8.0')).toThrowError(/semantic version/);
-  expect(() => validateImageTag('v0.18.0')).toThrowError(/semantic version/);
+  expect(() => validateImageTag('1.8.0')).toThrowError(
+    /must start with "0.0.0-"/,
+  );
+  expect(() => validateImageTag('v1.8.0')).toThrowError(
+    /must start with "0.0.0-"/,
+  );
+  expect(() => validateImageTag('pr-1234')).toThrowError(
+    /must start with "0.0.0-"/,
+  );
+  expect(() => validateImageTag('dev-e8cc6889')).toThrowError(
+    /must start with "0.0.0-"/,
+  );
+
+  expect(() => validateImageTag('0.0.0-dev_underscore')).toThrowError(
+    /not a valid semantic version/,
+  );
+  expect(() => validateImageTag('0.0.0-dev.0123')).toThrowError(
+    /not a valid semantic version/,
+  );
 
   expect(() => validateImageTag('invalid:tag')).toThrowError(
     /Invalid Docker image tag/,
@@ -84,7 +115,7 @@ test('planDevRelease rejects empty target ref', () => {
   ).toThrow(/Target ref must not be empty/);
 });
 
-test('planDevRelease plans dev release with default tag', () => {
+test('planDevRelease plans dev release with default 0.0.0-pr-* tag', () => {
   const {calls, exec} = makeMockExec();
   const plan = planDevRelease({
     exec,
@@ -93,7 +124,7 @@ test('planDevRelease plans dev release with default tag', () => {
   });
 
   expect(plan).toEqual({
-    image_tag: 'pr-greg-sync-opt',
+    image_tag: '0.0.0-pr-greg-sync-opt',
     ref: 'greg/sync-opt',
     source_sha: dummySha,
   });
@@ -105,7 +136,7 @@ test('planDevRelease plans dev release with default tag', () => {
   });
 });
 
-test('planDevRelease accepts custom image tag', () => {
+test('planDevRelease accepts custom image tag and normalizes to 0.0.0-dev-*', () => {
   const {exec} = makeMockExec();
   const plan = planDevRelease({
     exec,
@@ -115,8 +146,22 @@ test('planDevRelease accepts custom image tag', () => {
   });
 
   expect(plan).toEqual({
-    image_tag: 'custom-bench-1',
+    image_tag: '0.0.0-dev-custom-bench-1',
     ref: dummySha,
     source_sha: dummySha,
   });
+});
+
+test('planDevRelease rejects protected tags in imageTagInput', () => {
+  const {exec} = makeMockExec();
+  for (const tag of ['latest', 'HEAD', 'staging', 'canary']) {
+    expect(() =>
+      planDevRelease({
+        exec,
+        targetRef: dummySha,
+        imageTagInput: tag,
+        workflowRefName: 'main',
+      }),
+    ).toThrowError(/protected/);
+  }
 });

@@ -11,7 +11,8 @@ import {
 
 const gitShaPattern = /^[0-9a-f]{40}$/;
 const dockerTagPattern = /^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$/;
-const semverPattern = /^v?\d+\.\d+\.\d+$/;
+const semverRegex =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 const protectedTags = new Set(['latest', 'head', 'staging', 'canary']);
 
 export type DevReleasePlan = {
@@ -52,11 +53,18 @@ export function planDevRelease({
     throw new Error('Target ref must not be empty');
   }
 
+  const rawInput = imageTagInput?.trim();
+  if (rawInput && protectedTags.has(rawInput.toLowerCase())) {
+    throw new Error(
+      `Tag "${rawInput}" is protected and cannot be overwritten by dev releases.`,
+    );
+  }
+
   const sourceSha = resolveSourceSha(targetRef.trim(), exec);
   assertGitSha(sourceSha, 'source SHA');
 
-  const imageTag = imageTagInput?.trim()
-    ? imageTagInput.trim()
+  const imageTag = rawInput
+    ? normalizeDevImageTag(rawInput)
     : deriveDefaultTag(targetRef.trim(), sourceSha);
 
   validateImageTag(imageTag);
@@ -69,30 +77,47 @@ export function planDevRelease({
 }
 
 const gitRefPrefixPattern = /^refs\/(heads|remotes\/origin|remotes|pull)\//;
-const invalidTagCharPattern = /[^a-zA-Z0-9_.-]/g;
+const invalidSemVerPrereleaseCharPattern = /[^a-zA-Z0-9-]/g;
 const consecutiveHyphenPattern = /-+/g;
 const edgeHyphenPattern = /^-+|-+$/g;
 
 export function sanitizeBranchName(branch: string): string {
   return branch
     .replace(gitRefPrefixPattern, '')
-    .replace(invalidTagCharPattern, '-')
+    .replace(invalidSemVerPrereleaseCharPattern, '-')
     .replace(consecutiveHyphenPattern, '-')
     .replace(edgeHyphenPattern, '');
 }
 
 export function deriveDefaultTag(targetRef: string, sourceSha: string): string {
+  const shortSha = sourceSha.slice(0, 8);
   if (gitShaPattern.test(targetRef)) {
-    return `dev-${sourceSha.slice(0, 8)}`;
+    return `0.0.0-dev-${shortSha}`;
+  }
+  const rawClean = targetRef.replace(gitRefPrefixPattern, '');
+  if (rawClean.startsWith('0.0.0-')) {
+    const prerelease = sanitizeBranchName(rawClean.slice('0.0.0-'.length));
+    return `0.0.0-${prerelease}`.slice(0, 128);
   }
   const clean = sanitizeBranchName(targetRef);
   if (!clean) {
-    return `dev-${sourceSha.slice(0, 8)}`;
+    return `0.0.0-dev-${shortSha}`;
   }
   if (clean.startsWith('pr-') || clean.startsWith('dev-')) {
-    return clean.slice(0, 128);
+    return `0.0.0-${clean}`.slice(0, 128);
   }
-  return `pr-${clean}`.slice(0, 128);
+  return `0.0.0-pr-${clean}`.slice(0, 128);
+}
+
+export function normalizeDevImageTag(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.startsWith('0.0.0-')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('dev-') || trimmed.startsWith('pr-')) {
+    return `0.0.0-${trimmed}`;
+  }
+  return `0.0.0-dev-${trimmed}`;
 }
 
 export function validateImageTag(tag: string): void {
@@ -106,9 +131,14 @@ export function validateImageTag(tag: string): void {
       `Tag "${tag}" is protected and cannot be overwritten by dev releases.`,
     );
   }
-  if (semverPattern.test(tag)) {
+  if (!tag.startsWith('0.0.0-')) {
     throw new Error(
-      `Tag "${tag}" looks like a semantic version release. Dev releases must not use version numbers.`,
+      `Tag "${tag}" must start with "0.0.0-" to ensure CloudZero SemVer compatibility and prevent colliding with official releases.`,
+    );
+  }
+  if (!semverRegex.test(tag)) {
+    throw new Error(
+      `Tag "${tag}" is not a valid semantic version (SemVer 2.0.0). Prerelease identifiers may only contain alphanumerics and hyphens.`,
     );
   }
 }

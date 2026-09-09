@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       image_tag:
-        description: 'Docker image tag (optional; defaults to pr-<sanitized-branch>)'
+        description: 'Docker image tag (optional; defaults to 0.0.0-pr-<sanitized-branch> or 0.0.0-dev-<sha8>)'
         required: false
         type: string
 
@@ -261,6 +261,7 @@ jobs:
             printf '### Docker Images:\n'
             printf '- Docker Hub: `rocicorp/zero:%s`\n' "$IMAGE_TAG"
             printf '- GHCR: `ghcr.io/rocicorp/zero:%s`\n\n' "$IMAGE_TAG"
-            printf '### CloudZero Staging Deployment:\n'
-            printf 'Select `rocicorp/zero:%s` in the CloudZero god mode picker for your staging stack.\n' "$IMAGE_TAG"
+            printf '### Deploy to CloudZero Staging:\n'
+            printf 'Deploy this dev image to your staging stack via the CloudZero controller script:\n'
+            printf '```bash\nnode update-stack-zero-version.ts %s stack-ids <stack-id>\n```\n' "$IMAGE_TAG"
           } >> "$GITHUB_STEP_SUMMARY"
