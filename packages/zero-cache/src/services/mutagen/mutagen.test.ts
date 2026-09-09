@@ -11,6 +11,7 @@ import {
   DatabaseStorage,
 } from '../../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../replicator/schema/table-metadata.ts';
@@ -20,6 +21,7 @@ describe('mutagen/MutagenService', () => {
   const lc = createSilentLogContext();
   let tempDir: string;
   let replicaFile: string;
+  let storageDb: Database;
   let writeAuthzStorage: DatabaseStorage;
   let closeSpy: ReturnType<typeof vi.spyOn>;
 
@@ -34,7 +36,7 @@ describe('mutagen/MutagenService', () => {
     replica.exec(CREATE_TABLE_METADATA_TABLE);
     replica.close();
 
-    const storageDb = new Database(lc, ':memory:');
+    storageDb = new Database(lc, ':memory:');
     storageDb.prepare(CREATE_STORAGE_TABLE).run();
     writeAuthzStorage = new DatabaseStorage(storageDb);
 
@@ -43,6 +45,7 @@ describe('mutagen/MutagenService', () => {
 
   afterEach(async () => {
     closeSpy.mockRestore();
+    storageDb.close();
     await fs.rm(tempDir, {recursive: true, force: true});
   });
 
@@ -80,7 +83,7 @@ describe('mutagen/MutagenService', () => {
     expect(closeSpy).toHaveBeenCalledTimes(1);
   });
 
-  test('replica is closed after an in-flight mutation completes', async () => {
+  test('replica stays open while a push holds a ref', async () => {
     // A fake upstream whose transaction hangs until released, modeling a
     // mutation that is being processed when its connection closes.
     const tx = resolver<void>();
@@ -89,16 +92,37 @@ describe('mutagen/MutagenService', () => {
     } as unknown as PostgresDB;
 
     const service = createService(upstream);
-    service.ref();
+    service.ref(); // the connection
+    service.ref(); // the push (see SyncerWsMessageHandler)
     const result = service.processMutation(mutation, undefined);
 
-    // The last connection goes away while the mutation is in flight.
+    // The connection goes away while the push is in flight.
     service.unref();
-    await service.run();
+    expect(service.hasRefs()).toBe(true);
     expect(closeSpy).not.toHaveBeenCalled();
 
     tx.resolve();
     expect(await result).toBeUndefined();
+    service.unref(); // the push completes
+    await service.run();
     expect(closeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('replica is closed even if destroying the authorizer storage fails', async () => {
+    const service = createService({} as PostgresDB);
+    const destroySpy = vi
+      .spyOn(WriteAuthorizerImpl.prototype, 'destroy')
+      .mockImplementation(() => {
+        throw new Error('boom');
+      });
+    try {
+      service.ref();
+      service.unref();
+      await service.run();
+      expect(destroySpy).toHaveBeenCalledTimes(1);
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      destroySpy.mockRestore();
+    }
   });
 });

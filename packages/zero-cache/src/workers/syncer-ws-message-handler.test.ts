@@ -1,7 +1,10 @@
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
-import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/mutation.ts';
+import {
+  CRUD_MUTATION_NAME,
+  type CRUDMutation,
+} from '../../../zero-protocol/src/mutation.ts';
 import type {Auth, ValidateLegacyJWT} from '../auth/auth.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
@@ -29,6 +32,8 @@ type MockPusher = ReturnType<typeof createMockPusher>;
 function createMockMutagen() {
   return {
     processMutation: vi.fn().mockResolvedValue(undefined),
+    ref: vi.fn(),
+    unref: vi.fn(),
   };
 }
 
@@ -394,6 +399,58 @@ describe('SyncerWsMessageHandler auth handling', () => {
       {sub: 'test-user', iat: 1},
       true,
     );
+  });
+
+  test('holds a mutagen ref for the duration of a push', async () => {
+    const pusher = createMockPusher();
+    const mutagen = createMockMutagen();
+    const connContextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(connContextManager);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
+      {
+        type: 'jwt',
+        raw: 'jwt-token',
+        decoded: {sub: 'test-user', iat: 1},
+      },
+      {},
+      connContextManager,
+    );
+
+    const mutation = (id: number): CRUDMutation => ({
+      type: MutationType.CRUD,
+      id,
+      clientID: 'test-client',
+      name: CRUD_MUTATION_NAME,
+      args: [{ops: []}],
+      timestamp: Date.now(),
+    });
+    await handler.handleMessage([
+      'push',
+      {
+        clientGroupID: 'test-client-group',
+        mutations: [mutation(1), mutation(2)],
+        pushVersion: 1,
+        schemaVersion: 1,
+        timestamp: Date.now(),
+        requestID: 'req-1',
+      },
+    ]);
+
+    // The ref is taken before the first mutation and released after the
+    // last one, so that the connection closing (and unref-ing the mutagen)
+    // mid-push cannot stop the service between the mutations.
+    expect(mutagen.processMutation).toHaveBeenCalledTimes(2);
+    expect(mutagen.ref).toHaveBeenCalledTimes(1);
+    expect(mutagen.unref).toHaveBeenCalledTimes(1);
+    const [refOrder] = mutagen.ref.mock.invocationCallOrder;
+    const [unrefOrder] = mutagen.unref.mock.invocationCallOrder;
+    for (const order of mutagen.processMutation.mock.invocationCallOrder) {
+      expect(order).toBeGreaterThan(refOrder);
+      expect(order).toBeLessThan(unrefOrder);
+    }
   });
 
   test('rejects CRUD mutations when auth is opaque', async () => {

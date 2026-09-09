@@ -49,6 +49,11 @@ export type MutationError = [
 ];
 
 export interface Mutagen extends RefCountedService {
+  /**
+   * Callers must hold a {@link ref} for the duration of a push (i.e. across
+   * all of its mutations). The service stops, closing its replica handle,
+   * when its ref count drops to zero.
+   */
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
@@ -67,8 +72,6 @@ export class MutagenService implements Mutagen, Service {
   readonly #limiter: SlidingWindowLimiter | undefined;
   #refCount = 0;
   #isStopped = false;
-  #inFlightMutations = 0;
-  #released = false;
 
   readonly #crudMutations = getOrCreateCounter(
     'mutation',
@@ -139,7 +142,6 @@ export class MutagenService implements Mutagen, Service {
     this.#crudMutations.add(1, {
       clientGroupID: this.id,
     });
-    this.#inFlightMutations++;
     return processMutation(
       this.#lc,
       authData,
@@ -150,10 +152,7 @@ export class MutagenService implements Mutagen, Service {
       this.#writeAuthorizer,
       undefined,
       customMutatorsEnabled,
-    ).finally(() => {
-      this.#inFlightMutations--;
-      this.#maybeRelease();
-    });
+    );
   }
 
   run(): Promise<void> {
@@ -165,24 +164,18 @@ export class MutagenService implements Mutagen, Service {
       return this.#stopped.promise;
     }
     this.#isStopped = true;
-    this.#maybeRelease();
+    try {
+      this.#writeAuthorizer.destroy();
+    } catch (e) {
+      this.#lc.error?.('error destroying write authorizer storage', e);
+    } finally {
+      // The replica's statistics are maintained by the replicator, so skip
+      // the `PRAGMA optimize` that closing a writable handle would otherwise
+      // run on every client group churn.
+      this.#replica.close({optimize: false});
+    }
     this.#stopped.resolve();
     return this.#stopped.promise;
-  }
-
-  /**
-   * Releases the replica handle (and the write authorizer's storage) once
-   * the service is stopped and no mutation is using them. A mutation that is
-   * in flight when the last connection unrefs the service must be allowed to
-   * finish its authorization checks against the replica.
-   */
-  #maybeRelease() {
-    if (!this.#isStopped || this.#inFlightMutations > 0 || this.#released) {
-      return;
-    }
-    this.#released = true;
-    this.#writeAuthorizer.destroy();
-    this.#replica.close();
   }
 }
 
