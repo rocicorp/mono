@@ -599,7 +599,7 @@ export class TableSource implements Source {
     request: FetchRequest,
     connection: Connection,
   ): {text: string; normalizedText: string; values: unknown[]} {
-    if (request.start !== undefined) {
+    if (request.start !== undefined || request.filter !== undefined) {
       const {text, values} = format(
         this.#requestToSQL(
           request,

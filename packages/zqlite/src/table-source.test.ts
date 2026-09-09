@@ -1652,4 +1652,21 @@ describe('reusing a fetch template across fetches', () => {
     expect(fetchRows(input, request).rows).toEqual([rows[0]]);
     db.close();
   });
+
+  test('a request filter bypasses the template', () => {
+    const {db, source} = setup();
+    const input = source.connect(byId);
+    const filtered: FetchRequest = {
+      filter: {
+        type: 'simple',
+        left: {type: 'column', name: 'group'},
+        op: '=',
+        right: {type: 'literal', value: 'g2'},
+      },
+    };
+    expect(fetchRows(input, {}).rows).toEqual(rows);
+    expect(fetchRows(input, filtered).rows).toEqual([rows[2], rows[3]]);
+    expect(fetchRows(input, {}).rows).toEqual(rows);
+    db.close();
+  });
 });
