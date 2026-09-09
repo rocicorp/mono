@@ -14,6 +14,7 @@
 
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {type NormalizedZeroConfig} from '../../config/normalize.ts';
@@ -54,58 +55,116 @@ export const snapshotMessageSchema = v.union(statusMessageSchema);
 
 export type SnapshotMessage = v.Infer<typeof statusMessageSchema>;
 
+export type ReserveSnapshot = (
+  lc: LogContext,
+  config: NormalizedZeroConfig,
+) => Promise<Source<SnapshotMessage>>;
+
 export function reserveAndGetSnapshotStatus(
   lc: LogContext,
   config: NormalizedZeroConfig,
+  reserve: ReserveSnapshot = reserveSnapshot, // for testing
 ): Promise<SnapshotStatus> {
   const {promise: status, resolve, reject} = resolver<SnapshotStatus>();
 
   void (async function () {
     const abort = new AbortController();
-    process.on('SIGINT', () => abort.abort());
-    process.on('SIGTERM', () => abort.abort());
+    const {signal} = abort;
+    const onSignal = () => abort.abort();
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
 
-    for (let i = 0; ; i++) {
-      let err: unknown;
-      try {
-        let resolved = false;
-        const stream = await reserveSnapshot(lc, config);
-        for await (const msg of stream) {
-          // Capture the value of the status message that the change-streamer
-          // backup monitor returns, and hold the connection open to
-          // "reserve" the snapshot and prevent change log cleanup.
-          resolve(msg[1]);
-          resolved = true;
+    try {
+      for (let i = 0; ; i++) {
+        let err: unknown;
+        try {
+          let resolved = false;
+          const stream = await untilAborted(reserve(lc, config), signal);
+          // A signal while the stream is open cancels it, which ends the
+          // iteration below with an AbortError.
+          const cancelStream = () => stream.cancel(new AbortError('Aborted'));
+          signal.addEventListener('abort', cancelStream, {once: true});
+          try {
+            for await (const msg of stream) {
+              // Capture the value of the status message that the change-streamer
+              // backup monitor returns, and hold the connection open to
+              // "reserve" the snapshot and prevent change log cleanup.
+              resolve(msg[1]);
+              resolved = true;
+            }
+          } finally {
+            signal.removeEventListener('abort', cancelStream);
+          }
+          // The change-streamer itself closes the connection when the
+          // subscription is started (or the reservation retried).
+          if (resolved) {
+            break;
+          }
+        } catch (e) {
+          err = e;
         }
-        // The change-streamer itself closes the connection when the
-        // subscription is started (or the reservation retried).
-        if (resolved) {
-          break;
+        if (signal.aborted) {
+          // (A no-op if the status was already resolved.)
+          return reject(
+            err instanceof AbortError ? err : new AbortError('Aborted'),
+          );
         }
-      } catch (e) {
-        err = e;
+        // Retry in the view-syncer since it cannot proceed until it connects
+        // to a (compatible) replication-manager. In particular, a
+        // replication-manager that does not support the view-syncer's
+        // change-streamer protocol will close the stream with an error; this
+        // retry logic essentially delays the startup of a view-syncer until
+        // a compatible replication-manager has been rolled out, allowing
+        // replication-manager and view-syncer services to be updated in
+        // parallel.
+        lc.warn?.(
+          `Unable to reserve snapshot (attempt ${i + 1}). Retrying in 5 seconds.`,
+          String(err),
+        );
+        try {
+          await sleep(5000, abort.signal);
+        } catch (e) {
+          return reject(e);
+        }
       }
-      // Retry in the view-syncer since it cannot proceed until it connects
-      // to a (compatible) replication-manager. In particular, a
-      // replication-manager that does not support the view-syncer's
-      // change-streamer protocol will close the stream with an error; this
-      // retry logic essentially delays the startup of a view-syncer until
-      // a compatible replication-manager has been rolled out, allowing
-      // replication-manager and view-syncer services to be updated in
-      // parallel.
-      lc.warn?.(
-        `Unable to reserve snapshot (attempt ${i + 1}). Retrying in 5 seconds.`,
-        String(err),
-      );
-      try {
-        await sleep(5000, abort.signal);
-      } catch (e) {
-        return reject(e);
-      }
+    } finally {
+      // This function is called repeatedly (e.g. by the replicator's restore
+      // loop), so the signal handlers must not outlive the reservation.
+      process.off('SIGINT', onSignal);
+      process.off('SIGTERM', onSignal);
     }
   })();
 
   return status;
+}
+
+/**
+ * Resolves with the reserved stream, or rejects with an AbortError if the
+ * `signal` is aborted while the reservation is pending (in which case a
+ * stream that arrives later is canceled rather than held open).
+ */
+function untilAborted<T>(
+  reservation: Promise<Source<T>>,
+  signal: AbortSignal,
+): Promise<Source<T>> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new AbortError('Aborted'));
+    signal.addEventListener('abort', onAbort, {once: true});
+    reservation.then(
+      stream => {
+        signal.removeEventListener('abort', onAbort);
+        if (signal.aborted) {
+          stream.cancel();
+        } else {
+          resolve(stream);
+        }
+      },
+      e => {
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      },
+    );
+  });
 }
 
 function reserveSnapshot(
