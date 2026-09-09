@@ -786,24 +786,50 @@ export function makeBinarySelectExprs(
   });
 }
 
+/**
+ * Orders the downloaded rows, and optionally restricts them to a suffix of
+ * that order. Used by resumable backfills; see `backfill-resume.ts`.
+ */
+export type DownloadOrder = {
+  /** The `ORDER BY` expression, e.g. from `orderByRowKey()`. */
+  readonly by: string;
+
+  /**
+   * A boolean SQL expression restricting the download to rows after a mark,
+   * e.g. from `resumeWhere()`. It is ANDed with the publication row filter,
+   * and applies to the row and byte totals as well, so that a resumed run
+   * reports the progress of what remains.
+   */
+  readonly after?: string | undefined;
+};
+
 export function makeDownloadStatements(
   table: PublishedTableSpec,
   cols: string[],
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
   selectExprs?: string[] | undefined,
+  order?: DownloadOrder | undefined,
 ): DownloadStatements {
   const filterConditions = Object.values(table.publications)
     .map(({rowFilter}) => rowFilter)
     .filter(f => !!f); // remove nulls
-  const where =
-    filterConditions.length === 0
-      ? ''
-      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
+  const after = order?.after;
+  const conditions =
+    after === undefined
+      ? filterConditions.join(' OR ')
+      : [
+          ...(filterConditions.length
+            ? [`(${filterConditions.join(' OR ')})`]
+            : []),
+          after,
+        ].join(' AND ');
+  const where = conditions.length === 0 ? '' : /*sql*/ `WHERE ${conditions}`;
   const sample = tableSampleClause(sampleRate);
   const limit = limitClause(maxRowsPerTable);
+  const orderBy = order ? /*sql*/ ` ORDER BY ${order.by}` : '';
   const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)}${sample} ${where}`;
-  const select = /*sql*/ `SELECT ${(selectExprs ?? cols.map(id)).join(',')} ${fromTable}${limit}`;
+  const select = /*sql*/ `SELECT ${(selectExprs ?? cols.map(id)).join(',')} ${fromTable}${orderBy}${limit}`;
   if (limit) {
     // With LIMIT, wrap counts/sums in a subquery so they reflect the
     // capped rowset rather than the full (sampled) table.

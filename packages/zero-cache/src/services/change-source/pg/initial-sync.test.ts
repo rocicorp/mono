@@ -83,6 +83,55 @@ describe('makeDownloadStatements', () => {
       /FROM "public"\."t" TABLESAMPLE BERNOULLI\(50\) WHERE a > 10/,
     );
   });
+
+  test('order.by appends ORDER BY', () => {
+    const stmts = makeDownloadStatements(
+      spec(),
+      ['a', 'b'],
+      undefined,
+      undefined,
+      undefined,
+      {by: '"a","b"'},
+    );
+    expect(stmts.select).toBe(
+      `SELECT "a","b" FROM "public"."t"  ORDER BY "a","b"`,
+    );
+    // Totals are unaffected by ordering.
+    expect(stmts.getTotalRows).not.toMatch(/ORDER BY/);
+    expect(stmts.getTotalBytes).not.toMatch(/ORDER BY/);
+  });
+
+  test('order.after restricts the select and the totals', () => {
+    const stmts = makeDownloadStatements(
+      spec(),
+      ['a'],
+      undefined,
+      undefined,
+      undefined,
+      {by: '"a"', after: '("a") > (10)'},
+    );
+    expect(stmts.select).toBe(
+      `SELECT "a" FROM "public"."t" WHERE ("a") > (10) ORDER BY "a"`,
+    );
+    expect(stmts.getTotalRows).toBe(
+      `SELECT COUNT(*) AS "totalRows" FROM "public"."t" WHERE ("a") > (10)`,
+    );
+    expect(stmts.getTotalBytes).toMatch(/WHERE \("a"\) > \(10\)$/);
+  });
+
+  test('order.after is ANDed with a parenthesized row filter', () => {
+    const stmts = makeDownloadStatements(
+      spec({p: {rowFilter: 'a > 10'}, q: {rowFilter: 'b < 5'}}),
+      ['a'],
+      undefined,
+      undefined,
+      undefined,
+      {by: '"a"', after: '("a") > (20)'},
+    );
+    expect(stmts.select).toBe(
+      `SELECT "a" FROM "public"."t" WHERE (a > 10 OR b < 5) AND ("a") > (20) ORDER BY "a"`,
+    );
+  });
 });
 
 describe('getInitialDownloadState', () => {
