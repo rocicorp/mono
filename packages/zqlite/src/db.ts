@@ -143,9 +143,15 @@ export class Database implements Disposable {
     }
   }
 
-  close(): void {
+  /**
+   * Closes the database. For writable connections, `PRAGMA optimize` is run
+   * first (as recommended by SQLite) unless `optimize` is `false`, which is
+   * appropriate for short-lived handles on a database whose statistics are
+   * maintained by a longer-lived writer.
+   */
+  close({optimize = true}: {optimize?: boolean | undefined} = {}): void {
     const start = Date.now();
-    if (!this.#db.readonly) {
+    if (optimize && !this.#db.readonly) {
       try {
         this.#db.pragma('optimize');
         const elapsed = Date.now() - start;
