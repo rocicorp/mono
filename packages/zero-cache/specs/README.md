@@ -46,20 +46,34 @@ the cleanup grace period.
 
 ### Results
 
-**`Today` fails.** Nothing in the reservation machinery observes a reseed, and
-reconciliation runs on every change-stream connection. Two windows:
+**The reseed bug, found here and since fixed.** `NoInvalidation` fails: nothing
+in the reservation machinery observed a reseed, and reconciliation runs on every
+change-stream connection. Two windows:
 
 1. `peek()` returns the route stored by `pin()`, coverage and all
    (`sqlite-change-log-read-router.ts:101`), so a reseed between the pin and
    the confirmation confirms against a minimum the log no longer has.
 2. A reseed **after** confirmation silently voids a promise already made.
 
-Both end the same way: the follower restores, subscribes at the watermark it
+Both ended the same way: the follower restores, subscribes at the watermark it
 was handed, and is answered `WatermarkTooOld`. No silent gap — invariant 12
 holds — but the reservation bought nothing, which is the one thing it exists
 to do. `RevalidateOnly` shows that re-reading the bounds at confirmation time
-closes only the first window. `Fixed` shows that taking reservations back on a
-reseed closes both, and is sufficient on its own.
+closes only the first window; taking reservations back on a reseed closes both
+and is sufficient on its own.
+
+The fix is `SQLiteChangeLogWriterOptions.onReseeded` →
+`ChangeStreamerService.#invalidateReservations` →
+`SnapshotReservations.closeAll()`. `Fixed` is the shipped behaviour and is the
+baseline every other configuration below varies from.
+
+**A `truncated` reconcile deliberately does _not_ invalidate**, because it
+deletes above the resume watermark and every reservation is advertised at the
+confirmed backup watermark, which is at or below it. That relationship is load
+bearing rather than incidental: `TruncateLow` drops it and safety fails. It
+holds because a backup covers only what the replica has applied, the replica
+holds only what was forwarded, and invariant 2 puts forwarding after the log's
+commit. Worth an assertion if that chain ever changes.
 
 **`SeedConfirm` fails**, which answers the open question in the soak plan
 §1.5. Confirming on `seedWatermark <= backupWatermark` instead of

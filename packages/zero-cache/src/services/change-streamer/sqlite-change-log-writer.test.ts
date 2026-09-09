@@ -65,12 +65,14 @@ function setup(
   const commits: string[] = [];
   let disabled = 0;
   let rebuilt = 0;
+  const reseeds: string[] = [];
   const writer = new SQLiteChangeLogWriter(lc, {
     replicaFile: file.path,
     identity: IDENTITY,
     onCommit: watermark => commits.push(watermark),
     onDisabled: () => disabled++,
     onRebuilt: () => rebuilt++,
+    onReseeded: reason => reseeds.push(reason),
     now: () => 1_700_000_000_000,
     shadowValidationPercent,
   });
@@ -83,6 +85,7 @@ function setup(
     commits,
     disabledCount: () => disabled,
     rebuiltCount: () => rebuilt,
+    reseeds: () => reseeds,
     head: () => {
       using db = openChangeLogDB(lc, file.path, {readonly: true});
       return readChangeLogHead(db);
@@ -326,6 +329,10 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     expect(fixture.head()).toBe('06');
     expect(fixture.writer.enabled).toBe(true);
     expect(fixture.writer.state()?.invariantFailures).toBe(0);
+    // A truncate is not a reseed. It deletes above the resume watermark, which
+    // is at or above any confirmed backup, so it takes nothing back from a
+    // reservation. (`created` is the fixture's own first open.)
+    expect(fixture.reseeds()).toEqual(['created']);
   });
 
   test('oversized reconciliation replaces the log instead of deleting synchronously', () => {
@@ -352,12 +359,18 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     fixture.writer.reconcile(resumeAt('02'));
     expect(fixture.head()).toBe('02');
     expect(fixture.rebuiltCount()).toBe(1);
+    expect(fixture.reseeds()).toEqual(['created', 'oversized-truncate']);
 
     // One enormous row is bounded independently of the row count.
     insertSuffix(1, MAX_RECONCILE_TRUNCATE_BYTES + 1);
     fixture.writer.reconcile(resumeAt('02'));
     expect(fixture.head()).toBe('02');
     expect(fixture.rebuiltCount()).toBe(2);
+    expect(fixture.reseeds()).toEqual([
+      'created',
+      'oversized-truncate',
+      'oversized-truncate',
+    ]);
 
     // Rebuilding the disposable cache does not disable the stream writer.
     transaction(fixture.writer, '04');
@@ -510,6 +523,9 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       fixture.writer.reconcile(resumeAt('08', pgCookies));
 
       expect(fixture.head()).toBe('08');
+      // Reported so that anything holding a promise about the log's contents
+      // -- a snapshot reservation, above all -- can be told it is void.
+      expect(fixture.reseeds()).toEqual(['created', 'gap']);
       expect(fixture.cookies()).toEqual(pgCookies);
       expect(fixture.writer.state()).toMatchObject({
         cookieRows: {tableMetadata: 1, backfilling: 1},
@@ -528,6 +544,7 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       fixture.writer.reconcile(resumeAt('04', pgCookies));
 
       expect(fixture.cookies()).toEqual(folded);
+      expect(fixture.reseeds()).toEqual(['created']);
     });
 
     /**

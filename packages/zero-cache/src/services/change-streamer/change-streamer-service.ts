@@ -29,6 +29,7 @@ import {
 } from '../change-source/protocol/current/downstream.ts';
 import type {BackfillRequestMessage} from '../change-source/protocol/current/upstream.ts';
 import type {LitestreamVersion} from '../litestream/metrics.ts';
+import type {ReseedReason} from '../replicator/change-log-db.ts';
 import {
   publishReplicationError,
   replicationStatusError,
@@ -491,6 +492,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       'these followers have no fallback, so this is the rate at which one ' +
       'would instead have to wait for a later backup.',
   );
+  readonly #reservationInvalidations = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.reservation_invalidations',
+    'Snapshot reservations ended because the change log was reseeded out ' +
+      'from under them, by reseed reason.',
+  );
   readonly #reservationConfirmDelays = getOrCreateCounter(
     'replication',
     'sqlite_change_log.reservation_confirm_delays',
@@ -645,6 +652,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             // Invalidate cycles that can still read the replaced file.
             this.#comparator?.invalidate();
           },
+          onReseeded: reason => this.#invalidateReservations(reason),
         })
       : undefined;
     // The purge scheduler runs on the writer's own connection, which is also
@@ -1209,6 +1217,36 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     void this.#confirmReservations().catch(e =>
       this.#lc.warn?.(`error confirming snapshot reservation`, e),
     );
+  }
+
+  /**
+   * Ends every open snapshot reservation, for a log that was just reseeded.
+   *
+   * Reconciliation runs on every change-stream connection, so a reseed can
+   * land under a reservation that is open, pinned, or already confirmed. The
+   * purge pause holds the purger off while a reservation is advertising its
+   * bounds, but nothing holds off the initializer, and a pinned route keeps
+   * the coverage it captured (`SQLiteChangeLogReadRouter.peek`). Left alone, a
+   * follower restores from a backup the log can no longer reach and is
+   * answered `WatermarkTooOld` for its trouble -- which is precisely what a
+   * reservation exists to prevent.
+   *
+   * A `truncated` reconcile needs no such treatment: it deletes above the
+   * resume watermark, which is at or above the confirmed backup watermark that
+   * every reservation is advertised at, so what a reservation covers is
+   * untouched.
+   */
+  #invalidateReservations(reason: ReseedReason): void {
+    const taskIDs = this.#reservations?.closeAll() ?? [];
+    if (taskIDs.length) {
+      this.#reservationInvalidations.add(taskIDs.length, {reason});
+      this.#lc.warn?.(
+        `ending ${taskIDs.length} snapshot reservation(s): the change log ` +
+          `was reseeded (${reason}) and no longer covers the watermarks they ` +
+          `were given. Affected followers will restore again.`,
+        {taskIDs},
+      );
+    }
   }
 
   async #confirmReservations() {

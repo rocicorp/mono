@@ -1400,6 +1400,64 @@ describe('change-streamer/service', () => {
     }
   });
 
+  test('a reseed under an open reservation takes it back', async () => {
+    const logFile = new DbFile('sqlite-change-log-reservation-reseed');
+    await restartWithInlineChangeLogWriter(logFile, {
+      sqliteCatchup: {barrierPollIntervalMs: 10},
+      backupURL: 's3://foo/bar',
+    });
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'one'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      await expectAcks('06');
+
+      streamer.trackBackupWatermark('06');
+      const reservation = await streamer.startSnapshotReservation('follower');
+      const messagesSeen: SnapshotMessage[] = [];
+      const streamEnded = (async () => {
+        for await (const msg of reservation) {
+          messagesSeen.push(msg);
+        }
+      })();
+      await sleep(20);
+      expect(messagesSeen).toMatchObject([['status', {minWatermark: '06'}]]);
+
+      // Empty the log so the next reconcile cannot truncate its way to the
+      // resume watermark: the head is below it, which is a `gap` reseed.
+      {
+        using log = openChangeLogDB(lc, logFile.path, {readonly: false});
+        log.prepare(`DELETE FROM "_zero.changeLogStream"`).run();
+      }
+
+      // Reconciliation runs on every change-stream connection, so a dropped
+      // connection is all it takes to reseed under a confirmed reservation.
+      changes.cancel(new Error('disconnected'));
+
+      // The follower is not told, exactly as when the cap expires: its
+      // /snapshot stream simply ends, and it restores again rather than
+      // catching up from a watermark the log no longer has.
+      await streamEnded;
+      expect(logSink.messages).toContainEqual([
+        'warn',
+        expect.anything(),
+        [
+          expect.stringContaining(
+            'ending 1 snapshot reservation(s): the change log was reseeded ' +
+              '(gap)',
+          ),
+          {taskIDs: ['follower']},
+        ],
+      ]);
+    } finally {
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
   /**
    * §6.6's rollback drill. At readPercent=100, with a subscriber served from
    * SQLite and a snapshot reservation confirmed while SQLite was the pinned

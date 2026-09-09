@@ -13,8 +13,9 @@ fi
 
 # config            expected  what it establishes
 CASES=(
-  "Fixed            pass      safety holds once a reseed takes back reservations"
-  "Today            fail      a reseed under an open reservation breaks its promise"
+  "Fixed            pass      the shipped behaviour: a reseed takes back every reservation"
+  "NoInvalidation   fail      without that, a reseed under a reservation breaks its promise"
+  "TruncateLow      fail      a truncate below the backup would break it too"
   "RevalidateOnly   fail      re-reading bounds at confirm time is not enough"
   "SeedConfirm      fail      confirming on seedWatermark promises a span the log has no boundary for"
   "NoPause          pass      the purge pause has no safety role at this abstraction"
