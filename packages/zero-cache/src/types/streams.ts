@@ -283,6 +283,10 @@ async function streamOutInternal<T extends JSONValue>(
         // lc.debug?.(`pipelining`, data);
         sink.send(data);
 
+        // The ack is awaited off the send loop so that the next message can be
+        // sent without waiting for it. A bad ack is a protocol error like in
+        // the synchronous path below: close the socket (which cancels the
+        // source) rather than leaving the rejection unhandled.
         void (async () => {
           const {ack} = await acks.dequeue();
           // lc.debug?.(`received ack`, ack);
@@ -290,7 +294,7 @@ async function streamOutInternal<T extends JSONValue>(
             throw new Error(`Unexpected ack for ${id}: ${ack}`);
           }
           consumed();
-        })();
+        })().catch(e => closer.close(e));
       }
     } else {
       lc.debug?.(`started synchronous outbound stream`);
