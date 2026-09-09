@@ -1,8 +1,4 @@
-/**
- * A value that {@link Map.get} can distinguish from a missing entry.  `undefined`
- * is excluded because these helpers use `get() !== undefined` to detect absence.
- */
-type Defined = {} | null;
+import type {Defined} from './defined.ts';
 
 const nativeSupport =
   typeof (Map.prototype as unknown as MapES2026<unknown, Defined>)

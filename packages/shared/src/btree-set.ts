@@ -1,10 +1,11 @@
 import {assert} from './asserts.ts';
+import type {Defined} from './defined.ts';
 
 const MAX_NODE_SIZE = 32;
 
 type Comparator<K> = (a: K, b: K) => number;
 
-export class BTreeSet<K> {
+export class BTreeSet<K extends Defined> {
   #root: BNode<K> = emptyLeaf as BNode<K>;
   size: number = 0;
 
@@ -143,7 +144,7 @@ export class BTreeSet<K> {
    * the tree bottom-up. The caller must ensure entries are sorted by
    * `comparator`; violating this produces an invalid tree.
    */
-  static fromSorted<K>(
+  static fromSorted<K extends Defined>(
     comparator: Comparator<K>,
     sortedEntries: Iterable<K>,
   ): BTreeSet<K> {
@@ -198,12 +199,12 @@ export class BTreeSet<K> {
  * per-value result object. `nextValue()` returns `undefined` once exhausted,
  * so it is only meaningful for sets whose keys are never `undefined`.
  */
-export interface ValueIterator<K> {
+export interface ValueIterator<K extends Defined> {
   nextValue(): K | undefined;
 }
 
 /** Collects the rest of `it` into an array. */
-export function drainValues<K>(it: ValueIterator<K>): K[] {
+export function drainValues<K extends Defined>(it: ValueIterator<K>): K[] {
   const result: K[] = [];
   for (let v = it.nextValue(); v !== undefined; v = it.nextValue()) {
     result.push(v);
@@ -211,7 +212,7 @@ export function drainValues<K>(it: ValueIterator<K>): K[] {
   return result;
 }
 
-class BTreeForwardIterator<K> implements ValueIterator<K> {
+class BTreeForwardIterator<K extends Defined> implements ValueIterator<K> {
   readonly #nodeQueue: BNode<K>[][];
   readonly #nodeIndex: number[];
   #leaf: BNode<K>;
@@ -261,7 +262,7 @@ class BTreeForwardIterator<K> implements ValueIterator<K> {
   }
 }
 
-class BTreeReverseIterator<K> implements ValueIterator<K> {
+class BTreeReverseIterator<K extends Defined> implements ValueIterator<K> {
   readonly #nodeQueue: BNode<K>[][];
   readonly #nodeIndex: number[];
   #leaf: BNode<K>;
@@ -312,7 +313,7 @@ class BTreeReverseIterator<K> implements ValueIterator<K> {
   }
 }
 
-function valuesFrom<K>(
+function valuesFrom<K extends Defined>(
   root: BNode<K>,
   comparator: Comparator<K>,
   lowestKey: K | undefined,
@@ -342,7 +343,7 @@ function valuesFrom<K>(
   return new BTreeForwardIterator(nodeQueue, nodeIndex, leaf, i);
 }
 
-function valuesFromReversed<K>(
+function valuesFromReversed<K extends Defined>(
   maxKey: K | undefined,
   root: BNode<K>,
   comparator: Comparator<K>,
@@ -374,7 +375,7 @@ function valuesFromReversed<K>(
   return new BTreeReverseIterator(nodeQueue, nodeIndex, leaf, i);
 }
 
-function findPath<K>(
+function findPath<K extends Defined>(
   key: K | undefined,
   root: BNode<K>,
   comparator: Comparator<K>,
@@ -397,12 +398,12 @@ function findPath<K>(
   return [nodeQueue, nodeIndex, nextNode];
 }
 
-function emptyValueIterator<K>(): ValueIterator<K> {
+function emptyValueIterator<K extends Defined>(): ValueIterator<K> {
   return {nextValue: () => undefined};
 }
 
 /** Leaf node / base class. **************************************************/
-class BNode<K> {
+class BNode<K extends Defined> {
   // If this is an internal node, _keys[i] is the highest key in children[i].
   keys: K[];
   // True if this node might be within multiple `BTree`s (or have multiple parents).
@@ -518,7 +519,7 @@ class BNode<K> {
 }
 
 /** Internal node (non-leaf node) ********************************************/
-class BNodeInternal<K> extends BNode<K> {
+class BNodeInternal<K extends Defined> extends BNode<K> {
   // Note: conventionally B+ trees have one fewer key than the number of
   // children, but I find it easier to keep the array lengths equal: each
   // keys[i] caches the value of children[i].maxKey().
