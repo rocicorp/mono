@@ -103,10 +103,10 @@ export class PusherService implements Service, Pusher {
     selector: ConnectionSelector,
     push: PushBody,
   ): Exclude<HandlerResult, StreamResult> {
-    this.#pusher.enqueuePush(
-      this.#connContextManager.mustGetConnectionContext(selector),
-      push,
-    );
+    const connCtx = this.#connContextManager.getConnectionContext(selector);
+    if (connCtx) {
+      this.#pusher.enqueuePush(connCtx, push);
+    }
 
     return {
       type: 'ok',
