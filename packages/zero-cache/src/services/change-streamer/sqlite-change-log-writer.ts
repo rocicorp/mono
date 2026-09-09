@@ -27,6 +27,7 @@ import {
   type ChangeLogIdentity,
   type ChangeLogResumePoint,
   type ReconcileResult,
+  type ReseedReason,
 } from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {
@@ -59,6 +60,17 @@ export type SQLiteChangeLogWriterOptions = {
   onDisabled?: (() => void) | undefined;
   /** Called when reconciliation replaces the file, to close cached readers. */
   onRebuilt?: (() => void) | undefined;
+  /**
+   * Called when reconciliation reseeds the log, in place or by replacing the
+   * file. A reseeded log holds no history below its new seed, so anything that
+   * was promised a span of it -- a snapshot reservation, above all -- no longer
+   * has it. Reconciliation runs on every change-stream connection, so this can
+   * fire at any point in the life of the process, not just at startup.
+   *
+   * Distinct from `onRebuilt`, which is about the file handle rather than the
+   * contents: a rebuild always reseeds, but a reseed need not replace the file.
+   */
+  onReseeded?: ((reason: ReseedReason) => void) | undefined;
   /** Overridable for tests. */
   now?: (() => number) | undefined;
   /**
@@ -180,6 +192,12 @@ export class SQLiteChangeLogWriter {
     return this.#reconcile(db => this.#resumeFromLog(db, seed));
   }
 
+  #noteReseed(result: ReconcileResult): void {
+    if (result.action === 'reseeded') {
+      this.#opts.onReseeded?.(result.reason);
+    }
+  }
+
   #reconcile(
     resolve: (db: Database) => ChangeLogResumePoint,
   ): ChangeLogResumePoint | undefined {
@@ -202,6 +220,7 @@ export class SQLiteChangeLogWriter {
           this.#opts.onRebuilt?.();
         }
         recordSQLiteChangeLogReconcile(this.#lc, opened.result);
+        this.#noteReseed(opened.result);
         const info = getSQLiteChangeLogInfo(opened.db);
         logSQLiteChangeLogStartup(
           this.#lc,
@@ -236,6 +255,7 @@ export class SQLiteChangeLogWriter {
           result = rebuilt.result;
         }
         recordSQLiteChangeLogReconcile(this.#lc, result);
+        this.#noteReseed(result);
         if (result.action !== 'none') {
           this.#observer?.reconciled(
             getSQLiteChangeLogInfo(

@@ -21,7 +21,8 @@ CONSTANTS
     PauseWaitsForBatch,  \* whether pause() waits out an in-flight purge batch
     RevalidateOnConfirm, \* whether confirmation re-reads the log's bounds
     InvalidateOnReseed,  \* whether a reseed takes back open reservations
-    LeaseCoversRestore   \* whether the cap outlasts a restore that is moving
+    LeaseCoversRestore,  \* whether the cap outlasts a restore that is moving
+    TruncateBelowBackup  \* whether a reconcile may truncate below the backup
 
 ASSUME MaxWatermark \in Nat /\ MaxWatermark > 0
 ASSUME ConfirmUsesSeed \in BOOLEAN
@@ -29,6 +30,7 @@ ASSUME PauseWaitsForBatch \in BOOLEAN
 ASSUME RevalidateOnConfirm \in BOOLEAN
 ASSUME InvalidateOnReseed \in BOOLEAN
 ASSUME LeaseCoversRestore \in BOOLEAN
+ASSUME TruncateBelowBackup \in BOOLEAN
 
 Watermarks == 0..MaxWatermark
 NoBatch  == MaxWatermark + 1   \* no purge batch in flight
@@ -61,8 +63,9 @@ vars == <<head, seedWm, logMin, backup, batch, paused, task, resv>>
 (***************************************************************************)
 LogEmpty == logMin > head
 
-\* What catchup actually does, and so what any promise has to match.
-Spans(w) == ~LogEmpty /\ logMin =< w
+\* What catchup actually does, and so what any promise has to match: the log
+\* reaches back that far, and the boundary row at `w` is still in it.
+Spans(w) == ~LogEmpty /\ logMin =< w /\ w =< head
 
 \* The minimum a pinned route advertises to `#confirmReservations`.
 AdvertisedMin ==
@@ -118,6 +121,28 @@ BackupAdvance ==
 \* The log is wiped and reseeded at the replica's state version: one of the
 \* five ReseedReasons (created / schema-mismatch / identity-mismatch / gap /
 \* oversized-truncate). It keeps no history and writes no row for its seed.
+\* The routine outcome of reconciliation. Invariant 1 puts the log's commit
+\* before anything that can advance the resume watermark, so after a dropped
+\* connection the log normally holds transactions above the point upstream
+\* will resume from, and they are deleted before the stream restarts
+\* (invariant 18: truncate above the resume watermark, never dedupe).
+\*
+\* The resume watermark is at or above the confirmed backup, because a backup
+\* covers only what the replica has applied and the replica has only what was
+\* forwarded, which invariant 2 puts after the log's commit. Setting
+\* TruncateBelowBackup drops that assumption, to see whether it is load
+\* bearing.
+TruncateFloor == IF TruncateBelowBackup THEN logMin ELSE backup
+
+Truncate ==
+    /\ ~LogEmpty
+    /\ \E r \in Watermarks :
+          /\ r >= logMin
+          /\ r >= TruncateFloor
+          /\ r < head
+          /\ head' = r
+    /\ UNCHANGED <<seedWm, logMin, backup, batch, paused, task, resv>>
+
 \* Reconciliation runs on every change-stream connection
 \* (change-streamer-service.ts:765), so a reseed can land under a reservation
 \* that is already open, already pinned, or already confirmed. Nothing in the
@@ -276,7 +301,7 @@ TaskStep(t) ==
     \/ StallRestore(t)
     \/ Subscribe(t)
 
-Base == Commit \/ BackupAdvance \/ PurgeDispatch \/ PurgeApply
+Base == Commit \/ BackupAdvance \/ Truncate \/ PurgeDispatch \/ PurgeApply
            \/ \E t \in Tasks : TaskStep(t)
 
 Expire == \E t \in Tasks : ExpireReservation(t)

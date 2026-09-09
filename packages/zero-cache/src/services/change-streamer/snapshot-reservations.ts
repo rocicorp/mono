@@ -90,6 +90,31 @@ export class SnapshotReservations {
     this.#close(taskID, undefined);
   }
 
+  /**
+   * Takes back every open reservation, for a change log that no longer holds
+   * what they were promised.
+   *
+   * A reseed leaves the log with no history below its new seed, so every
+   * advertised `minWatermark` is stale and every confirmation still pending
+   * would be made against bounds that are already gone. Ending them here is
+   * what turns a promise the log can no longer keep into one that was never
+   * made: the follower reconnects, takes a fresh reservation, and that one is
+   * held -- or demoted, while PG is still there -- until a backup reaches the
+   * reseeded log's minimum.
+   *
+   * Like {@link #expire}, the follower is not told: its `/snapshot` stream
+   * ends, which is what the change-streamer does when a task subscribes.
+   *
+   * @returns the taskIDs whose reservations were ended.
+   */
+  closeAll(): string[] {
+    const taskIDs = [...this.#reservations.keys()];
+    for (const taskID of taskIDs) {
+      this.#close(taskID, undefined, 'invalidated');
+    }
+    return taskIDs;
+  }
+
   isCurrent(taskID: string, source: Source<SnapshotMessage>): boolean {
     return this.#reservations.get(taskID)?.owns(source) ?? false;
   }
@@ -131,7 +156,7 @@ export class SnapshotReservations {
   #close(
     taskID: string,
     cancelledInstanceID: InstanceID | undefined,
-    result?: 'expired' | undefined,
+    result?: 'expired' | 'invalidated' | undefined,
   ) {
     const res = this.#reservations.get(taskID);
     if (
