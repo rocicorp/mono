@@ -1,7 +1,9 @@
+import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
+import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   reserveAndGetSnapshotStatus,
@@ -36,6 +38,16 @@ describe('change-streamer/snapshot', () => {
   function expectListenersAdded(n: number) {
     expect(process.listenerCount('SIGINT')).toBe(sigintBefore + n);
     expect(process.listenerCount('SIGTERM')).toBe(sigtermBefore + n);
+  }
+
+  // Invokes the SIGTERM listener added since `listenersBefore` directly
+  // (emitting a real SIGTERM would also reach the test runner's handlers).
+  function sendSigterm(listenersBefore: Set<Function>) {
+    const added = process
+      .listeners('SIGTERM')
+      .find(l => !listenersBefore.has(l));
+    expect(added).toBeDefined();
+    (added as () => void)();
   }
 
   test('signal listeners are removed once the reservation completes', async () => {
@@ -79,15 +91,54 @@ describe('change-streamer/snapshot', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expectListenersAdded(1);
 
-    // Invoke the newly added SIGTERM listener directly (emitting a real
-    // SIGTERM would also reach the test runner's own handlers).
-    const added = process
-      .listeners('SIGTERM')
-      .find(l => !sigtermListeners.has(l));
-    expect(added).toBeDefined();
-    (added as () => void)();
+    sendSigterm(sigtermListeners);
 
     await expect(result).rejects.toBeInstanceOf(AbortError);
     expectListenersAdded(0);
+  });
+
+  test('signal while the reservation is pending rejects and removes the listeners', async () => {
+    const reservation = resolver<Source<SnapshotMessage>>();
+    const reserve: ReserveSnapshot = vi
+      .fn<ReserveSnapshot>()
+      .mockReturnValue(reservation.promise);
+
+    const sigtermListeners = new Set(process.listeners('SIGTERM'));
+    const result = reserveAndGetSnapshotStatus(lc, config, reserve);
+    result.catch(() => {});
+    await vi.advanceTimersByTimeAsync(0);
+    expectListenersAdded(1);
+
+    sendSigterm(sigtermListeners);
+
+    await expect(result).rejects.toBeInstanceOf(AbortError);
+    expectListenersAdded(0);
+
+    // A reservation that completes after the abort is not held open.
+    const stream = Subscription.create<SnapshotMessage>();
+    reservation.resolve(stream);
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await stream[Symbol.asyncIterator]().next()).done).toBe(true);
+  });
+
+  test('signal while the stream is open cancels it and removes the listeners', async () => {
+    const stream = Subscription.create<SnapshotMessage>();
+    const reserve: ReserveSnapshot = vi
+      .fn<ReserveSnapshot>()
+      .mockResolvedValue(stream);
+
+    const sigtermListeners = new Set(process.listeners('SIGTERM'));
+    const result = reserveAndGetSnapshotStatus(lc, config, reserve);
+    stream.push(['status', status]);
+    expect(await result).toEqual(status);
+    expectListenersAdded(1);
+
+    sendSigterm(sigtermListeners);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expectListenersAdded(0);
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
+      AbortError,
+    );
   });
 });
