@@ -161,6 +161,11 @@ export type TuningOptions = StorerOptions & {
   pgChangeLogEnabled: boolean;
   flowControlConsensusTimeoutProportion: number;
   flowControlSlowSubscriberGracePeriodMs?: number | undefined;
+  /**
+   * How long a snapshot reservation may hold the change log before it is
+   * taken back. Defaults to {@link DEFAULT_MAX_RESERVATION_AGE_MS}.
+   */
+  snapshotReservationMaxAgeMs?: number | undefined;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
   /**
    * Supplied when `sqliteChangeLogMode != off`, i.e. this is the gate on the
@@ -601,10 +606,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           })
         : undefined;
     this.#reservations = backupConfig
-      ? new SnapshotReservations(lc, backupConfig, taskID => {
-          this.#readRouter?.release(taskID);
-          this.#purgeScheduler?.resume(taskID);
-        })
+      ? new SnapshotReservations(
+          lc,
+          backupConfig,
+          taskID => {
+            this.#readRouter?.release(taskID);
+            this.#purgeScheduler?.resume(taskID);
+          },
+          // Deliberately not the service's injected `setTimeoutFn`: tests
+          // drive the cleanup pass through that mock by index, and an
+          // hour-scale safety valve does not belong in the same queue.
+          {maxAgeMs: opts.snapshotReservationMaxAgeMs},
+        )
       : undefined;
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#changeLogWriter = opts.sqliteChangeLogWriter

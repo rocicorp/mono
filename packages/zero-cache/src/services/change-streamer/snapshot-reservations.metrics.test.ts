@@ -137,3 +137,41 @@ test('a reservation that never confirmed is distinguishable at close', async () 
     await provider.shutdown();
   }
 });
+
+test('an expired reservation is distinguishable from one that was closed', async () => {
+  const {exporter, provider} = withProvider();
+  try {
+    const {SnapshotReservations} = await import('./snapshot-reservations.ts');
+    let expire: (() => void) | undefined;
+    const reservations = new SnapshotReservations(
+      createSilentLogContext(),
+      BACKUP_CONFIG,
+      undefined,
+      {
+        maxAgeMs: 60_000,
+        setTimeoutFn: ((fn: () => void) => {
+          expire = fn;
+          return {} as unknown as ReturnType<typeof setTimeout>;
+        }) as unknown as typeof setTimeout,
+      },
+    );
+
+    reservations.open('slow-task');
+    reservations.confirmFor('slow-task', 'replica-v1', 'sqlite-min', 'sqlite');
+    expect(expire).toBeDefined();
+    expire?.();
+
+    await provider.forceFlush();
+    // A reservation taken back for holding the log too long is a different
+    // event from a follower that subscribed or went away, and the whole point
+    // of the cap is being able to see how often it happens.
+    expect(
+      pointsFor(exporter, RESERVATION_DURATION).map(({attributes}) => [
+        attributes.result,
+        attributes.confirmed,
+      ]),
+    ).toEqual([['expired', true]]);
+  } finally {
+    await provider.shutdown();
+  }
+});
