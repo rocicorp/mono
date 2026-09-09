@@ -67,6 +67,8 @@ export class MutagenService implements Mutagen, Service {
   readonly #limiter: SlidingWindowLimiter | undefined;
   #refCount = 0;
   #isStopped = false;
+  #inFlightMutations = 0;
+  #released = false;
 
   readonly #crudMutations = getOrCreateCounter(
     'mutation',
@@ -137,6 +139,7 @@ export class MutagenService implements Mutagen, Service {
     this.#crudMutations.add(1, {
       clientGroupID: this.id,
     });
+    this.#inFlightMutations++;
     return processMutation(
       this.#lc,
       authData,
@@ -147,7 +150,10 @@ export class MutagenService implements Mutagen, Service {
       this.#writeAuthorizer,
       undefined,
       customMutatorsEnabled,
-    );
+    ).finally(() => {
+      this.#inFlightMutations--;
+      this.#maybeRelease();
+    });
   }
 
   run(): Promise<void> {
@@ -158,10 +164,25 @@ export class MutagenService implements Mutagen, Service {
     if (this.#isStopped) {
       return this.#stopped.promise;
     }
-    this.#writeAuthorizer.destroy();
     this.#isStopped = true;
+    this.#maybeRelease();
     this.#stopped.resolve();
     return this.#stopped.promise;
+  }
+
+  /**
+   * Releases the replica handle (and the write authorizer's storage) once
+   * the service is stopped and no mutation is using them. A mutation that is
+   * in flight when the last connection unrefs the service must be allowed to
+   * finish its authorization checks against the replica.
+   */
+  #maybeRelease() {
+    if (!this.#isStopped || this.#inFlightMutations > 0 || this.#released) {
+      return;
+    }
+    this.#released = true;
+    this.#writeAuthorizer.destroy();
+    this.#replica.close();
   }
 }
 
