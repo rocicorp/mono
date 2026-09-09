@@ -37,6 +37,7 @@ import {
   type SourceChange,
   type SourceInput,
 } from '../../zql/src/ivm/source.ts';
+import {LazyPullStream, type PullStream} from '../../zql/src/ivm/stream.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 import type {Database, Statement} from './db.ts';
@@ -281,30 +282,108 @@ export class TableSource implements Source {
     ) as Row;
   }
 
-  *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
-    const {sort, debug} = connection;
+  #fetch(
+    req: FetchRequest,
+    connection: Connection,
+  ): PullStream<Node | 'yield'> {
+    // Lazy, as the generator body was: nothing runs until the first `next()`.
+    return new LazyPullStream(() => {
+      const {sort, debug} = connection;
 
-    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
-    const sqlAndBindings = format(query);
+      const query = this.#requestToSQL(
+        req,
+        connection.filters?.condition,
+        sort,
+      );
+      const sqlAndBindings = format(query);
 
-    const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
-    cachedStatement.statement.safeIntegers(true);
-    const rowIterator = cachedStatement.statement.iterate<Row>(
-      ...sqlAndBindings.values,
-    );
-    const overlayPredicate = mergeOverlayPredicate(
-      connection.filters?.predicate,
-      req.filter,
-    );
-    try {
-      debug?.initQuery(this.#table, sqlAndBindings.text);
+      const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
+      cachedStatement.statement.safeIntegers(true);
+      const rowIterator = cachedStatement.statement.iterate<Row>(
+        ...sqlAndBindings.values,
+      );
+      const overlayPredicate = mergeOverlayPredicate(
+        connection.filters?.predicate,
+        req.filter,
+      );
 
-      if (sort) {
-        const comparator = makeComparator(sort, req.reverse);
-        yield* generateWithStart(
+      // The generator's `finally` ran on exhaustion, early return, or throw.
+      // `onDone` is hoisted above the try so a throw from `initQuery` -- or
+      // from building the chain -- still closes the SQLite cursor. Leaking one
+      // leaves later writes failing with "database connection is busy".
+      const onDone = () => {
+        // Ensure the SQLite iterate() is closed.
+        rowIterator.return?.();
+        if (debug) {
+          let totalNvisit = 0;
+          const planLines: string[] = [];
+          for (let i = 0; ; i++) {
+            const nvisit = cachedStatement.statement.scanStatus(
+              i,
+              SQLite3Database.SQLITE_SCANSTAT_NVISIT,
+              1,
+            );
+            if (nvisit === undefined) {
+              break;
+            }
+            totalNvisit += Number(nvisit);
+            const explain = cachedStatement.statement.scanStatus(
+              i,
+              SQLite3Database.SQLITE_SCANSTAT_EXPLAIN,
+              1,
+            );
+            if (typeof explain === 'string' && explain.length > 0) {
+              planLines.push(explain);
+            }
+          }
+          if (totalNvisit !== 0) {
+            debug.recordNVisit(this.#table, sqlAndBindings.text, totalNvisit);
+          }
+          if (planLines.length > 0) {
+            debug.recordExplain(this.#table, sqlAndBindings.text, planLines);
+          }
+          cachedStatement.statement.scanStatusReset();
+        }
+        this.#stmts.cache.return(cachedStatement);
+      };
+
+      try {
+        debug?.initQuery(this.#table, sqlAndBindings.text);
+        if (sort) {
+          const comparator = makeComparator(sort, req.reverse);
+          return new FinallyPull(
+            generateWithStart(
+              generateWithYields(
+                generateWithOverlay(
+                  req.start?.row,
+                  this.#mapFromSQLiteTypes(
+                    this.#columns,
+                    rowIterator,
+                    sqlAndBindings.text,
+                    debug,
+                  ),
+                  req.constraint,
+                  this.#overlay,
+                  connection.lastPushedEpoch,
+                  comparator,
+                  // SQL does the ordering and constraining, so the row stream
+                  // is already in the connection's sort order: the splice
+                  // comparator and the `startAt` comparator coincide here.
+                  comparator,
+                  overlayPredicate,
+                  req.multiConstraints,
+                ),
+                this.#shouldYield,
+              ),
+              req.start,
+              comparator,
+            ),
+            onDone,
+          );
+        }
+        return new FinallyPull(
           generateWithYields(
-            generateWithOverlay(
-              req.start?.row,
+            generateWithOverlayUnordered(
               this.#mapFromSQLiteTypes(
                 this.#columns,
                 rowIterator,
@@ -314,99 +393,60 @@ export class TableSource implements Source {
               req.constraint,
               this.#overlay,
               connection.lastPushedEpoch,
-              comparator,
-              // SQL does the ordering and constraining, so the row stream is
-              // already in the connection's sort order: the splice comparator
-              // and the `startAt` comparator coincide here.
-              comparator,
+              this.#primaryKey,
               overlayPredicate,
               req.multiConstraints,
             ),
             this.#shouldYield,
           ),
-          req.start,
-          comparator,
+          onDone,
         );
-      } else {
-        yield* generateWithYields(
-          generateWithOverlayUnordered(
-            this.#mapFromSQLiteTypes(
-              this.#columns,
-              rowIterator,
-              sqlAndBindings.text,
-              debug,
-            ),
-            req.constraint,
-            this.#overlay,
-            connection.lastPushedEpoch,
-            this.#primaryKey,
-            overlayPredicate,
-            req.multiConstraints,
-          ),
-          this.#shouldYield,
-        );
+      } catch (e) {
+        onDone();
+        throw e;
       }
-    } finally {
-      // Ensure the SQLite iterate() is closed.
-      rowIterator.return?.();
-      if (debug) {
-        let totalNvisit = 0;
-        const planLines: string[] = [];
-        for (let i = 0; ; i++) {
-          const nvisit = cachedStatement.statement.scanStatus(
-            i,
-            SQLite3Database.SQLITE_SCANSTAT_NVISIT,
-            1,
-          );
-          if (nvisit === undefined) {
-            break;
-          }
-          totalNvisit += Number(nvisit);
-          const explain = cachedStatement.statement.scanStatus(
-            i,
-            SQLite3Database.SQLITE_SCANSTAT_EXPLAIN,
-            1,
-          );
-          if (typeof explain === 'string' && explain.length > 0) {
-            planLines.push(explain);
-          }
-        }
-        if (totalNvisit !== 0) {
-          debug.recordNVisit(this.#table, sqlAndBindings.text, totalNvisit);
-        }
-        if (planLines.length > 0) {
-          debug.recordExplain(this.#table, sqlAndBindings.text, planLines);
-        }
-        cachedStatement.statement.scanStatusReset();
-      }
-      this.#stmts.cache.return(cachedStatement);
-    }
+    });
   }
 
-  *#mapFromSQLiteTypes(
+  #mapFromSQLiteTypes(
     valueTypes: Record<string, SchemaValue>,
     rowIterator: IterableIterator<Row>,
     query: string,
     debug: DebugDelegate | undefined,
-  ): IterableIterator<Row> {
-    let result;
-    do {
-      result = timeSampled(
-        this.#lc,
-        ++eventCount,
-        this.#logConfig.ivmSampling,
-        () => rowIterator.next(),
-        this.#logConfig.slowRowThreshold,
-        () =>
-          `table-source.next took too long for ${query}. Are you missing an index?`,
-      );
-      if (result.done) {
-        break;
-      }
-      const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
-      debug?.rowVended(this.#table, query, row);
-      yield row;
-    } while (!result.done);
+  ): PullStream<Row> {
+    const lc = this.#lc;
+    const logConfig = this.#logConfig;
+    const table = this.#table;
+    let done = false;
+    return {
+      next(): Row | undefined {
+        if (done) {
+          return undefined;
+        }
+        const result = timeSampled(
+          lc,
+          ++eventCount,
+          logConfig.ivmSampling,
+          () => rowIterator.next(),
+          logConfig.slowRowThreshold,
+          () =>
+            `table-source.next took too long for ${query}. Are you missing an index?`,
+        );
+        if (result.done) {
+          done = true;
+          return undefined;
+        }
+        const row = fromSQLiteTypes(valueTypes, result.value, table);
+        debug?.rowVended(table, query, row);
+        return row;
+      },
+      close(): void {
+        if (!done) {
+          done = true;
+          rowIterator.return?.();
+        }
+      },
+    };
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -714,11 +754,74 @@ function nonPrimaryKeys(
   return Object.keys(columns).filter(c => !primaryKey.includes(c));
 }
 
-function* generateWithYields(stream: Stream<Node>, shouldYield: () => boolean) {
-  for (const n of stream) {
-    if (shouldYield()) {
-      yield 'yield';
-    }
-    yield n;
+/** Runs `onDone` once, when the stream ends, is closed, or throws. */
+class FinallyPull implements PullStream<Node | 'yield'> {
+  readonly #inner: PullStream<Node | 'yield'>;
+  readonly #onDone: () => void;
+  #done = false;
+
+  constructor(inner: PullStream<Node | 'yield'>, onDone: () => void) {
+    this.#inner = inner;
+    this.#onDone = onDone;
   }
+
+  next(): Node | 'yield' | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    let v: Node | 'yield' | undefined;
+    try {
+      v = this.#inner.next();
+    } catch (e) {
+      this.close();
+      throw e;
+    }
+    if (v === undefined) {
+      this.close();
+    }
+    return v;
+  }
+
+  close(): void {
+    if (!this.#done) {
+      this.#done = true;
+      this.#inner.close();
+      this.#onDone();
+    }
+  }
+}
+
+/**
+ * Injects a 'yield' marker before a row whenever `shouldYield()` says so.
+ *
+ * The row is held until the marker has been handed back, which is the two
+ * `yield`s the generator emitted in one loop iteration.
+ */
+function generateWithYields(
+  stream: PullStream<Node>,
+  shouldYield: () => boolean,
+): PullStream<Node | 'yield'> {
+  let pending: Node | undefined;
+  return {
+    next(): Node | 'yield' | undefined {
+      if (pending !== undefined) {
+        const held = pending;
+        pending = undefined;
+        return held;
+      }
+      const n = stream.next();
+      if (n === undefined) {
+        return undefined;
+      }
+      if (shouldYield()) {
+        pending = n;
+        return 'yield';
+      }
+      return n;
+    },
+    close() {
+      pending = undefined;
+      stream.close();
+    },
+  };
 }
