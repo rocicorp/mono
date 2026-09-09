@@ -1927,9 +1927,8 @@ export class Zero<
   #disconnect(lc: LogContext, reason: ZeroError, closeCode?: CloseCode): void {
     const attempt = this.#currentConnectAttempt;
     if (attempt) {
-      // Recorded on the attempt as well as passed to abort() — see
-      // ConnectAttemptControl.abortReason for why signal.reason alone is not
-      // sufficient on every runtime.
+      // Record the reason before aborting so legacy runtimes can read it from
+      // ConnectAttemptControl.abortReason when signal.reason is unavailable.
       attempt.abortReason = reason;
       attempt.controller.abort();
     }
