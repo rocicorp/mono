@@ -62,37 +62,34 @@ test('validateImageTag accepts valid tags and blocks protected/semver tags', () 
   );
 });
 
-test('planDevRelease requires workflowRefName to be main', async () => {
+test('planDevRelease requires workflowRefName to be main', () => {
   const {exec} = makeMockExec();
-  await expect(
+  expect(() =>
     planDevRelease({
       exec,
       targetRef: 'greg/test',
       workflowRefName: 'feature-branch',
-      requireCommitVerification: false,
     }),
-  ).rejects.toThrow(/must be run from main/);
+  ).toThrow(/must be run from main/);
 });
 
-test('planDevRelease rejects empty target ref', async () => {
+test('planDevRelease rejects empty target ref', () => {
   const {exec} = makeMockExec();
-  await expect(
+  expect(() =>
     planDevRelease({
       exec,
       targetRef: '   ',
       workflowRefName: 'main',
-      requireCommitVerification: false,
     }),
-  ).rejects.toThrow(/Target ref must not be empty/);
+  ).toThrow(/Target ref must not be empty/);
 });
 
-test('planDevRelease plans dev release with default tag', async () => {
+test('planDevRelease plans dev release with default tag', () => {
   const {calls, exec} = makeMockExec();
-  const plan = await planDevRelease({
+  const plan = planDevRelease({
     exec,
     targetRef: 'greg/sync-opt',
     workflowRefName: 'main',
-    requireCommitVerification: false,
   });
 
   expect(plan).toEqual({
@@ -108,14 +105,13 @@ test('planDevRelease plans dev release with default tag', async () => {
   });
 });
 
-test('planDevRelease accepts custom image tag', async () => {
+test('planDevRelease accepts custom image tag', () => {
   const {exec} = makeMockExec();
-  const plan = await planDevRelease({
+  const plan = planDevRelease({
     exec,
     targetRef: dummySha,
     imageTagInput: 'custom-bench-1',
     workflowRefName: 'main',
-    requireCommitVerification: false,
   });
 
   expect(plan).toEqual({
@@ -123,102 +119,4 @@ test('planDevRelease accepts custom image tag', async () => {
     ref: dummySha,
     source_sha: dummySha,
   });
-});
-
-test('verifyCommit passes with Signed Commit Authors check run', async () => {
-  const {exec} = makeMockExec();
-  const mockFetch: typeof fetch = url => {
-    const urlStr = String(url);
-    if (urlStr.includes('/check-runs')) {
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            check_runs: [
-              {name: 'Signed Commit Authors', conclusion: 'success'},
-            ],
-          }),
-          {status: 200},
-        ),
-      );
-    }
-    return Promise.resolve(new Response('Not found', {status: 404}));
-  };
-
-  const plan = await planDevRelease({
-    exec,
-    fetchFn: mockFetch,
-    githubRepository: 'rocicorp/mono',
-    githubToken: 'dummy-token',
-    requireCommitVerification: true,
-    targetRef: 'main',
-    workflowRefName: 'main',
-  });
-
-  expect(plan.source_sha).toBe(dummySha);
-});
-
-test('verifyCommit rejects commit when Signed Commit Authors check failed', async () => {
-  const {exec} = makeMockExec();
-  const mockFetch: typeof fetch = url => {
-    const urlStr = String(url);
-    if (urlStr.includes('/check-runs')) {
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            check_runs: [
-              {name: 'Signed Commit Authors', conclusion: 'failure'},
-            ],
-          }),
-          {status: 200},
-        ),
-      );
-    }
-    return Promise.resolve(new Response('Not found', {status: 404}));
-  };
-
-  await expect(
-    planDevRelease({
-      exec,
-      fetchFn: mockFetch,
-      githubRepository: 'rocicorp/mono',
-      githubToken: 'dummy-token',
-      requireCommitVerification: true,
-      targetRef: 'main',
-      workflowRefName: 'main',
-    }),
-  ).rejects.toThrow(
-    /Commit .* has not passed the "Signed Commit Authors" check \(conclusion was "failure"\)/,
-  );
-});
-
-test('verifyCommit rejects commit when Signed Commit Authors check is missing', async () => {
-  const {exec} = makeMockExec();
-  const mockFetch: typeof fetch = url => {
-    const urlStr = String(url);
-    if (urlStr.includes('/check-runs')) {
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            check_runs: [{name: 'Other Check', conclusion: 'success'}],
-          }),
-          {status: 200},
-        ),
-      );
-    }
-    return Promise.resolve(new Response('Not found', {status: 404}));
-  };
-
-  await expect(
-    planDevRelease({
-      exec,
-      fetchFn: mockFetch,
-      githubRepository: 'rocicorp/mono',
-      githubToken: 'dummy-token',
-      requireCommitVerification: true,
-      targetRef: 'main',
-      workflowRefName: 'main',
-    }),
-  ).rejects.toThrow(
-    /Commit .* has not passed the "Signed Commit Authors" check \(check run was not found\)/,
-  );
 });

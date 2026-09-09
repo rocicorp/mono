@@ -22,19 +22,13 @@ export type DevReleasePlan = {
 
 export type PlanDevReleaseOptions = {
   exec?: Exec | undefined;
-  fetchFn?: typeof fetch | undefined;
-  githubRepository?: string | undefined;
-  githubToken?: string | undefined;
   imageTagInput?: string | undefined;
-  requireCommitVerification?: boolean | undefined;
   targetRef: string;
   workflowRefName: string;
 };
 
-export async function runDevReleasePlanCli() {
-  const plan = await planDevRelease({
-    githubRepository: process.env.GITHUB_REPOSITORY,
-    githubToken: process.env.GITHUB_TOKEN,
+export function runDevReleasePlanCli() {
+  const plan = planDevRelease({
     imageTagInput: process.env.IMAGE_TAG_INPUT || undefined,
     targetRef: mustEnv('TARGET_REF'),
     workflowRefName: mustEnv('WORKFLOW_REF_NAME'),
@@ -46,16 +40,12 @@ export async function runDevReleasePlanCli() {
   console.log(`Planned image tag: ${plan.image_tag}`);
 }
 
-export async function planDevRelease({
+export function planDevRelease({
   exec = defaultExec,
-  fetchFn = fetch,
-  githubRepository,
-  githubToken,
   imageTagInput,
-  requireCommitVerification = true,
   targetRef,
   workflowRefName,
-}: PlanDevReleaseOptions): Promise<DevReleasePlan> {
+}: PlanDevReleaseOptions): DevReleasePlan {
   assertMainWorkflowRef('Dev release', workflowRefName);
 
   if (!targetRef.trim()) {
@@ -70,15 +60,6 @@ export async function planDevRelease({
     : deriveDefaultTag(targetRef.trim(), sourceSha);
 
   validateImageTag(imageTag);
-
-  if (requireCommitVerification && githubToken && githubRepository) {
-    await verifyCommit({
-      fetchFn,
-      githubRepository,
-      githubToken,
-      sourceSha,
-    });
-  }
 
   return {
     image_tag: imageTag,
@@ -154,56 +135,4 @@ export function resolveSourceSha(targetRef: string, exec: Exec): string {
   // Target ref is a branch, tag, or PR ref (e.g. refs/pull/123/head).
   exec('git', ['fetch', 'origin', targetRef], {stdio: 'inherit'});
   return exec('git', ['rev-parse', '--verify', 'FETCH_HEAD^{commit}']).trim();
-}
-
-export async function verifyCommit({
-  fetchFn,
-  githubRepository,
-  githubToken,
-  sourceSha,
-}: {
-  fetchFn: typeof fetch;
-  githubRepository: string;
-  githubToken: string;
-  sourceSha: string;
-}): Promise<void> {
-  const headers = {
-    'Accept': 'application/vnd.github+json',
-    'Authorization': `Bearer ${githubToken}`,
-    'User-Agent': 'rocicorp-dev-release',
-  };
-
-  const checksUrl = `https://api.github.com/repos/${githubRepository}/commits/${sourceSha}/check-runs?per_page=100`;
-  const checksRes = await fetchFn(checksUrl, {headers});
-  if (!checksRes.ok) {
-    throw new Error(
-      `Failed to fetch check runs for ${sourceSha}: ${checksRes.status} ${checksRes.statusText}`,
-    );
-  }
-
-  const checksData = (await checksRes.json()) as {
-    check_runs?:
-      | Array<{
-          conclusion?: string | null | undefined;
-          name?: string | undefined;
-        }>
-      | undefined;
-  };
-
-  const signedCommitCheck = checksData.check_runs?.find(
-    c => c.name?.trim().toLowerCase() === 'signed commit authors',
-  );
-
-  if (signedCommitCheck?.conclusion === 'success') {
-    console.log(`Commit ${sourceSha} passed "${signedCommitCheck.name}" check`);
-    return;
-  }
-
-  const status = signedCommitCheck
-    ? `conclusion was "${signedCommitCheck.conclusion}"`
-    : 'check run was not found';
-
-  throw new Error(
-    `Commit ${sourceSha} has not passed the "Signed Commit Authors" check (${status}). Dev releases require the "Signed Commit Authors" check to pass.`,
-  );
 }
