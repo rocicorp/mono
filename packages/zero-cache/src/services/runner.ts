@@ -41,7 +41,15 @@ export class ServiceRunner<S extends Service> {
         ),
       )
       .finally(() => {
-        this.#instances.delete(id);
+        // Only remove the instance that just finished. If it was already
+        // replaced (e.g. because it became invalid and a new instance was
+        // created under the same id while it was still shutting down), the
+        // replacement must stay tracked; otherwise the next getService()
+        // would spawn a duplicate and the untracked one would never be
+        // stopped by this runner.
+        if (this.#instances.get(id) === service) {
+          this.#instances.delete(id);
+        }
       });
     return service;
   }
