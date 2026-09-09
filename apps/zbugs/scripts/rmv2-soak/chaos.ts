@@ -1,6 +1,8 @@
 import {stat} from 'node:fs/promises';
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {ChangeStreamerHttpClient} from '../../../../packages/zero-cache/src/services/change-streamer/change-streamer-http.ts';
+import type {SnapshotStatus} from '../../../../packages/zero-cache/src/services/change-streamer/snapshot.ts';
 import type {TrafficDriver} from '../change-log-traffic.ts';
 import type {SoakCluster} from './cluster.ts';
 import type {SoakConfig} from './config.ts';
@@ -133,6 +135,11 @@ function str(value: unknown, dflt = 'unknown'): string {
     default:
       return JSON.stringify(value) ?? dflt;
   }
+}
+
+/** A numeric field of an event's detail, or `dflt` when it is not one. */
+function num(value: unknown, dflt = 0): number {
+  return typeof value === 'number' ? value : dflt;
 }
 
 async function fileSize(path: string): Promise<number> {
@@ -735,6 +742,176 @@ async function waitForBackfillCompletion(
     }
     await sleep(500);
   }
+}
+
+/**
+ * The task id C16 reserves under. Deliberately not one of the cluster's node
+ * names: `SnapshotReservations.open()` closes whatever reservation the task
+ * already holds, so reusing a view-syncer's id would tear down that follower's
+ * own reservation instead of adding one.
+ */
+const C16_TASK_ID = 'c16-slow-restore';
+
+/** How long to wait for the change-streamer to confirm C16's reservation. */
+const RESERVATION_CONFIRM_TIMEOUT_MS = 120_000;
+
+/**
+ * How long to wait for the purger to run once C16 releases its reservation.
+ * The coordinator is level-triggered on a `CLEANUP_DELAY_MS` (30s) cadence, so
+ * a pass is not immediate even though the floor is free.
+ */
+const RESERVATION_DRAIN_TIMEOUT_MS = 180_000;
+
+export type C16Observations = {
+  readonly reservedWatermark: string | undefined;
+  readonly rowsPurgedDuringHold: number;
+  readonly passesAboveReservedWatermark: number;
+  readonly backupWatermarksDuringHold: number;
+  readonly changeLogLiveBytesBefore: number;
+  readonly changeLogLiveBytesDuring: number;
+  readonly changeLogLiveBytesAfter: number;
+  readonly rowsPurgedAfterRelease: number;
+};
+
+/**
+ * C16's gate: what a held reservation must and must not do.
+ *
+ * The `must not` is the interesting half. A reservation is the mechanism that
+ * makes a slow restore safe -- the follower is promised catchup from
+ * `minWatermark`, and the floor
+ * (`min(backupWatermark, ...acks, ...reservations)`) may not pass it while the
+ * socket is open -- so a purge that ran anyway is a follower that would meet
+ * `WatermarkTooOld` at the end of its restore.
+ *
+ * The retained/drained pair is what keeps the action honest: without growth
+ * during the hold there was nothing to purge, and "no rows purged" would pass
+ * for the wrong reason.
+ */
+export function c16Findings({
+  reservedWatermark,
+  rowsPurgedDuringHold,
+  passesAboveReservedWatermark,
+  backupWatermarksDuringHold,
+  changeLogLiveBytesBefore,
+  changeLogLiveBytesDuring,
+  changeLogLiveBytesAfter,
+  rowsPurgedAfterRelease,
+}: C16Observations): string[] {
+  const findings: string[] = [];
+  if (reservedWatermark === undefined) {
+    // Every other check is a statement about a reservation that was actually
+    // held, so none of them mean anything here.
+    return ['C16: the snapshot reservation was never confirmed'];
+  }
+  if (rowsPurgedDuringHold > 0) {
+    findings.push(
+      `C16: ${rowsPurgedDuringHold} change-log row(s) were purged while a ` +
+        'snapshot reservation was open',
+    );
+  }
+  if (passesAboveReservedWatermark > 0) {
+    findings.push(
+      `C16: ${passesAboveReservedWatermark} purge pass(es) ran with a floor ` +
+        `above the reserved watermark ${reservedWatermark}`,
+    );
+  }
+  if (
+    [
+      changeLogLiveBytesBefore,
+      changeLogLiveBytesDuring,
+      changeLogLiveBytesAfter,
+    ].some(bytes => bytes < 0)
+  ) {
+    findings.push('C16: change-log live-page usage was not measurable');
+  } else {
+    if (changeLogLiveBytesDuring <= changeLogLiveBytesBefore) {
+      findings.push(
+        'C16: the held reservation retained no change-log pages, so nothing ' +
+          'was asked of the floor',
+      );
+    }
+    if (changeLogLiveBytesAfter >= changeLogLiveBytesDuring) {
+      findings.push(
+        'C16: live change-log pages did not drain after the reservation was ' +
+          'released',
+      );
+    }
+  }
+  if (rowsPurgedAfterRelease === 0) {
+    findings.push(
+      'C16: no change-log rows were purged after the reservation was released',
+    );
+  }
+  if (backupWatermarksDuringHold === 0) {
+    findings.push(
+      'C16: no backup watermark arrived while the reservation was held, so ' +
+        'the upstream ACK path was never observed',
+    );
+  }
+  return findings;
+}
+
+type HeldReservation = {
+  /** The bounds the change-streamer advertised, or `undefined` if it never did. */
+  readonly status: SnapshotStatus | undefined;
+  readonly confirmMs: number;
+  /** Ends the reservation, the way subscribing to `/changes` would. */
+  readonly release: () => Promise<void>;
+};
+
+/**
+ * Opens a snapshot reservation and holds it, the way a view-syncer holds one
+ * for the whole of a litestream restore.
+ *
+ * The reservation lives exactly as long as its WebSocket, so the stream is
+ * *iterated* rather than read once and broken out of -- breaking cancels the
+ * subscription, which is precisely the release this is trying to defer. The
+ * real client does the same thing (`reserveAndGetSnapshotStatus`), and the
+ * change-streamer is what normally ends the stream, when the task subscribes.
+ */
+async function holdSnapshotReservation(
+  ctx: ChaosContext,
+  taskID: string,
+): Promise<HeldReservation> {
+  const client = new ChangeStreamerHttpClient(
+    ctx.lc,
+    // Only used for change-streamer discovery through the change DB, which an
+    // explicit URI skips.
+    {appID: ctx.config.appID, shardNum: 0},
+    ctx.config.upstreamDB,
+    `ws://127.0.0.1:${ctx.config.rmPort + 1}/`,
+  );
+  const openedAt = Date.now();
+  const stream = await client.reserveSnapshot(taskID);
+
+  let confirm: (status: SnapshotStatus | undefined) => void = () => {};
+  const confirmed = new Promise<SnapshotStatus | undefined>(resolve => {
+    confirm = resolve;
+  });
+  const ended = (async () => {
+    try {
+      for await (const msg of stream) {
+        confirm(msg[1]);
+      }
+    } finally {
+      // A stream that ends without a status leaves the wait unresolved
+      // otherwise; resolving twice is a no-op.
+      confirm(undefined);
+    }
+  })().catch(() => {});
+
+  const timer = setTimeout(confirm, RESERVATION_CONFIRM_TIMEOUT_MS, undefined);
+  const status = await confirmed;
+  clearTimeout(timer);
+
+  return {
+    status,
+    confirmMs: Date.now() - openedAt,
+    release: async () => {
+      stream.cancel();
+      await ended;
+    },
+  };
 }
 
 export const CHAOS_ACTIONS: readonly ChaosAction[] = [
@@ -1368,6 +1545,143 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       } finally {
         await dropBackfillFixture(ctx, table);
       }
+    },
+  },
+  {
+    id: 'C16',
+    title: 'Hold a snapshot reservation open under sustained writes',
+    expected:
+      'the change log is retained for the whole hold and drains after it; the upstream ACK keeps advancing',
+    async run(ctx, out) {
+      // Every other action leaves a reservation open for milliseconds -- the
+      // holds observed in a soak are 1-11ms, because the follower restores a
+      // small local replica. A production restore of a large replica out of S3
+      // is minutes, and for all of them the purge floor is pinned at the
+      // `minWatermark` the follower was promised. It is more than pinned:
+      // `startSnapshotReservation` takes a `pause(taskID)` on the purge
+      // scheduler that is only released when the reservation closes, so no
+      // pass deletes anything at all while one is open.
+      //
+      // This holds a reservation without restoring anything, which is the only
+      // way to ask the question without a replica big enough to take minutes
+      // to download.
+      const holdSeconds = Math.max(60, Math.round(300 * ctx.config.scale));
+      const load = ctx.traffic.runStage({
+        rate: 25,
+        durationSeconds: holdSeconds + 60,
+        label: 'C16-sustained',
+      });
+      const before = await ctx.sampler.sample();
+      const reservation = await holdSnapshotReservation(ctx, C16_TASK_ID);
+      const heldFrom = Date.now();
+      const reservedWatermark = reservation.status?.minWatermark;
+      out.notes.push(
+        `holding a snapshot reservation as ${C16_TASK_ID} for ${holdSeconds}s`,
+      );
+      out.measurements['holdSeconds'] = holdSeconds;
+      out.measurements['reservationConfirmMs'] = reservation.confirmMs;
+      out.measurements['reservedWatermark'] =
+        reservedWatermark ?? 'unconfirmed';
+
+      let during: ResourceSample | undefined;
+      let releasedAt = heldFrom;
+      try {
+        await sleep(holdSeconds * 1000);
+        during = await ctx.sampler.sample();
+      } finally {
+        // A reservation left open would pin the floor for the rest of the run,
+        // so it is released even if the hold itself failed. The boundary is
+        // taken *before* the release rather than after it: a purge in the
+        // milliseconds it takes the socket to close would then be read as an
+        // ordinary post-release pass rather than as a violation, and a
+        // spurious finding is worse here than an unobservable one.
+        releasedAt = Date.now();
+        await reservation.release();
+        out.notes.push('released the snapshot reservation');
+      }
+
+      const passes = ctx.log.events.filter(
+        e =>
+          e.kind === 'purge-pass' && e.tsMs >= heldFrom && e.tsMs < releasedAt,
+      );
+      const rowsPurgedDuringHold = passes.reduce(
+        (sum, e) => sum + num(e.detail.deletedRows),
+        0,
+      );
+      // A floor above the reservation would mean the floor formula dropped it;
+      // an absent floor field cannot be above anything.
+      const passesAboveReservedWatermark =
+        reservedWatermark === undefined
+          ? 0
+          : passes.filter(e => str(e.detail.floor, '') > reservedWatermark)
+              .length;
+      const backupWatermarksDuringHold = ctx.log.events.filter(
+        e =>
+          e.kind === 'backup-watermark' &&
+          e.tsMs >= heldFrom &&
+          e.tsMs < releasedAt,
+      ).length;
+      out.measurements['purgePassesDuringHold'] = passes.length;
+      out.measurements['purgePassesPausedDuringHold'] = passes.filter(
+        e => e.detail.stopped === 'paused',
+      ).length;
+      out.measurements['rowsPurgedDuringHold'] = rowsPurgedDuringHold;
+      out.measurements['passesAboveReservedWatermark'] =
+        passesAboveReservedWatermark;
+      out.measurements['backupWatermarksDuringHold'] =
+        backupWatermarksDuringHold;
+
+      // Let the writes stop before measuring the drain, so that the recovery
+      // is the purger catching up rather than a race with the workload.
+      await load;
+      const drainPass = await ctx.log
+        .waitFor(
+          'a purge pass after the reservation was released',
+          e => e.kind === 'purge-pass' && num(e.detail.deletedRows) > 0,
+          RESERVATION_DRAIN_TIMEOUT_MS,
+          releasedAt,
+        )
+        .catch(() => undefined);
+      const after = await ctx.sampler.sample();
+      const rowsPurgedAfterRelease = ctx.log.events
+        .filter(e => e.kind === 'purge-pass' && e.tsMs >= releasedAt)
+        .reduce((sum, e) => sum + num(e.detail.deletedRows), 0);
+      out.measurements['drainPassObserved'] = drainPass ? 'yes' : 'no';
+      out.measurements['rowsPurgedAfterRelease'] = rowsPurgedAfterRelease;
+
+      const liveBytes = (s: ResourceSample | undefined) =>
+        s?.changeLogLiveBytes ?? -1;
+      const slotBytes = (s: ResourceSample | undefined) =>
+        (s?.slots ?? []).reduce((acc, slot) => acc + slot.retainedBytes, 0);
+      out.measurements['changeLogBytesBefore'] = before?.changeLogBytes ?? -1;
+      out.measurements['changeLogBytesDuring'] = during?.changeLogBytes ?? -1;
+      out.measurements['changeLogBytesAfter'] = after?.changeLogBytes ?? -1;
+      out.measurements['changeLogLiveBytesBefore'] = liveBytes(before);
+      out.measurements['changeLogLiveBytesDuring'] = liveBytes(during);
+      out.measurements['changeLogLiveBytesAfter'] = liveBytes(after);
+      // The slot is recorded rather than gated. A reservation pins the purge
+      // floor but not the upstream ACK -- that is
+      // `min(pgChangeLogWatermark, backupWatermark)`, which no reservation
+      // enters, and which is the whole difference between this and C9. WAL is
+      // retained in segments, though, so a short run's slot numbers are too
+      // lumpy to assert on; the ACK-path evidence that *is* gated is
+      // `backupWatermarksDuringHold`.
+      out.measurements['slotRetainedBytesBefore'] = slotBytes(before);
+      out.measurements['slotRetainedBytesDuring'] = slotBytes(during);
+      out.measurements['slotRetainedBytesAfter'] = slotBytes(after);
+
+      out.findings.push(
+        ...c16Findings({
+          reservedWatermark,
+          rowsPurgedDuringHold,
+          passesAboveReservedWatermark,
+          backupWatermarksDuringHold,
+          changeLogLiveBytesBefore: liveBytes(before),
+          changeLogLiveBytesDuring: liveBytes(during),
+          changeLogLiveBytesAfter: liveBytes(after),
+          rowsPurgedAfterRelease,
+        }),
+      );
     },
   },
 ];

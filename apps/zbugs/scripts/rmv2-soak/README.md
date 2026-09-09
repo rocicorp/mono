@@ -177,25 +177,27 @@ consistently held is the evidence that the check can be tightened.
 
 ## Chaos matrix
 
-`--chaos` takes ids, `none`, or `all`. The default is C1-C8 and C13-C15.
+`--chaos` takes ids, `none`, or `all`. The default is C1-C8 and C13-C15; C9
+and C16 each hold a five-minute condition, so `all` is what adds them.
 
-| #   | Action                                                               | Expected route                                                      |
-| --- | -------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| C1  | SIGTERM a view-syncer (graceful drain), restart                      | `sqlite/selected`                                                   |
-| C2  | SIGQUIT a view-syncer (abrupt), restart                              | `sqlite/selected`                                                   |
-| C3  | Kill a view-syncer, delete its replica, restart                      | restore, then `sqlite`; **must not demote**                         |
-| C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`; stale long-gap replica discarded and restored    |
-| C5  | SIGTERM the replication-manager, restart                             | a valid log resumes from its own head                               |
-| C6  | Delete only the change log, restart, then wipe a view-syncer replica | `sqlite/selected-cold`, or `pg/cold-log` when cold reads are off    |
-| C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap                               |
-| C8  | SIGKILL the replication-manager mid-burst, restart                   | reconcile by _truncation_, not reseed                               |
-| C9  | Stop minio for five minutes under sustained writes, then restart it  | live log pages and app-scoped slot WAL grow, then drain             |
-| C10 | `readPercent` 100 -> 0, restart                                      | every route becomes `pg/percentage`                                 |
-| C11 | `serve` -> `compare` -> `write`, restart each time                   | the writer stays, reads stop, comparison stops                      |
-| C12 | `write` -> `off`, restart                                            | does turning it off actually free the disk                          |
-| C13 | C4 and C6 together                                                   | a follower already behind, meeting a reseed                         |
-| C14 | Wipe the RM's whole volume (replica, litestream state, change log)   | restore from backup into a fresh generation; no follower demoted    |
-| C15 | Restart the RM mid-backfill                                          | the run resumes from the replica's mark; nobody demoted or restored |
+| #   | Action                                                               | Expected route                                                        |
+| --- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| C1  | SIGTERM a view-syncer (graceful drain), restart                      | `sqlite/selected`                                                     |
+| C2  | SIGQUIT a view-syncer (abrupt), restart                              | `sqlite/selected`                                                     |
+| C3  | Kill a view-syncer, delete its replica, restart                      | restore, then `sqlite`; **must not demote**                           |
+| C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`; stale long-gap replica discarded and restored      |
+| C5  | SIGTERM the replication-manager, restart                             | a valid log resumes from its own head                                 |
+| C6  | Delete only the change log, restart, then wipe a view-syncer replica | `sqlite/selected-cold`, or `pg/cold-log` when cold reads are off      |
+| C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap                                 |
+| C8  | SIGKILL the replication-manager mid-burst, restart                   | reconcile by _truncation_, not reseed                                 |
+| C9  | Stop minio for five minutes under sustained writes, then restart it  | live log pages and app-scoped slot WAL grow, then drain               |
+| C10 | `readPercent` 100 -> 0, restart                                      | every route becomes `pg/percentage`                                   |
+| C11 | `serve` -> `compare` -> `write`, restart each time                   | the writer stays, reads stop, comparison stops                        |
+| C12 | `write` -> `off`, restart                                            | does turning it off actually free the disk                            |
+| C13 | C4 and C6 together                                                   | a follower already behind, meeting a reseed                           |
+| C14 | Wipe the RM's whole volume (replica, litestream state, change log)   | restore from backup into a fresh generation; no follower demoted      |
+| C15 | Restart the RM mid-backfill                                          | the run resumes from the replica's mark; nobody demoted or restored   |
+| C16 | Hold a snapshot reservation open for five minutes under writes       | the log is retained for the whole hold, then drains; the ACK advances |
 
 `GRACEFUL_SHUTDOWN = ['SIGTERM','SIGINT']` and `FORCEFUL_SHUTDOWN =
 ['SIGQUIT','SIGABRT']` are genuinely different paths in `life-cycle.ts`, which
@@ -204,6 +206,20 @@ is why C1 and C2 are two actions and not the same test twice.
 C10-C12 always run last regardless of the order they are requested in: C11 and
 C12 leave the change log rolled back to `write` and then `off`, which is not a
 state the rest of the run can continue from.
+
+**C16 is the slow-restore test.** A view-syncer reserves its snapshot before it
+restores and holds the reservation until it subscribes, so a restore that takes
+minutes -- a large replica coming out of S3 -- pins the purge floor at the
+`minWatermark` it was promised for that whole time, and pauses the purge
+scheduler outright (`startSnapshotReservation` takes a `pause(taskID)` that only
+the reservation's close releases). Every hold this harness has otherwise
+observed is 1-11 ms, so nothing else in the matrix asks that question. C16 holds
+one without restoring anything and asserts that the log was retained while it
+was open, that it drained afterwards, and that backup watermarks kept arriving
+throughout -- a reservation pins the floor but not the upstream ACK, which is
+`min(pgChangeLogWatermark, backupWatermark)`. The slot is reported rather than
+gated: WAL is retained in whole segments, which makes it too lumpy to assert on
+over a short run.
 
 ## Gotchas worth knowing
 
