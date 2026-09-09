@@ -111,6 +111,9 @@ export class BackfillManager implements Cancelable, Listener {
 
   readonly #commitThresholdBytes: number;
 
+  /** Set when the change stream is canceled. No further backfills are run. */
+  #canceled = false;
+
   constructor(
     lc: LogContext,
     changeStreamer: ChangeStreamMultiplexer,
@@ -180,6 +183,7 @@ export class BackfillManager implements Cancelable, Listener {
 
   #checkAndStartBackfill() {
     if (
+      !this.#canceled &&
       !this.#backfillRetryTimer &&
       !this.#runningBackfill &&
       this.#requiredBackfills.size
@@ -209,6 +213,10 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   #retryBackfillWithBackoff(e: unknown) {
+    if (this.#canceled) {
+      this.#lc.debug?.(`not retrying backfill: change stream canceled`, e);
+      return;
+    }
     const log = this.#retryDelayMs === this.#maxBackoffMs ? 'error' : 'warn';
     this.#lc[log]?.(
       `Error running backfill. Retrying in ${this.#retryDelayMs} ms`,
@@ -296,6 +304,13 @@ export class BackfillManager implements Cancelable, Listener {
     for await (const {message: msg, byteSize} of this.#backfillStreamer(
       state.request,
     )) {
+      if (this.#canceled) {
+        // Exiting the loop finalizes the backfill stream (and the upstream
+        // resources it holds). The reservation, if held, does not need to be
+        // released since the change stream is gone.
+        lc.info?.(`backfill stream canceled: change stream canceled`);
+        return;
+      }
       // Before sending `backfill-completed`, the main replication stream
       // may need to catch up, and/or the current transaction may need to be
       // committed to open a new transaction that's up to backfill watermark.
@@ -595,8 +610,18 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   cancel(): void {
+    this.#canceled = true;
     this.#stopRunningBackfill(`change stream canceled`);
     clearTimeout(this.#backfillRetryTimer);
+    this.#backfillRetryTimer = undefined;
+
+    // Wake up a backfill that is waiting for the change stream to reach a
+    // watermark. The change stream never will, and the backfill must be
+    // allowed to unwind (and release its upstream resources) rather than
+    // remain suspended forever.
+    for (const {reached} of this.#awaitingStatusWatermarks.splice(0)) {
+      reached();
+    }
   }
 }
 

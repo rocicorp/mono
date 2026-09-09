@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import type {Source} from '../../../types/streams.ts';
 import {Subscription} from '../../../types/subscription.ts';
@@ -20,6 +21,7 @@ type Waiter = {
   producer: string;
   startTime: number;
   grantReservation: (watermark: string) => void;
+  rejectReservation: (err: Error) => void;
 };
 
 /**
@@ -45,12 +47,31 @@ export class ChangeStreamMultiplexer {
    */
   readonly #waiters: Waiter[] = [];
 
+  #canceled = false;
+
   constructor(lc: LogContext, lastWatermark: string) {
     this.#lc = lc;
     this.#sub = Subscription.create<ChangeStreamMessage>({
-      cleanup: () => this.#producers.forEach(p => p.cancel()),
+      cleanup: () => this.#cancel(),
     });
     this.#lastWatermark = lastWatermark;
+  }
+
+  #cancel() {
+    this.#canceled = true;
+    this.#producers.forEach(p => p.cancel());
+
+    // A producer awaiting a reservation would otherwise remain suspended
+    // forever, since the reservation held when the stream was canceled is
+    // never released. Reject the pending reservations so that the producers
+    // unwind and release the resources (e.g. upstream connections and
+    // transactions) that they were holding for the stream.
+    for (const {producer, rejectReservation} of this.#waiters.splice(0)) {
+      this.#lc.info?.(
+        `rejecting reservation request from ${producer}: stream canceled`,
+      );
+      rejectReservation(new AbortError('change stream canceled'));
+    }
   }
 
   addProducers(...p: Cancelable[]): this {
@@ -74,6 +95,9 @@ export class ChangeStreamMultiplexer {
    * @param producer The name of the producer, purely for debugging output
    */
   reserve(producer: string): string | Promise<string> {
+    if (this.#canceled) {
+      return Promise.reject(new AbortError('change stream canceled'));
+    }
     if (this.#lastWatermark !== null) {
       // If the stream is not reserved, reserve it and return the
       // watermark.
@@ -84,8 +108,17 @@ export class ChangeStreamMultiplexer {
 
     // Otherwise, wait for the current reservation to be released.
     const startTime = performance.now();
-    const {promise, resolve: grantReservation} = resolver<string>();
-    this.#waiters.push({producer, startTime, grantReservation});
+    const {
+      promise,
+      resolve: grantReservation,
+      reject: rejectReservation,
+    } = resolver<string>();
+    this.#waiters.push({
+      producer,
+      startTime,
+      grantReservation,
+      rejectReservation,
+    });
 
     return promise;
   }
