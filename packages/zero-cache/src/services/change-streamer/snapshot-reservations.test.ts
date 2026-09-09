@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import {describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Source} from '../../types/streams.ts';
 import {SnapshotReservations} from './snapshot-reservations.ts';
@@ -234,5 +234,92 @@ describe('change-streamer/snapshot-reservations', () => {
   test('noteConfirmationDelayed() is false for an unknown taskID', () => {
     const reservations = newReservations();
     expect(reservations.noteConfirmationDelayed('unknown-task')).toBe(false);
+  });
+
+  describe('expiry', () => {
+    const MAX_AGE_MS = 60_000;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function newExpiringReservations(closed: string[]) {
+      return new SnapshotReservations(
+        createSilentLogContext(),
+        {backupURL: 's3://foo/bar', litestreamVersion: 'v5'},
+        taskID => closed.push(taskID),
+        {maxAgeMs: MAX_AGE_MS},
+      );
+    }
+
+    test('a reservation that outlives maxAgeMs is taken back', async () => {
+      // A restore that never finishes would otherwise hold the purge floor --
+      // and the purge scheduler's pause -- for as long as its socket stayed
+      // open. `closed` stands in for the release of both.
+      const closed: string[] = [];
+      const reservations = newExpiringReservations(closed);
+      const sub = reservations.open('task-1');
+      reservations.confirmFor('task-1', 'replica-v1', 'watermark-1', 'sqlite');
+      expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
+
+      vi.advanceTimersByTime(MAX_AGE_MS);
+
+      expect(closed).toEqual(['task-1']);
+      expect(reservations.getReservedWatermarks()).toEqual([]);
+      expect(reservations.confirmationsRequired()).toBe(false);
+      expect(await isCancelled(sub)).toBe(true);
+    });
+
+    test('a reservation is held for the whole of maxAgeMs', () => {
+      const closed: string[] = [];
+      const reservations = newExpiringReservations(closed);
+      reservations.open('task-1');
+      reservations.confirmFor('task-1', 'replica-v1', 'watermark-1', 'sqlite');
+
+      vi.advanceTimersByTime(MAX_AGE_MS - 1);
+
+      expect(closed).toEqual([]);
+      expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
+    });
+
+    test('a reservation that ends normally is not expired afterwards', () => {
+      const closed: string[] = [];
+      const reservations = newExpiringReservations(closed);
+      reservations.open('task-1');
+      reservations.close('task-1');
+      expect(closed).toEqual(['task-1']);
+
+      // The timer is cleared with the reservation, so the release does not
+      // fire a second time for a task that is long gone -- or, worse, for a
+      // later reservation that reused the id.
+      vi.advanceTimersByTime(MAX_AGE_MS * 2);
+      expect(closed).toEqual(['task-1']);
+    });
+
+    test('a replacement reservation gets its own deadline', async () => {
+      const closed: string[] = [];
+      const reservations = newExpiringReservations(closed);
+      reservations.open('task-1');
+      vi.advanceTimersByTime(MAX_AGE_MS - 1);
+
+      // A retry for the same task supersedes the first, which is closed here
+      // rather than by its own deadline.
+      const replacement = reservations.open('task-1');
+      expect(closed).toEqual(['task-1']);
+
+      // Past the *first* reservation's deadline: the replacement is still
+      // held, because its own clock started when it opened.
+      vi.advanceTimersByTime(2);
+      expect(closed).toEqual(['task-1']);
+      expect(reservations.isCurrent('task-1', replacement)).toBe(true);
+
+      vi.advanceTimersByTime(MAX_AGE_MS);
+      expect(closed).toEqual(['task-1', 'task-1']);
+      expect(await isCancelled(replacement)).toBe(true);
+    });
   });
 });

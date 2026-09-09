@@ -1565,6 +1565,12 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       // This holds a reservation without restoring anything, which is the only
       // way to ask the question without a replica big enough to take minutes
       // to download.
+      //
+      // The hold must stay under
+      // `--change-streamer-snapshot-reservation-max-age-ms` (an hour by
+      // default), which is the cap that takes a reservation back. Past it the
+      // change-streamer is *supposed* to purge, and this action would report
+      // that as a violation.
       const holdSeconds = Math.max(60, Math.round(300 * ctx.config.scale));
       const load = ctx.traffic.runStage({
         rate: 25,
