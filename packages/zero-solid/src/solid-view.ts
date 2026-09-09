@@ -2,6 +2,8 @@ import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
 import {emptyArray} from '../../shared/src/sentinels.ts';
 import {ChangeIndex} from '../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
+import type {RelationshipStream} from '../../zql/src/ivm/data.ts';
+import {drainPull, pullOf} from '../../zql/src/ivm/stream.ts';
 import {
   applyChange,
   idSymbol,
@@ -21,7 +23,6 @@ import {
   type QueryErrorDetails,
   type QueryResultDetails,
   type Schema,
-  type Stream,
   type TTL,
 } from './zero.ts';
 
@@ -113,7 +114,7 @@ export class SolidView implements Output {
 
     const initialRoot = this.#createEmptyRoot();
     this.#applyChangesToRoot(
-      skipYields(input.fetch({})),
+      drainPull(skipYields(input.fetch({}))),
       node => ({type: 'add', node}),
       initialRoot,
     );
@@ -286,13 +287,14 @@ function materializeRelationships(change: Change): ViewChange {
 }
 
 function materializeNodeRelationships(node: Node): Node {
-  const relationships: Record<string, () => Stream<Node>> = {};
+  const relationships: Record<string, () => RelationshipStream> = {};
   for (const relationship in node.relationships) {
     const materialized: Node[] = [];
-    for (const n of skipYields(node.relationships[relationship]())) {
+    const children = skipYields(node.relationships[relationship]());
+    for (let n = children.next(); n !== undefined; n = children.next()) {
       materialized.push(materializeNodeRelationships(n));
     }
-    relationships[relationship] = () => materialized;
+    relationships[relationship] = () => pullOf(materialized);
   }
   return {
     row: node.row,
