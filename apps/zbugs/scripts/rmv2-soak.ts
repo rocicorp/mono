@@ -44,7 +44,7 @@ const ROLLBACK_DRILLS = new Set(['C10', 'C11', 'C12']);
  * Everything except C9 (a five-minute minio outage) and the rollback drills,
  * which leave the change log rolled back to `off`. `--chaos all` adds them.
  */
-const DEFAULT_CHAOS = 'C1,C2,C3,C4,C5,C6,C7,C8,C13,C14';
+const DEFAULT_CHAOS = 'C1,C2,C3,C4,C5,C6,C7,C8,C13,C14,C15';
 
 const USAGE = `
 A local, reproducible end-to-end exercise of the SQLite change log in serve
@@ -71,7 +71,7 @@ Options:
                             retention floor, not a routing knob.
   --scale <f>               Multiplies every phase duration. Default: 1
   --chaos <list>            Comma-separated action ids, or "none", or "all".
-                            Default: C1-C8, C13 and C14. "all" adds C9 (a
+                            Default: C1-C8 and C13-C15. "all" adds C9 (a
                             long minio outage) and the C10-C12 rollback
                             drills, which run last and leave the log off.
   --baseline                Also run the mode=off A/B control pass first
@@ -548,6 +548,7 @@ async function main(): Promise<void> {
       const ctx: ChaosContext = {
         config,
         cluster: soakCluster,
+        lc,
         log: soakLog,
         metrics,
         sql,
