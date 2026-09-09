@@ -448,7 +448,7 @@ test('zero-cache --help', () => {
                                                                                    rather, it protects the system when the upstream throughput exceeds the downstream                                         
                                                                                    throughput.                                                                                                                
                                                                                                                                                                                                               
-     --change-streamer-flow-control-consensus-timeout-proportion number            default: 2                                                                                                                 
+     --change-streamer-flow-control-consensus-timeout-proportion number            default: 4                                                                                                                 
        ZERO_CHANGE_STREAMER_FLOW_CONTROL_CONSENSUS_TIMEOUT_PROPORTION env                                                                                                                                     
                                                                                    During periodic flow control checks (every 64kb), the amount of time to wait after the majority                            
                                                                                    of subscribers have acked, proportional to that interval, after which replication will continue                            
@@ -462,7 +462,7 @@ test('zero-cache --help', () => {
                                                                                                                                                                                                               
                                                                                    For example, if the majority of subscribers ack a message in 2.5ms, a padding proportion of                                
                                                                                    1.0 instructs replication to continue after an additional 2.5ms; for a proportion of 2.0, an                               
-                                                                                   additional 5.0ms, etc. The default value of 2.0 allows for a subscriber to be 3x slower than the                           
+                                                                                   additional 5.0ms, etc. The default value of 4.0 allows for a subscriber to be 5x slower than the                           
                                                                                    majority in the steady state, while similarly bounding the extent to which a temporarily lagging                           
                                                                                    subscriber (e.g. due to catchup) slows down the fleet.                                                                     
                                                                                                                                                                                                               
