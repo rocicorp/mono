@@ -394,6 +394,14 @@ export const zeroOptions = {
       ],
     },
 
+    // Temporary rollout gate. This defaults off for the compatibility
+    // deployment; enable it after all replication managers can consume
+    // partial-index schema snapshots.
+    pgPartialIndexTriggers: {
+      type: v.boolean().default(false),
+      hidden: true,
+    },
+
     pgStreamInboundTimeoutMs: {
       type: v.number().optional(),
       desc: [
@@ -469,9 +477,12 @@ export const zeroOptions = {
     },
 
     garbageCollectionInactivityThresholdHours: {
-      type: v.number().default(48),
+      type: v.number().default(24 * 7),
       desc: [
         `The duration after which an inactive CVR is eligible for garbage collection.`,
+        `Purging a CVR forces the next connection from that client group to`,
+        `re-sync from scratch, so this should comfortably exceed how long a`,
+        `typical user goes between sessions.`,
         `Note that garbage collection is an incremental, periodic process which does not`,
         `necessarily purge all eligible CVRs immediately.`,
       ],
@@ -550,6 +561,44 @@ export const zeroOptions = {
     ],
   },
 
+  viewSyncerHydrationBudgetMs: {
+    type: v
+      .number()
+      .assert(
+        value => Number.isSafeInteger(value) && value >= 0,
+        'must be a nonnegative integer',
+      )
+      .default(0),
+    desc: [
+      `The soft time budget in milliseconds for hydrating inactive queries`,
+      `during a view-syncer hydration pass. Active and internal queries always`,
+      `finish, and time spent in custom-query transform round trips is not`,
+      `charged to the budget. An inactive query not reached before the budget`,
+      `is spent is evicted: its CVR record and the remaining TTL that would`,
+      `have kept it warm are both dropped. A value of 0 disables`,
+      `hydration-budget eviction.`,
+    ],
+  },
+
+  viewSyncerQueryHydrationTimeoutMs: {
+    type: v
+      .number()
+      .assert(
+        value => Number.isSafeInteger(value) && value >= 0,
+        'must be a nonnegative integer',
+      )
+      .default(0),
+    desc: [
+      `The maximum processing time in milliseconds that a view-syncer spends`,
+      `hydrating a single client query. Time spent yielding to other work is`,
+      `not counted. A query whose hydration exceeds this limit is aborted and`,
+      `removed from the client's view, and affected clients receive an error`,
+      `for the query. The query is then rejected without being run again for`,
+      `a cooldown period, after which a retry is allowed. Internal queries are`,
+      `never aborted. A value of 0 disables the limit.`,
+    ],
+  },
+
   change: {
     db: {
       type: v.string().optional(),
@@ -560,13 +609,14 @@ export const zeroOptions = {
       ],
     },
 
+    /** @deprecated */
     maxConns: {
       type: v.number().default(5),
-      desc: [
-        `The maximum number of connections to open to the change database.`,
-        `This is used by the {bold change-streamer} for catching up`,
-        `{bold zero-cache} replication subscriptions.`,
+      deprecated: [
+        `Connections to the change db are created dynamically for subscriber catchup. Ensure`,
+        `that the database supports sufficient connections for at least 5 + numViewSyncers.`,
       ],
+      hidden: true,
     },
 
     statementTimeoutMs: {
@@ -725,6 +775,16 @@ export const zeroOptions = {
       hidden: true,
     },
 
+    pgChangeLogEnabled: {
+      type: v.boolean().default(true),
+      desc: [
+        `Whether the legacy Postgres change log remains authoritative for`,
+        `stream initialization, persistence, catchup, and upstream ACKs.`,
+        `Disabling it requires SQLite serve mode at 100 percent and a v5 backup.`,
+      ],
+      hidden: true,
+    },
+
     sqliteChangeLogReadPercent: {
       type: v.number().default(0),
       desc: [
@@ -811,7 +871,7 @@ export const zeroOptions = {
     },
 
     flowControlConsensusTimeoutProportion: {
-      type: v.number().default(2.0),
+      type: v.number().default(4.0),
       desc: [
         `During periodic flow control checks (every 64kb), the amount of time to wait after the majority`,
         `of subscribers have acked, proportional to that interval, after which replication will continue`,
@@ -825,7 +885,7 @@ export const zeroOptions = {
         ``,
         `For example, if the majority of subscribers ack a message in 2.5ms, a padding proportion of`,
         `1.0 instructs replication to continue after an additional 2.5ms; for a proportion of 2.0, an`,
-        `additional 5.0ms, etc. The default value of 2.0 allows for a subscriber to be 3x slower than the`,
+        `additional 5.0ms, etc. The default value of 4.0 allows for a subscriber to be 5x slower than the`,
         `majority in the steady state, while similarly bounding the extent to which a temporarily lagging`,
         `subscriber (e.g. due to catchup) slows down the fleet.`,
         ``,
@@ -1109,27 +1169,19 @@ export const zeroOptions = {
     checkpointThresholdMB: {
       type: v.number().default(40),
       desc: [
-        `The size of the WAL file at which to perform an SQlite checkpoint to apply`,
-        `the writes in the WAL to the main database file. Each checkpoint creates`,
-        `a new WAL segment file that will be backed up by litestream (v3). Smaller thresholds`,
-        `may improve read performance, at the expense of creating more files to download`,
-        `when restoring the replica from the backup.`,
+        `The size of the WAL file at which litestream performs background, best-effort (PASSIVE)`,
+        `SQLite checkpoints to apply the writes in the WAL to the main database file. Checkpoints`,
+        `result in new WAL (v3) or LTS (v5) files that are then backed up asynchronously.`,
         ``,
-        `This setting is only relevant when replicating with litestream v3, and is ignored`,
-        `when replicating with litestream v5.`,
+        `Note that these PASSIVE checkpoints are skipped if a write is in progress, so high writes rates`,
+        `can precipitate runaway wal growth. Also see {bold ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB}`,
       ],
     },
 
     minCheckpointPageCount: {
       type: v.number().optional(),
-      desc: [
-        `The WAL page count at which SQLite attempts a PASSIVE checkpoint, which`,
-        `transfers pages to the main database file without blocking writers.`,
-        `Defaults to {bold checkpointThresholdMB * 250} (since SQLite page size is 4KB).`,
-        ``,
-        `This setting is only relevant when replicating with litestream v3, and is ignored`,
-        `when replicating with litestream v5.`,
-      ],
+      deprecated: [`Use {bold ZERO_CHECKPOINT_THRESHOLD_MB}`],
+      hidden: true,
     },
 
     maxCheckpointPageCount: {
@@ -1144,6 +1196,50 @@ export const zeroOptions = {
       ],
     },
 
+    forceCheckpointThresholdMB: {
+      // TODO: Renable to default(256) after working through litestream /sync issues
+      type: v.number().default(0),
+      desc: [
+        `The size of the WAL file at which to pause writes and explicitly initiate a`,
+        `local litestream sync. This is a safeguard for the situation in which litestream's`,
+        `background checkpoints continually defer to incoming writes (i.e. high write load).`,
+        ``,
+        `If the WAL size reaches the forced checkpoint threshold, writes pause for an`,
+        `an explicit litestream checkpoint, providing a flow-control mechanism to ensure timely`,
+        `backups and prevent runaway wal growth.`,
+        ``,
+        `Note that these checkpoints {italic can} be skipped if litestream is performing a`,
+        `snapshot at the time (though snapshots are disabled by default). For such configurations,`,
+        `the {bold ZERO_LITESTREAM_MAX_WAL_SIZE_MB} provides an emergency break to prevent`,
+        `exceeding available disk space.`,
+        ``,
+        `Set this to 0 to disable and instead rely on the litestream's default {bold truncate-page-n}`,
+        `emergency break.`,
+        ``,
+        `This feature is only enabled with {bold ZERO_LITESTREAM_BACKUP_USING_V5}.`,
+      ],
+      hidden: true,
+    },
+
+    maxWalSizeMB: {
+      type: v.number().default(10240),
+      desc: [
+        `A fail-safe that pauses writes once the un-checkpointed WAL reaches this size,`,
+        `resuming when litestream manages to checkpoint it. This bounds WAL growth (and`,
+        `ultimately disk usage) whenever litestream cannot checkpoint — e.g. while it holds`,
+        `the checkpoint lock for an in-progress snapshot — and serves as an alternative to`,
+        `litestream's {bold truncate-page-n} emergency checkpoint, which would otherwise block`,
+        `writes for a second "bounary" snapshot.`,
+        ``,
+        `Size this generously relative to available disk; it should rarely be hit, as`,
+        `{bold ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB} keeps the WAL far smaller in`,
+        `normal operation. Set to {bold 0} to disable.`,
+        ``,
+        `This feature is only enabled with {bold ZERO_LITESTREAM_BACKUP_USING_V5}.`,
+      ],
+      hidden: true,
+    },
+
     incrementalBackupIntervalMinutes: {
       type: v.number().default(5),
       desc: [
@@ -1155,6 +1251,21 @@ export const zeroOptions = {
         `This option only applies to litestream v3 backups and will be deprecated/removed`,
         `once the zero-cache is transitioned to litestream v5. For configuring v5 backup`,
         `frequency, use {bold ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}.`,
+      ],
+    },
+
+    snapshotBackupIntervalHours: {
+      type: v.number().default(4),
+      desc: [
+        `The interval between snapshot backups of the replica. Snapshot backups`,
+        `make a full copy of the database to a new litestream generation. This`,
+        `improves restore time at the expense of bandwidth. Applications with a`,
+        `large database and low write rate can increase this interval to reduce`,
+        `network usage for backups (litestream defaults to 24 hours).`,
+        ``,
+        `This option only applies to litestream v3 backups and will be deprecated/removed`,
+        `once the zero-cache is transitioned to litestream v5. For configuring v5 backup`,
+        `frequency, use {bold ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS_V5}.`,
       ],
     },
 
@@ -1174,18 +1285,28 @@ export const zeroOptions = {
       ],
     },
 
-    snapshotBackupIntervalHours: {
-      type: v.number().default(4),
+    snapshotBackupIntervalHoursV5: {
+      type: v.number().default(24 * 30),
       desc: [
-        `The interval between snapshot backups of the replica. Snapshot backups`,
-        `make a full copy of the database to a new litestream generation. This`,
-        `improves restore time at the expense of bandwidth. Applications with a`,
-        `large database and low write rate can increase this interval to reduce`,
-        `network usage for backups (litestream defaults to 24 hours).`,
+        `The interval between snapshot backups of the replica when`,
+        `{bold ZERO_LITESTREAM_BACKUP_USING_V5} is enabled.`,
         ``,
-        `This setting is applied when replicating with either litestream v3 or v5.`,
-        `Note, however, that snapshots are generally not needed to improve restore time`,
-        `with v5, and so a longer interval (e.g. the litestream default of 24h) is fine.`,
+        `By default, snapshots are effectively disabled (i.e. every 30 days)`,
+        `because v5 compaction fulfills the role that snapshots played in v3`,
+        `(i.e. because of litestream v5 compaction, restores will generally involve`,
+        `O(db-size) bytes.`,
+        ``,
+        `Snapshots are disabled by default because they hold a read-lock on`,
+        `the database and prevent wal checkpoints, introducing the risk of large wal`,
+        `files for large databases with a high write rate.`,
+        ``,
+        `If configuring the zero-cache to actually perform v5 snapshots, the`,
+        `{bold ZERO_LITESTREAM_MAX_WAL_SIZE_MB} option can be used to pause replication`,
+        `if the wal reaches a certain size and cannot be checkpointed because of an`,
+        `in-progress snapshot.`,
+        ``,
+        `This option only applies to litestream v5 backups. For v3 backups, use`,
+        `{bold ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS}.`,
       ],
     },
 

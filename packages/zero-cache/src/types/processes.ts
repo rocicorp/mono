@@ -24,7 +24,26 @@ export const MESSAGE_TYPES = {
   notify: 'notify',
   ready: 'ready',
   backupWatermarkUpdate: 'backupWatermakUpdate',
+  profile: 'profile',
+  profileResponse: 'profileResponse',
 } as const;
+
+export type ProfileRequest = {
+  readonly id: string;
+  readonly durationMs: number;
+  readonly worker?: string | undefined;
+  readonly workerIndex?: number | undefined;
+};
+
+export type ProfileResponse = {
+  readonly id: string;
+  readonly name: string;
+  readonly profile?: unknown | undefined;
+  readonly error?: string | undefined;
+};
+
+export type ProfileMessage = ['profile', ProfileRequest];
+export type ProfileResponseMessage = ['profileResponse', ProfileResponse];
 
 export type Message<Payload> = [keyof typeof MESSAGE_TYPES, Payload];
 
@@ -38,17 +57,37 @@ function getMessage<M extends Message<unknown>>(
   return null;
 }
 
+/**
+ * Subscribes the `handler` to messages of the given `type` and returns a
+ * function that unsubscribes it. Use this (rather than
+ * {@link Receiver.onMessageType()}) for handlers scoped to a request or
+ * operation rather than to the lifetime of the {@link Worker}; the
+ * `'message'` listener is otherwise retained by the Worker forever.
+ */
+export function subscribeToMessageType<M extends Message<unknown>>(
+  e: EventEmitter,
+  type: M[0],
+  handler: (msg: M[1], sendHandle?: SendHandle) => void,
+): () => void {
+  const listener = (data: unknown, sendHandle?: SendHandle) => {
+    const msg = getMessage(type, data);
+    if (msg) {
+      handler(msg, sendHandle);
+    }
+  };
+  e.on('message', listener);
+  return () => {
+    e.off('message', listener);
+  };
+}
+
 function onMessageType<M extends Message<unknown>>(
   e: EventEmitter,
   type: M[0],
   handler: (msg: M[1], sendHandle?: SendHandle) => void,
 ) {
-  return e.on('message', (data, sendHandle) => {
-    const msg = getMessage(type, data);
-    if (msg) {
-      handler(msg, sendHandle);
-    }
-  });
+  subscribeToMessageType(e, type, handler);
+  return e;
 }
 
 function onceMessageType<M extends Message<unknown>>(
@@ -281,4 +320,43 @@ export function inProcChannel(): [Worker, Worker] {
       Object.assign(worker2, {send: sendTo(worker1), kill: kill(worker1), pid}),
     ),
   ];
+}
+
+/**
+ * Creates a {@link Worker} facade that broadcasts `send()` to all provided
+ * workers and aggregates their `'message'` events into one stream.
+ *
+ * This is useful for code that expects a single Worker for IPC (e.g.
+ * `handleProfzRequest`) but needs to reach multiple child workers.
+ */
+export function broadcastWorker(workers: Worker[]): Worker {
+  const emitter = new EventEmitter();
+
+  for (const w of workers) {
+    w.on('message', (message: Serializable, sendHandle?: SendHandle) =>
+      emitter.emit('message', message, sendHandle),
+    );
+  }
+
+  const send = <M extends Message<unknown>>(
+    message: M,
+    sendHandle?: SendHandle,
+    callback?: (error: Error | null) => void,
+  ) => {
+    for (const w of workers) {
+      w.send(message, sendHandle);
+    }
+    if (callback) {
+      callback(null);
+    }
+    return true;
+  };
+
+  const kill = (signal: NodeJS.Signals = 'SIGTERM') => {
+    for (const w of workers) {
+      w.kill(signal);
+    }
+  };
+
+  return wrap(Object.assign(emitter, {send, kill, pid}));
 }

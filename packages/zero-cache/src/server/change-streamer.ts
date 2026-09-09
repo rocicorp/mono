@@ -37,11 +37,14 @@ import {
 import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
 import {connectPgClient} from '../types/pg.ts';
 import {
+  broadcastWorker,
   childWorker,
   parentWorker,
   singleProcessMode,
+  type ProfileResponseMessage,
   type Worker,
 } from '../types/processes.ts';
+import {installProfileHandler} from '../types/profiler.ts';
 import {getShardConfig} from '../types/shards.ts';
 import type {ReplicaFileMode} from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
@@ -56,6 +59,7 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
   ...argv: string[]
 ): Promise<void> {
+  installProfileHandler(parent, 'change-streamer');
   const config = getNormalizedZeroConfig({env, argv});
   const {
     taskID,
@@ -67,6 +71,7 @@ export default async function runWorker(
       backPressureLimitHeapProportion,
       flowControlConsensusTimeoutProportion,
       flowControlSlowSubscriberGracePeriodSeconds,
+      pgChangeLogEnabled,
       sqliteChangeLogMode,
       sqliteChangeLogReadPercent,
       sqliteChangeLogColdReadPercent,
@@ -102,12 +107,14 @@ export default async function runWorker(
   );
   initEventSink(lc, config);
 
-  // Kick off DB connection warmup in the background.
+  // Startup-time client used for for change-streamer initialization
+  // and handoff / takeover. Steady-state clients are managed by the
+  // change-streamer (Storer) implementation.
   const changeDB = await connectPgClient(
     lc,
     change.db,
-    'change-streamer',
-    {max: change.maxConns},
+    'change-streamer-init',
+    {max: 5},
     {sendStringAsJson: true},
   );
   void warmupConnections(lc, changeDB, 'change').catch(() => {});
@@ -121,7 +128,7 @@ export default async function runWorker(
   // purges. This ensures that (this) change-streamer will be able to resume
   // from the backup.
   let purgeLock =
-    litestream.backupURL && litestream.executable
+    pgChangeLogEnabled && litestream.backupURL && litestream.executable
       ? await new PurgeLocker(lc, shard, changeDB).acquire()
       : null;
   const restoreOptions = {litestream, constraints: purgeLock ?? undefined};
@@ -178,6 +185,7 @@ export default async function runWorker(
               {
                 ...initialSync,
                 replicationSlotFailover: upstream.pgReplicationSlotFailover,
+                installPartialIndexTriggers: upstream.pgPartialIndexTriggers,
               },
               context,
               replicationLag.reportIntervalMs,
@@ -217,6 +225,7 @@ export default async function runWorker(
         purgeLock,
         autoReset ?? false,
         {
+          pgChangeLogEnabled,
           backPressureLimitHeapProportion,
           flowControlConsensusTimeoutProportion,
           flowControlSlowSubscriberGracePeriodMs:
@@ -255,14 +264,15 @@ export default async function runWorker(
               }
             : undefined,
           // Compare mode runs both advisory checks. Postgres remains authoritative.
-          sqliteChangeLogCompare: sqliteChangeLogComparing
-            ? {
-                replicaFile: replica.file,
-                comparePercent: sqliteChangeLogComparePercent,
-                retentionMs: sqliteChangeLogRetentionMs,
-                readBatchRows: sqliteChangeLogReadBatchRows,
-              }
-            : undefined,
+          sqliteChangeLogCompare:
+            pgChangeLogEnabled && sqliteChangeLogComparing
+              ? {
+                  replicaFile: replica.file,
+                  comparePercent: sqliteChangeLogComparePercent,
+                  retentionMs: sqliteChangeLogRetentionMs,
+                  readBatchRows: sqliteChangeLogReadBatchRows,
+                }
+              : undefined,
           // Slice 11 lands dark by default: serve mode constructs the stable
           // router, while readPercent=0 keeps every catchup on PG and emits
           // eligibility metrics before any canary traffic is enabled.
@@ -320,13 +330,14 @@ export default async function runWorker(
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
   const processes = new ProcessManager(lc, parent);
+  const profileSubWorkers: Worker[] = [];
   if (backupURL) {
     lc.info?.('setting up backup to', backupURL);
     litestream.backupURL = backupURL;
     const {promise: backupStarted, resolve} = resolver();
 
     // Start a backup replicator and corresponding litestream backup process.
-    processes
+    const backupReplicator = processes
       .addWorker(
         childWorker(REPLICATOR_URL, env, 'backup' satisfies ReplicaFileMode),
         'supporting',
@@ -343,6 +354,12 @@ export default async function runWorker(
         );
         resolve();
       });
+    profileSubWorkers.push(backupReplicator);
+    // Relay profileResponse messages from backup-replicator up to parent
+    backupReplicator.onMessageType<ProfileResponseMessage>(
+      'profileResponse',
+      res => parent.send(['profileResponse', res]),
+    );
     await backupStarted;
   }
 
@@ -364,9 +381,27 @@ export default async function runWorker(
     });
   }
 
+  // Create the broadcast facade once: each broadcastWorker() adds permanent
+  // 'message' forwarders to every sub worker, so creating one per /profz
+  // request would leak a forwarder per request.
+  const profileWorker =
+    profileSubWorkers.length > 0
+      ? broadcastWorker(profileSubWorkers)
+      : undefined;
+  const getProfileWorker = profileWorker
+    ? () => Promise.resolve(profileWorker)
+    : undefined;
+
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
-    {port, keepaliveTimeoutMs, startupDelayMs, readinessGate},
+    {
+      port,
+      keepaliveTimeoutMs,
+      startupDelayMs,
+      readinessGate,
+      config,
+      getProfileWorker,
+    },
     parent,
     changeStreamer,
   );

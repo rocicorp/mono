@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "replicache-perf",
+    "slug": "replicache-perf-rn",
+    "version": "1.0.0",
+    "ios": {
+      "bundleIdentifier": "dev.rocicorp.replicacheperfrn"
+    },
+    "android": {
+      "package": "dev.rocicorp.replicacheperfrn"
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}

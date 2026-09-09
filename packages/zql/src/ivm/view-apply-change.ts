@@ -1,6 +1,5 @@
 import {
   assert,
-  assertArray,
   assertNumber,
   unreachable,
 } from '../../../shared/src/asserts.ts';
@@ -769,11 +768,31 @@ function binarySearch(
   target: Row,
   comparator: Comparator,
 ): number {
-  let low = 0;
   let high = view.length - 1;
+  if (high < 0) {
+    return ~0;
+  }
+
+  // Probe the last entry before searching. Hydration feeds the view rows in
+  // the query's sort order, so every insert belongs at the end and the plain
+  // search spends log2(n) comparisons to rediscover that -- about eleven per
+  // row for a view of a couple of thousand. Row comparison is the single
+  // largest cost in hydration on Hermes, so collapsing those eleven to one is
+  // worth the one extra comparison this costs when the row does land inside
+  // the view, which is a single push rather than a bulk load.
+  // MetaEntry has all Row props; comparator only reads string keys
+  const last = comparator(view[high] as Row, target);
+  if (last < 0) {
+    return ~(high + 1);
+  }
+  if (last === 0) {
+    return high;
+  }
+
+  let low = 0;
+  high -= 1;
   while (low <= high) {
     const mid = (low + high) >>> 1;
-    // MetaEntry has all Row props; comparator only reads string keys
     const comparison = comparator(view[mid] as Row, target);
     if (comparison < 0) {
       low = mid + 1;
@@ -823,7 +842,9 @@ function getChildEntryList<M extends Mutate>(
   relationship: string,
 ): MetaEntryList<M> {
   const view = parentEntry[relationship];
-  assertArray(view);
+  // `relationship` is a string key, so a name colliding with a column would
+  // put a row value here; the message must not repeat it back.
+  assert(Array.isArray(view), 'expected relationship array');
   return view as MetaEntryList<M>;
 }
 

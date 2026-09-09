@@ -1,3 +1,4 @@
+import {Lock} from '@rocicorp/lock';
 import {
   deleteDatabaseSync,
   openDatabaseSync,
@@ -36,20 +37,44 @@ export function expoSQLiteStoreProvider(
   };
 }
 
+/**
+ * An expo-sqlite prepared statement is a stateful cursor over a single
+ * `sqlite3_stmt`: `executeForRawResultAsync` resets, rebinds and steps the
+ * first row, and the returned result's `getAllAsync` then steps the *remaining*
+ * rows of whatever the statement is currently bound to. Both are separate
+ * native round trips.
+ *
+ * `SQLiteStore` shares one prepared statement per SQL across all concurrent
+ * readers, so without serialization reader B's `executeForRawResultAsync` can
+ * rebind the statement inside reader A's await gap, and A's `getAllAsync` then
+ * returns B's rows (and B is starved of them). That yields wrong or missing
+ * values and, when a ref count delta is computed from such a read and written,
+ * a persistently corrupted store.
+ *
+ * Every call on a statement is therefore run under a per-statement lock so the
+ * execute + fetch pair is atomic with respect to other users of that statement.
+ */
 class ExpoSQLitePreparedStatement implements PreparedStatement {
   readonly #statement: SQLiteStatement;
+  readonly #lock = new Lock();
 
   constructor(statement: SQLiteStatement) {
     this.#statement = statement;
   }
 
-  async exec(params: string[]): Promise<void> {
-    await this.#statement.executeForRawResultAsync(params);
+  exec(params: string[]): Promise<void> {
+    return this.#lock.withLock(async () => {
+      await this.#statement.executeForRawResultAsync(params);
+    });
   }
 
-  async all(params: string[]): Promise<unknown[][]> {
-    const result = await this.#statement.executeForRawResultAsync(params);
-    return result.getAllAsync() as Promise<unknown[][]>;
+  all(params: string[]): Promise<unknown[][]> {
+    return this.#lock.withLock(async () => {
+      const result = await this.#statement.executeForRawResultAsync(params);
+      // Must be awaited inside the lock so that no other caller can reset the
+      // statement before all rows have been stepped.
+      return (await result.getAllAsync()) as unknown[][];
+    });
   }
 }
 

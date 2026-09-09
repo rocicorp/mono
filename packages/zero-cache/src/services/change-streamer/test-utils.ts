@@ -1,4 +1,5 @@
 import {Subscription} from '../../types/subscription.ts';
+import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {PROTOCOL_VERSION, type Downstream} from './change-streamer.ts';
 import {Subscriber, type SubscriberOptions} from './subscriber.ts';
 
@@ -8,6 +9,7 @@ export function createSubscriber(
   watermark = '00',
   caughtUp = false,
   options: SubscriberOptions = {},
+  mode: ReplicatorMode = 'serving',
 ): [Subscriber, Downstream[], Subscription<string>] {
   const id = '' + nextID++;
   const received: Downstream[] = [];
@@ -17,6 +19,7 @@ export function createSubscriber(
   const subscriber = new Subscriber(
     PROTOCOL_VERSION,
     id,
+    mode,
     watermark,
     sub,
     () => ({tag: 'status'}),

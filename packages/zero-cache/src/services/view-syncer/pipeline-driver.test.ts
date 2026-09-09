@@ -1,5 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type MockInstance,
+  test,
+  vi,
+} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
 import type {
@@ -21,6 +29,7 @@ import {
 } from '../../../../zqlite/src/database-storage.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {listTables} from '../../db/lite-tables.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
@@ -154,8 +163,33 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     dbFile.delete();
   });
+
+  /**
+   * Spies on the `destroy` of every source connection made from now on, so a
+   * test can check that a pipeline built for a query was torn down. The
+   * `failFetchOf` connection (1-based) throws when fetched.
+   */
+  function trackSourceConnections(failFetchOf?: number): MockInstance[] {
+    const destroys: MockInstance[] = [];
+    const connect = TableSource.prototype.connect;
+    vi.spyOn(TableSource.prototype, 'connect').mockImplementation(function (
+      this: TableSource,
+      ...args: Parameters<TableSource['connect']>
+    ) {
+      const input = connect.apply(this, args);
+      destroys.push(vi.spyOn(input, 'destroy'));
+      if (destroys.length === failFetchOf) {
+        vi.spyOn(input, 'fetch').mockImplementation(() => {
+          throw new Error('simulated fetch failure');
+        });
+      }
+      return input;
+    });
+    return destroys;
+  }
 
   const issues = table('issues')
     .columns({
@@ -817,6 +851,53 @@ describe('view-syncer/pipeline-driver', () => {
       stopReason: 'remove-query',
       pipelineLifetimeMs: expect.any(Number),
     });
+  });
+
+  test('abandoned hydration tears down its pipeline', () => {
+    pipelines.init(clientSchema);
+    const hydration = pipelines
+      .addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, startTimer())
+      [Symbol.iterator]();
+    // Consume the first row, then abandon the hydration, as a consumer that
+    // stops iterating early does.
+    expect(hydration.next().done).toBe(false);
+    hydration.return?.();
+
+    expect(pipelines.queries().has('queryID1')).toBe(false);
+    // The rows it yielded must not leave a partial signature behind.
+    expect(pipelines.rowSetSignature('queryID1')).toBeUndefined();
+
+    // The abandoned pipeline is disconnected from its sources, so a change to
+    // a table it was reading no longer produces output for it.
+    replicator.processTransaction(
+      '134',
+      messages.insert('issues', {id: '4', closed: 0}),
+    );
+    expect(changes()).toEqual([]);
+  });
+
+  test('failed scalar subquery resolution tears down earlier companions', () => {
+    pipelines.init(clientSchema);
+    const scalar =
+      ISSUES_WITH_SCALAR_SUBQUERY.where as CorrelatedSubqueryCondition;
+    // Two scalar subqueries: the first resolves and connects a companion
+    // pipeline to `comments`; executing the second fails at fetch time.
+    const ast: AST = {
+      ...ISSUES_WITH_SCALAR_SUBQUERY,
+      where: {type: 'and', conditions: [scalar, scalar]},
+    };
+    const destroys = trackSourceConnections(2);
+    expect(() => [
+      ...pipelines.addQuery('hash1', 'queryID1', ast, startTimer()),
+    ]).toThrow('simulated fetch failure');
+    expect(pipelines.queries().has('queryID1')).toBe(false);
+
+    // Both companions connected before the second one failed, and both
+    // connections were torn down.
+    expect(destroys).toHaveLength(2);
+    for (const destroy of destroys) {
+      expect(destroy).toHaveBeenCalledTimes(1);
+    }
   });
 
   test('insert', () => {
