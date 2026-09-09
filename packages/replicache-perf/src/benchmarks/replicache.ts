@@ -1,4 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
+import type {
+  Bencher,
+  Benchmark,
+} from '../../../../tools/rn-bench/src/benchmark.ts';
 import {
   closeAndCleanupRep,
   createIndexDefinitions,
@@ -9,6 +13,8 @@ import {
   range,
   ReplicachePerfTest,
   sampleSize,
+  setPopulateValues,
+  setPutMapEntries,
   setupPersistedData,
   sleep,
   type ReplicacheImpl,
@@ -22,7 +28,6 @@ import type {
 } from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../shared/src/json.ts';
-import type {Bencher, Benchmark} from '../benchmark.ts';
 import {
   getTmcwData,
   jsonArrayTestData,
@@ -55,14 +60,12 @@ export function benchmarkPopulate(opts: {
       await rep.clientGroupID;
 
       if (!opts.clean) {
-        await rep.mutate.populate({
-          numKeys: opts.numKeys,
-          randomValues: jsonArrayTestData(opts.numKeys, valSize),
-        });
+        setPopulateValues(jsonArrayTestData(opts.numKeys, valSize));
+        await rep.mutate.populate({numKeys: opts.numKeys});
       }
-      const randomValues = jsonArrayTestData(opts.numKeys, valSize);
+      setPopulateValues(jsonArrayTestData(opts.numKeys, valSize));
       bencher.reset();
-      await rep.mutate.populate({numKeys: opts.numKeys, randomValues});
+      await rep.mutate.populate({numKeys: opts.numKeys});
       bencher.stop();
     },
   };
@@ -87,8 +90,8 @@ export function benchmarkPersist(opts: {
         opts.indexes ?? 0,
       );
       const rep = (repToClose = makeRepWithPopulate({indexes}));
-      const randomValues = jsonArrayTestData(opts.numKeys, valSize);
-      await rep.mutate.populate({numKeys: opts.numKeys, randomValues});
+      setPopulateValues(jsonArrayTestData(opts.numKeys, valSize));
+      await rep.mutate.populate({numKeys: opts.numKeys});
       bencher.reset();
       await rep.persist();
       bencher.stop();
@@ -192,7 +195,8 @@ export function benchmarkRefresh(opts: {
             range(opts.numKeysPersisted),
             opts.numKeysPerMutation,
           ).map(i => [`key${i}`, jsonObjectTestData(valSize)]);
-          await rep.mutate.putMap(Object.fromEntries(entries));
+          setPutMapEntries(Object.fromEntries(entries));
+          await rep.mutate.putMap();
         }
       }
 
@@ -276,7 +280,7 @@ export function benchmarkRebase(opts: {
       }));
 
       // Create a bunch of keys.
-      await rep.mutate.putMap(
+      setPutMapEntries(
         Object.fromEntries(
           Array.from({length: numKeys}).map((_, i) => [
             `key${i}`,
@@ -284,11 +288,11 @@ export function benchmarkRebase(opts: {
           ]),
         ),
       );
+      await rep.mutate.putMap();
 
       for (let i = 0; i < mutations; i++) {
-        await rep.mutate.putMap({
-          key: jsonObjectTestData(targetSizePerMutation),
-        });
+        setPutMapEntries({key: jsonObjectTestData(targetSizePerMutation)});
+        await rep.mutate.putMap();
       }
 
       const {promise, resolve} = resolver<void>();
@@ -436,10 +440,8 @@ export function benchmarkReadTransaction(opts: {
     byteSize: opts.numKeys * valSize,
     async setup() {
       rep = makeRepWithPopulate();
-      await rep.mutate.populate({
-        numKeys: opts.numKeys,
-        randomValues: jsonArrayTestData(opts.numKeys, valSize),
-      });
+      setPopulateValues(jsonArrayTestData(opts.numKeys, valSize));
+      await rep.mutate.populate({numKeys: opts.numKeys});
     },
     async teardown() {
       await closeAndCleanupRep(rep);
@@ -472,10 +474,8 @@ export function benchmarkScan(opts: {numKeys: number}): Benchmark {
 
     async setup() {
       rep = makeRepWithPopulate();
-      await rep.mutate.populate({
-        numKeys: opts.numKeys,
-        randomValues: jsonArrayTestData(opts.numKeys, valSize),
-      });
+      setPopulateValues(jsonArrayTestData(opts.numKeys, valSize));
+      await rep.mutate.populate({numKeys: opts.numKeys});
     },
     async teardown() {
       await closeAndCleanupRep(rep);
@@ -575,7 +575,8 @@ export function benchmarkWriteSubRead(opts: {
         },
       }));
 
-      await rep.mutate.putMap(initData);
+      setPutMapEntries(initData);
+      await rep.mutate.putMap();
       let onDataCallCount = 0;
 
       const subs = Array.from({length: numSubsTotal}, (_, i) => {
@@ -616,11 +617,13 @@ export function benchmarkWriteSubRead(opts: {
         ]),
       );
 
+      setPutMapEntries(changes);
+
       // OK time the below!
       bencher.reset();
 
       // In a single transaction, invalidate numSubsDirty subscriptions.
-      await rep.mutate.putMap(changes);
+      await rep.mutate.putMap();
 
       bencher.stop();
 

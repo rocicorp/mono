@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
-import {deleteLiteDB} from '../../db/delete-lite-db.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
@@ -10,7 +9,7 @@ import {
   errorTypeToReadableName,
   PROTOCOL_VERSION,
   type ChangeStreamer,
-  type SerializedDownstream,
+  type SizedDownstream,
 } from '../change-streamer/change-streamer.ts';
 import type * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {RunningState} from '../running-state.ts';
@@ -23,6 +22,9 @@ import type {ReplicationReport} from './reporter/report-schema.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
+
+const MAX_WORKER_BATCH_MESSAGES = 256;
+const MAX_WORKER_BATCH_SIZE = 1024 * 1024;
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -38,7 +40,6 @@ export class IncrementalSyncer {
   readonly #changeStreamer: ChangeStreamer;
   readonly #worker: WriteWorkerClient;
   readonly #mode: ReplicatorMode;
-  readonly #replicaDbPath: string;
   readonly #statusPublisher: ReplicationStatusPublisher | null;
   readonly #notifier: Notifier;
   readonly #reporter: ReplicationReportRecorder;
@@ -58,7 +59,6 @@ export class IncrementalSyncer {
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
     mode: ReplicatorMode,
-    replicaDbPath: string,
     statusPublisher: ReplicationStatusPublisher | null,
   ) {
     this.#lc = lc;
@@ -67,7 +67,6 @@ export class IncrementalSyncer {
     this.#changeStreamer = changeStreamer;
     this.#worker = worker;
     this.#mode = mode;
-    this.#replicaDbPath = replicaDbPath;
     this.#statusPublisher = statusPublisher;
     this.#notifier = new Notifier();
     this.#reporter = new ReplicationReportRecorder(lc);
@@ -96,7 +95,7 @@ export class IncrementalSyncer {
       const {replicaVersion, watermark} =
         await this.#worker.getSubscriptionState();
 
-      let downstream: Source<SerializedDownstream> | undefined;
+      let downstream: Source<SizedDownstream> | undefined;
       let unregister = () => {};
       let err: unknown | undefined;
 
@@ -124,8 +123,26 @@ export class IncrementalSyncer {
         );
 
         let backfillStatus: DownloadStatus | undefined;
+        let writeBatch: ChangeStreamData[] = [];
+        let writeBatchSize = 0;
+        let inTransaction = false;
 
-        for await (const {data: message} of downstream) {
+        const flushWrites = async () => {
+          if (writeBatch.length === 0) {
+            return;
+          }
+          const batch = writeBatch;
+          writeBatch = [];
+          writeBatchSize = 0;
+
+          const result = await this.#worker.processMessages(batch);
+          this.#handleResult(lc, result);
+          if (result?.completedBackfill) {
+            backfillStatus = undefined;
+          }
+        };
+
+        for await (const {data: message, size} of downstream) {
           this.#replicationEvents.add(1);
           switch (message[0]) {
             case 'status': {
@@ -148,16 +165,6 @@ export class IncrementalSyncer {
               // Signal from the replication-manager that the view-syncer must
               // shut down and restore a new backup from litestream.
               const {type, message: msg} = message[1];
-              // Explicit errors from the change-streamer (e.g. watermark too
-              // old) often indicate a problem with the replica. As a
-              // conservative measure, delete the replica before shutting down
-              // so that the process restarts from scratch even if reusing the
-              // same volume.
-              lc.warn?.(
-                `received error from change-streamer. deleting replica file`,
-                {error: message[1]},
-              );
-              deleteLiteDB(this.#replicaDbPath);
               this.stop(
                 lc,
                 // Note: The AbortError indicates a clean / intentional shutdown.
@@ -199,12 +206,29 @@ export class IncrementalSyncer {
                 backfillStatus = status; // Update the current status
               }
 
-              const data = message as ChangeStreamData;
-              const result = await this.#worker.processMessage(data);
+              const type = message[0];
+              const invalidTransactionSequence =
+                type === 'begin' ? inTransaction : !inTransaction;
+              if (type === 'begin') {
+                inTransaction = true;
+              } else if (type === 'commit' || type === 'rollback') {
+                inTransaction = false;
+              }
 
-              this.#handleResult(lc, result);
-              if (result?.completedBackfill) {
-                backfillStatus = undefined;
+              writeBatch.push(message as ChangeStreamData);
+              writeBatchSize += size;
+              if (
+                // Waiting here ensures that consuming the commit, which ACKs
+                // it upstream, only happens after the SQLite commit finishes.
+                type === 'commit' ||
+                type === 'rollback' ||
+                // Promptly surface malformed transaction sequences instead
+                // of leaving a partial batch waiting for another message.
+                invalidTransactionSequence ||
+                writeBatch.length >= MAX_WORKER_BATCH_MESSAGES ||
+                writeBatchSize >= MAX_WORKER_BATCH_SIZE
+              ) {
+                await flushWrites();
               }
               break;
             }
@@ -260,5 +284,7 @@ export class IncrementalSyncer {
 
   stop(lc: LogContext, err?: unknown) {
     this.#state.stop(lc, err);
+    // Abort any polling loop that the write worker may be in.
+    this.#worker.abort();
   }
 }

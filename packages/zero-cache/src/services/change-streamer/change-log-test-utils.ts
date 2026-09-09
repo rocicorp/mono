@@ -112,7 +112,7 @@ export async function createShardStorer(
     'task-id',
     'change-streamer:12345',
     'ws',
-    db,
+    () => db,
     REPLICA_VERSION,
     () => {},
     () => {},

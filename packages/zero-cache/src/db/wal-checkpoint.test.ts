@@ -116,4 +116,49 @@ describe('db/wal-checkpoint', () => {
       ).toEqual({busy: 0, log: 1, checkpointed: 1});
     },
   );
+
+  // Verifies the behavior of NOOP checkpoints.
+  test('noop checkpoints', () => {
+    const db = dbFile.connect(lc);
+    db.pragma('wal_autocheckpoint = 0');
+
+    expect(db.pragma('wal_checkpoint(NOOP)')).toMatchObject([
+      {busy: 0, checkpointed: 0, log: 0},
+    ]);
+    const insert = db.prepare('INSERT INTO foo(id) VALUES(?)');
+    for (let i = 10; i < 20; i++) {
+      insert.run(i);
+    }
+
+    expect(db.pragma('wal_checkpoint(NOOP)')).toMatchObject([
+      {busy: 0, checkpointed: 0, log: 10},
+    ]);
+
+    for (let i = 20; i < 100; i++) {
+      insert.run(i);
+    }
+
+    expect(db.pragma('wal_checkpoint(NOOP)')).toMatchObject([
+      {busy: 0, checkpointed: 0, log: 90},
+    ]);
+    expect(db.pragma('wal_checkpoint(NOOP)')).toMatchObject([
+      {busy: 0, checkpointed: 0, log: 90},
+    ]);
+    expect(db.pragma('wal_checkpoint(PASSIVE)')).toMatchObject([
+      {busy: 0, checkpointed: 90, log: 90},
+    ]);
+    expect(db.pragma('wal_checkpoint(PASSIVE)')).toMatchObject([
+      {busy: 0, checkpointed: 90, log: 90},
+    ]);
+    expect(db.pragma('wal_checkpoint(NOOP)')).toMatchObject([
+      {busy: 0, checkpointed: 90, log: 90},
+    ]);
+
+    for (let i = 100; i < 125; i++) {
+      insert.run(i);
+    }
+    expect(db.pragma('wal_checkpoint(NOOP)')).toMatchObject([
+      {busy: 0, checkpointed: 0, log: 25},
+    ]);
+  });
 });

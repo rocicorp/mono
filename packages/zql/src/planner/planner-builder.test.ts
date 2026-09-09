@@ -174,6 +174,38 @@ suite('buildPlanGraph', () => {
       expect(plans.plan.fanOuts).toHaveLength(1);
       expect(plans.plan.fanIns).toHaveLength(1);
       expect(plans.plan.joins).toHaveLength(1);
+      // Simple branch is now represented as a PlannerFilter so the cost
+      // model can see its per-branch filter in UFI mode.
+      expect(plans.plan.filters).toHaveLength(1);
+    });
+
+    test('OR with two simple branches and one CSQ creates two filters', () => {
+      const ast = getAST(
+        builder.users.where(({or, cmp, exists}) =>
+          or(cmp('admin', true), cmp('status', 'alice'), exists('posts')),
+        ),
+      );
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
+
+      expect(plans.plan.fanOuts).toHaveLength(1);
+      expect(plans.plan.fanIns).toHaveLength(1);
+      expect(plans.plan.joins).toHaveLength(1);
+      expect(plans.plan.filters).toHaveLength(2);
+    });
+
+    test('OR with only simple branches does NOT create filters', () => {
+      // No CSQ → planner skips the fan structure entirely; runtime
+      // collapses to a single Filter node.
+      const ast = getAST(
+        builder.users.where(({or, cmp}) =>
+          or(cmp('admin', true), cmp('status', 'alice')),
+        ),
+      );
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
+
+      expect(plans.plan.fanOuts).toHaveLength(0);
+      expect(plans.plan.fanIns).toHaveLength(0);
+      expect(plans.plan.filters).toHaveLength(0);
     });
 
     test('nested OR creates nested fan structures', () => {
@@ -579,17 +611,20 @@ suite('buildPlanGraph', () => {
 
       expect(plans.plan.joins).toHaveLength(3);
 
-      // First join (flip: true) should be flipped and not flippable
-      expect(plans.plan.joins[0].type).toBe('flipped');
+      // The joins are in the order of the normalized AST, which sorts the
+      // EXISTS conditions by alias: comments, likes, posts.
+
+      // comments (flip: false) should be semi and not flippable
+      expect(plans.plan.joins[0].type).toBe('semi');
       expect(plans.plan.joins[0].isFlippable()).toBe(false);
 
-      // Second join (flip: false) should be semi and not flippable
+      // likes (flip: undefined) should be semi and flippable
       expect(plans.plan.joins[1].type).toBe('semi');
-      expect(plans.plan.joins[1].isFlippable()).toBe(false);
+      expect(plans.plan.joins[1].isFlippable()).toBe(true);
 
-      // Third join (flip: undefined) should be semi and flippable
-      expect(plans.plan.joins[2].type).toBe('semi');
-      expect(plans.plan.joins[2].isFlippable()).toBe(true);
+      // posts (flip: true) should be flipped and not flippable
+      expect(plans.plan.joins[2].type).toBe('flipped');
+      expect(plans.plan.joins[2].isFlippable()).toBe(false);
     });
 
     test('reset() restores join to initial type', () => {
