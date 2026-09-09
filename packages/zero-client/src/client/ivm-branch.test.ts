@@ -17,7 +17,7 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
+import {consume, drainPull} from '../../../zql/src/ivm/stream.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {createDb} from './test/create-db.ts';
 
@@ -42,7 +42,7 @@ test('fork', () => {
   // Fork should have same initial data
   const fork = main.fork();
   const forkConnection = fork.getSource('users')!.connect([['id', 'asc']]);
-  expect([...forkConnection.fetch({})]).toMatchInlineSnapshot(`
+  expect(drainPull(forkConnection.fetch({}))).toMatchInlineSnapshot(`
     [
       {
         "relationships": {},
@@ -65,7 +65,7 @@ test('fork', () => {
   );
 
   // Verify main and fork evolved independently
-  expect([...mainConnection.fetch({})]).toMatchInlineSnapshot(`
+  expect(drainPull(mainConnection.fetch({}))).toMatchInlineSnapshot(`
     [
       {
         "relationships": {},
@@ -84,7 +84,7 @@ test('fork', () => {
     ]
   `);
 
-  expect([...forkConnection.fetch({})]).toMatchInlineSnapshot(`
+  expect(drainPull(forkConnection.fetch({}))).toMatchInlineSnapshot(`
     [
       {
         "relationships": {},
@@ -127,11 +127,13 @@ describe('advance', () => {
     );
     await initFromStore(branch, syncHash, dagStore);
 
-    expect([
-      ...must(branch.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
+    expect(
+      drainPull(
+        must(branch.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "relationships": {},
@@ -385,11 +387,13 @@ describe('advance', () => {
       const head = await w.commit(SYNC_HEAD_NAME);
 
       await branch.advance(syncHash, head, diffs);
-      expect([
-        ...must(branch.getSource('issue'))
-          .connect([['id', 'asc']])
-          .fetch({}),
-      ]).toEqual(expected);
+      expect(
+        drainPull(
+          must(branch.getSource('issue'))
+            .connect([['id', 'asc']])
+            .fetch({}),
+        ),
+      ).toEqual(expected);
     });
   });
 
@@ -475,11 +479,13 @@ describe('forkToHead', () => {
     );
     await initFromStore(branch, syncHash, dagStore);
     await branch.forkToHead(dagStore, syncHash);
-    expect([
-      ...must(branch.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
+    expect(
+      drainPull(
+        must(branch.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "relationships": {},
@@ -521,11 +527,13 @@ describe('forkToHead', () => {
     const head = await w.commit(SYNC_HEAD_NAME);
 
     const fork = await branch.forkToHead(dagStore, head);
-    expect([
-      ...must(fork.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
+    expect(
+      drainPull(
+        must(fork.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "relationships": {},
@@ -542,11 +550,13 @@ describe('forkToHead', () => {
 
     // can also re-wind the fork to the original head
     const fork2 = await fork.forkToHead(dagStore, syncHash);
-    expect([
-      ...must(fork2.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
+    expect(
+      drainPull(
+        must(fork2.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ),
+    ).toMatchInlineSnapshot(`
       []
     `);
   });
