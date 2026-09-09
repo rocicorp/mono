@@ -451,6 +451,7 @@ export async function setupTablesAndReplication(
   lc: LogContext,
   sql: PostgresTransaction,
   requested: ShardConfig,
+  includePartialIndexes = true,
 ) {
   const {publications} = requested;
   // Validate requested publications.
@@ -506,13 +507,14 @@ export async function setupTablesAndReplication(
   const pubs = await getPublicationInfo(sql, allPublications);
   await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(lc, sql);
 
-  await setupTriggers(lc, sql, shard);
+  await setupTriggers(lc, sql, shard, includePartialIndexes);
 }
 
 export async function setupTriggers(
   lc: LogContext,
   tx: PostgresTransaction,
   shard: ShardConfig,
+  includePartialIndexes = true,
 ) {
   const schema = upstreamSchema(shard);
   const [{ddlDetection}] = await tx<InternalShardConfig[]> /*sql*/ `
@@ -522,7 +524,7 @@ export async function setupTriggers(
   // event triggers are not supported/allowed by the db provider.
   // This allows users to manually invoke the update_schemas() function
   // as a workaround.
-  await tx.unsafe(createEventFunctionStatements(shard));
+  await tx.unsafe(createEventFunctionStatements(shard, includePartialIndexes));
   try {
     await tx.savepoint(sub => sub.unsafe(triggerSetup(shard)));
   } catch (e) {
@@ -589,7 +591,7 @@ export function replicaIdentitiesForTablesWithoutPrimaryKeys(
       // - UNIQUE
       // - NOT NULL columns
       // - not deferrable (i.e. isImmediate)
-      // - not partial (are already filtered out)
+      // - not partial
       //
       // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-REPLICA-IDENTITY
       const {schema, name: tableName} = table;
@@ -598,7 +600,8 @@ export function replicaIdentitiesForTablesWithoutPrimaryKeys(
           idx.schema === schema &&
           idx.tableName === tableName &&
           idx.unique &&
-          idx.isImmediate,
+          idx.isImmediate &&
+          idx.predicate === undefined,
       )) {
         if (Object.keys(columns).some(col => !table.columns[col].notNull)) {
           continue; // Only indexes with all NOT NULL columns are suitable.

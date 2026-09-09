@@ -1,5 +1,6 @@
 import {RWLock} from '@rocicorp/lock';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {Read, Store, Write} from './store.ts';
 import {
@@ -11,6 +12,13 @@ import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
 
 /**
  * A SQLite prepared statement.
+ *
+ * `SQLiteStore` prepares one statement per SQL and shares it across all
+ * concurrent readers, so implementations must make each call atomic with
+ * respect to other callers of the same statement: `all()` must not let another
+ * `exec()`/`all()` rebind or reset the underlying statement between executing
+ * it and fetching its rows. Delegates whose native API splits execute and fetch
+ * into separate round trips (e.g. expo-sqlite) must serialize per statement.
  */
 export interface PreparedStatement {
   exec(params: string[]): Promise<void>;
@@ -141,7 +149,58 @@ export type PreparedStatements = {
   getMany: PreparedStatement;
   put: PreparedStatement;
   del: PreparedStatement;
+  /** Multi-row INSERT with the values bound as parameters, n rows wide. */
+  putN: (n: number) => PreparedStatement;
+  /** Multi-key DELETE with the keys bound as parameters, n keys wide. */
+  delN: (n: number) => PreparedStatement;
 };
+
+/**
+ * Widest batch we bind in one statement. SQLite's SQLITE_MAX_VARIABLE_NUMBER is
+ * 32766, and a put costs two parameters per row, so this is far below the cap;
+ * it exists to bound how many distinct statements we prepare and cache.
+ */
+const MAX_BATCH = 128;
+
+/** `repeatList('?', 3)` -> `'?,?,?'`. */
+function repeatList(item: string, n: number): string {
+  return `${item},`.repeat(n).slice(0, -1);
+}
+
+/**
+ * Prepares (and caches) a statement of each width on demand. Callers only ever
+ * ask for powers of two, so the cache holds at most log2(MAX_BATCH)+1 entries
+ * however many rows a commit turns out to have.
+ */
+function batchStatements(
+  delegate: SQLiteDatabase,
+  sqlFor: (n: number) => string,
+): (n: number) => PreparedStatement {
+  const cache = new Map<number, PreparedStatement>();
+  return (n: number) =>
+    getOrInsertComputed(cache, n, () => delegate.prepare(sqlFor(n)));
+}
+
+/**
+ * Runs `items` through `getStatement` in power-of-two sized batches, so any
+ * length is covered by a handful of cached statement widths.
+ */
+async function execInBatches<T>(
+  items: readonly T[],
+  getStatement: (n: number) => PreparedStatement,
+  toParams: (item: T, out: string[]) => void,
+): Promise<void> {
+  for (let i = 0; i < items.length;) {
+    const remaining = Math.min(MAX_BATCH, items.length - i);
+    const n = 1 << (31 - Math.clz32(remaining));
+    const params: string[] = [];
+    for (let j = 0; j < n; j++) {
+      toParams(items[i + j], params);
+    }
+    await getStatement(n).exec(params);
+    i += n;
+  }
+}
 
 export interface SQLiteStoreOptions {
   // Common options
@@ -194,6 +253,15 @@ export function setupDatabase(
     ),
     del: delegate.prepare(
       `DELETE FROM entry WHERE key IN (SELECT value FROM json_each(?))`,
+    ),
+    putN: batchStatements(
+      delegate,
+      n =>
+        `INSERT OR REPLACE INTO entry (key, value) VALUES ${repeatList('(?,?)', n)}`,
+    ),
+    delN: batchStatements(
+      delegate,
+      n => `DELETE FROM entry WHERE key IN (${repeatList('?', n)})`,
     ),
   };
 }
@@ -404,15 +472,37 @@ export class SQLiteWrite extends WriteImplBase implements Write {
       }
     }
 
-    const delP =
-      deleteKeys.length > 0
-        ? this.#preparedStatements.del.exec([JSON.stringify(deleteKeys)])
-        : undefined;
+    // Bind real parameters rather than serializing the whole pending set into
+    // one JSON document for json_each() to parse back out. Serializing it, and
+    // pushing the resulting (often megabyte-scale) string across the native
+    // bridge, measured as roughly a quarter of persist on device.
+    //
+    // Puts and deletes use different statements over disjoint keys (deletes
+    // were removed from _pending above), so they overlap. The batches *within*
+    // each must not: the power-of-two split reuses a width when a commit is
+    // wide enough (300 rows -> 128, 128, 32, 8, 4), and running two of those
+    // concurrently would have two callers on one prepared statement — the
+    // rebind-during-execute hazard described in kv/expo-sqlite/store.ts, which
+    // op-sqlite has no per-statement lock to absorb.
     const putP =
       this._pending.size > 0
-        ? this.#preparedStatements.put.exec([
-            JSON.stringify([...this._pending]),
-          ])
+        ? execInBatches(
+            [...this._pending] as [string, ReadonlyJSONValue][],
+            this.#preparedStatements.putN,
+            ([key, value], out) => {
+              out.push(key, JSON.stringify(value));
+            },
+          )
+        : undefined;
+    const delP =
+      deleteKeys.length > 0
+        ? execInBatches(
+            deleteKeys,
+            this.#preparedStatements.delN,
+            (key, out) => {
+              out.push(key);
+            },
+          )
         : undefined;
 
     if (putP) await putP;

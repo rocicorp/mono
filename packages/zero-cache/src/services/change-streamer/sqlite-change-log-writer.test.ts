@@ -53,7 +53,11 @@ function resumeAt(
   return {resumeWatermark, cookies};
 }
 
-function setup(name: string, resumeWatermark = '02') {
+function setup(
+  name: string,
+  resumeWatermark = '02',
+  shadowValidationPercent = 100,
+) {
   const sink = new TestLogSink();
   const lc = new LogContext('debug', undefined, sink);
   const file = new DbFile(name);
@@ -68,6 +72,7 @@ function setup(name: string, resumeWatermark = '02') {
     onDisabled: () => disabled++,
     onRebuilt: () => rebuilt++,
     now: () => 1_700_000_000_000,
+    shadowValidationPercent,
   });
   writer.reconcile(resumeAt(resumeWatermark));
   return {
@@ -131,6 +136,24 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       headLag: 0,
       invariantFailures: 0,
       hashMatches: 2,
+      hashMismatches: 0,
+      hashUnpaired: 0,
+    });
+  });
+
+  test('can skip rollout-only shadow validation', () => {
+    using fixture = setup('change-log-writer-no-shadow-validation', '02', 0);
+
+    transaction(fixture.writer, '04', [
+      'data',
+      messages.insert('foo', {id: 'one'}),
+    ]);
+
+    expect(fixture.head()).toBe('04');
+    expect(fixture.writer.state()).toMatchObject({
+      sqliteHead: '04',
+      receivedHead: '04',
+      hashMatches: 0,
       hashMismatches: 0,
       hashUnpaired: 0,
     });

@@ -264,7 +264,7 @@ describe('zero-cache/backfill throughput', () => {
         for (const request of requests) {
           let sample: BackfillSample | undefined;
           const start = performance.now();
-          for await (const message of streamBackfill(
+          for await (const {message} of streamBackfill(
             lc,
             getConnectionURI(upstream),
             {

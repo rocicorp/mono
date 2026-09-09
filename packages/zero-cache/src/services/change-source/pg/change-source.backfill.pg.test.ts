@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {literal} from 'pg-format';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {
   BigIntJSON,
@@ -23,8 +24,32 @@ import type {
   ChangeStreamMessage,
 } from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
+import {TAGS} from './schema/ddl.ts';
 
 const APP_ID = 'bf';
+
+// Simulates the Supabase environment, which does not fire event triggers for
+// `ALTER PUBLICATION` commands (https://github.com/supabase/supautils/issues/123),
+// by recreating the shard's event triggers with `ALTER PUBLICATION` removed
+// from the tag list. All other tags (CREATE TABLE, COMMENT, etc.) still fire.
+function removeAlterPublication(tags: readonly string[]) {
+  return tags.filter(tag => tag !== 'ALTER PUBLICATION');
+}
+
+const DISABLE_ALTER_PUBLICATION_TRIGGER = /*sql*/ `
+  DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
+  DROP EVENT TRIGGER ${APP_ID}_ddl_end_0;
+
+  CREATE EVENT TRIGGER ${APP_ID}_ddl_start_0
+    ON ddl_command_start
+    WHEN TAG IN (${literal(removeAlterPublication(TAGS))})
+    EXECUTE PROCEDURE ${APP_ID}_0.emit_ddl_start();
+
+  CREATE EVENT TRIGGER ${APP_ID}_ddl_end_0
+    ON ddl_command_end
+    WHEN TAG IN (${literal(removeAlterPublication([...TAGS, 'COMMENT']))})
+    EXECUTE PROCEDURE ${APP_ID}_0.emit_ddl_end();
+`;
 const PG_15_UP = 150000;
 const PG_18_UP = 180000;
 
@@ -786,6 +811,96 @@ describe.each([
           name: 'published.late_pk',
           columns: {
             id: {dataType: 'text|NOT_NULL', pos: 1},
+          },
+        },
+      ],
+    ],
+    [
+      // Repro for a Supabase bug: because Supabase does not fire event
+      // triggers for `ALTER PUBLICATION`, the schema change is detected via
+      // the `COMMENT ON PUBLICATION` hook (emitted as a `schemaSnapshot`
+      // event). If a `CREATE TABLE` immediately precedes the publish (in a
+      // *separate* transaction), the stale `CREATE TABLE` ddlStart event must
+      // not be misattributed as the command tag for the schemaSnapshot --
+      // otherwise the newly published table is treated as a freshly `CREATE`d
+      // table and (incorrectly) skips backfill of its pre-existing rows.
+      'supabase: CREATE TABLE, then ALTER PUBLICATION + COMMENT hook',
+      PG_15_UP,
+      // First transaction: create and seed the table. The CREATE TABLE fires
+      // a `CREATE TABLE` ddlStart event which lingers as the last-seen event.
+      // (The table is not yet published, so the seeded rows are "pre-existing"
+      // and must be backfilled once the table is added to the publication.)
+      /*sql*/ `
+      ${DISABLE_ALTER_PUBLICATION_TRIGGER}
+
+      CREATE TABLE drill (
+        id INT PRIMARY KEY,
+        num INT
+      );
+
+      INSERT INTO drill (id, num) SELECT g, g FROM generate_series(1, 3) g;
+      `,
+      // Second (separate) transaction: the publish. The ALTER PUBLICATION
+      // fires no event trigger (Supabase); the trailing COMMENT ON PUBLICATION
+      // is the hook that emits the schemaSnapshot. The stale CREATE TABLE
+      // ddlStart from the previous transaction must not be misattributed here.
+      /*sql*/ `
+      ALTER PUBLICATION published_tables ADD TABLE drill (id, num);
+      COMMENT ON PUBLICATION published_tables IS 'drill fingerprint test';
+      `,
+      {
+        ['drill']: [
+          {id: 1n, num: 1n},
+          {id: 2n, num: 2n},
+          {id: 3n, num: 3n},
+        ],
+      },
+      [
+        {
+          name: 'drill',
+          columns: {
+            id: {dataType: 'int4|NOT_NULL', pos: 1},
+            num: {dataType: 'int4', pos: 2},
+          },
+        },
+      ],
+    ],
+    [
+      // Same as above, but with the CREATE TABLE, the seeding, and the
+      // publish (ALTER PUBLICATION + COMMENT hook) all in a *single*
+      // transaction. Here there is no commit boundary between the stale
+      // CREATE TABLE ddlStart and the schemaSnapshot, so a `schemaSnapshot`
+      // must never adopt a preceding ddlStart's command tag -- it is a
+      // standalone hook that must always backfill newly published tables.
+      'supabase: CREATE TABLE + ALTER PUBLICATION + COMMENT in one txn',
+      PG_15_UP,
+      /*sql*/ `
+      ${DISABLE_ALTER_PUBLICATION_TRIGGER}
+
+      CREATE TABLE drill2 (
+        id INT PRIMARY KEY,
+        num INT
+      );
+
+      INSERT INTO drill2 (id, num) SELECT g, g FROM generate_series(1, 3) g;
+
+      ALTER PUBLICATION published_tables ADD TABLE drill2 (id, num);
+      COMMENT ON PUBLICATION published_tables IS 'drill2 fingerprint test';
+      `,
+      null,
+      {
+        ['drill2']: [
+          {id: 1n, num: 1n},
+          {id: 2n, num: 2n},
+          {id: 3n, num: 3n},
+        ],
+      },
+      [
+        {
+          name: 'drill2',
+          columns: {
+            id: {dataType: 'int4|NOT_NULL', pos: 1},
+            num: {dataType: 'int4', pos: 2},
           },
         },
       ],

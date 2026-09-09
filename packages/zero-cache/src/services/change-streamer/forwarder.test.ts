@@ -1,6 +1,11 @@
+import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test, vi} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
+import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {StreamTooFarBehind} from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
@@ -355,8 +360,9 @@ describe('change-streamer/forwarder', () => {
     function addSubscriber(
       forwarder: Forwarder,
       stats: {processRate: number; missedLastTimeout: boolean},
+      mode: ReplicatorMode = 'serving',
     ) {
-      const [sub] = createSubscriber('00', true);
+      const [sub] = createSubscriber('00', true, {}, mode);
       vi.spyOn(sub, 'getStats').mockReturnValue({
         processRate: stats.processRate,
         pending: 0,
@@ -420,6 +426,100 @@ describe('change-streamer/forwarder', () => {
       forwarder.checkSubscriberProgress(5000);
       forwarder.checkSubscriberProgress(60_000);
       expect(catchingUp.close).not.toHaveBeenCalled();
+    });
+
+    test('a lagging backup subscriber is never disconnected (fail-safe)', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      // A backup-replicator that is genuinely lagging (slower than the healthy
+      // baseline, timing out). Disconnecting it would shut down the whole
+      // replication-manager, so the forwarder must never close it even long
+      // after the grace period has elapsed.
+      const backup = addSubscriber(
+        forwarder,
+        {processRate: 1, missedLastTimeout: true},
+        'backup',
+      );
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(2000);
+      forwarder.checkSubscriberProgress(60_000);
+      expect(backup.close).not.toHaveBeenCalled();
+    });
+
+    test('a lagging backup does not shield a lagging serving replica', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      const backup = addSubscriber(
+        forwarder,
+        {processRate: 1, missedLastTimeout: true},
+        'backup',
+      );
+      const serving = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(1500);
+      forwarder.checkSubscriberProgress(2000);
+
+      // The serving replica is still disconnected on its own merits; only the
+      // backup is exempt.
+      expect(serving.close).toHaveBeenCalledWith(
+        StreamTooFarBehind,
+        expect.stringContaining('lagging'),
+      );
+      expect(backup.close).not.toHaveBeenCalled();
+    });
+
+    test('backup lag warnings are throttled to once per grace period and report a running total', () => {
+      const logSink = new TestLogSink();
+      const forwarder = new Forwarder(
+        new LogContext('warn', undefined, logSink),
+        {
+          flowControlConsensusTimeoutProportion: 2,
+          flowControlSlowSubscriberGracePeriodMs: 1000,
+        },
+      );
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      addSubscriber(
+        forwarder,
+        {processRate: 1, missedLastTimeout: true},
+        'backup',
+      );
+
+      const backupWarnings = () =>
+        logSink.messages
+          .map(([, , args]) => String(args[0]))
+          .filter(msg => msg.startsWith('backup subscriber'));
+
+      // t=1000 seeds the lagging clock (laggingDuration 0, below the grace
+      // period), so no event yet.
+      forwarder.checkSubscriberProgress(1000);
+      expect(backupWarnings()).toHaveLength(0);
+
+      // t=2000 crosses the grace period: the first event is warned immediately.
+      forwarder.checkSubscriberProgress(2000);
+      // t=2400/2800 are within a grace period of the last warning: counted but
+      // suppressed.
+      forwarder.checkSubscriberProgress(2400);
+      forwarder.checkSubscriberProgress(2800);
+      expect(backupWarnings()).toHaveLength(1);
+      expect(backupWarnings()[0]).toContain('1 lag events so far');
+
+      // t=3000 is a full grace period after the first warning: warned again,
+      // now reporting the accumulated total.
+      forwarder.checkSubscriberProgress(3000);
+      const warnings = backupWarnings();
+      expect(warnings).toHaveLength(2);
+      expect(warnings[1]).toContain('4 lag events so far');
     });
 
     test('recovering before the grace period elapses avoids disconnection', () => {

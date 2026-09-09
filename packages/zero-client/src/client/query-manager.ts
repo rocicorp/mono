@@ -328,6 +328,7 @@ export class QueryManager implements InspectorDelegate {
     return this.#add(queryId, normalized, name, args, ttl, gotCallback);
   }
 
+  /** @deprecated */
   addLegacy(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
@@ -418,6 +419,7 @@ export class QueryManager implements InspectorDelegate {
     this.#updateEntry(entry, queryID, ttl);
   }
 
+  /** @deprecated */
   updateLegacy(ast: AST, ttl: TTL) {
     const normalized = normalizeAST(ast);
     const queryID = hashOfAST(normalized);

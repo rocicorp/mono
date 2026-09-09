@@ -14,6 +14,26 @@ export type PragmaConfig = {
   walAutocheckpoint?: number | undefined;
 };
 
+/**
+ * Enables write-path checkpoint backpressure in the write worker. At each
+ * commit boundary, if the WAL has grown to at least `checkpointThresholdPages`,
+ * the worker forces an immediate litestream sync (sealing the WAL to LTX and
+ * running litestream's checkpoint).
+ *
+ * The optional `walMaxPages` is an emergency break that pauses until the WAL drains,
+ * rather than letting it exceed available disk space. This replaces litestream's
+ * analogous `truncate-page-n` emergency break, which is more disruptive because of
+ * https://github.com/benbjohnson/litestream/issues/1332. Note, however, this should
+ * never been needed if non-initial snapshots are disabled (which is the default).
+ *
+ * Set only for the backup replicator when replicating with litestream v5; `null`
+ * disables the feature entirely (no per-commit overhead).
+ */
+export type ForceCheckpointConfig = {
+  checkpointThresholdPages: number;
+  maxWalPages?: number | undefined;
+};
+
 type ErrorHandler = (err: Error) => void;
 
 /**
@@ -21,7 +41,9 @@ type ErrorHandler = (err: Error) => void;
  */
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
-  processMessage(downstream: ChangeStreamData): Promise<CommitResult | null>;
+  processMessages(
+    downstream: readonly ChangeStreamData[],
+  ): Promise<CommitResult | null>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
@@ -87,9 +109,15 @@ export function deserializeError(serialized: SerializedError): Error {
 
 // Wire protocol types.
 export type ArgsMap = {
-  init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
+  init: [
+    string,
+    ChangeProcessorMode,
+    PragmaConfig,
+    LogConfig,
+    ForceCheckpointConfig | null,
+  ];
   getSubscriptionState: [];
-  processMessage: [ChangeStreamData];
+  processMessages: [readonly ChangeStreamData[]];
   abort: [];
   stop: [];
 };
@@ -101,7 +129,7 @@ export type Request<M extends Method = Method> = {method: M; args: ArgsMap[M]};
 export type ResultMap = {
   init: void;
   getSubscriptionState: SubscriptionState;
-  processMessage: CommitResult | null;
+  processMessages: CommitResult | null;
   abort: void;
   stop: void;
 };
@@ -186,16 +214,19 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     mode: ChangeProcessorMode,
     pragmas: PragmaConfig,
     logConfig: LogConfig,
+    checkpoint: ForceCheckpointConfig | null = null,
   ): Promise<void> {
-    return this.#call('init', [dbPath, mode, pragmas, logConfig]);
+    return this.#call('init', [dbPath, mode, pragmas, logConfig, checkpoint]);
   }
 
   getSubscriptionState(): Promise<SubscriptionState> {
     return this.#call('getSubscriptionState', []);
   }
 
-  processMessage(downstream: ChangeStreamData): Promise<CommitResult | null> {
-    return this.#call('processMessage', [downstream]);
+  processMessages(
+    downstream: readonly ChangeStreamData[],
+  ): Promise<CommitResult | null> {
+    return this.#call('processMessages', [downstream]);
   }
 
   abort(): void {

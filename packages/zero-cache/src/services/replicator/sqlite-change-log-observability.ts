@@ -240,12 +240,12 @@ export class SQLiteChangeLogObserver {
   readonly #messageProcessing = getOrCreateLatencyHistogram(
     'replica',
     'sqlite_change_log.message_processing_duration',
-    'Time to write a replication message to the SQLite change log.',
+    'Sampled time to write a replication message to the SQLite change log.',
   );
   // The commit that sits on the forward path. There is no second commit to
   // order against any more: the replica's belongs to a subscriber downstream of
   // this loop, so `sqlite_change_log.replica_commit_duration` and the phantom
-  // window it measured are gone. A failed commit is still timed, by
+  // window it measured are gone. Sampled failed commits are still timed by
   // `message_processing_duration` keyed `tag="commit"`.
   readonly #logCommitDuration = getOrCreateLatencyHistogram(
     'replica',
@@ -276,7 +276,7 @@ export class SQLiteChangeLogObserver {
   readonly #hashComparisonCounter = getOrCreateCounter(
     'replica',
     'sqlite_change_log.hash_comparisons',
-    'Ephemeral transaction hash comparisons between the received change stream and SQLite change-log writes.',
+    'Sampled ephemeral transaction hash comparisons between the received change stream and SQLite change-log writes.',
   );
   readonly #hashUnpairedCounter = getOrCreateCounter(
     'replica',
@@ -361,11 +361,16 @@ export class SQLiteChangeLogObserver {
   }
 
   /**
-   * Called as each message arrives, before it is written. Hashes the *received*
-   * stream, which is compared against the hash the writer computes over what it
-   * *stored*.
+   * Called as each message arrives, before it is written. For a sampled
+   * transaction, hashes the *received* stream and compares it with the hash the
+   * writer computes over what it *stored*.
    */
-  messageReceived(data: ChangeStreamData, json: string): void {
+  messageReceived(
+    data: ChangeStreamData,
+    json: string,
+    validateHash = true,
+    storedChange = extractChangeSubstring(json, data[1].tag),
+  ): void {
     const tag = data[1].tag;
     if (data[0] === 'begin') {
       if (this.#sourceHasher !== undefined) {
@@ -375,14 +380,16 @@ export class SQLiteChangeLogObserver {
         );
       }
       const watermark = data[2].commitWatermark;
-      this.#sourceHasher = new ChangeLogTransactionHasher();
+      this.#sourceHasher = validateHash
+        ? new ChangeLogTransactionHasher()
+        : undefined;
       this.#sourcePos = 0;
       this.#sourceCommitHash = undefined;
-      this.#sourceHasher.add({
+      this.#sourceHasher?.add({
         watermark,
         pos: this.#sourcePos,
         tag,
-        change: extractChangeSubstring(json, tag),
+        change: storedChange,
         precommit: null,
       });
       return;
@@ -395,6 +402,10 @@ export class SQLiteChangeLogObserver {
 
     if (data[0] === 'commit') {
       this.#receivedHead = data[2].watermark;
+    }
+
+    if (!validateHash) {
+      return;
     }
 
     const watermark = this.#transactionWatermark;
@@ -412,7 +423,7 @@ export class SQLiteChangeLogObserver {
       watermark: commitWatermark,
       pos: ++this.#sourcePos,
       tag,
-      change: extractChangeSubstring(json, tag),
+      change: storedChange,
       precommit: data[0] === 'commit' ? watermark : null,
     });
     if (data[0] === 'commit') {
@@ -425,10 +436,12 @@ export class SQLiteChangeLogObserver {
   messageProcessed(
     data: ChangeStreamData,
     commit: ChangeLogCommit | null,
-    durationMs: number,
+    durationMs: number | undefined,
   ): void {
     const tag = data[1].tag;
-    this.#messageProcessing.recordMs(durationMs, {tag, outcome: 'success'});
+    if (durationMs !== undefined) {
+      this.#messageProcessing.recordMs(durationMs, {tag, outcome: 'success'});
+    }
 
     if (data[0] === 'begin') {
       if (this.#transactionWatermark !== undefined) {
@@ -478,7 +491,16 @@ export class SQLiteChangeLogObserver {
       this.#rows += commit.stats.rows;
       this.#estimatedBytes += commit.stats.estimatedBytes;
       this.#transactionRows.record(commit.stats.rows);
-      this.#compareHashes(watermark, this.#sourceCommitHash, commit.stats.hash);
+      if (
+        this.#sourceCommitHash !== undefined ||
+        commit.stats.hash !== undefined
+      ) {
+        this.#compareHashes(
+          watermark,
+          this.#sourceCommitHash,
+          commit.stats.hash,
+        );
+      }
     }
     if (watermark < this.#sqliteHead) {
       this.#invariantFailure('SQLite change-log head regressed', {
@@ -494,11 +516,13 @@ export class SQLiteChangeLogObserver {
   messageFailed(
     data: ChangeStreamData,
     error: unknown,
-    durationMs: number,
+    durationMs: number | undefined,
   ): void {
     const tag = data[1].tag;
-    this.#messageProcessing.recordMs(durationMs, {tag, outcome: 'error'});
-    if (data[0] === 'commit') {
+    if (durationMs !== undefined) {
+      this.#messageProcessing.recordMs(durationMs, {tag, outcome: 'error'});
+    }
+    if (data[0] === 'commit' && this.#sourceCommitHash !== undefined) {
       // No commit duration here: a failed commit produces no statistics, so
       // there is nothing to attribute. The attempt is timed by
       // `message_processing_duration{tag="commit",outcome="error"}` above.
@@ -593,10 +617,14 @@ export class SQLiteChangeLogObserver {
   #compareHashes(
     watermark: string,
     sourceHash: string | undefined,
-    sqliteHash: string,
+    sqliteHash: string | undefined,
   ): void {
     if (sourceHash === undefined) {
       this.#recordUnpaired(watermark, 'missing-source-hash');
+      return;
+    }
+    if (sqliteHash === undefined) {
+      this.#recordUnpaired(watermark, 'missing-sqlite-hash');
       return;
     }
     if (sourceHash === sqliteHash) {
