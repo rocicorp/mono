@@ -81,6 +81,9 @@ describe('mutagen/MutagenService', () => {
     await service.run();
 
     expect(closeSpy).toHaveBeenCalledTimes(1);
+    // The replicator maintains the replica's statistics, so the per-client-group
+    // handle must not run PRAGMA optimize on close.
+    expect(closeSpy).toHaveBeenCalledWith({optimize: false});
   });
 
   test('replica stays open while a push holds a ref', async () => {
