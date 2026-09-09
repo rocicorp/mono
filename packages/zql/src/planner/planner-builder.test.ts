@@ -1,7 +1,7 @@
 import {expect, suite, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {AST, Condition} from '../../../zero-protocol/src/ast.ts';
 import {asQueryInternals} from '../query/query-internals.ts';
 import type {AnyQuery} from '../query/query.ts';
 import {buildPlanGraph, planQuery} from './planner-builder.ts';
@@ -662,6 +662,19 @@ suite('planQuery purity', () => {
     return found;
   }
 
+  function flipsInPlanOrder(condition: Condition): boolean[] {
+    if (condition.type === 'simple') {
+      return [];
+    }
+    if (condition.type === 'correlatedSubquery') {
+      const {where} = condition.related.subquery;
+      // The planner numbers a correlated subquery after the conditions of its
+      // own subquery, so follow the same post-order walk.
+      return [...(where ? flipsInPlanOrder(where) : []), must(condition.flip)];
+    }
+    return condition.conditions.flatMap(flipsInPlanOrder);
+  }
+
   test('leaves the input AST untouched, including symbol keys', () => {
     const ast = getAST(query);
     const before = JSON.stringify(ast);
@@ -682,23 +695,7 @@ suite('planQuery purity', () => {
     const where = must(planned.where);
     assert(where.type === 'and', 'expected a conjunction');
 
-    // The planner numbers a correlated subquery after the conditions of its
-    // own subquery, so `posts.user` is join 0, `posts` is join 1, and
-    // `comments` is join 2.
-    const posts = where.conditions[0];
-    assert(posts.type === 'correlatedSubquery', 'expected the posts EXISTS');
-    const postsUser = must(posts.related.subquery.where);
-    assert(
-      postsUser.type === 'correlatedSubquery',
-      'expected the posts.user EXISTS',
-    );
-    const comments = where.conditions[1];
-    assert(
-      comments.type === 'correlatedSubquery',
-      'expected the comments EXISTS',
-    );
-
-    expect([postsUser.flip, posts.flip, comments.flip]).toEqual(
+    expect(flipsInPlanOrder(where)).toEqual(
       plans.plan.joins.map(j => j.type === 'flipped'),
     );
   });
