@@ -882,6 +882,11 @@ export class Storer implements Service {
       );
     } catch (e) {
       subs.map(({subscriber}) => subscriber.fail(e));
+      // Nothing will run the catchup tasks that normally finalize the pool
+      // (below), so tear it down here. Otherwise its workers (each holding an
+      // open READ ONLY transaction) and the connection pool are leaked.
+      reader.abort();
+      void catchupConns.end().catch(() => {});
       throw e;
     } finally {
       catchupSnapshotted();
