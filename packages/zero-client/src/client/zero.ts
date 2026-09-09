@@ -1793,7 +1793,7 @@ export class Zero<
     // The run loop has already stopped waiting for this attempt if it was
     // canceled. Do not let setup that completed late create a socket.
     if (signal.aborted) {
-      throw attempt.abortReason ?? signal.reason;
+      throw attempt.abortReason;
     }
 
     const [ws, initConnectionQueries, deletedClients] = await createSocket(
@@ -1826,7 +1826,7 @@ export class Zero<
     // still belongs to this attempt and must be closed.
     if (signal.aborted) {
       ws.close();
-      throw attempt.abortReason ?? signal.reason;
+      throw attempt.abortReason;
     }
 
     if (this.closed) {
@@ -1855,7 +1855,7 @@ export class Zero<
     attempt.clearTimeout = this.#armConnectTimeout(lc, attempt, 'ack');
     await attempt.connected.promise;
     if (signal.aborted) {
-      throw attempt.abortReason ?? signal.reason;
+      throw attempt.abortReason;
     }
     this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
     // push any outstanding mutations on reconnect.
@@ -1931,7 +1931,7 @@ export class Zero<
       // ConnectAttemptControl.abortReason for why signal.reason alone is not
       // sufficient on every runtime.
       attempt.abortReason = reason;
-      attempt.controller.abort(reason);
+      attempt.controller.abort();
     }
 
     if (shouldReportConnectError(reason)) {
@@ -2256,10 +2256,7 @@ export class Zero<
               'setup',
             );
             const canceled = resolver<never>();
-            const abortHandler = () =>
-              canceled.reject(
-                attempt.abortReason ?? attempt.controller.signal.reason,
-              );
+            const abortHandler = () => canceled.reject(attempt.abortReason);
             attempt.controller.signal.addEventListener('abort', abortHandler, {
               once: true,
             });
