@@ -167,6 +167,15 @@ describe('view-syncer/service', () => {
     ]);
   });
 
+  test('inspector authentication is cleared when the view-syncer shuts down', async () => {
+    expect(delegate.isAuthenticated(serviceID)).toBe(true);
+
+    await vs.stop();
+    await viewSyncerDone;
+
+    expect(delegate.isAuthenticated(serviceID)).toBe(false);
+  });
+
   test('inspect queries sharing a transformationHash have metrics per query id', async () => {
     const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},

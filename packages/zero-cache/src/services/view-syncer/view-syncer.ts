@@ -3499,6 +3499,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // after cleanup; a destroyed transformer is safe to use (it just stops
     // caching and never restarts its cleanup interval).
     this.#customQueryTransformer?.destroy();
+    // Inspector authentication is tracked per client group in a set that
+    // outlives this service. Release this client group's entry so that the
+    // set does not grow with every client group ever served by the worker.
+    this.#inspectorDelegate.clearAuthenticated(this.id);
 
     for (const client of this.#clients.values()) {
       if (err) {
