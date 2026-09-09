@@ -14,6 +14,7 @@ import {getPublicationInfo} from './published.ts';
 import {
   createReplica,
   initReplica,
+  replicaIdentitiesForTablesWithoutPrimaryKeys,
   setupTablesAndReplication,
   setupTriggers,
   validatePublicationName,
@@ -148,6 +149,32 @@ describe('change-source/pg', () => {
 
     const index = pubs.indexes.find(idx => idx.name === 'join_key');
     expect(index?.isReplicaIdentity).toBe(true);
+  });
+
+  test('partial index is not selected as replica identity', async () => {
+    await db.unsafe(`
+      CREATE TABLE identity_test(id TEXT NOT NULL, active BOOLEAN NOT NULL);
+      CREATE UNIQUE INDEX partial_key ON identity_test (id)
+        WHERE active = true;
+      CREATE UNIQUE INDEX full_key ON identity_test (id);
+      CREATE PUBLICATION zero_identity_test FOR TABLE identity_test;
+    `);
+
+    const pubs = await getPublicationInfo(db, ['zero_identity_test']);
+    const partialFirst = pubs.indexes.toSorted((a, b) =>
+      a.predicate === undefined ? 1 : b.predicate === undefined ? -1 : 0,
+    );
+    await replicaIdentitiesForTablesWithoutPrimaryKeys({
+      ...pubs,
+      indexes: partialFirst,
+    })?.apply(lc, db);
+
+    const updated = await getPublicationInfo(db, ['zero_identity_test']);
+    expect(
+      updated.indexes
+        .filter(index => index.isReplicaIdentity)
+        .map(index => index.name),
+    ).toEqual(['full_key']);
   });
 
   test('numeric app ID', async () => {

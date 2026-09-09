@@ -1,5 +1,6 @@
 import {assertValidLiteColumnSpec} from '../types/lite.ts';
 import {id, idList} from '../types/sql.ts';
+import {liteIndexPredicateSQL} from './index-predicate.ts';
 import type {ColumnSpec, LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
 /**
@@ -42,8 +43,15 @@ export function createLiteIndexStatement(index: LiteIndexSpec): string {
   const columns = Object.entries(index.columns)
     .map(([name, dir]) => `${id(name)} ${dir}`)
     .join(',');
-  const unique = index.unique ? 'UNIQUE' : '';
+  // Partial indexes are never unique on the replica. Their uniqueness is
+  // not needed (a partial index cannot serve as a row key), and a UNIQUE
+  // partial index would turn any divergence between PostgreSQL's and
+  // SQLite's evaluation of the predicate into a replication failure.
+  const unique = index.unique && !index.predicate ? 'UNIQUE' : '';
+  const predicate = index.predicate
+    ? ` WHERE ${liteIndexPredicateSQL(index.predicate)}`
+    : '';
   return `CREATE ${unique} INDEX ${id(index.name)} ON ${id(
     index.tableName,
-  )} (${columns});`;
+  )} (${columns})${predicate};`;
 }

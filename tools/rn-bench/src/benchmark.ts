@@ -28,6 +28,7 @@ export async function runBenchmark(
   const minTime = 500;
   const maxTotalTime = 5000;
   const times: number[] = [];
+  /** Total measured time so far; the loop below runs until it hits minTime. */
   let sum = 0;
 
   if (benchmark.skip && (await benchmark.skip())) {
@@ -50,13 +51,15 @@ export async function runBenchmark(
         let t1 = 0;
         let subtracted = 0;
         const reset = () => {
-          performance.mark('mark-' + i);
+          // performance.mark/measure are not available on all React Native
+          // JS engines; performance.now() is.
+          performance.mark?.('mark-' + i);
           t0 = performance.now();
           subtracted = 0;
         };
         const stop = () => {
           t1 = performance.now();
-          performance.measure(benchmark.name, 'mark-' + i);
+          performance.measure?.(benchmark.name, 'mark-' + i);
         };
         const subtract = (n: number) => {
           subtracted += n;
@@ -86,19 +89,25 @@ export async function runBenchmark(
   }
 
   times.sort((a, b) => a - b);
-  // Remove two slowest. Treat them as JIT warmup.
-  times.splice(0, 2);
+  // Remove the two slowest, treating them as JIT warmup. `times` is sorted
+  // ascending, so that is the tail -- `splice(0, 2)` dropped the two *fastest*
+  // instead, which can only bias every statistic upward.
+  times.splice(-2);
   const calcPercentile = (percentile: number): number =>
     times[Math.floor((runCount * percentile) / 100)];
   const runCount = times.length;
   const medianMs = calcPercentile(50);
+  // Sum the samples that survived the discard above. `sum` accumulated every
+  // run, so dividing it by the post-discard `runCount` reported a mean that
+  // was not the mean of anything -- it came out above p95 on every benchmark.
+  const retainedSum = times.reduce((a, b) => a + b, 0);
   return {
     name: benchmark.name,
     group: benchmark.group,
     byteSize: benchmark.byteSize,
     sortedRunTimesMs: times,
     runTimesStatistics: {
-      meanMs: sum / runCount,
+      meanMs: retainedSum / runCount,
       medianMs,
       p75Ms: calcPercentile(75),
       p90Ms: calcPercentile(90),

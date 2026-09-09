@@ -1,5 +1,6 @@
 import {
   boolean,
+  createBuilder,
   createSchema,
   json,
   number,
@@ -318,5 +319,6 @@ export const schema = createSchema({
     relContactRelationships,
     relActivityRelationships,
   ],
-  enableLegacyQueries: true,
 });
+
+export const builder = createBuilder(schema);

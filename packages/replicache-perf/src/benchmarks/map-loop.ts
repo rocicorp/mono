@@ -1,4 +1,4 @@
-import type {Benchmark} from '../benchmark.ts';
+import type {Benchmark} from '../../../../tools/rn-bench/src/benchmark.ts';
 
 export function benchmarks(): Array<Benchmark> {
   return [forLoop(), forEach()];

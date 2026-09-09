@@ -72,13 +72,7 @@ describe('write-worker', () => {
       ['commit', issues.commit(), {watermark: '06'}],
     ];
 
-    let commitResult = null;
-    for (let i = 0; i < messages.length; i++) {
-      const result = await worker.processMessage(messages[i]);
-      if (result) {
-        commitResult = result;
-      }
-    }
+    const commitResult = await worker.processMessages(messages);
 
     expect(commitResult).toEqual({
       watermark: '06',
@@ -107,13 +101,11 @@ describe('write-worker', () => {
   // to their own inode.
   test('the write worker never creates a change log', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
-    for (const message of [
+    await worker.processMessages([
       ['begin', issues.begin(), {commitWatermark: '06'}],
       ['data', issues.insert('issues', {issueID: 1, bool: true})],
       ['commit', issues.commit(), {watermark: '06'}],
-    ] satisfies ChangeStreamData[]) {
-      await worker.processMessage(message);
-    }
+    ] satisfies ChangeStreamData[]);
 
     expect(existsSync(changeLogFileName(dbFile.path))).toBe(false);
   });
@@ -122,14 +114,9 @@ describe('write-worker', () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 
     // Start a transaction but don't commit
-    await worker.processMessage([
-      'begin',
-      issues.begin(),
-      {commitWatermark: '06'},
-    ]);
-    await worker.processMessage([
-      'data',
-      issues.insert('issues', {issueID: 123, bool: true}),
+    await worker.processMessages([
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 123, bool: true})],
     ]);
 
     // Abort should roll back
@@ -146,9 +133,7 @@ describe('write-worker', () => {
       ['commit', issues.commit(), {watermark: '07'}],
     ];
 
-    for (let i = 0; i < messages.length; i++) {
-      await worker.processMessage(messages[i]);
-    }
+    await worker.processMessages(messages);
 
     const rowsAfter = mainDb.prepare('SELECT issueID FROM issues').all();
     expect(rowsAfter).toEqual([{issueID: 789}]);
@@ -171,19 +156,21 @@ describe('write-worker', () => {
       errorReceived = err;
     });
 
-    // Send a processMessage without a begin - should cause a failure
+    // Send a processMessages without a begin - should cause a failure
     await expect(
-      worker.processMessage([
-        'data',
-        {
-          tag: 'insert',
-          relation: {
-            schema: 'public',
-            name: 'nonexistent',
-            rowKey: {columns: ['id'], type: 'default'},
+      worker.processMessages([
+        [
+          'data',
+          {
+            tag: 'insert',
+            relation: {
+              schema: 'public',
+              name: 'nonexistent',
+              rowKey: {columns: ['id'], type: 'default'},
+            },
+            new: {id: [1, 'int4']},
           },
-          new: {id: [1, 'int4']},
-        },
+        ],
       ]),
     ).rejects.toThrow();
 
@@ -207,9 +194,9 @@ describe('write-worker', () => {
       },
     ];
     const request = {
-      method: 'processMessage',
-      args: [data],
-    } satisfies Request<'processMessage'>;
+      method: 'processMessages',
+      args: [[data]],
+    } satisfies Request<'processMessages'>;
     const echoWorker = new Worker(
       /*js*/ `
         const {parentPort} = require('node:worker_threads');
@@ -224,7 +211,7 @@ describe('write-worker', () => {
       const [roundTripped] = (await response) as [typeof request];
 
       expect(roundTripped).toEqual(request);
-      expect(roundTripped.args[0][1]).toMatchObject({
+      expect(roundTripped.args[0][0][1]).toMatchObject({
         new: {issueID: 9007199254740993n, text: 'before\0after'},
       });
     } finally {

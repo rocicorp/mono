@@ -27,9 +27,27 @@ function tableKey({schema, name}: Identifier) {
   return `${schema}.${name}`;
 }
 
+/**
+ * A {@link MessageBackfill} or {@link BackfillCompleted} paired with the
+ * approximate number of upstream bytes it represents. The BackfillManager uses
+ * `byteSize` to bound the size of each replica transaction, committing and
+ * reopening once {@link COMMIT_THRESHOLD_BYTES} is reached.
+ */
+export type BackfillMessage = {
+  message: MessageBackfill | BackfillCompleted;
+  byteSize: number;
+};
+
 type BackfillStreamer = (
   req: BackfillRequest,
-) => AsyncGenerator<MessageBackfill | BackfillCompleted>;
+) => AsyncGenerator<BackfillMessage>;
+
+/**
+ * Commit (and reopen) the current backfill transaction once this many bytes of
+ * backfill data have accumulated in it. Bounds the size of a single replica
+ * COMMIT/checkpoint so it can't monopolize the replica.
+ */
+const COMMIT_THRESHOLD_BYTES = 8 * 1024 * 1024;
 
 type RunningBackfillState = {
   request: BackfillRequest;
@@ -91,6 +109,11 @@ export class BackfillManager implements Cancelable, Listener {
   /** The watermark of the current transaction in the change stream. */
   #currentTxWatermark: string | null = null;
 
+  readonly #commitThresholdBytes: number;
+
+  /** Set when the change stream is canceled. No further backfills are run. */
+  #canceled = false;
+
   constructor(
     lc: LogContext,
     changeStreamer: ChangeStreamMultiplexer,
@@ -98,6 +121,7 @@ export class BackfillManager implements Cancelable, Listener {
     jsonFormat: JSONFormat = JSON_STRINGIFIED,
     minBackoffMs = MIN_BACKOFF_INTERVAL_MS,
     maxBackoffMs = MAX_BACKOFF_INTERVAL_MS,
+    commitThresholdBytes = COMMIT_THRESHOLD_BYTES,
   ) {
     this.#lc = lc.withContext('component', 'backfill-manager');
     this.#changeStreamer = changeStreamer;
@@ -106,6 +130,7 @@ export class BackfillManager implements Cancelable, Listener {
     this.#minBackoffMs = minBackoffMs;
     this.#maxBackoffMs = maxBackoffMs;
     this.#retryDelayMs = minBackoffMs;
+    this.#commitThresholdBytes = commitThresholdBytes;
   }
 
   run(lastWatermark: string, initialRequests: BackfillRequest[]) {
@@ -158,6 +183,7 @@ export class BackfillManager implements Cancelable, Listener {
 
   #checkAndStartBackfill() {
     if (
+      !this.#canceled &&
       !this.#backfillRetryTimer &&
       !this.#runningBackfill &&
       this.#requiredBackfills.size
@@ -187,6 +213,10 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   #retryBackfillWithBackoff(e: unknown) {
+    if (this.#canceled) {
+      this.#lc.debug?.(`not retrying backfill: change stream canceled`, e);
+      return;
+    }
     const log = this.#retryDelayMs === this.#maxBackoffMs ? 'error' : 'warn';
     this.#lc[log]?.(
       `Error running backfill. Retrying in ${this.#retryDelayMs} ms`,
@@ -206,6 +236,7 @@ export class BackfillManager implements Cancelable, Listener {
     // backfillTx is set if and only if a changeStreamer reservation has been
     // acquired and the backfill stream is inside a transaction.
     let backfillTx: string | null = null;
+    let uncommittedBytes = 0;
 
     /**
      * @returns the new tx watermark, or null if backfill was cancelled
@@ -267,9 +298,19 @@ export class BackfillManager implements Cancelable, Listener {
         changeStream.release(backfillTx);
       }
       backfillTx = null;
+      uncommittedBytes = 0;
     };
 
-    for await (const msg of this.#backfillStreamer(state.request)) {
+    for await (const {message: msg, byteSize} of this.#backfillStreamer(
+      state.request,
+    )) {
+      if (this.#canceled) {
+        // Exiting the loop finalizes the backfill stream (and the upstream
+        // resources it holds). The reservation, if held, does not need to be
+        // released since the change stream is gone.
+        lc.info?.(`backfill stream canceled: change stream canceled`);
+        return;
+      }
       // Before sending `backfill-completed`, the main replication stream
       // may need to catch up, and/or the current transaction may need to be
       // committed to open a new transaction that's up to backfill watermark.
@@ -278,10 +319,14 @@ export class BackfillManager implements Cancelable, Listener {
         (this.#changeStreamReached(lc, msg.watermark) ||
           (backfillTx !== null && backfillTx < msg.watermark));
 
-      // If necessary, yield the reservation to the main stream.
+      // Commit (and later reopen) the transaction if the main stream is
+      // waiting on the reservation, if we must catch up before completing, or
+      // if the size of current transaction has reached the commit threshold.
       if (
         backfillTx &&
-        (changeStream.waiterDelay() > 0 || mustWaitBeforeFlush)
+        (changeStream.waiterDelay() > 0 ||
+          mustWaitBeforeFlush ||
+          uncommittedBytes >= this.#commitThresholdBytes)
       ) {
         commitTx();
       }
@@ -309,6 +354,7 @@ export class BackfillManager implements Cancelable, Listener {
       // `await` to allow the change streamer to exert back pressure
       // on backfills.
       await changeStream.push(['data', msg]);
+      uncommittedBytes += byteSize;
     }
 
     // Flush any final tx and release the stream.
@@ -564,8 +610,18 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   cancel(): void {
+    this.#canceled = true;
     this.#stopRunningBackfill(`change stream canceled`);
     clearTimeout(this.#backfillRetryTimer);
+    this.#backfillRetryTimer = undefined;
+
+    // Wake up a backfill that is waiting for the change stream to reach a
+    // watermark. The change stream never will, and the backfill must be
+    // allowed to unwind (and release its upstream resources) rather than
+    // remain suspended forever.
+    for (const {reached} of this.#awaitingStatusWatermarks.splice(0)) {
+      reached();
+    }
   }
 }
 

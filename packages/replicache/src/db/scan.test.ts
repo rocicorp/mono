@@ -24,7 +24,7 @@ test('scan', async () => {
       await map.flush();
 
       const actual = [];
-      for await (const entry of map.scan(fromKey)) {
+      for await (const entry of map.scan(fromKey, false)) {
         actual.push(entry[0]);
       }
       const expected2 = expected;
@@ -77,7 +77,7 @@ test('scan index startKey', async () => {
         indexName: 'dummy',
       });
       const actual = [];
-      for await (const entry of map.scan(fromKey)) {
+      for await (const entry of map.scan(fromKey, false)) {
         const [secondaryKey, primaryKey] = decodeIndexKey(entry[0]);
         actual.push({primaryKey, secondaryKey, val: entry[1]});
       }

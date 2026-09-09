@@ -52,6 +52,7 @@ export class Exists implements FilterOperator {
     this.#cacheHitCountsForTesting = cacheHitCountsForTesting;
     assert(
       this.#input.getSchema().relationships[relationshipName],
+      // log-leak-ignore -- relationship name is schema, allowed in errors
       `Input schema missing ${relationshipName}`,
     );
     this.#not = type === 'NOT EXISTS';

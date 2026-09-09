@@ -54,11 +54,16 @@ export class SyntheticClient {
     this.userID = userID;
     this.#clientIndex = clientIndex;
     installWebSocketPolyfill();
+    const targetCacheURL =
+      config.cacheURLs && config.cacheURLs.length > 0
+        ? config.cacheURLs[clientIndex % config.cacheURLs.length]
+        : config.cacheURL;
     this.#zero = new Zero({
       schema,
-      cacheURL: config.cacheURL,
+      cacheURL: targetCacheURL,
       userID,
-      storageKey: config.runID,
+      auth: userID,
+      storageKey: `${config.runID}-${clientIndex}`,
       kvStore: 'mem',
       logLevel: 'error',
       queryChangeThrottleMs: 0,
@@ -77,7 +82,6 @@ export class SyntheticClient {
 
   #registerProfileQuery(config: BenchmarkConfig, queryIndex: number): void {
     const {name, query} = buildProfileQuery(
-      this.#zero.query,
       config.profile,
       config.model,
       queryIndex,

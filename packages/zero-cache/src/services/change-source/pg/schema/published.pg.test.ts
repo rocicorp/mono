@@ -2,7 +2,11 @@ import type postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import * as PostgresTypeClass from '../../../../db/postgres-type-class-enum.ts';
 import {test, type PgTest} from '../../../../test/db.ts';
-import {getPublicationInfo, type PublicationInfo} from './published.ts';
+import {
+  getPublicationInfo,
+  getSkippedIndexDiagnostics,
+  type PublicationInfo,
+} from './published.ts';
 
 describe('tables/published', () => {
   let db: postgres.Sql;
@@ -1691,6 +1695,7 @@ describe('tables/published', () => {
         issue_id INTEGER PRIMARY KEY,
         org_id INTEGER CHECK (org_id > 0),
         component_id INTEGER,
+        secret INTEGER,
         excluded INTEGER GENERATED ALWAYS AS (issue_id + 1) STORED
       );
       CREATE TABLE test.users (
@@ -1699,9 +1704,15 @@ describe('tables/published', () => {
       );
       CREATE INDEX idx_with_expression ON test.issues (org_id, (component_id + 1));
       CREATE INDEX partial_idx ON test.issues (component_id) WHERE org_id > 1000;
+      CREATE INDEX unpublished_predicate ON test.issues (component_id) WHERE secret > 0;
+      CREATE INDEX unsupported_function ON test.issues (component_id) WHERE abs(org_id) > 0;
+      CREATE UNIQUE INDEX partial_unique ON test.issues (component_id)
+        WHERE org_id > 0;
       CREATE INDEX idx_with_gen ON test.issues (issue_id, org_id, component_id, excluded);
       CREATE INDEX birthday_idx ON test.users (user_id, birthday);
-      CREATE PUBLICATION zero_data FOR TABLE test.issues, TABLE test.users (user_id);`,
+      CREATE PUBLICATION zero_data FOR
+        TABLE test.issues (issue_id, org_id, component_id),
+        TABLE test.users (user_id);`,
         {
           publications: [
             {
@@ -1792,6 +1803,48 @@ describe('tables/published', () => {
         },
         {
           "schema": "test",
+          "tableName": "issues",
+          "name": "partial_idx",
+          "unique": false,
+          "isPrimaryKey": false,
+          "isReplicaIdentity": false,
+          "isImmediate": true,
+          "columns": {
+            "component_id": "ASC"
+          },
+          "predicate": {
+            "type": "comparison",
+            "column": "org_id",
+            "op": ">",
+            "value": {
+              "type": "integer",
+              "value": "1000"
+            }
+          }
+        },
+        {
+          "schema": "test",
+          "tableName": "issues",
+          "name": "partial_unique",
+          "unique": false,
+          "isPrimaryKey": false,
+          "isReplicaIdentity": false,
+          "isImmediate": true,
+          "columns": {
+            "component_id": "ASC"
+          },
+          "predicate": {
+            "type": "comparison",
+            "column": "org_id",
+            "op": ">",
+            "value": {
+              "type": "integer",
+              "value": "0"
+            }
+          }
+        },
+        {
+          "schema": "test",
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
@@ -1804,6 +1857,83 @@ describe('tables/published', () => {
         }
       ]"
     `);
+  });
+
+  test('production partial-index predicate shapes', async () => {
+    await db.unsafe(/*sql*/ `
+      CREATE SCHEMA test;
+      CREATE TABLE test.items (
+        id INT PRIMARY KEY,
+        language TEXT,
+        is_primary BOOL,
+        nullable_id INT,
+        status TEXT,
+        end_date TEXT,
+        following BOOL,
+        is_reciprocal_follow BOOL,
+        closed_at TIMESTAMPTZ
+      );
+      CREATE INDEX boolean_false ON test.items (id) WHERE is_primary = false;
+      CREATE INDEX text_equality ON test.items (id) WHERE language = 'en-US';
+      CREATE INDEX boolean_true ON test.items (id) WHERE is_primary = true;
+      CREATE INDEX bare_boolean ON test.items (id) WHERE following;
+      CREATE INDEX null_test ON test.items (id) WHERE nullable_id IS NOT NULL;
+      CREATE INDEX and_predicate ON test.items (id)
+        WHERE following AND is_reciprocal_follow = false;
+      CREATE INDEX is_null ON test.items (id) WHERE closed_at IS NULL;
+      CREATE INDEX literal_list ON test.items (id)
+        WHERE status IN ('in_progress', 'want_to_read');
+      CREATE INDEX regex ON test.items (id)
+        WHERE end_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+      CREATE PUBLICATION zero_data FOR TABLE test.items;
+    `);
+
+    const published = await getPublicationInfo(db, ['zero_data']);
+    const partialIndexes = published.indexes.filter(
+      index => index.name !== 'items_pkey',
+    );
+    expect(partialIndexes.map(index => index.name).sort()).toEqual([
+      'and_predicate',
+      'bare_boolean',
+      'boolean_false',
+      'boolean_true',
+      'is_null',
+      'literal_list',
+      'null_test',
+      'text_equality',
+    ]);
+    expect(partialIndexes.every(index => index.predicate !== undefined)).toBe(
+      true,
+    );
+    expect(
+      published.indexes.find(index => index.name === 'literal_list'),
+    ).toMatchObject({
+      predicate: {
+        type: 'or',
+        conditions: [
+          {
+            type: 'comparison',
+            column: 'status',
+            op: '=',
+            value: {type: 'string', value: 'in_progress'},
+          },
+          {
+            type: 'comparison',
+            column: 'status',
+            op: '=',
+            value: {type: 'string', value: 'want_to_read'},
+          },
+        ],
+      },
+    });
+    expect(getSkippedIndexDiagnostics(published)).toEqual([
+      {
+        schema: 'test',
+        index: 'regex',
+        predicate: "(end_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'::text)",
+        reason: 'unsupported-operator',
+      },
+    ]);
   });
 
   test('includes generated columns for pg 18+', async ({skip}) => {
@@ -1940,6 +2070,27 @@ describe('tables/published', () => {
           "isImmediate": true,
           "columns": {
             "issue_id": "ASC"
+          }
+        },
+        {
+          "schema": "test",
+          "tableName": "issues",
+          "name": "partial_idx",
+          "unique": false,
+          "isPrimaryKey": false,
+          "isReplicaIdentity": false,
+          "isImmediate": true,
+          "columns": {
+            "component_id": "ASC"
+          },
+          "predicate": {
+            "type": "comparison",
+            "column": "org_id",
+            "op": ">",
+            "value": {
+              "type": "integer",
+              "value": "1000"
+            }
           }
         },
         {
