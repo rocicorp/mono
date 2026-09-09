@@ -7,6 +7,7 @@ import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {isAdminPasswordValid} from '../config/zero-config.ts';
 import {
   singleProcessMode,
+  subscribeToMessageType,
   type ProfileResponse,
   type ProfileResponseMessage,
   type Worker,
@@ -71,22 +72,30 @@ export async function handleProfzRequest(
         }
       };
 
-      worker.onMessageType<ProfileResponseMessage>(
+      // The worker is long-lived (and shared across requests), so the
+      // per-request handler must be removed once this request is done.
+      const unsubscribe = subscribeToMessageType<ProfileResponseMessage>(
+        worker,
         'profileResponse',
         onMessage,
       );
-      worker.send([
-        'profile',
-        {
-          id,
-          durationMs,
-          worker: targetWorker === localProcessName ? '__none__' : targetWorker,
-          workerIndex: targetWorkerIndex,
-        },
-      ]);
+      try {
+        worker.send([
+          'profile',
+          {
+            id,
+            durationMs,
+            worker:
+              targetWorker === localProcessName ? '__none__' : targetWorker,
+            workerIndex: targetWorkerIndex,
+          },
+        ]);
 
-      // Wait for duration plus grace period for IPC transfer
-      await sleep(durationMs + 500);
+        // Wait for duration plus grace period for IPC transfer
+        await sleep(durationMs + 500);
+      } finally {
+        unsubscribe();
+      }
     } catch (err) {
       lc.warn?.('Failed to dispatch profile request to child workers:', err);
     }
