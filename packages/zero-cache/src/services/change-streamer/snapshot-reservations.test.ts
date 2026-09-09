@@ -191,6 +191,55 @@ describe('change-streamer/snapshot-reservations', () => {
     expect(reservations.confirmationsRequired()).toBe(false);
   });
 
+  describe('closeAll()', () => {
+    test('takes back every reservation and reports whose', async () => {
+      const reservations = newReservations();
+      const one = reservations.open('task-1');
+      const two = reservations.open('task-2');
+      reservations.confirmFor('task-2', 'replica-v1', 'watermark-2', 'sqlite');
+
+      // Confirmed or not, a reseeded log covers neither.
+      expect(reservations.closeAll().toSorted()).toEqual(['task-1', 'task-2']);
+
+      expect(await isCancelled(one)).toBe(true);
+      expect(await isCancelled(two)).toBe(true);
+      expect(reservations.confirmationsRequired()).toBe(false);
+      expect(reservations.getReservedWatermarks()).toEqual([]);
+    });
+
+    test('releases each reservation through the close callback', () => {
+      const closed: string[] = [];
+      const reservations = new SnapshotReservations(
+        createSilentLogContext(),
+        {backupURL: 's3://foo/bar', litestreamVersion: 'v5'},
+        taskID => closed.push(taskID),
+      );
+      reservations.open('task-1');
+      reservations.open('task-2');
+
+      reservations.closeAll();
+
+      // The purge pause and the pinned read route are both released here.
+      expect(closed.toSorted()).toEqual(['task-1', 'task-2']);
+    });
+
+    test('is a no-op with no reservations', () => {
+      const reservations = newReservations();
+      expect(reservations.closeAll()).toEqual([]);
+    });
+
+    test('a reservation opened afterwards is unaffected', () => {
+      const reservations = newReservations();
+      reservations.open('task-1');
+      reservations.closeAll();
+
+      // The follower reconnects, and its new reservation is confirmed against
+      // the reseeded log's own bounds rather than the ones that are gone.
+      reservations.open('task-1');
+      expect(reservations.confirmationsRequired()).toBe(true);
+    });
+  });
+
   test('close() is a no-op for an unknown taskID', () => {
     const reservations = newReservations();
     reservations.open('task-1');
