@@ -57,8 +57,9 @@ import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
 import {
   LazyPullStream,
   type PullStream,
-  PullStreamBase,
   type Stream,
+  filterPull,
+  takeWhilePull,
 } from './stream.ts';
 
 export type Overlay = {
@@ -438,18 +439,22 @@ export class MemorySource implements Source {
       mergedFilterPredicate,
     );
 
-    const withConstraint = new WithConstraint(
+    // we use `req.constraint` and not `fetchOrPkConstraint` here because we
+    // need to AND the constraint with what could have been the primary key
+    // constraint. Rows are sorted by the constraint key first, so matches are
+    // contiguous and the first miss ends the scan.
+    const {constraint} = req;
+    const withConstraint = takeWhilePull(
       skipYields(
         generateWithStart(withOverlay, req.start, connectionComparator),
       ),
-      // we use `req.constraint` and not `fetchOrPkConstraint` here because we need to
-      // AND the constraint with what could have been the primary key constraint
-      req.constraint,
+      node =>
+        constraint === undefined || constraintMatchesRow(constraint, node.row),
     );
 
     return {
       stream: mergedFilterPredicate
-        ? new WithFilter(withConstraint, mergedFilterPredicate)
+        ? filterPull(withConstraint, node => mergedFilterPredicate(node.row))
         : withConstraint,
     };
   }
@@ -485,7 +490,9 @@ export class MemorySource implements Source {
         : (a, b) => conn.compareRows(a.row, b.row),
     );
 
-    return rest.length === 0 ? merged : new MatchesAllConstraints(merged, rest);
+    return rest.length === 0
+      ? merged
+      : filterPull(merged, node => node === 'yield' || matchesAll(node, rest));
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -575,13 +582,12 @@ function mergePredicates(
  * are contiguous. This is `#fetch`'s hot path -- no overlay, no `start`, no
  * filters -- which a plain scan and every join child-lookup take.
  */
-class ConstrainedRowPull extends PullStreamBase<Node> {
+class ConstrainedRowPull implements PullStream<Node> {
   readonly #rows: ValueIterator<Row>;
   readonly #constraint: Constraint | undefined;
   #done = false;
 
   constructor(rows: ValueIterator<Row>, constraint: Constraint | undefined) {
-    super();
     this.#rows = rows;
     this.#constraint = constraint;
   }
@@ -609,12 +615,11 @@ class ConstrainedRowPull extends PullStreamBase<Node> {
 }
 
 /** The index scan as a pull stream; `nextValue()` avoids a result object. */
-class RowScan extends PullStreamBase<Row> {
+class RowScan implements PullStream<Row> {
   readonly #rows: ValueIterator<Row>;
   #done = false;
 
   constructor(rows: ValueIterator<Row>) {
-    super();
     this.#rows = rows;
   }
 
@@ -634,66 +639,6 @@ class RowScan extends PullStreamBase<Row> {
       this.#done = true;
       this.#rows.return?.();
     }
-  }
-}
-
-class WithConstraint extends PullStreamBase<Node> {
-  readonly #it: PullStream<Node>;
-  readonly #constraint: Constraint | undefined;
-  #done = false;
-
-  constructor(it: PullStream<Node>, constraint: Constraint | undefined) {
-    super();
-    this.#it = it;
-    this.#constraint = constraint;
-  }
-
-  next(): Node | undefined {
-    if (this.#done) {
-      return undefined;
-    }
-    const node = this.#it.next();
-    if (node === undefined) {
-      this.#done = true;
-      return undefined;
-    }
-    const c = this.#constraint;
-    if (c !== undefined && !constraintMatchesRow(c, node.row)) {
-      this.close();
-      return undefined;
-    }
-    return node;
-  }
-
-  close(): void {
-    if (!this.#done) {
-      this.#done = true;
-      this.#it.close();
-    }
-  }
-}
-
-class WithFilter extends PullStreamBase<Node> {
-  readonly #it: PullStream<Node>;
-  readonly #filter: (row: Row) => boolean;
-
-  constructor(it: PullStream<Node>, filter: (row: Row) => boolean) {
-    super();
-    this.#it = it;
-    this.#filter = filter;
-  }
-
-  next(): Node | undefined {
-    for (;;) {
-      const node = this.#it.next();
-      if (node === undefined || this.#filter(node.row)) {
-        return node;
-      }
-    }
-  }
-
-  close(): void {
-    this.#it.close();
   }
 }
 
@@ -825,7 +770,7 @@ function* genPush(
   setOverlay(undefined);
 }
 
-export class WithStart extends PullStreamBase<Node | 'yield'> {
+export class WithStart implements PullStream<Node | 'yield'> {
   readonly #nodes: PullStream<Node | 'yield'>;
   readonly #start: Start | undefined;
   readonly #compare: (r1: Row, r2: Row) => number;
@@ -836,7 +781,6 @@ export class WithStart extends PullStreamBase<Node | 'yield'> {
     start: Start | undefined,
     compare: (r1: Row, r2: Row) => number,
   ) {
-    super();
     this.#nodes = nodes;
     this.#start = start;
     this.#compare = compare;
@@ -1058,7 +1002,7 @@ function overlaysForFilterPredicate(
  * for the following call. The generator this replaces expressed the same thing
  * with two `yield`s in one loop iteration.
  */
-export class OverlayInner extends PullStreamBase<Node> {
+export class OverlayInner implements PullStream<Node> {
   readonly #rows: PullStream<Row>;
   readonly #overlays: Overlays;
   readonly #compare: (r1: Row, r2: Row) => number;
@@ -1072,7 +1016,6 @@ export class OverlayInner extends PullStreamBase<Node> {
     overlays: Overlays,
     compare: (r1: Row, r2: Row) => number,
   ) {
-    super();
     this.#rows = rows;
     this.#overlays = overlays;
     this.#compare = compare;
@@ -1177,7 +1120,7 @@ export function generateWithOverlayUnordered(
 }
 
 /** {@link OverlayInner} for unordered streams: eager add, inline PK suppress. */
-export class OverlayInnerUnordered extends PullStreamBase<Node> {
+export class OverlayInnerUnordered implements PullStream<Node> {
   readonly #rows: PullStream<Row>;
   readonly #overlays: Overlays;
   readonly #primaryKey: PrimaryKey;
@@ -1190,7 +1133,6 @@ export class OverlayInnerUnordered extends PullStreamBase<Node> {
     overlays: Overlays,
     primaryKey: PrimaryKey,
   ) {
-    super();
     this.#rows = rows;
     this.#overlays = overlays;
     this.#primaryKey = primaryKey;
@@ -1355,49 +1297,21 @@ export function mergeSortedStreams(
   return new MergeSortedStreams(streams, compare);
 }
 
-/** Keeps rows matching every remaining `MultiConstraint` entry. */
-class MatchesAllConstraints extends PullStreamBase<Node | 'yield'> {
-  readonly #merged: PullStream<Node | 'yield'>;
-  readonly #rest: readonly MultiConstraint[];
-
-  constructor(
-    merged: PullStream<Node | 'yield'>,
-    rest: readonly MultiConstraint[],
-  ) {
-    super();
-    this.#merged = merged;
-    this.#rest = rest;
-  }
-
-  next(): Node | 'yield' | undefined {
-    for (;;) {
-      const node = this.#merged.next();
-      if (node === undefined || node === 'yield') {
-        return node;
-      }
-      let matchesAll = true;
-      for (const mc of this.#rest) {
-        let any = false;
-        for (const c of mc) {
-          if (constraintMatchesRow(c, node.row)) {
-            any = true;
-            break;
-          }
-        }
-        if (!any) {
-          matchesAll = false;
-          break;
-        }
-      }
-      if (matchesAll) {
-        return node;
+/** True when `node` satisfies every remaining `MultiConstraint` entry. */
+function matchesAll(node: Node, rest: readonly MultiConstraint[]): boolean {
+  for (const mc of rest) {
+    let any = false;
+    for (const c of mc) {
+      if (constraintMatchesRow(c, node.row)) {
+        any = true;
+        break;
       }
     }
+    if (!any) {
+      return false;
+    }
   }
-
-  close(): void {
-    this.#merged.close();
-  }
+  return true;
 }
 
 type MergeEntry = {row: Node; idx: number};
@@ -1414,7 +1328,7 @@ type MergeEntry = {row: Node; idx: number};
  * underlying cursors are released; leaking one leaves later writes on the same
  * connection failing with "database connection is busy executing a query".
  */
-class MergeSortedStreams extends PullStreamBase<Node | 'yield'> {
+class MergeSortedStreams implements PullStream<Node | 'yield'> {
   readonly #streams: readonly PullStream<Node | 'yield'>[];
   readonly #compare: (a: Node, b: Node) => number;
   readonly #active: boolean[];
@@ -1428,7 +1342,6 @@ class MergeSortedStreams extends PullStreamBase<Node | 'yield'> {
     streams: readonly PullStream<Node | 'yield'>[],
     compare: (a: Node, b: Node) => number,
   ) {
-    super();
     this.#streams = streams;
     this.#compare = compare;
     this.#active = new Array(streams.length).fill(true);

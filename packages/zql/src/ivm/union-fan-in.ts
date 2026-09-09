@@ -19,7 +19,7 @@ import {
   pushAccumulatedChanges,
 } from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream, PullStreamBase, type PullStream} from './stream.ts';
+import {type Stream, type PullStream} from './stream.ts';
 import type {UnionFanOut} from './union-fan-out.ts';
 
 export class UnionFanIn implements Operator {
@@ -178,24 +178,23 @@ export class UnionFanIn implements Operator {
       // looked like a branch holding the row, silently dropping the
       // add/remove and desyncing a downstream `Take`'s push and fetch paths.
       let otherBranchHasRow = false;
-      {
-        const __pull181 = fetchResult;
-        try {
-          for (
-            let node = __pull181.next();
-            node !== undefined;
-            node = __pull181.next()
-          ) {
-            if (node === 'yield') {
-              yield node;
-              continue;
-            }
-            otherBranchHasRow = true;
-            break;
+
+      const branchRows = fetchResult;
+      try {
+        for (
+          let node = branchRows.next();
+          node !== undefined;
+          node = branchRows.next()
+        ) {
+          if (node === 'yield') {
+            yield node;
+            continue;
           }
-        } finally {
-          __pull181.close();
+          otherBranchHasRow = true;
+          break;
         }
+      } finally {
+        branchRows.close();
       }
 
       if (otherBranchHasRow) {
@@ -265,7 +264,7 @@ export function mergeFetches(
  * replacement for the node just emitted, so a 'yield' can be returned and the
  * merge resumed at the same place.
  */
-class MergeFetches extends PullStreamBase<Node | 'yield'> {
+class MergeFetches implements PullStream<Node | 'yield'> {
   readonly #streams: readonly PullStream<Node | 'yield'>[];
   readonly #comparator: (l: Node, r: Node) => number;
   readonly #current: (Node | null)[];
@@ -281,7 +280,6 @@ class MergeFetches extends PullStreamBase<Node | 'yield'> {
     streams: readonly PullStream<Node | 'yield'>[],
     comparator: (l: Node, r: Node) => number,
   ) {
-    super();
     this.#streams = streams;
     this.#comparator = comparator;
     this.#current = new Array(streams.length).fill(null);

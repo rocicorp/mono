@@ -8,7 +8,8 @@ import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {type Comparator, type Node} from './data.ts';
-import {PullStreamBase, type PullStream} from './stream.ts';
+import {skipYields} from './operator.ts';
+import {pullOf, type PullStream} from './stream.ts';
 
 import type {SourceSchema} from './schema.ts';
 import type {Entry, Format} from './view.ts';
@@ -117,44 +118,9 @@ function childNodes(
   relationship: string,
 ): PullStream<ViewNode> {
   const children = node.relationships[relationship];
-  if (Array.isArray(children)) {
-    return new ArrayPullStream(children);
-  }
-  return new SkipYieldsPull(children());
-}
-
-class ArrayPullStream extends PullStreamBase<ViewNode> {
-  readonly #a: readonly ViewNode[];
-  #i = 0;
-  constructor(a: readonly ViewNode[]) {
-    super();
-    this.#a = a;
-  }
-  next(): ViewNode | undefined {
-    return this.#i < this.#a.length ? this.#a[this.#i++] : undefined;
-  }
-  close(): void {
-    this.#i = this.#a.length;
-  }
-}
-
-class SkipYieldsPull extends PullStreamBase<ViewNode> {
-  readonly #s: PullStream<Node | 'yield'>;
-  constructor(s: PullStream<Node | 'yield'>) {
-    super();
-    this.#s = s;
-  }
-  next(): Node | undefined {
-    for (;;) {
-      const v = this.#s.next();
-      if (v !== 'yield') {
-        return v;
-      }
-    }
-  }
-  close(): void {
-    this.#s.close();
-  }
+  return Array.isArray(children)
+    ? pullOf(children)
+    : (skipYields(children()) as PullStream<ViewNode>);
 }
 
 type Mutate = boolean;

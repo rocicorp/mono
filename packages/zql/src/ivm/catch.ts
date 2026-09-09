@@ -130,19 +130,18 @@ export function expandNode(node: Node | 'yield'): CaughtNode {
         row: node.row,
         relationships: mapValues(node.relationships, getChildren => {
           const children: CaughtNode[] = [];
-          {
-            const __pull132 = getChildren();
-            try {
-              for (
-                let child = __pull132.next();
-                child !== undefined;
-                child = __pull132.next()
-              ) {
-                children.push(expandNode(child));
-              }
-            } finally {
-              __pull132.close();
+
+          const childStream = getChildren();
+          try {
+            for (
+              let child = childStream.next();
+              child !== undefined;
+              child = childStream.next()
+            ) {
+              children.push(expandNode(child));
             }
+          } finally {
+            childStream.close();
           }
           return children;
         }),
