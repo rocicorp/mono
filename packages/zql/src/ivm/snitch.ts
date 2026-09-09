@@ -172,13 +172,13 @@ export class FilterSnitch implements FilterOperator {
   /** The node whose 'filter' has been logged but not yet resolved. */
   #logged: Node | undefined;
 
-  filterPull(node: Node): boolean | 'yield' {
+  filter(node: Node): boolean | 'yield' {
     if (this.#logged !== node) {
       this.#log([this.#name, 'filter', node.row]);
       this.#logged = node;
     }
     assert(this.#output, 'Snitch: output must be set before filter is called');
-    const r = this.#output.filterPull(node);
+    const r = this.#output.filter(node);
     if (r !== 'yield') {
       this.#logged = undefined;
     }

@@ -21,7 +21,7 @@ describe('FilterStart', () => {
     const mockFilterOutput: FilterOutput = {
       push: vi.fn(),
       beginFilter: vi.fn(),
-      filterPull: () => drainGenerator(filterGenerator()),
+      filter: () => drainGenerator(filterGenerator()),
       endFilter: vi.fn(),
     };
 

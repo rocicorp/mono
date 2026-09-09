@@ -100,7 +100,7 @@ export class Exists implements FilterOperator {
       }
     | undefined;
 
-  filterPull(node: Node): boolean | 'yield' {
+  filter(node: Node): boolean | 'yield' {
     let p = this.#pending;
     if (p === undefined || p.node !== node) {
       p = {node, key: undefined, count: undefined, exists: undefined};
@@ -139,7 +139,7 @@ export class Exists implements FilterOperator {
       this.#pending = undefined;
       return false;
     }
-    const out = this.#output.filterPull(node);
+    const out = this.#output.filter(node);
     if (out === 'yield') {
       return 'yield';
     }

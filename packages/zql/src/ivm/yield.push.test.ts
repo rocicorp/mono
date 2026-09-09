@@ -34,7 +34,7 @@ class YieldOutput implements FilterOutput {
   /** The node whose 'yield' has already been emitted. */
   #yielded: Node | undefined;
 
-  filterPull(node: Node): boolean | 'yield' {
+  filter(node: Node): boolean | 'yield' {
     if (this.yields && this.#yielded !== node) {
       this.#yielded = node;
       return 'yield';
