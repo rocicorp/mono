@@ -3340,6 +3340,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       client,
       this.#inspectorDelegate,
       this.id,
+      this,
       this.#cvrStore,
       this.#config,
       connCtx,
@@ -3499,10 +3500,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // after cleanup; a destroyed transformer is safe to use (it just stops
     // caching and never restarts its cleanup interval).
     this.#customQueryTransformer?.destroy();
-    // Inspector authentication is tracked per client group in a set that
-    // outlives this service. Release this client group's entry so that the
-    // set does not grow with every client group ever served by the worker.
-    this.#inspectorDelegate.clearAuthenticated(this.id);
+    // Inspector authentication is tracked per client group in a map that
+    // outlives this service. Release the entry this service established so
+    // that the map does not grow with every client group ever served by the
+    // worker. Passing `this` leaves an entry alone if a replacement service
+    // for the same client group has authenticated in the meantime.
+    this.#inspectorDelegate.clearAuthenticated(this.id, this);
 
     for (const client of this.#clients.values()) {
       if (err) {

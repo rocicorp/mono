@@ -32,6 +32,7 @@ import {
   nextPoke,
   permissions,
   permissionsAll,
+  restartViewSyncer,
   serviceID,
   setup,
   TEST_ADMIN_PASSWORD,
@@ -89,6 +90,9 @@ describe('view-syncer/service', () => {
   let delegate: InspectorDelegate;
   let customQueryTransformer: CustomQueryTransformer | undefined;
   let clearMocks: () => void;
+  let databaseStorage: Awaited<ReturnType<typeof setup>>['databaseStorage'];
+  let config: Awaited<ReturnType<typeof setup>>['config'];
+  let setTimeoutFn: Awaited<ReturnType<typeof setup>>['setTimeoutFn'];
 
   beforeEach<PgTest>(async ({testDBs}) => {
     ({
@@ -103,6 +107,9 @@ describe('view-syncer/service', () => {
       inspectorDelegate: delegate,
       customQueryTransformer,
       clearMocks,
+      databaseStorage,
+      config,
+      setTimeoutFn,
     } = await setup(testDBs, 'view_syncer_inspect_test', permissionsAll, {
       queryFetchMode: 'empty-validation',
     }));
@@ -168,12 +175,71 @@ describe('view-syncer/service', () => {
   });
 
   test('inspector authentication is cleared when the view-syncer shuts down', async () => {
+    delegate.clearAuthenticated(serviceID);
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {op: 'authenticate', id: 'auth-1', value: TEST_ADMIN_PASSWORD},
+    ]);
+    expect(await client.dequeue()).toEqual([
+      'inspect',
+      {id: 'auth-1', op: 'authenticated', value: true},
+    ]);
     expect(delegate.isAuthenticated(serviceID)).toBe(true);
 
     await vs.stop();
     await viewSyncerDone;
 
     expect(delegate.isAuthenticated(serviceID)).toBe(false);
+  });
+
+  test('a replacement view-syncer keeps its authentication when the previous one shuts down', async () => {
+    delegate.clearAuthenticated(serviceID);
+
+    // The ServiceRunner can start a replacement for the same client group
+    // while the previous service is still shutting down.
+    const replacement = restartViewSyncer({
+      databaseStorage,
+      replicaDbFile,
+      cvrDB,
+      config,
+      customQueryTransformer,
+      setTimeoutFn,
+    });
+    try {
+      const ctx = {...SYNC_CONTEXT, wsID: 'ws2'};
+      const client = replacement.connect(ctx, []);
+      await nextPoke(client);
+      replacement.stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      await replacement.vs.inspect(ctx, [
+        'inspect',
+        {op: 'authenticate', id: 'auth-2', value: TEST_ADMIN_PASSWORD},
+      ]);
+      expect(await client.dequeue()).toEqual([
+        'inspect',
+        {id: 'auth-2', op: 'authenticated', value: true},
+      ]);
+      expect(delegate.isAuthenticated(serviceID)).toBe(true);
+
+      // The previous service shutting down must not revoke it...
+      await vs.stop();
+      await viewSyncerDone;
+      expect(delegate.isAuthenticated(serviceID)).toBe(true);
+
+      // ...but the replacement's own shutdown does.
+      await replacement.vs.stop();
+      await replacement.viewSyncerDone;
+      expect(delegate.isAuthenticated(serviceID)).toBe(false);
+    } finally {
+      await replacement.vs.stop();
+      await replacement.viewSyncerDone;
+    }
   });
 
   test('inspect queries sharing a transformationHash have metrics per query id', async () => {
