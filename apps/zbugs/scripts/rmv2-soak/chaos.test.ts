@@ -1,8 +1,10 @@
 import {expect, test} from 'vitest';
 import {
   c15Findings,
+  c16Findings,
   c9ResourceFindings,
   type C15Observations,
+  type C16Observations,
 } from './chaos.ts';
 
 test('accepts C9 recovery when earlier fat payloads make live pages decrease', () => {
@@ -153,5 +155,78 @@ test('reports an unsettled fixture instead of judging the run', () => {
   ).toEqual([
     "C15's 200000 fixture rows did not reach every replica before the column " +
       'was added; the run it measured started from an unsettled table',
+  ]);
+});
+
+const c16 = (overrides: Partial<C16Observations> = {}): C16Observations => ({
+  reservedWatermark: '691l5n60',
+  rowsPurgedDuringHold: 0,
+  passesAboveReservedWatermark: 0,
+  backupWatermarksDuringHold: 140,
+  changeLogLiveBytesBefore: 4_194_304,
+  changeLogLiveBytesDuring: 22_020_096,
+  changeLogLiveBytesAfter: 5_242_880,
+  rowsPurgedAfterRelease: 30_604,
+  ...overrides,
+});
+
+test('accepts a reservation that held the floor and drained after release', () => {
+  expect(c16Findings(c16())).toEqual([]);
+});
+
+test('reports a change log purged under an open reservation', () => {
+  expect(
+    c16Findings(
+      c16({rowsPurgedDuringHold: 1_200, passesAboveReservedWatermark: 2}),
+    ),
+  ).toEqual([
+    'C16: 1200 change-log row(s) were purged while a snapshot reservation ' +
+      'was open',
+    'C16: 2 purge pass(es) ran with a floor above the reserved watermark ' +
+      '691l5n60',
+  ]);
+});
+
+test('reports an unconfirmed reservation without judging anything else', () => {
+  // Nothing was reserved, so growth, drain and the ACK path are all about a
+  // floor that was never asked to hold.
+  expect(
+    c16Findings(
+      c16({
+        reservedWatermark: undefined,
+        changeLogLiveBytesDuring: 4_194_304,
+        backupWatermarksDuringHold: 0,
+      }),
+    ),
+  ).toEqual(['C16: the snapshot reservation was never confirmed']);
+});
+
+test('reports a hold that retained nothing and never drained', () => {
+  expect(
+    c16Findings(
+      c16({
+        changeLogLiveBytesDuring: 4_194_304,
+        changeLogLiveBytesAfter: 4_194_304,
+        rowsPurgedAfterRelease: 0,
+      }),
+    ),
+  ).toEqual([
+    'C16: the held reservation retained no change-log pages, so nothing was ' +
+      'asked of the floor',
+    'C16: live change-log pages did not drain after the reservation was ' +
+      'released',
+    'C16: no change-log rows were purged after the reservation was released',
+  ]);
+});
+
+test('reports an unmeasurable live-page sample and a silent ACK path', () => {
+  expect(
+    c16Findings(
+      c16({changeLogLiveBytesDuring: -1, backupWatermarksDuringHold: 0}),
+    ),
+  ).toEqual([
+    'C16: change-log live-page usage was not measurable',
+    'C16: no backup watermark arrived while the reservation was held, so the ' +
+      'upstream ACK path was never observed',
   ]);
 });
