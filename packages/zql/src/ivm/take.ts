@@ -22,7 +22,13 @@ import {
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream} from './stream.ts';
+import {
+  emptyPullStream,
+  LazyPullStream,
+  type PullStream,
+  PullStreamBase,
+  type Stream,
+} from './stream.ts';
 
 const MAX_BOUND_KEY = 'maxBound';
 
@@ -90,7 +96,14 @@ export class Take implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
+    // Lazy: the generator read take state on first next(), and a push between
+    // fetch() and iteration must still be visible.
+    return new LazyPullStream(() => this.#startFetch(req));
+  }
+
+  #startFetch(req: FetchRequest): PullStream<Node | 'yield'> {
+    const compareRows = this.getSchema().compareRows;
     if (
       !this.#partitionKey ||
       (req.constraint &&
@@ -99,120 +112,67 @@ export class Take implements Operator {
       const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
       const takeState = this.#storage.get(takeStateKey);
       if (!takeState) {
-        yield* this.#initialFetch(req);
-        return;
+        return this.#initialFetch(req, takeStateKey);
       }
       if (takeState.bound === undefined) {
-        return;
+        return emptyPullStream();
       }
-      for (const inputNode of this.#input.fetch(req)) {
-        if (inputNode === 'yield') {
-          yield inputNode;
-          continue;
-        }
-        if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
-          return;
-        }
-        if (
-          this.#rowHiddenFromFetch &&
-          this.getSchema().compareRows(
-            this.#rowHiddenFromFetch,
-            inputNode.row,
-          ) === 0
-        ) {
-          continue;
-        }
-        yield inputNode;
-      }
-      return;
+      const bound = takeState.bound;
+      const hidden = this.#rowHiddenFromFetch;
+      return new TakeScanPull(this.#input.fetch(req), node =>
+        compareRows(bound, node.row) < 0
+          ? 'stop'
+          : hidden && compareRows(hidden, node.row) === 0
+            ? 'skip'
+            : 'emit',
+      );
     }
-    // There is a partition key, but the fetch is not constrained or constrained
-    // on a different key.  Thus we don't have a single take state to bound by.
-    // This currently only happens with nested sub-queries
-    // e.g. issues include issuelabels include label.  We could remove this
-    // case if we added a translation layer (powered by some state) in join.
-    // Specifically we need joinKeyValue => parent constraint key
     const maxBound = this.#storage.get(MAX_BOUND_KEY);
     if (maxBound === undefined) {
-      return;
+      return emptyPullStream();
     }
-    for (const inputNode of this.#input.fetch(req)) {
-      if (inputNode === 'yield') {
-        yield inputNode;
-        continue;
+    return new TakeScanPull(this.#input.fetch(req), node => {
+      if (compareRows(node.row, maxBound) > 0) {
+        return 'stop';
       }
-      if (this.getSchema().compareRows(inputNode.row, maxBound) > 0) {
-        return;
-      }
-      const takeStateKey = getTakeStateKey(this.#partitionKey, inputNode.row);
-      const takeState = this.#storage.get(takeStateKey);
-      if (
-        takeState?.bound !== undefined &&
-        this.getSchema().compareRows(takeState.bound, inputNode.row) >= 0
-      ) {
-        yield inputNode;
-      }
-    }
+      const takeState = this.#storage.get(
+        getTakeStateKey(this.#partitionKey, node.row),
+      );
+      return takeState?.bound !== undefined &&
+        compareRows(takeState.bound, node.row) >= 0
+        ? 'emit'
+        : 'skip';
+    });
   }
 
-  *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
+  #initialFetch(
+    req: FetchRequest,
+    takeStateKey: string,
+  ): PullStream<Node | 'yield'> {
     assert(req.start === undefined, 'Start should be undefined');
     assert(!req.reverse, 'Reverse should be false');
-
     if (this.#limit === 0) {
-      return;
+      return emptyPullStream();
     }
-
     assert(
       constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
       'Constraint should match partition key',
     );
-
-    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
     assert(
       this.#storage.get(takeStateKey) === undefined,
       'Take state should be undefined',
     );
-
-    let size = 0;
-    let bound: Row | undefined;
-    let downstreamEarlyReturn = true;
-    let exceptionThrown = false;
-    try {
-      for (const inputNode of this.#input.fetch(req)) {
-        if (inputNode === 'yield') {
-          yield 'yield';
-          continue;
-        }
-        yield inputNode;
-        bound = inputNode.row;
-        size++;
-        if (size === this.#limit) {
-          break;
-        }
-      }
-      downstreamEarlyReturn = false;
-    } catch (e) {
-      exceptionThrown = true;
-      throw e;
-    } finally {
-      if (!exceptionThrown) {
+    return new TakeInitialPull(
+      this.#input.fetch(req),
+      this.#limit,
+      (size, bound) =>
         this.#setTakeState(
           takeStateKey,
           size,
           bound,
           this.#storage.get(MAX_BOUND_KEY),
-        );
-        // If it becomes necessary to support downstream early return, this
-        // assert should be removed, and replaced with code that consumes
-        // the input stream until limit is reached or the input stream is
-        // exhausted so that takeState is properly hydrated.
-        assert(
-          !downstreamEarlyReturn,
-          'Unexpected early return prevented full hydration',
-        );
-      }
-    }
+        ),
+    );
   }
 
   #getStateAndConstraint(row: Row) {
@@ -283,37 +243,59 @@ export class Take implements Operator {
       let beforeBoundNode: Node | undefined;
       let boundNode: Node | undefined;
       if (this.#limit === 1) {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
+        {
+          const __p246 = this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+          });
+          try {
+            for (
+              let node = __p246.next();
+              node !== undefined;
+              node = __p246.next()
+            ) {
+              if (node === 'yield') {
+                yield node;
+                continue;
+              }
+              boundNode = node;
+              break;
+            }
+          } finally {
+            __p246.close();
           }
-          boundNode = node;
-          break;
         }
       } else {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-          reverse: true,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
-          } else if (boundNode === undefined) {
-            boundNode = node;
-          } else {
-            beforeBoundNode = node;
-            break;
+        {
+          const __p261 = this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+            reverse: true,
+          });
+          try {
+            for (
+              let node = __p261.next();
+              node !== undefined;
+              node = __p261.next()
+            ) {
+              if (node === 'yield') {
+                yield node;
+                continue;
+              } else if (boundNode === undefined) {
+                boundNode = node;
+              } else {
+                beforeBoundNode = node;
+                break;
+              }
+            }
+          } finally {
+            __p261.close();
           }
         }
       }
@@ -352,20 +334,31 @@ export class Take implements Operator {
         return;
       }
       let beforeBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'after',
-        },
-        constraint,
-        reverse: true,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      {
+        const __p315 = this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'after',
+          },
+          constraint,
+          reverse: true,
+        });
+        try {
+          for (
+            let node = __p315.next();
+            node !== undefined;
+            node = __p315.next()
+          ) {
+            if (node === 'yield') {
+              yield node;
+              continue;
+            }
+            beforeBoundNode = node;
+            break;
+          }
+        } finally {
+          __p315.close();
         }
-        beforeBoundNode = node;
-        break;
       }
 
       let newBound: {node: Node; push: boolean} | undefined;
@@ -377,24 +370,35 @@ export class Take implements Operator {
         };
       }
       if (!newBound?.push) {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
-          }
-          const push = compareRows(node.row, takeState.bound) > 0;
-          newBound = {
-            node,
-            push,
-          };
-          if (push) {
-            break;
+        {
+          const __p340 = this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+          });
+          try {
+            for (
+              let node = __p340.next();
+              node !== undefined;
+              node = __p340.next()
+            ) {
+              if (node === 'yield') {
+                yield node;
+                continue;
+              }
+              const push = compareRows(node.row, takeState.bound) > 0;
+              newBound = {
+                node,
+                push,
+              };
+              if (push) {
+                break;
+              }
+            }
+          } finally {
+            __p340.close();
           }
         }
       }
@@ -484,20 +488,31 @@ export class Take implements Operator {
         // bounds.
 
         let beforeBoundNode: Node | undefined;
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'after',
-          },
-          constraint,
-          reverse: true,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
+        {
+          const __p447 = this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'after',
+            },
+            constraint,
+            reverse: true,
+          });
+          try {
+            for (
+              let node = __p447.next();
+              node !== undefined;
+              node = __p447.next()
+            ) {
+              if (node === 'yield') {
+                yield node;
+                continue;
+              }
+              beforeBoundNode = node;
+              break;
+            }
+          } finally {
+            __p447.close();
           }
-          beforeBoundNode = node;
-          break;
         }
         assert(
           beforeBoundNode !== undefined,
@@ -517,19 +532,30 @@ export class Take implements Operator {
       assert(newCmp > 0, 'New comparison must be greater than 0');
       // Find the first item at the old bounds. This will be the new bounds.
       let newBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'at',
-        },
-        constraint,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      {
+        const __p480 = this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'at',
+          },
+          constraint,
+        });
+        try {
+          for (
+            let node = __p480.next();
+            node !== undefined;
+            node = __p480.next()
+          ) {
+            if (node === 'yield') {
+              yield node;
+              continue;
+            }
+            newBoundNode = node;
+            break;
+          }
+        } finally {
+          __p480.close();
         }
-        newBoundNode = node;
-        break;
       }
       assert(
         newBoundNode !== undefined,
@@ -572,22 +598,33 @@ export class Take implements Operator {
 
       let oldBoundNode: Node | undefined;
       let newBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'at',
-        },
-        constraint,
-        reverse: true,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
-        } else if (oldBoundNode === undefined) {
-          oldBoundNode = node;
-        } else {
-          newBoundNode = node;
-          break;
+      {
+        const __p535 = this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'at',
+          },
+          constraint,
+          reverse: true,
+        });
+        try {
+          for (
+            let node = __p535.next();
+            node !== undefined;
+            node = __p535.next()
+          ) {
+            if (node === 'yield') {
+              yield node;
+              continue;
+            } else if (oldBoundNode === undefined) {
+              oldBoundNode = node;
+            } else {
+              newBoundNode = node;
+              break;
+            }
+          }
+        } finally {
+          __p535.close();
         }
       }
       assert(
@@ -632,19 +669,30 @@ export class Take implements Operator {
       // at this point we need to find the row after the bound and use that or
       // the newRow as the new bound.
       let afterBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'after',
-        },
-        constraint,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      {
+        const __p595 = this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'after',
+          },
+          constraint,
+        });
+        try {
+          for (
+            let node = __p595.next();
+            node !== undefined;
+            node = __p595.next()
+          ) {
+            if (node === 'yield') {
+              yield node;
+              continue;
+            }
+            afterBoundNode = node;
+            break;
+          }
+        } finally {
+          __p595.close();
         }
-        afterBoundNode = node;
-        break;
       }
       assert(
         afterBoundNode !== undefined,
@@ -754,4 +802,123 @@ export function makePartitionKeyComparator(
     }
     return 0;
   };
+}
+
+/**
+ * A Take scan in the pull protocol: forwards 'yield', and asks `decide` per
+ * node whether to emit it, skip it, or stop (closing the input).
+ */
+class TakeScanPull extends PullStreamBase<Node | 'yield'> {
+  readonly #input: PullStream<Node | 'yield'>;
+  readonly #decide: (node: Node) => 'emit' | 'skip' | 'stop';
+  #done = false;
+
+  constructor(
+    input: PullStream<Node | 'yield'>,
+    decide: (node: Node) => 'emit' | 'skip' | 'stop',
+  ) {
+    super();
+    this.#input = input;
+    this.#decide = decide;
+  }
+
+  next(): Node | 'yield' | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    for (;;) {
+      const v = this.#input.next();
+      if (v === undefined) {
+        this.#done = true;
+        return undefined;
+      }
+      if (v === 'yield') {
+        return v;
+      }
+      const d = this.#decide(v);
+      if (d === 'emit') {
+        return v;
+      }
+      if (d === 'stop') {
+        this.close();
+        return undefined;
+      }
+    }
+  }
+
+  close(): void {
+    if (!this.#done) {
+      this.#done = true;
+      this.#input.close();
+    }
+  }
+}
+
+/**
+ * Take's initial fetch in the pull protocol. Emits up to `limit` nodes and
+ * records the take state once the scan completes -- which, as with the
+ * generator, is when the consumer asks for the node after the last one. A
+ * consumer that closes early still gets the state recorded and then the same
+ * assertion the generator raised from its finally block: initial hydration
+ * must run to completion.
+ */
+class TakeInitialPull extends PullStreamBase<Node | 'yield'> {
+  readonly #input: PullStream<Node | 'yield'>;
+  readonly #limit: number;
+  readonly #finish: (size: number, bound: Row | undefined) => void;
+  #size = 0;
+  #bound: Row | undefined;
+  #done = false;
+
+  constructor(
+    input: PullStream<Node | 'yield'>,
+    limit: number,
+    finish: (size: number, bound: Row | undefined) => void,
+  ) {
+    super();
+    this.#input = input;
+    this.#limit = limit;
+    this.#finish = finish;
+  }
+
+  next(): Node | 'yield' | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    if (this.#size === this.#limit) {
+      this.#complete();
+      return undefined;
+    }
+    let v: Node | 'yield' | undefined;
+    try {
+      v = this.#input.next();
+    } catch (e) {
+      // As the generator did: an exception records no state.
+      this.#done = true;
+      throw e;
+    }
+    if (v === undefined) {
+      this.#complete();
+      return undefined;
+    }
+    if (v === 'yield') {
+      return v;
+    }
+    this.#bound = v.row;
+    this.#size++;
+    return v;
+  }
+
+  #complete(): void {
+    this.#done = true;
+    this.#input.close();
+    this.#finish(this.#size, this.#bound);
+  }
+
+  close(): void {
+    if (!this.#done) {
+      this.#complete();
+      assert(false, 'Unexpected early return prevented full hydration');
+    }
+  }
 }

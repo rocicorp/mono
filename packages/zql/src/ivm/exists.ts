@@ -12,7 +12,12 @@ import {
   type FilterOutput,
 } from './filter-operators.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream} from './stream.ts';
+import {
+  type Stream,
+  emptyPullStream,
+  pullOf,
+  type PullStream,
+} from './stream.ts';
 
 /**
  * The Exists operator filters data based on whether or not a relationship is
@@ -78,25 +83,103 @@ export class Exists implements FilterOperator {
     this.#output.endFilter();
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
-    let exists: boolean | undefined;
-    if (!this.#noSizeReuse && !this.#inPush) {
-      const key = this.#getCacheKey(node, this.#parentJoinKey);
-      exists = this.#cache.get(key);
-      if (exists === undefined) {
-        exists = yield* this.#fetchExists(node);
-        this.#cache.set(key, exists);
-      } else if (this.#cacheHitCountsForTesting) {
-        this.#cacheHitCountsForTesting.set(
-          key,
-          (this.#cacheHitCountsForTesting.get(key) ?? 0) + 1,
-        );
+  /**
+   * The node `filterPull` is part-way through, and where it got to.
+   *
+   * Exists is the one filter that genuinely suspends: counting a relationship
+   * pulls a child stream that can emit 'yield'. The generator this replaces
+   * held that position implicitly; here it is explicit, so no generator is
+   * created per node.
+   */
+  #pending:
+    | {
+        node: Node;
+        key: string | undefined;
+        count: {stream: PullStream<Node | 'yield'>; size: number} | undefined;
+        exists: boolean | undefined;
+      }
+    | undefined;
+
+  filterPull(node: Node): boolean | 'yield' {
+    let p = this.#pending;
+    if (p === undefined || p.node !== node) {
+      p = {node, key: undefined, count: undefined, exists: undefined};
+      this.#pending = p;
+      if (!this.#noSizeReuse && !this.#inPush) {
+        const key = this.#getCacheKey(node, this.#parentJoinKey);
+        p.key = key;
+        const cached = this.#cache.get(key);
+        if (cached !== undefined) {
+          p.exists = cached;
+          if (this.#cacheHitCountsForTesting) {
+            this.#cacheHitCountsForTesting.set(
+              key,
+              (this.#cacheHitCountsForTesting.get(key) ?? 0) + 1,
+            );
+          }
+        }
       }
     }
 
-    const result =
-      (yield* this.#filter(node, exists)) && (yield* this.#output.filter(node));
-    return result;
+    if (p.exists === undefined) {
+      p.count ??= this.#startCount(node);
+      const r = this.#countStep(p.count);
+      if (r === 'yield') {
+        return 'yield';
+      }
+      p.count.stream.close();
+      p.count = undefined;
+      p.exists = r > 0;
+      if (p.key !== undefined) {
+        this.#cache.set(p.key, p.exists);
+      }
+    }
+
+    if (!(this.#not ? !p.exists : p.exists)) {
+      this.#pending = undefined;
+      return false;
+    }
+    const out = this.#output.filterPull(node);
+    if (out === 'yield') {
+      return 'yield';
+    }
+    this.#pending = undefined;
+    return out;
+  }
+
+  /** Opens the relationship stream whose rows are being counted. */
+  #startCount(node: Node): {
+    stream: PullStream<Node | 'yield'>;
+    size: number;
+  } {
+    const relationship = node.relationships[this.#relationshipName];
+    assert(
+      relationship,
+      () =>
+        `Exists: relationship "${this.#relationshipName}" not found on node`,
+    );
+    return {stream: relationship(), size: 0};
+  }
+
+  /**
+   * Counts until the stream yields or ends: 'yield' to forward, otherwise the
+   * final size. Shared by `filterPull` above and the push path's `#fetchSize`,
+   * so the counting rule exists once.
+   */
+  #countStep(state: {
+    stream: PullStream<Node | 'yield'>;
+    size: number;
+  }): 'yield' | number {
+    for (;;) {
+      const n = state.stream.next();
+      if (n === undefined) {
+        return state.size;
+      }
+      if (n === 'yield') {
+        return 'yield';
+      }
+      state.size++;
+    }
   }
 
   destroy(): void {
@@ -150,7 +233,8 @@ export class Exists implements FilterOperator {
                       row: change[ChangeIndex.NODE].row,
                       relationships: {
                         ...change[ChangeIndex.NODE].relationships,
-                        [this.#relationshipName]: () => [],
+                        [this.#relationshipName]: () =>
+                          emptyPullStream<Node | 'yield'>(),
                       },
                     }),
                     this,
@@ -183,11 +267,12 @@ export class Exists implements FilterOperator {
                       row: change[ChangeIndex.NODE].row,
                       relationships: {
                         ...change[ChangeIndex.NODE].relationships,
-                        [this.#relationshipName]: () => [
-                          change[ChangeIndex.CHILD_DATA].change[
-                            ChangeIndex.NODE
-                          ],
-                        ],
+                        [this.#relationshipName]: () =>
+                          pullOf([
+                            change[ChangeIndex.CHILD_DATA].change[
+                              ChangeIndex.NODE
+                            ],
+                          ]),
                       },
                     }),
                     this,
@@ -247,20 +332,18 @@ export class Exists implements FilterOperator {
   }
 
   *#fetchSize(node: Node): Generator<'yield', number> {
-    const relationship = node.relationships[this.#relationshipName];
-    assert(
-      relationship,
-      () =>
-        `Exists: relationship "${this.#relationshipName}" not found on node`,
-    );
-    let size = 0;
-    for (const n of relationship()) {
-      if (n === 'yield') {
-        yield 'yield';
-      } else {
-        size++;
+    const state = this.#startCount(node);
+    try {
+      for (;;) {
+        const r = this.#countStep(state);
+        if (r === 'yield') {
+          yield 'yield';
+          continue;
+        }
+        return r;
       }
+    } finally {
+      state.stream.close();
     }
-    return size;
   }
 }

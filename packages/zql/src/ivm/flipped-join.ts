@@ -28,7 +28,14 @@ import {
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream} from './stream.ts';
+import {
+  type Stream,
+  emptyPullStream,
+  type PullStream,
+  LazyPullStream,
+  pullOf,
+  drainPull,
+} from './stream.ts';
 
 /**
  * Maximum number of entries sent in a single batched `parent.fetch`
@@ -158,7 +165,17 @@ export class FlippedJoin implements Input {
     return this.#schema;
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
+    return new LazyPullStream(() => this.#startFetch(req));
+  }
+
+  /**
+   * Two phases: drain the child stream (forwarding its 'yield's) to collect
+   * the child nodes, then hand off to the batched parent fetch built from
+   * them. The generator this replaces expressed the handoff as a `yield*`
+   * after its collection loop.
+   */
+  #startFetch(req: FetchRequest): PullStream<Node | 'yield'> {
     // Translate constraints for the parent on parts of the join key to
     // constraints for the child.
     const childConstraint: Record<string, Value> = {};
@@ -173,64 +190,64 @@ export class FlippedJoin implements Input {
       }
     }
 
-    const childNodes: Node[] = [];
-    for (const node of this.#child.fetch(
+    const childStream = this.#child.fetch(
       hasChildConstraint ? {constraint: childConstraint} : {},
-    )) {
-      if (node === 'yield') {
-        yield node;
-        continue;
+    );
+    const childNodes: Node[] = [];
+    let collecting = true;
+    let inner: PullStream<Node | 'yield'> | undefined;
+
+    const startBatched = () => {
+      childStream.close();
+      // FlippedJoin's split-push change overlay logic is largely
+      // the same as Join's with the exception of remove.  For remove,
+      // the change is undone here, and then re-applied to parents with order
+      // less than or equal to change.position below.  This is necessary
+      // because if the removed node was the last related child, the
+      // related parents with position greater than change.position
+      // (which should not yet have the node removed), would not even
+      // be fetched here, and would be absent from the output all together.
+      if (
+        this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE
+      ) {
+        const removedNode = this.#inprogressChildChange[ChangeIndex.NODE];
+        const compare = this.#child.getSchema().compareRows;
+        const insertPos = binarySearch(childNodes.length, i =>
+          compare(removedNode.row, childNodes[i].row),
+        );
+        childNodes.splice(insertPos, 0, removedNode);
       }
-      childNodes.push(node);
-    }
+      inner = this.#fetchBatched(req, childNodes);
+    };
 
-    // FlippedJoin's split-push change overlay logic is largely
-    // the same as Join's with the exception of remove.  For remove,
-    // the change is undone here, and then re-applied to parents with order
-    // less than or equal to change.position below.  This is necessary
-    // because if the removed node was the last related child, the
-    // related parents with position greater than change.position
-    // (which should not yet have the node removed), would not even
-    // be fetched here, and would be absent from the output all together.
-    if (this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-      const removedNode = this.#inprogressChildChange[ChangeIndex.NODE];
-      const compare = this.#child.getSchema().compareRows;
-      const insertPos = binarySearch(childNodes.length, i =>
-        compare(removedNode.row, childNodes[i].row),
-      );
-      childNodes.splice(insertPos, 0, removedNode);
-    }
-
-    yield* this.#fetchBatched(req, childNodes);
+    return {
+      next: (): Node | 'yield' | undefined => {
+        while (collecting) {
+          const node = childStream.next();
+          if (node === undefined) {
+            collecting = false;
+            startBatched();
+            break;
+          }
+          if (node === 'yield') {
+            return node;
+          }
+          childNodes.push(node);
+        }
+        return inner?.next();
+      },
+      close: () => {
+        collecting = false;
+        childStream.close();
+        inner?.close();
+      },
+    };
   }
 
-  /**
-   * Fetches parents for `childNodes` in batched calls, using
-   * `multiConstraint` so the source can issue one query per chunk (e.g.
-   * SQL `IN` with index-aware seek) instead of N per-child cursors.
-   *
-   * Multi-constraint values are split into chunks of `CHUNK_SIZE`, so
-   * SQL `IN` lists stay bounded — predictable plans, statement-cache
-   * hits across calls of the same chunk size, well below SQLite's
-   * parameter limit.
-   *
-   * Within each chunk, the source returns parents in `compareRows` order.
-   * Across chunks, we merge with `mergeSortedStreams` so the overall
-   * stream is also in order. Note: the merge primes one row from every
-   * chunk before yielding the first output, so all chunks open their
-   * cursors up front. Early termination downstream then prevents any
-   * further work on un-advanced chunks (cursors get `.return()`'d via
-   * `mergeSortedStreams`'s finally block).
-   *
-   * Replaces the previous split between `#fetchMergeSort` and
-   * `#fetchQuicksort`. The unique-vs-not distinction is no longer needed:
-   * the source handles cardinality (single index seek for each value) and
-   * ordering (SQL `ORDER BY` / index walk).
-   */
-  *#fetchBatched(
+  #fetchBatched(
     req: FetchRequest,
     childNodes: Node[],
-  ): Stream<Node | 'yield'> {
+  ): PullStream<Node | 'yield'> {
     const parentReqConstraint = req.constraint;
     const parentKey = this.#parentKey;
     const childKey = this.#childKey;
@@ -263,7 +280,7 @@ export class FlippedJoin implements Input {
     }
 
     if (computedMulti.length === 0) {
-      return;
+      return emptyPullStream<Node | 'yield'>();
     }
 
     // Source returns parents in compareRows order within each chunk.
@@ -285,36 +302,47 @@ export class FlippedJoin implements Input {
           })
         : this.#fetchChunked(req, incoming, computedMulti, compare);
 
-    for (const node of parentStream) {
-      if (node === 'yield') {
-        yield 'yield';
-        continue;
-      }
-      const key = canonicalKey(node.row, parentKey);
-      const idxs = childIndexesByKey.get(key);
-      if (idxs === undefined) {
-        // This row's parent-key doesn't match any of our computed
-        // multi-constraint entries. Happens when our parent is an
-        // intermediate operator (e.g. a chained FlippedJoin) that passes
-        // multiConstraints through unchanged instead of filtering — see
-        // FetchRequest.multiConstraints contract. The lookup miss here
-        // performs the required filter, so just skip the row.
-        continue;
-      }
-      // Children retain their original input order within the group
-      // because we appended to `idxs` in iteration order.
-      const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
-      yield* this.#yieldParentWithOverlay(node, relatedChildNodes);
-    }
+    return {
+      next: (): Node | 'yield' | undefined => {
+        for (;;) {
+          const node = parentStream.next();
+          if (node === undefined) {
+            return undefined;
+          }
+          if (node === 'yield') {
+            return 'yield';
+          }
+          const key = canonicalKey(node.row, parentKey);
+          const idxs = childIndexesByKey.get(key);
+          if (idxs === undefined) {
+            // This row's parent-key doesn't match any of our computed
+            // multi-constraint entries. Happens when our parent is an
+            // intermediate operator (e.g. a chained FlippedJoin) that passes
+            // multiConstraints through unchanged instead of filtering — see
+            // FetchRequest.multiConstraints contract. The lookup miss here
+            // performs the required filter, so just skip the row.
+            continue;
+          }
+          // Children retain their original input order within the group
+          // because we appended to `idxs` in iteration order.
+          const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
+          const parent = this.#parentWithOverlay(node, relatedChildNodes);
+          if (parent !== undefined) {
+            return parent;
+          }
+        }
+      },
+      close: () => parentStream.close(),
+    };
   }
 
-  *#fetchChunked(
+  #fetchChunked(
     req: FetchRequest,
     incomingMultis: readonly MultiConstraint[],
     computedMulti: MultiConstraint,
     compare: (a: Node, b: Node) => number,
-  ): Stream<Node | 'yield'> {
-    const chunkStreams: Stream<Node | 'yield'>[] = [];
+  ): PullStream<Node | 'yield'> {
+    const chunkStreams: PullStream<Node | 'yield'>[] = [];
     for (let i = 0; i < computedMulti.length; i += multiConstraintChunkSize) {
       chunkStreams.push(
         this.#parent.fetch({
@@ -326,13 +354,14 @@ export class FlippedJoin implements Input {
         }),
       );
     }
-    yield* mergeSortedStreams(chunkStreams, compare);
+    return mergeSortedStreams(chunkStreams, compare);
   }
 
-  *#yieldParentWithOverlay(
+  /** The parent with its overlaid children, or undefined if none remain. */
+  #parentWithOverlay(
     minParentNode: Node,
     relatedChildNodes: Node[],
-  ): Stream<Node> {
+  ): Node | undefined {
     let overlaidRelatedChildNodes = relatedChildNodes;
     if (
       this.#inprogressChildChange &&
@@ -360,26 +389,27 @@ export class FlippedJoin implements Input {
           );
         }
       } else if (!hasInprogressChildChangeBeenPushedForMinParentNode) {
-        overlaidRelatedChildNodes = [
-          ...generateWithOverlayNoYield(
-            relatedChildNodes,
+        overlaidRelatedChildNodes = drainPull(
+          generateWithOverlayNoYield(
+            pullOf(relatedChildNodes),
             this.#inprogressChildChange,
             this.#child.getSchema(),
           ),
-        ];
+        );
       }
     }
 
-    // yield node if after the overlay it still has relationship nodes
-    if (overlaidRelatedChildNodes.length > 0) {
-      yield {
-        ...minParentNode,
-        relationships: {
-          ...minParentNode.relationships,
-          [this.#relationshipName]: () => overlaidRelatedChildNodes,
-        },
-      };
+    // emit the node if after the overlay it still has relationship nodes
+    if (overlaidRelatedChildNodes.length === 0) {
+      return undefined;
     }
+    return {
+      ...minParentNode,
+      relationships: {
+        ...minParentNode.relationships,
+        [this.#relationshipName]: () => pullOf(overlaidRelatedChildNodes),
+      },
+    };
   }
 
   *#pushChild(change: Change): Stream<'yield'> {
@@ -417,69 +447,97 @@ export class FlippedJoin implements Input {
       );
       const parentNodeStream = constraint
         ? this.#parent.fetch({constraint})
-        : [];
-      for (const parentNode of parentNodeStream) {
-        if (parentNode === 'yield') {
-          yield 'yield';
-          continue;
-        }
-        this.#inprogressChildChange = change;
-        this.#inprogressChildChangePosition = parentNode.row;
-        const childNodeStream = () => {
-          const constraint = buildJoinConstraint(
-            parentNode.row,
-            this.#parentKey,
-            this.#childKey,
-          );
-          return constraint ? this.#child.fetch({constraint}) : [];
-        };
-        if (!exists) {
-          for (const childNode of childNodeStream()) {
-            if (childNode === 'yield') {
+        : emptyPullStream<Node | 'yield'>();
+      {
+        const __pull421 = parentNodeStream;
+        try {
+          for (
+            let parentNode = __pull421.next();
+            parentNode !== undefined;
+            parentNode = __pull421.next()
+          ) {
+            if (parentNode === 'yield') {
               yield 'yield';
               continue;
             }
-            if (
-              this.#child
-                .getSchema()
-                .compareRows(childNode.row, change[ChangeIndex.NODE].row) !== 0
-            ) {
-              exists = true;
-              break;
-            }
-          }
-        }
-        if (exists) {
-          yield* this.#output.push(
-            makeChildChange(
+            this.#inprogressChildChange = change;
+            this.#inprogressChildChangePosition = parentNode.row;
+            const childNodeStream = () => {
+              const constraint = buildJoinConstraint(
+                parentNode.row,
+                this.#parentKey,
+                this.#childKey,
+              );
+              return constraint
+                ? this.#child.fetch({constraint})
+                : emptyPullStream<Node | 'yield'>();
+            };
+            if (!exists) {
               {
+                const __pull437 = childNodeStream();
+                try {
+                  for (
+                    let childNode = __pull437.next();
+                    childNode !== undefined;
+                    childNode = __pull437.next()
+                  ) {
+                    if (childNode === 'yield') {
+                      yield 'yield';
+                      continue;
+                    }
+                    if (
+                      this.#child
+                        .getSchema()
+                        .compareRows(
+                          childNode.row,
+                          change[ChangeIndex.NODE].row,
+                        ) !== 0
+                    ) {
+                      exists = true;
+                      break;
+                    }
+                  }
+                } finally {
+                  __pull437.close();
+                }
+              }
+            }
+            if (exists) {
+              yield* this.#output.push(
+                makeChildChange(
+                  {
+                    ...parentNode,
+                    relationships: {
+                      ...parentNode.relationships,
+                      [this.#relationshipName]: childNodeStream,
+                    },
+                  },
+                  {
+                    relationshipName: this.#relationshipName,
+                    change,
+                  },
+                ),
+                this,
+              );
+            } else {
+              const newNode = {
                 ...parentNode,
                 relationships: {
                   ...parentNode.relationships,
-                  [this.#relationshipName]: childNodeStream,
+                  [this.#relationshipName]: () =>
+                    pullOf([change[ChangeIndex.NODE]]),
                 },
-              },
-              {
-                relationshipName: this.#relationshipName,
-                change,
-              },
-            ),
-            this,
-          );
-        } else {
-          const newNode = {
-            ...parentNode,
-            relationships: {
-              ...parentNode.relationships,
-              [this.#relationshipName]: () => [change[ChangeIndex.NODE]],
-            },
-          };
-          yield* this.#output.push(
-            change[ChangeIndex.TYPE] === ChangeType.ADD
-              ? makeAddChange(newNode)
-              : makeRemoveChange(newNode),
-            this,
-          );
+              };
+              yield* this.#output.push(
+                change[ChangeIndex.TYPE] === ChangeType.ADD
+                  ? makeAddChange(newNode)
+                  : makeRemoveChange(newNode),
+                this,
+              );
+            }
+          }
+        } finally {
+          __pull421.close();
         }
       }
     } finally {
@@ -494,7 +552,9 @@ export class FlippedJoin implements Input {
         this.#parentKey,
         this.#childKey,
       );
-      return constraint ? this.#child.fetch({constraint}) : [];
+      return constraint
+        ? this.#child.fetch({constraint})
+        : emptyPullStream<Node | 'yield'>();
     };
 
     const flip = (node: Node) => ({
@@ -507,13 +567,24 @@ export class FlippedJoin implements Input {
 
     // If no related child don't push as this is an inner join.
     let hasRelatedChild = false;
-    for (const node of childNodeStream(change[ChangeIndex.NODE])()) {
-      if (node === 'yield') {
-        yield 'yield';
-        continue;
-      } else {
-        hasRelatedChild = true;
-        break;
+    {
+      const __pull510 = childNodeStream(change[ChangeIndex.NODE])();
+      try {
+        for (
+          let node = __pull510.next();
+          node !== undefined;
+          node = __pull510.next()
+        ) {
+          if (node === 'yield') {
+            yield 'yield';
+            continue;
+          } else {
+            hasRelatedChild = true;
+            break;
+          }
+        }
+      } finally {
+        __pull510.close();
       }
     }
     if (!hasRelatedChild) {

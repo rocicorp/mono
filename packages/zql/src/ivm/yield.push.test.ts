@@ -23,13 +23,25 @@ import {
   type SourceInput,
 } from './source.ts';
 import type {Stream} from './stream.ts';
-import {consume} from './stream.ts';
+import {consume, drainPull, type PullStream} from './stream.ts';
 import {Take} from './take.ts';
 import {UnionFanIn} from './union-fan-in.ts';
 import {UnionFanOut} from './union-fan-out.ts';
 
 class YieldOutput implements FilterOutput {
   yields: boolean = false;
+
+  /** The node whose 'yield' has already been emitted. */
+  #yielded: Node | undefined;
+
+  filterPull(node: Node): boolean | 'yield' {
+    if (this.yields && this.#yielded !== node) {
+      this.#yielded = node;
+      return 'yield';
+    }
+    this.#yielded = undefined;
+    return true;
+  }
 
   *push(_change: Change | SourceChange, _pusher: InputBase): Stream<'yield'> {
     if (this.yields) yield 'yield';
@@ -39,10 +51,6 @@ class YieldOutput implements FilterOutput {
 
   beginFilter() {}
   endFilter() {}
-  *filter(_node: Node): Generator<'yield', boolean> {
-    if (this.yields) yield 'yield';
-    return true;
-  }
 }
 
 class YieldMemorySource extends MemorySource {
@@ -71,14 +79,49 @@ class YieldMemorySource extends MemorySource {
     const originalFetch = input.fetch.bind(input);
 
     const source = this;
-    input.fetch = function* (req: FetchRequest): Stream<Node | 'yield'> {
-      for (const n of originalFetch(req)) {
-        if (source.yieldOnFetch) {
-          yield 'yield';
+    input.fetch = (req: FetchRequest): PullStream<Node | 'yield'> => {
+      const inner = originalFetch(req);
+      let pending: Node | 'yield' | undefined;
+      let exhausted = false;
+      let tailDone = false;
+      const tail = (): 'yield' | undefined => {
+        if (!tailDone) {
+          tailDone = true;
+          if (source.yieldOnFetch) {
+            return 'yield';
+          }
         }
-        yield n;
-      }
-      if (source.yieldOnFetch) yield 'yield';
+        return undefined;
+      };
+      return {
+        next(): Node | 'yield' | undefined {
+          if (pending !== undefined) {
+            const held = pending;
+            pending = undefined;
+            return held;
+          }
+          if (exhausted) {
+            return tail();
+          }
+          const n = inner.next();
+          if (n === undefined) {
+            exhausted = true;
+            inner.close();
+            return tail();
+          }
+          if (source.yieldOnFetch) {
+            pending = n;
+            return 'yield';
+          }
+          return n;
+        },
+        close() {
+          exhausted = true;
+          tailDone = true;
+          pending = undefined;
+          inner.close();
+        },
+      };
     };
     return input;
   }
@@ -165,7 +208,7 @@ describe('Yield Propagation (Push)', () => {
       take.setOutput(output);
 
       // Initialize Take
-      consume(take.fetch({}));
+      drainPull(take.fetch({}));
 
       expect(collectPush(source, makeAdd('0'))).toEqual(['yield', 'yield']);
     });
@@ -183,7 +226,7 @@ describe('Yield Propagation (Push)', () => {
       take.setOutput(output);
 
       // Initialize Take
-      consume(take.fetch({}));
+      drainPull(take.fetch({}));
 
       expect(collectPush(source, makeRemove('0'))).toEqual(['yield', 'yield']);
     });
@@ -203,7 +246,7 @@ describe('Yield Propagation (Push)', () => {
       take.setOutput(output);
 
       // Initialize Take
-      consume(take.fetch({}));
+      drainPull(take.fetch({}));
 
       // Push add '0'. This should displace '1'.
       const result = collectPush(source, makeAdd('0'));
@@ -228,7 +271,7 @@ describe('Yield Propagation (Push)', () => {
       take.setOutput(output);
 
       // Initialize Take
-      consume(take.fetch({}));
+      drainPull(take.fetch({}));
 
       // Push remove '0'.
       const result = collectPush(source, makeRemove('0'));
@@ -251,7 +294,7 @@ describe('Yield Propagation (Push)', () => {
       take.setOutput(output);
 
       // Initialize Take
-      consume(take.fetch({}));
+      drainPull(take.fetch({}));
 
       // Edit '0' to '2' (move out of bounds).
       const result = collectPush(source, makeEdit('2', '0'));
@@ -275,7 +318,7 @@ describe('Yield Propagation (Push)', () => {
       take.setOutput(output);
 
       // Initialize Take
-      consume(take.fetch({}));
+      drainPull(take.fetch({}));
 
       // Edit '2' to '0' (move into bounds).
       const result = collectPush(source, makeEdit('0', '2'));
@@ -645,7 +688,7 @@ describe('Yield Propagation (Push)', () => {
       output.yields = true;
       take.setOutput(output);
 
-      consume(take.fetch({}));
+      drainPull(take.fetch({}));
 
       // Output yields 2.
       expect(collectPush(source, makeAdd('1'))).toEqual(['yield', 'yield']);

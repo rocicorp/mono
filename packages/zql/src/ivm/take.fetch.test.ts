@@ -12,8 +12,7 @@ import type {Node} from './data.ts';
 import {MemoryStorage} from './memory-storage.ts';
 import type {FetchRequest} from './operator.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
-import type {Stream} from './stream.ts';
-import {consume} from './stream.ts';
+import {consume, drainPull, type PullStream} from './stream.ts';
 import {Take, type PartitionKey} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 
@@ -382,7 +381,7 @@ suite('take with no partition', () => {
 });
 
 class ThrowingSnitch extends Snitch {
-  fetch(_: FetchRequest): Stream<Node> {
+  fetch(_: FetchRequest): PullStream<Node | 'yield'> {
     throw new Error('ThrowingSnitch error');
   }
 }
@@ -401,7 +400,7 @@ test('exception during hydrate', () => {
   const limit = 10;
 
   const take = new Take(snitch, storage, limit);
-  expect(() => [...take.fetch({})]).toThrow('ThrowingSnitch error');
+  expect(() => drainPull(take.fetch({}))).toThrow('ThrowingSnitch error');
 });
 
 test('early return during hydrate', () => {
@@ -424,10 +423,17 @@ test('early return during hydrate', () => {
   const take = new Take(snitch, storage, limit);
   expect(() => {
     let count = 0;
-    for (const _ of take.fetch({})) {
-      count++;
-      if (count > 1) {
-        break;
+    {
+      const __pull427 = take.fetch({});
+      try {
+        for (let _ = __pull427.next(); _ !== undefined; _ = __pull427.next()) {
+          count++;
+          if (count > 1) {
+            break;
+          }
+        }
+      } finally {
+        __pull427.close();
       }
     }
   }).toThrow('Unexpected early return prevented full hydration');

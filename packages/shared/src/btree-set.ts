@@ -96,7 +96,7 @@ export class BTreeSet<K> {
     return valuesFrom(this.#root, this.comparator, undefined, true);
   }
 
-  valuesFrom(lowestKey?: K, inclusive: boolean = true): IterableIterator<K> {
+  valuesFrom(lowestKey?: K, inclusive: boolean = true): ValueIterator<K> {
     return valuesFrom(this.#root, this.comparator, lowestKey, inclusive);
   }
 
@@ -113,7 +113,7 @@ export class BTreeSet<K> {
   valuesFromReversed(
     highestKey?: K,
     inclusive: boolean = true,
-  ): IterableIterator<K> {
+  ): ValueIterator<K> {
     return valuesFromReversed(
       this.#maxKey(),
       this.#root,
@@ -187,7 +187,16 @@ export class BTreeSet<K> {
   }
 }
 
-class BTreeForwardIterator<K> implements IterableIterator<K> {
+/**
+ * An iterator that can also hand back values without the iterator protocol's
+ * per-value result object. `nextValue()` returns `undefined` once exhausted,
+ * so it is only meaningful for sets whose keys are never `undefined`.
+ */
+export interface ValueIterator<K> extends IterableIterator<K> {
+  nextValue(): K | undefined;
+}
+
+class BTreeForwardIterator<K> implements ValueIterator<K> {
   readonly #nodeQueue: BNode<K>[][];
   readonly #nodeIndex: number[];
   #leaf: BNode<K>;
@@ -205,16 +214,17 @@ class BTreeForwardIterator<K> implements IterableIterator<K> {
     this.#i = startI;
   }
 
-  next(): IteratorResult<K> {
+  /** Moves to the next key; false once exhausted. */
+  #advance(): boolean {
     for (;;) {
       if (++this.#i < this.#leaf.keys.length) {
-        return {done: false, value: this.#leaf.keys[this.#i]};
+        return true;
       }
 
       let level = -1;
       for (;;) {
         if (++level >= this.#nodeQueue.length) {
-          return {done: true, value: undefined as unknown as K};
+          return false;
         }
         if (++this.#nodeIndex[level] < this.#nodeQueue[level].length) {
           break;
@@ -231,12 +241,22 @@ class BTreeForwardIterator<K> implements IterableIterator<K> {
     }
   }
 
+  next(): IteratorResult<K> {
+    return this.#advance()
+      ? {done: false, value: this.#leaf.keys[this.#i]}
+      : {done: true, value: undefined as unknown as K};
+  }
+
+  nextValue(): K | undefined {
+    return this.#advance() ? this.#leaf.keys[this.#i] : undefined;
+  }
+
   [Symbol.iterator]() {
     return this;
   }
 }
 
-class BTreeReverseIterator<K> implements IterableIterator<K> {
+class BTreeReverseIterator<K> implements ValueIterator<K> {
   readonly #nodeQueue: BNode<K>[][];
   readonly #nodeIndex: number[];
   #leaf: BNode<K>;
@@ -254,17 +274,18 @@ class BTreeReverseIterator<K> implements IterableIterator<K> {
     this.#i = startI;
   }
 
-  next(): IteratorResult<K> {
+  /** Moves to the previous key; false once exhausted. */
+  #advance(): boolean {
     for (;;) {
       if (--this.#i >= 0) {
-        return {done: false, value: this.#leaf.keys[this.#i]};
+        return true;
       }
 
       let level;
       // Advance to the next leaf node
       for (level = -1; ;) {
         if (++level >= this.#nodeQueue.length) {
-          return {done: true, value: undefined as unknown as K};
+          return false;
         }
         if (--this.#nodeIndex[level] >= 0) {
           break;
@@ -281,6 +302,16 @@ class BTreeReverseIterator<K> implements IterableIterator<K> {
     }
   }
 
+  next(): IteratorResult<K> {
+    return this.#advance()
+      ? {done: false, value: this.#leaf.keys[this.#i]}
+      : {done: true, value: undefined as unknown as K};
+  }
+
+  nextValue(): K | undefined {
+    return this.#advance() ? this.#leaf.keys[this.#i] : undefined;
+  }
+
   [Symbol.iterator]() {
     return this;
   }
@@ -291,10 +322,10 @@ function valuesFrom<K>(
   comparator: Comparator<K>,
   lowestKey: K | undefined,
   inclusive: boolean,
-): IterableIterator<K> {
+): ValueIterator<K> {
   const info = findPath(lowestKey, root, comparator);
   if (info === undefined) {
-    return iterator<K>(() => ({done: true, value: undefined}));
+    return emptyValueIterator<K>();
   }
 
   let [nodeQueue, nodeIndex, leaf] = info;
@@ -322,11 +353,11 @@ function valuesFromReversed<K>(
   comparator: Comparator<K>,
   highestKey: K | undefined,
   inclusive: boolean,
-): IterableIterator<K> {
+): ValueIterator<K> {
   if (highestKey === undefined) {
     highestKey = maxKey;
     if (highestKey === undefined) {
-      return iterator<K>(() => ({done: true, value: undefined}));
+      return emptyValueIterator<K>();
     } // collection is empty
   }
   let [nodeQueue, nodeIndex, leaf] =
@@ -371,9 +402,10 @@ function findPath<K>(
   return [nodeQueue, nodeIndex, nextNode];
 }
 
-function iterator<T>(next: () => IteratorResult<T>): IterableIterator<T> {
+function emptyValueIterator<K>(): ValueIterator<K> {
   return {
-    next,
+    next: () => ({done: true, value: undefined as unknown as K}),
+    nextValue: () => undefined,
     [Symbol.iterator]() {
       return this;
     },

@@ -4,7 +4,7 @@ import type {DebugDelegate} from '../../builder/debug-delegate.ts';
 import type {Node} from '../data.ts';
 import type {FetchRequest} from '../operator.ts';
 import type {Source, SourceChange, SourceInput} from '../source.ts';
-import type {Stream} from '../stream.ts';
+import type {PullStream, Stream} from '../stream.ts';
 
 /**
  * A source wrapper that randomly injects 'yield' values into fetch and push
@@ -59,22 +59,53 @@ export class RandomYieldSource implements Source {
 
     const wrappedInput: SourceInput = {
       ...sourceInput,
-      *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-        for (const item of originalFetch(req)) {
-          // Check for abort (can throw)
-          checkAbort?.();
-          // Randomly yield before each item
-          if (rng() < yieldProbability) {
-            yield 'yield';
+      fetch: (req: FetchRequest): PullStream<Node | 'yield'> => {
+        const src = originalFetch(req);
+        let pending: Node | 'yield' | undefined;
+        let exhausted = false;
+        let tailDone = false;
+        const tail = (): 'yield' | undefined => {
+          if (!tailDone) {
+            tailDone = true;
+            // Check for abort at the end (can throw)
+            checkAbort?.();
+            if (rng() < yieldProbability) {
+              return 'yield';
+            }
           }
-          yield item;
-        }
-        // Check for abort at the end
-        checkAbort?.();
-        // Randomly yield at the end
-        if (rng() < yieldProbability) {
-          yield 'yield';
-        }
+          return undefined;
+        };
+        return {
+          next(): Node | 'yield' | undefined {
+            if (pending !== undefined) {
+              const held = pending;
+              pending = undefined;
+              return held;
+            }
+            if (exhausted) {
+              return tail();
+            }
+            const item = src.next();
+            if (item === undefined) {
+              exhausted = true;
+              return tail();
+            }
+            // Check for abort (can throw)
+            checkAbort?.();
+            // Randomly yield before each item
+            if (rng() < yieldProbability) {
+              pending = item;
+              return 'yield';
+            }
+            return item;
+          },
+          close() {
+            exhausted = true;
+            tailDone = true;
+            pending = undefined;
+            src.close();
+          },
+        };
       },
     };
 

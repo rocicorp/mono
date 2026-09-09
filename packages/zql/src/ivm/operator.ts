@@ -5,7 +5,7 @@ import type {Change} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import type {PullStream, Stream} from './stream.ts';
 
 export {skipYields} from './skip-yields.ts';
 
@@ -41,7 +41,7 @@ export interface Input extends InputBase {
    * - During push: If a fetch to an input consumed by the push logic yields
    * 'yield', it must be yielded to the caller of push immediately.
    */
-  fetch(req: FetchRequest): Stream<Node | 'yield'>;
+  fetch(req: FetchRequest): PullStream<Node | 'yield'>;
 }
 
 /**

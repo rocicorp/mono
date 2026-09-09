@@ -15,7 +15,12 @@ import {
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream} from './stream.ts';
+import {
+  type Stream,
+  emptyPullStream,
+  PullStreamBase,
+  type PullStream,
+} from './stream.ts';
 import {
   constraintMatchesPartitionKey,
   makePartitionKeyComparator,
@@ -84,7 +89,7 @@ export class Cap implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
     assert(!req.start, 'Cap does not support start');
     assert(!req.reverse, 'Cap does not support reverse');
 
@@ -102,78 +107,42 @@ export class Cap implements Operator {
     const capStateKey = getCapStateKey(this.#partitionKey, req.constraint);
     const capState = this.#storage.get(capStateKey);
     if (!capState) {
-      yield* this.#initialFetch(req);
-      return;
+      return this.#initialFetch(req, capStateKey);
     }
     if (capState.size === 0) {
-      return;
+      return emptyPullStream();
     }
     // PK-based point lookups: fetch each tracked row by its PK directly,
     // rather than scanning the partition and filtering.
-    for (const pk of capState.pks) {
-      const constraint = deserializePKToConstraint(pk, this.#primaryKey);
-      for (const inputNode of this.#input.fetch({constraint})) {
-        if (inputNode === 'yield') {
-          yield inputNode;
-          continue;
-        }
-        yield inputNode;
-      }
-    }
+    return new CapPointLookups(capState.pks, pk =>
+      this.#input.fetch({
+        constraint: deserializePKToConstraint(pk, this.#primaryKey),
+      }),
+    );
   }
 
-  *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
+  #initialFetch(
+    req: FetchRequest,
+    capStateKey: string,
+  ): PullStream<Node | 'yield'> {
     if (this.#limit === 0) {
-      return;
+      return emptyPullStream();
     }
-
     assert(
       constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
       'Constraint should match partition key',
     );
-
-    const capStateKey = getCapStateKey(this.#partitionKey, req.constraint);
     assert(
       this.#storage.get(capStateKey) === undefined,
       'Cap state should be undefined',
     );
-
-    let size = 0;
-    const pks: string[] = [];
-    let downstreamEarlyReturn = true;
-    let exceptionThrown = false;
-    try {
-      for (const inputNode of this.#input.fetch(req)) {
-        if (inputNode === 'yield') {
-          yield 'yield';
-          continue;
-        }
-        yield inputNode;
-        pks.push(serializePK(inputNode.row, this.#primaryKey));
-        size++;
-        if (size === this.#limit) {
-          break;
-        }
-      }
-      downstreamEarlyReturn = false;
-    } catch (e) {
-      exceptionThrown = true;
-      throw e;
-    } finally {
-      if (!exceptionThrown) {
-        this.#storage.set(capStateKey, {size, pks});
-        // If it becomes necessary to support downstream early return, this
-        // assert should be removed, and replaced with code that consumes
-        // the input stream until limit is reached or the input stream is
-        // exhausted so that capState is properly hydrated.
-        assert(
-          !downstreamEarlyReturn,
-          'Unexpected early return prevented full hydration',
-        );
-      }
-    }
+    return new CapInitialFetch(
+      this.#input.fetch(req),
+      this.#limit,
+      row => serializePK(row, this.#primaryKey),
+      (size, pks) => this.#storage.set(capStateKey, {size, pks}),
+    );
   }
-
   *push(change: Change): Stream<'yield'> {
     if (change[ChangeIndex.TYPE] === ChangeType.EDIT) {
       yield* this.#pushEditChange(change);
@@ -223,15 +192,26 @@ export class Cap implements Operator {
         : undefined;
 
       let replacement: Node | undefined;
-      for (const node of this.#input.fetch({constraint})) {
-        if (node === 'yield') {
-          yield node;
-          continue;
-        }
-        const nodePK = serializePK(node.row, this.#primaryKey);
-        if (!pkSet.has(nodePK)) {
-          replacement = node;
-          break;
+      {
+        const __pull190 = this.#input.fetch({constraint});
+        try {
+          for (
+            let node = __pull190.next();
+            node !== undefined;
+            node = __pull190.next()
+          ) {
+            if (node === 'yield') {
+              yield node;
+              continue;
+            }
+            const nodePK = serializePK(node.row, this.#primaryKey);
+            if (!pkSet.has(nodePK)) {
+              replacement = node;
+              break;
+            }
+          }
+        } finally {
+          __pull190.close();
         }
       }
 
@@ -326,4 +306,112 @@ function deserializePKToConstraint(
     constraint[primaryKey[i]] = values[i];
   }
   return constraint;
+}
+
+/** Flattens per-PK point lookups into one stream. */
+class CapPointLookups extends PullStreamBase<Node | 'yield'> {
+  readonly #pks: readonly string[];
+  readonly #fetch: (pk: string) => PullStream<Node | 'yield'>;
+  #i = 0;
+  #cur: PullStream<Node | 'yield'> | undefined;
+
+  constructor(
+    pks: readonly string[],
+    fetch: (pk: string) => PullStream<Node | 'yield'>,
+  ) {
+    super();
+    this.#pks = pks;
+    this.#fetch = fetch;
+  }
+
+  next(): Node | 'yield' | undefined {
+    for (;;) {
+      if (this.#cur !== undefined) {
+        const v = this.#cur.next();
+        if (v !== undefined) {
+          return v;
+        }
+        this.#cur = undefined;
+      }
+      if (this.#i >= this.#pks.length) {
+        return undefined;
+      }
+      this.#cur = this.#fetch(this.#pks[this.#i++]);
+    }
+  }
+
+  close(): void {
+    this.#i = this.#pks.length;
+    this.#cur?.close();
+    this.#cur = undefined;
+  }
+}
+
+/**
+ * Cap's first fetch: emits up to `limit` rows and records the cap state when
+ * the scan completes. Early close still records, then raises the same
+ * assertion the generator raised from its finally block.
+ */
+class CapInitialFetch extends PullStreamBase<Node | 'yield'> {
+  readonly #input: PullStream<Node | 'yield'>;
+  readonly #limit: number;
+  readonly #pkOf: (row: Row) => string;
+  readonly #finish: (size: number, pks: string[]) => void;
+  readonly #pks: string[] = [];
+  #size = 0;
+  #done = false;
+
+  constructor(
+    input: PullStream<Node | 'yield'>,
+    limit: number,
+    pkOf: (row: Row) => string,
+    finish: (size: number, pks: string[]) => void,
+  ) {
+    super();
+    this.#input = input;
+    this.#limit = limit;
+    this.#pkOf = pkOf;
+    this.#finish = finish;
+  }
+
+  next(): Node | 'yield' | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    if (this.#size === this.#limit) {
+      this.#complete();
+      return undefined;
+    }
+    let v: Node | 'yield' | undefined;
+    try {
+      v = this.#input.next();
+    } catch (e) {
+      // As the generator did: an exception records no state.
+      this.#done = true;
+      throw e;
+    }
+    if (v === undefined) {
+      this.#complete();
+      return undefined;
+    }
+    if (v === 'yield') {
+      return v;
+    }
+    this.#pks.push(this.#pkOf(v.row));
+    this.#size++;
+    return v;
+  }
+
+  #complete(): void {
+    this.#done = true;
+    this.#input.close();
+    this.#finish(this.#size, this.#pks);
+  }
+
+  close(): void {
+    if (!this.#done) {
+      this.#complete();
+      assert(false, 'Unexpected early return prevented full hydration');
+    }
+  }
 }

@@ -19,7 +19,7 @@ import {
   pushAccumulatedChanges,
 } from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {type Stream, PullStreamBase, type PullStream} from './stream.ts';
 import type {UnionFanOut} from './union-fan-out.ts';
 
 export class UnionFanIn implements Operator {
@@ -100,7 +100,7 @@ export class UnionFanIn implements Operator {
     }
   }
 
-  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
     const iterables = this.#inputs.map(input => input.fetch(req));
     const compareRows = this.#schema.compareRows;
     const compare = req.reverse
@@ -178,13 +178,24 @@ export class UnionFanIn implements Operator {
       // looked like a branch holding the row, silently dropping the
       // add/remove and desyncing a downstream `Take`'s push and fetch paths.
       let otherBranchHasRow = false;
-      for (const node of fetchResult) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      {
+        const __pull181 = fetchResult;
+        try {
+          for (
+            let node = __pull181.next();
+            node !== undefined;
+            node = __pull181.next()
+          ) {
+            if (node === 'yield') {
+              yield node;
+              continue;
+            }
+            otherBranchHasRow = true;
+            break;
+          }
+        } finally {
+          __pull181.close();
         }
-        otherBranchHasRow = true;
-        break;
       }
 
       if (otherBranchHasRow) {
@@ -238,78 +249,124 @@ export class UnionFanIn implements Operator {
   }
 }
 
-export function* mergeFetches(
-  fetches: Iterable<Node | 'yield'>[],
+export function mergeFetches(
+  fetches: PullStream<Node | 'yield'>[],
   comparator: (l: Node, r: Node) => number,
-): IterableIterator<Node | 'yield'> {
-  const iterators = fetches.map(i => i[Symbol.iterator]());
-  let threw = false;
-  try {
-    const current: (Node | null)[] = [];
-    let lastNodeYielded: Node | undefined;
-    for (let i = 0; i < iterators.length; i++) {
-      const iter = iterators[i];
-      let result = iter.next();
-      // yield yields when initializing
-      while (!result.done && result.value === 'yield') {
-        yield result.value;
-        result = iter.next();
-      }
-      current[i] = result.done ? null : (result.value as Node);
-    }
-    while (current.some(c => c !== null)) {
-      const min = current.reduce(
-        (acc: [Node, number] | undefined, c, i): [Node, number] | undefined => {
-          if (c === null) {
-            return acc;
-          }
-          if (acc === undefined || comparator(c, acc[0]) < 0) {
-            return [c, i];
-          }
-          return acc;
-        },
-        undefined,
-      );
+): PullStream<Node | 'yield'> {
+  return new MergeFetches(fetches, comparator);
+}
 
-      assert(min !== undefined, 'min is undefined');
-      const [minNode, minIndex] = min;
-      const iter = iterators[minIndex];
-      let result = iter.next();
-      while (!result.done && result.value === 'yield') {
-        yield result.value;
-        result = iter.next();
+/**
+ * Linear-scan merge of pre-sorted branches, dropping duplicates that compare
+ * equal to the last emitted node.
+ *
+ * The generator this replaces suspended inside its "advance this branch" loop
+ * to forward a 'yield'. That point is now `#refill`: the branch owing a
+ * replacement for the node just emitted, so a 'yield' can be returned and the
+ * merge resumed at the same place.
+ */
+class MergeFetches extends PullStreamBase<Node | 'yield'> {
+  readonly #streams: readonly PullStream<Node | 'yield'>[];
+  readonly #comparator: (l: Node, r: Node) => number;
+  readonly #current: (Node | null)[];
+  #lastEmitted: Node | undefined;
+  /** Node selected but not yet emitted: its branch is refilled first. */
+  #held: Node | undefined;
+  #primeIdx = 0;
+  #priming = true;
+  #refill: number | undefined;
+  #done = false;
+
+  constructor(
+    streams: readonly PullStream<Node | 'yield'>[],
+    comparator: (l: Node, r: Node) => number,
+  ) {
+    super();
+    this.#streams = streams;
+    this.#comparator = comparator;
+    this.#current = new Array(streams.length).fill(null);
+  }
+
+  /** A Node, 'yield' to forward, or undefined when the branch is spent. */
+  #pullOne(idx: number): Node | 'yield' | undefined {
+    return this.#streams[idx].next();
+  }
+
+  next(): Node | 'yield' | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    for (;;) {
+      if (this.#priming) {
+        while (this.#primeIdx < this.#streams.length) {
+          const v = this.#pullOne(this.#primeIdx);
+          if (v === 'yield') {
+            return v;
+          }
+          this.#current[this.#primeIdx] = v === undefined ? null : v;
+          this.#primeIdx++;
+        }
+        this.#priming = false;
       }
-      current[minIndex] = result.done ? null : (result.value as Node);
-      if (
-        lastNodeYielded !== undefined &&
-        comparator(lastNodeYielded, minNode) === 0
-      ) {
+
+      if (this.#refill !== undefined) {
+        const idx = this.#refill;
+        const v = this.#pullOne(idx);
+        if (v === 'yield') {
+          return v;
+        }
+        this.#refill = undefined;
+        this.#current[idx] = v === undefined ? null : v;
+        // The branch has been advanced; now the held node may be emitted.
+        // Order matters: the generator forwarded a branch's 'yield's before
+        // emitting the node it had selected from that branch.
+        const held = this.#held;
+        this.#held = undefined;
+        if (held !== undefined) {
+          if (
+            this.#lastEmitted !== undefined &&
+            this.#comparator(this.#lastEmitted, held) === 0
+          ) {
+            continue;
+          }
+          this.#lastEmitted = held;
+          return held;
+        }
         continue;
       }
-      lastNodeYielded = minNode;
-      yield minNode;
-    }
-  } catch (e) {
-    threw = true;
-    for (const iter of iterators) {
-      try {
-        iter.throw?.(e);
-      } catch (_cleanupError) {
-        // error in the iter.throw cleanup,
-        // catch so other iterators are cleaned up
-      }
-    }
-    throw e;
-  } finally {
-    if (!threw) {
-      for (const iter of iterators) {
-        try {
-          iter.return?.();
-        } catch (_cleanupError) {
-          // error in the iter.return cleanup,
-          // catch so other iterators are cleaned up
+
+      let minNode: Node | undefined;
+      let minIndex = -1;
+      for (let i = 0; i < this.#current.length; i++) {
+        const c = this.#current[i];
+        if (c === null) {
+          continue;
+        }
+        if (minNode === undefined || this.#comparator(c, minNode) < 0) {
+          minNode = c;
+          minIndex = i;
         }
       }
+      if (minNode === undefined) {
+        this.close();
+        return undefined;
+      }
+
+      // Hold the node and advance its branch first; the duplicate check and
+      // the emit both happen once the refill completes.
+      this.#held = minNode;
+      this.#refill = minIndex;
+    }
+  }
+
+  close(): void {
+    if (this.#done) {
+      return;
+    }
+    this.#done = true;
+    this.#held = undefined;
+    for (const s of this.#streams) {
+      s.close();
     }
   }
 }

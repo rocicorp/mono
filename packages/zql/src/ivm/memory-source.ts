@@ -1,7 +1,7 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {BTreeSet} from '../../../shared/src/btree-set.ts';
+import {BTreeSet, type ValueIterator} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
-import {once, toSorted} from '../../../shared/src/iterables.ts';
+import {toSorted} from '../../../shared/src/iterables.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {
   Condition,
@@ -54,7 +54,12 @@ import type {
   SourceInput,
 } from './source.ts';
 import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
-import type {Stream} from './stream.ts';
+import {
+  LazyPullStream,
+  type PullStream,
+  PullStreamBase,
+  type Stream,
+} from './stream.ts';
 
 export type Overlay = {
   epoch: number;
@@ -94,54 +99,6 @@ export type Connection = {
  * This data is kept in sorted order as downstream pipelines will always expect
  * the data they receive from `pull` to be in sorted order.
  */
-const DONE: IteratorReturnResult<undefined> = {done: true, value: undefined};
-
-/**
- * A stream whose work starts on the first `next()`, like a generator body.
- *
- * Chained generators are the most expensive way to move a row on Hermes: a
- * four-deep pipeline measured ~2x a hand-written iterator chain and ~30x a
- * plain loop. This is the shim that lets `#fetch` stop being a generator
- * without moving its setup earlier -- setup still runs on first `next()`, the
- * stream is still single-use, and `[Symbol.iterator]()` still returns itself.
- */
-class LazyStream<T> implements IterableIterator<T> {
-  #start: (() => Iterator<T>) | undefined;
-  #inner: Iterator<T> | undefined;
-
-  constructor(start: () => Iterator<T>) {
-    this.#start = start;
-  }
-
-  next(): IteratorResult<T> {
-    let inner = this.#inner;
-    if (inner === undefined) {
-      const start = this.#start;
-      if (start === undefined) {
-        return DONE;
-      }
-      this.#start = undefined;
-      inner = this.#inner = start();
-    }
-    return inner.next();
-  }
-
-  /**
-   * Propagates early termination, as `yield*` does. Sources hold real
-   * resources -- SQLite cursors -- and leaking one leaves later writes on the
-   * same connection failing with "database connection is busy".
-   */
-  return(value?: unknown): IteratorResult<T> {
-    this.#start = undefined;
-    const inner = this.#inner;
-    this.#inner = undefined;
-    return inner?.return?.(value) ?? DONE;
-  }
-
-  [Symbol.iterator](): IterableIterator<T> {
-    return this;
-  }
-}
 
 /**
  * Rows from an index scan, wrapped as Nodes, stopping at the first row that
@@ -152,48 +109,9 @@ class LazyStream<T> implements IterableIterator<T> {
  * `start`, no filters -- which is what a plain scan and every join
  * child-lookup take.
  */
-class ConstrainedRowIterator implements Iterator<Node> {
-  readonly #rows: Iterator<Row>;
-  readonly #constraint: Constraint | undefined;
-  #done = false;
-
-  constructor(rows: Iterator<Row>, constraint: Constraint | undefined) {
-    this.#rows = rows;
-    this.#constraint = constraint;
-  }
-
-  next(): IteratorResult<Node> {
-    if (this.#done) {
-      return DONE;
-    }
-    const result = this.#rows.next();
-    if (result.done) {
-      this.#done = true;
-      return DONE;
-    }
-    const row = result.value;
-    const constraint = this.#constraint;
-    if (constraint !== undefined && !constraintMatchesRow(constraint, row)) {
-      // `break` out of the old `for...of` closed the underlying scan; do the
-      // same explicitly.
-      this.#done = true;
-      this.#rows.return?.();
-      return DONE;
-    }
-    return {done: false, value: {row, relationships: {}}};
-  }
-
-  return(value?: unknown): IteratorResult<Node> {
-    this.#done = true;
-    // Close the scan for its side effect; its result is a Row, not a Node.
-    this.#rows.return?.(value);
-    return DONE;
-  }
-
-  [Symbol.iterator](): Iterator<Node> {
-    return this;
-  }
-}
+type FetchPlan =
+  | {rows: ValueIterator<Row>; constraint: Constraint | undefined}
+  | {stream: PullStream<Node | 'yield'>};
 
 export class MemorySource implements Source {
   readonly #tableName: string;
@@ -359,16 +277,24 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  #fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
-    // A generator body does not run until the first `next()`, and this one
-    // reads `#overlay` and `conn.lastPushedEpoch` -- a caller may legitimately
-    // call `fetch()` and only iterate after a push. `LazyStream` keeps that
-    // exact timing while letting the branches below return hand-written
-    // iterators instead of generators.
-    return new LazyStream(() => this.#startFetch(req, conn));
+  #fetch(req: FetchRequest, conn: Connection): PullStream<Node | 'yield'> {
+    // Lazy, as a generator body was: this reads `#overlay` and
+    // `conn.lastPushedEpoch`, and a caller may fetch then iterate after a push.
+    return new LazyPullStream(() => {
+      const plan = this.#prepareFetch(req, conn);
+      return 'rows' in plan
+        ? new ConstrainedRowPull(plan.rows, plan.constraint)
+        : plan.stream;
+    });
   }
 
-  #startFetch(req: FetchRequest, conn: Connection): Iterator<Node | 'yield'> {
+  /**
+   * Everything `#fetch` decides before it produces a row, shared by both
+   * protocols so the fast-path condition and the overlay setup exist once.
+   * Returns the raw index scan for the hot path -- no overlay, no `start`, no
+   * filters -- and an assembled iterator for everything else.
+   */
+  #prepareFetch(req: FetchRequest, conn: Connection): FetchPlan {
     // multiConstraints is handled by driving sub-fetches off the first
     // entry's values and post-filtering matches against any remaining
     // entries. TableSource implements multi-IN natively via SQL `AND` of
@@ -379,7 +305,7 @@ export class MemorySource implements Source {
       req.multiConstraints &&
       req.multiConstraints.some(mc => mc.length > 0)
     ) {
-      return this.#fetchMulti(req, conn)[Symbol.iterator]();
+      return {stream: this.#fetchMulti(req, conn)};
     }
     const requestedSort = must(conn.sort);
     const {compareRows} = conn;
@@ -478,12 +404,12 @@ export class MemorySource implements Source {
     const overlayActive =
       this.#overlay && conn.lastPushedEpoch >= this.#overlay.epoch;
     if (!overlayActive && !req.start && !conn.filters && !req.filter) {
-      return new ConstrainedRowIterator(rowsIterable, req.constraint);
+      return {rows: rowsIterable, constraint: req.constraint};
     }
 
     const withOverlay = generateWithOverlay(
       startAt,
-      pkConstraint ? once(rowsIterable) : rowsIterable,
+      new RowScan(rowsIterable),
       // use `req.constraint` here and not `fetchOrPkConstraint` since `fetchOrPkConstraint` could be the
       // primary key constraint. The primary key constraint comes from filters and is acting as a filter
       // rather than as the fetch constraint.
@@ -512,7 +438,7 @@ export class MemorySource implements Source {
       mergedFilterPredicate,
     );
 
-    const withConstraint = generateWithConstraint(
+    const withConstraint = new WithConstraint(
       skipYields(
         generateWithStart(withOverlay, req.start, connectionComparator),
       ),
@@ -521,14 +447,14 @@ export class MemorySource implements Source {
       req.constraint,
     );
 
-    return (
-      mergedFilterPredicate
-        ? generateWithFilter(withConstraint, mergedFilterPredicate)
-        : withConstraint
-    )[Symbol.iterator]();
+    return {
+      stream: mergedFilterPredicate
+        ? new WithFilter(withConstraint, mergedFilterPredicate)
+        : withConstraint,
+    };
   }
 
-  *#fetchMulti(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+  #fetchMulti(req: FetchRequest, conn: Connection): PullStream<Node | 'yield'> {
     // Caller (`#fetch`) guards entry on `req.multiConstraints.some(mc =>
     // mc.length > 0)`, so `multis` is guaranteed non-empty after the
     // empty-entry filter. Per the MultiConstraint contract (operator.ts),
@@ -545,7 +471,7 @@ export class MemorySource implements Source {
     // MultiConstraint contract (see operator.ts), entries are unique and
     // key-compatible with `baseConstraint`, so we don't dedupe or check
     // compatibility here.
-    const subStreams: Stream<Node | 'yield'>[] = primary.map(c => {
+    const subStreams: PullStream<Node | 'yield'>[] = primary.map(c => {
       const merged: Constraint = baseConstraint ? {...baseConstraint, ...c} : c;
       return this.#fetch(
         {...req, constraint: merged, multiConstraints: undefined},
@@ -559,32 +485,7 @@ export class MemorySource implements Source {
         : (a, b) => conn.compareRows(a.row, b.row),
     );
 
-    if (rest.length === 0) {
-      yield* merged;
-      return;
-    }
-
-    for (const node of merged) {
-      if (node === 'yield') {
-        yield 'yield';
-        continue;
-      }
-      let matchesAll = true;
-      for (const mc of rest) {
-        let any = false;
-        for (const c of mc) {
-          if (constraintMatchesRow(c, node.row)) {
-            any = true;
-            break;
-          }
-        }
-        if (!any) {
-          matchesAll = false;
-          break;
-        }
-      }
-      if (matchesAll) yield node;
-    }
+    return rest.length === 0 ? merged : new MatchesAllConstraints(merged, rest);
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -667,23 +568,132 @@ function mergePredicates(
   return row => connPredicate(row) && reqPredicate(row);
 }
 
-function* generateWithConstraint(
-  it: Stream<Node>,
-  constraint: Constraint | undefined,
-) {
-  for (const node of it) {
-    if (constraint && !constraintMatchesRow(constraint, node.row)) {
-      break;
+/** Stops at the first row that fails `constraint`; matches are contiguous. */
+/**
+ * Rows from an index scan wrapped as Nodes, stopping at the first row that
+ * fails `constraint`. Rows are sorted by the constraint key first, so matches
+ * are contiguous. This is `#fetch`'s hot path -- no overlay, no `start`, no
+ * filters -- which a plain scan and every join child-lookup take.
+ */
+class ConstrainedRowPull extends PullStreamBase<Node> {
+  readonly #rows: ValueIterator<Row>;
+  readonly #constraint: Constraint | undefined;
+  #done = false;
+
+  constructor(rows: ValueIterator<Row>, constraint: Constraint | undefined) {
+    super();
+    this.#rows = rows;
+    this.#constraint = constraint;
+  }
+
+  next(): Node | undefined {
+    if (this.#done) {
+      return undefined;
     }
-    yield node;
+    const row = this.#rows.nextValue();
+    if (row === undefined) {
+      this.#done = true;
+      return undefined;
+    }
+    const constraint = this.#constraint;
+    if (constraint !== undefined && !constraintMatchesRow(constraint, row)) {
+      this.#done = true;
+      return undefined;
+    }
+    return {row, relationships: {}};
+  }
+
+  close(): void {
+    this.#done = true;
   }
 }
 
-function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
-  for (const node of it) {
-    if (filter(node.row)) {
-      yield node;
+/** The index scan as a pull stream; `nextValue()` avoids a result object. */
+class RowScan extends PullStreamBase<Row> {
+  readonly #rows: ValueIterator<Row>;
+  #done = false;
+
+  constructor(rows: ValueIterator<Row>) {
+    super();
+    this.#rows = rows;
+  }
+
+  next(): Row | undefined {
+    if (this.#done) {
+      return undefined;
     }
+    const row = this.#rows.nextValue();
+    if (row === undefined) {
+      this.#done = true;
+    }
+    return row;
+  }
+
+  close(): void {
+    if (!this.#done) {
+      this.#done = true;
+      this.#rows.return?.();
+    }
+  }
+}
+
+class WithConstraint extends PullStreamBase<Node> {
+  readonly #it: PullStream<Node>;
+  readonly #constraint: Constraint | undefined;
+  #done = false;
+
+  constructor(it: PullStream<Node>, constraint: Constraint | undefined) {
+    super();
+    this.#it = it;
+    this.#constraint = constraint;
+  }
+
+  next(): Node | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    const node = this.#it.next();
+    if (node === undefined) {
+      this.#done = true;
+      return undefined;
+    }
+    const c = this.#constraint;
+    if (c !== undefined && !constraintMatchesRow(c, node.row)) {
+      this.close();
+      return undefined;
+    }
+    return node;
+  }
+
+  close(): void {
+    if (!this.#done) {
+      this.#done = true;
+      this.#it.close();
+    }
+  }
+}
+
+class WithFilter extends PullStreamBase<Node> {
+  readonly #it: PullStream<Node>;
+  readonly #filter: (row: Row) => boolean;
+
+  constructor(it: PullStream<Node>, filter: (row: Row) => boolean) {
+    super();
+    this.#it = it;
+    this.#filter = filter;
+  }
+
+  next(): Node | undefined {
+    for (;;) {
+      const node = this.#it.next();
+      if (node === undefined || this.#filter(node.row)) {
+        return node;
+      }
+    }
+  }
+
+  close(): void {
+    this.#it.close();
   }
 }
 
@@ -815,36 +825,54 @@ function* genPush(
   setOverlay(undefined);
 }
 
-export function* generateWithStart(
-  nodes: Iterable<Node | 'yield'>,
-  start: Start | undefined,
-  compare: (r1: Row, r2: Row) => number,
-): Stream<Node | 'yield'> {
-  if (!start) {
-    yield* nodes;
-    return;
+export class WithStart extends PullStreamBase<Node | 'yield'> {
+  readonly #nodes: PullStream<Node | 'yield'>;
+  readonly #start: Start | undefined;
+  readonly #compare: (r1: Row, r2: Row) => number;
+  #started: boolean;
+
+  constructor(
+    nodes: PullStream<Node | 'yield'>,
+    start: Start | undefined,
+    compare: (r1: Row, r2: Row) => number,
+  ) {
+    super();
+    this.#nodes = nodes;
+    this.#start = start;
+    this.#compare = compare;
+    this.#started = start === undefined;
   }
-  let started = false;
-  for (const node of nodes) {
-    if (node === 'yield') {
-      yield node;
-      continue;
-    }
-    if (!started) {
-      if (start.basis === 'at') {
-        if (compare(node.row, start.row) >= 0) {
-          started = true;
-        }
-      } else if (start.basis === 'after') {
-        if (compare(node.row, start.row) > 0) {
-          started = true;
-        }
+
+  next(): Node | 'yield' | undefined {
+    for (;;) {
+      const node = this.#nodes.next();
+      if (node === undefined || node === 'yield') {
+        return node;
+      }
+      if (this.#started) {
+        return node;
+      }
+      // `start` is non-undefined here: #started begins true when it is not.
+      const start = this.#start as Start;
+      const c = this.#compare(node.row, start.row);
+      if (start.basis === 'at' ? c >= 0 : c > 0) {
+        this.#started = true;
+        return node;
       }
     }
-    if (started) {
-      yield node;
-    }
   }
+
+  close(): void {
+    this.#nodes.close();
+  }
+}
+
+export function generateWithStart(
+  nodes: PullStream<Node | 'yield'>,
+  start: Start | undefined,
+  compare: (r1: Row, r2: Row) => number,
+): PullStream<Node | 'yield'> {
+  return new WithStart(nodes, start, compare);
 }
 
 /**
@@ -867,9 +895,9 @@ export function* generateWithStart(
  * is what #4926 fixed for `generateWithStart`; this parameter is the same
  * distinction for the overlay's own `startAt` pruning.
  */
-export function* generateWithOverlay(
+export function generateWithOverlay(
   startAt: Row | undefined,
-  rows: Iterable<Row>,
+  rows: PullStream<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
   lastPushedEpoch: number,
@@ -877,7 +905,7 @@ export function* generateWithOverlay(
   startAtCompare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
   multiConstraints?: readonly MultiConstraint[] | undefined,
-) {
+): PullStream<Node> {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
     overlayToApply = overlay;
@@ -890,7 +918,7 @@ export function* generateWithOverlay(
     filterPredicate,
     multiConstraints,
   );
-  yield* generateWithOverlayInner(rows, overlays, compare);
+  return new OverlayInner(rows, overlays, compare);
 }
 
 function computeOverlays(
@@ -1022,35 +1050,81 @@ function overlaysForFilterPredicate(
   };
 }
 
-export function* generateWithOverlayInner(
-  rowIterator: Iterable<Row>,
-  overlays: Overlays,
-  compare: (r1: Row, r2: Row) => number,
-) {
-  let addOverlayYielded = false;
-  let removeOverlaySkipped = false;
-  for (const row of rowIterator) {
-    if (!addOverlayYielded && overlays.add) {
-      const cmp = compare(overlays.add, row);
-      if (cmp < 0) {
-        addOverlayYielded = true;
-        yield {row: overlays.add, relationships: {}};
-      }
-    }
+/**
+ * Splices the overlay rows into an ordered row stream.
+ *
+ * `#pending` holds a row that has been read but not yet emitted: when the add
+ * overlay sorts before it, that overlay is returned first and the row is kept
+ * for the following call. The generator this replaces expressed the same thing
+ * with two `yield`s in one loop iteration.
+ */
+export class OverlayInner extends PullStreamBase<Node> {
+  readonly #rows: PullStream<Row>;
+  readonly #overlays: Overlays;
+  readonly #compare: (r1: Row, r2: Row) => number;
+  #pending: Row | undefined;
+  #addYielded = false;
+  #removeSkipped = false;
+  #done = false;
 
-    if (!removeOverlaySkipped && overlays.remove) {
-      const cmp = compare(overlays.remove, row);
-      if (cmp === 0) {
-        removeOverlaySkipped = true;
+  constructor(
+    rows: PullStream<Row>,
+    overlays: Overlays,
+    compare: (r1: Row, r2: Row) => number,
+  ) {
+    super();
+    this.#rows = rows;
+    this.#overlays = overlays;
+    this.#compare = compare;
+  }
+
+  next(): Node | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    const {add, remove} = this.#overlays;
+    for (;;) {
+      let row = this.#pending;
+      if (row === undefined) {
+        row = this.#rows.next();
+        if (row === undefined) {
+          this.#done = true;
+          if (!this.#addYielded && add) {
+            this.#addYielded = true;
+            return {row: add, relationships: {}};
+          }
+          return undefined;
+        }
+        this.#pending = row;
+      }
+      if (!this.#addYielded && add && this.#compare(add, row) < 0) {
+        this.#addYielded = true;
+        return {row: add, relationships: {}};
+      }
+      if (!this.#removeSkipped && remove && this.#compare(remove, row) === 0) {
+        this.#removeSkipped = true;
+        this.#pending = undefined;
         continue;
       }
+      this.#pending = undefined;
+      return {row, relationships: {}};
     }
-    yield {row, relationships: {}};
   }
 
-  if (!addOverlayYielded && overlays.add) {
-    yield {row: overlays.add, relationships: {}};
+  close(): void {
+    if (!this.#done) {
+      this.#done = true;
+      this.#rows.close();
+    }
   }
+}
+
+export function generateWithOverlayInner(
+  rows: PullStream<Row>,
+  overlays: Overlays,
+  compare: (r1: Row, r2: Row) => number,
+): PullStream<Node> {
+  return new OverlayInner(rows, overlays, compare);
 }
 
 /**
@@ -1058,15 +1132,15 @@ export function* generateWithOverlayInner(
  * No `startAt` or comparator needed. Injects remove/old-edit rows eagerly
  * at the start, and suppresses add/new-edit rows inline by PK match.
  */
-export function* generateWithOverlayUnordered(
-  rows: Iterable<Row>,
+export function generateWithOverlayUnordered(
+  rows: PullStream<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
   lastPushedEpoch: number,
   primaryKey: PrimaryKey,
   filterPredicate?: (row: Row) => boolean,
   multiConstraints?: readonly MultiConstraint[] | undefined,
-) {
+): PullStream<Node> {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
     overlayToApply = overlay;
@@ -1099,31 +1173,72 @@ export function* generateWithOverlayUnordered(
   if (filterPredicate) {
     overlays = overlaysForFilterPredicate(overlays, filterPredicate);
   }
-  yield* generateWithOverlayInnerUnordered(rows, overlays, primaryKey);
+  return new OverlayInnerUnordered(rows, overlays, primaryKey);
 }
 
-export function* generateWithOverlayInnerUnordered(
-  rowIterator: Iterable<Row>,
+/** {@link OverlayInner} for unordered streams: eager add, inline PK suppress. */
+export class OverlayInnerUnordered extends PullStreamBase<Node> {
+  readonly #rows: PullStream<Row>;
+  readonly #overlays: Overlays;
+  readonly #primaryKey: PrimaryKey;
+  #addEmitted = false;
+  #removeSkipped = false;
+  #done = false;
+
+  constructor(
+    rows: PullStream<Row>,
+    overlays: Overlays,
+    primaryKey: PrimaryKey,
+  ) {
+    super();
+    this.#rows = rows;
+    this.#overlays = overlays;
+    this.#primaryKey = primaryKey;
+  }
+
+  next(): Node | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    const {add, remove} = this.#overlays;
+    if (!this.#addEmitted) {
+      this.#addEmitted = true;
+      if (add) {
+        return {row: add, relationships: {}};
+      }
+    }
+    for (;;) {
+      const row = this.#rows.next();
+      if (row === undefined) {
+        this.#done = true;
+        return undefined;
+      }
+      if (
+        !this.#removeSkipped &&
+        remove &&
+        rowMatchesPK(remove, row, this.#primaryKey)
+      ) {
+        this.#removeSkipped = true;
+        continue;
+      }
+      return {row, relationships: {}};
+    }
+  }
+
+  close(): void {
+    if (!this.#done) {
+      this.#done = true;
+      this.#rows.close();
+    }
+  }
+}
+
+export function generateWithOverlayInnerUnordered(
+  rows: PullStream<Row>,
   overlays: Overlays,
   primaryKey: PrimaryKey,
-) {
-  // Eager inject: yield the add overlay at the start (row not yet in storage)
-  if (overlays.add) {
-    yield {row: overlays.add, relationships: {}};
-  }
-  // Stream with inline suppress: skip the remove overlay (row still in storage)
-  let removeSkipped = false;
-  for (const row of rowIterator) {
-    if (
-      !removeSkipped &&
-      overlays.remove &&
-      rowMatchesPK(overlays.remove, row, primaryKey)
-    ) {
-      removeSkipped = true;
-      continue;
-    }
-    yield {row, relationships: {}};
-  }
+): PullStream<Node> {
+  return new OverlayInnerUnordered(rows, overlays, primaryKey);
 }
 
 function rowMatchesPK(a: Row, b: Row, primaryKey: PrimaryKey): boolean {
@@ -1204,7 +1319,7 @@ function generateRows(
   data: BTreeSet<Row>,
   scanStart: RowBound | undefined,
   reverse: boolean | undefined,
-): IterableIterator<Row> {
+): ValueIterator<Row> {
   const from = scanStart as Row | undefined;
   return reverse ? data.valuesFromReversed(from) : data.valuesFrom(from);
 }
@@ -1233,109 +1348,200 @@ export function stringify(change: SourceChange) {
  * leaves cursors open, causing later writes on the same connection to
  * fail with "database connection is busy executing a query".
  */
-export function* mergeSortedStreams(
-  streams: readonly Stream<Node | 'yield'>[],
+export function mergeSortedStreams(
+  streams: readonly PullStream<Node | 'yield'>[],
   compare: (a: Node, b: Node) => number,
-): Stream<Node | 'yield'> {
-  const iterators: Iterator<Node | 'yield'>[] = streams.map(s =>
-    s[Symbol.iterator](),
-  );
-  // True while iterators[i] hasn't yet returned `done`. The finally
-  // block uses this to skip already-exhausted streams when propagating
-  // `.return()`.
-  const active: boolean[] = new Array(iterators.length).fill(true);
+): PullStream<Node | 'yield'> {
+  return new MergeSortedStreams(streams, compare);
+}
 
-  // Min-heap of entries; `idx` tells us which stream to refill from
-  // after the entry's row is emitted.
-  type Entry = {row: Node; idx: number};
-  const heap: Entry[] = [];
+/** Keeps rows matching every remaining `MultiConstraint` entry. */
+class MatchesAllConstraints extends PullStreamBase<Node | 'yield'> {
+  readonly #merged: PullStream<Node | 'yield'>;
+  readonly #rest: readonly MultiConstraint[];
 
-  const siftUp = (start: number) => {
+  constructor(
+    merged: PullStream<Node | 'yield'>,
+    rest: readonly MultiConstraint[],
+  ) {
+    super();
+    this.#merged = merged;
+    this.#rest = rest;
+  }
+
+  next(): Node | 'yield' | undefined {
+    for (;;) {
+      const node = this.#merged.next();
+      if (node === undefined || node === 'yield') {
+        return node;
+      }
+      let matchesAll = true;
+      for (const mc of this.#rest) {
+        let any = false;
+        for (const c of mc) {
+          if (constraintMatchesRow(c, node.row)) {
+            any = true;
+            break;
+          }
+        }
+        if (!any) {
+          matchesAll = false;
+          break;
+        }
+      }
+      if (matchesAll) {
+        return node;
+      }
+    }
+  }
+
+  close(): void {
+    this.#merged.close();
+  }
+}
+
+type MergeEntry = {row: Node; idx: number};
+
+/**
+ * N-way merge of pre-sorted Node streams, as a pull stream.
+ *
+ * The generator this replaces suspended mid-prime and mid-refill to forward a
+ * 'yield'; the same points are now explicit state -- `#primeIdx` for priming,
+ * `#refill` for the stream owing a replacement for the root it just emitted --
+ * so a 'yield' can be returned and the merge resumed exactly where it paused.
+ *
+ * Streams that are not exhausted are closed on completion or `close()`, so the
+ * underlying cursors are released; leaking one leaves later writes on the same
+ * connection failing with "database connection is busy executing a query".
+ */
+class MergeSortedStreams extends PullStreamBase<Node | 'yield'> {
+  readonly #streams: readonly PullStream<Node | 'yield'>[];
+  readonly #compare: (a: Node, b: Node) => number;
+  readonly #active: boolean[];
+  readonly #heap: MergeEntry[] = [];
+  #priming = true;
+  #primeIdx = 0;
+  #refill: number | undefined;
+  #done = false;
+
+  constructor(
+    streams: readonly PullStream<Node | 'yield'>[],
+    compare: (a: Node, b: Node) => number,
+  ) {
+    super();
+    this.#streams = streams;
+    this.#compare = compare;
+    this.#active = new Array(streams.length).fill(true);
+  }
+
+  #siftUp(start: number): void {
+    const heap = this.#heap;
     let i = start;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (compare(heap[i].row, heap[p].row) >= 0) return;
+      if (this.#compare(heap[i].row, heap[p].row) >= 0) {
+        return;
+      }
       const t = heap[i];
       heap[i] = heap[p];
       heap[p] = t;
       i = p;
     }
-  };
+  }
 
-  const siftDown = (start: number) => {
+  #siftDown(start: number): void {
+    const heap = this.#heap;
     let i = start;
     const n = heap.length;
-    while (true) {
+    for (;;) {
       const l = (i << 1) + 1;
       const r = l + 1;
       let smallest = i;
-      if (l < n && compare(heap[l].row, heap[smallest].row) < 0) smallest = l;
-      if (r < n && compare(heap[r].row, heap[smallest].row) < 0) smallest = r;
-      if (smallest === i) return;
+      if (l < n && this.#compare(heap[l].row, heap[smallest].row) < 0) {
+        smallest = l;
+      }
+      if (r < n && this.#compare(heap[r].row, heap[smallest].row) < 0) {
+        smallest = r;
+      }
+      if (smallest === i) {
+        return;
+      }
       const t = heap[i];
       heap[i] = heap[smallest];
       heap[smallest] = t;
       i = smallest;
     }
-  };
+  }
 
-  // Pull the next Node from iterator `idx`, forwarding any 'yield's.
-  // Returns the Node, or `undefined` once the stream is exhausted.
-  const pullNext = function* (
-    idx: number,
-  ): Generator<'yield', Node | undefined, undefined> {
-    while (true) {
-      const r = iterators[idx].next();
-      if (r.done) {
-        active[idx] = false;
-        return undefined;
+  /** One value from stream `idx`: a Node, 'yield' to forward, or undefined. */
+  #pullOne(idx: number): Node | 'yield' | undefined {
+    const v = this.#streams[idx].next();
+    if (v === undefined) {
+      this.#active[idx] = false;
+    }
+    return v;
+  }
+
+  next(): Node | 'yield' | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    for (;;) {
+      if (this.#priming) {
+        while (this.#primeIdx < this.#streams.length) {
+          const v = this.#pullOne(this.#primeIdx);
+          if (v === 'yield') {
+            return v;
+          }
+          if (v !== undefined) {
+            this.#heap.push({row: v, idx: this.#primeIdx});
+            this.#siftUp(this.#heap.length - 1);
+          }
+          this.#primeIdx++;
+        }
+        this.#priming = false;
       }
-      if (r.value === 'yield') {
-        yield 'yield';
+
+      if (this.#refill !== undefined) {
+        const v = this.#pullOne(this.#refill);
+        if (v === 'yield') {
+          return v;
+        }
+        this.#refill = undefined;
+        if (v !== undefined) {
+          // The emitted row was captured by the caller, so replacing the
+          // root's row in place is safe.
+          this.#heap[0].row = v;
+          this.#siftDown(0);
+        } else {
+          const last = must(this.#heap.pop());
+          if (this.#heap.length > 0) {
+            this.#heap[0] = last;
+            this.#siftDown(0);
+          }
+        }
         continue;
       }
-      return r.value;
-    }
-  };
 
-  try {
-    // Prime: push the first row of each non-empty stream onto the heap.
-    for (let i = 0; i < iterators.length; i++) {
-      const row = yield* pullNext(i);
-      if (row !== undefined) {
-        heap.push({row, idx: i});
-        siftUp(heap.length - 1);
+      if (this.#heap.length === 0) {
+        this.close();
+        return undefined;
       }
+      const top = this.#heap[0];
+      this.#refill = top.idx;
+      return top.row;
     }
+  }
 
-    while (heap.length > 0) {
-      // Root is the global min across all active streams.
-      const top = heap[0];
-      yield top.row;
-      const next = yield* pullNext(top.idx);
-      if (next !== undefined) {
-        // Refill root in place (top === heap[0]) and sift down. The
-        // already-yielded `top.row` value is captured by the yield, so
-        // mutating it here doesn't affect what was emitted.
-        top.row = next;
-        siftDown(0);
-      } else {
-        // Stream exhausted. Move tail to root and shrink. Pop returns
-        // the last entry; if the heap had only one entry it was the
-        // root we just yielded, so we just leave the heap empty.
-        const last = must(heap.pop());
-        if (heap.length > 0) {
-          heap[0] = last;
-          siftDown(0);
-        }
-      }
+  close(): void {
+    if (this.#done) {
+      return;
     }
-  } finally {
-    // Close any iterators that aren't already exhausted so their
-    // `finally` blocks (which release cursors / cached statements) run.
-    for (let i = 0; i < iterators.length; i++) {
-      if (active[i]) {
-        iterators[i].return?.();
+    this.#done = true;
+    for (let i = 0; i < this.#streams.length; i++) {
+      if (this.#active[i]) {
+        this.#active[i] = false;
+        this.#streams[i].close();
       }
     }
   }

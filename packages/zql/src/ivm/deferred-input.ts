@@ -3,7 +3,7 @@ import {makeAddChange} from './change.ts';
 import type {Node} from './data.ts';
 import type {FetchRequest, Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {consume, type Stream} from './stream.ts';
+import {consume, emptyPullStream, type PullStream} from './stream.ts';
 
 /**
  * A placeholder `Input` for a view whose pipeline has not been built yet.
@@ -53,10 +53,8 @@ export class DeferredInput implements Input {
     return this.#schema;
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    if (this.#input) {
-      yield* this.#input.fetch(req);
-    }
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
+    return this.#input ? this.#input.fetch(req) : emptyPullStream();
   }
 
   destroy(): void {
@@ -85,7 +83,8 @@ export class DeferredInput implements Input {
     }
     try {
       input.setOutput(output);
-      for (const node of input.fetch({})) {
+      const stream = input.fetch({});
+      for (let node = stream.next(); node !== undefined; node = stream.next()) {
         if (node === 'yield') {
           continue;
         }

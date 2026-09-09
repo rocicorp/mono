@@ -3,6 +3,7 @@ import {describe, expect, test, vi} from 'vitest';
 import type {Node} from './data.js';
 import {skipYields, type FetchRequest, type Operator} from './operator.js';
 import type {SourceSchema} from './schema.js';
+import {drainPull, pullOf} from './stream.ts';
 import {UnionFanIn} from './union-fan-in.js';
 import type {UnionFanOut} from './union-fan-out.js';
 
@@ -19,7 +20,7 @@ const mockSchema: SourceSchema = {
 
 const mockOperator = (schema: SourceSchema, data: Node[] = []): Operator => ({
   getSchema: () => schema,
-  fetch: (_req: FetchRequest) => data,
+  fetch: (_req: FetchRequest) => pullOf(data),
   push: vi.fn(),
   setOutput: vi.fn(),
   destroy: vi.fn(),
@@ -209,7 +210,7 @@ describe('UnionFanIn', () => {
       const input2 = mockOperator(mockSchema, data2);
 
       const fanIn = new UnionFanIn(fanOut, [input1, input2]);
-      const result = [...skipYields(fanIn.fetch({} as FetchRequest))];
+      const result = drainPull(skipYields(fanIn.fetch({} as FetchRequest)));
 
       expect(result).toHaveLength(4);
       expect(result.map(n => n.row.id)).toEqual([1, 2, 3, 4]);
@@ -219,7 +220,7 @@ describe('UnionFanIn', () => {
       const fanOut = mockUnionFanOut(mockSchema);
       const fanIn = new UnionFanIn(fanOut, []);
 
-      const result = [...fanIn.fetch({} as FetchRequest)];
+      const result = drainPull(fanIn.fetch({} as FetchRequest));
       expect(result).toHaveLength(0);
     });
 
@@ -238,7 +239,7 @@ describe('UnionFanIn', () => {
       const input2 = mockOperator(mockSchema, data2);
 
       const fanIn = new UnionFanIn(fanOut, [input1, input2]);
-      const result = [...skipYields(fanIn.fetch({} as FetchRequest))];
+      const result = drainPull(skipYields(fanIn.fetch({} as FetchRequest)));
 
       expect(result).toHaveLength(3);
       expect(result.map(n => n.row.id)).toEqual([1, 2, 3]);
@@ -252,7 +253,7 @@ describe('UnionFanIn', () => {
     ): Operator => ({
       getSchema: () => schema,
       fetch: (req: FetchRequest) =>
-        req.reverse ? data.toReversed() : [...data],
+        pullOf(req.reverse ? data.toReversed() : [...data]),
       push: vi.fn(),
       setOutput: vi.fn(),
       destroy: vi.fn(),
@@ -277,9 +278,9 @@ describe('UnionFanIn', () => {
       const inputB = mockOrderedOperator(mockSchema, dataB);
 
       const fanIn = new UnionFanIn(fanOut, [inputA, inputB]);
-      const result = [
-        ...skipYields(fanIn.fetch({reverse: true} as FetchRequest)),
-      ];
+      const result = drainPull(
+        skipYields(fanIn.fetch({reverse: true} as FetchRequest)),
+      );
 
       // BUG: UnionFanIn.fetch hands mergeFetches an ascending comparator
       // regardless of req.reverse, so the merge picks min across descending
@@ -308,9 +309,9 @@ describe('UnionFanIn', () => {
       const inputB = mockOrderedOperator(mockSchema, dataB);
 
       const fanIn = new UnionFanIn(fanOut, [inputA, inputB]);
-      const result = [
-        ...skipYields(fanIn.fetch({reverse: true} as FetchRequest)),
-      ];
+      const result = drainPull(
+        skipYields(fanIn.fetch({reverse: true} as FetchRequest)),
+      );
 
       expect(result.map(n => n.row.id)).toEqual([4, 3, 2, 1]);
     });

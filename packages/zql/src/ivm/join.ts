@@ -10,7 +10,7 @@ import {
   makeRemoveChange,
   type Change,
 } from './change.ts';
-import type {Node} from './data.ts';
+import type {Node, RelationshipStream} from './data.ts';
 import {
   buildJoinConstraint,
   generateWithOverlay,
@@ -25,7 +25,12 @@ import {
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream} from './stream.ts';
+import {
+  emptyPullStream,
+  PullStreamBase,
+  type PullStream,
+  type Stream,
+} from './stream.ts';
 
 type Args = {
   parent: Input;
@@ -116,14 +121,13 @@ export class Join implements Input {
     return this.#schema;
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    for (const parentNode of this.#parent.fetch(req)) {
-      if (parentNode === 'yield') {
-        yield parentNode;
-        continue;
-      }
-      yield this.#processParentNode(parentNode.row, parentNode.relationships);
-    }
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
+    // The parent spine in the pull protocol. Child lookups behind each node's
+    // relationships still go through `fetch`; converting those means
+    // converting what consumes relationships.
+    return new JoinPull(this.#parent.fetch(req), (row, rels) =>
+      this.#processParentNode(row, rels),
+    );
   }
 
   *#pushParent(change: Change): Stream<'yield'> {
@@ -228,20 +232,34 @@ export class Join implements Input {
         this.#parentKey,
       );
       if (constraint) {
-        for (const parentNode of this.#parent.fetch({constraint})) {
-          if (parentNode === 'yield') {
-            yield parentNode;
-            continue;
+        {
+          const __pull236 = this.#parent.fetch({constraint});
+          try {
+            for (
+              let parentNode = __pull236.next();
+              parentNode !== undefined;
+              parentNode = __pull236.next()
+            ) {
+              if (parentNode === 'yield') {
+                yield parentNode;
+                continue;
+              }
+              this.#inprogressChildChangePosition = parentNode.row;
+              const childChange = makeChildChange(
+                this.#processParentNode(
+                  parentNode.row,
+                  parentNode.relationships,
+                ),
+                {
+                  relationshipName: this.#relationshipName,
+                  change,
+                },
+              );
+              yield* this.#output.push(childChange, this);
+            }
+          } finally {
+            __pull236.close();
           }
-          this.#inprogressChildChangePosition = parentNode.row;
-          const childChange = makeChildChange(
-            this.#processParentNode(parentNode.row, parentNode.relationships),
-            {
-              relationshipName: this.#relationshipName,
-              change,
-            },
-          );
-          yield* this.#output.push(childChange, this);
         }
       }
     } finally {
@@ -251,7 +269,7 @@ export class Join implements Input {
 
   #processParentNode(
     parentNodeRow: Row,
-    parentNodeRelations: Record<string, () => Stream<Node | 'yield'>>,
+    parentNodeRelations: Record<string, () => RelationshipStream>,
   ): Node {
     const childStream = () => {
       const constraint = buildJoinConstraint(
@@ -259,7 +277,9 @@ export class Join implements Input {
         this.#parentKey,
         this.#childKey,
       );
-      const stream = constraint ? this.#child.fetch({constraint}) : [];
+      const stream = constraint
+        ? this.#child.fetch({constraint})
+        : emptyPullStream<Node | 'yield'>();
 
       if (
         this.#inprogressChildChange &&
@@ -276,18 +296,17 @@ export class Join implements Input {
         ) > 0
       ) {
         const childSchema = this.#child.getSchema();
-        if (childSchema.sort === undefined) {
-          return generateWithOverlayUnordered(
-            stream,
-            this.#inprogressChildChange,
-            childSchema,
-          );
-        }
-        return generateWithOverlay(
-          stream,
-          this.#inprogressChildChange,
-          childSchema,
-        );
+        return childSchema.sort === undefined
+          ? generateWithOverlayUnordered(
+              stream,
+              this.#inprogressChildChange,
+              childSchema,
+            )
+          : generateWithOverlay(
+              stream,
+              this.#inprogressChildChange,
+              childSchema,
+            );
       }
       return stream;
     };
@@ -299,5 +318,28 @@ export class Join implements Input {
         [this.#relationshipName]: childStream,
       },
     };
+  }
+}
+
+class JoinPull extends PullStreamBase<Node | 'yield'> {
+  readonly #parent: PullStream<Node | 'yield'>;
+  readonly #process: (row: Row, rels: Node['relationships']) => Node;
+  constructor(
+    parent: PullStream<Node | 'yield'>,
+    process: (row: Row, rels: Node['relationships']) => Node,
+  ) {
+    super();
+    this.#parent = parent;
+    this.#process = process;
+  }
+  next(): Node | 'yield' | undefined {
+    const p = this.#parent.next();
+    if (p === undefined || p === 'yield') {
+      return p;
+    }
+    return this.#process(p.row, p.relationships);
+  }
+  close(): void {
+    this.#parent.close();
   }
 }
