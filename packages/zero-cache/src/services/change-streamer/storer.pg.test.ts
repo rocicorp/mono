@@ -1978,6 +1978,71 @@ describe('change-streamer/storer', () => {
     });
   });
 
+  describe('catchup snapshot failure', () => {
+    let catchupDB: PostgresDB;
+
+    beforeEach<PgTest>(async ({testDBs}) => {
+      // A database without the cdc tables, so that the catchup pool's
+      // snapshot read fails.
+      catchupDB = await testDBs.create('change_streamer_storer_catchup');
+      const catchupProvider: PostgresDBProvider = (applicationName, maxConns) =>
+        pgClient(
+          lc,
+          getConnectionURI(
+            applicationName === 'subscriber-catchup' ? catchupDB : db,
+          ),
+          applicationName,
+          {max: maxConns},
+          {sendStringAsJson: true},
+        );
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        catchupProvider,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        opts,
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+
+      return async () => {
+        await testDBs.drop(catchupDB);
+      };
+    });
+
+    async function catchupConnections(): Promise<number> {
+      const [{count}] = await db<{count: bigint}[]>`
+        SELECT COUNT(*) AS count FROM pg_stat_activity
+          WHERE datname = ${catchupDB.options.database}`;
+      return Number(count);
+    }
+
+    test('failed snapshot read tears down the catchup pool', async () => {
+      const [sub, _, stream] = createSubscriber('03');
+      storer.catchup(sub, 'serving');
+
+      await expect(done).rejects.toThrow('replicationState');
+      // Prevent the beforeEach cleanup from re-throwing the rejected done.
+      done = Promise.resolve();
+
+      // The subscriber is failed (closed without a downstream error) ...
+      const iterator = stream[Symbol.asyncIterator]();
+      expect((await iterator.next()).done).toBe(true);
+
+      // ... and the catchup pool, whose workers each hold an open READ ONLY
+      // transaction, is released rather than left dangling.
+      for (let i = 0; (await catchupConnections()) > 0 && i < 100; i++) {
+        await sleep(50);
+      }
+      expect(await catchupConnections()).toBe(0);
+    });
+  });
+
   test('purge lock on empty change-log (e.g. before initial sync)', async () => {
     await db`TRUNCATE "xero_5/cdc"."changeLog"`;
     const purgeLocker = new PurgeLocker(lc, shard, db);
