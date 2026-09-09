@@ -309,6 +309,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #lock = new Lock();
   readonly #cvrStore: CVRStore;
   readonly #stopped = resolver();
+
+  /**
+   * Set when {@link #cleanup} begins. Lock tasks that were in flight when the
+   * view-syncer was stopped may still complete after the timers have been
+   * cleared; this flag prevents them from scheduling new timers, which would
+   * otherwise outlive the service (and retain everything it references).
+   */
+  #shuttingDown = false;
   readonly #initialized = resolver<'initialized'>();
 
   #cvr: CVRSnapshot | undefined;
@@ -970,10 +978,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return true;
   }
 
-  // oxlint-disable-next-line no-unused-private-class-members -- False positive, used in #scheduleShutdown
   #shutdownTimer: NodeJS.Timeout | null = null;
 
+  #stopShutdownTimer() {
+    if (this.#shutdownTimer !== null) {
+      clearTimeout(this.#shutdownTimer);
+      this.#shutdownTimer = null;
+    }
+  }
+
   #scheduleShutdown(delayMs = 0) {
+    if (this.#shuttingDown) {
+      return;
+    }
     this.#shutdownTimer ??= this.#setTimeout(() => {
       this.#shutdownTimer = null;
 
@@ -1055,6 +1072,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    */
   #scheduleAuthMaintenance(lc: LogContext) {
     this.#stopAuthMaintenanceTimer();
+    if (this.#shuttingDown) {
+      return;
+    }
 
     const plan = this.connContextManager.planMaintenance();
     if (plan.earliestDeadlineAt === undefined) {
@@ -1353,6 +1373,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #startTTLClockInterval(lc: LogContext): void {
     this.#stopTTLClockInterval();
+    if (this.#shuttingDown) {
+      return;
+    }
     this.#ttlClockInterval = this.#setTimeout(() => {
       this.#updateTTLClockInCVRWithoutLock(lc);
       this.#startTTLClockInterval(lc);
@@ -1659,6 +1682,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #scheduleExpireEviction(lc: LogContext, cvr: CVRSnapshot): void {
     const {ttlClock} = cvr;
     this.#stopExpireTimer();
+    if (this.#shuttingDown) {
+      return;
+    }
 
     // first see if there is any inactive query with a ttl.
     const next = nextEvictionTime(cvr);
@@ -3453,10 +3479,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   async #cleanup(err?: unknown) {
+    this.#shuttingDown = true;
     this.connContextManager.setSharedRetransformReady(false);
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
     this.#stopAuthMaintenanceTimer();
+    this.#stopShutdownTimer();
     // The InspectorDelegate shares this transformer and may still use it
     // after cleanup; a destroyed transformer is safe to use (it just stops
     // caching and never restarts its cleanup interval).
