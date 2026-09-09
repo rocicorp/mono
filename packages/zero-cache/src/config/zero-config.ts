@@ -801,6 +801,23 @@ export const zeroOptions = {
       hidden: true,
     },
 
+    snapshotReservationMaxAgeMs: {
+      type: v.number().default(60 * 60 * 1000),
+      desc: [
+        `How long a view-syncer's snapshot reservation may hold the change`,
+        `log before the change-streamer takes it back. A reservation keeps the`,
+        `purge floor -- and the purge scheduler itself -- from moving past the`,
+        `watermark a restoring view-syncer was promised, and lives as long as`,
+        `its connection, so a restore that never finishes would otherwise pin`,
+        `the log until the disk filled.`,
+        ``,
+        `Taking a reservation back costs that view-syncer a repeated restore,`,
+        `so this must stay well above the time a restore actually takes: a`,
+        `value below it turns every restore into a loop.`,
+      ],
+      hidden: true,
+    },
+
     pgChangeLogEnabled: {
       type: v.boolean().default(true),
       desc: [

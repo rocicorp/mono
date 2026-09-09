@@ -71,6 +71,7 @@ export default async function runWorker(
       backPressureLimitHeapProportion,
       flowControlConsensusTimeoutProportion,
       flowControlSlowSubscriberGracePeriodSeconds,
+      snapshotReservationMaxAgeMs,
       backfillResume,
       backfillResumeMinCorrelation,
       pgChangeLogEnabled,
@@ -238,6 +239,7 @@ export default async function runWorker(
             flowControlSlowSubscriberGracePeriodSeconds > 0
               ? flowControlSlowSubscriberGracePeriodSeconds * 1000
               : undefined,
+          snapshotReservationMaxAgeMs,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
           sqliteCatchup: {
