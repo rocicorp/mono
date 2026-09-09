@@ -66,7 +66,7 @@ export class LitestreamCheckpointer {
     litestream: LitestreamController,
     config: ForceCheckpointConfig,
   ) {
-    this.#lc = lc.withContext('litestream-checkpointer');
+    this.#lc = lc.withContext('component', 'litestream-checkpointer');
     this.#db = db;
     this.#litestream = litestream;
     this.#attemptChunk = config.checkpointThresholdPages;
