@@ -423,18 +423,17 @@ test('early return during hydrate', () => {
   const take = new Take(snitch, storage, limit);
   expect(() => {
     let count = 0;
-    {
-      const __pull427 = take.fetch({});
-      try {
-        for (let _ = __pull427.next(); _ !== undefined; _ = __pull427.next()) {
-          count++;
-          if (count > 1) {
-            break;
-          }
+
+    const stream = take.fetch({});
+    try {
+      for (let _ = stream.next(); _ !== undefined; _ = stream.next()) {
+        count++;
+        if (count > 1) {
+          break;
         }
-      } finally {
-        __pull427.close();
       }
+    } finally {
+      stream.close();
     }
   }).toThrow('Unexpected early return prevented full hydration');
 });

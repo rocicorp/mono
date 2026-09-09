@@ -22,8 +22,8 @@ import type {SourceSchema} from './schema.ts';
 import {
   type Stream,
   emptyPullStream,
-  PullStreamBase,
   type PullStream,
+  takeWhilePull,
 } from './stream.ts';
 
 export type Bound = {
@@ -66,7 +66,10 @@ export class Skip implements Operator {
     }
     // Reverse: rows arrive descending, so the first row that should not be
     // present ends the stream.
-    return new SkipReverse(nodes, row => this.#shouldBePresent(row));
+    return takeWhilePull(
+      nodes,
+      node => node === 'yield' || this.#shouldBePresent(node.row),
+    );
   }
   setOutput(output: Output): void {
     this.#output = output;
@@ -159,47 +162,5 @@ export class Skip implements Operator {
 
     // bound is before the start, return start
     return req.start;
-  }
-}
-
-/** Stops at the first row failing `shouldBePresent`; forwards 'yield'. */
-class SkipReverse extends PullStreamBase<Node | 'yield'> {
-  readonly #nodes: PullStream<Node | 'yield'>;
-  readonly #shouldBePresent: (row: Row) => boolean;
-  #done = false;
-
-  constructor(
-    nodes: PullStream<Node | 'yield'>,
-    shouldBePresent: (row: Row) => boolean,
-  ) {
-    super();
-    this.#nodes = nodes;
-    this.#shouldBePresent = shouldBePresent;
-  }
-
-  next(): Node | 'yield' | undefined {
-    if (this.#done) {
-      return undefined;
-    }
-    const node = this.#nodes.next();
-    if (node === undefined) {
-      this.#done = true;
-      return undefined;
-    }
-    if (node === 'yield') {
-      return node;
-    }
-    if (!this.#shouldBePresent(node.row)) {
-      this.close();
-      return undefined;
-    }
-    return node;
-  }
-
-  close(): void {
-    if (!this.#done) {
-      this.#done = true;
-      this.#nodes.close();
-    }
   }
 }

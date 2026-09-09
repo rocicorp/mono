@@ -49,38 +49,161 @@ export function drainGenerator<Yield, Return>(
  * `undefined` is the end marker, so a PullStream cannot carry `undefined` as a
  * value. Nodes are objects and 'yield' is a string; neither can be.
  */
+/**
+ * A stream read by calling `next()` until it returns `undefined`; `close()`
+ * releases resources if the consumer stops early.
+ *
+ * Deliberately NOT `Iterable`. If a pull stream could be `for...of`'d, every
+ * unconverted consumer would keep silently paying the iterator protocol -- a
+ * `{done, value}` object per row -- which is the cost this protocol exists to
+ * remove. There is no adapter back to an iterable: a consumer that wants
+ * values calls `next()`.
+ */
 export interface PullStream<T> {
   next(): T | undefined;
   close(): void;
 }
 
+const EMPTY: PullStream<never> = {
+  next: () => undefined,
+  close: () => {},
+};
 /**
- * Base for pull streams.
+ * Keeps the values `keep` accepts.
  *
- * Deliberately NOT `Iterable`. If a pull stream could be `for...of`'d, every
- * unconverted consumer would keep silently paying the iterator protocol -- a
- * `{done, value}` object per row -- which is the cost this protocol exists to
- * remove. There is deliberately no adapter back to an iterable: a consumer
- * that wants values calls `next()`.
+ * These three cover most of what operators do to a stream, replacing a
+ * per-operator class each -- all the same pull/check/return shape. A node
+ * stream carrying 'yield' markers passes them through by accepting them in
+ * the predicate.
  */
-export abstract class PullStreamBase<T> implements PullStream<T> {
-  abstract next(): T | undefined;
-  abstract close(): void;
+export function filterPull<T>(
+  stream: PullStream<T>,
+  keep: (value: T) => boolean,
+): PullStream<T> {
+  return {
+    next() {
+      for (;;) {
+        const v = stream.next();
+        if (v === undefined || keep(v)) {
+          return v;
+        }
+      }
+    },
+    close: () => stream.close(),
+  };
 }
 
-class EmptyPullStream<T> extends PullStreamBase<T> {
-  next(): T | undefined {
-    return undefined;
-  }
-  close(): void {}
+/** Ends the stream at the first value `keep` rejects, closing the source. */
+export function takeWhilePull<T>(
+  stream: PullStream<T>,
+  keep: (value: T) => boolean,
+): PullStream<T> {
+  let done = false;
+  return {
+    next() {
+      if (done) {
+        return undefined;
+      }
+      const v = stream.next();
+      if (v === undefined) {
+        done = true;
+        return undefined;
+      }
+      if (!keep(v)) {
+        done = true;
+        stream.close();
+        return undefined;
+      }
+      return v;
+    },
+    close() {
+      if (!done) {
+        done = true;
+        stream.close();
+      }
+    },
+  };
 }
-const EMPTY: PullStream<never> = new EmptyPullStream<never>();
+
+/** Applies `map` to each value. */
+export function mapPull<T, U>(
+  stream: PullStream<T>,
+  map: (value: T) => U,
+): PullStream<U> {
+  return {
+    next() {
+      const v = stream.next();
+      return v === undefined ? undefined : map(v);
+    },
+    close: () => stream.close(),
+  };
+}
+
+/**
+ * Emits at most `limit` values, calling `onValue` for each and `onComplete`
+ * once the scan finishes.
+ *
+ * `Take` and `Cap` both hydrate this way: read up to a limit, record what was
+ * seen, and treat a consumer that stops early as a bug -- their initial fetch
+ * must run to completion or the state they persist is wrong. Closing early
+ * still records, then raises, exactly as their generators' `finally` did.
+ */
+export function limitedScan<T>(
+  stream: PullStream<T>,
+  limit: number,
+  isValue: (v: T) => boolean,
+  onValue: (v: T) => void,
+  onComplete: () => void,
+  onEarlyClose: () => void,
+): PullStream<T> {
+  let seen = 0;
+  let done = false;
+  const complete = () => {
+    done = true;
+    stream.close();
+    onComplete();
+  };
+  return {
+    next() {
+      if (done) {
+        return undefined;
+      }
+      if (seen === limit) {
+        complete();
+        return undefined;
+      }
+      let v: T | undefined;
+      try {
+        v = stream.next();
+      } catch (e) {
+        // As the generators did: an exception records no state.
+        done = true;
+        throw e;
+      }
+      if (v === undefined) {
+        complete();
+        return undefined;
+      }
+      if (isValue(v)) {
+        onValue(v);
+        seen++;
+      }
+      return v;
+    },
+    close() {
+      if (!done) {
+        complete();
+        onEarlyClose();
+      }
+    },
+  };
+}
+
 /** A pull stream over a fixed list; for producers that already have an array. */
-class ArrayPull<T> extends PullStreamBase<T> {
+class ArrayPull<T> implements PullStream<T> {
   readonly #items: readonly T[];
   #i = 0;
   constructor(items: readonly T[]) {
-    super();
     this.#items = items;
   }
   next(): T | undefined {
@@ -133,12 +256,11 @@ export function emptyPullStream<T>(): PullStream<T> {
  * does. Lets a source defer reading mutable state until iteration actually
  * begins.
  */
-export class LazyPullStream<T> extends PullStreamBase<T> {
+export class LazyPullStream<T> implements PullStream<T> {
   #start: (() => PullStream<T>) | undefined;
   #inner: PullStream<T> | undefined;
 
   constructor(start: () => PullStream<T>) {
-    super();
     this.#start = start;
   }
 

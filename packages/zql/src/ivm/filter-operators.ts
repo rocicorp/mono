@@ -9,12 +9,7 @@ import {
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {
-  LazyPullStream,
-  PullStreamBase,
-  type PullStream,
-  type Stream,
-} from './stream.ts';
+import {LazyPullStream, type PullStream, type Stream} from './stream.ts';
 
 /**
  * The `where` clause of a ZQL query is implemented using a sub-graph of
@@ -188,14 +183,13 @@ export function buildFilterPipeline(
  * suspended on so the same node is offered again after a 'yield'; calls
  * endFilter() exactly once, on exhaustion, close, or throw.
  */
-class FilterStartPull extends PullStreamBase<Node | 'yield'> {
+class FilterStartPull implements PullStream<Node | 'yield'> {
   readonly #input: PullStream<Node | 'yield'>;
   readonly #output: FilterOutput;
   #pending: Node | undefined;
   #ended = false;
 
   constructor(input: PullStream<Node | 'yield'>, output: FilterOutput) {
-    super();
     this.#input = input;
     this.#output = output;
   }

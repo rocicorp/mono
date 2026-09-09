@@ -142,19 +142,17 @@ export function drainStreams(node: Node | 'yield') {
     return;
   }
   for (const stream of Object.values(node.relationships)) {
-    {
-      const __pull149 = stream();
-      try {
-        for (
-          let node = __pull149.next();
-          node !== undefined;
-          node = __pull149.next()
-        ) {
-          drainStreams(node);
-        }
-      } finally {
-        __pull149.close();
+    const children = stream();
+    try {
+      for (
+        let node = children.next();
+        node !== undefined;
+        node = children.next()
+      ) {
+        drainStreams(node);
       }
+    } finally {
+      children.close();
     }
   }
 }

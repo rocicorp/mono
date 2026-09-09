@@ -28,17 +28,15 @@ describe('FilterStart', () => {
     const filterStart = new FilterStart(mockInput);
     filterStart.setFilterOutput(mockFilterOutput);
 
-    {
-      const __pull31 = filterStart.fetch({} as FetchRequest);
-      try {
-        for (let n = __pull31.next(); n !== undefined; n = __pull31.next()) {
-          expect(n).toEqual({row: {id: 1}, relationships: {}});
-          // break after consuming 1 of the 3 nodes.
-          break;
-        }
-      } finally {
-        __pull31.close();
+    const stream = filterStart.fetch({} as FetchRequest);
+    try {
+      for (let n = stream.next(); n !== undefined; n = stream.next()) {
+        expect(n).toEqual({row: {id: 1}, relationships: {}});
+        // break after consuming 1 of the 3 nodes.
+        break;
       }
+    } finally {
+      stream.close();
     }
 
     expect(mockFilterOutput.beginFilter).toHaveBeenCalledTimes(1);

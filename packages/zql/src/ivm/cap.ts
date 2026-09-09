@@ -18,8 +18,8 @@ import type {SourceSchema} from './schema.ts';
 import {
   type Stream,
   emptyPullStream,
-  PullStreamBase,
   type PullStream,
+  limitedScan,
 } from './stream.ts';
 import {
   constraintMatchesPartitionKey,
@@ -136,11 +136,14 @@ export class Cap implements Operator {
       this.#storage.get(capStateKey) === undefined,
       'Cap state should be undefined',
     );
-    return new CapInitialFetch(
+    const pks: string[] = [];
+    return limitedScan(
       this.#input.fetch(req),
       this.#limit,
-      row => serializePK(row, this.#primaryKey),
-      (size, pks) => this.#storage.set(capStateKey, {size, pks}),
+      node => node !== 'yield',
+      node => pks.push(serializePK((node as Node).row, this.#primaryKey)),
+      () => this.#storage.set(capStateKey, {size: pks.length, pks}),
+      () => assert(false, 'Unexpected early return prevented full hydration'),
     );
   }
   *push(change: Change): Stream<'yield'> {
@@ -192,27 +195,26 @@ export class Cap implements Operator {
         : undefined;
 
       let replacement: Node | undefined;
-      {
-        const __pull190 = this.#input.fetch({constraint});
-        try {
-          for (
-            let node = __pull190.next();
-            node !== undefined;
-            node = __pull190.next()
-          ) {
-            if (node === 'yield') {
-              yield node;
-              continue;
-            }
-            const nodePK = serializePK(node.row, this.#primaryKey);
-            if (!pkSet.has(nodePK)) {
-              replacement = node;
-              break;
-            }
+
+      const candidates = this.#input.fetch({constraint});
+      try {
+        for (
+          let node = candidates.next();
+          node !== undefined;
+          node = candidates.next()
+        ) {
+          if (node === 'yield') {
+            yield node;
+            continue;
           }
-        } finally {
-          __pull190.close();
+          const nodePK = serializePK(node.row, this.#primaryKey);
+          if (!pkSet.has(nodePK)) {
+            replacement = node;
+            break;
+          }
         }
+      } finally {
+        candidates.close();
       }
 
       if (replacement) {
@@ -309,7 +311,7 @@ function deserializePKToConstraint(
 }
 
 /** Flattens per-PK point lookups into one stream. */
-class CapPointLookups extends PullStreamBase<Node | 'yield'> {
+class CapPointLookups implements PullStream<Node | 'yield'> {
   readonly #pks: readonly string[];
   readonly #fetch: (pk: string) => PullStream<Node | 'yield'>;
   #i = 0;
@@ -319,7 +321,6 @@ class CapPointLookups extends PullStreamBase<Node | 'yield'> {
     pks: readonly string[],
     fetch: (pk: string) => PullStream<Node | 'yield'>,
   ) {
-    super();
     this.#pks = pks;
     this.#fetch = fetch;
   }
@@ -344,74 +345,5 @@ class CapPointLookups extends PullStreamBase<Node | 'yield'> {
     this.#i = this.#pks.length;
     this.#cur?.close();
     this.#cur = undefined;
-  }
-}
-
-/**
- * Cap's first fetch: emits up to `limit` rows and records the cap state when
- * the scan completes. Early close still records, then raises the same
- * assertion the generator raised from its finally block.
- */
-class CapInitialFetch extends PullStreamBase<Node | 'yield'> {
-  readonly #input: PullStream<Node | 'yield'>;
-  readonly #limit: number;
-  readonly #pkOf: (row: Row) => string;
-  readonly #finish: (size: number, pks: string[]) => void;
-  readonly #pks: string[] = [];
-  #size = 0;
-  #done = false;
-
-  constructor(
-    input: PullStream<Node | 'yield'>,
-    limit: number,
-    pkOf: (row: Row) => string,
-    finish: (size: number, pks: string[]) => void,
-  ) {
-    super();
-    this.#input = input;
-    this.#limit = limit;
-    this.#pkOf = pkOf;
-    this.#finish = finish;
-  }
-
-  next(): Node | 'yield' | undefined {
-    if (this.#done) {
-      return undefined;
-    }
-    if (this.#size === this.#limit) {
-      this.#complete();
-      return undefined;
-    }
-    let v: Node | 'yield' | undefined;
-    try {
-      v = this.#input.next();
-    } catch (e) {
-      // As the generator did: an exception records no state.
-      this.#done = true;
-      throw e;
-    }
-    if (v === undefined) {
-      this.#complete();
-      return undefined;
-    }
-    if (v === 'yield') {
-      return v;
-    }
-    this.#pks.push(this.#pkOf(v.row));
-    this.#size++;
-    return v;
-  }
-
-  #complete(): void {
-    this.#done = true;
-    this.#input.close();
-    this.#finish(this.#size, this.#pks);
-  }
-
-  close(): void {
-    if (!this.#done) {
-      this.#complete();
-      assert(false, 'Unexpected early return prevented full hydration');
-    }
   }
 }

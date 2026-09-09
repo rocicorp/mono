@@ -6,7 +6,7 @@ import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import {compareValues, valuesEqual, type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
-import {PullStreamBase, type PullStream} from './stream.ts';
+import {type PullStream} from './stream.ts';
 
 export function generateWithOverlayNoYield(
   stream: PullStream<Node>,
@@ -27,7 +27,7 @@ export function generateWithOverlayNoYield(
  * which the generator expressed as two `yield`s in one loop iteration. `#q`
  * holds those so `next()` can hand them back one at a time.
  */
-class JoinOverlay extends PullStreamBase<Node | 'yield'> {
+class JoinOverlay implements PullStream<Node | 'yield'> {
   readonly #stream: PullStream<Node | 'yield'>;
   readonly #overlay: Change;
   readonly #schema: SourceSchema;
@@ -43,7 +43,6 @@ class JoinOverlay extends PullStreamBase<Node | 'yield'> {
     overlay: Change,
     schema: SourceSchema,
   ) {
-    super();
     this.#stream = stream;
     this.#overlay = overlay;
     this.#schema = schema;
@@ -203,7 +202,7 @@ export function generateWithOverlayNoYieldUnordered(
 }
 
 /** {@link JoinOverlay} for unordered streams: eager inject, inline suppress. */
-class JoinOverlayUnordered extends PullStreamBase<Node | 'yield'> {
+class JoinOverlayUnordered implements PullStream<Node | 'yield'> {
   readonly #stream: PullStream<Node | 'yield'>;
   readonly #overlay: Change;
   readonly #schema: SourceSchema;
@@ -217,7 +216,6 @@ class JoinOverlayUnordered extends PullStreamBase<Node | 'yield'> {
     overlay: Change,
     schema: SourceSchema,
   ) {
-    super();
     this.#stream = stream;
     this.#overlay = overlay;
     this.#schema = schema;
