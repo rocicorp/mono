@@ -21,7 +21,8 @@ type Fetch = {
 
 function fetchRowCount(input: Input, filter: NoSubqueryCondition | undefined) {
   let count = 0;
-  for (const node of input.fetch({filter})) {
+  const stream = input.fetch({filter});
+  for (let node = stream.next(); node !== undefined; node = stream.next()) {
     if (node !== 'yield') {
       count++;
     }

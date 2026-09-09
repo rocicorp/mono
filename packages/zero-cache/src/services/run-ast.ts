@@ -102,8 +102,13 @@ export async function runAst(
     // triggering early return on Take's #initialFetch assertion.
     // The subquery AST already has limit: 1, so at most one row is produced.
     let node: Node | undefined;
-    for (const n of skipYields(input.fetch({}))) {
-      node ??= n;
+    const rows = skipYields(input.fetch({}));
+    try {
+      for (let n = rows.next(); n !== undefined; n = rows.next()) {
+        node ??= n;
+      }
+    } finally {
+      rows.close();
     }
     input.destroy();
     return node ? ((node.row[childField] as LiteralValue) ?? null) : undefined;

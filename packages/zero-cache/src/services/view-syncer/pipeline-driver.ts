@@ -15,7 +15,7 @@ import {
 import {ChangeIndex} from '../../../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
-import type {Node} from '../../../../zql/src/ivm/data.ts';
+import type {Node, RelationshipStream} from '../../../../zql/src/ivm/data.ts';
 import {
   skipYields,
   throwOutput,
@@ -33,6 +33,7 @@ import {
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from '../../../../zql/src/ivm/source.ts';
+import {pullOf, type PullStream} from '../../../../zql/src/ivm/stream.ts';
 import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
 import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
@@ -560,8 +561,13 @@ export class PipelineDriver {
       // triggering early return on Take's #initialFetch assertion.
       // The subquery AST already has limit: 1, so at most one row is produced.
       let node: Node | undefined;
-      for (const n of skipYields(input.fetch({}))) {
-        node ??= n;
+      const rows = skipYields(input.fetch({}));
+      try {
+        for (let n = rows.next(); n !== undefined; n = rows.next()) {
+          node ??= n;
+        }
+      } finally {
+        rows.close();
       }
       if (!node) {
         return undefined;
@@ -1369,9 +1375,9 @@ class Streamer {
       switch (type) {
         case ChangeType.REMOVE:
         case ChangeType.ADD: {
-          yield* this.#streamNodes(queryID, schema, type, () => [
-            change[ChangeIndex.NODE],
-          ]);
+          yield* this.#streamNodes(queryID, schema, type, () =>
+            pullOf([change[ChangeIndex.NODE]]),
+          );
           break;
         }
 
@@ -1385,9 +1391,9 @@ class Streamer {
           break;
         }
         case ChangeType.EDIT:
-          yield* this.#streamNodes(queryID, schema, type, () => [
-            {row: change[ChangeIndex.NODE].row, relationships: {}},
-          ]);
+          yield* this.#streamNodes(queryID, schema, type, () =>
+            pullOf([{row: change[ChangeIndex.NODE].row, relationships: {}}]),
+          );
           break;
         default:
           unreachable(change[ChangeIndex.TYPE]);
@@ -1399,7 +1405,7 @@ class Streamer {
     queryID: string,
     schema: SourceSchema,
     op: ChangeType.ADD | ChangeType.REMOVE | ChangeType.EDIT,
-    nodes: () => Iterable<Node | 'yield'>,
+    nodes: () => RelationshipStream,
   ): Iterable<RowChange | 'yield'> {
     const {tableName: table, system} = schema;
 
@@ -1412,36 +1418,46 @@ class Streamer {
       return;
     }
 
-    for (const node of nodes()) {
-      if (node === 'yield') {
-        yield node;
-        continue;
-      }
-      const {relationships} = node;
-      let {row} = node;
-      const rowKey = getRowKey(primaryKey, row);
-      if (op !== ChangeType.REMOVE) {
-        const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
-        if (
-          typeof rowVersion === 'string' &&
-          rowVersion < (spec.minRowVersion ?? '00')
-        ) {
-          row = {...row, [ZERO_VERSION_COLUMN_NAME]: spec.minRowVersion};
+    const stream = nodes();
+    try {
+      for (let node = stream.next(); node !== undefined; node = stream.next()) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
+        const {relationships} = node;
+        let {row} = node;
+        const rowKey = getRowKey(primaryKey, row);
+        if (op !== ChangeType.REMOVE) {
+          const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
+          if (
+            typeof rowVersion === 'string' &&
+            rowVersion < (spec.minRowVersion ?? '00')
+          ) {
+            row = {...row, [ZERO_VERSION_COLUMN_NAME]: spec.minRowVersion};
+          }
+        }
+
+        yield {
+          type: op,
+          queryID,
+          table,
+          rowKey,
+          row: op === ChangeType.REMOVE ? undefined : row,
+        } as RowChange;
+
+        for (const [relationship, children] of Object.entries(relationships)) {
+          const childSchema = must(schema.relationships[relationship]);
+          yield* this.#streamNodes(
+            queryID,
+            childSchema,
+            op,
+            children as () => RelationshipStream,
+          );
         }
       }
-
-      yield {
-        type: op,
-        queryID,
-        table,
-        rowKey,
-        row: op === ChangeType.REMOVE ? undefined : row,
-      } as RowChange;
-
-      for (const [relationship, children] of Object.entries(relationships)) {
-        const childSchema = must(schema.relationships[relationship]);
-        yield* this.#streamNodes(queryID, childSchema, op, children);
-      }
+    } finally {
+      stream.close();
     }
   }
 }
@@ -1481,7 +1497,7 @@ class QueryFailureLoggingOperator implements Input, Output {
     this.#input.destroy();
   }
 
-  fetch(req: FetchRequest): Iterable<Node | 'yield'> {
+  fetch(req: FetchRequest): PullStream<Node | 'yield'> {
     return this.#input.fetch(req);
   }
 
@@ -1525,13 +1541,24 @@ function logQueryFailure(
   queryLC.error?.(message, error);
 }
 
-function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
-  for (const node of nodes) {
-    if (node === 'yield') {
-      yield node;
-      continue;
+function* toAdds(
+  nodes: PullStream<Node | 'yield'>,
+): Iterable<Change | 'yield'> {
+  // `finally` is load-bearing: abandoning this generator -- an aborted or
+  // evicted hydration -- must still close the stream. `for...of` did that
+  // implicitly via `.return()`; the pull protocol makes it explicit, and a
+  // leaked SQLite cursor leaves later writes failing with "database
+  // connection is busy executing a query".
+  try {
+    for (let node = nodes.next(); node !== undefined; node = nodes.next()) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
+      yield [ChangeType.ADD, node, null];
     }
-    yield [ChangeType.ADD, node, null];
+  } finally {
+    nodes.close();
   }
 }
 
