@@ -177,24 +177,25 @@ consistently held is the evidence that the check can be tightened.
 
 ## Chaos matrix
 
-`--chaos` takes ids, `none`, or `all`. The default is C1-C8, C13 and C14.
+`--chaos` takes ids, `none`, or `all`. The default is C1-C8 and C13-C15.
 
-| #   | Action                                                               | Expected route                                                   |
-| --- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| C1  | SIGTERM a view-syncer (graceful drain), restart                      | `sqlite/selected`                                                |
-| C2  | SIGQUIT a view-syncer (abrupt), restart                              | `sqlite/selected`                                                |
-| C3  | Kill a view-syncer, delete its replica, restart                      | restore, then `sqlite`; **must not demote**                      |
-| C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`; stale long-gap replica discarded and restored |
-| C5  | SIGTERM the replication-manager, restart                             | a valid log resumes from its own head                            |
-| C6  | Delete only the change log, restart, then wipe a view-syncer replica | `sqlite/selected-cold`, or `pg/cold-log` when cold reads are off |
-| C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap                            |
-| C8  | SIGKILL the replication-manager mid-burst, restart                   | reconcile by _truncation_, not reseed                            |
-| C9  | Stop minio for five minutes under sustained writes, then restart it  | live log pages and app-scoped slot WAL grow, then drain          |
-| C10 | `readPercent` 100 -> 0, restart                                      | every route becomes `pg/percentage`                              |
-| C11 | `serve` -> `compare` -> `write`, restart each time                   | the writer stays, reads stop, comparison stops                   |
-| C12 | `write` -> `off`, restart                                            | does turning it off actually free the disk                       |
-| C13 | C4 and C6 together                                                   | a follower already behind, meeting a reseed                      |
-| C14 | Wipe the RM's whole volume (replica, litestream state, change log)   | restore from backup into a fresh generation; no follower demoted |
+| #   | Action                                                               | Expected route                                                      |
+| --- | -------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| C1  | SIGTERM a view-syncer (graceful drain), restart                      | `sqlite/selected`                                                   |
+| C2  | SIGQUIT a view-syncer (abrupt), restart                              | `sqlite/selected`                                                   |
+| C3  | Kill a view-syncer, delete its replica, restart                      | restore, then `sqlite`; **must not demote**                         |
+| C4  | Kill mid-burst; a short outage, then one past retention              | `sqlite/selected`; stale long-gap replica discarded and restored    |
+| C5  | SIGTERM the replication-manager, restart                             | a valid log resumes from its own head                               |
+| C6  | Delete only the change log, restart, then wipe a view-syncer replica | `sqlite/selected-cold`, or `pg/cold-log` when cold reads are off    |
+| C7  | SIGSTOP the replication-manager 30s, then SIGCONT                    | disconnect and reconnect, no data gap                               |
+| C8  | SIGKILL the replication-manager mid-burst, restart                   | reconcile by _truncation_, not reseed                               |
+| C9  | Stop minio for five minutes under sustained writes, then restart it  | live log pages and app-scoped slot WAL grow, then drain             |
+| C10 | `readPercent` 100 -> 0, restart                                      | every route becomes `pg/percentage`                                 |
+| C11 | `serve` -> `compare` -> `write`, restart each time                   | the writer stays, reads stop, comparison stops                      |
+| C12 | `write` -> `off`, restart                                            | does turning it off actually free the disk                          |
+| C13 | C4 and C6 together                                                   | a follower already behind, meeting a reseed                         |
+| C14 | Wipe the RM's whole volume (replica, litestream state, change log)   | restore from backup into a fresh generation; no follower demoted    |
+| C15 | Restart the RM mid-backfill                                          | the run resumes from the replica's mark; nobody demoted or restored |
 
 `GRACEFUL_SHUTDOWN = ['SIGTERM','SIGINT']` and `FORCEFUL_SHUTDOWN =
 ['SIGQUIT','SIGABRT']` are genuinely different paths in `life-cycle.ts`, which

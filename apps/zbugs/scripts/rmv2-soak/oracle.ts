@@ -326,6 +326,62 @@ export function readStateVersion(lc: LogContext, replicaFile: string): string {
   }
 }
 
+/**
+ * One table's in-flight backfill state on a replica, as C15 reads it.
+ *
+ * `mark` is how far an ordered run has been applied. It exists only while the
+ * backfill is in flight -- a completion deletes the row -- so `undefined`
+ * means either "never started" or "already finished", which the caller
+ * distinguishes by when it asked.
+ */
+export type BackfillState = {
+  readonly mark: string | null;
+  readonly markWatermark: string | null;
+  readonly runID: string | null;
+};
+
+export function readBackfillState(
+  lc: LogContext,
+  replicaFile: string,
+  table: string,
+): BackfillState | undefined {
+  let db: Database | undefined;
+  try {
+    db = openReplica(lc, replicaFile);
+    // Every in-flight column of one table shares a mark, so any row answers.
+    return db
+      .prepare(
+        `SELECT "mark", "markWatermark", "runID"
+           FROM "_zero.backfilling" WHERE "table" = ? LIMIT 1`,
+      )
+      .get<BackfillState | undefined>(table);
+  } catch {
+    return undefined;
+  } finally {
+    db?.close();
+  }
+}
+
+/** A replica's row count for `table`, or -1 if it does not have it yet. */
+export function readTableRowCount(
+  lc: LogContext,
+  replicaFile: string,
+  table: string,
+): number {
+  let db: Database | undefined;
+  try {
+    db = openReplica(lc, replicaFile);
+    const row = db
+      .prepare(`SELECT COUNT(*) AS "rows" FROM "${table}"`)
+      .get<{rows: number} | undefined>();
+    return row?.rows ?? -1;
+  } catch {
+    return -1;
+  } finally {
+    db?.close();
+  }
+}
+
 export function readReplicaVersion(
   lc: LogContext,
   replicaFile: string,
