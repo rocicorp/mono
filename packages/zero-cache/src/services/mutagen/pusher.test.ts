@@ -1585,6 +1585,23 @@ describe('pusher streaming', () => {
     vi.resetAllMocks();
   });
 
+  test('ignores a push after its websocket connection closes', () => {
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+    });
+    getContextManager(pusher).closeConnection(selector);
+
+    expect(pusher.enqueuePush(selector, makePush(1))).toEqual({type: 'ok'});
+  });
+
   test('returns ok for subsequent pushes from same client', () => {
     const pusher = newPusherService({
       url: ['http://example.com'],
