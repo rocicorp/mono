@@ -289,14 +289,12 @@ test('FanOut forwards beginFilter/endFilter to all outputs', () => {
   const mockOutput1 = {
     push: vi.fn(),
     filter: vi.fn(),
-    filterPull: vi.fn(),
     beginFilter: vi.fn(),
     endFilter: vi.fn(),
   };
   const mockOutput2 = {
     push: vi.fn(),
     filter: vi.fn(),
-    filterPull: vi.fn(),
     beginFilter: vi.fn(),
     endFilter: vi.fn(),
   };
@@ -327,7 +325,6 @@ test('FanIn forwards beginFilter/endFilter to output', () => {
   const mockOutput = {
     push: vi.fn(),
     filter: vi.fn(),
-    filterPull: vi.fn(),
     beginFilter: vi.fn(),
     endFilter: vi.fn(),
   };

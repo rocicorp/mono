@@ -63,10 +63,10 @@ export class FanOut implements FilterOperator {
   /** Which output suspended on 'yield', so re-entry resumes there. */
   #filterIndex = 0;
 
-  filterPull(node: Node): boolean | 'yield' {
+  filter(node: Node): boolean | 'yield' {
     const outputs = this.#outputs;
     for (let i = this.#filterIndex; i < outputs.length; i++) {
-      const r = outputs[i].filterPull(node);
+      const r = outputs[i].filter(node);
       if (r === 'yield') {
         this.#filterIndex = i;
         return 'yield';

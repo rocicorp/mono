@@ -47,7 +47,7 @@ export interface FilterOutput extends Output {
    * allocation per node. `Exists` is the one that does suspend, and holds its
    * position in explicit state rather than in a generator.
    */
-  filterPull(node: Node): boolean | 'yield';
+  filter(node: Node): boolean | 'yield';
   endFilter(): void;
 }
 
@@ -63,7 +63,7 @@ export const throwFilterOutput: FilterOutput = {
     throw new Error('Output not set');
   },
 
-  filterPull(): boolean | 'yield' {
+  filter(): boolean | 'yield' {
     throw new Error('Output not set');
   },
 
@@ -142,7 +142,7 @@ export class FilterEnd implements Input, FilterOutput {
   beginFilter() {}
   endFilter() {}
 
-  filterPull(_node: Node): boolean {
+  filter(_node: Node): boolean {
     return true;
   }
 
@@ -215,7 +215,7 @@ class FilterStartPull implements PullStream<Node | 'yield'> {
           }
           node = v;
         }
-        const verdict = this.#output.filterPull(node);
+        const verdict = this.#output.filter(node);
         if (verdict === 'yield') {
           this.#pending = node;
           return 'yield';

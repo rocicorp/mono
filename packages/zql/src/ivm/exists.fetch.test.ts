@@ -1537,7 +1537,6 @@ test('Exists forwards beginFilter/endFilter', () => {
   const mockOutput = {
     push: vi.fn(),
     filter: vi.fn(),
-    filterPull: vi.fn(),
     beginFilter: vi.fn(),
     endFilter: vi.fn(),
   };
