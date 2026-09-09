@@ -8,16 +8,49 @@ export type ChangeLogEntry = {
   change: string;
 };
 
+export type SerializedChangeStreamData = {
+  /** The canonical downstream representation forwarded to subscribers. */
+  readonly json: string;
+  /** The already-serialized change tuple element stored in change logs. */
+  readonly change: string;
+};
+
+/**
+ * Serializes a data-plane message and its stored change payload in one pass.
+ *
+ * Change logs retain only the second tuple element for backwards
+ * compatibility. Serializing that element first avoids stringifying the full
+ * message and then copying the payload back out of the resulting string on the
+ * replication hot path.
+ */
+export function serializeChangeStreamDataWithChange(
+  data: ChangeStreamData,
+): SerializedChangeStreamData {
+  const change = BigIntJSON.stringify(data[1]);
+  const type = data[0];
+  switch (type) {
+    case 'begin':
+    case 'commit':
+      return {
+        json: `[${JSON.stringify(type)},${change},${BigIntJSON.stringify(data[2])}]`,
+        change,
+      };
+    case 'data':
+    case 'rollback':
+      return {json: `[${JSON.stringify(type)},${change}]`, change};
+  }
+}
+
 /** Serializes a data-plane message to the canonical downstream JSON form. */
 export function serializeChangeStreamData(data: ChangeStreamData): string {
-  return BigIntJSON.stringify(data);
+  return serializeChangeStreamDataWithChange(data).json;
 }
 
 /**
- * Extracts the stringified change message from the stringified stream message
- * (the second tuple element). This allows the stream message to be stringified
- * once while storing only the change message in the change log for backwards
- * compatibility.
+ * Extracts the second tuple element for callers that only have the canonical
+ * downstream JSON. The live write path uses
+ * {@link serializeChangeStreamDataWithChange} and does not scan or copy the
+ * completed message.
  */
 export function extractChangeSubstring(
   streamMessageJSON: string,

@@ -4,13 +4,14 @@ import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
   streamIn,
-  streamInStringified,
+  streamInWithSize,
   streamOut,
   streamOutStringified,
   type Source,
@@ -19,12 +20,13 @@ import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService, type Options as HttpOptions} from '../http-service.ts';
+import {handleProfzRequest} from '../profz.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
   type ChangeStreamer,
   type ChangeStreamerService,
-  type SerializedDownstream,
+  type SizedDownstream,
   type SubscriberContext,
 } from './change-streamer.ts';
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
@@ -41,6 +43,8 @@ const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 type Options = HttpOptions & {
   startupDelayMs: number;
+  config?: Pick<NormalizedZeroConfig, 'adminPassword'> | undefined;
+  getProfileWorker?: (() => Promise<Worker>) | undefined;
 };
 
 export class ChangeStreamerHttpServer extends HttpService {
@@ -63,6 +67,18 @@ export class ChangeStreamerHttpServer extends HttpService {
         SNAPSHOT_PATH_PATTERN,
         {websocket: true},
         this.#reserveSnapshot,
+      );
+
+      fastify.get('/profz', (req, res) =>
+        handleProfzRequest(
+          lc,
+          opts.config ?? {adminPassword: undefined},
+          req,
+          res,
+          opts.getProfileWorker,
+          undefined,
+          'change-streamer',
+        ),
       );
 
       installWebSocketReceiver<'snapshot' | 'changes'>(
@@ -234,15 +250,13 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     return streamIn(this.#lc, ws, snapshotMessageSchema);
   }
 
-  async subscribe(
-    ctx: SubscriberContext,
-  ): Promise<Source<SerializedDownstream>> {
+  async subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>> {
     const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
     const params = getParams(ctx);
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamInStringified(this.#lc, ws, downstreamSchema);
+    return streamInWithSize(this.#lc, ws, downstreamSchema);
   }
 }
 

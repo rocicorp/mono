@@ -2,7 +2,7 @@ import {pid} from 'node:process';
 import type {MessagePort} from 'node:worker_threads';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
+import {WebSocket, WebSocketServer, type ServerOptions} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -749,6 +749,21 @@ export class Syncer implements SingletonService {
       }
       recordConnectionFailure('internal');
       throw e;
+    }
+
+    // Resolving auth can take a while (e.g. a remote JWKS fetch), during
+    // which the client may have disconnected. A Connection created for a
+    // closed socket never receives the 'close' event and is thus never
+    // cleaned up, leaking its timer, its registrations in the connection
+    // context manager and its refs on the mutagen and pusher services.
+    if (ws.readyState !== WebSocket.OPEN) {
+      this.#lc.debug?.('websocket closed while resolving auth', {
+        clientGroupID,
+        clientID,
+        readyState: ws.readyState,
+      });
+      recordConnectionFailure('closed_during_auth');
+      return;
     }
 
     const viewSyncer = this.#viewSyncers.getService(clientGroupID);

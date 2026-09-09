@@ -1,6 +1,8 @@
+import {existsSync, statSync} from 'node:fs';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
+import {deleteLiteDB} from '../../../db/delete-lite-db.ts';
 import {runSchemaMigrations} from '../../../db/migration-lite.ts';
 import {
   DbFile,
@@ -455,8 +457,8 @@ describe('replica-schema-migrations', () => {
       },
     },
     {
-      // v14 creates and seeds the change-log stream table; v16 drops it. Both
-      // run here, in that order.
+      // v14 is empty; v16's cleanup is harmless when no pre-release table
+      // exists.
       fromSchemaVersion: 13,
       fromDataVersion: 11,
       desc: 'preserves writeTimeMs after rollback and rollforward',
@@ -489,8 +491,8 @@ describe('replica-schema-migrations', () => {
       },
     },
     {
-      // A replica that a v14 zero-cache created, seed included. v16 drops the
-      // table out from under it.
+      // A replica that a pre-release v14 zero-cache created, seed included.
+      // v16 drops the table out from under it.
       fromSchemaVersion: 14,
       fromDataVersion: 14,
       desc: 'drops the change-log stream table a v14 zero-cache created',
@@ -539,11 +541,11 @@ describe('replica-schema-migrations', () => {
       },
     },
     {
-      // Rolled back to v14 code, which reset dataVersion to 14 while leaving
-      // schemaVersion at 16, then rolled forward. Migration 16 re-runs with
-      // its schema step skipped, so it must not resurrect the table.
+      // Rolled back to v13 code, which reset dataVersion to 13 while leaving
+      // schemaVersion at 16, then rolled forward. Empty migration 14 lets the
+      // data version catch up without requiring the pre-release table.
       fromSchemaVersion: 16,
-      fromDataVersion: 14,
+      fromDataVersion: 13,
       desc: 'stays dropped after rollback and rollforward',
       // writeTimeMs is NOT NULL because a v16 schema has been through v15.
       replicaSetup:
@@ -667,10 +669,33 @@ describe('replica-schema-migrations', () => {
 
   beforeEach(() => {
     replicaFile = new DbFile('replica_schema_test');
-    return () => replicaFile.delete();
+    return () => {
+      replicaFile.delete();
+      deleteLiteDB(`${replicaFile.path}.tmp`);
+    };
   });
 
   const lc = createSilentLogContext();
+
+  test('publishes a new replica only after initial sync succeeds', async () => {
+    const temporaryReplica = `${replicaFile.path}.tmp`;
+    await expect(
+      initReplica(lc, 'test', replicaFile.path, () => {
+        throw new Error('initial sync failed');
+      }),
+    ).rejects.toThrow('initial sync failed');
+
+    expect(existsSync(replicaFile.path)).toBe(false);
+    expect(statSync(temporaryReplica).size).toBe(8192);
+
+    await initReplica(lc, 'test', replicaFile.path, (_, db) => {
+      initReplicationState(db, ['foo_publication'], '123');
+      return promiseVoid;
+    });
+
+    expect(existsSync(replicaFile.path)).toBe(true);
+    expect(existsSync(temporaryReplica)).toBe(false);
+  });
 
   for (const c of cases) {
     test(`from v${c.fromSchemaVersion}: ${c.desc}`, async () => {

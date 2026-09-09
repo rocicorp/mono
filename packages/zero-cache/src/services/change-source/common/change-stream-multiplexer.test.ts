@@ -6,6 +6,7 @@ import {
   test,
   vi,
 } from 'vitest';
+import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {
   ChangeStreamMessage,
@@ -87,6 +88,28 @@ describe('change-stream-multiplexer', () => {
 
     expect(cancelFn1).toHaveBeenCalledOnce();
     expect(cancelFn2).toHaveBeenCalledOnce();
+  });
+
+  test('cancelation rejects pending and subsequent reservations', async () => {
+    expect(stream.reserve('foo')).toBe('123');
+
+    // Already reserved, so this producer waits in line.
+    const res2 = stream.reserve('bar');
+    expect(res2).toBeInstanceOf(Promise);
+    expect(stream.waiterDelay()).toBeGreaterThan(0);
+
+    stream.asSource().cancel();
+
+    expect(cancelFn1).toHaveBeenCalledOnce();
+    expect(cancelFn2).toHaveBeenCalledOnce();
+
+    // The reservation held by 'foo' is never released, so the pending
+    // request must be rejected rather than left waiting forever.
+    await expect(res2).rejects.toBeInstanceOf(AbortError);
+    expect(stream.waiterDelay()).toBeLessThan(0);
+
+    // Subsequent reservation requests are also rejected.
+    await expect(stream.reserve('baz')).rejects.toBeInstanceOf(AbortError);
   });
 
   test('listeners', () => {

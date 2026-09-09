@@ -69,7 +69,6 @@ export type Overlays = {
 type Index = {
   comparator: Comparator;
   data: BTreeSet<Row>;
-  usedBy: Set<Connection>;
 };
 
 export type Connection = {
@@ -120,7 +119,6 @@ export class MemorySource implements Source {
     this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
       comparator,
       data: primaryIndexData ?? new BTreeSet<Row>(comparator),
-      usedBy: new Set(),
     });
   }
 
@@ -207,6 +205,13 @@ export class MemorySource implements Source {
     assert(idx !== -1, 'Connection not found');
     this.#connections.splice(idx, 1);
 
+    // Indexes deliberately hold no reference back to the connections that use
+    // them. They used to, to support deleting an index once its last user went
+    // away. That deletion is gone (see below) but the `usedBy` set outlived it,
+    // so an index kept every `Connection` — and through its `input` and
+    // `output`, the whole torn-down pipeline — reachable for as long as the
+    // source lived.
+    //
     // TODO: We used to delete unused indexes here. But in common cases like
     // navigating into issue detail pages it caused a ton of constantly
     // building and destroying indexes.
@@ -222,13 +227,12 @@ export class MemorySource implements Source {
     return index;
   }
 
-  #getOrCreateIndex(sort: Ordering, usedBy: Connection): Index {
+  #getOrCreateIndex(sort: Ordering): Index {
     const key = JSON.stringify(sort);
     const index = this.#indexes.get(key);
     // Future optimization could use existing index if it's the same just sorted
     // in reverse of needed.
     if (index) {
-      index.usedBy.add(usedBy);
       return index;
     }
 
@@ -244,7 +248,7 @@ export class MemorySource implements Source {
     const rows = toSorted(this.#getPrimaryIndex().data, comparator);
     const data = BTreeSet.fromSorted(comparator, rows);
 
-    const newIndex = {comparator, data, usedBy: new Set([usedBy])};
+    const newIndex = {comparator, data};
     this.#indexes.set(key, newIndex);
     return newIndex;
   }
@@ -275,8 +279,19 @@ export class MemorySource implements Source {
       ? (r1, r2) => compareRows(r2, r1)
       : compareRows;
 
+    const reqFilter = req.filter;
+    const connFilterCondition = conn.filters?.condition;
+    const mergedFilterCondition: NoSubqueryCondition | undefined =
+      connFilterCondition && reqFilter
+        ? {type: 'and', conditions: [connFilterCondition, reqFilter]}
+        : (connFilterCondition ?? reqFilter);
+    const mergedFilterPredicate = mergePredicates(
+      conn.filters?.predicate,
+      reqFilter,
+    );
+
     const pkConstraint = primaryKeyConstraintFromFilters(
-      conn.filters?.condition,
+      mergedFilterCondition,
       this.#primaryKey,
     );
     // The primary key constraint will be more limiting than the constraint
@@ -302,7 +317,7 @@ export class MemorySource implements Source {
       indexSort.push(...requestedSort);
     }
 
-    const index = this.#getOrCreateIndex(indexSort, conn);
+    const index = this.#getOrCreateIndex(indexSort);
     const {data, comparator: compare} = index;
     // Avoid allocating a new closure when not reversing (the common case).
     const indexComparator: Comparator = req.reverse
@@ -353,7 +368,7 @@ export class MemorySource implements Source {
     // a large amount of per-row generator-resume overhead on the hottest path.
     const overlayActive =
       this.#overlay && conn.lastPushedEpoch >= this.#overlay.epoch;
-    if (!overlayActive && !req.start && !conn.filters) {
+    if (!overlayActive && !req.start && !conn.filters && !req.filter) {
       const {constraint} = req;
       for (const row of rowsIterable) {
         if (constraint && !constraintMatchesRow(constraint, row)) {
@@ -392,7 +407,7 @@ export class MemorySource implements Source {
       // there by the constraint key dropped the in-flight overlay and served
       // pre-push data. Same distinction #4926 drew for `generateWithStart`.
       connectionComparator,
-      conn.filters?.predicate,
+      mergedFilterPredicate,
     );
 
     const withConstraint = generateWithConstraint(
@@ -404,8 +419,8 @@ export class MemorySource implements Source {
       req.constraint,
     );
 
-    yield* conn.filters
-      ? generateWithFilter(withConstraint, conn.filters.predicate)
+    yield* mergedFilterPredicate
+      ? generateWithFilter(withConstraint, mergedFilterPredicate)
       : withConstraint;
   }
 
@@ -532,6 +547,20 @@ export class MemorySource implements Source {
       }
     }
   }
+}
+
+function mergePredicates(
+  connPredicate: ((row: Row) => boolean) | undefined,
+  reqFilter: NoSubqueryCondition | undefined,
+): ((row: Row) => boolean) | undefined {
+  if (!reqFilter) {
+    return connPredicate;
+  }
+  const reqPredicate = createPredicate(reqFilter);
+  if (!connPredicate) {
+    return reqPredicate;
+  }
+  return row => connPredicate(row) && reqPredicate(row);
 }
 
 function* generateWithConstraint(

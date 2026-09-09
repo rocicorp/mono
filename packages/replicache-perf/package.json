@@ -10,6 +10,7 @@
     "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
     "build": "node tool/build.ts",
     "perf": "pnpm run build && node src/runner.ts",
+    "perf:rn": "pnpm run build && node src/perf-rn.ts",
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },
@@ -19,7 +20,7 @@
     "@types/command-line-usage": "^5.0.4",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
-    "compare-utf8": "^0.2.0",
+    "compare-utf8": "^0.2.3",
     "esbuild": "0.27.7",
     "get-port": "^7.0.0",
     "hash-wasm": "^4.9.0",
@@ -27,13 +28,16 @@
     "playwright": "^1.60.0",
     "playwright-core": "1.53.2",
     "replicache": "workspace:*",
+    "rn-bench": "workspace:*",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
     "vite": "^8.0.13",
     "xbytes": "^1.7.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.65.0"
+    "@types/ws": "^8.5.12",
+    "oxfmt": "^0.65.0",
+    "ws": "^8.18.1"
   },
   "packageManager": "pnpm@11.11.0"
 }

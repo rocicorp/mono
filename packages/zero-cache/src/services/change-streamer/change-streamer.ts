@@ -1,6 +1,6 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {ParsedJSON, Source} from '../../types/streams.ts';
+import type {Sized, Source} from '../../types/streams.ts';
 import {
   changeStreamDataSchema,
   type ChangeStreamData,
@@ -67,10 +67,10 @@ export interface ChangeStreamer {
   /**
    * Subscribes to changes based on the supplied subscriber `ctx`,
    * which indicates the watermark at which the subscriber is up to
-   * date. Each result contains both parsed, validated data and the exact JSON
-   * payload sent by the ChangeStreamerService.
+   * date. Each result contains parsed, validated data and its approximate
+   * serialized transport size.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<SerializedDownstream>>;
+  subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>>;
 }
 
 // v1: v0.18
@@ -228,8 +228,8 @@ export function errorTypeToReadableName(val: ErrorType) {
  */
 export type Downstream = v.Infer<typeof downstreamSchema>;
 
-/** A downstream message and its canonical ChangeStreamer JSON. */
-export type SerializedDownstream = ParsedJSON<Downstream>;
+/** A downstream message and its approximate serialized transport size. */
+export type SizedDownstream = Sized<Downstream>;
 
 export interface ChangeStreamerService
   extends Omit<ChangeStreamer, 'subscribe'>, Service {

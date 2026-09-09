@@ -116,6 +116,7 @@ export declare const createIndexSchema: v.ObjectType<{
         tableName: v.Type<string>;
         unique: v.Type<boolean>;
         columns: v.Type<Record<string, "ASC" | "DESC">>;
+        predicate: v.Optional<import("../../../../db/specs.ts").IndexPredicate>;
     }, "schema"> & {
         schema: v.Type<string>;
     }, undefined>;
@@ -423,6 +424,7 @@ export declare const schemaChangeSchema: v.UnionType<[v.ObjectType<{
         tableName: v.Type<string>;
         unique: v.Type<boolean>;
         columns: v.Type<Record<string, "ASC" | "DESC">>;
+        predicate: v.Optional<import("../../../../db/specs.ts").IndexPredicate>;
     }, "schema"> & {
         schema: v.Type<string>;
     }, undefined>;

@@ -25,8 +25,13 @@ validation:
 
 dbs:
   - path: ${ZERO_REPLICA_FILE}
-    # The monitor-interval is the interval at which new l0 files are created.
+    # The monitor-interval is the steady-state interval at which the db / wal
+    # is checked to create new l0 files and/or checkpoint the wal. The
+    # application will also explicitly trigger a "/sync" if the wal reaches
+    # ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB.
     monitor-interval: ${ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}s
+    min-checkpoint-page-count: ${ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT}
+    truncate-page-n: ${ZERO_LITESTREAM_TRUNCATE_PAGE_N}
     replica:
       url: ${ZERO_LITESTREAM_BACKUP_URL}
       endpoint: ${ZERO_LITESTREAM_ENDPOINT}
@@ -34,9 +39,18 @@ dbs:
       auto-recover: true
       concurrency: ${ZERO_LITESTREAM_MULTIPART_CONCURRENCY}
       part-size: ${ZERO_LITESTREAM_MULTIPART_SIZE}
+      download-concurrency: ${ZERO_LITESTREAM_MULTIPART_CONCURRENCY}
+      download-part-size: ${ZERO_LITESTREAM_MULTIPART_SIZE}
 
 logging:
   level: ${ZERO_LITESTREAM_LOG_LEVEL}
   type: ${ZERO_LOG_FORMAT}
 
 addr: localhost:${LITESTREAM_PORT}
+
+# Control API served as HTTP over a Unix domain socket, used for in-process IPC
+# from zero-cache (e.g. forcing an immediate sync/checkpoint via POST /sync).
+socket:
+  enabled: true
+  path: ${ZERO_LITESTREAM_SOCKET_PATH}
+  permissions: 0600
