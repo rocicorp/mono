@@ -49,6 +49,11 @@ export type MutationError = [
 ];
 
 export interface Mutagen extends RefCountedService {
+  /**
+   * Callers must hold a {@link ref} for the duration of a push (i.e. across
+   * all of its mutations). The service stops, closing its replica handle,
+   * when its ref count drops to zero.
+   */
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
@@ -158,8 +163,17 @@ export class MutagenService implements Mutagen, Service {
     if (this.#isStopped) {
       return this.#stopped.promise;
     }
-    this.#writeAuthorizer.destroy();
     this.#isStopped = true;
+    try {
+      this.#writeAuthorizer.destroy();
+    } catch (e) {
+      this.#lc.error?.('error destroying write authorizer storage', e);
+    } finally {
+      // The replica's statistics are maintained by the replicator, so skip
+      // the `PRAGMA optimize` that closing a writable handle would otherwise
+      // run on every client group churn.
+      this.#replica.close({optimize: false});
+    }
     this.#stopped.resolve();
     return this.#stopped.promise;
   }
