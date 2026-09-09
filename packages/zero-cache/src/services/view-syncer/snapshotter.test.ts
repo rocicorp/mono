@@ -696,9 +696,20 @@ describe('view-syncer/snapshotter', () => {
 
     // Snapshot the entire query - it should only have "id"=? in WHERE,
     // not "handle"=? since handle is NULL
-    expect(getRowsCalls[0][0]).toBe(
+    const [query] = getRowsCalls[0]!;
+    expect(query).toBe(
       'SELECT "id","handle","_0_version" FROM "users" WHERE "id"=?',
     );
+
+    // Keep this lookup index-driven. A nullable alternate key must not enter
+    // the batched OR lookup.
+    const plan = diff.prev.db.db
+      .prepare(`EXPLAIN QUERY PLAN ${query}`)
+      .all<{detail: string}>(30)
+      .map(row => row.detail)
+      .join('\n');
+    expect(plan).toMatch(/SEARCH users USING/);
+    expect(plan).not.toMatch(/\bSCAN users\b/);
 
     getSpy.mockRestore();
   });

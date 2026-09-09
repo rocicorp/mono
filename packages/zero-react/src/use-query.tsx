@@ -1,5 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import React, {useSyncExternalStore} from 'react';
+import React, {useRef, useSyncExternalStore} from 'react';
+import {deepEqual} from '../../shared/src/json.ts';
 import {TESTING} from '../../shared/src/testing.ts';
 import {
   type Immutable,
@@ -29,6 +30,92 @@ import type {
   TypedView,
   Zero,
 } from './zero.ts';
+
+type StableQueryCache = {
+  zero: unknown;
+  context: unknown;
+  /** The last input, so an unchanged one is an identity compare and nothing else. */
+  rawQuery: object;
+  /** The `CustomQuery` a query request names; undefined for a plain query. */
+  customQuery: unknown;
+  args: ReadonlyJSONValue | undefined;
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  q: Query<any, any, any>;
+};
+
+/**
+ * Resolves a query request against the Zero context, reusing the previous
+ * result while the request means the same thing.
+ *
+ * Interning already makes an unchanged *plain* query come back as the same
+ * object, so this is aimed at the query-request form -- `queries.issue({id})`
+ * -- where every render allocates a fresh request and `addContextToQuery`
+ * re-runs the definition. That costs argument validation (a zod parse of
+ * byte-identical args) plus a walk of the builder chain, neither of which
+ * interning removes: it makes rebuilding the chain cheap and gives the same
+ * object back, but only after the work has been done again.
+ *
+ * A request resolves to the previous query when it names the same
+ * `CustomQuery`, the same context, and deep-equal args. Those are exactly the
+ * inputs the definition is allowed to depend on: a named query is re-derived
+ * on the server from its name and args, so it has to be a pure function of
+ * them, or client and server would build different queries.
+ *
+ * The ref is written during render. That is safe here because it is a pure
+ * cache: an entry is derived only from the inputs, so a StrictMode double
+ * render or a discarded concurrent render leaves it valid either way.
+ */
+function useStableQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends BaseDefaultSchema,
+  TReturn,
+  TContext extends BaseDefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  zero: Zero<TSchema, undefined, TContext>,
+): Query<TTable, TSchema, TReturn> | undefined {
+  const cacheRef = useRef<StableQueryCache | undefined>(undefined);
+
+  // Deliberately kept rather than cleared: a query toggled off and back on
+  // reuses what it had.
+  if (!query) {
+    return undefined;
+  }
+
+  const cache = cacheRef.current;
+  if (cache && cache.zero === zero) {
+    if (cache.rawQuery === query) {
+      return cache.q as Query<TTable, TSchema, TReturn>;
+    }
+    if (
+      'query' in query &&
+      cache.customQuery === query.query &&
+      cache.context === zero.context &&
+      deepEqual(cache.args, query.args)
+    ) {
+      // Same meaning, new wrapper object: remember it so the next render is
+      // the identity compare above.
+      cache.rawQuery = query;
+      return cache.q as Query<TTable, TSchema, TReturn>;
+    }
+  }
+
+  const q = addContextToQuery(query, zero.context);
+  const isRequest = 'query' in query;
+  cacheRef.current = {
+    zero: zero,
+    context: zero.context,
+    rawQuery: query,
+    customQuery: isRequest ? query.query : undefined,
+    args: isRequest ? query.args : undefined,
+    q,
+  };
+  return q;
+}
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,
@@ -137,7 +224,7 @@ export function useQuery<
   const zero = useZero<TSchema, undefined, TContext>();
 
   // When query is falsy, use disabled subscriber/snapshot to maintain hook order
-  const q = query ? addContextToQuery(query, zero.context) : undefined;
+  const q = useStableQuery(query, zero);
   const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
 
   // https://react.dev/reference/react/useSyncExternalStore
@@ -216,7 +303,7 @@ export function useSuspenseQuery<
   const zero = useZero<TSchema, undefined, TContext>();
 
   // When query is falsy, use disabled subscriber/snapshot to maintain hook order
-  const q = query ? addContextToQuery(query, zero.context) : undefined;
+  const q = useStableQuery(query, zero);
   const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
 
   // https://react.dev/reference/react/useSyncExternalStore
@@ -348,11 +435,18 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyViewWrapper = ViewWrapper<any, any, any, any, any>;
 
-const allViews = new WeakMap<ViewStore, Map<string, AnyViewWrapper>>();
+const allViews = new WeakMap<
+  ViewStore,
+  Map<string, Map<string, AnyViewWrapper>>
+>();
 
 export function getAllViewsSizeForTesting(store: ViewStore): number {
   if (TESTING) {
-    return allViews.get(store)?.size ?? 0;
+    let size = 0;
+    for (const byHash of allViews.get(store)?.values() ?? []) {
+      size += byHash.size;
+    }
+    return size;
   }
   return 0;
 }
@@ -406,7 +500,18 @@ export function getAllViewsSizeForTesting(store: ViewStore): number {
  * Swapping `useState` to `useRef` has similar problems.
  */
 export class ViewStore {
-  #views = new Map<string, AnyViewWrapper>();
+  /**
+   * Client id, then query hash.
+   *
+   * Nested rather than keyed by the two joined together, because this is
+   * looked up on every render of every `useQuery`. Joining them builds a
+   * string that V8 has to hash from scratch, where both halves on their own
+   * are strings it has already hashed and cached -- `hash()` is memoized on an
+   * interned query, so the same string comes back each render. Measured over a
+   * rebuild-and-look-up of one chain, that is the difference between 202ns and
+   * 123ns; the join cost more than rebuilding and hashing the whole query.
+   */
+  #views = new Map<string, Map<string, AnyViewWrapper>>();
 
   constructor() {
     if (TESTING) {
@@ -448,18 +553,30 @@ export class ViewStore {
       };
     }
 
-    const hash = qi.hash() + JSON.stringify(qi.format) + zero.clientID;
-    let existing = this.#views.get(hash);
+    const {clientID} = zero;
+    const hash = qi.hash();
+    let byHash = this.#views.get(clientID);
+    let existing = byHash?.get(hash);
     if (!existing) {
       existing = new ViewWrapper(q, zero, ttl, view => {
-        const currentView = this.#views.get(hash);
+        const views = this.#views.get(clientID);
+        const currentView = views?.get(hash);
         if (currentView && currentView !== view) {
           // we replaced the view with a new one already.
           return;
         }
-        this.#views.delete(hash);
+        views?.delete(hash);
+        if (views?.size === 0) {
+          // Nothing is left for this client, so drop its map rather than
+          // keeping one per client id the page has ever seen.
+          this.#views.delete(clientID);
+        }
       });
-      this.#views.set(hash, existing);
+      if (!byHash) {
+        byHash = new Map();
+        this.#views.set(clientID, byHash);
+      }
+      byHash.set(hash, existing);
     } else {
       existing.updateTTL(ttl);
     }
@@ -635,6 +752,14 @@ class ViewWrapper<
   };
 
   updateTTL(ttl: TTL): void {
+    // `getView` calls this on every render, and forwarding an unchanged TTL
+    // reaches the query manager, which re-derives the query's id from its AST
+    // to find the entry. Nothing downstream distinguishes a repeat, so skip
+    // it. A change in how the same duration is spelled ('60s' vs 60000) is
+    // still a change here and still propagates, as it did before.
+    if (this.#ttl === ttl) {
+      return;
+    }
     this.#ttl = ttl;
     this.#view?.updateTTL(ttl);
   }

@@ -66,6 +66,28 @@ describe('services/runner', () => {
     expect(s1).not.toBe(s2);
   });
 
+  test('replacement created during teardown stays tracked', async () => {
+    const s1 = runner.getService('foo');
+    // The instance becomes invalid (e.g. its last ref was dropped) but is
+    // still running its (async) shutdown.
+    s1.valid = false;
+    const s2 = runner.getService('foo');
+    expect(s2).not.toBe(s1);
+
+    // The old instance finishes shutting down after the replacement was
+    // created under the same id.
+    s1.resolver.resolve();
+    await sleep(1);
+
+    // The replacement must still be the tracked instance.
+    expect(runner.getService('foo')).toBe(s2);
+    expect([...runner.getServices()]).toContain(s2);
+
+    s2.resolver.resolve();
+    await sleep(1);
+    expect([...runner.getServices()]).not.toContain(s2);
+  });
+
   // Models the zombie ViewSyncer scenario: a service whose run() blocks on
   // an unresolved initialization promise should be cleaned up when that
   // promise is rejected (e.g. when all clients disconnect before

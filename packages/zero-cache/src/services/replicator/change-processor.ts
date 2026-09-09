@@ -14,7 +14,6 @@ import {
 } from '../../db/create.ts';
 import {
   computeZqlSpecs,
-  listIndexes,
   listTables,
   type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
@@ -625,17 +624,7 @@ class TransactionProcessor {
       );
     }
 
-    if (
-      Object.keys(create.backfill ?? {}).length ===
-      Object.keys(create.spec.columns).length
-    ) {
-      this.#reloadTableSpecs();
-    } else {
-      // Make the table visible immediately unless all of the columns are
-      // being backfilled. In the backfill case, the version bump will happen
-      // with the backfill is complete.
-      this.#logResetOp(table.name);
-    }
+    this.#logResetOp(table.name);
     this.#lc.info?.(create.tag, table.name);
   }
 
@@ -740,43 +729,49 @@ class TransactionProcessor {
         msg.new,
         'ignore-default',
       );
+      if (oldName !== newName) {
+        // Rename the column in place first so that SQLite rewrites every
+        // reference to it in the table's index definitions, including the
+        // WHERE clauses of partial indexes.
+        this.#db.db.exec(
+          `ALTER TABLE ${id(table)} RENAME ${id(oldName)} TO ${id(newName)}`,
+        );
+        oldName = newName;
+      }
       const tableSpec = must(
         listTables(this.#db.db, false, false).find(
           tableSpec => tableSpec.name === table,
         ),
       );
-      const indexes = listIndexes(this.#db.db).filter(
-        idx => idx.tableName === table,
-      );
+      // Recreating the table drops its indexes, so capture their DDL to
+      // replay afterwards. Auto-indexes (PRIMARY KEY) have no DDL and are
+      // recreated by the CREATE TABLE statement itself.
+      const indexDDL = this.#db.db
+        .prepare(
+          `SELECT sql FROM sqlite_master
+             WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL
+             ORDER BY rowid`,
+        )
+        .all<{sql: string}>(table)
+        .map(({sql}) => sql);
       const tmpTable = `tmp.${table}`;
-      const newColumns = mapEntries(tableSpec.columns, (column, spec) => [
-        column === oldName ? newName : column,
-        column === oldName ? {...newLiteSpec, pos: spec.pos} : spec,
-      ]);
-      const sourceColumns = Object.keys(tableSpec.columns);
-      const destinationColumns = Object.keys(newColumns);
+      const columns = Object.keys(tableSpec.columns);
       const stmts = [
         createLiteTableStatement({
           ...tableSpec,
           name: tmpTable,
-          columns: newColumns,
+          columns: mapEntries(tableSpec.columns, (column, spec) => [
+            column,
+            column === newName ? {...newLiteSpec, pos: spec.pos} : spec,
+          ]),
         }),
-        `INSERT INTO ${id(tmpTable)} (${destinationColumns.map(id).join(',')})
-         SELECT ${sourceColumns.map(id).join(',')} FROM ${id(table)};`,
+        `INSERT INTO ${id(tmpTable)} (${columns.map(id).join(',')})
+         SELECT ${columns.map(id).join(',')} FROM ${id(table)};`,
         `DROP TABLE ${id(table)};`,
         `ALTER TABLE ${id(tmpTable)} RENAME TO ${id(table)};`,
-        ...indexes.map(idx =>
-          createLiteIndexStatement({
-            ...idx,
-            columns: mapEntries(idx.columns, (column, direction) => [
-              column === oldName ? newName : column,
-              direction,
-            ]),
-          }),
-        ),
+        ...indexDDL.map(sql => `${sql};`),
       ];
       this.#db.db.exec(stmts.join(''));
-      oldName = newName;
     }
     if (oldName !== newName) {
       this.#db.db.exec(
@@ -829,17 +824,7 @@ class TransactionProcessor {
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
     // having a unique index), so reset pipelines to refresh table schemas.
-    // However, the reset is not necessary if the index is for a table
-    // that is not yet visible due to backfilling.
-    const tableSpec = must(this.#tableSpecs.get(index.tableName));
-    if (
-      (tableSpec.backfilling ?? []).length ===
-      Object.entries(tableSpec.columns).length - 1 // don't count _0_version
-    ) {
-      this.#reloadTableSpecs();
-    } else {
-      this.#logResetOp(index.tableName);
-    }
+    this.#logResetOp(index.tableName);
     this.#lc.info?.(create.tag, index.name);
   }
 

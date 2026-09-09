@@ -16,6 +16,8 @@ import {
   makeRepName,
   makeRepWithPopulate,
   putMap,
+  setPopulateValues,
+  setPutMapEntries,
   range,
   ReplicachePerfTest,
   sampleSize,
@@ -92,7 +94,8 @@ describe('replicache', () => {
           mutators: {putMap},
         });
 
-        await rep.mutate.putMap(initData);
+        setPutMapEntries(initData);
+        await rep.mutate.putMap();
         let onDataCallCount = 0;
 
         const subs = Array.from({length: numSubsTotal}, (_, i) => {
@@ -130,9 +133,11 @@ describe('replicache', () => {
           ]),
         );
 
+        setPutMapEntries(changes);
+
         try {
           yield async () => {
-            await rep.mutate.putMap(changes);
+            await rep.mutate.putMap();
           };
         } finally {
           subs.forEach(c => c());
@@ -201,11 +206,11 @@ describe('replicache', () => {
           const indexes = createIndexDefinitions(numIndexes);
           const rep = makeRepWithPopulate({indexes});
           await rep.clientGroupID;
-          const randomValues = jsonArrayTestData(numKeys, valSize);
+          setPopulateValues(jsonArrayTestData(numKeys, valSize));
 
           try {
             yield async () => {
-              await rep.mutate.populate({numKeys, randomValues});
+              await rep.mutate.populate({numKeys});
             };
           } finally {
             await closeAndCleanupRep(rep);
@@ -226,10 +231,8 @@ describe('replicache', () => {
 
       beforeAll(async () => {
         rep = makeRepWithPopulate();
-        await rep.mutate.populate({
-          numKeys,
-          randomValues: jsonArrayTestData(numKeys, valSize),
-        });
+        setPopulateValues(jsonArrayTestData(numKeys, valSize));
+        await rep.mutate.populate({numKeys});
       });
 
       afterAll(async () => {
@@ -389,8 +392,8 @@ describe('replicache', () => {
         async function* () {
           const indexes = createIndexDefinitions(numIndexes);
           const rep = makeRepWithPopulate({indexes});
-          const randomValues = jsonArrayTestData(numKeys, valSize);
-          await rep.mutate.populate({numKeys, randomValues});
+          setPopulateValues(jsonArrayTestData(numKeys, valSize));
+          await rep.mutate.populate({numKeys});
 
           try {
             yield async () => {
@@ -505,7 +508,8 @@ describe('replicache', () => {
               range(numKeysPersisted),
               numKeysPerMutation,
             ).map(i => [`key${i}`, jsonObjectTestData(valSize)]);
-            await rep.mutate.putMap(Object.fromEntries(entries));
+            setPutMapEntries(Object.fromEntries(entries));
+            await rep.mutate.putMap();
           }
         }
 
@@ -679,7 +683,7 @@ describe('replicache', () => {
             },
           }),
         });
-        await rep.mutate.putMap(
+        setPutMapEntries(
           Object.fromEntries(
             Array.from({length: numKeys}).map((_, i) => [
               `key${i}`,
@@ -687,10 +691,10 @@ describe('replicache', () => {
             ]),
           ),
         );
+        await rep.mutate.putMap();
         for (let i = 0; i < mutations; i++) {
-          await rep.mutate.putMap({
-            key: jsonObjectTestData(targetSizePerMutation),
-          });
+          setPutMapEntries({key: jsonObjectTestData(targetSizePerMutation)});
+          await rep.mutate.putMap();
         }
         return rep;
       }

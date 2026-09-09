@@ -4,6 +4,7 @@ import {
   extractChangeSubstring,
   reconstructWatermarkedChange,
   serializeChangeStreamData,
+  serializeChangeStreamDataWithChange,
   type ChangeLogEntry,
 } from './change-log-codec.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer.ts';
@@ -146,8 +147,10 @@ describe('change log codec', () => {
       const {watermark, data, json, change} = fixture;
       const tag = data[1].tag;
       const serialized = serializeChangeStreamData(data);
+      const parts = serializeChangeStreamDataWithChange(data);
 
       expect(serialized).toBe(json);
+      expect(parts).toEqual({json, change});
       expect(extractChangeSubstring(serialized, tag)).toBe(change);
 
       const entry = {watermark, tag, change};

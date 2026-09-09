@@ -6,8 +6,8 @@ import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {test, type PgTest} from '../../test/db.ts';
-import {postgresTypeConfig, type PostgresDB} from '../../types/pg.ts';
+import {getConnectionURI, test, type PgTest} from '../../test/db.ts';
+import {pgClient, postgresTypeConfig, type PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
   type ChangeStreamData,
@@ -19,7 +19,12 @@ import {extractChangeSubstring} from './change-log-codec.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
-import {PurgeLocker, Storer, type TuningOptions} from './storer.ts';
+import {
+  PurgeLocker,
+  Storer,
+  type PostgresDBProvider,
+  type TuningOptions,
+} from './storer.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const opts: TuningOptions = {
@@ -69,6 +74,7 @@ function summarize({
 describe('change-streamer/storer', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
+  let dbProvider: PostgresDBProvider;
   let storer: Storer;
   let done: Promise<void>;
   let consumed: Queue<Commit | UpstreamStatusMessage>;
@@ -83,6 +89,14 @@ describe('change-streamer/storer', () => {
     db = await testDBs.create('change_streamer_storer', {
       typeOpts: {sendStringAsJson: true},
     });
+    dbProvider = (applicationName: string, maxConns: number) =>
+      pgClient(
+        lc,
+        getConnectionURI(db),
+        applicationName,
+        {max: maxConns},
+        {sendStringAsJson: true},
+      );
     shard = {appID: APP_ID, shardNum: SHARD_NUM};
     await db.begin(tx => setupCDCTables(lc, tx, shard));
     await ensureReplicationConfig(
@@ -152,7 +166,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -225,7 +239,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1680,7 +1694,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'wss',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1714,7 +1728,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1793,7 +1807,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        singleConnDb,
+        () => singleConnDb,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1831,7 +1845,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1913,7 +1927,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        singleConnDb,
+        () => singleConnDb,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1961,6 +1975,71 @@ describe('change-streamer/storer', () => {
 
     test('getCatchupBounds rejects on a hang', async () => {
       await withReservedConnection(() => storer.getCatchupBounds());
+    });
+  });
+
+  describe('catchup snapshot failure', () => {
+    let catchupDB: PostgresDB;
+
+    beforeEach<PgTest>(async ({testDBs}) => {
+      // A database without the cdc tables, so that the catchup pool's
+      // snapshot read fails.
+      catchupDB = await testDBs.create('change_streamer_storer_catchup');
+      const catchupProvider: PostgresDBProvider = (applicationName, maxConns) =>
+        pgClient(
+          lc,
+          getConnectionURI(
+            applicationName === 'subscriber-catchup' ? catchupDB : db,
+          ),
+          applicationName,
+          {max: maxConns},
+          {sendStringAsJson: true},
+        );
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        catchupProvider,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        opts,
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+
+      return async () => {
+        await testDBs.drop(catchupDB);
+      };
+    });
+
+    async function catchupConnections(): Promise<number> {
+      const [{count}] = await db<{count: bigint}[]>`
+        SELECT COUNT(*) AS count FROM pg_stat_activity
+          WHERE datname = ${catchupDB.options.database}`;
+      return Number(count);
+    }
+
+    test('failed snapshot read tears down the catchup pool', async () => {
+      const [sub, _, stream] = createSubscriber('03');
+      storer.catchup(sub, 'serving');
+
+      await expect(done).rejects.toThrow('replicationState');
+      // Prevent the beforeEach cleanup from re-throwing the rejected done.
+      done = Promise.resolve();
+
+      // The subscriber is failed (closed without a downstream error) ...
+      const iterator = stream[Symbol.asyncIterator]();
+      expect((await iterator.next()).done).toBe(true);
+
+      // ... and the catchup pool, whose workers each hold an open READ ONLY
+      // transaction, is released rather than left dangling.
+      for (let i = 0; (await catchupConnections()) > 0 && i < 100; i++) {
+        await sleep(50);
+      }
+      expect(await catchupConnections()).toBe(0);
     });
   });
 

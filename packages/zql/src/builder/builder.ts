@@ -41,7 +41,11 @@ import type {ConnectionCostModel} from '../planner/planner-connection.ts';
 import type {PlanDebugger} from '../planner/planner-debug.ts';
 import {completeOrdering} from '../query/complete-ordering.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
-import {createPredicate, type NoSubqueryCondition} from './filter.ts';
+import {
+  createPredicate,
+  transformFilters,
+  type NoSubqueryCondition,
+} from './filter.ts';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
@@ -403,8 +407,11 @@ function applyWhere(
   name: string,
 ): Input {
   if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
-    return buildFilterPipeline(input, delegate, filterInput =>
-      applyFilter(filterInput, condition, delegate, name),
+    return buildFilterPipeline(
+      input,
+      delegate,
+      filterInput => applyFilter(filterInput, condition, delegate, name),
+      transformFilters(condition).filters,
     );
   }
 
@@ -427,16 +434,15 @@ function applyFilterWithFlips(
         conditionIncludesFlippedSubqueryAtAnyLevel,
       );
       if (withoutFlipped.length > 0) {
-        end = buildFilterPipeline(input, delegate, filterInput =>
-          applyAnd(
-            filterInput,
-            {
-              type: 'and',
-              conditions: withoutFlipped,
-            },
-            delegate,
-            name,
-          ),
+        const andCondition: Conjunction = {
+          type: 'and',
+          conditions: withoutFlipped,
+        };
+        end = buildFilterPipeline(
+          input,
+          delegate,
+          filterInput => applyAnd(filterInput, andCondition, delegate, name),
+          transformFilters(andCondition).filters,
         );
       }
       assert(withFlipped.length > 0, 'Impossible to have no flips here');
@@ -458,17 +464,16 @@ function applyFilterWithFlips(
 
       const branches: Input[] = [];
       if (withoutFlipped.length > 0) {
+        const orCondition: Disjunction = {
+          type: 'or',
+          conditions: withoutFlipped,
+        };
         branches.push(
-          buildFilterPipeline(end, delegate, filterInput =>
-            applyOr(
-              filterInput,
-              {
-                type: 'or',
-                conditions: withoutFlipped,
-              },
-              delegate,
-              name,
-            ),
+          buildFilterPipeline(
+            end,
+            delegate,
+            filterInput => applyOr(filterInput, orCondition, delegate, name),
+            transformFilters(orCondition).filters,
           ),
         );
       }
