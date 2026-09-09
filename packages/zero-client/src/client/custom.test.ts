@@ -12,6 +12,7 @@ import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
+import {drainPull} from '../../../zql/src/ivm/stream.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue} from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
@@ -485,11 +486,13 @@ describe('rebasing custom mutators', () => {
       createdAt: 1743018138477,
     });
 
-    expect([
-      ...must(branch.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
+    expect(
+      drainPull(
+        must(branch.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "relationships": {},
