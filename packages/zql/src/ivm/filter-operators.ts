@@ -226,6 +226,7 @@ class FilterStartPull implements PullStream<Node | 'yield'> {
         }
       }
     } catch (e) {
+      this.#input.close();
       this.#end();
       throw e;
     }

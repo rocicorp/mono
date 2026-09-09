@@ -79,8 +79,15 @@ export class Exists implements FilterOperator {
   }
 
   endFilter() {
+    this.#releasePending();
     this.#cache = new Map();
     this.#output.endFilter();
+  }
+
+  /** Closes the relationship stream a suspended `filter()` was reading. */
+  #releasePending(): void {
+    this.#pending?.count?.stream.close();
+    this.#pending = undefined;
   }
 
   /**
@@ -103,6 +110,7 @@ export class Exists implements FilterOperator {
   filter(node: Node): boolean | 'yield' {
     let p = this.#pending;
     if (p === undefined || p.node !== node) {
+      this.#releasePending();
       p = {node, key: undefined, count: undefined, exists: undefined};
       this.#pending = p;
       if (!this.#noSizeReuse && !this.#inPush) {

@@ -291,6 +291,17 @@ class MergeFetches implements PullStream<Node | 'yield'> {
   }
 
   next(): Node | 'yield' | undefined {
+    try {
+      return this.#nextInner();
+    } catch (e) {
+      // As the generator's catch did: one bad branch must not strand the
+      // cursors the others hold.
+      this.close();
+      throw e;
+    }
+  }
+
+  #nextInner(): Node | 'yield' | undefined {
     if (this.#done) {
       return undefined;
     }

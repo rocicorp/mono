@@ -59,6 +59,7 @@ import {
   type PullStream,
   type Stream,
   filterPull,
+  firstPull,
   takeWhilePull,
 } from './stream.ts';
 
@@ -408,9 +409,13 @@ export class MemorySource implements Source {
       return {rows: rowsIterable, constraint: req.constraint};
     }
 
+    const rowScan = new RowScan(rowsIterable);
     const withOverlay = generateWithOverlay(
       startAt,
-      new RowScan(rowsIterable),
+      // A primary-key constraint comes from filters, so `takeWhilePull` below
+      // (which bounds on `req.constraint`) does not end this scan. Without the
+      // cap the walk runs to the end of the index.
+      pkConstraint ? firstPull(rowScan) : rowScan,
       // use `req.constraint` here and not `fetchOrPkConstraint` since `fetchOrPkConstraint` could be the
       // primary key constraint. The primary key constraint comes from filters and is acting as a filter
       // rather than as the fetch constraint.
@@ -1396,6 +1401,15 @@ class MergeSortedStreams implements PullStream<Node | 'yield'> {
   }
 
   next(): Node | 'yield' | undefined {
+    try {
+      return this.#nextInner();
+    } catch (e) {
+      this.close();
+      throw e;
+    }
+  }
+
+  #nextInner(): Node | 'yield' | undefined {
     if (this.#done) {
       return undefined;
     }

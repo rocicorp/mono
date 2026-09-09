@@ -231,20 +231,24 @@ export function applyChangeInternal<M extends Mutate>(
         for (const relationship of Object.keys(change.node.relationships)) {
           const childSchema = must(schema.relationships[relationship]);
           const children = childNodes(change.node, relationship);
-          for (
-            let node = children.next();
-            node !== undefined;
-            node = children.next()
-          ) {
-            currentParent = applyChangeInternal(
-              currentParent,
-              {type: change.type, node},
-              childSchema,
-              relationship,
-              format,
-              withIDs,
-              mutate,
-            );
+          try {
+            for (
+              let node = children.next();
+              node !== undefined;
+              node = children.next()
+            ) {
+              currentParent = applyChangeInternal(
+                currentParent,
+                {type: change.type, node},
+                childSchema,
+                relationship,
+                format,
+                withIDs,
+                mutate,
+              );
+            }
+          } finally {
+            children.close();
           }
         }
         return currentParent;
@@ -654,55 +658,63 @@ function initializeRelationshipsForNewEntryIfAny(
       result[relationship] = newView;
 
       const children = childNodes(node, relationship);
-      for (
-        let childNode = children.next();
-        childNode !== undefined;
-        childNode = children.next()
-      ) {
-        applyChangeInternal(
-          result,
-          {type: 'add', node: childNode},
-          childSchema,
-          relationship,
-          childFormat,
-          withIDs,
-          true, // this is a new entry, so we can mutate
-        );
+      try {
+        for (
+          let childNode = children.next();
+          childNode !== undefined;
+          childNode = children.next()
+        ) {
+          applyChangeInternal(
+            result,
+            {type: 'add', node: childNode},
+            childSchema,
+            relationship,
+            childFormat,
+            withIDs,
+            true, // this is a new entry, so we can mutate
+          );
+        }
+      } finally {
+        children.close();
       }
     } else {
       // Plural non-hidden: build array in-place for efficiency
       const childArray: MutableMetaEntryList = track([]);
 
       const children = childNodes(node, relationship);
-      for (
-        let childNode = children.next();
-        childNode !== undefined;
-        childNode = children.next()
-      ) {
-        const newEntry = makeNewMetaEntry(
-          childNode.row,
-          childSchema,
-          withIDs,
-          1,
-        );
-        const rawPos = binarySearch(
-          childArray,
-          childNode.row,
-          childSchema.compareRows,
-        );
-
-        if (rawPos >= 0) {
-          childArray[rawPos][refCountSymbol]++;
-        } else {
-          childArray.splice(~rawPos, 0, newEntry);
-          initializeRelationshipsForNewEntryIfAny(
-            newEntry,
-            childNode,
+      try {
+        for (
+          let childNode = children.next();
+          childNode !== undefined;
+          childNode = children.next()
+        ) {
+          const newEntry = makeNewMetaEntry(
+            childNode.row,
             childSchema,
-            childFormat.relationships,
             withIDs,
+            1,
           );
+          const rawPos = binarySearch(
+            childArray,
+            childNode.row,
+            childSchema.compareRows,
+          );
+
+          if (rawPos >= 0) {
+            childArray[rawPos][refCountSymbol]++;
+          } else {
+            childArray.splice(~rawPos, 0, newEntry);
+            initializeRelationshipsForNewEntryIfAny(
+              newEntry,
+              childNode,
+              childSchema,
+              childFormat.relationships,
+              withIDs,
+            );
+          }
         }
+      } finally {
+        children.close();
       }
 
       result[relationship] = childArray;

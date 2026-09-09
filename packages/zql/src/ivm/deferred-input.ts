@@ -84,11 +84,19 @@ export class DeferredInput implements Input {
     try {
       input.setOutput(output);
       const stream = input.fetch({});
-      for (let node = stream.next(); node !== undefined; node = stream.next()) {
-        if (node === 'yield') {
-          continue;
+      try {
+        for (
+          let node = stream.next();
+          node !== undefined;
+          node = stream.next()
+        ) {
+          if (node === 'yield') {
+            continue;
+          }
+          consume(output.push(makeAddChange(node), input));
         }
-        consume(output.push(makeAddChange(node), input));
+      } finally {
+        stream.close();
       }
     } catch (e) {
       input.destroy();

@@ -3,7 +3,7 @@ import {emptyArray} from '../../shared/src/sentinels.ts';
 import {ChangeIndex} from '../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import type {RelationshipStream} from '../../zql/src/ivm/data.ts';
-import {drainPull, pullOf} from '../../zql/src/ivm/stream.ts';
+import {pullOf} from '../../zql/src/ivm/stream.ts';
 import {
   applyChange,
   idSymbol,
@@ -113,11 +113,23 @@ export class SolidView implements Output {
     input.setOutput(this);
 
     const initialRoot = this.#createEmptyRoot();
-    this.#applyChangesToRoot(
-      drainPull(skipYields(input.fetch({}))),
-      node => ({type: 'add', node}),
-      initialRoot,
-    );
+    // Lazy, as ArrayView#hydrate is: expanding a node's relationships triggers
+    // child fetches, so draining the parent scan first would reorder them.
+    const hydrate = input.fetch({});
+    try {
+      for (
+        let node = hydrate.next();
+        node !== undefined;
+        node = hydrate.next()
+      ) {
+        if (node === 'yield') {
+          continue;
+        }
+        this.#applyChangeToRoot({type: 'add', node}, initialRoot);
+      }
+    } finally {
+      hydrate.close();
+    }
 
     this.#setState = setState;
     this.#setState(
@@ -291,8 +303,12 @@ function materializeNodeRelationships(node: Node): Node {
   for (const relationship in node.relationships) {
     const materialized: Node[] = [];
     const children = skipYields(node.relationships[relationship]());
-    for (let n = children.next(); n !== undefined; n = children.next()) {
-      materialized.push(materializeNodeRelationships(n));
+    try {
+      for (let n = children.next(); n !== undefined; n = children.next()) {
+        materialized.push(materializeNodeRelationships(n));
+      }
+    } finally {
+      children.close();
     }
     relationships[relationship] = () => pullOf(materialized);
   }

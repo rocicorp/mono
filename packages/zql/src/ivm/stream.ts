@@ -199,6 +199,34 @@ export function limitedScan<T>(
   };
 }
 
+/**
+ * At most the first value, then closes the source.
+ *
+ * The pull-protocol form of `once()`. A primary-key equality can match one
+ * row, so the index walk must stop there rather than run to the end of the
+ * scan rejecting rows one at a time.
+ */
+export function firstPull<T>(stream: PullStream<T>): PullStream<T> {
+  let done = false;
+  return {
+    next() {
+      if (done) {
+        return undefined;
+      }
+      done = true;
+      const v = stream.next();
+      stream.close();
+      return v;
+    },
+    close() {
+      if (!done) {
+        done = true;
+        stream.close();
+      }
+    },
+  };
+}
+
 /** A pull stream over a fixed list; for producers that already have an array. */
 class ArrayPull<T> implements PullStream<T> {
   readonly #items: readonly T[];

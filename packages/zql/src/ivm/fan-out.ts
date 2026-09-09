@@ -49,6 +49,9 @@ export class FanOut implements FilterOperator {
   }
 
   beginFilter(): void {
+    // The resume point belongs to one scan. An abandoned 'yield' would
+    // otherwise make the next scan start part-way down the branch list.
+    this.#filterIndex = 0;
     for (const output of this.#outputs) {
       output.beginFilter();
     }

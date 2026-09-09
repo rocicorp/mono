@@ -118,14 +118,14 @@ export class Take implements Operator {
         return emptyPullStream();
       }
       const bound = takeState.bound;
-      const hidden = this.#rowHiddenFromFetch;
-      return new TakeScanPull(this.#input.fetch(req), node =>
-        compareRows(bound, node.row) < 0
+      return new TakeScanPull(this.#input.fetch(req), node => {
+        const hidden = this.#rowHiddenFromFetch;
+        return compareRows(bound, node.row) < 0
           ? 'stop'
           : hidden && compareRows(hidden, node.row) === 0
             ? 'skip'
-            : 'emit',
-      );
+            : 'emit';
+      });
     }
     const maxBound = this.#storage.get(MAX_BOUND_KEY);
     if (maxBound === undefined) {

@@ -18,6 +18,7 @@ import type {SourceSchema} from './schema.ts';
 import {
   type Stream,
   emptyPullStream,
+  LazyPullStream,
   type PullStream,
   limitedScan,
 } from './stream.ts';
@@ -90,6 +91,10 @@ export class Cap implements Operator {
   }
 
   fetch(req: FetchRequest): PullStream<Node | 'yield'> {
+    return new LazyPullStream(() => this.#startFetch(req));
+  }
+
+  #startFetch(req: FetchRequest): PullStream<Node | 'yield'> {
     assert(!req.start, 'Cap does not support start');
     assert(!req.reverse, 'Cap does not support reverse');
 
