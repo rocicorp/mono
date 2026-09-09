@@ -688,8 +688,17 @@ function gatherRows(
       _queryComplete,
     ) => {
       const schema = input.getSchema();
-      for (const node of skipYields(input.fetch({}))) {
-        processNode(schema, node);
+      const stream = skipYields(input.fetch({}));
+      try {
+        for (
+          let node = stream.next();
+          node !== undefined;
+          node = stream.next()
+        ) {
+          processNode(schema, node);
+        }
+      } finally {
+        stream.close();
       }
 
       return {
@@ -715,8 +724,17 @@ function gatherRows(
       node.relationships,
     )) {
       const childSchema = must(schema.relationships[relationship]);
-      for (const child of skipYields(getChildren())) {
-        processNode(childSchema, child);
+      const children = skipYields(getChildren());
+      try {
+        for (
+          let child = children.next();
+          child !== undefined;
+          child = children.next()
+        ) {
+          processNode(childSchema, child);
+        }
+      } finally {
+        children.close();
       }
     }
   }
