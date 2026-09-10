@@ -27,7 +27,7 @@ export type ZeroVersion =
   | CanaryZeroVersion
   | HeadZeroVersion;
 export type ZeroTag<V extends ZeroVersion = ZeroVersion> = `zero/v${V}`;
-export type MaintenanceZeroBranch = `maint/zero/v${number}.${number}`;
+export type MaintenanceZeroBranch = `maint/zero/${string}`;
 export type ReleaseBranch = 'main' | MaintenanceZeroBranch;
 
 export const defaultExec: Exec = (command, args, options) =>
