@@ -197,6 +197,33 @@ describe('view-syncer/service', () => {
     expect(delegate.isAuthenticated(serviceID)).toBe(false);
   });
 
+  test('an authenticate racing the shutdown leaves no inspector authentication behind', async () => {
+    delegate.clearAuthenticated(serviceID);
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    // Queue the authenticate on the view-syncer's lock and stop the service
+    // before it has run. The request is either rejected because the service
+    // is shutting down, or it completes before cleanup releases the
+    // authentication; in neither case may the entry outlive the service.
+    const authenticate = vs
+      .inspect(SYNC_CONTEXT, [
+        'inspect',
+        {op: 'authenticate', id: 'auth-1', value: TEST_ADMIN_PASSWORD},
+      ])
+      .then(
+        () => 'completed',
+        () => 'rejected',
+      );
+    await vs.stop();
+    await viewSyncerDone;
+
+    expect(['completed', 'rejected']).toContain(await authenticate);
+    expect(delegate.isAuthenticated(serviceID)).toBe(false);
+  });
+
   test('a replacement view-syncer keeps its authentication when the previous one shuts down', async () => {
     delegate.clearAuthenticated(serviceID);
 
