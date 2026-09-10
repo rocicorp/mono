@@ -39,6 +39,25 @@ test('dropStore', async () => {
   });
 });
 
+test('openError records why the initial open rejected', async () => {
+  const error = new DOMException(
+    'Unable to open database file on disk',
+    'UnknownError',
+  );
+  const openRequest = {error} as IDBOpenDBRequest;
+  vi.spyOn(indexedDB, 'open').mockImplementation(() => openRequest);
+
+  const store = new IDBStore(`open-error-${Math.random()}`);
+  expect(store.openError).toBe(null);
+
+  assert(openRequest.onerror, 'Expected openRequest.onerror to be defined');
+  openRequest.onerror(new Event('error'));
+
+  await expect(store.read()).rejects.toBe(error);
+  expect(store.openError).toBe(error);
+  vi.restoreAllMocks();
+});
+
 describe('reopening IDB', () => {
   let name: string;
   let idb: Promise<IDBDatabase>;
