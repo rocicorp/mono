@@ -1963,7 +1963,13 @@ describe('change-streamer/service', () => {
           },
         ],
         backfilling: [
-          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+          {
+            schema: 'my',
+            table: 'foo',
+            column: 'a',
+            backfill: {fooID: 1},
+            minSnapshot: null,
+          },
         ],
       };
       expect(cookies()).toEqual(atResumePoint);
@@ -1980,7 +1986,13 @@ describe('change-streamer/service', () => {
       expect(cookies()).toEqual({
         ...atResumePoint,
         backfilling: [
-          {schema: 'my', table: 'bar', column: 'b', backfill: {barID: 2}},
+          {
+            schema: 'my',
+            table: 'bar',
+            column: 'b',
+            backfill: {barID: 2},
+            minSnapshot: null,
+          },
           ...atResumePoint.backfilling,
         ],
       });

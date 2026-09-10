@@ -357,7 +357,13 @@ describe('replicator/change-log-stream-writer', () => {
           {schema: 'my', table: 'foo', metadata: {rowKey: {columns: ['id']}}},
         ],
         backfilling: [
-          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+          {
+            schema: 'my',
+            table: 'foo',
+            column: 'a',
+            backfill: {fooID: 1},
+            minSnapshot: null,
+          },
         ],
       });
     });

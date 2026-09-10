@@ -351,7 +351,7 @@ export class Storer implements Service {
         SELECT "schema", "table", "metadata" FROM ${this.#cdc('tableMetadata')}
           ORDER BY "schema" COLLATE "C", "table" COLLATE "C"`,
 
-            sql<BackfillCookie[]>`
+            sql<Omit<BackfillCookie, 'minSnapshot'>[]>`
         SELECT "schema", "table", "column", "backfill" FROM ${this.#cdc('backfilling')}
           ORDER BY "schema" COLLATE "C", "table" COLLATE "C", "column" COLLATE "C"`,
           ],
@@ -364,7 +364,15 @@ export class Storer implements Service {
       backfillRequests: v.parse(result, backfillRequestsSchema),
       cookies: {
         tableMetadata: [...tableMetadata],
-        backfilling: [...backfilling],
+        // `minSnapshot` is not a column here: it is an annotation the SQLite
+        // change log maintains at write time, and this store is being retired
+        // (see `BackfillCookie.minSnapshot`). Reported as null so that the two
+        // stores' sets are the same shape; the canonical rendering the
+        // comparison runs on excludes it either way.
+        backfilling: backfilling.map(cookie => ({
+          ...cookie,
+          minSnapshot: null,
+        })),
       },
     };
   }
@@ -1104,6 +1112,17 @@ export class Storer implements Service {
                 WHERE "schema" = ${schema} AND "table" = ${table} AND "column" IN ${sql([...op.columns])}`,
         ];
       }
+
+      case 'invalidate-marks':
+        // Deliberately a no-op here. `minSnapshot` is an annotation on the
+        // cookie set rather than a transition of it -- the fold cannot derive
+        // it, and the canonical rendering the three stores are compared on
+        // excludes it -- and the Postgres change log is being retired, so it
+        // does not carry the column. A `startStream` seeded from `cdc` alone
+        // hands the manager no `minSnapshot`, which costs a backfill started
+        // from the beginning rather than resumed. Resume needs the SQLite log
+        // in any case (see the change-streamer's subscribe path).
+        return [];
 
       default:
         unreachable(op);

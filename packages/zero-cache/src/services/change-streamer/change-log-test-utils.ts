@@ -224,12 +224,16 @@ export async function readPgCookies(
     db<TableMetadataCookie[]>`
       SELECT "schema", "table", "metadata" FROM ${db(cdcSchema)}."tableMetadata"
         ORDER BY "schema", "table"`,
-    db<BackfillCookie[]>`
+    db<Omit<BackfillCookie, 'minSnapshot'>[]>`
       SELECT "schema", "table", "column", "backfill" FROM ${db(cdcSchema)}."backfilling"
         ORDER BY "schema", "table", "column"`,
   ]);
   return {
     tableMetadata: [...tableMetadata],
-    backfilling: [...backfilling],
+    // The Postgres change log does not carry `minSnapshot` -- it is an
+    // annotation the SQLite log maintains at write time, excluded from the
+    // canonical rendering the two stores are compared on (see
+    // `BackfillCookie.minSnapshot`).
+    backfilling: backfilling.map(cookie => ({...cookie, minSnapshot: null})),
   };
 }

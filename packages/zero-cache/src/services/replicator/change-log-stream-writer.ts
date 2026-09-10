@@ -159,6 +159,14 @@ export class ChangeLogStreamWriter {
       for (const op of this.#cookies.apply(change)) {
         this.#cookieMutations.push(op.op);
       }
+    } else if (tag === 'update') {
+      // A row key change is the one data change the cookie jar cares about:
+      // it makes every mark on the table unsafe to resume from. The check is
+      // a comparison of the key columns and only runs when the update carries
+      // a key at all, which is the cost the BackfillManager already pays.
+      for (const op of this.#cookies.applyUpdate(change, watermark)) {
+        this.#cookieMutations.push(op.op);
+      }
     }
   }
 

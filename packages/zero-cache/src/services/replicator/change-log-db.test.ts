@@ -1118,7 +1118,13 @@ describe('replicator/change-log-db', () => {
         {schema: 'my', table: 'bar', metadata: {rowKey: {columns: ['barID']}}},
       ],
       backfilling: [
-        {schema: 'my', table: 'bar', column: 'z', backfill: {barID: 9}},
+        {
+          schema: 'my',
+          table: 'bar',
+          column: 'z',
+          backfill: {barID: 9},
+          minSnapshot: null,
+        },
       ],
     };
 

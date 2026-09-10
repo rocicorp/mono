@@ -47,6 +47,10 @@ import {
   logSQLiteCorruptionDiagnostics,
 } from '../../db/sqlite-corruption.ts';
 import {
+  backfillControlTags,
+  schemaChangeTags,
+} from '../change-source/protocol/current/schema-change-tags.ts';
+import {
   CHANGE_LOG_BACKFILLING_TABLE,
   CHANGE_LOG_TABLE_METADATA_TABLE,
   CREATE_CHANGE_LOG_COOKIE_SCHEMA,
@@ -72,13 +76,20 @@ import {
  * Readers can now filter without parsing arbitrary row payloads, and
  * reconciliation can bound truncation by bytes as well as rows.
  *
+ * v5 added `minSnapshot` to the backfilling cookie table (see
+ * `change-log-cookies.ts`) and a partial index over the tags that the cookie
+ * fold and the backfill-declaration resolution scan for. The index is what
+ * keeps those range reads off the data changes that dominate the log; without
+ * it, finding a handful of schema changes in a window means walking every row
+ * in it.
+ *
  * `auto_vacuum = INCREMENTAL` arrived within v2, deliberately without a bump:
  * it is a file-header property rather than a schema change, and the reseed a
  * version mismatch triggers cannot enable it (see
  * {@link applyChangeLogPragmas}), so {@link openChangeLogDBForWriting} guards
  * on the pragma itself instead of on this number.
  */
-export const CHANGE_LOG_DB_SCHEMA_VERSION = 4;
+export const CHANGE_LOG_DB_SCHEMA_VERSION = 5;
 
 /** https://www.sqlite.org/pragma.html#pragma_auto_vacuum */
 const AUTO_VACUUM_INCREMENTAL = 2;
@@ -86,6 +97,18 @@ const AUTO_VACUUM_INCREMENTAL = 2;
 export const CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
 export const CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
   '_zero.changeLogStream_writeTimeMs';
+export const CHANGE_LOG_STREAM_FOLD_TAG_INDEX =
+  '_zero.changeLogStream_foldTags';
+
+/**
+ * The tags that a fold or a declaration resolution reads out of a watermark
+ * range: the schema changes that move the cookie jar, and the backfill run
+ * announcements that say which run a subscriber will end up following.
+ */
+export const FOLD_TAGS: readonly string[] = [
+  ...schemaChangeTags,
+  ...backfillControlTags,
+];
 
 const INTEGER_BYTES = 8;
 
@@ -134,6 +157,10 @@ export const CREATE_CHANGE_LOG_STREAM_SCHEMA = /*sql*/ `
   CREATE INDEX "${CHANGE_LOG_STREAM_WRITE_TIME_INDEX}"
     ON "${CHANGE_LOG_STREAM_TABLE}" ("writeTimeMs", "watermark")
     WHERE "writeTimeMs" IS NOT NULL;
+
+  CREATE INDEX "${CHANGE_LOG_STREAM_FOLD_TAG_INDEX}"
+    ON "${CHANGE_LOG_STREAM_TABLE}" ("watermark", "pos")
+    WHERE "tag" IN (${FOLD_TAGS.map(tag => `'${tag}'`).join(', ')});
 `;
 
 /**
