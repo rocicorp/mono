@@ -323,9 +323,10 @@ function printSummary(
   if (summary.e2eServingLagMs) {
     const lag = summary.e2eServingLagMs;
     const p75Str = lag.p75 !== undefined ? `p75=${lag.p75.toFixed(1)}ms, ` : '';
+    const p90Str = lag.p90 !== undefined ? `p90=${lag.p90.toFixed(1)}ms, ` : '';
     const p95Str = lag.p95 !== undefined ? `p95=${lag.p95.toFixed(1)}ms, ` : '';
     log(
-      `E2E serving lag: avg=${lag.avg.toFixed(1)}ms, p50=${lag.p50.toFixed(1)}ms, ${p75Str}${p95Str}p99=${lag.p99.toFixed(1)}ms, max=${lag.max.toFixed(1)}ms`,
+      `E2E serving lag: avg=${lag.avg.toFixed(1)}ms, p50=${lag.p50.toFixed(1)}ms, ${p75Str}${p90Str}${p95Str}p99=${lag.p99.toFixed(1)}ms, max=${lag.max.toFixed(1)}ms`,
     );
   }
   if (summary.pipelineResets !== undefined && summary.pipelineResets > 0) {

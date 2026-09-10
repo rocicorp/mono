@@ -206,6 +206,8 @@ describe('CloudZeroMetricsPoller', () => {
       expect(summary.cloudzeroSummary?.rmPod?.memoryWorkingSetBytes).toBe(
         157286400,
       );
+      expect(summary.cloudzeroSummary?.vsSummary.totalCpuCores).toBe(0.3);
+      expect(summary.cloudzeroSummary?.vsSummary.avgCpuCores).toBe(0.3);
       expect(summary.cloudzeroSummary?.vsSummary.maxCpuCores).toBe(0.3);
       expect(summary.cloudzeroSummary?.vsSummary.maxMemoryMB).toBe(250);
     } finally {

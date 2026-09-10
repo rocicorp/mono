@@ -448,6 +448,7 @@ export class CloudZeroMetricsPoller {
     let peakVsMaxCpu = latest.vsSummary.maxCpuCores;
     let peakVsTotalMem = latest.vsSummary.totalMemoryMB;
     let peakVsMaxMem = latest.vsSummary.maxMemoryMB;
+    let peakVsPipelines = latest.vsSummary.totalPipelines;
 
     for (const snap of this.#snapshots) {
       if (snap.rmPod) {
@@ -461,6 +462,10 @@ export class CloudZeroMetricsPoller {
       peakVsMaxCpu = Math.max(peakVsMaxCpu, snap.vsSummary.maxCpuCores);
       peakVsTotalMem = Math.max(peakVsTotalMem, snap.vsSummary.totalMemoryMB);
       peakVsMaxMem = Math.max(peakVsMaxMem, snap.vsSummary.maxMemoryMB);
+      peakVsPipelines = Math.max(
+        peakVsPipelines,
+        snap.vsSummary.totalPipelines,
+      );
     }
 
     const peakRmMb = Number((peakRmWorkingSetBytes / (1024 * 1024)).toFixed(1));
@@ -469,6 +474,10 @@ export class CloudZeroMetricsPoller {
       latest.replicationLagMs;
     const servingLagMs =
       aggregateLagStats(this.#snapshots, 'servingLagMs') ?? latest.servingLagMs;
+
+    const podCount = latest.vsSummary.podCount;
+    const peakVsAvgCpu =
+      podCount > 0 ? Number((peakVsTotalCpu / podCount).toFixed(4)) : 0;
 
     const aggregated: CloudZeroMetricsSummary = {
       ...latest,
@@ -483,9 +492,11 @@ export class CloudZeroMetricsPoller {
       vsSummary: {
         ...latest.vsSummary,
         totalCpuCores: Number(peakVsTotalCpu.toFixed(4)),
+        avgCpuCores: peakVsAvgCpu,
         maxCpuCores: Number(peakVsMaxCpu.toFixed(4)),
         totalMemoryMB: Number(peakVsTotalMem.toFixed(1)),
         maxMemoryMB: Number(peakVsMaxMem.toFixed(1)),
+        totalPipelines: peakVsPipelines,
       },
       replicationLagMs,
       servingLagMs,
