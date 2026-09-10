@@ -167,16 +167,23 @@ export function printLinearSweepSummaryTable(
   for (const a of attempts) {
     const s = a.summary;
     const p = a.point;
+    const e2eTail =
+      s?.e2eServingLagMs?.p95 ??
+      s?.e2eServingLagMs?.p75 ??
+      s?.e2eServingLagMs?.p99;
     const e2eStr = s?.e2eServingLagMs
-      ? `${s.e2eServingLagMs.p50.toFixed(1)} / ${s.e2eServingLagMs.p95.toFixed(1)}ms`
+      ? `${s.e2eServingLagMs.p50.toFixed(1)} / ${e2eTail !== undefined ? `${e2eTail.toFixed(1)}ms` : 'N/A'}`
       : s?.p95ClientVisibleLagMs !== undefined
         ? `${s.p50ClientVisibleLagMs.toFixed(1)} / ${s.p95ClientVisibleLagMs.toFixed(1)}ms`
         : 'N/A';
+    const ivmTail =
+      s?.advancementLatencyMs?.p95 ?? s?.advancementLatencyMs?.p99;
     const ivmStr = s?.advancementLatencyMs
-      ? `${s.advancementLatencyMs.p50.toFixed(1)} / ${s.advancementLatencyMs.p95.toFixed(1)}ms`
+      ? `${s.advancementLatencyMs.p50.toFixed(1)} / ${ivmTail !== undefined ? `${ivmTail.toFixed(1)}ms` : 'N/A'}`
       : 'N/A';
+    const rmTail = s?.replicationLagMs?.p95 ?? s?.replicationLagMs?.p99;
     const rmStr = s?.replicationLagMs
-      ? `${s.replicationLagMs.p50.toFixed(1)} / ${s.replicationLagMs.p95.toFixed(1)}ms`
+      ? `${s.replicationLagMs.p50.toFixed(1)} / ${rmTail !== undefined ? `${rmTail.toFixed(1)}ms` : 'N/A'}`
       : 'N/A';
     const status = a.status === 'pass' ? 'HEALTHY' : 'COLLAPSED';
 

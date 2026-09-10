@@ -245,8 +245,37 @@ describe('CloudZeroMetricsPoller', () => {
     const snapshot = buildCloudZeroSnapshot(metrics, 'test-stack');
     expect(snapshot.servingLagMs?.min).toBe(1.0);
     expect(snapshot.servingLagMs?.p50).toBe(10.0);
+    expect(snapshot.servingLagMs?.p75).toBe(20.0);
+    expect(snapshot.servingLagMs?.p90).toBeUndefined();
+    expect(snapshot.servingLagMs?.p95).toBeUndefined();
     expect(snapshot.servingLagMs?.p99).toBe(50.0);
     expect(snapshot.servingLagMs?.max).toBe(80.0);
+  });
+
+  test('computes percentiles from prometheus histogram buckets', () => {
+    const raw = `
+zero_sync_view_syncer_lag_seconds_bucket{le="0.005",stack_id="test-stack"} 10
+zero_sync_view_syncer_lag_seconds_bucket{le="0.01",stack_id="test-stack"} 30
+zero_sync_view_syncer_lag_seconds_bucket{le="0.025",stack_id="test-stack"} 60
+zero_sync_view_syncer_lag_seconds_bucket{le="0.05",stack_id="test-stack"} 80
+zero_sync_view_syncer_lag_seconds_bucket{le="0.1",stack_id="test-stack"} 95
+zero_sync_view_syncer_lag_seconds_bucket{le="+Inf",stack_id="test-stack"} 100
+zero_sync_view_syncer_lag_seconds_sum{stack_id="test-stack"} 2.5
+zero_sync_view_syncer_lag_seconds_count{stack_id="test-stack"} 100
+`;
+    const parsed = parsePrometheusText(raw, 'test-stack');
+    const snapshot = buildCloudZeroSnapshot(parsed, 'test-stack');
+
+    expect(snapshot.servingLagMs).toBeDefined();
+    expect(snapshot.servingLagMs?.count).toBe(100);
+    expect(snapshot.servingLagMs?.sum).toBe(2500);
+    expect(snapshot.servingLagMs?.avg).toBe(25);
+    expect(snapshot.servingLagMs?.p50).toBe(20);
+    expect(snapshot.servingLagMs?.p75).toBe(43.75);
+    expect(snapshot.servingLagMs?.p90).toBe(83.33);
+    expect(snapshot.servingLagMs?.p95).toBe(100);
+    expect(snapshot.servingLagMs?.p99).toBe(100);
+    expect(snapshot.servingLagMs?.max).toBe(100);
   });
 
   test('aggregates peak lag across snapshots in toMetricSummary', async () => {
@@ -297,20 +326,26 @@ describe('CloudZeroMetricsPoller', () => {
     }) as typeof fetch;
 
     try {
-      poller.start();
+      // Fetch an initial snapshot deterministically so latest is populated
+      const snap = await poller.fetchSnapshot();
+      expect(snap).not.toBeNull();
+      expect(poller.latest).not.toBeNull();
       expect(fetchCount).toBe(1);
 
       // Reset retains latest but clears snapshot history
       poller.reset();
-      expect(poller.latest).toBeDefined();
+      expect(poller.latest).not.toBeNull();
+
+      // Start starts the timer
+      poller.start();
 
       // Stop stops the timer and takes a final snapshot
       await poller.stop();
-      expect(fetchCount).toBe(2);
+      expect(fetchCount).toBe(3); // initial + start() + stop()
 
       // Subsequent stop call is idempotent (no-op, no extra fetch)
       await poller.stop();
-      expect(fetchCount).toBe(2);
+      expect(fetchCount).toBe(3);
     } finally {
       globalThis.fetch = originalFetch;
     }

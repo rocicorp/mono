@@ -283,11 +283,28 @@ function gitCommit(): string | undefined {
   }
 }
 
+function sanitizeDatabaseUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    if (url.password) {
+      url.password = '<REDACTED>';
+      return url.toString().replace('%3CREDACTED%3E', '<REDACTED>');
+    }
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 export function sanitizeConfig(config: BenchmarkConfig): BenchmarkConfig {
   return {
     ...config,
     adminPassword:
       config.adminPassword !== undefined ? '<REDACTED>' : undefined,
+    pg: {
+      ...config.pg,
+      url: sanitizeDatabaseUrl(config.pg.url),
+    },
     cloudzero:
       config.cloudzero !== undefined
         ? {

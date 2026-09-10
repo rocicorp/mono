@@ -303,18 +303,29 @@ function printSummary(
   log(`max seq lag: ${summary.maxSeqLag}`);
   log(`lag slope: ${summary.lagSlopeSeqPerSec.toFixed(2)} seq/s`);
   if (summary.replicationLagMs) {
+    const p95Str =
+      summary.replicationLagMs.p95 !== undefined
+        ? `p95=${summary.replicationLagMs.p95.toFixed(1)}ms, `
+        : '';
     log(
-      `RM replication lag: p50=${summary.replicationLagMs.p50.toFixed(1)}ms, p95=${summary.replicationLagMs.p95.toFixed(1)}ms, max=${summary.replicationLagMs.max.toFixed(1)}ms`,
+      `RM replication lag: p50=${summary.replicationLagMs.p50.toFixed(1)}ms, ${p95Str}max=${summary.replicationLagMs.max.toFixed(1)}ms`,
     );
   }
   if (summary.advancementLatencyMs) {
+    const p95Str =
+      summary.advancementLatencyMs.p95 !== undefined
+        ? `p95=${summary.advancementLatencyMs.p95.toFixed(1)}ms, `
+        : '';
     log(
-      `IVM advance duration: p50=${summary.advancementLatencyMs.p50.toFixed(1)}ms, p95=${summary.advancementLatencyMs.p95.toFixed(1)}ms, max=${summary.advancementLatencyMs.max.toFixed(1)}ms`,
+      `IVM advance duration: p50=${summary.advancementLatencyMs.p50.toFixed(1)}ms, ${p95Str}max=${summary.advancementLatencyMs.max.toFixed(1)}ms`,
     );
   }
   if (summary.e2eServingLagMs) {
+    const lag = summary.e2eServingLagMs;
+    const p75Str = lag.p75 !== undefined ? `p75=${lag.p75.toFixed(1)}ms, ` : '';
+    const p95Str = lag.p95 !== undefined ? `p95=${lag.p95.toFixed(1)}ms, ` : '';
     log(
-      `E2E serving lag: avg=${summary.e2eServingLagMs.avg.toFixed(1)}ms, p50=${summary.e2eServingLagMs.p50.toFixed(1)}ms, p95=${summary.e2eServingLagMs.p95.toFixed(1)}ms`,
+      `E2E serving lag: avg=${lag.avg.toFixed(1)}ms, p50=${lag.p50.toFixed(1)}ms, ${p75Str}${p95Str}p99=${lag.p99.toFixed(1)}ms, max=${lag.max.toFixed(1)}ms`,
     );
   }
   if (summary.pipelineResets !== undefined && summary.pipelineResets > 0) {

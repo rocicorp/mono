@@ -84,6 +84,9 @@ export function buildCloudZeroSnapshot(
   const replLags: number[] = [];
   const servingLagStatsByStat = new Map<string, number[]>();
   const servingLagScalars: number[] = [];
+  const lagHistogramBuckets: {le: number; count: number}[] = [];
+  let lagHistogramSum: number | undefined;
+  let lagHistogramCount: number | undefined;
 
   for (const m of metrics) {
     const pod = m.labels.pod;
@@ -105,6 +108,28 @@ export function buildCloudZeroSnapshot(
       }
     } else if (m.name === 'zero_sync_serving_lag_millisecond') {
       servingLagScalars.push(m.value);
+    } else if (
+      m.name === 'zero_sync_view_syncer_lag_seconds_bucket' ||
+      m.name === 'zero_sync_view_syncer_lag_bucket'
+    ) {
+      if (m.labels.le) {
+        const le = m.labels.le === '+Inf' ? Infinity : Number(m.labels.le);
+        if (!Number.isNaN(le)) {
+          const multiplier = m.name.includes('_seconds_') ? 1000 : 1;
+          lagHistogramBuckets.push({le: le * multiplier, count: m.value});
+        }
+      }
+    } else if (
+      m.name === 'zero_sync_view_syncer_lag_seconds_sum' ||
+      m.name === 'zero_sync_view_syncer_lag_sum'
+    ) {
+      const multiplier = m.name.includes('_seconds_') ? 1000 : 1;
+      lagHistogramSum = (lagHistogramSum ?? 0) + m.value * multiplier;
+    } else if (
+      m.name === 'zero_sync_view_syncer_lag_seconds_count' ||
+      m.name === 'zero_sync_view_syncer_lag_count'
+    ) {
+      lagHistogramCount = (lagHistogramCount ?? 0) + m.value;
     }
   }
 
@@ -148,6 +173,28 @@ export function buildCloudZeroSnapshot(
   const maxVsMem = vsPods.reduce((max, p) => Math.max(max, p.memoryMB), 0);
   const totalPipelines = vsPods.reduce((acc, p) => acc + (p.pipelines ?? 0), 0);
 
+  const mins = servingLagStatsByStat.get('min') ?? [];
+  const maxs =
+    servingLagStatsByStat.get('max') ??
+    (servingLagScalars.length > 0 ? servingLagScalars : []);
+  const exactMin = mins.length > 0 ? Math.min(...mins) : undefined;
+  const exactMax = maxs.length > 0 ? Math.max(...maxs) : undefined;
+
+  const histogramLag =
+    lagHistogramBuckets.length > 0
+      ? computeHistogramPercentiles(
+          lagHistogramBuckets,
+          lagHistogramSum,
+          lagHistogramCount,
+          exactMin,
+          exactMax,
+        )
+      : null;
+
+  const servingLagMs =
+    histogramLag ??
+    computeServingLagStats(servingLagStatsByStat, servingLagScalars);
+
   return {
     stackId,
     rmPod,
@@ -162,10 +209,74 @@ export function buildCloudZeroSnapshot(
       totalPipelines,
     },
     replicationLagMs: computeStatsFromNumbers(replLags),
-    servingLagMs: computeServingLagStats(
-      servingLagStatsByStat,
-      servingLagScalars,
-    ),
+    servingLagMs,
+  };
+}
+
+function computeHistogramPercentiles(
+  buckets: readonly {readonly le: number; readonly count: number}[],
+  sum?: number | undefined,
+  totalCount?: number | undefined,
+  exactMin?: number | undefined,
+  exactMax?: number | undefined,
+): PercentileStats | null {
+  if (buckets.length === 0) {
+    return null;
+  }
+  const countByLe = new Map<number, number>();
+  for (const b of buckets) {
+    countByLe.set(b.le, (countByLe.get(b.le) ?? 0) + b.count);
+  }
+  const sorted = Array.from(countByLe.entries(), ([le, count]) => ({
+    le,
+    count,
+  })).sort((a, b) => a.le - b.le);
+
+  const n = totalCount ?? sorted.at(-1)?.count ?? 0;
+  if (n === 0) {
+    return null;
+  }
+
+  const finiteBuckets = sorted.filter(b => Number.isFinite(b.le));
+  const highestFiniteBound = finiteBuckets.at(-1)?.le ?? 0;
+
+  const quantile = (q: number): number => {
+    const rank = q * n;
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].count >= rank) {
+        const prevBound = i === 0 ? 0 : sorted[i - 1].le;
+        const prevCount = i === 0 ? 0 : sorted[i - 1].count;
+        const bucketCount = sorted[i].count - prevCount;
+        if (bucketCount <= 0 || !Number.isFinite(sorted[i].le)) {
+          return Number(prevBound.toFixed(2));
+        }
+        const fraction = (rank - prevCount) / bucketCount;
+        return Number(
+          (prevBound + fraction * (sorted[i].le - prevBound)).toFixed(2),
+        );
+      }
+    }
+    return Number(highestFiniteBound.toFixed(2));
+  };
+
+  const firstPositiveIndex = sorted.findIndex(b => b.count > 0);
+  const histMin =
+    firstPositiveIndex <= 0 ? 0 : (sorted[firstPositiveIndex - 1]?.le ?? 0);
+  const min = exactMin ?? histMin;
+  const max = exactMax ?? highestFiniteBound;
+  const s = sum ?? n * quantile(0.5);
+
+  return {
+    count: n,
+    sum: Number(s.toFixed(2)),
+    avg: Number((s / n).toFixed(2)),
+    min,
+    p50: quantile(0.5),
+    p75: quantile(0.75),
+    p90: quantile(0.9),
+    p95: quantile(0.95),
+    p99: quantile(0.99),
+    max,
   };
 }
 
@@ -185,11 +296,9 @@ function computeServingLagStats(
 
   const min = mins.length > 0 ? Math.min(...mins) : 0;
   const p50 = p50s.length > 0 ? Math.max(...p50s) : 0;
-  const p75 = p75s.length > 0 ? Math.max(...p75s) : p50;
-  const p99 = p99s.length > 0 ? Math.max(...p99s) : p75;
+  const p75 = p75s.length > 0 ? Math.max(...p75s) : undefined;
+  const p99 = p99s.length > 0 ? Math.max(...p99s) : (p75 ?? p50);
   const max = maxs.length > 0 ? Math.max(...maxs) : p99;
-  const p90 = Number((p75 + (p99 - p75) * 0.625).toFixed(2));
-  const p95 = Number((p75 + (p99 - p75) * 0.833).toFixed(2));
   const avg =
     p50s.length > 0 ? p50s.reduce((a, b) => a + b, 0) / p50s.length : p50;
   const count = p50s.length > 0 ? p50s.length : 1;
@@ -200,8 +309,7 @@ function computeServingLagStats(
     avg: Number(avg.toFixed(2)),
     min,
     p50,
-    p90,
-    p95,
+    p75,
     p99,
     max,
   };
@@ -228,10 +336,11 @@ function computeStatsFromNumbers(
 
   return {
     count,
-    sum,
-    avg,
+    sum: Number(sum.toFixed(2)),
+    avg: Number(avg.toFixed(2)),
     min: sorted[0] ?? 0,
     p50: percentile(50),
+    p75: percentile(75),
     p90: percentile(90),
     p95: percentile(95),
     p99: percentile(99),
@@ -398,10 +507,28 @@ function aggregateLagStats(
   }
   const max = Math.max(...statsList.map(s => s.max));
   const p99 = Math.max(...statsList.map(s => s.p99));
-  const p95 = Math.max(...statsList.map(s => s.p95));
-  const p90 = Math.max(...statsList.map(s => s.p90));
-  const p50 = Math.max(...statsList.map(s => s.p50));
   const min = Math.min(...statsList.map(s => s.min));
+
+  const p50s = statsList.map(s => s.p50);
+  const p50 = Number(
+    (p50s.reduce((a, b) => a + b, 0) / p50s.length).toFixed(2),
+  );
+
+  const p75s = statsList
+    .map(s => s.p75)
+    .filter((v): v is number => v !== undefined && !Number.isNaN(v));
+  const p75 = p75s.length > 0 ? Math.max(...p75s) : undefined;
+
+  const p90s = statsList
+    .map(s => s.p90)
+    .filter((v): v is number => v !== undefined && !Number.isNaN(v));
+  const p90 = p90s.length > 0 ? Math.max(...p90s) : undefined;
+
+  const p95s = statsList
+    .map(s => s.p95)
+    .filter((v): v is number => v !== undefined && !Number.isNaN(v));
+  const p95 = p95s.length > 0 ? Math.max(...p95s) : undefined;
+
   const count = statsList.reduce((acc, s) => acc + s.count, 0);
   const sum = statsList.reduce((acc, s) => acc + s.sum, 0);
   const avg = count > 0 ? sum / count : 0;
@@ -412,6 +539,7 @@ function aggregateLagStats(
     avg: Number(avg.toFixed(2)),
     min,
     p50,
+    p75,
     p90,
     p95,
     p99,

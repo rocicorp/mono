@@ -8,8 +8,9 @@ export interface PercentileStats {
   readonly avg: number;
   readonly min: number;
   readonly p50: number;
-  readonly p90: number;
-  readonly p95: number;
+  readonly p75?: number | undefined;
+  readonly p90?: number | undefined;
+  readonly p95?: number | undefined;
   readonly p99: number;
   readonly max: number;
 }
@@ -399,8 +400,8 @@ function computePercentiles(
 
   const percentileAt = (p: number) => {
     const idx = Math.min(
-      Math.floor((p / 100) * values.length),
       values.length - 1,
+      Math.max(0, Math.ceil((p / 100) * values.length) - 1),
     );
     return values[idx] ?? 0;
   };
@@ -411,6 +412,7 @@ function computePercentiles(
     avg: count > 0 ? sum / count : 0,
     min,
     p50: percentileAt(50),
+    p75: percentileAt(75),
     p90: percentileAt(90),
     p95: percentileAt(95),
     p99: percentileAt(99),
