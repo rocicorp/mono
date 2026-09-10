@@ -45,6 +45,10 @@ type WriteSQL = postgres.Sql | postgres.TransactionSql;
 export type ThroughputWriteModel = {
   readonly name: BenchmarkModel;
   writeOne(sql: WriteSQL, seq: number): Promise<WriteImpact>;
+  writeBatch(
+    sql: WriteSQL,
+    seqs: readonly number[],
+  ): Promise<readonly WriteImpact[]>;
 };
 
 export function createThroughputWriteModel(
@@ -54,6 +58,7 @@ export function createThroughputWriteModel(
   return {
     name: config.model,
     writeOne: (sql, seq) => writeOne(config, payload, sql, seq),
+    writeBatch: (sql, seqs) => writeBatch(config, payload, sql, seqs),
   };
 }
 
@@ -211,71 +216,152 @@ function writeOne(
   sql: WriteSQL,
   seq: number,
 ): Promise<WriteImpact> {
-  if (config.model === 'hot') {
-    return writeHot(config, payload, sql, seq);
-  }
-  return writeRealistic(config, payload, sql, seq);
+  return writeBatch(config, payload, sql, [seq]).then(impacts => impacts[0]);
 }
 
-async function writeHot(
+function writeBatch(
   config: BenchmarkConfig,
   payload: string,
   sql: WriteSQL,
-  seq: number,
-): Promise<WriteImpact> {
+  seqs: readonly number[],
+): Promise<readonly WriteImpact[]> {
+  if (config.model === 'hot') {
+    return writeHotBatch(config, payload, sql, seqs);
+  }
+  return writeRealisticBatch(config, payload, sql, seqs);
+}
+
+async function writeHotBatch(
+  config: BenchmarkConfig,
+  payload: string,
+  sql: WriteSQL,
+  seqs: readonly number[],
+): Promise<readonly WriteImpact[]> {
+  if (seqs.length === 0) {
+    return [];
+  }
   switch (config.profile) {
-    case 'feed-append':
-      await writeEvent(sql, config, payload, seq, 0);
-      return visibleImpact();
+    case 'feed-append': {
+      const events = seqs.map(seq => ({
+        id: `${config.runID}-event-${seq}`,
+        profile: config.profile,
+        shard: 0,
+        bucket: 0,
+        seq,
+        payload: {body: payload},
+      }));
+      await sql`INSERT INTO zero_throughput_event ${sql(events)}`;
+      return seqs.map(() => visibleImpact());
+    }
 
     case 'email': {
-      const threadID = `email-thread-${seq % EMAIL_THREAD_COUNT}`;
-      await insertEmailMessage(sql, {
-        config,
-        payload,
-        seq,
-        threadID,
-        ownerID: SHARED_OWNER_ID,
+      const threadIndex =
+        Math.floor(seqs[0] / config.batchSize) % EMAIL_THREAD_COUNT;
+      const threadID = `email-thread-${threadIndex}`;
+      const maxSeq = Math.max(...seqs);
+
+      const messages = seqs.map(seq => ({
+        id: `${config.runID}-email-message-${seq}`,
+        thread_id: threadID,
+        owner_id: SHARED_OWNER_ID,
         mailbox: 'inbox',
-      });
-      await updateEmailThreadSeq(sql, threadID, seq);
-      return visibleImpact();
+        sender_id: SHARED_OWNER_ID,
+        unread: true,
+        body: payload,
+        seq,
+      }));
+
+      await Promise.all([
+        sql`INSERT INTO zero_throughput_email_message ${sql(messages)}`,
+        sql`
+          UPDATE zero_throughput_email_thread
+          SET
+            seq = ${maxSeq},
+            written_at = clock_timestamp(),
+            updated_at = clock_timestamp()
+          WHERE id = ${threadID}
+        `,
+      ]);
+
+      return seqs.map(() => visibleImpact());
     }
 
     case 'forum': {
-      const threadID = `forum-thread-${seq % FORUM_THREAD_COUNT}`;
-      const authorID = `forum-user-${seq % FORUM_USER_COUNT}`;
-      await insertForumPost(sql, {
-        config,
-        payload,
+      const threadIndex =
+        Math.floor(seqs[0] / config.batchSize) % FORUM_THREAD_COUNT;
+      const threadID = `forum-thread-${threadIndex}`;
+      const maxSeq = Math.max(...seqs);
+
+      const posts = seqs.map(seq => ({
+        id: `${config.runID}-forum-post-${seq}`,
+        thread_id: threadID,
+        category_id: FORUM_CATEGORY_ID,
+        author_id: `forum-user-${seq % FORUM_USER_COUNT}`,
+        body: payload,
         seq,
-        threadID,
-        categoryID: FORUM_CATEGORY_ID,
-        authorID,
-      });
-      await updateForumThreadSeq(sql, threadID, seq);
-      await updateForumCategorySeq(sql, FORUM_CATEGORY_ID, seq);
-      return visibleImpact();
+      }));
+
+      await Promise.all([
+        sql`INSERT INTO zero_throughput_forum_post ${sql(posts)}`,
+        sql`
+          UPDATE zero_throughput_forum_thread
+          SET
+            seq = ${maxSeq},
+            written_at = clock_timestamp(),
+            updated_at = clock_timestamp()
+          WHERE id = ${threadID}
+        `,
+      ]);
+
+      return seqs.map(() => visibleImpact());
     }
 
     case 'relational': {
-      const accountIndex = seq % REL_ACCOUNT_COUNT;
-      const contactIndex = seq % REL_CONTACTS_PER_ACCOUNT;
+      const accountIndex =
+        Math.floor(seqs[0] / config.batchSize) % REL_ACCOUNT_COUNT;
       const accountID = `rel-account-${accountIndex}`;
-      const contactID = `${accountID}-contact-${contactIndex}`;
-      await insertRelActivity(sql, {
-        config,
-        payload,
-        seq,
-        orgID: REL_ORG_ID,
-        accountID,
-        contactID,
+      const maxSeq = Math.max(...seqs);
+
+      const activities = seqs.map(seq => {
+        const contactIndex = seq % REL_CONTACTS_PER_ACCOUNT;
+        const contactID = `${accountID}-contact-${contactIndex}`;
+        return {
+          id: `${config.runID}-rel-activity-${seq}`,
+          org_id: REL_ORG_ID,
+          account_id: accountID,
+          contact_id: contactID,
+          kind: seq % 5 === 0 ? 'meeting' : 'note',
+          body: payload,
+          seq,
+        };
       });
-      await updateRelAccountSeq(sql, accountID, seq);
-      await updateRelOrgSeq(sql, REL_ORG_ID, seq);
-      return visibleImpact();
+
+      await Promise.all([
+        sql`INSERT INTO zero_throughput_rel_activity ${sql(activities)}`,
+        sql`
+          UPDATE zero_throughput_rel_account
+          SET
+            seq = ${maxSeq},
+            written_at = clock_timestamp(),
+            updated_at = clock_timestamp()
+          WHERE id = ${accountID}
+        `,
+      ]);
+
+      return seqs.map(() => visibleImpact());
     }
   }
+}
+
+function writeRealisticBatch(
+  config: BenchmarkConfig,
+  payload: string,
+  sql: WriteSQL,
+  seqs: readonly number[],
+): Promise<readonly WriteImpact[]> {
+  return Promise.all(
+    seqs.map(seq => writeRealistic(config, payload, sql, seq)),
+  );
 }
 
 function writeRealistic(
@@ -424,16 +510,18 @@ async function writeRealisticForum(
   );
   const authorID = `forum-user-${seq % FORUM_USER_COUNT}`;
 
-  await insertForumPost(sql, {
-    config,
-    payload,
-    seq,
-    threadID,
-    categoryID,
-    authorID,
-  });
-  await updateForumThreadSeq(sql, threadID, seq);
-  await updateForumCategorySeq(sql, categoryID, seq);
+  await Promise.all([
+    insertForumPost(sql, {
+      config,
+      payload,
+      seq,
+      threadID,
+      categoryID,
+      authorID,
+    }),
+    updateForumThreadSeq(sql, threadID, seq),
+    updateForumCategorySeq(sql, categoryID, seq),
+  ]);
   return impact(active, active ? 1 : 0, active);
 }
 

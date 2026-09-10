@@ -13,6 +13,8 @@ export interface PercentileStats {
   readonly max: number;
 }
 
+import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
+
 export interface MetricSummary {
   readonly replicationLagMs: PercentileStats | null;
   readonly e2eServingLagMs: PercentileStats | null;
@@ -23,6 +25,7 @@ export interface MetricSummary {
   readonly changesReplicated: number;
   readonly flowControlWaits: number;
   readonly flowControlWaitDurationMs: PercentileStats | null;
+  readonly cloudzero?: CloudZeroMetricsSummary | undefined;
 }
 
 interface RawDataPoint {

@@ -66,15 +66,13 @@ export class FixedRateWriter {
         if (delayMs > 0) {
           await sleep(delayMs);
         }
-        nextStart += intervalMs;
+        nextStart = Math.max(nextStart + intervalMs, nowMs() - intervalMs * 2);
 
         const seqs = allocateSeqs(this.#config.batchSize);
         const txStart = nowMs();
-        const impacts: WriteImpact[] = [];
+        let impacts: readonly WriteImpact[] = [];
         await this.#sql.begin(async tx => {
-          for (const seq of seqs) {
-            impacts.push(await this.#model.writeOne(tx, seq));
-          }
+          impacts = await this.#model.writeBatch(tx, seqs);
         });
         for (const impact of impacts) {
           localImpact = addWriteImpact(localImpact, impact);

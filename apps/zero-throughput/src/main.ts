@@ -3,6 +3,10 @@ import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {inspect} from 'node:util';
 import {startSyntheticClients, type SyntheticClient} from './client.ts';
+import {
+  CloudZeroMetricsPoller,
+  type CloudZeroMetricsSummary,
+} from './cloudzero-metrics.ts';
 import {appPath, loadConfig, type BenchmarkConfig} from './config.ts';
 import {
   connectBenchmarkDB,
@@ -57,6 +61,22 @@ async function main(): Promise<void> {
     const metricsCollector = new OTelMetricsCollector();
     await metricsCollector.start();
     cleanup.push(() => metricsCollector.stop());
+
+    let cloudzeroPoller: CloudZeroMetricsPoller | undefined;
+    if (config.cloudzero) {
+      log(
+        `Starting CloudZero metrics poller for stack ${config.cloudzero.stackId}...`,
+      );
+      cloudzeroPoller = new CloudZeroMetricsPoller({
+        metricsUrl: config.cloudzero.metricsUrl,
+        apiKey: config.cloudzero.apiKey,
+        stackId: config.cloudzero.stackId,
+      });
+      cloudzeroPoller.start();
+      cleanup.push(async () => {
+        await cloudzeroPoller?.stop();
+      });
+    }
 
     if (config.pg.start) {
       log('Starting PostgreSQL...');
@@ -153,7 +173,12 @@ async function main(): Promise<void> {
       );
       samples.push(sample);
       if (config.progressIntervalMs > 0 && Date.now() >= nextProgressAtMs) {
-        printProgress(sample, config.durationMs, config.users);
+        printProgress(
+          sample,
+          config.durationMs,
+          config.users,
+          cloudzeroPoller?.latest,
+        );
         nextProgressAtMs = Date.now() + config.progressIntervalMs;
       }
     };
@@ -191,7 +216,23 @@ async function main(): Promise<void> {
       );
     }
 
-    const metricsSummary = metricsCollector.getSummary();
+    let metricsSummary = metricsCollector.getSummary();
+    if (cloudzeroPoller) {
+      await cloudzeroPoller.stop();
+      const czSummary = cloudzeroPoller.toMetricSummary();
+      metricsSummary = {
+        ...metricsSummary,
+        replicationLagMs:
+          metricsSummary.replicationLagMs ??
+          czSummary.metricSummary.replicationLagMs ??
+          null,
+        e2eServingLagMs:
+          metricsSummary.e2eServingLagMs ??
+          czSummary.metricSummary.e2eServingLagMs ??
+          null,
+        cloudzero: czSummary.cloudzeroSummary ?? undefined,
+      };
+    }
     result = buildResult({
       config,
       processes,
@@ -278,6 +319,17 @@ function printSummary(
   if (summary.pipelineResets !== undefined && summary.pipelineResets > 0) {
     log(`Pipeline resets: ${summary.pipelineResets}`);
   }
+  if (summary.cloudzero) {
+    const cz = summary.cloudzero;
+    if (cz.rmPod) {
+      log(
+        `CloudZero RM pod: cpu=${cz.rmPod.cpuCores.toFixed(3)} cores, mem=${cz.rmPod.memoryMB}MB`,
+      );
+    }
+    log(
+      `CloudZero VS (${cz.vsSummary.podCount} pods): totalCpu=${cz.vsSummary.totalCpuCores.toFixed(3)} cores (max=${cz.vsSummary.maxCpuCores.toFixed(3)}), totalMem=${cz.vsSummary.totalMemoryMB}MB, pipelines=${cz.vsSummary.totalPipelines}`,
+    );
+  }
   if (summary.failureReasons.length > 0) {
     log(`failure reasons: ${summary.failureReasons.join('; ')}`);
   }
@@ -288,9 +340,21 @@ function printProgress(
   sample: MetricSample,
   durationMs: number,
   expectedClients: number,
+  cloudzero?: CloudZeroMetricsSummary | null | undefined,
 ): void {
+  let extra = '';
+  if (cloudzero) {
+    const rmCpu = cloudzero.rmPod
+      ? `${(cloudzero.rmPod.cpuCores * 100).toFixed(0)}%`
+      : 'n/a';
+    const rmMem = cloudzero.rmPod ? `${cloudzero.rmPod.memoryMB}MB` : 'n/a';
+    const vsTotalCpu = `${(cloudzero.vsSummary.totalCpuCores * 100).toFixed(0)}%`;
+    const vsTotalMem = `${cloudzero.vsSummary.totalMemoryMB}MB`;
+    const vsPipes = cloudzero.vsSummary.totalPipelines;
+    extra = `, rm(cpu=${rmCpu}, mem=${rmMem}), vs[${cloudzero.vsSummary.podCount}](cpu=${vsTotalCpu}, mem=${vsTotalMem}, pipes=${vsPipes})`;
+  }
   log(
-    `Progress: ${formatDuration(Math.min(sample.elapsedMs, durationMs))} / ${formatDuration(durationMs)}, committed=${sample.committedSeq}, seqLag=${sample.seqLag}, connected=${sample.connectedClients}/${expectedClients}`,
+    `Progress: ${formatDuration(Math.min(sample.elapsedMs, durationMs))} / ${formatDuration(durationMs)}, committed=${sample.committedSeq}, seqLag=${sample.seqLag}, connected=${sample.connectedClients}/${expectedClients}${extra}`,
   );
 }
 
@@ -314,10 +378,7 @@ async function startSteadyStateProfiling(
   const profileDir = appPath(config.profileDir);
   mkdirSync(profileDir, {recursive: true});
 
-  const warmupDelay = Math.min(
-    2000,
-    Math.max(500, Math.floor(config.durationMs / 4)),
-  );
+  const warmupDelay = Math.max(2000, Math.floor(config.durationMs / 3));
   await sleep(warmupDelay);
 
   const durationSec = Math.min(

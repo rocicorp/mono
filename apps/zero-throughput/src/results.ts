@@ -2,6 +2,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import type {ClientStats, SyntheticClient} from './client.ts';
+import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
 import type {BenchmarkConfig} from './config.ts';
 import {appPath, appRoot} from './config.ts';
 import type {MetricSummary, PercentileStats} from './metrics.ts';
@@ -52,6 +53,7 @@ export type BenchmarkResult = {
     readonly advancementLatencyMs?: PercentileStats | null | undefined;
     readonly e2eServingLagMs?: PercentileStats | null | undefined;
     readonly pipelineResets?: number | undefined;
+    readonly cloudzero?: CloudZeroMetricsSummary | undefined;
     readonly writeImpact: WriteImpactSummary;
     readonly pass: boolean;
     readonly failureReasons: readonly string[];
@@ -145,10 +147,15 @@ export function buildResult(args: {
       txLatencyP95Ms: percentile(args.writerStats.transactionLatencyMs, 95),
       txLatencyP99Ms: percentile(args.writerStats.transactionLatencyMs, 99),
       txLatencyAverageMs: average(args.writerStats.transactionLatencyMs),
-      replicationLagMs: args.metricsSummary?.replicationLagMs,
+      replicationLagMs:
+        args.metricsSummary?.replicationLagMs ??
+        args.metricsSummary?.cloudzero?.replicationLagMs,
       advancementLatencyMs: args.metricsSummary?.advancementLatencyMs,
-      e2eServingLagMs: args.metricsSummary?.e2eServingLagMs,
+      e2eServingLagMs:
+        args.metricsSummary?.e2eServingLagMs ??
+        args.metricsSummary?.cloudzero?.servingLagMs,
       pipelineResets: args.metricsSummary?.pipelineResets,
+      cloudzero: args.metricsSummary?.cloudzero,
       writeImpact,
       pass: failureReasons.length === 0,
       failureReasons,
