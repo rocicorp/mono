@@ -1,5 +1,6 @@
 import {createServer, type Server} from 'node:http';
 import {gunzipSync} from 'node:zlib';
+import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
 
 export interface PercentileStats {
   readonly count: number;
@@ -12,8 +13,6 @@ export interface PercentileStats {
   readonly p99: number;
   readonly max: number;
 }
-
-import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
 
 export interface MetricSummary {
   readonly replicationLagMs: PercentileStats | null;
