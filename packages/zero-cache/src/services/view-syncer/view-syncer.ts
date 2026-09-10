@@ -1969,8 +1969,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       hydrationPassStats.activeHydratedQueries++;
       this.#hydrations.add(1);
       this.#hydrationTime.recordMs(elapsed);
-      this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
-      this.#inspectorDelegate.addQuery(transformationHash, transformedAst);
+      // Keyed by query id like the other hydration path: the inspector looks
+      // metrics and ASTs up by query id, and removeQuery() is keyed by it too.
+      this.#addQueryMaterializationServerMetric(queryID, elapsed);
+      this.#inspectorDelegate.addQuery(queryID, transformedAst);
       lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
 
       let drifted = false;
