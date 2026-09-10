@@ -38,8 +38,6 @@ import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
-import type {SchemaChange} from '../change-source/protocol/current/data.ts';
-import {schemaChangeTags} from '../change-source/protocol/current/schema-change-tags.ts';
 import type {BackfillRequest} from '../change-source/protocol/current/upstream.ts';
 import {
   backfillRequestsFrom,
@@ -51,10 +49,13 @@ import {
   type ChangeLogResumePoint,
 } from '../replicator/change-log-db.ts';
 import {
+  readBackfillProgress,
   readBackfillRequests,
   readReplicaCookies,
+  type BackfillProgress,
 } from '../replicator/schema/backfilling.ts';
 import {getReplicationState} from '../replicator/schema/replication-state.ts';
+import {readSchemaChanges} from './change-log-range.ts';
 import {SQLITE_CHANGE_LOG_BOUNDARY_SQL} from './sqlite-change-log-reader.ts';
 
 /** Everything one stream connection starts from, read at one position. */
@@ -62,6 +63,14 @@ export type InitializationParameters = {
   readonly lastWatermark: string;
   readonly backfillRequests: BackfillRequest[];
   readonly cookies: CookieSet;
+
+  /**
+   * How far this replication-manager's own replica got with each in-flight
+   * backfill. Present only on the replica-derived parameters -- marks are
+   * subscriber state, not cookies, so no change log carries them -- and used
+   * to resume a run across a manager restart (see {@link withResumeMarks}).
+   */
+  readonly marks?: BackfillProgress[] | undefined;
 };
 
 /**
@@ -94,7 +103,9 @@ export type ChangeLogInitializerSources = {
   /** Typically {@link replicaInitializationSource}. */
   readonly replica: () => InitializationParameters;
   /**
-   * Reconciles the SQLite change log and returns its current resume point.
+   * Reconciles the SQLite change log and returns its current resume point,
+   * with the watermark the log was seeded at (absent when unknown, which
+   * vouches for no row key change in the log).
    *
    * When `resumeFrom` is present, it supplies the resume point. Otherwise, a
    * valid log uses its own head. A new or invalid log uses `seed`.
@@ -104,7 +115,7 @@ export type ChangeLogInitializerSources = {
   readonly reconcileChangeLog: (
     resumeFrom: ChangeLogResumePoint | undefined,
     seed: () => ChangeLogResumePoint,
-  ) => ChangeLogResumePoint | undefined;
+  ) => ReconciledLog | undefined;
   /**
    * The change log, for the fold. `undefined` before the stream loop's first
    * reconcile has created it, and again once the writer has failed soft and
@@ -112,6 +123,10 @@ export type ChangeLogInitializerSources = {
    * an error, since neither says anything about the two stores.
    */
   readonly changeLog: () => Database | undefined;
+};
+
+type ReconciledLog = ChangeLogResumePoint & {
+  readonly seedWatermark?: string | undefined;
 };
 
 type Opts = {
@@ -133,18 +148,6 @@ type Opts = {
    */
   readonly initFromReplica: boolean;
 };
-
-/**
- * The most change-log rows one comparison will scan.
- *
- * The interval is `(replicaWatermark, pgWatermark]`, so it is normally a
- * handful of transactions — but a replicator that has been stalled can leave it
- * arbitrarily large, and this runs on the stream loop between reconciliation and
- * `startStream`, where latency delays the resumption of replication. Over the
- * cap the comparison declines rather than pays: a chronically lagging replicator
- * shows up as `inconclusive`, which is charted, and not as a stall.
- */
-const MAX_FOLD_SCAN_ROWS = 10_000;
 
 export class ChangeLogInitializer {
   readonly #lc: LogContext;
@@ -216,7 +219,14 @@ export class ChangeLogInitializer {
         // Reconciliation makes sure that the log contains that interval.
         this.#lastComparison = this.#compare(pg, replica);
       }
-      return pg;
+      return {
+        ...pg,
+        backfillRequests: withResumeMarks(
+          pg.backfillRequests,
+          replica?.marks,
+          replica && keyChangesSince(replica, pg.lastWatermark, reconciled),
+        ),
+      };
     }
 
     // Use the reconciled log position. If the writer is unavailable, use the
@@ -228,7 +238,12 @@ export class ChangeLogInitializer {
       cookies: resumePoint.cookies,
       // Derive the requests from these cookies so that the requests and the
       // watermark describe the same position.
-      backfillRequests: backfillRequestsFrom(resumePoint.cookies),
+      backfillRequests: withResumeMarks(
+        backfillRequestsFrom(resumePoint.cookies),
+        replica?.marks,
+        replica &&
+          keyChangesSince(replica, resumePoint.resumeWatermark, reconciled),
+      ),
     };
   }
 
@@ -360,12 +375,13 @@ export function readReplicaInitializationParameters(
   db: Database,
 ): InitializationParameters {
   const runner = new StatementRunner(db);
-  runner.begin(); // deferred, i.e. one read snapshot for the three statements
+  runner.begin(); // deferred, i.e. one read snapshot for the statements
   try {
     return {
       lastWatermark: getReplicationState(runner).stateVersion,
       backfillRequests: readBackfillRequests(db),
       cookies: readReplicaCookies(db),
+      marks: readBackfillProgress(db),
     };
   } finally {
     if (db.inTransaction) {
@@ -405,6 +421,118 @@ export function replicaInitializationSource(
 }
 
 /**
+ * Attaches the replication-manager's *own* replica's backfill marks to the
+ * initial requests, so that a manager restart resumes a run where its backup
+ * replicator left off rather than from the beginning.
+ *
+ * The replica is the only authority for this, and the only replica whose mark
+ * a change source is ever handed. Every subscriber that can catch up on this
+ * manager's change log holds everything the log holds, and the log holds
+ * everything the replica applied, so a run resumed from the replica's mark
+ * sends every subscriber that was following the interrupted run the rest of
+ * what it needs. The resumed run says which run it picks up from
+ * (`resumeRunID`), which is how those subscribers know to follow it.
+ *
+ * A mark taken at a snapshot older than a row key change on its table is
+ * dropped: a row whose key moved across it is sent by neither the run that
+ * passed it nor a run resumed after it. The replica voids its own marks for
+ * the key changes it has applied. The ones it has not -- between its
+ * watermark and the stream's start, which the manager will never see -- are
+ * `keyChanges` (see {@link keyChangesSince}); when those cannot be known, no
+ * mark is resumed from. The request's own `minSnapshot` is checked as well.
+ * So is a mark whose columns disagree on the run that produced it or on their
+ * position in it, since a resumed run must name the run it resumes and the
+ * batch it resumes after.
+ */
+function withResumeMarks(
+  requests: readonly BackfillRequest[],
+  marks: readonly BackfillProgress[] | undefined,
+  keyChanges: KeyChanges | undefined,
+): BackfillRequest[] {
+  if (!marks?.length || keyChanges === undefined) {
+    return [...requests];
+  }
+  const byTable = new Map(
+    marks.map(mark => [JSON.stringify([mark.schema, mark.table]), mark]),
+  );
+  return requests.map(request => {
+    const {schema, name} = request.table;
+    const key = JSON.stringify([schema, name]);
+    const declared = byTable.get(key);
+    if (
+      declared === undefined ||
+      declared.mark === null ||
+      declared.markWatermark === null ||
+      declared.runID === null ||
+      declared.runSeq === null
+    ) {
+      return request;
+    }
+    for (const bound of [request.minSnapshot, keyChanges.get(key)]) {
+      if (
+        bound !== null &&
+        bound !== undefined &&
+        declared.markWatermark < bound
+      ) {
+        return request;
+      }
+    }
+    return {
+      ...request,
+      resumeFrom: declared.mark,
+      resumeFromWatermark: declared.markWatermark,
+      resumeRunID: declared.runID,
+      resumeSeq: declared.runSeq,
+    };
+  });
+}
+
+/**
+ * The latest row key change on each table, by `JSON.stringify([schema,
+ * table])`, among those a replica has not applied.
+ */
+export type KeyChanges = ReadonlyMap<string, string>;
+
+/**
+ * The row key changes between the replica's watermark and the stream's start,
+ * or undefined when they cannot be known.
+ *
+ * A stream that starts at or below the replica's watermark has none: the
+ * replica applied every change up to it, and the manager sees every change
+ * after it. Otherwise they are what the change log recorded, if the log was
+ * reconciled to the stream's start and has written everything above the
+ * replica's watermark -- i.e. was seeded at or below it. (A log seeded above
+ * it, say from Postgres after a gap, never saw the transactions in between.)
+ * Anything else is unknown: resuming from the replica's marks would trust that
+ * no row crossed them in an interval nothing recorded.
+ */
+export function keyChangesSince(
+  replica: Pick<InitializationParameters, 'lastWatermark'>,
+  streamStart: string,
+  log: ReconciledLog | undefined,
+): KeyChanges | undefined {
+  if (streamStart <= replica.lastWatermark) {
+    return new Map();
+  }
+  if (
+    log === undefined ||
+    log.resumeWatermark !== streamStart ||
+    log.seedWatermark === undefined ||
+    log.seedWatermark > replica.lastWatermark
+  ) {
+    return undefined;
+  }
+  const keyChanges = new Map<string, string>();
+  for (const {schema, table, minSnapshot} of log.cookies.backfilling) {
+    const key = JSON.stringify([schema, table]);
+    if (minSnapshot !== null && (keyChanges.get(key) ?? '') < minSnapshot) {
+      keyChanges.set(key, minSnapshot);
+    }
+  }
+  return keyChanges;
+}
+
+/**
  * Whether the log holds the complete interval above `fromWatermark`, using the
  * same predicate catchup uses to decide `too-old`: the log both reaches back
  * that far and contains that transaction's `commit` row, so the next row after
@@ -430,55 +558,6 @@ function spansInterval(db: Database, fromWatermark: string): boolean {
     fromWatermark >= row.minWatermark &&
     row.boundaryExists === 1
   );
-}
-
-const SCHEMA_CHANGE_TAG_LIST = schemaChangeTags
-  .map(tag => `'${tag}'`)
-  .join(', ');
-
-/**
- * The log's schema changes over `(after, through]`, in stream order, or
- * `undefined` if the interval is too large to scan (see
- * {@link MAX_FOLD_SCAN_ROWS}).
- *
- * The tag is stored beside the verbatim change so this scan never parses the
- * payloads of ordinary data changes. The row count is still checked first so a
- * stalled replicator cannot make the range scan unbounded.
- *
- * The count is itself capped, at one row past the cap it is deciding. A bare
- * `count(*)` over the interval is `O(interval)`, so the unbounded interval this
- * exists to decline would still be walked in full before being declined —
- * which is the latency the cap is here to avoid, not a cheaper form of it. The
- * `LIMIT` makes the decision `O(MAX_FOLD_SCAN_ROWS)`, and the comparison is
- * unaffected: the subquery returns the true count whenever it is within the
- * cap, and `cap + 1` whenever it is not.
- */
-function readSchemaChanges(
-  db: Database,
-  after: string,
-  through: string,
-): SchemaChange[] | undefined {
-  const {rows} = db
-    .prepare(/*sql*/ `
-      SELECT count(*) AS "rows" FROM (
-        SELECT 1 FROM "${CHANGE_LOG_STREAM_TABLE}"
-          WHERE "watermark" > ? AND "watermark" <= ?
-          LIMIT ${MAX_FOLD_SCAN_ROWS + 1}
-      )
-    `)
-    .get<{rows: number}>(after, through);
-  if (rows > MAX_FOLD_SCAN_ROWS) {
-    return undefined;
-  }
-  return db
-    .prepare(/*sql*/ `
-      SELECT "change" FROM "${CHANGE_LOG_STREAM_TABLE}"
-        WHERE "watermark" > ? AND "watermark" <= ?
-          AND "tag" IN (${SCHEMA_CHANGE_TAG_LIST})
-        ORDER BY "watermark", "pos"
-    `)
-    .all<{change: string}>(after, through)
-    .map(({change}) => BigIntJSON.parse(change) as SchemaChange);
 }
 
 function streamTableExists(db: Database): boolean {

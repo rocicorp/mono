@@ -55,6 +55,7 @@ import {
   CHANGE_LOG_TABLE_METADATA_TABLE,
   CREATE_CHANGE_LOG_COOKIE_SCHEMA,
   DROP_CHANGE_LOG_COOKIE_TABLES,
+  readCookies,
   replaceCookies,
   type CookieSet,
 } from './change-log-cookies.ts';
@@ -282,6 +283,17 @@ export type ChangeLogResumePoint = {
    * exist, and both this field and the truncate-above path become dead code.
    */
   readonly cookies: CookieSet;
+};
+
+/**
+ * A reconciled log's resume point, and the watermark the log was seeded at.
+ * The log has written every transaction above its seed, and so has recorded
+ * every row key change there in its cookies' `minSnapshot`, which is what
+ * lets a replica's backfill mark be checked against the key changes that the
+ * replica has not applied yet (see `withResumeMarks`).
+ */
+export type ReconciledChangeLog = ChangeLogResumePoint & {
+  readonly seedWatermark: string;
 };
 
 /**
@@ -778,7 +790,7 @@ function reconcile(
     // back, so the cookie set no longer belongs to the head. The anchor's set
     // does, and it lands in this same transaction: invariant 17 holds at every
     // point another connection could observe the log.
-    replaceCookies(db, anchor.cookies);
+    replaceCookies(db, keepingKeyChanges(db, anchor));
     lc.info?.('truncated phantom transactions from the SQLite change log', {
       sqliteChangeLogReconcile: {head, rows, cookies: cookieCounts(anchor)},
     });
@@ -840,6 +852,45 @@ export function changeLogWipeReason(
     return 'identity-mismatch';
   }
   return undefined;
+}
+
+/**
+ * The anchor's cookie set, with the log's own record of row key changes kept.
+ *
+ * `minSnapshot` is written at append time and cannot be folded from anything
+ * the anchor has -- a Postgres anchor carries none -- yet everything the log
+ * recorded about the transactions it keeps is still true. Dropping it would
+ * leave a log that claims to have seen every key change since its seed while
+ * knowing of none before the truncation, and a replica's mark would be
+ * resumed from across one (see `withResumeMarks`). So each table keeps the
+ * latest key change the log recorded for it, which a truncated transaction
+ * can only have raised: that errs toward a run from the beginning.
+ *
+ * A table the log did not have in flight at its head -- a truncated
+ * transaction renamed it or completed it -- has nothing to keep that can be
+ * attributed to it, and is taken to have changed a key at the resume
+ * watermark.
+ */
+function keepingKeyChanges(db: Database, anchor: ChangeLogAnchor): CookieSet {
+  const recorded = new Map<string, string | null>();
+  for (const {schema, table, minSnapshot} of readCookies(db).backfilling) {
+    const key = JSON.stringify([schema, table]);
+    recorded.set(key, maxVersion(recorded.get(key) ?? null, minSnapshot));
+  }
+  return {
+    ...anchor.cookies,
+    backfilling: anchor.cookies.backfilling.map(cookie => {
+      const key = JSON.stringify([cookie.schema, cookie.table]);
+      const kept = recorded.has(key)
+        ? (recorded.get(key) ?? null)
+        : anchor.resumeWatermark;
+      return {...cookie, minSnapshot: maxVersion(cookie.minSnapshot, kept)};
+    }),
+  };
+}
+
+function maxVersion(a: string | null, b: string | null): string | null {
+  return a === null ? b : b === null || a >= b ? a : b;
 }
 
 function reseed(

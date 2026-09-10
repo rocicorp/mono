@@ -472,7 +472,17 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       // the cookies is truncated away and Postgres' set takes its place.
       fixture.writer.reconcile(resumeAt('02', pgCookies));
 
-      expect(fixture.cookies()).toEqual(pgCookies);
+      // (The log did not have 'my.bar' in flight at its head, so it cannot say
+      // which row key changes it saw on it, and one is assumed at the resume
+      // watermark.)
+      const installed = {
+        ...pgCookies,
+        backfilling: pgCookies.backfilling.map(c => ({
+          ...c,
+          minSnapshot: '02',
+        })),
+      };
+      expect(fixture.cookies()).toEqual(installed);
       expect(fixture.writer.state()).toMatchObject({
         cookieRows: {tableMetadata: 1, backfilling: 1},
       });
@@ -486,7 +496,7 @@ describe('change-streamer/sqlite-change-log-writer', () => {
           {schema: 'my', table: 'foo', metadata: {rowKey: {columns: ['id']}}},
         ],
         backfilling: [
-          ...pgCookies.backfilling,
+          ...installed.backfilling,
           {
             schema: 'my',
             table: 'foo',
@@ -551,6 +561,7 @@ describe('change-streamer/sqlite-change-log-writer', () => {
         expect(fixture.writer.reconcileFromLog(noSeed)).toEqual({
           resumeWatermark: '04',
           cookies: folded,
+          seedWatermark: '02',
         });
         // The log already uses its own head and cookies, so reconciliation does
         // not change it.
@@ -570,9 +581,10 @@ describe('change-streamer/sqlite-change-log-writer', () => {
           now: () => 1_700_000_000_000,
         });
         try {
-          expect(other.reconcileFromLog(() => replicaSeed)).toEqual(
-            replicaSeed,
-          );
+          expect(other.reconcileFromLog(() => replicaSeed)).toEqual({
+            ...replicaSeed,
+            seedWatermark: '03',
+          });
           // The fixture uses `pgCookies` as the replica seed. This assertion
           // makes sure that the seed supplied the cookies.
           expect(fixture.cookies()).toEqual(pgCookies);
@@ -595,9 +607,10 @@ describe('change-streamer/sqlite-change-log-writer', () => {
         try {
           // A restore starts without a log, so reconciliation uses the replica
           // seed.
-          expect(writer.reconcileFromLog(() => replicaSeed)).toEqual(
-            replicaSeed,
-          );
+          expect(writer.reconcileFromLog(() => replicaSeed)).toEqual({
+            ...replicaSeed,
+            seedWatermark: '03',
+          });
         } finally {
           writer.close();
         }

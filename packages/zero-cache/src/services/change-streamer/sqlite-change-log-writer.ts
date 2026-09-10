@@ -21,11 +21,13 @@ import {
   deleteChangeLogDB,
   openChangeLogDBForWriting,
   readChangeLogHead,
+  readChangeLogMeta,
   rebuildChangeLogDBForWriting,
   reconcileChangeLog,
   type ChangeLogAnchor,
   type ChangeLogIdentity,
   type ChangeLogResumePoint,
+  type ReconciledChangeLog,
   type ReconcileResult,
 } from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
@@ -162,9 +164,7 @@ export class SQLiteChangeLogWriter {
    * `resumeFrom` includes cookies because the cookies must match the resume
    * watermark.
    */
-  reconcile(
-    resumeFrom: ChangeLogResumePoint,
-  ): ChangeLogResumePoint | undefined {
+  reconcile(resumeFrom: ChangeLogResumePoint): ReconciledChangeLog | undefined {
     return this.#reconcile(() => resumeFrom);
   }
 
@@ -176,13 +176,13 @@ export class SQLiteChangeLogWriter {
    */
   reconcileFromLog(
     seed: () => ChangeLogResumePoint,
-  ): ChangeLogResumePoint | undefined {
+  ): ReconciledChangeLog | undefined {
     return this.#reconcile(db => this.#resumeFromLog(db, seed));
   }
 
   #reconcile(
     resolve: (db: Database) => ChangeLogResumePoint,
-  ): ChangeLogResumePoint | undefined {
+  ): ReconciledChangeLog | undefined {
     if (this.#disabled) {
       return undefined;
     }
@@ -258,6 +258,7 @@ export class SQLiteChangeLogWriter {
           'the SQLite change log has no head after reconciliation',
         ),
         cookies: readCookies(reconciledDB),
+        seedWatermark: readChangeLogMeta(reconciledDB).seedWatermark,
       };
     } catch (e) {
       this.#failSoft('reconciling the SQLite change log', e);

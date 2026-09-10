@@ -12,11 +12,18 @@
 
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
-import type {SchemaChange} from '../change-source/protocol/current/data.ts';
-import {readCookies} from '../replicator/change-log-cookies.ts';
+import type {
+  SchemaChange,
+  StreamedChange,
+} from '../change-source/protocol/current/data.ts';
+import {
+  backfillRequestsFrom,
+  readCookies,
+} from '../replicator/change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   readChangeLogHead,
@@ -65,8 +72,10 @@ describe('change-streamer/change-log-initializer', () => {
    * Drives one transaction into the change log, and -- unless the replica is
    * being held back to simulate a replicator that trails -- into the replica.
    */
-  const transaction = (changes: SchemaChange[], opts?: {toReplica?: boolean}) =>
-    driver.transaction(changes, opts);
+  const transaction = (
+    changes: StreamedChange[],
+    opts?: {toReplica?: boolean},
+  ) => driver.transaction(changes, opts);
 
   /**
    * What Postgres would have derived, taken from the change log's own fold of
@@ -429,24 +438,19 @@ describe('change-streamer/change-log-initializer', () => {
       .run(lastPos, watermark);
   }
 
-  test('an interval too large to scan is inconclusive', async () => {
+  test('ordinary changes above the old scan cap do not prevent comparison', async () => {
     await transaction([CREATE_FOO]);
     const head = await transaction([], {toReplica: false});
-    // Above MAX_FOLD_SCAN_ROWS. A replicator that has been stalled can leave
-    // the interval arbitrarily large, and this runs between reconciliation and
-    // `startStream`, so the comparison declines rather than pays.
+    // Only relevant schema changes consume the advisory fold's budget.
     padTransaction(head, 10_002);
 
-    expect(await compare()).toBe('inconclusive');
+    expect(await compare()).toBe('equal-after-fold');
   });
 
-  test('an interval exactly at the cap is still folded', async () => {
+  test('an interval at the old scan cap is still folded', async () => {
     await transaction([CREATE_FOO]);
     const head = await transaction([], {toReplica: false});
-    // Exactly MAX_FOLD_SCAN_ROWS, i.e. the last interval that is scanned
-    // rather than declined. Pinned because the guard counts to one row *past*
-    // the cap in SQL so that an unbounded interval is not walked in full, and
-    // an off-by-one there would silently stop folding a legal interval.
+    // The former all-events boundary is no longer a special case.
     padTransaction(head, 9_999);
 
     expect(await compare()).toBe('equal-after-fold');
@@ -600,6 +604,217 @@ describe('change-streamer/change-log-initializer', () => {
       expect(() => withoutPg({initFromReplica: false})).toThrow(
         'At least one of initFromPgChangeLog or initFromReplica',
       );
+    });
+  });
+
+  // A replication-manager resumes a run from its own replica's mark, which the
+  // replica voids for every row key change it applies. Those between the
+  // replica's watermark and the stream's start it has not applied, and the
+  // manager will never see.
+  describe('resume marks', () => {
+    const relation = {
+      schema: 'my',
+      name: 'foo',
+      rowKey: {columns: ['id']},
+    };
+
+    /** A replica holding a mark after batch 1 of run-1, at 04. */
+    async function replicaWithMark() {
+      await transaction([
+        CREATE_FOO,
+        {
+          tag: 'create-index',
+          spec: {
+            name: 'foo_pkey',
+            schema: 'my',
+            tableName: 'foo',
+            unique: true,
+            columns: {id: 'ASC'},
+          },
+        },
+      ]); // 02
+      await transaction([
+        {
+          tag: 'backfill-started',
+          relation,
+          columns: ['a', 'b'],
+          watermark: '02',
+          runID: 'run-1',
+          resumes: null,
+        },
+      ]); // 03
+      await transaction([
+        {
+          tag: 'backfill',
+          relation,
+          columns: ['a', 'b'],
+          watermark: '02',
+          rowValues: [[5, 'x', 'y']],
+          runID: 'run-1',
+          seq: 1,
+          lastKey: ['5'],
+        },
+      ]); // 04
+      expect(readReplicaInitializationParameters(replica).marks).toMatchObject([
+        {mark: ['5'], markWatermark: '02', runID: 'run-1', runSeq: 1},
+      ]);
+    }
+
+    const keyChange = {
+      tag: 'update',
+      relation,
+      key: {id: 9},
+      new: {id: 1},
+    } as const;
+    const notAKeyChange = {
+      tag: 'insert',
+      relation,
+      new: {id: 10},
+    } as const;
+
+    /** Postgres's parameters at the log's head, which carry no minSnapshot. */
+    function pgAtHead(): InitializationParameters {
+      const {lastWatermark, cookies} = pgParameters();
+      const pgCookies = {
+        ...cookies,
+        backfilling: cookies.backfilling.map(c => ({...c, minSnapshot: null})),
+      };
+      return {
+        lastWatermark,
+        cookies: pgCookies,
+        backfillRequests: backfillRequestsFrom(pgCookies),
+      };
+    }
+
+    /** The log, reconciled to its head, seeded at `seedWatermark`. */
+    const logSeededAt =
+      (seedWatermark: string | undefined) =>
+      (): ChangeLogResumePoint & {seedWatermark?: string | undefined} => ({
+        resumeWatermark: must(readChangeLogHead(changeLog)),
+        cookies: readCookies(changeLog),
+        seedWatermark,
+      });
+
+    function resumed(params: InitializationParameters) {
+      return params.backfillRequests.map(r => r.resumeFrom ?? null);
+    }
+
+    describe('with Postgres', () => {
+      test('are not resumed from across a key change the replica has not applied', async () => {
+        await replicaWithMark();
+        await transaction([keyChange], {toReplica: false}); // 05
+
+        const params = await initializer({
+          pg: () => Promise.resolve(pgAtHead()),
+          reconcileChangeLog: logSeededAt(REPLICA_VERSION),
+        }).initialize();
+        expect(params.lastWatermark).toBe('05');
+        expect(resumed(params)).toEqual([null]);
+      });
+
+      test('are resumed from when the log recorded no key change since the replica', async () => {
+        await replicaWithMark();
+        await transaction([notAKeyChange], {toReplica: false}); // 05
+
+        const params = await initializer({
+          pg: () => Promise.resolve(pgAtHead()),
+          reconcileChangeLog: logSeededAt(REPLICA_VERSION),
+        }).initialize();
+        expect(params.backfillRequests).toMatchObject([
+          {
+            resumeFrom: ['5'],
+            resumeFromWatermark: '02',
+            resumeRunID: 'run-1',
+            resumeSeq: 1,
+          },
+        ]);
+      });
+
+      test('are not resumed from when the log was seeded above the replica', async () => {
+        await replicaWithMark();
+        await transaction([notAKeyChange], {toReplica: false}); // 05
+
+        // The log never saw 05's transaction written, so it cannot say that
+        // it moved no key.
+        for (const seed of ['05', undefined]) {
+          const params = await initializer({
+            pg: () => Promise.resolve(pgAtHead()),
+            reconcileChangeLog: logSeededAt(seed),
+          }).initialize();
+          expect(resumed(params)).toEqual([null]);
+        }
+      });
+
+      test('are not resumed from with no log to vouch for the interval', async () => {
+        await replicaWithMark();
+        await transaction([notAKeyChange], {toReplica: false}); // 05
+
+        const params = await initializer({
+          pg: () => Promise.resolve(pgAtHead()),
+          reconcileChangeLog: () => undefined,
+        }).initialize();
+        expect(resumed(params)).toEqual([null]);
+      });
+
+      test('need no log when the replica is at the stream start', async () => {
+        await replicaWithMark();
+
+        const params = await initializer({
+          pg: () => Promise.resolve(pgAtHead()),
+          reconcileChangeLog: () => undefined,
+        }).initialize();
+        expect(resumed(params)).toEqual([['5']]);
+      });
+    });
+
+    describe('with Postgres retired', () => {
+      const withoutPg = (
+        reconcile: ChangeLogInitializerSources['reconcileChangeLog'],
+      ) =>
+        initializer({
+          initFromPgChangeLog: false,
+          pg: () => Promise.reject(new Error('Postgres must not be read')),
+          reconcileChangeLog: reconcile,
+        });
+
+      test('are not resumed from across a key change the replica has not applied', async () => {
+        await replicaWithMark();
+        await transaction([keyChange], {toReplica: false}); // 05
+
+        const params = await withoutPg(
+          logSeededAt(REPLICA_VERSION),
+        ).initialize();
+        expect(resumed(params)).toEqual([null]);
+      });
+
+      test('are resumed from when the log recorded no key change since the replica', async () => {
+        await replicaWithMark();
+        await transaction([notAKeyChange], {toReplica: false}); // 05
+
+        const params = await withoutPg(
+          logSeededAt(REPLICA_VERSION),
+        ).initialize();
+        expect(resumed(params)).toEqual([['5']]);
+      });
+
+      test('are not resumed from when the log was seeded above the replica', async () => {
+        await replicaWithMark();
+        await transaction([notAKeyChange], {toReplica: false}); // 05
+
+        const params = await withoutPg(logSeededAt('05')).initialize();
+        expect(resumed(params)).toEqual([null]);
+      });
+
+      test('are resumed from when the replica is the resume point', async () => {
+        await replicaWithMark();
+        await transaction([keyChange], {toReplica: false}); // 05
+
+        // The stream resumes at the replica, so the source re-sends the key
+        // change, and the manager sees it.
+        const params = await withoutPg(() => undefined).initialize();
+        expect(params.lastWatermark).toBe('04');
+        expect(resumed(params)).toEqual([['5']]);
+      });
     });
   });
 

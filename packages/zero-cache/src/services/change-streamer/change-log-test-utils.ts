@@ -19,7 +19,7 @@ import {StatementRunner} from '../../db/statements.ts';
 import type {TestDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cdcSchema} from '../../types/shards.ts';
-import type {SchemaChange} from '../change-source/protocol/current/data.ts';
+import type {StreamedChange} from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {
   CREATE_CHANGE_LOG_COOKIE_SCHEMA,
@@ -136,7 +136,7 @@ export async function createShardStorer(
 /** The `ChangeStreamData` messages of one transaction, in stream order. */
 export function transactionMessages(
   watermark: string,
-  changes: SchemaChange[],
+  changes: StreamedChange[],
 ): ChangeStreamData[] {
   return [
     ['begin', {tag: 'begin'}, {commitWatermark: watermark}],
@@ -188,7 +188,7 @@ export class ChangeStreamDriver {
    * replicator trailing the log's head is simulated.
    */
   async transaction(
-    changes: SchemaChange[],
+    changes: StreamedChange[],
     {toReplica = true}: {toReplica?: boolean} = {},
   ): Promise<string> {
     const wm = this.claimWatermark();

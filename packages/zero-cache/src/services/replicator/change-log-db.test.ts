@@ -8,6 +8,7 @@ import {
 import {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, expectTableExact} from '../../test/lite.ts';
 import {CREATE_V14_CHANGE_LOG_STREAM} from '../change-source/common/replica-schema.ts';
+import type {MessageUpdate} from '../change-source/protocol/current/data.ts';
 import {
   CHANGE_LOG_BACKFILLING_TABLE,
   ChangeLogCookieWriter,
@@ -1171,7 +1172,60 @@ describe('replicator/change-log-db', () => {
       expect(
         reconcileChangeLog(lc, db, anchorAt('05', {cookies: ANCHOR_COOKIES})),
       ).toMatchObject({action: 'truncated', cookiesStale: true});
-      expect(readCookies(db)).toEqual(ANCHOR_COOKIES);
+      expect(readCookies(db)).toEqual({
+        ...ANCHOR_COOKIES,
+        // The log did not have my.bar in flight at its head, so it cannot say
+        // which row key changes it saw on it: one is assumed at the resume
+        // watermark.
+        backfilling: ANCHOR_COOKIES.backfilling.map(c => ({
+          ...c,
+          minSnapshot: '05',
+        })),
+      });
+    });
+
+    // `minSnapshot` is recorded at append time and cannot be folded from
+    // anything a Postgres anchor has. What the log recorded about the
+    // transactions it keeps is still true, and a replica's mark is checked
+    // against it.
+    test('a truncation keeps the row key changes the log recorded', () => {
+      using db = createReconciledLog();
+      seedCookie(db);
+      const writer = new ChangeLogCookieWriter(db);
+      const keyChange: MessageUpdate = {
+        tag: 'update',
+        relation: {schema: 'my', name: 'foo', rowKey: {columns: ['id']}},
+        key: {id: 1},
+        new: {id: 2},
+      };
+      writer.applyMarkOps(keyChange, '04');
+      appendTransaction(db, '09', '05', 2, 100);
+
+      const anchorCookies: CookieSet = {
+        tableMetadata: [],
+        backfilling: [
+          {
+            schema: 'my',
+            table: 'foo',
+            column: 'a',
+            backfill: {fooID: 1},
+            minSnapshot: null,
+          },
+        ],
+      };
+      expect(
+        reconcileChangeLog(lc, db, anchorAt('05', {cookies: anchorCookies})),
+      ).toMatchObject({action: 'truncated'});
+      expect(readCookies(db).backfilling).toEqual([
+        {...anchorCookies.backfilling[0], minSnapshot: '04'},
+      ]);
+
+      // A key change a truncated transaction recorded is kept too, which errs
+      // toward a run from the beginning.
+      writer.applyMarkOps(keyChange, '09');
+      appendTransaction(db, '09', '05', 2, 100);
+      reconcileChangeLog(lc, db, anchorAt('05', {cookies: anchorCookies}));
+      expect(readCookies(db).backfilling).toMatchObject([{minSnapshot: '09'}]);
     });
 
     test('a truncation with an empty anchor set clears the jar', () => {
