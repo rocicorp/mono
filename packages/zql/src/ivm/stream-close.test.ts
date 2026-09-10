@@ -62,9 +62,7 @@ describe('forEachPull', () => {
   test('visits every value then closes', () => {
     const {stream, state} = tracked([1, 2, 3]);
     const seen: number[] = [];
-    forEachPull(stream, v => {
-      seen.push(v);
-    });
+    forEachPull(stream, v => seen.push(v));
     expect(seen).toEqual([1, 2, 3]);
     expect(state.closes).toBe(1);
   });
@@ -145,12 +143,20 @@ describe('forEachPull early exit', () => {
     expect(state.closes).toBe(1);
   });
 
-  test('a falsy return is not a break', () => {
+  test('a shorthand arrow returning a value is not a break', () => {
+    const {stream} = tracked([1, 2, 3]);
+    const seen: number[] = [];
+    // `push` returns a number; only the exact string 'break' stops the scan.
+    forEachPull(stream, v => seen.push(v));
+    expect(seen).toEqual([1, 2, 3]);
+  });
+
+  test('a return that is not exactly “break” does not stop the scan', () => {
     const {stream} = tracked([1, 2, 3]);
     const seen: number[] = [];
     forEachPull(stream, v => {
       seen.push(v);
-      return undefined;
+      return 'brake';
     });
     expect(seen).toEqual([1, 2, 3]);
   });

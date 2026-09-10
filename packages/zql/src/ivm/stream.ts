@@ -111,10 +111,15 @@ export function withPull<T, R>(
  * The `'break'` sentinel is the point: a `break` out of a hand-written loop is
  * exactly the abrupt completion that `for...of` used to close for, and the
  * case most likely to be written without a `finally`.
+ *
+ * `fn` returns `unknown` rather than `void | 'break'` so that a shorthand
+ * arrow whose body happens to produce a value -- `v => rows.push(v)` -- is
+ * still accepted. The cost is that only the exact string `'break'` stops the
+ * scan: any other return, including a misspelling, is ignored.
  */
 export function forEachPull<T>(
   stream: PullStream<T>,
-  fn: (value: T) => void | 'break',
+  fn: (value: T) => unknown,
 ): void {
   withPull(stream, s => {
     for (let v = s.next(); v !== undefined; v = s.next()) {

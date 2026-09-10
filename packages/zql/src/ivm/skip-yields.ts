@@ -23,7 +23,7 @@ export function skipYields(
  */
 export function forEachSkippingYields(
   stream: PullStream<Node | 'yield'>,
-  fn: (node: Node) => void | 'break',
+  fn: (node: Node) => unknown,
 ): void {
   forEachPull(skipYields(stream), fn);
 }
