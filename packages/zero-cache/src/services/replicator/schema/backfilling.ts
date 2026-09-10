@@ -31,13 +31,17 @@
  * where the same query against `column_metadata` is an unindexed scan over a row
  * per column of every table.
  *
- * This table is write-only from the replica's perspective. Nothing in the
- * replicator reads it; it exists to be read by the change-streamer.
+ * The `backfill` half of this table is write-only from the replica's
+ * perspective: nothing in the replicator reads it; it exists to be read by the
+ * change-streamer. The resume columns added in v18 (`mark`, `markWatermark`,
+ * `runID`, `minSnapshot`) are read as well as written, by the rules in
+ * `change-processor.ts` and by `readBackfillDeclarations()`.
  */
 
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../../shared/src/bigint-json.ts';
+import {must} from '../../../../../shared/src/must.ts';
 import type {Database, Statement} from '../../../../../zqlite/src/db.ts';
 import {getOrCreateCounter} from '../../../observability/metrics.ts';
 import {liteTableName} from '../../../types/names.ts';
@@ -60,7 +64,32 @@ export const BACKFILLING_TABLE = '_zero.backfilling';
 // `backfill` holds the JSON that `cdc.backfilling` holds as JSONB. SQLite has
 // no JSONB, and nothing here queries into the document: it is stored to be
 // handed back to the change source verbatim.
+//
+// `mark`, `markWatermark` and `runID` are *subscriber state*, not cookies:
+// they say how far this replica has applied an ordered backfill run, and are
+// excluded from the cookie set that the change log's initialization compares.
+// `minSnapshot` is a cookie (see `change-log-cookies.ts`), holding the earliest
+// snapshot at which a backfill of the table is still valid.
 export const CREATE_BACKFILLING_TABLE = /*sql*/ `
+  CREATE TABLE "${BACKFILLING_TABLE}" (
+    "schema"        TEXT NOT NULL,
+    "table"         TEXT NOT NULL,
+    "column"        TEXT NOT NULL,
+    "backfill"      TEXT NOT NULL,
+    "mark"          TEXT,
+    "markWatermark" TEXT,
+    "runID"         TEXT,
+    "minSnapshot"   TEXT,
+    PRIMARY KEY ("schema", "table", "column")
+  );
+`;
+
+/**
+ * The table as the v17 migration created it, frozen. A replica migrating from
+ * v16 gets this and is then brought to the current shape by the v18 migration;
+ * a fresh replica gets {@link CREATE_BACKFILLING_TABLE} directly.
+ */
+export const CREATE_BACKFILLING_TABLE_V17 = /*sql*/ `
   CREATE TABLE "${BACKFILLING_TABLE}" (
     "schema"   TEXT NOT NULL,
     "table"    TEXT NOT NULL,
@@ -69,6 +98,36 @@ export const CREATE_BACKFILLING_TABLE = /*sql*/ `
     PRIMARY KEY ("schema", "table", "column")
   );
 `;
+
+/** The v18 migration: {@link CREATE_BACKFILLING_TABLE}'s four new columns. */
+export const ADD_BACKFILLING_RESUME_COLUMNS = /*sql*/ `
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "mark" TEXT;
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "markWatermark" TEXT;
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "runID" TEXT;
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "minSnapshot" TEXT;
+`;
+
+/**
+ * A subscriber's progress on one table's in-flight backfill: the columns being
+ * backfilled, and the mark / run they have in common. Where the columns
+ * disagree — which happens when a column is added to a table whose backfill is
+ * already under way — the differing field is null, which costs a restart from
+ * the beginning rather than a wrong resume.
+ */
+/** One in-flight column's resume state; see {@link BackfillDeclaration}. */
+export type BackfillingColumn = {
+  readonly runID: string | null;
+  readonly mark: readonly string[] | null;
+};
+
+export type BackfillDeclaration = {
+  schema: string;
+  table: string;
+  columns: string[];
+  mark: string[] | null;
+  markWatermark: string | null;
+  runID: string | null;
+};
 
 /**
  * The replica's interpreter of the cookie fold in
@@ -97,9 +156,93 @@ export class BackfillingTracker {
   #dropTable: Statement | undefined;
   #renameColumn: Statement | undefined;
   #dropColumn: Statement | undefined;
+  #columnsOf: Statement | undefined;
+  #setRunID: Statement | undefined;
+  #advanceMark: Statement | undefined;
 
   constructor(db: Database) {
     this.#db = db;
+  }
+
+  /**
+   * `B(T)`: the columns of the table that this replica currently has in
+   * flight, which is the whole of what a `backfill` message is allowed to
+   * write and a `backfill-completed` message is allowed to complete.
+   *
+   * Each column's value is the run it is following (or null), and the mark it
+   * has applied up to (or null).
+   */
+  backfillingColumns(table: Identifier): Map<string, BackfillingColumn> {
+    const rows = (this.#columnsOf ??= this.#db.prepare(/*sql*/ `
+      SELECT "column", "runID", "mark" FROM "${BACKFILLING_TABLE}"
+        WHERE "schema" = ? AND "table" = ?
+    `)).all<{column: string; runID: string | null; mark: string | null}>(
+      table.schema,
+      table.name,
+    );
+    return new Map(
+      rows.map(({column, runID, mark}) => [
+        column,
+        {runID, mark: mark === null ? null : (JSON.parse(mark) as string[])},
+      ]),
+    );
+  }
+
+  /**
+   * Records whether the column is following run `runID` (or, with null, that
+   * it is following none).
+   *
+   * Never touches the mark: a subscriber that stops following a run keeps how
+   * far it got, so that a later run can be resumed from it.
+   */
+  setFollowing(table: Identifier, column: string, runID: string | null): void {
+    (this.#setRunID ??= this.#db.prepare(/*sql*/ `
+      UPDATE "${BACKFILLING_TABLE}" SET "runID" = ?
+        WHERE "schema" = ? AND "table" = ? AND "column" = ?
+    `)).run(runID, table.schema, table.name, column);
+  }
+
+  /**
+   * Advances the column's mark, which means: every row of run `runID` whose
+   * key sorts at or before `mark`, as of snapshot `markWatermark`, has been
+   * applied.
+   *
+   * The `runID` in the WHERE clause is the following rule: a subscriber only
+   * advances its mark for a run it is following, because only then does it
+   * know that it has every row the run sent before this batch.
+   */
+  advanceMark(
+    table: Identifier,
+    column: string,
+    runID: string,
+    mark: readonly string[],
+    markWatermark: string,
+  ): void {
+    (this.#advanceMark ??= this.#db.prepare(/*sql*/ `
+      UPDATE "${BACKFILLING_TABLE}"
+        SET "mark" = ?, "markWatermark" = ?
+        WHERE "schema" = ? AND "table" = ? AND "column" = ? AND "runID" = ?
+    `)).run(
+      JSON.stringify(mark),
+      markWatermark,
+      table.schema,
+      table.name,
+      column,
+      runID,
+    );
+  }
+
+  /**
+   * Clears the specified columns from the table's in-flight set.
+   *
+   * Unlike the `complete-backfill` fold, which clears every column the
+   * completion names, this clears exactly the columns the subscriber was
+   * following, which is the whole of what it is entitled to complete.
+   */
+  completeColumns(table: Identifier, columns: readonly string[]): void {
+    for (const column of columns) {
+      this.#deleteColumn(table, column);
+    }
   }
 
   /**
@@ -181,6 +324,72 @@ export class BackfillingTracker {
         WHERE "schema" = ? AND "table" = ? AND "column" = ?
     `)).run(table.schema, table.name, column);
   }
+}
+
+/**
+ * The subscriber's progress on every in-flight backfill, sent in the subscribe
+ * request so that the change-streamer can resume a run rather than restart it.
+ *
+ * One entry per table. A field is reported only where every in-flight column
+ * of the table agrees on it; otherwise it is null, which costs a restart from
+ * the beginning rather than a wrong resume.
+ */
+export function readBackfillDeclarations(db: Database): BackfillDeclaration[] {
+  const rows = db
+    .prepare(/*sql*/ `
+      SELECT "schema", "table", "column", "mark", "markWatermark", "runID"
+        FROM "${BACKFILLING_TABLE}"
+        ORDER BY "schema", "table", "column"
+    `)
+    .all<{
+      schema: string;
+      table: string;
+      column: string;
+      mark: string | null;
+      markWatermark: string | null;
+      runID: string | null;
+    }>();
+
+  const declarations = new Map<string, BackfillDeclaration>();
+  // Tracks whether the columns of a table have disagreed on a field, which is
+  // not the same as agreeing on null.
+  const disagreed = new Map<string, Set<keyof BackfillDeclaration>>();
+
+  for (const row of rows) {
+    const key = `${row.schema}.${row.table}`;
+    const mark = row.mark === null ? null : (JSON.parse(row.mark) as string[]);
+    const existing = declarations.get(key);
+    if (!existing) {
+      declarations.set(key, {
+        schema: row.schema,
+        table: row.table,
+        columns: [row.column],
+        mark,
+        markWatermark: row.markWatermark,
+        runID: row.runID,
+      });
+      disagreed.set(key, new Set());
+      continue;
+    }
+    existing.columns.push(row.column);
+    const differs = must(disagreed.get(key));
+    if (JSON.stringify(existing.mark) !== JSON.stringify(mark)) {
+      differs.add('mark').add('markWatermark');
+    }
+    if (existing.markWatermark !== row.markWatermark) {
+      differs.add('mark').add('markWatermark');
+    }
+    if (existing.runID !== row.runID) {
+      differs.add('runID');
+    }
+  }
+
+  for (const [key, declaration] of declarations) {
+    for (const field of must(disagreed.get(key))) {
+      (declaration[field] as null) = null;
+    }
+  }
+  return [...declarations.values()];
 }
 
 /**

@@ -757,7 +757,7 @@ describe('replica-schema-migrations', () => {
   // the reason it can: nothing at v16 reads "_zero.backfilling", and what a v16
   // zero-cache does write — "_zero.column_metadata.backfill" — is what
   // migration 17's `migrateData` rebuilds the table from on the way forward.
-  test('a v16 zero-cache runs against a v17 replica', async () => {
+  test('a v16 zero-cache runs against the current replica', async () => {
     const replica = replicaFile.connect(lc);
     initLiteDB(replica, CREATE_VERSION_HISTORY, {});
     await initReplica(lc, 'test', replicaFile.path, (_, db) => {
@@ -789,12 +789,74 @@ describe('replica-schema-migrations', () => {
     expectMatchingObjectsInTables(replica, {
       // The data version rolls back; the schema version never moves backwards.
       ['_zero.versionHistory']: [
-        {dataVersion: 16, schemaVersion: 17, minSafeVersion: 1},
+        {
+          dataVersion: 16,
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          minSafeVersion: 1,
+        },
       ],
       // The table is left alone rather than dropped, so rolling forward does
       // not have to recreate it.
       [BACKFILLING_TABLE]: [
         {schema: 'my', table: 'foo', column: 'a', backfill: '{"fooID":1}'},
+      ],
+    });
+  });
+
+  test('a v17 zero-cache runs against a v18 replica', async () => {
+    const replica = replicaFile.connect(lc);
+    initLiteDB(replica, CREATE_VERSION_HISTORY, {});
+    await initReplica(lc, 'test', replicaFile.path, (_, db) => {
+      initReplicationState(db, ['foo_publication'], '123');
+      return promiseVoid;
+    });
+    // A v18 zero-cache has recorded resume state on an in-flight backfill.
+    replica
+      .prepare(/*sql*/ `INSERT INTO "${BACKFILLING_TABLE}"
+                 ("schema", "table", "column", "backfill",
+                  "mark", "markWatermark", "runID", "minSnapshot")
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('my', 'foo', 'a', '{"fooID":1}', '["123"]', '0a', 'run-abc', '09');
+
+    const v17MigrationMap = Object.fromEntries(
+      Object.entries(schemaVersionMigrationMap).filter(
+        ([version]) => Number(version) <= 17,
+      ),
+    );
+    await runSchemaMigrations(
+      lc,
+      'test',
+      replicaFile.path,
+      {
+        migrateSchema: () => {
+          throw new Error('the replica is already synced');
+        },
+      },
+      v17MigrationMap,
+    );
+
+    expectMatchingObjectsInTables(replica, {
+      ['_zero.versionHistory']: [
+        {
+          dataVersion: 17,
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          minSafeVersion: 1,
+        },
+      ],
+      // The columns are nullable and a v17 zero-cache neither reads nor writes
+      // them, so they survive the rollback untouched. Rolling forward finds
+      // the marks where it left them.
+      [BACKFILLING_TABLE]: [
+        {
+          schema: 'my',
+          table: 'foo',
+          column: 'a',
+          backfill: '{"fooID":1}',
+          mark: '["123"]',
+          markWatermark: '0a',
+          runID: 'run-abc',
+          minSnapshot: '09',
+        },
       ],
     });
   });

@@ -26,6 +26,7 @@ import {
 } from '../../db/pg-to-lite.ts';
 import type {ColumnSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
+import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
   JSON_PARSED,
@@ -37,8 +38,13 @@ import {
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
 import {id} from '../../types/sql.ts';
+import {
+  stateVersionFromString,
+  stateVersionToString,
+} from '../../types/state-version.ts';
 import type {
   BackfillCompleted,
+  BackfillStarted,
   Change,
   ColumnAdd,
   ColumnDrop,
@@ -47,6 +53,7 @@ import type {
   IndexCreate,
   IndexDrop,
   MessageBackfill,
+  MessageBegin,
   MessageCommit,
   MessageDelete,
   MessageInsert,
@@ -63,6 +70,7 @@ import type {ReplicatorMode} from './replicator.ts';
 import {BackfillingTracker} from './schema/backfilling.ts';
 import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
+import {getSubscriptionState} from './schema/replication-state.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
   updateReplicationWatermark,
@@ -116,6 +124,14 @@ export class ChangeProcessor {
   readonly #tableSpecs = new Map<string, LiteTableSpecWithReplicationStatus>();
 
   #currentTx: TransactionProcessor | null = null;
+
+  /**
+   * The `commitWatermark` the change-streamer sent for the open transaction,
+   * which the `commit` must match. It differs from the version the
+   * transaction is committed at whenever that version is replica-local
+   * (see {@link #commitVersionFor}).
+   */
+  #currentTxWatermark: string | null = null;
 
   #failure: Error | undefined;
 
@@ -185,6 +201,41 @@ export class ChangeProcessor {
     return null;
   }
 
+  /**
+   * The version to commit the transaction at.
+   *
+   * For an ordinary transaction this is the change-streamer's commit
+   * watermark. For a **backfill** transaction it is a version local to this
+   * replica, because the watermark a replication-manager mints for a backfill
+   * transaction — its last upstream watermark plus a minor — orders that
+   * manager's stream and means nothing to another one. Two managers under the
+   * same upstream watermark `M` both mint `M.1, M.2, ...` for different rows,
+   * so a subscriber that carried one manager's `M.3` to another manager would
+   * either land on that manager's own `M.3`, silently skipping its `M.1..M.3`,
+   * or find no `M.3` at all and be told `WatermarkTooOld`, which
+   * `IncrementalSyncer` answers with a full replica restore. During a backfill
+   * on a quiet upstream most commits are backfill commits, so the second is the
+   * common outcome.
+   *
+   * Committing at a local version instead means the replica's major is always
+   * a real upstream commit, which is what the replicator subscribes at. The
+   * local version is never below the incoming one, which preserves the
+   * guarantee that a completion transaction's version is at least its
+   * snapshot watermark. The `_0_version` of the backfilled rows is the
+   * snapshot watermark either way, and is unaffected.
+   */
+  #commitVersionFor(msg: MessageBegin, watermark: string): string {
+    if (!msg.backfill) {
+      return watermark;
+    }
+    const current = getSubscriptionState(this.#db).watermark;
+    if (watermark > current) {
+      return watermark;
+    }
+    const {major, minor = 0n} = stateVersionFromString(current);
+    return stateVersionToString({major, minor: BigInt(minor) + 1n});
+  }
+
   #beginTransaction(
     lc: LogContext,
     commitVersion: string,
@@ -237,9 +288,10 @@ export class ChangeProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
+      this.#currentTxWatermark = must(watermark);
       this.#currentTx = this.#beginTransaction(
         lc,
-        must(watermark),
+        this.#commitVersionFor(msg, this.#currentTxWatermark),
         msg.json ?? JSON_PARSED,
       );
       return null;
@@ -255,16 +307,24 @@ export class ChangeProcessor {
 
     if (msg.tag === 'commit') {
       assert(watermark, 'watermark is required for commit messages');
-      const result = tx.processCommit(msg, watermark);
+      if (watermark !== this.#currentTxWatermark) {
+        throw new Error(
+          `'commit' watermark ${watermark} does not match 'begin' watermark ` +
+            `${this.#currentTxWatermark}: ${stringify(msg)}`,
+        );
+      }
+      const result = tx.processCommit(msg, tx.version);
       // Clear only after a successful commit so #fail can roll back a commit
       // path that throws before SQLite has committed.
       this.#currentTx = null;
+      this.#currentTxWatermark = null;
       return result;
     }
 
     if (msg.tag === 'rollback') {
       tx.abort(lc);
       this.#currentTx = null;
+      this.#currentTxWatermark = null;
       return null;
     }
 
@@ -312,7 +372,7 @@ export class ChangeProcessor {
         tx.processBackfill(msg);
         break;
       case 'backfill-started':
-        // Run announcements carry no rows, and nothing here follows runs yet.
+        tx.processBackfillStarted(msg);
         break;
       case 'backfill-completed':
         tx.processBackfillCompleted(msg);
@@ -324,6 +384,23 @@ export class ChangeProcessor {
     return null;
   }
 }
+
+// Counted where the guard and the following rule actually fire. A nonzero
+// count is expected only while a subscriber is moving between
+// replication-managers mid-backfill; a steadily climbing one means runs are
+// being sent to subscribers that cannot use them.
+const rowsSkippedByGuard = getOrCreateCounter(
+  'replication',
+  'backfill_rows_skipped_by_guard',
+  "Backfilled rows dropped because none of the message's columns is in the " +
+    "replica's in-flight backfill set.",
+);
+const completionsIgnored = getOrCreateCounter(
+  'replication',
+  'backfill_completions_ignored',
+  'Backfill completions ignored because the replica was not following the ' +
+    'run that sent them.',
+);
 
 /**
  * The {@link TransactionProcessor} handles the sequence of messages from
@@ -352,6 +429,11 @@ class TransactionProcessor {
   readonly #db: StatementRunner;
   readonly #mode: ChangeProcessorMode;
   readonly #version: LexiVersion;
+
+  /** The version this transaction commits at; see `#commitVersionFor`. */
+  get version(): LexiVersion {
+    return this.#version;
+  }
   readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
   readonly #backfilling: BackfillingTracker;
@@ -891,15 +973,47 @@ class TransactionProcessor {
     this.#reloadTableSpecs();
   }
 
-  processBackfill({relation, watermark, columns, rowValues}: MessageBackfill) {
+  processBackfill(msg: MessageBackfill) {
+    const {relation, watermark, columns, rowValues, runID, lastKey} = msg;
     const tableName = liteTableName(relation);
     const tableSpec = must(this.#tableSpecs.get(tableName));
     const rowKeyCols = relation.rowKey.columns;
+    const table = {schema: relation.schema, name: relation.name};
+
+    // The column guard. A run can outlive the completion of the columns it is
+    // backfilling -- a subscriber that moved between replication-managers can
+    // be sent rows from a snapshot older than values it already has -- so the
+    // replica's own in-flight set, not the message, decides what may be
+    // written. Without this, a stale `backfill` overwrites newer replicated
+    // values, because no per-column version is recorded once the column's
+    // backfill has completed.
+    const backfilling = this.#backfilling.backfillingColumns(table);
+    const writable = [...rowKeyCols, ...columns].filter(c =>
+      backfilling.has(c),
+    );
+    if (writable.length === 0) {
+      this.#lc.debug?.(
+        `skipping backfill of ${tableName}: none of ` +
+          `[${columns.join(',')}] is being backfilled`,
+      );
+      rowsSkippedByGuard.add(rowValues.length, {table: tableName});
+      return;
+    }
+
+    // Every value the message carries, in message order, so that a row's
+    // values can be read off `rowValues` positionally...
     const cols = [...rowKeyCols, ...columns];
+    // ...but only the key and the writable columns are ever written.
+    const inserted = [
+      ...rowKeyCols,
+      ...writable.filter(c => !rowKeyCols.includes(c)),
+    ];
 
     // Common parts of the INSERT sql statement.
-    const insertColsStr = [...cols, ZERO_VERSION_COLUMN_NAME].map(id).join(',');
-    const qMarks = Array.from({length: cols.length + 1})
+    const insertColsStr = [...inserted, ZERO_VERSION_COLUMN_NAME]
+      .map(id)
+      .join(',');
+    const qMarks = Array.from({length: inserted.length + 1})
       .fill('?')
       .join(',');
     const rowKeyColsStr = rowKeyCols.map(id).join(',');
@@ -907,8 +1021,9 @@ class TransactionProcessor {
     let backfilled = 0;
     let skipped = 0;
     for (const v of rowValues) {
+      const values = Object.fromEntries(cols.map((c, i) => [c, v[i]]));
       const row = liteRow(
-        Object.fromEntries(cols.map((c, i) => [c, v[i]])),
+        Object.fromEntries(inserted.map(c => [c, values[c]])),
         tableSpec,
         this.#jsonFormat,
       );
@@ -920,10 +1035,10 @@ class TransactionProcessor {
       }
       const updates =
         rowOp?.op === SET_OP
-          ? cols.filter(
+          ? writable.filter(
               c => (rowOp.backfillingColumnVersions[c] ?? '') <= watermark,
             )
-          : cols;
+          : writable;
       if (updates.length === 0) {
         // row already has newer values for all backfilling columns.
         skipped++;
@@ -942,6 +1057,16 @@ class TransactionProcessor {
       backfilled++;
     }
 
+    // Advance the mark, but only for columns following this run: only then
+    // does the replica know it holds every row the run sent before this batch.
+    if (runID !== undefined && lastKey !== undefined) {
+      for (const col of writable) {
+        if (backfilling.get(col)?.runID === runID) {
+          this.#backfilling.advanceMark(table, col, runID, lastKey, watermark);
+        }
+      }
+    }
+
     this.#lc.debug?.(
       `backfilled ${backfilled} rows (skipped ${skipped}) into ${tableName}`,
     );
@@ -949,17 +1074,77 @@ class TransactionProcessor {
 
   #completedBackfill: DownloadStatus | undefined;
 
+  /**
+   * Records whether this replica is *following* the announced run.
+   *
+   * A subscriber that has processed this announcement and every message since
+   * holds every row of the run whose key sorts after `resumeFrom`. So it may
+   * follow when the announcement covers everyone (`resumeFrom` null), when the
+   * announcement covers exactly where it has got to (`resumeFrom` equals its
+   * mark), or when it is already following this run (a re-delivery after a
+   * reconnect). Otherwise it stops following, which is what keeps it from
+   * honoring a completion for rows it does not have.
+   *
+   * The mark is never touched here: a subscriber that stops following a run
+   * keeps how far it got, so that a later run can be resumed from it.
+   */
+  processBackfillStarted(msg: BackfillStarted) {
+    const {relation, columns, runID, resumeFrom} = msg;
+    const table = {schema: relation.schema, name: relation.name};
+    const backfilling = this.#backfilling.backfillingColumns(table);
+
+    let following = 0;
+    for (const col of [...relation.rowKey.columns, ...columns]) {
+      const state = backfilling.get(col);
+      if (state === undefined) {
+        continue; // not in flight here; the column guard covers it
+      }
+      const follows =
+        resumeFrom === null ||
+        state.runID === runID ||
+        JSON.stringify(state.mark) === JSON.stringify(resumeFrom);
+      this.#backfilling.setFollowing(table, col, follows ? runID : null);
+      following += follows ? 1 : 0;
+    }
+    this.#lc.debug?.(
+      `backfill run ${runID} of ${liteTableName(relation)} announced from ` +
+        `${JSON.stringify(resumeFrom)}: following ${following} of ` +
+        `${backfilling.size} in-flight column(s)`,
+    );
+  }
+
   processBackfillCompleted(msg: BackfillCompleted) {
-    const {relation, columns, status} = msg;
+    const {relation, columns, status, runID} = msg;
     const tableName = liteTableName(relation);
     const rowKeyCols = relation.rowKey.columns;
-    const cols = [...rowKeyCols, ...columns];
+    const table = {schema: relation.schema, name: relation.name};
+
+    // A completion may only complete columns this replica has in flight, and
+    // (for a change source that identifies its runs) only those it is
+    // following. A completion it is not following is a completion of rows it
+    // does not have: honoring it would publish half a column, and its
+    // unconditional version bump would reset the whole table for IVM.
+    const backfilling = this.#backfilling.backfillingColumns(table);
+    const cols = [...rowKeyCols, ...columns].filter(col => {
+      const state = backfilling.get(col);
+      return (
+        state !== undefined && (runID === undefined || state.runID === runID)
+      );
+    });
+    if (cols.length === 0) {
+      this.#lc.info?.(
+        `ignoring completion of backfill run ${runID} of ${tableName}: ` +
+          `not following it`,
+      );
+      completionsIgnored.add(1, {table: tableName});
+      return;
+    }
 
     const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
     for (const col of cols) {
       columnMetadata.clearBackfilling(tableName, col);
     }
-    this.#backfilling.apply(msg);
+    this.#backfilling.completeColumns(table, cols);
     // Given that new columns are being exposed for every row in the table, bump the
     // row version for all rows.
     this.#bumpVersions(relation);

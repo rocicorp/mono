@@ -6,6 +6,7 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import {WRITE_WORKER_URL} from '../../server/worker-urls.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
+import type {BackfillDeclaration} from './schema/backfilling.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
 
 export type PragmaConfig = {
@@ -41,6 +42,8 @@ type ErrorHandler = (err: Error) => void;
  */
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
+  /** The replica's progress on its in-flight backfills. */
+  getBackfillDeclarations(): Promise<BackfillDeclaration[]>;
   processMessages(
     downstream: readonly ChangeStreamData[],
   ): Promise<CommitResult | null>;
@@ -117,6 +120,7 @@ export type ArgsMap = {
     ForceCheckpointConfig | null,
   ];
   getSubscriptionState: [];
+  getBackfillDeclarations: [];
   processMessages: [readonly ChangeStreamData[]];
   abort: [];
   stop: [];
@@ -129,6 +133,7 @@ export type Request<M extends Method = Method> = {method: M; args: ArgsMap[M]};
 export type ResultMap = {
   init: void;
   getSubscriptionState: SubscriptionState;
+  getBackfillDeclarations: BackfillDeclaration[];
   processMessages: CommitResult | null;
   abort: void;
   stop: void;
@@ -221,6 +226,10 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 
   getSubscriptionState(): Promise<SubscriptionState> {
     return this.#call('getSubscriptionState', []);
+  }
+
+  getBackfillDeclarations(): Promise<BackfillDeclaration[]> {
+    return this.#call('getBackfillDeclarations', []);
   }
 
   processMessages(

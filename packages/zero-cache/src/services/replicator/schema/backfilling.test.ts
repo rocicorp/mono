@@ -8,6 +8,7 @@ import {
   BackfillingTracker,
   CREATE_BACKFILLING_TABLE,
   populateBackfillingFromColumnMetadata,
+  readBackfillDeclarations,
   readBackfillRequests,
 } from './backfilling.ts';
 import {CREATE_COLUMN_METADATA_TABLE} from './column-metadata.ts';
@@ -28,10 +29,132 @@ describe('replicator/schema/backfilling', () => {
     return () => db.close();
   });
 
-  /** Every assertion below is about this one table's rows. */
+  /**
+   * Every assertion below is about this one table's rows. The v18 resume
+   * columns default to null so that the cookie-fold cases stay about the
+   * fold; the cases that exercise them spell them out.
+   */
   function expectBackfilling(rows: Record<string, unknown>[]) {
-    expectTables(db, {[BACKFILLING_TABLE]: rows});
+    expectTables(db, {
+      [BACKFILLING_TABLE]: rows.map(row => ({
+        mark: null,
+        markWatermark: null,
+        runID: null,
+        minSnapshot: null,
+        ...row,
+      })),
+    });
   }
+
+  describe('readBackfillDeclarations', () => {
+    function insert(
+      table: string,
+      column: string,
+      resume: {
+        mark?: string[] | null;
+        markWatermark?: string | null;
+        runID?: string | null;
+      } = {},
+    ) {
+      db.prepare(
+        `INSERT INTO "${BACKFILLING_TABLE}"
+           ("schema", "table", "column", "backfill",
+            "mark", "markWatermark", "runID")
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        'public',
+        table,
+        column,
+        '{"id":1}',
+        resume.mark === undefined || resume.mark === null
+          ? null
+          : JSON.stringify(resume.mark),
+        resume.markWatermark ?? null,
+        resume.runID ?? null,
+      );
+    }
+
+    test('nothing in flight declares nothing', () => {
+      expect(readBackfillDeclarations(db)).toEqual([]);
+    });
+
+    test('one entry per table, with the columns in flight', () => {
+      insert('issues', 'description', {
+        mark: ['1'],
+        markWatermark: '0a',
+        runID: 'run-1',
+      });
+      insert('issues', 'assignee', {
+        mark: ['1'],
+        markWatermark: '0a',
+        runID: 'run-1',
+      });
+      insert('comments', 'body');
+
+      expect(readBackfillDeclarations(db)).toEqual([
+        {
+          schema: 'public',
+          table: 'comments',
+          columns: ['body'],
+          mark: null,
+          markWatermark: null,
+          runID: null,
+        },
+        {
+          schema: 'public',
+          table: 'issues',
+          columns: ['assignee', 'description'],
+          mark: ['1'],
+          markWatermark: '0a',
+          runID: 'run-1',
+        },
+      ]);
+    });
+
+    test('columns that disagree null out the field they disagree on', () => {
+      // A column added to a table whose backfill was already under way.
+      insert('issues', 'description', {
+        mark: ['1'],
+        markWatermark: '0a',
+        runID: 'run-1',
+      });
+      insert('issues', 'assignee', {runID: 'run-1'});
+
+      expect(readBackfillDeclarations(db)).toEqual([
+        {
+          schema: 'public',
+          table: 'issues',
+          columns: ['assignee', 'description'],
+          // Declaring a mark that only some columns have reached would
+          // complete the others early, so the table restarts instead.
+          mark: null,
+          markWatermark: null,
+          // They do agree on the run, so the run is still declared.
+          runID: 'run-1',
+        },
+      ]);
+    });
+
+    test('columns that disagree on the run null out only the run', () => {
+      insert('issues', 'description', {
+        mark: ['1'],
+        markWatermark: '0a',
+        runID: 'run-1',
+      });
+      insert('issues', 'assignee', {mark: ['1'], markWatermark: '0a'});
+
+      expect(readBackfillDeclarations(db)).toEqual([
+        {
+          schema: 'public',
+          table: 'issues',
+          columns: ['assignee', 'description'],
+          mark: ['1'],
+          markWatermark: '0a',
+          runID: null,
+        },
+      ]);
+    });
+  });
 
   describe('BackfillingTracker', () => {
     function apply(...changes: SchemaChange[]) {

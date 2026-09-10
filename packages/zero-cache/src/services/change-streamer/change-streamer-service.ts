@@ -15,6 +15,7 @@ import {
 import {min} from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {ShardID} from '../../types/shards.ts';
+import {majorVersionOf} from '../../types/state-version.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {
@@ -1303,6 +1304,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #getCleanupFloor(): {
     backupWatermark: string;
     purgeWatermark: string;
+    minWatermark: string;
     current: string[];
   } {
     const backupWatermark = this.#backupWatermark;
@@ -1318,20 +1320,35 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     // subscribers to reconnect and expose their ACKs. Once it expires, an
     // empty set places no additional constraint on the confirmed backup
     // watermark and must not pin either change log indefinitely.
+    const minWatermark = min(backupWatermark, ...current);
     return {
       backupWatermark,
-      purgeWatermark: min(backupWatermark, ...current),
+      minWatermark,
+      // A subscriber resumes at the *major* of its state version, because the
+      // minor of a backfill transaction is local to the replication-manager
+      // that minted it (see `#commitVersionFor` in `change-processor.ts`). So
+      // the entry it will name has to outlive it: purging to the min ACK
+      // itself would delete the last upstream commit out from under a
+      // subscriber whose ACK has since advanced through a run's backfill
+      // transactions, and answer its reconnect with `WatermarkTooOld` — a
+      // fleet-wide restore, on a quiet upstream, for every reconnect during a
+      // long backfill.
+      //
+      // What this retains beyond the min ACK is exactly the backfill
+      // transactions since the last upstream commit, which is exactly what
+      // such a reconnect replays.
+      purgeWatermark: majorVersionOf(minWatermark),
       current,
     };
   }
 
   async #purgePGChangeLog(): Promise<void> {
     try {
-      const {backupWatermark, purgeWatermark, current} =
+      const {backupWatermark, purgeWatermark, minWatermark, current} =
         this.#getCleanupFloor();
-      if (purgeWatermark < backupWatermark) {
-        if (this.#loggedBehindWatermark !== purgeWatermark) {
-          this.#loggedBehindWatermark = purgeWatermark;
+      if (minWatermark < backupWatermark) {
+        if (this.#loggedBehindWatermark !== minWatermark) {
+          this.#loggedBehindWatermark = minWatermark;
           this.#lc.info?.(
             `At least one client is behind backup ${backupWatermark}`,
             {watermarks: current},
@@ -1362,12 +1379,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       return;
     }
     try {
-      const {backupWatermark, purgeWatermark} = this.#getCleanupFloor();
+      const {backupWatermark, purgeWatermark, minWatermark} =
+        this.#getCleanupFloor();
       // Consume the request before starting. A backup notification that
       // arrives during this pass records another request, which is merged with
       // the continuation returned by this pass rather than being overwritten.
       this.#sqlitePurgeContinuation = undefined;
-      if (purgeWatermark < backupWatermark) {
+      if (minWatermark < backupWatermark) {
         // Live constraint changes are not edge-triggered. Keep evaluating the
         // floor until it reaches the durable backup watermark, independently
         // of whether the PG implementation still exists.

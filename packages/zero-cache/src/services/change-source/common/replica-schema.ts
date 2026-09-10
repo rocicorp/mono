@@ -14,7 +14,8 @@ import {
 } from '../../../db/sqlite-corruption.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
-  CREATE_BACKFILLING_TABLE,
+  ADD_BACKFILLING_RESUME_COLUMNS,
+  CREATE_BACKFILLING_TABLE_V17,
   populateBackfillingFromColumnMetadata,
 } from '../../replicator/schema/backfilling.ts';
 import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
@@ -343,11 +344,25 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   // forward again, so a rollback costs nothing but the re-seed.
   17: {
     migrateSchema: (_, db) => {
-      db.exec(CREATE_BACKFILLING_TABLE);
+      db.exec(CREATE_BACKFILLING_TABLE_V17);
     },
 
     migrateData: (lc, db) => {
       populateBackfillingFromColumnMetadata(lc, db);
+    },
+  },
+
+  // Resumable backfills. `mark` / `markWatermark` / `runID` record how far
+  // this replica has applied an ordered backfill run, and which run it is
+  // following; `minSnapshot` records the earliest snapshot at which a backfill
+  // of the table is still valid. See `replicator/schema/backfilling.ts`.
+  //
+  // No `minSafeVersion`: all four are nullable, and a v17 zero-cache neither
+  // reads nor writes them. Rolling back loses the marks, which costs a
+  // backfill restarted from the beginning rather than resumed.
+  18: {
+    migrateSchema: (_, db) => {
+      db.exec(ADD_BACKFILLING_RESUME_COLUMNS);
     },
   },
 };
