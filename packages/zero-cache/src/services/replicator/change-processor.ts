@@ -311,6 +311,9 @@ export class ChangeProcessor {
       case 'backfill':
         tx.processBackfill(msg);
         break;
+      case 'backfill-started':
+        // Run announcements carry no rows, and nothing here follows runs yet.
+        break;
       case 'backfill-completed':
         tx.processBackfillCompleted(msg);
         break;

@@ -4,6 +4,7 @@ import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
@@ -22,8 +23,10 @@ import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService, type Options as HttpOptions} from '../http-service.ts';
 import {handleProfzRequest} from '../profz.ts';
 import {
+  backfillDeclarationsSchema,
   downstreamSchema,
   PROTOCOL_VERSION,
+  type BackfillDeclaration,
   type ChangeStreamer,
   type ChangeStreamerService,
   type SizedDownstream,
@@ -40,6 +43,15 @@ const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
+
+/**
+ * Node's default request-header limit is 16KB, which a subscriber declaring
+ * progress on a few dozen in-flight backfills can exceed. Raised rather than
+ * paged: a request over even this limit is a schema with hundreds of tables
+ * backfilling at once, at which point the declaration belongs in a first
+ * frame on the socket rather than in the query string.
+ */
+const MAX_REQUEST_HEADER_BYTES = 64 * 1024;
 
 type Options = HttpOptions & {
   startupDelayMs: number;
@@ -59,35 +71,43 @@ export class ChangeStreamerHttpServer extends HttpService {
     parent: Worker,
     changeStreamer: ChangeStreamerService,
   ) {
-    super('change-streamer-http-server', lc, opts, async fastify => {
-      await fastify.register(websocket);
+    super(
+      'change-streamer-http-server',
+      lc,
+      // A subscriber declares its backfill progress in the subscribe request's
+      // query string, a few hundred bytes per in-flight table. Node's 16KB
+      // default would reject the request outright rather than degrade.
+      {maxRequestHeaderBytes: MAX_REQUEST_HEADER_BYTES, ...opts},
+      async fastify => {
+        await fastify.register(websocket);
 
-      fastify.get(CHANGES_PATH_PATTERN, {websocket: true}, this.#subscribe);
-      fastify.get(
-        SNAPSHOT_PATH_PATTERN,
-        {websocket: true},
-        this.#reserveSnapshot,
-      );
+        fastify.get(CHANGES_PATH_PATTERN, {websocket: true}, this.#subscribe);
+        fastify.get(
+          SNAPSHOT_PATH_PATTERN,
+          {websocket: true},
+          this.#reserveSnapshot,
+        );
 
-      fastify.get('/profz', (req, res) =>
-        handleProfzRequest(
+        fastify.get('/profz', (req, res) =>
+          handleProfzRequest(
+            lc,
+            opts.config ?? {adminPassword: undefined},
+            req,
+            res,
+            opts.getProfileWorker,
+            undefined,
+            'change-streamer',
+          ),
+        );
+
+        installWebSocketReceiver<'snapshot' | 'changes'>(
           lc,
-          opts.config ?? {adminPassword: undefined},
-          req,
-          res,
-          opts.getProfileWorker,
-          undefined,
-          'change-streamer',
-        ),
-      );
-
-      installWebSocketReceiver<'snapshot' | 'changes'>(
-        lc,
-        fastify.websocketServer,
-        this.#receiveWebsocket,
-        parent,
-      );
-    });
+          fastify.websocketServer,
+          this.#receiveWebsocket,
+          parent,
+        );
+      },
+    );
 
     this.#lc = lc;
     this.#opts = opts;
@@ -279,7 +299,20 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
     // default: the barrier falls back to polling rather than waiting on an
     // ACK that would never be attributed to a writer.
     logsChangeStream: params.getBoolean('logsChangeStream'),
+    backfills: parseBackfills(params.get('backfills', false)),
   };
+}
+
+function parseBackfills(
+  json: string | null | undefined,
+): BackfillDeclaration[] | undefined {
+  if (json === undefined || json === null || json.length === 0) {
+    return undefined;
+  }
+  // A malformed declaration is a bug in a peer, not a reason to refuse the
+  // subscription: the worst case of dropping it is that a backfill restarts
+  // from the beginning.
+  return v.parse(JSON.parse(json), backfillDeclarationsSchema);
 }
 
 function checkProtocolVersion(pathname: string): number {
@@ -304,7 +337,7 @@ function checkProtocolVersion(pathname: string): number {
 // This is called from the client-side (i.e. the replicator).
 function getParams(ctx: SubscriberContext): URLSearchParams {
   // The protocolVersion is hard-coded into the CHANGES_PATH.
-  const {protocolVersion, ...stringParams} = ctx;
+  const {protocolVersion, backfills, ...stringParams} = ctx;
   assert(
     protocolVersion === PROTOCOL_VERSION,
     `replicator should be setting protocolVersion to ${PROTOCOL_VERSION}`,
@@ -313,5 +346,6 @@ function getParams(ctx: SubscriberContext): URLSearchParams {
     ...stringParams,
     initial: ctx.initial ? 'true' : 'false',
     logsChangeStream: ctx.logsChangeStream ? 'true' : 'false',
+    ...(backfills?.length ? {backfills: JSON.stringify(backfills)} : {}),
   });
 }

@@ -116,7 +116,10 @@ class FaultyChangeSource implements ChangeSource {
 
             case 'drop-upstream-ack':
               stream.changes.cancel(
-                new Error(`injected fault: ${fault} at ${msg[2].watermark}`),
+                new Error(
+                  `injected fault: ${fault} at ` +
+                    `${msg[0] === 'status' ? msg[2].watermark : msg[0]}`,
+                ),
               );
               return;
           }

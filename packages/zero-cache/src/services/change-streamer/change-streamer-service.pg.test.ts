@@ -25,6 +25,7 @@ import type {
   Data,
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.ts';
 import {exitAfter} from '../life-cycle.ts';
 import type {LitestreamVersion} from '../litestream/metrics.ts';
 import {
@@ -84,7 +85,7 @@ describe('change-streamer/service', () => {
   let sql: PostgresDB;
   let streamer: ChangeStreamerService;
   let changes: Subscription<ChangeStreamMessage>;
-  let acks: Queue<UpstreamStatusMessage>;
+  let acks: Queue<ChangeSourceUpstream>;
   let streamerDone: Promise<void>;
   let logSink: TestLogSink;
 
@@ -255,9 +256,18 @@ describe('change-streamer/service', () => {
     expect(down).toEqual(['error', {type: 0, message: 'timed-out'}]);
   }
 
+  /** The watermark of an upstream `status` message; fails on anything else. */
+  function ackWatermark(msg: ChangeSourceUpstream): string {
+    assert(
+      msg[0] === 'status',
+      () => `expected a status message, got ${msg[0]}`,
+    );
+    return msg[2].watermark;
+  }
+
   async function expectAcks(...watermarks: string[]) {
     for (const watermark of watermarks) {
-      expect((await acks.dequeue())[2].watermark).toBe(watermark);
+      expect(ackWatermark(await acks.dequeue())).toBe(watermark);
     }
   }
 
@@ -383,7 +393,7 @@ describe('change-streamer/service', () => {
       Promise.resolve({
         initialWatermark: REPLICA_VERSION,
         changes,
-        acks: {push: (status: UpstreamStatusMessage) => acks.enqueue(status)},
+        acks: {push: (status: ChangeSourceUpstream) => acks.enqueue(status)},
       }),
     );
     streamer = await initializeStreamer(
@@ -3862,7 +3872,7 @@ describe('change-streamer/service', () => {
     async function newV5BackupStreamer() {
       await streamer.stop();
       const v5Changes = Subscription.create<ChangeStreamMessage>();
-      const v5Acks = new Queue<UpstreamStatusMessage>();
+      const v5Acks = new Queue<ChangeSourceUpstream>();
       const backupStreamer = await newBackupStreamer(
         's3://foo/bar',
         {
@@ -3893,7 +3903,7 @@ describe('change-streamer/service', () => {
     }
 
     const NO_ACK = Symbol('no-ack');
-    async function expectNoAck(v5Acks: Queue<UpstreamStatusMessage>) {
+    async function expectNoAck(v5Acks: Queue<ChangeSourceUpstream>) {
       expect(
         await v5Acks.dequeue(NO_ACK as unknown as UpstreamStatusMessage, 50),
       ).toBe(NO_ACK);
@@ -3912,7 +3922,7 @@ describe('change-streamer/service', () => {
       await expectNoAck(v5Acks);
 
       backupStreamer.trackBackupWatermark('09');
-      expect((await v5Acks.dequeue())[2].watermark).toBe('09');
+      expect(ackWatermark(await v5Acks.dequeue())).toBe('09');
 
       await backupStreamer.stop();
     });
@@ -3931,7 +3941,7 @@ describe('change-streamer/service', () => {
       // Even though the backup already reported '09', the ack should wait
       // for the pg change-log to persist the commit itself.
       await waitForChangeLog('09');
-      expect((await v5Acks.dequeue())[2].watermark).toBe('09');
+      expect(ackWatermark(await v5Acks.dequeue())).toBe('09');
 
       await backupStreamer.stop();
     });
@@ -3948,12 +3958,12 @@ describe('change-streamer/service', () => {
       // up through '09': the ack should stop there.
       await waitForChangeLog('0a');
       backupStreamer.trackBackupWatermark('09');
-      expect((await v5Acks.dequeue())[2].watermark).toBe('09');
+      expect(ackWatermark(await v5Acks.dequeue())).toBe('09');
       await expectNoAck(v5Acks);
 
       // Once the backup catches up to '0a', the second commit is acked too.
       backupStreamer.trackBackupWatermark('0a');
-      expect((await v5Acks.dequeue())[2].watermark).toBe('0a');
+      expect(ackWatermark(await v5Acks.dequeue())).toBe('0a');
 
       await backupStreamer.stop();
     });
