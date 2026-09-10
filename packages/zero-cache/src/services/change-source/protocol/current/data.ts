@@ -13,7 +13,7 @@ import * as v from '../../../../../../shared/src/valita.ts';
 import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.ts';
 import type {Satisfies} from '../../../../types/satisfies.ts';
 import {jsonObjectSchema} from './json.ts';
-import {schemaChangeTags} from './schema-change-tags.ts';
+import {backfillControlTags, schemaChangeTags} from './schema-change-tags.ts';
 
 export const beginSchema = v.object({
   tag: v.literal('begin'),
@@ -31,6 +31,15 @@ export const beginSchema = v.object({
 
   // Directs the change-streamer to skip the ACK for the corresponding commit.
   skipAck: v.boolean().optional(),
+
+  // Whether this transaction carries backfill data rather than upstream
+  // changes. A backfill transaction's version orders the stream of the
+  // replication-manager that minted it and means nothing to another one, so
+  // a subscriber commits it at a version local to its own replica rather than
+  // at the incoming version. (`skipAck` is set on the same transactions, but
+  // it directs the change-streamer rather than stating what the transaction
+  // is.)
+  backfill: v.boolean().optional(),
 });
 
 export const commitSchema = v.object({
@@ -299,6 +308,45 @@ export const backfillSchema = v.object({
   // Optionally includes the progress of the backfill operation,
   // for display purposes.
   status: downloadStatusSchema.optional(),
+
+  // The run that produced these rows. Absent from messages written by
+  // change-sources that predate resumable backfills, and from change-log
+  // entries written by them, which are replayed verbatim during catchup.
+  runID: v.string().optional(),
+
+  // The mark (see `backfill-resume.ts`) of the last row in `rowValues`: the
+  // Postgres text form of its row key values, in `relation.rowKey.columns`
+  // order. Absent when the key is not resumable or the run is not ordered,
+  // in which case subscribers hold no mark for the table and every run of it
+  // starts from the beginning.
+  lastKey: v.array(v.string()).optional(),
+});
+
+// Announces a backfill run, as the first message of the run and again
+// whenever the run is re-announced to cover a subscriber that joined late.
+//
+// A subscriber that has processed `backfill-started(R, resumeFrom)` and every
+// subsequent message of the stream holds every row of run `R` whose key sorts
+// after `resumeFrom` (all rows when it is null). That is what lets a
+// subscriber decide whether it is following a run — and therefore whether it
+// may honor the run's completion — without ever comparing keys.
+export const backfillStartedSchema = v.object({
+  tag: v.literal('backfill-started'),
+
+  relation: newRelationSchema,
+
+  // The columns being backfilled, as on `backfill`.
+  columns: v.array(v.string()),
+
+  // The watermark of the run's snapshot.
+  watermark: v.string(),
+
+  // Identifies the run. Random, and unique across replication-managers.
+  runID: v.string(),
+
+  // The mark that this announcement covers from, or null for "from the
+  // beginning", which covers every subscriber.
+  resumeFrom: v.array(v.string()).nullable(),
 });
 
 // Indicates that the backfill for the specified columns have
@@ -321,6 +369,12 @@ export const backfillCompletedSchema = v.object({
   // Optionally includes the final status of the backfill operation,
   // for display purposes.
   status: downloadStatusSchema.optional(),
+
+  // The run that completed. A subscriber honors the completion only for
+  // columns it is following in this run. Absent from messages written by
+  // change-sources that predate resumable backfills, and from change-log
+  // entries written by them, which complete unconditionally as before.
+  runID: v.string().optional(),
 });
 
 export type MessageBegin = v.Infer<typeof beginSchema>;
@@ -334,6 +388,7 @@ export type MessageDelete = v.Infer<typeof deleteSchema>;
 export type MessageTruncate = v.Infer<typeof truncateSchema>;
 
 export type MessageBackfill = v.Infer<typeof backfillSchema>;
+export type BackfillStarted = v.Infer<typeof backfillStartedSchema>;
 
 export type TableCreate = v.Infer<typeof createTableSchema>;
 export type TableRename = v.Infer<typeof renameTableSchema>;
@@ -396,11 +451,36 @@ export type SchemaChange = Satisfies<
 
 export type SchemaChangeTag = v.Infer<typeof schemaChangeTagsSchema>;
 
+/**
+ * Backfill control messages are neither data changes (they carry no rows)
+ * nor schema changes (they carry no DDL); they annotate the backfill runs
+ * that the surrounding `backfill` messages belong to. They are stored in the
+ * change log like any other change so that the change-streamer can tell,
+ * from a subscriber's catchup range, which runs it will end up following.
+ */
+export const backfillControlSchema = backfillStartedSchema;
+
+export type BackfillControl = Satisfies<
+  JSONObject,
+  v.Infer<typeof backfillControlSchema>
+>;
+
+const backfillControlTagsSchema = v.literalUnion(...backfillControlTags);
+
+export type BackfillControlTag = v.Infer<typeof backfillControlTagsSchema>;
+
 export type DataOrSchemaChange = DataChange | SchemaChange;
+
+/**
+ * Everything that can appear in a `data` message on the change stream: row
+ * changes, schema changes, and backfill control messages.
+ */
+export type StreamedChange = DataOrSchemaChange | BackfillControl;
 
 export type Change =
   | MessageBegin
   | DataOrSchemaChange
+  | BackfillControl
   | MessageCommit
   | MessageRollback;
 
@@ -416,4 +496,10 @@ const dataChangeTagSet = new Set<string>(dataChangeTags);
 
 export function isDataChange(change: Change): change is DataChange {
   return dataChangeTagSet.has(change.tag);
+}
+
+const backfillControlTagSet = new Set<string>(backfillControlTags);
+
+export function isBackfillControl(change: Change): change is BackfillControl {
+  return backfillControlTagSet.has(change.tag);
 }

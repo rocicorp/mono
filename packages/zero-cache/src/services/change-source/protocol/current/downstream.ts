@@ -1,6 +1,7 @@
 import * as v from '../../../../../../shared/src/valita.ts';
 import {resetRequiredSchema} from './control.ts';
 import {
+  backfillControlSchema,
   beginSchema,
   commitSchema,
   dataChangeSchema,
@@ -16,7 +17,7 @@ const begin = v.tuple([
 ]);
 const data = v.tuple([
   v.literal('data'),
-  v.union(dataChangeSchema, schemaChangeSchema),
+  v.union(dataChangeSchema, schemaChangeSchema, backfillControlSchema),
 ]);
 const commit = v.tuple([
   v.literal('commit'),

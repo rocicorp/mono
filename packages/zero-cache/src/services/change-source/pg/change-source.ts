@@ -652,7 +652,15 @@ export class PostgresChangeSource implements ChangeSource {
 
     return {
       changes: changes.asSource(),
-      acks: {push: status => acker.ack(status[2].watermark)},
+      acks: {
+        push: msg => {
+          // `backfill-request` messages are not acted on yet: only the status
+          // messages that ACK stored commits are.
+          if (msg[0] === 'status') {
+            acker.ack(msg[2].watermark);
+          }
+        },
+      },
     };
   }
 

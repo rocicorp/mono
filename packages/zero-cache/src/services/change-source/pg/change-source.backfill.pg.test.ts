@@ -18,7 +18,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {createChangeProcessor} from '../../replicator/test-utils.ts';
-import type {DataOrSchemaChange} from '../protocol/current/data.ts';
+import type {StreamedChange} from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
   ChangeStreamMessage,
@@ -167,8 +167,8 @@ describe.each([
 
   const BIG_TOASTABLE_VALUE = 'a'.repeat(1_000_000);
 
-  async function nextTransaction(): Promise<DataOrSchemaChange[]> {
-    const data: DataOrSchemaChange[] = [];
+  async function nextTransaction(): Promise<StreamedChange[]> {
+    const data: StreamedChange[] = [];
     for (;;) {
       const change = await downstream.dequeue('timeout', 10_000);
       if (change === 'timeout') {

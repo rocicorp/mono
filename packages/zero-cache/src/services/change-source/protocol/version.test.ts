@@ -37,13 +37,25 @@ test('protocol versions', () => {
   // Then update the version number of the `CHANGE_SOURCE_PATH`
   // in current and export it appropriately as the new version
   // in `mod.ts`.
-  // The hash last changed for the optional `commit.commitTimeMs` field, which
-  // is additive: the stream is parsed in 'passthrough' mode, so an older peer
-  // ignores the field and a newer peer treats its absence as "no commit time
-  // reported". No new version directory was needed.
-  t(current, '1vrxj3cwxp2mq', '/changes/v0/stream');
+  // The hash last changed for resumable backfills, which are additive:
+  // the `backfill-started` message, the optional `runID` / `lastKey` fields on
+  // `backfill` and `backfill-completed`, the optional `backfill` flag on
+  // `begin`, the optional resume fields on `BackfillRequest`, and the
+  // `backfill-request` upstream message. The stream is parsed in
+  // 'passthrough' mode, so an older peer ignores the new fields, and a newer
+  // peer treats their absence (including in changes replayed from the Change
+  // DB) as "backfill runs are not identified", which completes backfills
+  // unconditionally as before. A change source that does not send
+  // `backfill-started` never has a subscriber follow a run, and one that does
+  // not understand `backfill-request` ignores it (the upstream schema is a
+  // union and the custom source's sink drops anything but status), and the
+  // optional `subscriberID` on `backfill-request`, which is carried for
+  // attribution only -- no decision reads it, so a sender that omits it is
+  // answered exactly as before.
+  // No new version directory was needed.
+  t(current, 'qzxjthikh2qs', '/changes/v0/stream');
   // During initial development, we use v0 as a non-stable
   // version (i.e. breaking change are allowed). Once the
   // protocol graduates to v1, versions must be stable.
-  t(v0, '1vrxj3cwxp2mq', '/changes/v0/stream');
+  t(v0, 'qzxjthikh2qs', '/changes/v0/stream');
 });

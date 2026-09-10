@@ -2,6 +2,10 @@ import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Sized, Source} from '../../types/streams.ts';
 import {
+  backfillIDSchema,
+  tableMetadataSchema,
+} from '../change-source/protocol/current/data.ts';
+import {
   changeStreamDataSchema,
   type ChangeStreamData,
 } from '../change-source/protocol/current/downstream.ts';
@@ -103,7 +107,56 @@ export interface ChangeStreamer {
 //     field, and a newer peer treats its absence (including in changes
 //     replayed from the Change DB) as "no commit time reported".
 
-export const PROTOCOL_VERSION = 6;
+// v7:
+//   - Adds the `backfill-started` message, which announces a backfill run so
+//     that a subscriber can decide whether it is following the run without
+//     comparing row keys, and the `runID` / `lastKey` fields on `backfill` and
+//     `backfill-completed` that go with it.
+//   - Adds the `backfill` flag to `begin`, marking transactions whose version
+//     is local to the replication-manager that minted it.
+//   - Adds the `backfills` subscriber context parameter, with which a
+//     subscriber declares its progress on in-flight backfills, including
+//     opaque table metadata and column backfill IDs so that a manager can
+//     restart a backfill it has already completed.
+//   All are additive: the stream is parsed in 'passthrough' mode, `backfills`
+//   is ignored by servers that do not know it, and `backfill-started` is
+//   withheld from subscribers below v7 (see `Subscriber.supportsMessage`).
+
+export const PROTOCOL_VERSION = 7;
+
+/**
+ * A subscriber's progress on one table's in-flight backfill, sent in the
+ * subscribe request so that the change-streamer (and, if it cannot resolve
+ * them itself, the change source) can resume a run rather than restart it.
+ *
+ * The columns, mark and run are the values common to every in-flight column
+ * of the table; where the columns disagree, the differing field is null.
+ */
+export const backfillDeclarationSchema = v.object({
+  schema: v.string(),
+  table: v.string(),
+
+  /** The table's columns that are currently being backfilled. */
+  columns: v.array(v.string()),
+
+  // Preserve upstream identities even after another manager has completed
+  // the backfill and removed its cookies.
+  metadata: tableMetadataSchema.nullable().optional(),
+  backfill: v.record(backfillIDSchema).optional(),
+
+  /** How far the subscriber has applied an ordered run, if it knows. */
+  mark: v.array(v.string()).nullable(),
+
+  /** The watermark at which `mark` was recorded. */
+  markWatermark: v.string().nullable(),
+
+  /** The run the subscriber is following, if any. */
+  runID: v.string().nullable(),
+});
+
+export type BackfillDeclaration = v.Infer<typeof backfillDeclarationSchema>;
+
+export const backfillDeclarationsSchema = v.array(backfillDeclarationSchema);
 
 export type SubscriberContext = {
   /**
@@ -156,6 +209,14 @@ export type SubscriberContext = {
    * subscriber's ACK advances its head or releases its catchup barrier.
    */
   logsChangeStream: boolean;
+
+  /**
+   * The subscriber's progress on in-flight backfills, one entry per table
+   * with backfilling columns. Empty (or absent, for subscribers below
+   * protocol v7) means the subscriber declares nothing, in which case a
+   * backfill of the table restarts from the beginning.
+   */
+  backfills?: BackfillDeclaration[] | undefined;
 };
 
 /**

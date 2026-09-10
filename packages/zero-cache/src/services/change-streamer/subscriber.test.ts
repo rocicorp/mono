@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {PROTOCOL_VERSION} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {createSubscriber} from './test-utils.ts';
 
@@ -652,5 +653,83 @@ describe('change-streamer/subscriber', () => {
       expect(sub.reportChangeRate(2000, 'lagging')).toBe(0);
       expect(sub.reportChangeRate(2300, 'lagging')).toBe(300);
     });
+  });
+
+  describe('supportsMessage', () => {
+    test.each([
+      [4, 'update-table-metadata', false],
+      [5, 'update-table-metadata', true],
+      [PROTOCOL_VERSION, 'update-table-metadata', true],
+      [4, 'backfill-started', false],
+      [6, 'backfill-started', false],
+      [7, 'backfill-started', true],
+      [PROTOCOL_VERSION, 'backfill-started', true],
+      // Everything else is understood by every supported subscriber.
+      [4, 'backfill', true],
+      [4, 'backfill-completed', true],
+      [4, 'insert', true],
+    ] as [number, 'insert', boolean][])(
+      'v%s %s -> %s',
+      (protocolVersion, tag, expected) => {
+        const [sub] = createSubscriber(
+          '00',
+          true,
+          {},
+          'serving',
+          protocolVersion,
+        );
+        expect(sub.supportsMessage(tag)).toBe(expected);
+      },
+    );
+  });
+
+  test('backfill-started is withheld from a v6 subscriber', async () => {
+    const backfillStarted = json([
+      'data',
+      {
+        tag: 'backfill-started',
+        relation: {schema: 'public', name: 'issue', rowKey: {columns: ['id']}},
+        columns: ['description'],
+        watermark: '02',
+        runID: 'run-abc',
+        resumeFrom: null,
+      },
+    ]);
+    const backfill = json([
+      'data',
+      {
+        tag: 'backfill',
+        relation: {schema: 'public', name: 'issue', rowKey: {columns: ['id']}},
+        columns: ['description'],
+        watermark: '02',
+        rowValues: [['1', 'a']],
+        runID: 'run-abc',
+        lastKey: ['1'],
+      },
+    ]);
+
+    for (const [version, expectedTags] of [
+      [6, ['status', 'backfill']],
+      [7, ['status', 'backfill-started', 'backfill']],
+    ] as [number, string[]][]) {
+      const [sub, received, downstream] = createSubscriber(
+        '00',
+        true,
+        {},
+        'serving',
+        version,
+      );
+      // Not awaited: nothing consumes `downstream`, so the sends stay pending
+      // until the subscription is canceled, which hands the unconsumed
+      // messages to `received`.
+      void sub.send(['02', 'backfill-started', backfillStarted]);
+      void sub.send(['03', 'backfill', backfill]);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      downstream.cancel();
+
+      expect(
+        received.map(([, change]) => (change as {tag: string}).tag),
+      ).toEqual(expectedTags);
+    }
   });
 });
