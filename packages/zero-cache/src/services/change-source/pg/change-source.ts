@@ -29,7 +29,10 @@ import type {
   PublishedTableSpec,
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {getOrCreateCounter} from '../../../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateLatencyHistogram,
+} from '../../../observability/metrics.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
 import {
@@ -67,6 +70,7 @@ import {
 import {initReplica} from '../common/replica-schema.ts';
 import type {
   BackfillRequest,
+  Mark,
   DownstreamStatusMessage,
   JSONObject,
 } from '../protocol/current.ts';
@@ -83,6 +87,12 @@ import type {
   Data,
 } from '../protocol/current/downstream.ts';
 import type {ColumnMetadata, TableMetadata} from './backfill-metadata.ts';
+import {tableMetadataSchema} from './backfill-metadata.ts';
+import {
+  getKeyCollations,
+  isResumableKey,
+  rowsExist,
+} from './backfill-resume.ts';
 import {streamBackfill} from './backfill-stream.ts';
 import {
   initialSync,
@@ -124,9 +134,41 @@ import {validate} from './schema/validation.ts';
 
 const REPLICA_SLOT_CLEANUP_INTERVAL_MS = 30_000;
 
+// One index seek per forwarded declaration, bounded by the number of
+// subscribers that connect during a run. Charted because it is the only
+// upstream query on the path that starts a subscription.
+const rowsExistDuration = getOrCreateLatencyHistogram(
+  'replication',
+  'backfill_rows_exist_duration',
+  'Time to decide whether a declaring subscriber needs rows a running ' +
+    'backfill has already sent.',
+);
+
 interface PurgeLock {
   release(): Promise<void>;
 }
+
+/** See the `backfillResume` and `backfillResumeMinCorrelation` config. */
+export type BackfillOptions = {
+  /**
+   * Whether backfills are ordered by the row key so that a subscriber can
+   * resume one. Off by default: the correctness fixes that go with resumable
+   * backfills -- the column guard, the run-following rule, and replica-local
+   * backfill versions -- are unconditional and do not depend on this.
+   */
+  resume?: boolean | undefined;
+
+  /** The heap-correlation gate; see `backfill-resume.ts`. */
+  minKeyCorrelation?: number | undefined;
+
+  /**
+   * The number of backfill bytes after which the manager commits and reopens
+   * its transaction. Defaults to the manager's own threshold; overridden in
+   * tests that need a run to span more than one transaction without moving
+   * megabytes to get there.
+   */
+  commitThresholdBytes?: number | undefined;
+};
 
 /**
  * Initializes a Postgres change source, including the initial sync of the
@@ -145,6 +187,7 @@ export async function initializePostgresChangeSource(
   {backupV5}: ReplicaOptions = {backupV5: true},
   purgeLock?: PurgeLock | null,
   streamInboundTimeoutMs?: number | undefined,
+  backfillOptions: BackfillOptions = {},
 ): Promise<InitializeResult> {
   const db = await connectPgClient(lc, upstreamURI, 'change-source-init');
   try {
@@ -221,6 +264,7 @@ export async function initializePostgresChangeSource(
       lagReportIntervalMs,
       syncOptions.textCopy,
       streamInboundTimeoutMs,
+      backfillOptions,
     );
 
     const destinationBackupURL =
@@ -384,6 +428,7 @@ export class PostgresChangeSource implements ChangeSource {
   readonly #context: ServerContext;
   readonly #lagReporter: LagReporter | null;
   readonly #textCopy: boolean;
+  readonly #backfillOptions: BackfillOptions;
   readonly #streamInboundTimeoutMs: number | undefined;
   readonly #subscribe: typeof subscribe;
   readonly #streamBackfill: typeof streamBackfill;
@@ -399,6 +444,7 @@ export class PostgresChangeSource implements ChangeSource {
     lagReportIntervalMs: number,
     textCopy?: boolean | undefined,
     streamInboundTimeoutMs?: number | undefined,
+    backfillOptions: BackfillOptions = {},
     // Injectable dependencies, overridable in tests. Default to the production
     // implementations.
     deps: {
@@ -420,6 +466,7 @@ export class PostgresChangeSource implements ChangeSource {
     this.#backupOptions = backupOptions;
     this.#context = context;
     this.#textCopy = textCopy ?? false;
+    this.#backfillOptions = backfillOptions;
     this.#streamInboundTimeoutMs = streamInboundTimeoutMs;
     this.#lagReporter =
       lagReportIntervalMs > 0
@@ -512,10 +559,20 @@ export class PostgresChangeSource implements ChangeSource {
     // the main replication stream and backfill streams initiated by the
     // BackfillManager.
     const changes = new ChangeStreamMultiplexer(this.#lc, clientWatermark);
-    const backfillManager = new BackfillManager(this.#lc, changes, req =>
-      this.#streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
-        textCopy: this.#textCopy,
-      }),
+    const backfillManager = new BackfillManager(
+      this.#lc,
+      changes,
+      req =>
+        this.#streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
+          textCopy: this.#textCopy,
+          resume: this.#backfillOptions.resume ?? false,
+          minKeyCorrelation: this.#backfillOptions.minKeyCorrelation,
+        }),
+      (req, from, to) => this.#rowsExistUpstream(req, from, to),
+      undefined,
+      undefined,
+      undefined,
+      this.#backfillOptions.commitThresholdBytes,
     );
     changes
       .addProducers(messages, backfillManager)
@@ -654,14 +711,67 @@ export class PostgresChangeSource implements ChangeSource {
       changes: changes.asSource(),
       acks: {
         push: msg => {
-          // `backfill-request` messages are not acted on yet: only the status
-          // messages that ACK stored commits are.
           if (msg[0] === 'status') {
             acker.ack(msg[2].watermark);
+          } else {
+            // A subscriber's declared backfill progress, forwarded by the
+            // change-streamer because it could not resolve it from its own
+            // change log. Handled asynchronously (it may query upstream); a
+            // failure costs a backfill that restarts rather than resumes.
+            void backfillManager
+              .onBackfillRequest(msg)
+              .catch(e =>
+                this.#lc.warn?.(`error handling a backfill request`, e),
+              );
           }
         },
       },
     };
+  }
+
+  /**
+   * Answers the manager's only question about a declaring subscriber: are
+   * there rows of the table with a key in `(from, to]`, i.e. rows the running
+   * run has already sent that the subscriber does not have?
+   *
+   * Resolved against the current schema rather than the run's snapshot: the
+   * question is about which rows exist now, and an index seek on the live
+   * table is what makes it cheap. A row key that is not resumable, or a table
+   * that has been renamed or dropped since, answers "yes", which restarts the
+   * run -- the safe direction.
+   */
+  async #rowsExistUpstream(
+    req: BackfillRequest,
+    from: Mark | null,
+    to: Mark,
+  ): Promise<boolean> {
+    const {tables} = await getPublicationInfo(this.#db, [
+      ...this.#replica.publications,
+    ]);
+    const spec = tables.find(
+      t => t.schema === req.table.schema && t.name === req.table.name,
+    );
+    if (!spec) {
+      return true; // renamed or dropped; restart rather than resume
+    }
+    const meta = v.parse(req.table.metadata, tableMetadataSchema);
+    const rowKeyCols = Object.keys(meta.rowKey);
+    const collations = await getKeyCollations(this.#db, spec.oid, rowKeyCols);
+    const keySpecs = rowKeyCols.map(col => ({
+      ...spec.columns[col],
+      collationIsDeterministic: collations.get(col) ?? null,
+    }));
+    if (!isResumableKey(keySpecs)) {
+      return true;
+    }
+    const start = performance.now();
+    try {
+      return await rowsExist(this.#db, spec, rowKeyCols, keySpecs, from, to);
+    } finally {
+      rowsExistDuration.recordMs(performance.now() - start, {
+        table: req.table.name,
+      });
+    }
   }
 
   async #logCurrentReplicaInfo() {

@@ -5,16 +5,21 @@ import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {randInt} from '../../../../../shared/src/rand.ts';
+import {getOrCreateCounter} from '../../../observability/metrics.ts';
 import {JSON_STRINGIFIED, type JSONFormat} from '../../../types/lite.ts';
 import {
   stateVersionFromString,
   stateVersionToString,
 } from '../../../types/state-version.ts';
+import {isRowKeyChange} from '../../replicator/change-log-cookies.ts';
 import type {
   BackfillCompleted,
   BackfillRequest,
+  BackfillRequestMessage,
+  BackfillStarted,
   ChangeStreamMessage,
   Identifier,
+  Mark,
   MessageBackfill,
 } from '../protocol/current.ts';
 import type {
@@ -34,13 +39,48 @@ function tableKey({schema, name}: Identifier) {
  * reopening once {@link COMMIT_THRESHOLD_BYTES} is reached.
  */
 export type BackfillMessage = {
-  message: MessageBackfill | BackfillCompleted;
+  message: BackfillStarted | MessageBackfill | BackfillCompleted;
   byteSize: number;
 };
 
 type BackfillStreamer = (
   req: BackfillRequest,
 ) => AsyncGenerator<BackfillMessage>;
+
+/**
+ * Asks Postgres whether any row of the table has a key in `(from, to]`, under
+ * the table's publication row filter. `from === null` means "from the
+ * beginning".
+ *
+ * This is the only key comparison outside the backfill COPY itself, and it
+ * answers the only question the manager has about a declaring subscriber:
+ * does it need rows this run has already sent?
+ */
+export type RowsExist = (
+  req: BackfillRequest,
+  from: Mark | null,
+  to: Mark,
+) => Promise<boolean>;
+
+/**
+ * A backfill the manager owes, and everything it knows about resuming it.
+ *
+ * `minWatermark` lives here rather than on the running state so that a row key
+ * change on a table whose run is not currently active is not forgotten.
+ */
+type RequiredBackfill = {
+  request: BackfillRequest;
+
+  /**
+   * The version of the most recent row-key-changing update on the table. A
+   * run snapshotted before it is canceled; a mark recorded before it is
+   * dropped.
+   */
+  minWatermark: string;
+
+  /** Where the next run of this table should start. */
+  resumeFrom: Mark | null;
+};
 
 /**
  * Commit (and reopen) the current backfill transaction once this many bytes of
@@ -53,7 +93,45 @@ type RunningBackfillState = {
   request: BackfillRequest;
   canceledReason?: string | undefined;
   minWatermark: string;
+
+  /** Set from the run's own announcement, once it has been pushed. */
+  announcement?: BackfillStarted | undefined;
+
+  /**
+   * The mark of the last `backfill` message pushed, i.e. how far the run has
+   * got. Absent for an unordered run, which produces no marks.
+   */
+  lastMark?: Mark | undefined;
+
+  /**
+   * Re-announcements to push before the run's next message. Draining them
+   * here rather than pushing them directly is what keeps them ordered with
+   * the run's rows, which is the whole of what makes an announcement mean
+   * anything.
+   */
+  readonly pendingAnnouncements: BackfillStarted[];
 };
+
+// The backfill run counters of the resumable-backfills rollout. A restart is
+// the cost of a subscriber that needs rows a run has passed; a re-announcement
+// is the same situation resolved for free.
+const runs = getOrCreateCounter(
+  'replication',
+  'backfill_runs',
+  'Backfill runs started, by whether they started from the beginning or ' +
+    'resumed from a mark.',
+);
+const restarts = getOrCreateCounter(
+  'replication',
+  'backfill_restarts',
+  'Backfill runs canceled and restarted, by what made them restart.',
+);
+const reannouncements = getOrCreateCounter(
+  'replication',
+  'backfill_reannouncements',
+  'Run announcements re-emitted to cover a subscriber whose mark the run ' +
+    'had already passed, which costs no rows.',
+);
 
 const MIN_BACKOFF_INTERVAL_MS = 2_000;
 const MAX_BACKOFF_INTERVAL_MS = 60_000;
@@ -86,11 +164,12 @@ export class BackfillManager implements Cancelable, Listener {
    * Tracks the metadata of required backfills based on schema changes
    * and initial backfill requests.
    */
-  readonly #requiredBackfills = new CustomKeyMap<Identifier, BackfillRequest>(
+  readonly #requiredBackfills = new CustomKeyMap<Identifier, RequiredBackfill>(
     tableKey,
   );
   readonly #changeStreamer: ChangeStreamMultiplexer;
   readonly #backfillStreamer: BackfillStreamer;
+  readonly #rowsExist: RowsExist;
   readonly #jsonFormat: JSONFormat;
 
   /**
@@ -118,19 +197,21 @@ export class BackfillManager implements Cancelable, Listener {
     lc: LogContext,
     changeStreamer: ChangeStreamMultiplexer,
     backfillStreamer: BackfillStreamer,
+    rowsExist: RowsExist = () => Promise.resolve(true),
     jsonFormat: JSONFormat = JSON_STRINGIFIED,
     minBackoffMs = MIN_BACKOFF_INTERVAL_MS,
     maxBackoffMs = MAX_BACKOFF_INTERVAL_MS,
-    commitThresholdBytes = COMMIT_THRESHOLD_BYTES,
+    commitThresholdBytes: number | undefined = COMMIT_THRESHOLD_BYTES,
   ) {
     this.#lc = lc.withContext('component', 'backfill-manager');
     this.#changeStreamer = changeStreamer;
     this.#backfillStreamer = backfillStreamer;
+    this.#rowsExist = rowsExist;
     this.#jsonFormat = jsonFormat;
     this.#minBackoffMs = minBackoffMs;
     this.#maxBackoffMs = maxBackoffMs;
     this.#retryDelayMs = minBackoffMs;
-    this.#commitThresholdBytes = commitThresholdBytes;
+    this.#commitThresholdBytes = commitThresholdBytes ?? COMMIT_THRESHOLD_BYTES;
   }
 
   run(lastWatermark: string, initialRequests: BackfillRequest[]) {
@@ -193,8 +274,18 @@ export class BackfillManager implements Cancelable, Listener {
       // simpler that adding logic to classify (and declassify)
       // problematic backfills.
       const candidates = [...this.#requiredBackfills.values()];
-      const request = candidates[randInt(0, candidates.length - 1)];
-      const state = {request, minWatermark: ''};
+      const entry = candidates[randInt(0, candidates.length - 1)];
+
+      const request: BackfillRequest = {
+        ...entry.request,
+        resumeFrom: entry.resumeFrom,
+        minSnapshot: entry.minWatermark || null,
+      };
+      const state: RunningBackfillState = {
+        request,
+        minWatermark: entry.minWatermark,
+        pendingAnnouncements: [],
+      };
       const lc = this.#lc.withContext('table', request.table.name);
 
       this.#runningBackfill = state;
@@ -242,19 +333,21 @@ export class BackfillManager implements Cancelable, Listener {
      * @returns the new tx watermark, or null if backfill was cancelled
      */
     const beginTxFor = async (
-      msg: MessageBackfill | BackfillCompleted,
+      msg: BackfillMessage['message'],
     ): Promise<string | null> => {
       assert(backfillTx === null, 'Expected no active backfill transaction');
       const lastWatermark = await changeStream.reserve('backfill');
 
       // After obtaining the changeStream reservation, check if the stream
       // had changes that resulted in invalidating / canceling this backfill.
-      if (
-        state.canceledReason ||
-        (msg.tag === 'backfill' && msg.watermark < state.minWatermark)
-      ) {
+      // A run announcement is checked like a batch of rows: it commits the
+      // run's snapshot, so a snapshot that predates a row key change is
+      // canceled before it is announced.
+      const staleSnapshot =
+        (msg.tag === 'backfill' || msg.tag === 'backfill-started') &&
+        msg.watermark < state.minWatermark;
+      if (state.canceledReason || staleSnapshot) {
         if (state.canceledReason === undefined) {
-          assert(msg.tag === 'backfill', 'Expected backfill message tag'); // TypeScript should have figured this out.
           this.#stopRunningBackfill(
             `row key change at ${state.minWatermark} ` +
               `postdates backfill watermark at ${msg.watermark}`,
@@ -282,7 +375,9 @@ export class BackfillManager implements Cancelable, Listener {
 
       void changeStream.push([
         'begin',
-        {tag: 'begin', json: this.#jsonFormat, skipAck: true},
+        // `backfill` tells the replicator that `tx` orders this manager's
+        // stream only, so it commits the transaction at a replica-local version.
+        {tag: 'begin', json: this.#jsonFormat, skipAck: true, backfill: true},
         {commitWatermark: tx},
       ]);
       return (backfillTx = tx);
@@ -299,6 +394,28 @@ export class BackfillManager implements Cancelable, Listener {
       }
       backfillTx = null;
       uncommittedBytes = 0;
+    };
+
+    /**
+     * Pushes a message into the backfill transaction, opening one if
+     * necessary. Returns the transaction's watermark, or null if the backfill
+     * was canceled. (The watermark is returned rather than assigned so that
+     * `backfillTx` is only ever assigned in the loop below, where the
+     * narrowing that the commit checks depend on can see it.)
+     */
+    const pushMessage = async (
+      msg: BackfillMessage['message'],
+      byteSize: number,
+    ): Promise<string | null> => {
+      const tx = backfillTx ?? (await beginTxFor(msg));
+      if (tx === null) {
+        return null;
+      }
+      // `await` to allow the change streamer to exert back pressure
+      // on backfills.
+      await changeStream.push(['data', msg]);
+      uncommittedBytes += byteSize;
+      return tx;
     };
 
     for await (const {message: msg, byteSize} of this.#backfillStreamer(
@@ -341,8 +458,24 @@ export class BackfillManager implements Cancelable, Listener {
         throw new MissingRowKeyError(state.request);
       }
 
-      // Reserve the changeStreamer if not in a transaction.
-      if ((backfillTx ??= await beginTxFor(msg)) === null) {
+      // Re-announcements are pushed here, and not from
+      // `onBackfillRequest()`, so that they are ordered with the run's rows:
+      // "anyone at this mark is covered from here" is a statement about a
+      // position in the stream, and means nothing out of order with it.
+      for (const announcement of state.pendingAnnouncements.splice(0)) {
+        backfillTx = await pushMessage(announcement, 0);
+        if (backfillTx === null) {
+          lc.info?.(
+            `backfill stream canceled: ${state.canceledReason}`,
+            state.request,
+          );
+          this.#checkAndStartBackfill();
+          return;
+        }
+      }
+
+      backfillTx = await pushMessage(msg, byteSize);
+      if (backfillTx === null) {
         lc.info?.(
           `backfill stream canceled: ${state.canceledReason}`,
           state.request,
@@ -351,15 +484,190 @@ export class BackfillManager implements Cancelable, Listener {
         return; // this backfill is canceled
       }
 
-      // `await` to allow the change streamer to exert back pressure
-      // on backfills.
-      await changeStream.push(['data', msg]);
-      uncommittedBytes += byteSize;
+      // Recorded after the push, so that `lastMark` is never ahead of what
+      // subscribers have been sent.
+      if (msg.tag === 'backfill-started') {
+        state.announcement = msg;
+        const start = msg.resumeFrom === null ? 'zero' : 'resumed';
+        runs.add(1, {start, table: msg.relation.name});
+        // The one line that says which run is on the wire and where it picked
+        // up. `backfillRun` is structured because everything downstream of it
+        // -- the soak harness included -- wants the fields, not the prose.
+        lc.info?.(
+          `run ${msg.runID} of ${msg.relation.name} is streaming from ` +
+            `${
+              msg.resumeFrom === null
+                ? 'the beginning'
+                : JSON.stringify(msg.resumeFrom)
+            }`,
+          {
+            backfillRun: {
+              runID: msg.runID,
+              schema: msg.relation.schema,
+              table: msg.relation.name,
+              columns: msg.columns,
+              start,
+              resumeFrom: msg.resumeFrom,
+              snapshot: msg.watermark,
+            },
+          },
+        );
+      } else if (msg.tag === 'backfill' && msg.lastKey !== undefined) {
+        state.lastMark = msg.lastKey;
+      }
     }
 
     // Flush any final tx and release the stream.
     backfillTx && commitTx();
     lc.debug?.(`backfill stream exited`, state.canceledReason ?? '');
+  }
+
+  /**
+   * Handles a subscriber's declared progress on a backfill, forwarded by the
+   * change-streamer because it could not resolve it from its own change log:
+   * either the subscriber needs rows a running run has already sent, or it
+   * needs a table this session has already finished.
+   *
+   * Everything here is decided without ordering keys outside Postgres: a mark
+   * is compared for equality, or handed to {@link RowsExist}.
+   */
+  async onBackfillRequest(message: BackfillRequestMessage): Promise<void> {
+    const [
+      ,
+      {table, columns, mark: declared, markWatermark, runID, subscriberID},
+    ] = message;
+    // On the context rather than at each site: every decision this method
+    // logs -- a restart above all -- is about one subscriber's declaration,
+    // and naming it is what makes a restart attributable after the fact.
+    const lc = this.#lc
+      .withContext('table', table.name)
+      .withContext('declaredBy', subscriberID ?? 'unknown');
+    let entry = this.#requiredBackfills.get(table);
+
+    // A mark recorded at a snapshot older than a row key change on the table
+    // cannot be resumed from: a row whose key moved from above it to below it
+    // was sent by neither the run that passed it nor a run resumed after it.
+    let mark = declared;
+    if (
+      mark !== null &&
+      entry !== undefined &&
+      (markWatermark ?? '') < entry.minWatermark
+    ) {
+      lc.info?.(
+        `dropping a mark taken at ${markWatermark}, which predates the row ` +
+          `key change at ${entry.minWatermark}`,
+      );
+      mark = null;
+    }
+
+    if (entry === undefined) {
+      // Scenario B: this session already finished the table, so it has no
+      // `minSnapshot` for it -- the cookie row is gone -- and cannot tell
+      // whether the declared mark is still safe. Rather than scan the log for
+      // key changes on a table it has forgotten, it starts from the
+      // beginning. Every other subscriber ignores the resulting rows through
+      // the column guard.
+      lc.info?.(
+        `adding a backfill for a table this session already finished; ` +
+          `it will run from the beginning`,
+        {columns: Object.keys(columns)},
+      );
+      this.#setRequiredBackfill('backfill-request', {
+        table,
+        columns,
+        resumeFrom: null,
+      });
+      entry = must(this.#requiredBackfills.get(table));
+      mark = null;
+    }
+
+    const running = this.#backfillRunningFor(table);
+    if (running === null) {
+      // No run to compare against, so the next one has to cover both this
+      // subscriber and whatever the entry was already going to start from.
+      // Equal marks cost nothing; different ones cannot be ordered here, so
+      // the run starts from the beginning, which covers both.
+      // The next run has to cover this subscriber as well as whatever it was
+      // already going to start from. A mark equal to the pending start covers
+      // both -- which is the common case, since a fleet restoring from one
+      // backup declares one mark, and a restarted manager seeds the pending
+      // start from its own replica's. Anything else cannot be ordered
+      // outside Postgres, so the run starts from the beginning, which covers
+      // everyone. (Starting from the declared mark instead would be a
+      // regression in coverage for any subscriber that has no mark at all.)
+      if (
+        entry.resumeFrom !== null &&
+        JSON.stringify(entry.resumeFrom) !== JSON.stringify(mark)
+      ) {
+        lc.info?.(
+          `the next run of ${table.name} will start from the beginning`,
+          {declared: mark, wouldHaveResumedFrom: entry.resumeFrom},
+        );
+        entry.resumeFrom = null;
+      }
+      this.#checkAndStartBackfill();
+      return;
+    }
+
+    if (runID !== null && runID === running.announcement?.runID) {
+      lc.debug?.(`subscriber is already following run ${runID}`);
+      return; // nothing to do: it has everything the run has sent
+    }
+
+    const {lastMark} = running;
+    if (lastMark === undefined) {
+      // An unordered run produces no marks, so there is no way to say "anyone
+      // at `mark` is covered from here". Restart from the beginning, which
+      // covers everyone.
+      this.#restartRun(lc, entry, running, null, 'declaration');
+      return;
+    }
+
+    // Does this subscriber need rows the run has already passed?
+    let needed: boolean;
+    try {
+      needed = await this.#rowsExist(running.request, mark, lastMark);
+    } catch (e) {
+      lc.warn?.(`error checking for rows the run has passed`, e);
+      // Restarting is the safe answer: it re-sends rows the subscriber may
+      // already have, which the column guard and the following rule make
+      // harmless.
+      needed = true;
+    }
+    if (this.#backfillRunningFor(table) !== running) {
+      return; // the run ended or was canceled while the query was in flight
+    }
+
+    if (needed) {
+      this.#restartRun(lc, entry, running, mark, 'declaration');
+      return;
+    }
+
+    // The run has sent nothing this subscriber needs, so it can be told that
+    // everything after its mark is covered from here on. Re-announcing costs
+    // no rows and leaves existing followers alone: they are already
+    // following this run, and the rule keeps them following it.
+    const announcement = must(running.announcement);
+    lc.info?.(`re-announcing run ${announcement.runID} from the mark`, {mark});
+    running.pendingAnnouncements.push({...announcement, resumeFrom: mark});
+    reannouncements.add(1, {table: table.name});
+  }
+
+  #restartRun(
+    lc: LogContext,
+    entry: RequiredBackfill,
+    running: RunningBackfillState,
+    resumeFrom: Mark | null,
+    reason: 'declaration' | 'key-change',
+  ) {
+    entry.resumeFrom = resumeFrom;
+    lc.info?.(
+      `restarting the backfill of ${entry.request.table.name} from ` +
+        `${resumeFrom === null ? 'the beginning' : JSON.stringify(resumeFrom)}`,
+    );
+    restarts.add(1, {reason, table: entry.request.table.name});
+    this.#stopRunningBackfill(`restarting from a subscriber's mark`, running);
+    this.#checkAndStartBackfill();
   }
 
   #backfillRunningFor(table: Identifier): RunningBackfillState | null {
@@ -386,16 +694,27 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   #setRequiredBackfill(source: string, req: BackfillRequest) {
-    const action = this.#requiredBackfills.has(req.table) ? 'updated' : 'added';
+    const existing = this.#requiredBackfills.get(req.table);
+    const action = existing ? 'updated' : 'added';
     this.#lc.info?.(`Backfill ${action}: ${source}`, {backfill: req});
-    this.#requiredBackfills.set(req.table, req);
+    this.#requiredBackfills.set(req.table, {
+      // The resume state of a table survives its request being updated (a
+      // rename, a metadata change, a column added or dropped): none of those
+      // move any row, so none of them invalidate a mark.
+      minWatermark: existing?.minWatermark ?? req.minSnapshot ?? '',
+      resumeFrom: existing?.resumeFrom ?? req.resumeFrom ?? null,
+      ...existing,
+      request: req,
+    });
   }
 
   #deleteRequiredBackfill(source: string, id: Identifier) {
-    const req = this.#requiredBackfills.get(id);
-    if (req) {
+    const entry = this.#requiredBackfills.get(id);
+    if (entry) {
       const action = source === 'backfill-completed' ? 'completed' : 'dropped';
-      this.#lc.info?.(`Backfill ${action}: ${source}`, {backfill: req});
+      this.#lc.info?.(`Backfill ${action}: ${source}`, {
+        backfill: entry.request,
+      });
       this.#requiredBackfills.delete(id);
     }
   }
@@ -429,7 +748,7 @@ export class BackfillManager implements Cancelable, Listener {
     switch (tag) {
       case 'update-table-metadata': {
         const {table, new: metadata} = change;
-        const backfillRequest = this.#requiredBackfills.get(table);
+        const backfillRequest = this.#requiredBackfills.get(table)?.request;
         if (backfillRequest) {
           this.#setRequiredBackfill(tag, {
             ...backfillRequest,
@@ -458,7 +777,7 @@ export class BackfillManager implements Cancelable, Listener {
       }
       case 'rename-table': {
         const {old, new: newTable} = change;
-        const backfillRequest = this.#requiredBackfills.get(old);
+        const backfillRequest = this.#requiredBackfills.get(old)?.request;
         if (backfillRequest) {
           const {schema, name} = newTable;
           this.#deleteRequiredBackfill(tag, old);
@@ -474,7 +793,7 @@ export class BackfillManager implements Cancelable, Listener {
       }
       case 'drop-table': {
         const {id} = change;
-        const backfillRequest = this.#requiredBackfills.get(id);
+        const backfillRequest = this.#requiredBackfills.get(id)?.request;
         if (backfillRequest) {
           this.#deleteRequiredBackfill(tag, id);
           if (this.#backfillRunningFor(id)) {
@@ -491,7 +810,7 @@ export class BackfillManager implements Cancelable, Listener {
           backfill,
         } = change;
         if (backfill) {
-          const backfillRequest = this.#requiredBackfills.get(table);
+          const backfillRequest = this.#requiredBackfills.get(table)?.request;
           if (!backfillRequest) {
             this.#setRequiredBackfill(tag, {
               table: {...table, metadata},
@@ -520,7 +839,7 @@ export class BackfillManager implements Cancelable, Listener {
           new: {name: newName},
         } = change;
         if (oldName !== newName) {
-          const backfillRequest = this.#requiredBackfills.get(table);
+          const backfillRequest = this.#requiredBackfills.get(table)?.request;
           if (backfillRequest && oldName in backfillRequest.columns) {
             const {[oldName]: colSpec, ...otherCols} = backfillRequest.columns;
             this.#setRequiredBackfill(tag, {
@@ -537,7 +856,7 @@ export class BackfillManager implements Cancelable, Listener {
       }
       case 'drop-column': {
         const {table, column} = change;
-        const backfillRequest = this.#requiredBackfills.get(table);
+        const backfillRequest = this.#requiredBackfills.get(table)?.request;
         if (backfillRequest && column in backfillRequest.columns) {
           const {[column]: _excluded, ...remaining} = backfillRequest.columns;
           if (Object.keys(remaining).length === 0) {
@@ -556,35 +875,41 @@ export class BackfillManager implements Cancelable, Listener {
         break;
       }
       case 'update': {
-        const {relation, key, new: row} = change;
-        const backfill = this.#backfillRunningFor(relation);
+        // A corner case that backfill is unable to correctly handle is when a
+        // row's key changes; this is decomposed into a delete of the old key
+        // and a set of the new key in the replica change log, at which point
+        // the backfill algorithm assumes that the (old) row is deleted but
+        // does not know to backfill the new row. The current backfill is
+        // canceled and retried if its version precedes this update, and no
+        // mark taken before it can be resumed from.
+        if (!isRowKeyChange(change)) {
+          break;
+        }
+        const {relation} = change;
         const txWatermark = must(this.#currentTxWatermark, `not in a tx`);
-        if (backfill?.request.table.metadata && key !== null) {
-          // A corner case that backfill is unable to correctly handle is
-          // when a row's key changes; this is decomposed into a delete
-          // of the old key and a set of the new key in the replica change
-          // log, at which point the backfill algorithm assumes that the
-          // (old) row is deleted but does not know to backfill the new row.
-          // In these corner cases, the current backfill is canceled and
-          // retried if its version precedes this update.
-          for (const col of Object.keys(
-            backfill.request.table.metadata.rowKey,
-          )) {
-            if (key[col] !== row[col]) {
-              backfill.minWatermark = txWatermark;
-              this.#lc.info?.(
-                `key for row as changed (col: ${col}). ` +
-                  `backfill data must not predate ${backfill.minWatermark}`,
-              );
-              break;
-            }
-          }
+        // Recorded on the required entry rather than only on the running
+        // state, so that a key change on a table whose run is not currently
+        // active is not forgotten -- and so that a mark declared later, from
+        // a snapshot older than this, is dropped rather than resumed from.
+        const entry = this.#requiredBackfills.get(relation);
+        if (entry) {
+          entry.minWatermark = txWatermark;
+          entry.resumeFrom = null;
+        }
+        const backfill = this.#backfillRunningFor(relation);
+        if (backfill) {
+          backfill.minWatermark = txWatermark;
+          this.#lc.info?.(
+            `key for row has changed. ` +
+              `backfill data must not predate ${txWatermark}`,
+          );
+          restarts.add(1, {reason: 'key-change', table: relation.name});
         }
         break;
       }
       case 'backfill-completed': {
         const {relation, columns} = change;
-        const backfillRequest = this.#requiredBackfills.get(relation);
+        const backfillRequest = this.#requiredBackfills.get(relation)?.request;
         assert(
           backfillRequest,
           () => `No BackfillRequest completed backfill ${stringify(change)}`,

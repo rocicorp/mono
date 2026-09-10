@@ -87,6 +87,7 @@ test('a non-transactional foreign-shard message does not interrupt a running bac
     0, // lagReportIntervalMs: no LagReporter
     false,
     undefined,
+    {},
     {
       subscribe: () => Promise.resolve({messages, acks}),
       streamBackfill: () => backfillStream[Symbol.asyncIterator](),
