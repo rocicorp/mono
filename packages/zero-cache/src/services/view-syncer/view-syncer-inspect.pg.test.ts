@@ -32,6 +32,7 @@ import {
   nextPoke,
   permissions,
   permissionsAll,
+  restartViewSyncer,
   serviceID,
   setup,
   TEST_ADMIN_PASSWORD,
@@ -89,6 +90,9 @@ describe('view-syncer/service', () => {
   let delegate: InspectorDelegate;
   let customQueryTransformer: CustomQueryTransformer | undefined;
   let clearMocks: () => void;
+  let databaseStorage: Awaited<ReturnType<typeof setup>>['databaseStorage'];
+  let config: Awaited<ReturnType<typeof setup>>['config'];
+  let setTimeoutFn: Awaited<ReturnType<typeof setup>>['setTimeoutFn'];
 
   beforeEach<PgTest>(async ({testDBs}) => {
     ({
@@ -103,6 +107,9 @@ describe('view-syncer/service', () => {
       inspectorDelegate: delegate,
       customQueryTransformer,
       clearMocks,
+      databaseStorage,
+      config,
+      setTimeoutFn,
     } = await setup(testDBs, 'view_syncer_inspect_test', permissionsAll, {
       queryFetchMode: 'empty-validation',
     }));
@@ -165,6 +172,52 @@ describe('view-syncer/service', () => {
         },
       },
     ]);
+  });
+
+  test('unchanged queries rehydrated on restart are recorded by query id', async () => {
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desired queries
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // hydrated
+    const ast = delegate.getASTForQuery('query-hash1');
+    expect(ast).toBeDefined();
+
+    await vs.stop();
+    await viewSyncerDone;
+
+    // A fresh view-syncer (with a fresh InspectorDelegate) rehydrates the
+    // gotten query as an unchanged query, which is a different code path
+    // from the initial hydration.
+    const restarted = restartViewSyncer({
+      databaseStorage,
+      replicaDbFile,
+      cvrDB,
+      config,
+      customQueryTransformer,
+      setTimeoutFn,
+    });
+    try {
+      restarted.connect({...SYNC_CONTEXT, wsID: 'ws2'}, []);
+      restarted.stateChanges.push({state: 'version-ready'});
+
+      // The inspector looks up ASTs and metrics by query id.
+      await vi.waitFor(
+        () => {
+          expect(
+            restarted.inspectorDelegate.getASTForQuery('query-hash1'),
+          ).toEqual(ast);
+        },
+        {timeout: 5_000},
+      );
+      expect(
+        restarted.inspectorDelegate.getMetricsJSONForQuery('query-hash1'),
+      ).toMatchObject({'query-hydration-server-ms': expect.any(Number)});
+    } finally {
+      await restarted.vs.stop();
+      await restarted.viewSyncerDone;
+    }
   });
 
   test('inspect queries sharing a transformationHash have metrics per query id', async () => {
