@@ -8,7 +8,7 @@
 // failure means the replica disagrees with Postgres, not that it disagrees
 // with a paraphrase.
 //
-// Two properties, from plans/resumable-backfills-plan.md section 4:
+// Two safety properties, from plans/resumable-backfills-plan.md section 4:
 //
 //   never stale  -- a backfilled column is either still empty or holds the
 //                   current upstream value. A run whose snapshot predates a
@@ -19,10 +19,25 @@
 //                   received publishes a column that is silently, permanently
 //                   half empty (invariant 4).
 //
+// And one liveness property, which neither of those can see: a replica that
+// stops following every run is never stale and never half.
+//
+//   completes    -- once the interleaving stops, and the subscriber stays with
+//                   a manager that honors its backfill requests, the backfill
+//                   completes.
+//
+// That puts the change-streamer's declaration tracker in the loop. It sees
+// exactly what the replica sees, and its requests are the only way a replica
+// that cannot follow a run gets one it can. The subscriber connects before the
+// table exists and declares nothing, so the backfill it tracks is one that the
+// stream itself started.
+//
 // Everything the generator emits is *manager-legal*: a run sends every row
-// after its resume point, in key order, before it completes. What varies is
+// after its resume point, in key order, before it completes, and a run that
+// resumes another picks up after a batch that run really sent. What varies is
 // which of those messages this subscriber sees -- which is what moving
-// between replication-managers mid-run actually does to it.
+// between replication-managers mid-run, or catching up on a change log
+// seeded above where it was, actually does to it.
 
 import type {LogContext} from '@rocicorp/logger';
 import fc from 'fast-check';
@@ -31,14 +46,21 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
+import {schemaVersionMigrationMap} from '../change-source/common/replica-schema.ts';
 import type {
   BackfillCompleted,
   BackfillStarted,
   MessageBackfill,
   StreamedChange,
 } from '../change-source/protocol/current/data.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {BackfillRequestMessage} from '../change-source/protocol/current/upstream.ts';
+import {BackfillDeclarations} from '../change-streamer/backfill-declarations.ts';
 import {ChangeProcessor} from './change-processor.ts';
-import {BACKFILLING_TABLE} from './schema/backfilling.ts';
+import {
+  BACKFILLING_TABLE,
+  readBackfillDeclarations,
+} from './schema/backfilling.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 
@@ -57,10 +79,27 @@ const relation: BackfillStarted['relation'] = {
 /** What the generator may emit. Illegal steps are skipped, not forced. */
 type Step =
   | {kind: 'startFromZero'}
-  | {kind: 'startFromDeclaredMark'}
+  // A run that resumes the live run after `after` of its batches: what a
+  // replication-manager restarted mid-run does, from its own replica's mark.
+  // Legal only after the run has sent that many, whether or not this
+  // subscriber saw them.
+  | {kind: 'resumeLive'; after: 0 | 1 | 2 | 3}
+  // A run from `key` that resumes a run this subscriber never followed.
   | {kind: 'startFromKey'; key: Key}
+  // A run this subscriber does not see begin: it is at another
+  // replication-manager while the run is announced and sends its first
+  // `count` batches, and arrives after, on a new connection.
+  | {kind: 'startUnseen'; key: Key | null; count: 0 | 1 | 2}
   | {kind: 'sendBatch'; count: 1 | 2 | 3}
+  // Batches of the live run this subscriber never sees: it is away, and
+  // returns on a change log that starts after them -- a fresh manager's,
+  // seeded past them, or the same manager's at a watermark it advanced to
+  // elsewhere. The run may carry on in its sight after that.
+  | {kind: 'missBatches'; count: 1 | 2}
   | {kind: 'resendBatch'}
+  // A re-delivery of the live run's announcement, after a reconnect to the
+  // manager at a watermark below it -- which re-delivers every batch of the
+  // run after it as well.
   | {kind: 'reannounce'}
   | {kind: 'complete'}
   // Any run this subscriber has seen re-delivers. `back: 0` is a reconnect to
@@ -76,16 +115,37 @@ type Step =
   // update the way Postgres leaves out an unchanged TOASTed value. The moved
   // row arrives with no value for the column, so only a run that starts below
   // its new key will ever supply one.
-  | {kind: 'keyChangeToasted'; id: Key; to: Key};
+  | {kind: 'keyChangeToasted'; id: Key; to: Key}
+  // The subscriber's change stream reconnects, so the change-streamer's
+  // tracker starts over from what the replica declares.
+  | {kind: 'reconnect'}
+  // A rollback to a v17 zero-cache, which replicates that TOASTed move but
+  // maintains none of the resume columns, then the roll forward to v18.
+  | {kind: 'v17KeyChangeToasted'; id: Key; to: Key};
+
+const keyMove = fc
+  .tuple(fc.constantFrom(...KEYS), fc.constantFrom(...KEYS))
+  .filter(([id, to]) => id !== to);
 
 const stepArb: fc.Arbitrary<Step> = fc.oneof(
   fc.constant<Step>({kind: 'startFromZero'}),
-  fc.constant<Step>({kind: 'startFromDeclaredMark'}),
+  fc
+    .constantFrom(0 as const, 1 as const, 2 as const, 3 as const)
+    .map<Step>(after => ({kind: 'resumeLive', after})),
   fc.constantFrom(...KEYS).map<Step>(key => ({kind: 'startFromKey', key})),
+  fc
+    .record({
+      key: fc.constantFrom<Key | null>(null, ...KEYS),
+      count: fc.constantFrom<0 | 1 | 2>(0, 1, 2),
+    })
+    .map<Step>(({key, count}) => ({kind: 'startUnseen', key, count})),
   fc.constantFrom(1 as const, 2 as const, 3 as const).map<Step>(count => ({
     kind: 'sendBatch',
     count,
   })),
+  fc
+    .constantFrom(1 as const, 2 as const)
+    .map<Step>(count => ({kind: 'missBatches', count})),
   fc.constant<Step>({kind: 'resendBatch'}),
   fc.constant<Step>({kind: 'reannounce'}),
   fc.constant<Step>({kind: 'complete'}),
@@ -99,28 +159,32 @@ const stepArb: fc.Arbitrary<Step> = fc.oneof(
   })),
   fc.constantFrom(...KEYS).map<Step>(id => ({kind: 'update', id})),
   fc.constantFrom(...KEYS).map<Step>(id => ({kind: 'delete', id})),
-  fc
-    .tuple(fc.constantFrom(...KEYS), fc.constantFrom(...KEYS))
-    .filter(([id, to]) => id !== to)
-    .map<Step>(([id, to]) => ({kind: 'keyChange', id, to})),
-  fc
-    .tuple(fc.constantFrom(...KEYS), fc.constantFrom(...KEYS))
-    .filter(([id, to]) => id !== to)
-    .map<Step>(([id, to]) => ({kind: 'keyChangeToasted', id, to})),
+  keyMove.map<Step>(([id, to]) => ({kind: 'keyChange', id, to})),
+  keyMove.map<Step>(([id, to]) => ({kind: 'keyChangeToasted', id, to})),
+  fc.constant<Step>({kind: 'reconnect'}),
+  keyMove.map<Step>(([id, to]) => ({kind: 'v17KeyChangeToasted', id, to})),
 );
 
 /** A run in flight at some replication-manager. */
 type Run = {
   runID: string;
   resumeFrom: Key | null;
+  /** The run this one resumes, and after which of its batches. */
+  resumes: {runID: string; seq: number} | null;
   /** Keys the run still owes, in order. */
   pending: Key[];
+  /** The last key of each batch sent so far, seen by this subscriber or not. */
+  sent: Key[];
+  /** Every batch sent so far, for re-delivery after a reconnect. */
+  batches: {rowValues: unknown[][]; lastKey: string[]; seq: number}[];
   /** The values its COPY snapshot holds, taken when it started. */
   snapshot: Map<Key, string>;
   /** The watermark that snapshot was taken at. */
   watermark: string;
   /** The last batch it sent, for re-delivery after a reconnect. */
-  lastBatch: {rowValues: unknown[][]; lastKey: string[]} | undefined;
+  lastBatch:
+    | {rowValues: unknown[][]; lastKey: string[]; seq: number}
+    | undefined;
   started: BackfillStarted;
   minor: number;
   /**
@@ -131,6 +195,8 @@ type Run = {
    * a key change voids marks but not runs.
    */
   canceled: boolean;
+  /** Whether its completion has been sent. A manager re-announces no such run. */
+  completed: boolean;
 };
 
 describe('replicator/backfill rules (model)', () => {
@@ -169,7 +235,7 @@ describe('replicator/backfill rules (model)', () => {
       {kind: 'startFromKey', key: 3},
       {kind: 'sendBatch', count: 3},
       {kind: 'complete'},
-      {kind: 'startFromDeclaredMark'},
+      {kind: 'startFromZero'},
       {kind: 'sendBatch', count: 3},
       {kind: 'complete'},
     ],
@@ -180,31 +246,99 @@ describe('replicator/backfill rules (model)', () => {
       {kind: 'sendBatch', count: 3},
       {kind: 'complete'},
     ],
-    // A row whose key moves voids the mark but not the run.
+    // A row whose key moves cancels the run, and the next starts over.
     'a row key change under a run': [
       {kind: 'startFromZero'},
       {kind: 'sendBatch', count: 1},
       {kind: 'keyChange', id: 3, to: 1},
-      {kind: 'startFromDeclaredMark'},
+      {kind: 'startFromZero'},
       {kind: 'sendBatch', count: 3},
       {kind: 'complete'},
     ],
     // The row moves down, past a cursor that has already gone by, and the
-    // update that moved it carries no value for the column. Only voiding the
-    // mark keeps a resumed run from starting above it and leaving it empty.
+    // update that moved it carries no value for the column. Only a run from
+    // the beginning supplies one; a run resumed after the move is illegal.
     'a row key change that omits an unchanged TOASTed value': [
       {kind: 'startFromZero'},
       {kind: 'sendBatch', count: 2},
       {kind: 'delete', id: 1},
       {kind: 'keyChangeToasted', id: 3, to: 1},
-      {kind: 'startFromDeclaredMark'},
+      {kind: 'resumeLive', after: 2},
+      {kind: 'startFromZero'},
       {kind: 'sendBatch', count: 3},
       {kind: 'complete'},
     ],
-    // A row deleted after the run's snapshot must not be resurrected.
+    // A row deleted after the snapshot must not be resurrected.
     'a row deleted after the snapshot': [
       {kind: 'startFromZero'},
       {kind: 'delete', id: 2},
+      {kind: 'sendBatch', count: 3},
+      {kind: 'complete'},
+    ],
+    // A run resuming one this subscriber never followed replaces the run,
+    // which this one cannot follow, and the replacement completes. The
+    // subscriber declared nothing, so only the tracker's request for the
+    // backfill the stream started gets it a run it can follow.
+    'a replacement run it cannot follow, with nothing declared': [
+      {kind: 'startFromZero'},
+      {kind: 'sendBatch', count: 2},
+      {kind: 'startFromKey', key: 1},
+      {kind: 'sendBatch', count: 3},
+      {kind: 'complete'},
+    ],
+    // The manager restarts after its replica applied the first batch, and the
+    // resumed run picks up after it. This subscriber, two batches in, has
+    // everything the resumed run assumes, and follows it to completion.
+    'a resumed run from a batch this subscriber applied': [
+      {kind: 'startFromZero'},
+      {kind: 'sendBatch', count: 2},
+      {kind: 'resumeLive', after: 1},
+      {kind: 'sendBatch', count: 3},
+      {kind: 'complete'},
+    ],
+    // The same resume, after a batch this subscriber never saw: it was away,
+    // and returned on a change log seeded past it. The resumed run must not
+    // cover it -- it never had row 2 -- and a run from the beginning must.
+    'a resumed run from a batch this subscriber missed': [
+      {kind: 'startFromZero'},
+      {kind: 'sendBatch', count: 1},
+      {kind: 'missBatches', count: 1},
+      {kind: 'resumeLive', after: 2},
+      {kind: 'sendBatch', count: 3},
+      {kind: 'complete'},
+    ],
+    // The subscriber leaves the manager mid-run, advances its watermark
+    // elsewhere, and returns to the same run, which carries on and completes
+    // in its sight. It still names the run it follows, and has not got every
+    // row the run sent: the batch that skips a position, or the completion
+    // at a position it never reached, must end its following.
+    'a run continued after batches this subscriber missed': [
+      {kind: 'startFromZero'},
+      {kind: 'sendBatch', count: 1},
+      {kind: 'missBatches', count: 1},
+      {kind: 'sendBatch', count: 1},
+      {kind: 'complete'},
+    ],
+    'a run completed after batches this subscriber missed': [
+      {kind: 'startFromZero'},
+      {kind: 'missBatches', count: 1},
+      {kind: 'complete'},
+    ],
+    'a run completed after every batch this subscriber missed': [
+      {kind: 'startFromZero'},
+      {kind: 'missBatches', count: 1},
+      {kind: 'missBatches', count: 2},
+    ],
+    // The same move as above, replicated by a v17 zero-cache, which voids no
+    // mark and keeps the run. Rolling forward has to forget both, or the
+    // subscriber follows a run resumed past the moved row and leaves it
+    // empty.
+    'a v17 rollback that replicates a row key change': [
+      {kind: 'startFromZero'},
+      {kind: 'sendBatch', count: 2},
+      {kind: 'delete', id: 1},
+      {kind: 'v17KeyChangeToasted', id: 3, to: 1},
+      {kind: 'startFromZero'},
       {kind: 'sendBatch', count: 3},
       {kind: 'complete'},
     ],
@@ -214,7 +348,7 @@ describe('replicator/backfill rules (model)', () => {
     test(name, () => runScenario(lc, steps));
   }
 
-  test('a backfilled column is never stale and never half populated', () => {
+  test('a backfilled column is never stale, never half populated, and completes', () => {
     fc.assert(
       fc.property(fc.array(stepArb, {minLength: 1, maxLength: 14}), steps => {
         runScenario(lc, steps);
@@ -242,20 +376,37 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
     return `${(base36.length - 1).toString(36)}${base36}`;
   };
 
+  // The change-streamer's tracker for this subscriber, made the way
+  // `Subscriber` makes it. The subscriber connects before the table exists,
+  // so it declares nothing.
+  let tracker = BackfillDeclarations.forSubscriber(true, []);
+  const reconnect = () => {
+    tracker = BackfillDeclarations.forSubscriber(
+      true,
+      readBackfillDeclarations(replica),
+    );
+  };
+
   function tx(
     watermark: string,
     backfill: boolean,
     ...changes: StreamedChange[]
   ) {
-    processor.processMessage(lc, [
-      'begin',
-      backfill ? {tag: 'begin', skipAck: true, backfill: true} : {tag: 'begin'},
-      {commitWatermark: watermark},
-    ]);
-    for (const change of changes) {
-      processor.processMessage(lc, ['data', change]);
+    const stream: ChangeStreamData[] = [
+      [
+        'begin',
+        backfill
+          ? {tag: 'begin', skipAck: true, backfill: true}
+          : {tag: 'begin'},
+        {commitWatermark: watermark},
+      ],
+      ...changes.map((change): ChangeStreamData => ['data', change]),
+      ['commit', {tag: 'commit'}, {watermark}],
+    ];
+    for (const message of stream) {
+      processor.processMessage(lc, message);
+      tracker?.apply(message);
     }
-    processor.processMessage(lc, ['commit', {tag: 'commit'}, {watermark}]);
   }
 
   // A run's snapshot is taken at an upstream commit watermark -- a major.
@@ -309,36 +460,14 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
   let writes = 0;
 
   // ---- the subscriber's view ----------------------------------------------
-  // What a manager makes of this subscriber's declaration. A mark taken at a
-  // snapshot older than the table's `minSnapshot` is dropped rather than
-  // resumed from -- `change-log-initializer.ts:448` on the way in,
-  // `backfill-manager.ts:552` at the manager.
-  const declaredMark = (): Key | null => {
-    const row = replica
-      .prepare(
-        `SELECT "mark", "markWatermark", "minSnapshot"
-           FROM "${BACKFILLING_TABLE}" WHERE "column" = ?`,
-      )
-      .get<
-        | {
-            mark: string | null;
-            markWatermark: string | null;
-            minSnapshot: string | null;
-          }
-        | undefined
-      >(COLUMN);
-    if (!row?.mark) {
-      return null;
-    }
-    if (row.minSnapshot && (row.markWatermark ?? '') < row.minSnapshot) {
-      return null;
-    }
-    return Number(JSON.parse(row.mark)[0]) as Key;
-  };
   const completed = () =>
     replica
       .prepare(`SELECT COUNT(*) AS n FROM "${BACKFILLING_TABLE}"`)
       .get<{n: number}>().n === 0;
+  const followedRun = () =>
+    replica
+      .prepare(`SELECT "runID" FROM "${BACKFILLING_TABLE}" WHERE "column" = ?`)
+      .get<{runID: string | null} | undefined>(COLUMN)?.runID ?? null;
   const rows = () =>
     new Map(
       replica
@@ -352,7 +481,18 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
   // moved away from, which have not stopped.
   const runs: Run[] = [];
   const current = () => runs.at(-1);
+  const liveRun = () => {
+    const run = current();
+    return run && !run.canceled && !run.completed ? run : undefined;
+  };
   let runCounter = 0;
+
+  // What the manager that sent the last run knows: whether it still owes the
+  // table a backfill, and whether a subscriber declared, during the live run,
+  // that it is not following it -- in which case the table runs again from
+  // the beginning once the live run completes.
+  let owed = true;
+  let rerun = false;
 
   function check(after: string) {
     const actual = rows();
@@ -379,7 +519,11 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
     }
   }
 
-  function startRun(resumeFrom: Key | null) {
+  function startRun(
+    resumeFrom: Key | null,
+    resumes: Run['resumes'],
+    seen = true,
+  ): Run {
     runCounter++;
     const watermark = lastMajor;
     const snapshot = new Map(truth);
@@ -393,65 +537,170 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
       columns: [COLUMN],
       watermark,
       runID: `run-${runCounter}`,
-      resumeFrom: resumeFrom === null ? null : [String(resumeFrom)],
+      resumes,
     };
-    runs.push({
+    const run: Run = {
       runID: started.runID,
       resumeFrom,
+      resumes,
       pending,
+      sent: [],
+      batches: [],
       snapshot,
       watermark,
       lastBatch: undefined,
       started,
       minor: 0,
       canceled: false,
-    });
-    backfillTx(must(current()), started);
+      completed: false,
+    };
+    runs.push(run);
+    owed = true;
+    if (seen) {
+      backfillTx(run, started);
+    } else {
+      run.minor++;
+    }
+    return run;
   }
 
   function backfillTx(r: Run, ...changes: StreamedChange[]) {
     r.minor++;
-    tx(`${r.watermark}.${String(r.minor).padStart(2, '0')}`, true, ...changes);
+    tx(`${r.watermark}.${lexi(r.minor)}`, true, ...changes);
+  }
+
+  function sendBatch(run: Run, count: number, seen = true) {
+    const batch = run.pending.splice(0, count);
+    const rowValues = batch.map(k => [k, run.snapshot.get(k)!]);
+    const lastKey = [String(batch.at(-1))];
+    run.sent.push(must(batch.at(-1)));
+    run.lastBatch = {rowValues, lastKey, seq: run.sent.length};
+    run.batches.push(run.lastBatch);
+    if (seen) {
+      backfillTx(run, backfillMsg(run, rowValues, lastKey, run.sent.length));
+    } else {
+      run.minor++;
+    }
+  }
+
+  function complete(run: Run) {
+    run.completed = true;
+    if (run === current()) {
+      // The table is owed another run only if a subscriber declared, during
+      // this one, that it was not following it.
+      owed = rerun;
+      rerun = false;
+    }
+    backfillTx(run, completedMsg(run));
+  }
+
+  function moveKey(id: Key, to: Key, toasted: boolean) {
+    const value = truth.get(id)!;
+    truth.delete(id);
+    truth.set(to, value);
+    liveTx(
+      messages.update(
+        'issues',
+        toasted
+          ? {id: to, note: `note-${id}`}
+          : {id: to, note: `note-${id}`, [COLUMN]: value},
+        {id},
+      ),
+    );
+    for (const r of runs) {
+      if (r.watermark < lastMajor) {
+        r.canceled = true;
+      }
+    }
+  }
+
+  /**
+   * The manager's side of a forwarded declaration, as
+   * `BackfillManager.onBackfillRequest` decides it: nothing for a subscriber
+   * already following the running run; a run from the beginning after the
+   * running one for a subscriber that is not; and a run from the beginning
+   * for a table this session already finished.
+   */
+  function honor([, request]: BackfillRequestMessage) {
+    if (!owed) {
+      owed = true; // Scenario B: the next run starts from the beginning
+      return;
+    }
+    const run = liveRun();
+    if (run === undefined) {
+      return; // the next run starts from the beginning
+    }
+    if (request.runID !== null && request.runID === run.runID) {
+      return;
+    }
+    rerun = true;
   }
 
   for (const [i, step] of steps.entries()) {
     const at = `step ${i} (${step.kind})`;
     switch (step.kind) {
       case 'startFromZero':
-        startRun(null);
+        startRun(null, null);
         break;
-      case 'startFromDeclaredMark':
-        startRun(declaredMark());
+      case 'resumeLive': {
+        // The manager's own replica had applied `after` batches of the live
+        // run when the manager restarted: the resumed run picks up from the
+        // last key of that batch, or from where the run itself started.
+        const run = liveRun();
+        if (run && run.sent.length >= step.after) {
+          const from =
+            step.after === 0 ? run.resumeFrom : run.sent[step.after - 1];
+          startRun(from, {runID: run.runID, seq: step.after});
+        }
         break;
+      }
       case 'startFromKey':
-        startRun(step.key);
+        startRun(step.key, {runID: 'a-run-elsewhere', seq: 0});
         break;
+      case 'startUnseen': {
+        const run = startRun(
+          step.key,
+          step.key === null ? null : {runID: 'a-run-elsewhere', seq: 0},
+          false,
+        );
+        for (let n = 0; n < step.count && run.pending.length > 0; n++) {
+          sendBatch(run, 1, false);
+        }
+        reconnect();
+        break;
+      }
       case 'reannounce': {
-        const run = current();
-        if (run && !run.canceled) {
+        const run = liveRun();
+        if (run) {
           backfillTx(run, run.started);
+          for (const {rowValues, lastKey, seq} of run.batches) {
+            backfillTx(run, backfillMsg(run, rowValues, lastKey, seq));
+          }
         }
         break;
       }
       case 'sendBatch': {
         const run = current();
-        if (!run || run.canceled || run.pending.length === 0) {
-          break;
+        if (run && !run.canceled && run.pending.length > 0) {
+          sendBatch(run, step.count);
         }
-        const batch = run.pending.splice(0, step.count);
-        const rowValues = batch.map(k => [k, run.snapshot.get(k)!]);
-        const lastKey = [String(batch.at(-1))];
-        run.lastBatch = {rowValues, lastKey};
-        backfillTx(run, backfillMsg(run, rowValues, lastKey));
+        break;
+      }
+      case 'missBatches': {
+        const run = current();
+        if (run && !run.canceled && run.pending.length > 0) {
+          for (let n = 0; n < step.count && run.pending.length > 0; n++) {
+            sendBatch(run, 1, false);
+          }
+          reconnect();
+        }
         break;
       }
       case 'resendBatch': {
         const run = current();
         if (run?.lastBatch && !run.canceled) {
-          backfillTx(
-            run,
-            backfillMsg(run, run.lastBatch.rowValues, run.lastBatch.lastKey),
-          );
+          const {rowValues, lastKey, seq} = run.lastBatch;
+          backfillTx(run, backfillMsg(run, rowValues, lastKey, seq));
         }
         break;
       }
@@ -459,24 +708,22 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
         // A manager only completes a run it has sent in full.
         const run = current();
         if (run && run.pending.length === 0) {
-          backfillTx(run, completedMsg(run));
+          complete(run);
         }
         break;
       }
       case 'staleResend': {
         const run = runs.at(-1 - step.back);
         if (run?.lastBatch && !run.canceled) {
-          backfillTx(
-            run,
-            backfillMsg(run, run.lastBatch.rowValues, run.lastBatch.lastKey),
-          );
+          const {rowValues, lastKey, seq} = run.lastBatch;
+          backfillTx(run, backfillMsg(run, rowValues, lastKey, seq));
         }
         break;
       }
       case 'staleComplete': {
         const run = runs.at(-1 - step.back);
         if (run && run.pending.length === 0) {
-          backfillTx(run, completedMsg(run));
+          complete(run);
         }
         break;
       }
@@ -503,32 +750,87 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
         liveTx(messages.delete('issues', {id: step.id}));
         break;
       case 'keyChange':
-      case 'keyChangeToasted': {
+      case 'keyChangeToasted':
+        if (truth.has(step.id) && !truth.has(step.to)) {
+          moveKey(step.id, step.to, step.kind === 'keyChangeToasted');
+        }
+        break;
+      case 'reconnect':
+        reconnect();
+        break;
+      case 'v17KeyChangeToasted': {
         if (!truth.has(step.id) || truth.has(step.to)) {
           break;
         }
-        const value = truth.get(step.id)!;
-        truth.delete(step.id);
-        truth.set(step.to, value);
-        liveTx(
-          messages.update(
-            'issues',
-            step.kind === 'keyChange'
-              ? {id: step.to, note: `note-${step.id}`, [COLUMN]: value}
-              : {id: step.to, note: `note-${step.id}`},
-            {id: step.id},
-          ),
+        // Rolled back: the v17 zero-cache applies the move, and every resume
+        // column the v18 rules would have changed keeps its old value.
+        const kept = replica
+          .prepare(
+            `SELECT "column", "mark", "markWatermark", "runID", "runSeq",
+                    "minSnapshot"
+               FROM "${BACKFILLING_TABLE}"`,
+          )
+          .all<{
+            column: string;
+            mark: string | null;
+            markWatermark: string | null;
+            runID: string | null;
+            runSeq: number | null;
+            minSnapshot: string | null;
+          }>();
+        moveKey(step.id, step.to, true);
+        const restore = replica.prepare(
+          `UPDATE "${BACKFILLING_TABLE}"
+             SET "mark" = ?, "markWatermark" = ?, "runID" = ?, "runSeq" = ?,
+                 "minSnapshot" = ?
+             WHERE "column" = ?`,
         );
-        for (const r of runs) {
-          if (r.watermark < lastMajor) {
-            r.canceled = true;
-          }
+        for (const r of kept) {
+          restore.run(
+            r.mark,
+            r.markWatermark,
+            r.runID,
+            r.runSeq,
+            r.minSnapshot,
+            r.column,
+          );
         }
+        // Rolled forward: migration 18's `migrateData` runs again, and the
+        // subscriber reconnects with what the replica then declares.
+        void must(schemaVersionMigrationMap[18].migrateData)(lc, replica);
+        reconnect();
         break;
       }
     }
     check(at);
   }
+
+  // ---- completes ------------------------------------------------------------
+  // The interleaving stops. The subscriber stays with the manager that sent
+  // the last run, which honors its requests, and nothing changes upstream.
+  const followed = followedRun();
+  if (followed !== null && followed !== current()?.runID) {
+    // It follows a run at a manager it has since left, so its connection to
+    // this one is a new one, which starts from what the replica declares.
+    reconnect();
+  }
+  for (let round = 0; round < 3 && !completed(); round++) {
+    for (const request of tracker?.requests('subscriber') ?? []) {
+      honor(request);
+    }
+    if (owed) {
+      const run = liveRun() ?? startRun(null, null);
+      if (run.pending.length > 0) {
+        sendBatch(run, run.pending.length);
+      }
+      complete(run);
+    }
+    check(`after the interleaving, round ${round}`);
+  }
+  expect(
+    completed(),
+    'the backfill never completed after the interleaving stopped',
+  ).toBe(true);
   replica.close();
 }
 
@@ -536,6 +838,7 @@ function backfillMsg(
   run: Run,
   rowValues: unknown[][],
   lastKey: string[],
+  seq: number,
 ): MessageBackfill {
   return {
     tag: 'backfill',
@@ -544,6 +847,7 @@ function backfillMsg(
     watermark: run.watermark,
     rowValues: rowValues as MessageBackfill['rowValues'],
     runID: run.runID,
+    seq,
     lastKey,
   };
 }
@@ -555,5 +859,6 @@ function completedMsg(run: Run): BackfillCompleted {
     columns: [COLUMN],
     watermark: run.watermark,
     runID: run.runID,
+    seq: run.sent.length,
   };
 }
