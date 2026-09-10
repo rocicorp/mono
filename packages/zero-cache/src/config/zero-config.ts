@@ -1178,7 +1178,7 @@ export const zeroOptions = {
     },
 
     incrementalBackupIntervalMinutes: {
-      type: v.number().default(5),
+      type: v.number().default(15),
       desc: [
         `The interval between incremental v3 backups of the replica. Shorter intervals`,
         `reduce the amount of change history that needs to be replayed when catching`,
@@ -1192,7 +1192,7 @@ export const zeroOptions = {
     },
 
     snapshotBackupIntervalHours: {
-      type: v.number().default(4),
+      type: v.number().default(12),
       desc: [
         `The interval between snapshot backups of the replica. Snapshot backups`,
         `make a full copy of the database to a new litestream generation. This`,
