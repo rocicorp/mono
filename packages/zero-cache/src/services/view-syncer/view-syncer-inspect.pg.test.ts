@@ -197,6 +197,52 @@ describe('view-syncer/service', () => {
     expect(delegate.isAuthenticated(serviceID)).toBe(false);
   });
 
+  test('unchanged queries rehydrated on restart are recorded by query id', async () => {
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desired queries
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // hydrated
+    const ast = delegate.getASTForQuery('query-hash1');
+    expect(ast).toBeDefined();
+
+    await vs.stop();
+    await viewSyncerDone;
+
+    // A fresh view-syncer (with a fresh InspectorDelegate) rehydrates the
+    // gotten query as an unchanged query, which is a different code path
+    // from the initial hydration.
+    const restarted = restartViewSyncer({
+      databaseStorage,
+      replicaDbFile,
+      cvrDB,
+      config,
+      customQueryTransformer,
+      setTimeoutFn,
+    });
+    try {
+      restarted.connect({...SYNC_CONTEXT, wsID: 'ws2'}, []);
+      restarted.stateChanges.push({state: 'version-ready'});
+
+      // The inspector looks up ASTs and metrics by query id.
+      await vi.waitFor(
+        () => {
+          expect(
+            restarted.inspectorDelegate.getASTForQuery('query-hash1'),
+          ).toEqual(ast);
+        },
+        {timeout: 5_000},
+      );
+      expect(
+        restarted.inspectorDelegate.getMetricsJSONForQuery('query-hash1'),
+      ).toMatchObject({'query-hydration-server-ms': expect.any(Number)});
+    } finally {
+      await restarted.vs.stop();
+      await restarted.viewSyncerDone;
+    }
+  });
+
   test('an authenticate racing the shutdown leaves no inspector authentication behind', async () => {
     delegate.clearAuthenticated(serviceID);
     const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
