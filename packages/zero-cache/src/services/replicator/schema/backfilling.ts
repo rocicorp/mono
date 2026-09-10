@@ -31,13 +31,17 @@
  * where the same query against `column_metadata` is an unindexed scan over a row
  * per column of every table.
  *
- * This table is write-only from the replica's perspective. Nothing in the
- * replicator reads it; it exists to be read by the change-streamer.
+ * The `backfill` half of this table is write-only from the replica's
+ * perspective: nothing in the replicator reads it; it exists to be read by the
+ * change-streamer. The resume columns added in v18 (`mark`, `markWatermark`,
+ * `runID`, `minSnapshot`) are read as well as written, by the rules in
+ * `change-processor.ts` and by `readBackfillProgress()`.
  */
 
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../../shared/src/bigint-json.ts';
+import {must} from '../../../../../shared/src/must.ts';
 import type {Database, Statement} from '../../../../../zqlite/src/db.ts';
 import {getOrCreateCounter} from '../../../observability/metrics.ts';
 import {liteTableName} from '../../../types/names.ts';
@@ -60,7 +64,37 @@ export const BACKFILLING_TABLE = '_zero.backfilling';
 // `backfill` holds the JSON that `cdc.backfilling` holds as JSONB. SQLite has
 // no JSONB, and nothing here queries into the document: it is stored to be
 // handed back to the change source verbatim.
+//
+// `mark`, `markWatermark`, `runID` and `runSeq` are *subscriber state*, not
+// cookies: they say how far this replica has applied an ordered backfill run
+// (the mark) and which run it is following, and how many of its batches it
+// has applied (the position), and are excluded from the cookie set that the
+// change log's initialization compares. The run and position are declared
+// when the replica subscribes; the mark never leaves the replica, except when
+// the replica is a replication-manager's own, whose manager resumes a run
+// from it after a restart. `minSnapshot` is a cookie (see `change-log-cookies.ts`), holding
+// the earliest snapshot at which a backfill of the table is still valid.
 export const CREATE_BACKFILLING_TABLE = /*sql*/ `
+  CREATE TABLE "${BACKFILLING_TABLE}" (
+    "schema"        TEXT NOT NULL,
+    "table"         TEXT NOT NULL,
+    "column"        TEXT NOT NULL,
+    "backfill"      TEXT NOT NULL,
+    "mark"          TEXT,
+    "markWatermark" TEXT,
+    "runID"         TEXT,
+    "runSeq"        INTEGER,
+    "minSnapshot"   TEXT,
+    PRIMARY KEY ("schema", "table", "column")
+  );
+`;
+
+/**
+ * The table as the v17 migration created it, frozen. A replica migrating from
+ * v16 gets this and is then brought to the current shape by the v18 migration;
+ * a fresh replica gets {@link CREATE_BACKFILLING_TABLE} directly.
+ */
+export const CREATE_BACKFILLING_TABLE_V17 = /*sql*/ `
   CREATE TABLE "${BACKFILLING_TABLE}" (
     "schema"   TEXT NOT NULL,
     "table"    TEXT NOT NULL,
@@ -69,6 +103,77 @@ export const CREATE_BACKFILLING_TABLE = /*sql*/ `
     PRIMARY KEY ("schema", "table", "column")
   );
 `;
+
+/** The v18 migration: {@link CREATE_BACKFILLING_TABLE}'s five new columns. */
+export const ADD_BACKFILLING_RESUME_COLUMNS = /*sql*/ `
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "mark" TEXT;
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "markWatermark" TEXT;
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "runID" TEXT;
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "runSeq" INTEGER;
+  ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "minSnapshot" TEXT;
+`;
+
+/**
+ * Forgets this replica's progress on every in-flight backfill: its marks and
+ * the runs it is following. The v18 migration's `migrateData`, which runs
+ * again when a replica rolls forward from a v17 zero-cache.
+ *
+ * A v17 zero-cache keeps these columns but maintains none of them -- every
+ * statement it has names only the v17 columns -- so a row key change that it
+ * replicates voids no mark. Resuming from such a mark would skip a row whose
+ * key moved below it, and whose unchanged TOASTed value the replicated update
+ * omitted.
+ *
+ * `minSnapshot` is left alone. It can be as stale as the marks, but it is only
+ * ever checked against a mark, and every mark it could have caught is cleared
+ * here: a run that can still advance one started after any key change this
+ * replica missed, since a manager cancels every run that a key change
+ * postdates.
+ */
+export function clearBackfillingMarks(db: Database): void {
+  db.exec(/*sql*/ `
+    UPDATE "${BACKFILLING_TABLE}"
+      SET "mark" = NULL, "markWatermark" = NULL,
+          "runID" = NULL, "runSeq" = NULL
+  `);
+}
+
+/** One in-flight column's resume state; see {@link BackfillProgress}. */
+export type BackfillingColumn = {
+  readonly runID: string | null;
+  /** The position of the last batch of `runID` applied, or null with it. */
+  readonly seq: number | null;
+  readonly mark: readonly string[] | null;
+};
+
+/**
+ * What a subscriber declares about one table's in-flight backfill when it
+ * subscribes: the columns being backfilled, the run they are following, and
+ * the position of the last of its batches they applied. Where the columns
+ * disagree -- which happens when a column is added to a table whose backfill
+ * is already under way -- the run and position are null, which costs a run
+ * from the beginning rather than a wrong one.
+ */
+export type BackfillDeclaration = {
+  schema: string;
+  table: string;
+  columns: string[];
+  metadata?: TableMetadata | null | undefined;
+  backfill?: Record<string, BackfillID> | undefined;
+  runID: string | null;
+  runSeq: number | null;
+};
+
+/**
+ * A {@link BackfillDeclaration} with how far the replica has got: the mark the
+ * columns have in common, and the watermark it was recorded at. Read only by
+ * a replication-manager from its own replica, to resume a run across a
+ * restart; a subscriber declares nothing of it.
+ */
+export type BackfillProgress = BackfillDeclaration & {
+  mark: string[] | null;
+  markWatermark: string | null;
+};
 
 /**
  * The replica's interpreter of the cookie fold in
@@ -97,9 +202,135 @@ export class BackfillingTracker {
   #dropTable: Statement | undefined;
   #renameColumn: Statement | undefined;
   #dropColumn: Statement | undefined;
+  #columnsOf: Statement | undefined;
+  #setRunID: Statement | undefined;
+  #advanceMark: Statement | undefined;
 
   constructor(db: Database) {
     this.#db = db;
+  }
+
+  /**
+   * `B(T)`: the columns of the table that this replica currently has in
+   * flight, which is the whole of what a `backfill` message is allowed to
+   * write and a `backfill-completed` message is allowed to complete.
+   *
+   * Each column's value is the run it is following (or null), the position
+   * of the last of its batches applied (or null), and the mark it has applied
+   * up to (or null).
+   */
+  backfillingColumns(table: Identifier): Map<string, BackfillingColumn> {
+    const rows = (this.#columnsOf ??= this.#db.prepare(/*sql*/ `
+      SELECT "column", "runID", "runSeq", "mark"
+        FROM "${BACKFILLING_TABLE}"
+        WHERE "schema" = ? AND "table" = ?
+    `)).all<{
+      column: string;
+      runID: string | null;
+      runSeq: number | null;
+      mark: string | null;
+    }>(table.schema, table.name);
+    return new Map(
+      rows.map(({column, runID, runSeq, mark}) => [
+        column,
+        {
+          runID,
+          seq: runSeq,
+          mark: mark === null ? null : (JSON.parse(mark) as string[]),
+        },
+      ]),
+    );
+  }
+
+  /**
+   * Records whether the column is following run `runID` (or, with null, that
+   * it is following none). Following a new run starts at position 0 with no
+   * mark; a run already followed keeps its position and mark.
+   *
+   * The mark goes with the run that produced it. A mark is where this replica
+   * got to in one run, after one of its batches, and a manager resumes from it
+   * announcing exactly that run and position (`resumes`). Kept across a switch
+   * to another run, it would be paired with that run's position 0 instead,
+   * and a run resumed from it would skip rows that a subscriber following
+   * only the new run never received.
+   */
+  setFollowing(table: Identifier, column: string, runID: string | null): void {
+    // SET expressions see the row as it was, so "runID" here is the run the
+    // column was following.
+    (this.#setRunID ??= this.#db.prepare(/*sql*/ `
+      UPDATE "${BACKFILLING_TABLE}"
+        SET "runSeq" = CASE
+              WHEN ? IS NULL THEN NULL
+              WHEN "runID" IS ? THEN "runSeq"
+              ELSE 0
+            END,
+            "mark" = CASE WHEN "runID" IS ? THEN "mark" END,
+            "markWatermark" = CASE WHEN "runID" IS ? THEN "markWatermark" END,
+            "runID" = ?
+        WHERE "schema" = ? AND "table" = ? AND "column" = ?
+    `)).run(
+      runID,
+      runID,
+      runID,
+      runID,
+      runID,
+      table.schema,
+      table.name,
+      column,
+    );
+  }
+
+  /**
+   * Records that the column has applied batch `seq` of run `runID` (a
+   * re-delivered batch never moves the position back), and, for an ordered
+   * run, advances its mark, which means: every row of the run whose key sorts
+   * at or before `mark`, as of snapshot `markWatermark`, has been applied.
+   *
+   * The `runID` in the WHERE clause is the following rule: a subscriber only
+   * advances its position and mark for a run it is following, because only
+   * then does it know that it has every row the run sent before this batch.
+   */
+  advanceRun(
+    table: Identifier,
+    column: string,
+    runID: string,
+    seq: number | undefined,
+    mark: readonly string[] | undefined,
+    markWatermark: string,
+  ): void {
+    (this.#advanceMark ??= this.#db.prepare(/*sql*/ `
+      UPDATE "${BACKFILLING_TABLE}"
+        SET "runSeq" = CASE
+              WHEN ? IS NULL THEN "runSeq"
+              ELSE MAX(COALESCE("runSeq", 0), ?)
+            END,
+            "mark" = COALESCE(?, "mark"),
+            "markWatermark" = CASE WHEN ? IS NULL THEN "markWatermark" ELSE ? END
+        WHERE "schema" = ? AND "table" = ? AND "column" = ? AND "runID" = ?
+    `)).run(
+      seq ?? null,
+      seq ?? null,
+      mark === undefined ? null : JSON.stringify(mark),
+      mark === undefined ? null : markWatermark,
+      markWatermark,
+      table.schema,
+      table.name,
+      column,
+      runID,
+    );
+  }
+
+  /**
+   * Clears the specified columns from the table's in-flight set.
+   *
+   * Unlike the `complete-backfill` fold, which clears every column the
+   * completion names, this clears exactly the columns the subscriber was
+   * following, which is the whole of what it is entitled to complete.
+   */
+  completeColumns(table: Identifier, columns: readonly string[]): void {
+    for (const column of columns) {
+      this.#deleteColumn(table, column);
+    }
   }
 
   /**
@@ -181,6 +412,101 @@ export class BackfillingTracker {
         WHERE "schema" = ? AND "table" = ? AND "column" = ?
     `)).run(table.schema, table.name, column);
   }
+}
+
+/**
+ * What the subscriber declares about every in-flight backfill when it
+ * subscribes: {@link readBackfillProgress} without the marks, which are this
+ * replica's own business.
+ */
+export function readBackfillDeclarations(db: Database): BackfillDeclaration[] {
+  return readBackfillProgress(db).map(
+    ({mark: _mark, markWatermark: _markWatermark, ...declaration}) =>
+      declaration,
+  );
+}
+
+/**
+ * The replica's progress on every in-flight backfill: what it declares, and
+ * how far it has got. A replication-manager reads this from its own replica
+ * so that a run interrupted by its restart resumes where the replica got to.
+ *
+ * One entry per table. A field is reported only where every in-flight column
+ * of the table agrees on it; otherwise it is null, which costs a run from the
+ * beginning rather than a wrong resume. The run and its position go together.
+ */
+export function readBackfillProgress(db: Database): BackfillProgress[] {
+  const rows = db
+    .prepare(/*sql*/ `
+      SELECT b."schema", b."table", b."column", b."backfill",
+             b."mark", b."markWatermark", b."runID", b."runSeq",
+             t."upstreamMetadata"
+        FROM "${BACKFILLING_TABLE}" b
+        LEFT JOIN "_zero.tableMetadata" t
+          ON b."schema" = t."schema" AND b."table" = t."table"
+        ORDER BY b."schema", b."table", b."column"
+    `)
+    .all<{
+      schema: string;
+      table: string;
+      column: string;
+      backfill: string;
+      upstreamMetadata: string | null;
+      mark: string | null;
+      markWatermark: string | null;
+      runID: string | null;
+      runSeq: number | null;
+    }>();
+
+  const progress = new Map<string, BackfillProgress>();
+  // Tracks whether the columns of a table have disagreed on a field, which is
+  // not the same as agreeing on null.
+  const disagreed = new Map<string, Set<keyof BackfillProgress>>();
+
+  for (const row of rows) {
+    const key = `${row.schema}.${row.table}`;
+    const mark = row.mark === null ? null : (JSON.parse(row.mark) as string[]);
+    const existing = progress.get(key);
+    if (!existing) {
+      progress.set(key, {
+        schema: row.schema,
+        table: row.table,
+        columns: [row.column],
+        metadata:
+          row.upstreamMetadata === null
+            ? null
+            : (BigIntJSON.parse(row.upstreamMetadata) as TableMetadata),
+        backfill: {[row.column]: BigIntJSON.parse(row.backfill) as BackfillID},
+        mark,
+        markWatermark: row.markWatermark,
+        runID: row.runID,
+        runSeq: row.runSeq,
+      });
+      disagreed.set(key, new Set());
+      continue;
+    }
+    existing.columns.push(row.column);
+    must(existing.backfill)[row.column] = BigIntJSON.parse(
+      row.backfill,
+    ) as BackfillID;
+    const differs = must(disagreed.get(key));
+    if (JSON.stringify(existing.mark) !== JSON.stringify(mark)) {
+      differs.add('mark').add('markWatermark');
+    }
+    if (existing.markWatermark !== row.markWatermark) {
+      differs.add('mark').add('markWatermark');
+    }
+    if (existing.runID !== row.runID || existing.runSeq !== row.runSeq) {
+      differs.add('runID').add('runSeq');
+    }
+  }
+
+  for (const [key, entry] of progress) {
+    for (const field of must(disagreed.get(key))) {
+      (entry[field] as null) = null;
+    }
+  }
+  return [...progress.values()];
 }
 
 /**

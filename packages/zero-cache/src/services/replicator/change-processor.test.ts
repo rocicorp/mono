@@ -3606,12 +3606,14 @@ describe('replicator/change-processor', () => {
           'data',
           {
             tag: 'backfill-completed',
+            // The run that the `backfill` above belongs to: the table's row
+            // key and no other column.
             relation: {
               schema: 'public',
               name: 'bff',
-              rowKey: {columns: ['b', 'a', 'c']},
+              rowKey: {columns: ['id']},
             },
-            columns: ['d', 'e'],
+            columns: [],
             watermark: '115',
           },
         ],

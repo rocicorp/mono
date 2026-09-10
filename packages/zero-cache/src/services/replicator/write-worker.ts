@@ -16,6 +16,7 @@ import type {ChangeStreamData} from '../change-source/protocol/current/downstrea
 import {LitestreamCheckpointer} from '../litestream/litestream-checkpointer.ts';
 import {LitestreamController} from '../litestream/litestream-controller.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
+import {readBackfillDeclarations} from './schema/backfilling.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
   applyPragmas,
@@ -127,6 +128,15 @@ function createAPI(): API {
     getSubscriptionState() {
       try {
         return getSubscriptionState(must(runner));
+      } catch (e) {
+        handleCorruptedDb(e);
+        throw e;
+      }
+    },
+
+    getBackfillDeclarations() {
+      try {
+        return readBackfillDeclarations(must(runner).db);
       } catch (e) {
         handleCorruptedDb(e);
         throw e;
