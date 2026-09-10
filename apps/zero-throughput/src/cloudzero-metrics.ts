@@ -37,7 +37,7 @@ const LABEL_PAIR_PATTERN = /([a-zA-Z0-9_]+)="([^"]*)"/g;
 
 export function parsePrometheusText(
   text: string,
-  targetStackId?: string,
+  targetStackId?: string | undefined,
 ): ParsedMetric[] {
   const metrics: ParsedMetric[] = [];
   const lines = text.split('\n');
@@ -291,12 +291,16 @@ function computeServingLagStats(
   const mins = statsByStat.get('min') ?? [];
   const p50s = statsByStat.get('p50') ?? [];
   const p75s = statsByStat.get('p75') ?? [];
+  const p90s = statsByStat.get('p90') ?? [];
+  const p95s = statsByStat.get('p95') ?? [];
   const p99s = statsByStat.get('p99') ?? [];
   const maxs = statsByStat.get('max') ?? (scalars.length > 0 ? scalars : []);
 
   const min = mins.length > 0 ? Math.min(...mins) : 0;
   const p50 = p50s.length > 0 ? Math.max(...p50s) : 0;
   const p75 = p75s.length > 0 ? Math.max(...p75s) : undefined;
+  const p90 = p90s.length > 0 ? Math.max(...p90s) : undefined;
+  const p95 = p95s.length > 0 ? Math.max(...p95s) : undefined;
   const p99 = p99s.length > 0 ? Math.max(...p99s) : (p75 ?? p50);
   const max = maxs.length > 0 ? Math.max(...maxs) : p99;
   const avg =
@@ -310,6 +314,8 @@ function computeServingLagStats(
     min,
     p50,
     p75,
+    p90,
+    p95,
     p99,
     max,
   };
@@ -361,7 +367,7 @@ export class CloudZeroMetricsPoller {
     metricsUrl: string;
     apiKey: string;
     stackId: string;
-    intervalMs?: number;
+    intervalMs?: number | undefined;
   }) {
     this.#metricsUrl = options.metricsUrl;
     this.#apiKey = options.apiKey;

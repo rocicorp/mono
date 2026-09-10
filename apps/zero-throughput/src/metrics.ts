@@ -377,10 +377,10 @@ export class OTelMetricsCollector {
 
 function computePercentiles(
   values: number[],
-  totalCount?: number,
-  totalSum?: number,
-  globalMin?: number,
-  globalMax?: number,
+  totalCount?: number | undefined,
+  totalSum?: number | undefined,
+  globalMin?: number | undefined,
+  globalMax?: number | undefined,
 ): PercentileStats | null {
   if (values.length === 0) {
     return null;

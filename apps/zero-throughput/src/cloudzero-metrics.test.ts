@@ -252,6 +252,52 @@ describe('CloudZeroMetricsPoller', () => {
     expect(snapshot.servingLagMs?.max).toBe(80.0);
   });
 
+  test('parses pre-computed p90 and p95 when present in stat labels', () => {
+    const metrics: ParsedMetric[] = [
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'min'},
+        value: 1.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p50'},
+        value: 10.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p75'},
+        value: 20.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p90'},
+        value: 35.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p95'},
+        value: 45.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p99'},
+        value: 50.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'max'},
+        value: 80.0,
+      },
+    ];
+
+    const snapshot = buildCloudZeroSnapshot(metrics, 'test-stack');
+    expect(snapshot.servingLagMs?.p75).toBe(20.0);
+    expect(snapshot.servingLagMs?.p90).toBe(35.0);
+    expect(snapshot.servingLagMs?.p95).toBe(45.0);
+    expect(snapshot.servingLagMs?.p99).toBe(50.0);
+  });
+
   test('computes percentiles from prometheus histogram buckets', () => {
     const raw = `
 zero_sync_view_syncer_lag_seconds_bucket{le="0.005",stack_id="test-stack"} 10
