@@ -320,4 +320,9 @@ export class Forwarder {
       ),
     );
   }
+
+  /** Every registered subscriber, active or awaiting the next transaction. */
+  getSubscribers(): Subscriber[] {
+    return [...this.#active, ...this.#queued];
+  }
 }

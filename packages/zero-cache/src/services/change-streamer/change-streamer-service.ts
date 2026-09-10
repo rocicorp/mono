@@ -22,12 +22,15 @@ import type {
   ChangeSource,
   ChangeStream,
 } from '../change-source/change-source.ts';
+import type {BackfillStarted} from '../change-source/protocol/current/data.ts';
 import {
   type ChangeStreamControl,
   type ChangeStreamData,
   type Rollback,
 } from '../change-source/protocol/current/downstream.ts';
+import type {BackfillRequestMessage} from '../change-source/protocol/current/upstream.ts';
 import type {LitestreamVersion} from '../litestream/metrics.ts';
+import {readCookies} from '../replicator/change-log-cookies.ts';
 import {
   publishReplicationError,
   replicationStatusError,
@@ -44,6 +47,11 @@ import {
   ChangeLogInitializer,
   replicaInitializationSource,
 } from './change-log-initializer.ts';
+import {
+  foldIdentities,
+  readBackfillAnnouncements,
+  readSchemaChanges,
+} from './change-log-range.ts';
 import {
   type ChangeStreamerService,
   type Status,
@@ -259,6 +267,16 @@ export async function initializeStreamer(
     setTimeoutFn,
   );
 }
+
+// Where each declared backfill ended up. `following` is the steady state: the
+// subscriber's own catchup carries the announcement of the run it will follow,
+// and the change source never hears about it.
+const declarationOutcome = getOrCreateCounter(
+  'replication',
+  'backfill_declarations',
+  'Backfill progress declarations from subscribers, by what was done with ' +
+    'them.',
+);
 
 const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
 
@@ -763,6 +781,19 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         watermark = null;
 
         this.#acker.reset(stream.acks);
+
+        // A change source that just (re)started has no memory of the backfill
+        // requests forwarded on behalf of already-connected subscribers, and
+        // they will not declare again until they reconnect.
+        for (const subscriber of this.#forwarder.getSubscribers()) {
+          if (subscriber.backfillRequests.length) {
+            this.#forwardBackfillRequests(
+              this.#lc,
+              subscriber.backfillRequests,
+            );
+          }
+        }
+
         for await (const change of stream.changes) {
           this.#acker.trackDownstream(change);
 
@@ -1073,10 +1104,187 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
       }
     }
+    this.#resolveBackfillDeclarations(lc, ctx, subscriber);
+
     // Any snapshot reservation held by this task can be closed now that
     // it is subscribed to the change stream.
     this.#reservations?.close(ctx.taskID);
     return downstream;
+  }
+
+  /**
+   * Decides what to do with a subscriber's declared backfill progress.
+   *
+   * Most declarations need nothing: the subscriber's catchup range already
+   * contains the announcement of the run it will end up following, so it will
+   * follow it without the change source ever hearing about it. What is left
+   * -- a subscriber the running run has passed rows for, or one that needs a
+   * table this session already finished -- is forwarded upstream as a
+   * `backfill-request`, which the {@link BackfillManager} answers by
+   * restarting the run from the mark or by re-announcing it.
+   *
+   * Fail-soft throughout: dropping a declaration costs a backfill that starts
+   * from the beginning rather than resuming, which every other subscriber
+   * ignores through the column guard.
+   */
+  #resolveBackfillDeclarations(
+    lc: LogContext,
+    ctx: SubscriberContext,
+    subscriber: Subscriber,
+  ): void {
+    const declarations = ctx.backfills;
+    if (!declarations?.length) {
+      return;
+    }
+    const db = this.#changeLogWriter?.connection;
+    if (db === undefined) {
+      // Resolution needs the log: without it there is no way to tell which
+      // runs the subscriber's catchup will deliver, and forwarding every
+      // declaration would restart every run on every reconnect.
+      lc.warn?.(
+        `dropping ${declarations.length} backfill declaration(s): ` +
+          `the SQLite change log is not available`,
+      );
+      declarationOutcome.add(declarations.length, {outcome: 'dropped-no-log'});
+      return;
+    }
+
+    const head = this.#lastForwardedCommitWatermark;
+    if (head === undefined) {
+      lc.warn?.(
+        `dropping ${declarations.length} backfill declaration(s): the ` +
+          `change log has no head yet`,
+      );
+      declarationOutcome.add(declarations.length, {outcome: 'dropped-no-log'});
+      return;
+    }
+    let announcements;
+    let schemaChanges;
+    try {
+      schemaChanges = readSchemaChanges(db, ctx.watermark, head);
+      announcements = readBackfillAnnouncements(db, ctx.watermark, head);
+    } catch (e) {
+      lc.warn?.(`error reading the change log for backfill declarations`, e);
+      declarationOutcome.add(declarations.length, {outcome: 'dropped-error'});
+      return;
+    }
+    if (schemaChanges === undefined || announcements === undefined) {
+      lc.warn?.(
+        `dropping ${declarations.length} backfill declaration(s): ` +
+          `the interval (${ctx.watermark}, ${head}] is too large to scan`,
+      );
+      declarationOutcome.add(declarations.length, {
+        outcome: 'dropped-fold-cap',
+      });
+      return;
+    }
+
+    // The identity a declaration names is the one the subscriber knew at its
+    // watermark; the change source knows the current one.
+    const renames = foldIdentities(schemaChanges);
+    const inCookieJar = new Set(
+      readCookies(db).backfilling.map(c => `${c.schema}.${c.table}`),
+    );
+    // The last announcement per table decides whether catchup covers the
+    // subscriber: an earlier one is superseded by it.
+    const lastAnnouncement = new Map<string, BackfillStarted>();
+    for (const announcement of announcements) {
+      const {schema, name} = announcement.relation;
+      lastAnnouncement.set(`${schema}.${name}`, announcement);
+    }
+
+    const forward: BackfillRequestMessage[] = [];
+    for (const declaration of declarations) {
+      const declared = `${declaration.schema}.${declaration.table}`;
+      // `foldIdentities` is seeded lazily: a table nobody renamed or dropped
+      // has no entry at all, and maps to itself. Only an entry that is
+      // explicitly `null` means dropped -- which is why the miss and the null
+      // are distinguished here rather than collapsed with `??`.
+      const current = renames.has(declared)
+        ? renames.get(declared)
+        : {schema: declaration.schema, name: declaration.table};
+      if (current === null || current === undefined) {
+        // The table was dropped in the interval; catchup carries the drop and
+        // the subscriber's own fold clears the backfill with it.
+        declarationOutcome.add(1, {outcome: 'dropped-table'});
+        continue;
+      }
+      const key = `${current.schema}.${current.name}`;
+      const announced = lastAnnouncement.get(key);
+      if (
+        announced !== undefined &&
+        (announced.resumeFrom === null ||
+          JSON.stringify(announced.resumeFrom) ===
+            JSON.stringify(declaration.mark))
+      ) {
+        // Catchup delivers this announcement, and the subscriber will follow
+        // the run it announces. Nothing to forward.
+        declarationOutcome.add(1, {outcome: 'following'});
+        continue;
+      }
+      // A table this session has already finished has no cookie row, so it
+      // also has no `minSnapshot` with which to judge the declared mark. The
+      // mark is dropped and the run starts from the beginning.
+      const scenarioB = !inCookieJar.has(key);
+      if (scenarioB) {
+        declarationOutcome.add(1, {outcome: 'mark-dropped-scenario-b'});
+      } else {
+        declarationOutcome.add(1, {outcome: 'forwarded'});
+      }
+      forward.push([
+        'backfill-request',
+        {
+          table: {schema: current.schema, name: current.name, metadata: null},
+          columns: Object.fromEntries(
+            declaration.columns.map(column => [column, {}]),
+          ),
+          mark: scenarioB ? null : declaration.mark,
+          markWatermark: scenarioB ? null : declaration.markWatermark,
+          runID: declaration.runID,
+          subscriberID: subscriber.id,
+        },
+      ]);
+    }
+
+    if (forward.length === 0) {
+      return;
+    }
+    lc.info?.(
+      `forwarding ${forward.length} backfill declaration(s) that catchup ` +
+        `does not cover`,
+      {
+        backfillDeclarations: forward.map(([, r]) => ({
+          schema: r.table.schema,
+          table: r.table.name,
+          mark: r.mark,
+          markWatermark: r.markWatermark,
+          runID: r.runID,
+          subscriberID: r.subscriberID,
+        })),
+      },
+    );
+    // Remembered so that they can be re-sent on the next stream connection:
+    // a change source that restarted has no memory of them, and the
+    // subscriber will not re-declare until it reconnects.
+    subscriber.backfillRequests = forward;
+    this.#forwardBackfillRequests(lc, forward);
+  }
+
+  #forwardBackfillRequests(
+    lc: LogContext,
+    requests: readonly BackfillRequestMessage[],
+  ): void {
+    const stream = this.#stream;
+    if (stream === undefined) {
+      lc.info?.(
+        `deferring ${requests.length} backfill request(s) until the change ` +
+          `stream connects`,
+      );
+      return;
+    }
+    for (const request of requests) {
+      stream.acks.push(request);
+    }
   }
 
   async startSnapshotReservation(

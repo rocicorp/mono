@@ -7,6 +7,7 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import type {BackfillRequestMessage} from '../change-source/protocol/current/upstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {
   ChangeTag,
@@ -96,6 +97,14 @@ export class Subscriber {
     );
     this.#onAck = options.onAck;
   }
+
+  /**
+   * The backfill requests forwarded upstream on this subscriber's behalf,
+   * re-sent on every change stream connection: a change source that restarted
+   * has no memory of them, and this subscriber will not declare again until
+   * it reconnects.
+   */
+  backfillRequests: readonly BackfillRequestMessage[] = [];
 
   get watermark() {
     return this.#watermark;
