@@ -3,13 +3,9 @@ import {emptyArray} from '../../shared/src/sentinels.ts';
 import {ChangeIndex} from '../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import type {RelationshipStream} from '../../zql/src/ivm/data.ts';
+import {forEachSkippingYields} from '../../zql/src/ivm/skip-yields.ts';
 import {pullOf} from '../../zql/src/ivm/stream.ts';
-import {
-  applyChange,
-  idSymbol,
-  skipYields,
-  type ViewChange,
-} from './bindings.ts';
+import {applyChange, idSymbol, type ViewChange} from './bindings.ts';
 import {
   type AnyViewFactory,
   type Change,
@@ -115,21 +111,9 @@ export class SolidView implements Output {
     const initialRoot = this.#createEmptyRoot();
     // Lazy, as ArrayView#hydrate is: expanding a node's relationships triggers
     // child fetches, so draining the parent scan first would reorder them.
-    const hydrate = input.fetch({});
-    try {
-      for (
-        let node = hydrate.next();
-        node !== undefined;
-        node = hydrate.next()
-      ) {
-        if (node === 'yield') {
-          continue;
-        }
-        this.#applyChangeToRoot({type: 'add', node}, initialRoot);
-      }
-    } finally {
-      hydrate.close();
-    }
+    forEachSkippingYields(input.fetch({}), node => {
+      this.#applyChangeToRoot({type: 'add', node}, initialRoot);
+    });
 
     this.#setState = setState;
     this.#setState(
@@ -302,14 +286,9 @@ function materializeNodeRelationships(node: Node): Node {
   const relationships: Record<string, () => RelationshipStream> = {};
   for (const relationship in node.relationships) {
     const materialized: Node[] = [];
-    const children = skipYields(node.relationships[relationship]());
-    try {
-      for (let n = children.next(); n !== undefined; n = children.next()) {
-        materialized.push(materializeNodeRelationships(n));
-      }
-    } finally {
-      children.close();
-    }
+    forEachSkippingYields(node.relationships[relationship](), n => {
+      materialized.push(materializeNodeRelationships(n));
+    });
     relationships[relationship] = () => pullOf(materialized);
   }
   return {

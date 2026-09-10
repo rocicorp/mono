@@ -76,6 +76,55 @@ const EMPTY: PullStream<never> = {
  * stream carrying 'yield' markers passes them through by accepting them in
  * the predicate.
  */
+/**
+ * Runs `fn` with `stream` and closes it afterwards, on the normal path and on
+ * a throw.
+ *
+ * `close()` is what `for...of` used to do implicitly on abrupt completion, so
+ * anything that takes ownership of a stream for the length of a scope should
+ * go through here rather than hand-writing try/finally. If `fn` throws, that
+ * error is the one raised: a failure to close is a symptom, not the cause.
+ */
+export function withPull<T, R>(
+  stream: PullStream<T>,
+  fn: (stream: PullStream<T>) => R,
+): R {
+  let result: R;
+  try {
+    result = fn(stream);
+  } catch (e) {
+    try {
+      stream.close();
+    } catch {
+      // Preserve the original failure.
+    }
+    throw e;
+  }
+  stream.close();
+  return result;
+}
+
+/**
+ * Calls `fn` for each value, closing the stream when the scan ends, when `fn`
+ * returns `'break'`, or when `fn` throws.
+ *
+ * The `'break'` sentinel is the point: a `break` out of a hand-written loop is
+ * exactly the abrupt completion that `for...of` used to close for, and the
+ * case most likely to be written without a `finally`.
+ */
+export function forEachPull<T>(
+  stream: PullStream<T>,
+  fn: (value: T) => void | 'break',
+): void {
+  withPull(stream, s => {
+    for (let v = s.next(); v !== undefined; v = s.next()) {
+      if (fn(v) === 'break') {
+        return;
+      }
+    }
+  });
+}
+
 export function filterPull<T>(
   stream: PullStream<T>,
   keep: (value: T) => boolean,
@@ -84,13 +133,34 @@ export function filterPull<T>(
     next() {
       for (;;) {
         const v = stream.next();
-        if (v === undefined || keep(v)) {
+        if (v === undefined) {
+          return v;
+        }
+        if (callOrClose(stream, keep, v)) {
           return v;
         }
       }
     },
     close: () => stream.close(),
   };
+}
+
+/**
+ * Applies a caller-supplied callback, closing `stream` if it throws. A
+ * combinator has no scope to close in, and the exception propagates past the
+ * caller's own `close()`, so the release has to happen here.
+ */
+function callOrClose<T, R>(
+  stream: PullStream<unknown>,
+  fn: (value: T) => R,
+  value: T,
+): R {
+  try {
+    return fn(value);
+  } catch (e) {
+    stream.close();
+    throw e;
+  }
 }
 
 /** Ends the stream at the first value `keep` rejects, closing the source. */
@@ -109,7 +179,7 @@ export function takeWhilePull<T>(
         done = true;
         return undefined;
       }
-      if (!keep(v)) {
+      if (!callOrClose(stream, keep, v)) {
         done = true;
         stream.close();
         return undefined;
@@ -133,7 +203,7 @@ export function mapPull<T, U>(
   return {
     next() {
       const v = stream.next();
-      return v === undefined ? undefined : map(v);
+      return v === undefined ? undefined : callOrClose(stream, map, v);
     },
     close: () => stream.close(),
   };
@@ -176,8 +246,11 @@ export function limitedScan<T>(
       try {
         v = stream.next();
       } catch (e) {
-        // As the generators did: an exception records no state.
+        // As the generators did: an exception records no state. The source
+        // still has to be released -- setting `done` makes the caller's
+        // close() skip it, which is the bug FilterStartPull had.
         done = true;
+        stream.close();
         throw e;
       }
       if (v === undefined) {
@@ -256,18 +329,18 @@ export function drainPullMap<T, U>(
   map: (value: T) => U,
 ): U[] {
   const out: U[] = [];
-  for (let v = stream.next(); v !== undefined; v = stream.next()) {
+  forEachPull(stream, v => {
     out.push(map(v));
-  }
+  });
   return out;
 }
 
 /** Reads a pull stream to completion. For tests and for `Catch`. */
 export function drainPull<T>(stream: PullStream<T>): T[] {
   const out: T[] = [];
-  for (let v = stream.next(); v !== undefined; v = stream.next()) {
+  forEachPull(stream, v => {
     out.push(v);
-  }
+  });
   return out;
 }
 

@@ -7,7 +7,7 @@ import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import {type FetchRequest, type Input, type Output} from './operator.ts';
-import {drainPullMap} from './stream.ts';
+import {drainPullMap, forEachPull} from './stream.ts';
 
 export type CaughtNode =
   | {
@@ -132,17 +132,9 @@ export function expandNode(node: Node | 'yield'): CaughtNode {
           const children: CaughtNode[] = [];
 
           const childStream = getChildren();
-          try {
-            for (
-              let child = childStream.next();
-              child !== undefined;
-              child = childStream.next()
-            ) {
-              children.push(expandNode(child));
-            }
-          } finally {
-            childStream.close();
-          }
+          forEachPull(childStream, child => {
+            children.push(expandNode(child));
+          });
           return children;
         }),
       };

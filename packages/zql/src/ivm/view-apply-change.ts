@@ -9,7 +9,7 @@ import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {type Comparator, type Node} from './data.ts';
 import {skipYields} from './operator.ts';
-import {pullOf, type PullStream} from './stream.ts';
+import {forEachPull, pullOf, type PullStream} from './stream.ts';
 
 import type {SourceSchema} from './schema.ts';
 import type {Entry, Format} from './view.ts';
@@ -231,25 +231,17 @@ export function applyChangeInternal<M extends Mutate>(
         for (const relationship of Object.keys(change.node.relationships)) {
           const childSchema = must(schema.relationships[relationship]);
           const children = childNodes(change.node, relationship);
-          try {
-            for (
-              let node = children.next();
-              node !== undefined;
-              node = children.next()
-            ) {
-              currentParent = applyChangeInternal(
-                currentParent,
-                {type: change.type, node},
-                childSchema,
-                relationship,
-                format,
-                withIDs,
-                mutate,
-              );
-            }
-          } finally {
-            children.close();
-          }
+          forEachPull(children, node => {
+            currentParent = applyChangeInternal(
+              currentParent,
+              {type: change.type, node},
+              childSchema,
+              relationship,
+              format,
+              withIDs,
+              mutate,
+            );
+          });
         }
         return currentParent;
       }
@@ -658,64 +650,48 @@ function initializeRelationshipsForNewEntryIfAny(
       result[relationship] = newView;
 
       const children = childNodes(node, relationship);
-      try {
-        for (
-          let childNode = children.next();
-          childNode !== undefined;
-          childNode = children.next()
-        ) {
-          applyChangeInternal(
-            result,
-            {type: 'add', node: childNode},
-            childSchema,
-            relationship,
-            childFormat,
-            withIDs,
-            true, // this is a new entry, so we can mutate
-          );
-        }
-      } finally {
-        children.close();
-      }
+      forEachPull(children, childNode => {
+        applyChangeInternal(
+          result,
+          {type: 'add', node: childNode},
+          childSchema,
+          relationship,
+          childFormat,
+          withIDs,
+          true, // this is a new entry, so we can mutate
+        );
+      });
     } else {
       // Plural non-hidden: build array in-place for efficiency
       const childArray: MutableMetaEntryList = track([]);
 
       const children = childNodes(node, relationship);
-      try {
-        for (
-          let childNode = children.next();
-          childNode !== undefined;
-          childNode = children.next()
-        ) {
-          const newEntry = makeNewMetaEntry(
-            childNode.row,
-            childSchema,
-            withIDs,
-            1,
-          );
-          const rawPos = binarySearch(
-            childArray,
-            childNode.row,
-            childSchema.compareRows,
-          );
+      forEachPull(children, childNode => {
+        const newEntry = makeNewMetaEntry(
+          childNode.row,
+          childSchema,
+          withIDs,
+          1,
+        );
+        const rawPos = binarySearch(
+          childArray,
+          childNode.row,
+          childSchema.compareRows,
+        );
 
-          if (rawPos >= 0) {
-            childArray[rawPos][refCountSymbol]++;
-          } else {
-            childArray.splice(~rawPos, 0, newEntry);
-            initializeRelationshipsForNewEntryIfAny(
-              newEntry,
-              childNode,
-              childSchema,
-              childFormat.relationships,
-              withIDs,
-            );
-          }
+        if (rawPos >= 0) {
+          childArray[rawPos][refCountSymbol]++;
+        } else {
+          childArray.splice(~rawPos, 0, newEntry);
+          initializeRelationshipsForNewEntryIfAny(
+            newEntry,
+            childNode,
+            childSchema,
+            childFormat.relationships,
+            withIDs,
+          );
         }
-      } finally {
-        children.close();
-      }
+      });
 
       result[relationship] = childArray;
     }

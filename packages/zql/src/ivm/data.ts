@@ -1,6 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import {forEachPull} from './stream.ts';
 import type {PullStream} from './stream.ts';
 
 /**
@@ -143,16 +144,8 @@ export function drainStreams(node: Node | 'yield') {
   }
   for (const stream of Object.values(node.relationships)) {
     const children = stream();
-    try {
-      for (
-        let node = children.next();
-        node !== undefined;
-        node = children.next()
-      ) {
-        drainStreams(node);
-      }
-    } finally {
-      children.close();
-    }
+    forEachPull(children, node => {
+      drainStreams(node);
+    });
   }
 }

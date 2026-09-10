@@ -3,6 +3,7 @@ import {makeAddChange} from './change.ts';
 import type {Node} from './data.ts';
 import type {FetchRequest, Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
+import {forEachSkippingYields} from './skip-yields.ts';
 import {consume, emptyPullStream, type PullStream} from './stream.ts';
 
 /**
@@ -83,21 +84,9 @@ export class DeferredInput implements Input {
     }
     try {
       input.setOutput(output);
-      const stream = input.fetch({});
-      try {
-        for (
-          let node = stream.next();
-          node !== undefined;
-          node = stream.next()
-        ) {
-          if (node === 'yield') {
-            continue;
-          }
-          consume(output.push(makeAddChange(node), input));
-        }
-      } finally {
-        stream.close();
-      }
+      forEachSkippingYields(input.fetch({}), node => {
+        consume(output.push(makeAddChange(node), input));
+      });
     } catch (e) {
       input.destroy();
       throw e;
