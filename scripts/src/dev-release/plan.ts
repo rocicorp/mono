@@ -108,9 +108,9 @@ export function resolveUniqueShortSha(
       return shortSha;
     }
   } catch {
-    // Fallback if git rev-parse fails for any reason
+    // Fallback to full SHA to guarantee uniqueness without collision
   }
-  return sourceSha.slice(0, minLen);
+  return sourceSha;
 }
 
 export function deriveDevImageTag(
