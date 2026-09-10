@@ -64,7 +64,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify Signed Commit Authors
-        uses: rocicorp/.github/.github/actions/verify-signed-commit-authors@main
+        uses: rocicorp/.github/.github/actions/verify-signed-commit-authors@c49caa1498b8cf402992126969f2d7c8adc9ca4b # main
         with:
           enforce: 'true'
           github-token: ${{ secrets.GITHUB_TOKEN }}
