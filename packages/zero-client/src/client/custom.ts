@@ -207,6 +207,7 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
 }
 
 function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
+  // The forked branch is already populated, so there is nothing to defer.
   return new ZeroContext(
     lc,
     ivmBranch,
@@ -218,5 +219,5 @@ function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
     applyViewUpdates => applyViewUpdates(),
     emptyFunction,
     assertValidRunOptions,
-  );
+  ).markPipelinesReady();
 }

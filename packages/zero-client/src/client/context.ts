@@ -44,12 +44,13 @@ export class ZeroContext extends QueryDelegateBase {
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  // Pipeline construction is deferred between `deferPipelines()` and
-  // `markPipelinesReady()`. Zero calls the former at construction and the
-  // latter once the replica has been loaded into the IVM sources, so cold
-  // boot loads the sources once instead of pushing every row through every
-  // already-materialized pipeline.
-  #pipelinesReady = true;
+  // Pipeline construction is deferred until `markPipelinesReady()` is called.
+  // Zero calls it once the replica has been loaded into the IVM sources, so
+  // cold boot loads the sources once instead of pushing every row through
+  // every already-materialized pipeline. Contexts whose sources are already
+  // populated at construction (custom mutator transactions, tests) call it
+  // right away.
+  #pipelinesReady = false;
   readonly #pendingPipelines: Set<() => void> = new Set();
 
   readonly assertValidRunOptions: (options?: RunOptions) => void;
@@ -111,27 +112,21 @@ export class ZeroContext extends QueryDelegateBase {
   }
 
   /**
-   * Stop building pipelines for materialized queries until
-   * {@link markPipelinesReady} is called. Views materialized in the meantime
-   * are empty and `unknown`, exactly as they would be over empty sources.
+   * Build and hydrate every pipeline deferred since construction, in
+   * materialization order, as a single view-update batch. Views materialized
+   * before this is called are empty and `unknown` in the meantime, exactly as
+   * they would be over empty sources. A pipeline that fails to build is
+   * logged and its view reports an error; the rest are still built.
+   *
+   * Returns `this` so it can be chained onto the constructor call.
    */
-  deferPipelines(): void {
-    this.#pipelinesReady = false;
-  }
-
-  /**
-   * Build and hydrate every pipeline deferred since {@link deferPipelines},
-   * in materialization order, as a single view-update batch. A pipeline that
-   * fails to build is logged and its view reports an error; the rest are
-   * still built.
-   */
-  markPipelinesReady(): void {
+  markPipelinesReady(): this {
     if (this.#pipelinesReady) {
-      return;
+      return this;
     }
     this.#pipelinesReady = true;
     if (this.#pendingPipelines.size === 0) {
-      return;
+      return this;
     }
     const pending = [...this.#pendingPipelines];
     this.#pendingPipelines.clear();
@@ -154,6 +149,7 @@ export class ZeroContext extends QueryDelegateBase {
         this.#endTransaction();
       }
     });
+    return this;
   }
 
   mapAst(ast: AST): AST {

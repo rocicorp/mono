@@ -125,7 +125,7 @@ describe('query materialization metrics', () => {
       testBatchViewUpdates,
       addMetricSpy as ZeroContext['addMetric'],
       assertValidRunOptions,
-    );
+    ).markPipelinesReady();
   });
 
   describe('query-materialization-client metric', () => {
@@ -595,7 +595,7 @@ describe('query materialization metrics', () => {
         testBatchViewUpdates,
         addMetricSpy as ZeroContext['addMetric'],
         assertValidRunOptions,
-      );
+      ).markPipelinesReady();
     });
 
     test('handles rapid materialization and destruction', () => {
