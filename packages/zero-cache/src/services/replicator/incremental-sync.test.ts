@@ -212,6 +212,7 @@ describe('replicator/incremental-sync', () => {
       watermark: '02',
       initial: true,
       logsChangeStream: false,
+      backfills: [],
     });
 
     const firstBegin = [
@@ -508,6 +509,7 @@ describe('replicator/incremental-sync', () => {
       watermark: '09',
       initial: true,
       logsChangeStream: false,
+      backfills: [],
     });
 
     for (const change of [
@@ -717,6 +719,7 @@ describe('replicator/incremental-sync', () => {
       watermark: '09',
       initial: true,
       logsChangeStream: false,
+      backfills: [],
     });
 
     const next = versionReady.next();

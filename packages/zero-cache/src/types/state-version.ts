@@ -55,3 +55,17 @@ export function majorVersionFromString(ver: string): bigint {
 export function majorVersionToString(major: number | bigint) {
   return versionToLexi(major);
 }
+
+/**
+ * The major portion of a state version, as it appears in the string.
+ *
+ * Note that this is not `majorVersionToString(majorVersionFromString(ver))`:
+ * a LexiVersion can be non-canonical (`"101"` and `"01"` both decode to 1),
+ * and a change source's watermarks are its own to choose. Splitting the string
+ * preserves whatever encoding the change source used, which is what a
+ * subscriber has to hand back to it.
+ */
+export function majorVersionOf(ver: string): string {
+  const dot = ver.indexOf('.');
+  return dot < 0 ? ver : ver.slice(0, dot);
+}

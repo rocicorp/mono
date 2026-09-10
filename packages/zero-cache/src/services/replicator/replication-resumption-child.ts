@@ -187,6 +187,10 @@ class FailpointWriteWorkerClient implements WriteWorkerClient {
     return this.#inner.getSubscriptionState();
   }
 
+  getBackfillDeclarations() {
+    return this.#inner.getBackfillDeclarations();
+  }
+
   async processMessages(
     downstream: readonly ChangeStreamData[],
   ): Promise<CommitResult | null> {

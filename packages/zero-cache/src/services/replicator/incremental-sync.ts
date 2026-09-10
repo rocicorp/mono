@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
+import {majorVersionOf} from '../../types/state-version.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -94,6 +95,23 @@ export class IncrementalSyncer {
     while (this.#state.shouldRun()) {
       const {replicaVersion, watermark} =
         await this.#worker.getSubscriptionState();
+      const backfills = await this.#worker.getBackfillDeclarations();
+
+      // Subscribe at the *major* of the replica's state version. The minor of
+      // a backfill transaction is local to this replica -- the version a
+      // replication-manager stamps on one orders that manager's stream and
+      // means nothing to another (see `#commitVersionFor` in
+      // `change-processor.ts`) -- so handing it back to a change-streamer
+      // would either land on that manager's own transaction at the same
+      // version, silently skipping everything it sent before it, or find no
+      // such version and be answered with `WatermarkTooOld`, which this class
+      // answers with a full replica restore. The major is always a real
+      // upstream commit, which both catchup implementations can resume from,
+      // and which the change-streamer's purge floor keeps for exactly this
+      // reason. What it costs is re-delivery of the backfill transactions
+      // since that commit, which a following subscriber re-applies
+      // idempotently.
+      const subscribeWatermark = majorVersionOf(watermark);
 
       let downstream: Source<SizedDownstream> | undefined;
       let unregister = () => {};
@@ -105,9 +123,12 @@ export class IncrementalSyncer {
           taskID: this.#taskID,
           id: this.#id,
           mode: this.#mode,
-          watermark,
+          watermark: subscribeWatermark,
           replicaVersion,
           initial: watermark === initialWatermark,
+          // How far this replica has got with each in-flight backfill, so
+          // that a run can be resumed rather than restarted.
+          backfills,
           // The SQLite change log is written by the change-streamer itself, so
           // no replicator logs the change stream any more. The parameter stays
           // on the wire for change-streamers that still exclude a writer from
