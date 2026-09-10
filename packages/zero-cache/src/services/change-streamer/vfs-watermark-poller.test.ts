@@ -217,6 +217,42 @@ describe('change-streamer/vfs-watermark-poller', () => {
     expect(spawnMock).toHaveBeenCalledTimes(1);
   });
 
+  test('a replacement spawned before the old child exits is not orphaned', async () => {
+    setUp();
+    const poller = makePoller(
+      fakeVfsQuery(
+        `echo '${line('01', 100, '2025-01-01T00:00:00Z')}'\n${BLOCK}`,
+      ),
+    );
+    poller.checkLocalWatermark();
+    await vi.waitFor(() => expect(pushed).toHaveLength(1));
+    const child1 = spawnMock.mock.results[0].value as childProcess.ChildProcess;
+    const child1Closed = new Promise<void>(resolve =>
+      child1.once('close', () => resolve()),
+    );
+
+    // Catch up (which stops the poller) and fall behind again (which restarts
+    // it) before the first child has had a chance to exit.
+    setLocalWatermark('01');
+    poller.checkLocalWatermark();
+    expect(child1.killed).toBe(true);
+    setLocalWatermark('02');
+    poller.checkLocalWatermark();
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+    const child2 = spawnMock.mock.results[1].value as childProcess.ChildProcess;
+
+    // The stale child's exit must not schedule a respawn next to the
+    // replacement (the initial backoff is 2s).
+    await child1Closed;
+    await new Promise(resolve => setTimeout(resolve, 2_500));
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+
+    // ...and the replacement is still tracked: catching up stops it.
+    setLocalWatermark('01');
+    poller.checkLocalWatermark();
+    expect(child2.killed).toBe(true);
+  });
+
   test('an unexpected exit while still behind schedules a respawn', async () => {
     setUp();
     const poller = makePoller(fakeVfsQuery('exit 1'), {
