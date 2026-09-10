@@ -29,6 +29,9 @@ export async function handleInspect(
   client: ClientHandler,
   inspectorDelegate: InspectorDelegate,
   clientGroupID: string,
+  // The service handling the request, on whose behalf authentication is
+  // recorded (see InspectorDelegate.clearAuthenticated).
+  authOwner: object,
   cvrStore: CVRStore,
   config: NormalizedZeroConfig,
   ctx: ConnectionContext,
@@ -98,7 +101,7 @@ export async function handleInspect(
         const password = body.value;
         const ok = isAdminPasswordValid(lc, config, password);
         if (ok) {
-          inspectorDelegate.setAuthenticated(clientGroupID);
+          inspectorDelegate.setAuthenticated(clientGroupID, authOwner);
         } else {
           inspectorDelegate.clearAuthenticated(clientGroupID);
         }
