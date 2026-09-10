@@ -29,10 +29,19 @@ export type ServerMetrics = {
 type ClientGroupID = string;
 
 /**
- * Set of authenticated client group IDs. We keep this outside of the class to
- * share this state across all instances of the InspectorDelegate.
+ * The service that established a client group's authentication, i.e. the
+ * ViewSyncer serving it. See {@link InspectorDelegate.clearAuthenticated}.
  */
-const authenticatedClientGroupIDs = new Set<ClientGroupID>();
+type AuthOwner = object;
+
+const NO_OWNER: AuthOwner = {};
+
+/**
+ * Authenticated client group IDs, each mapped to the owner that authenticated
+ * it. We keep this outside of the class to share this state across all
+ * instances of the InspectorDelegate.
+ */
+const authenticatedClientGroupIDs = new Map<ClientGroupID, AuthOwner>();
 
 export class InspectorDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
@@ -105,12 +114,31 @@ export class InspectorDelegate implements MetricsDelegate {
     );
   }
 
-  setAuthenticated(clientGroupID: ClientGroupID): void {
-    authenticatedClientGroupIDs.add(clientGroupID);
+  /**
+   * Marks the client group as authenticated on behalf of `owner`, the service
+   * (ViewSyncer) that handled the authentication.
+   */
+  setAuthenticated(
+    clientGroupID: ClientGroupID,
+    owner: AuthOwner = NO_OWNER,
+  ): void {
+    authenticatedClientGroupIDs.set(clientGroupID, owner);
   }
 
-  clearAuthenticated(clientGroupID: ClientGroupID) {
-    authenticatedClientGroupIDs.delete(clientGroupID);
+  /**
+   * Clears the client group's authentication. When `owner` is given, the
+   * authentication is only cleared if it was established by that owner: a
+   * replacement ViewSyncer can start for the same client group while the
+   * previous one is still shutting down, and the previous one's cleanup must
+   * not revoke what the replacement has since authenticated.
+   */
+  clearAuthenticated(clientGroupID: ClientGroupID, owner?: AuthOwner) {
+    if (
+      owner === undefined ||
+      authenticatedClientGroupIDs.get(clientGroupID) === owner
+    ) {
+      authenticatedClientGroupIDs.delete(clientGroupID);
+    }
   }
 
   /**
