@@ -692,10 +692,6 @@ export class Zero<
       assertValidRunOptions,
     );
 
-    // Defer building query pipelines until ZeroRep.init has loaded the replica
-    // into the IVM sources (see ZeroContext.markPipelinesReady).
-    this.#zeroContext.deferPipelines();
-
     this.query = createRunnableBuilder(this.#zeroContext, schema);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
