@@ -14,3 +14,10 @@ export const schemaChangeTags = [
   'drop-index',
   'backfill-completed',
 ] as const;
+
+/**
+ * Backfill control tags: messages that annotate backfill runs without
+ * carrying rows or DDL. Like {@link schemaChangeTags}, this is a closed list
+ * used to tag-filter reads of the change log.
+ */
+export const backfillControlTags = ['backfill-started'] as const;
