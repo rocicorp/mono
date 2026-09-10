@@ -94,6 +94,22 @@ export class BackfillDeclarations {
     }
   }
 
+  /**
+   * The tracker for a subscriber, or undefined for one that does not follow
+   * backfill runs and so has nothing to request. A subscriber that follows
+   * runs is tracked even when it declares nothing: the stream can start a
+   * backfill that the subscriber then cannot follow, and nothing else would
+   * request it.
+   */
+  static forSubscriber(
+    followsBackfillRuns: boolean,
+    declarations: readonly BackfillDeclaration[] | undefined,
+  ): BackfillDeclarations | undefined {
+    return followsBackfillRuns
+      ? new BackfillDeclarations(declarations ?? [])
+      : undefined;
+  }
+
   get inTransaction(): boolean {
     return this.#inTransaction;
   }

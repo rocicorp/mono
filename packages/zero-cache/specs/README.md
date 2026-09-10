@@ -12,26 +12,43 @@ It models the **post-retirement** topology — no PG change log — because that
 the configuration the properties are about. With PG still enabled every hold
 below becomes a demotion and every catchup succeeds.
 
+A watermark has a **major** and a **minor**. A major is an upstream commit. A
+minor is a backfill transaction that the replication-manager mints under the
+last one, and it is local to the replica that applies it, so a follower that
+follows backfill runs (protocol v7) subscribes at the major of its state
+version rather than at the version itself. That difference is the one the
+model needs to see the seed-boundary bug below.
+
 Run everything with `./check.sh`. It fetches `tla2tools.jar` on first use and
 asserts the expected outcome of each configuration; a `FAIL` line means the
-code's behaviour and the spec's have diverged.
+code's behaviour and the spec's have diverged. The shipped configuration has
+about a million distinct states, and all twelve configurations take a little
+over a minute.
 
 ### What is modelled
 
-| Spec                                                        | Code                                                                                                                  |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `logMin`, `head`, `seedWm`                                  | `SQLiteChangeLogCoverage` (`sqlite-change-log-read-router.ts:14`)                                                     |
-| `Spans(w)`                                                  | `spansInterval` (`change-log-initializer.ts:462`) — reaches back that far **and** holds a `commit` row at exactly `w` |
-| `Floor`                                                     | `#getCleanupFloor` (`change-streamer-service.ts:1525`)                                                                |
-| `PurgeDispatch` / `PurgeApply`                              | `SQLiteChangeLogPurgeScheduler.purge`, split so a batch can be in flight                                              |
-| `OpenReservation` / `PinReservation` / `ConfirmReservation` | `startSnapshotReservation` and `#confirmReservations`                                                                 |
-| `ExpireReservation`                                         | `SnapshotReservations.#expire`                                                                                        |
-| `Reseed`                                                    | `reconcileChangeLog`, which runs on **every change-stream connection** (`change-streamer-service.ts:765`)             |
+| Spec                                                        | Code                                                                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `head`, `log`, `seedWm`                                     | `SQLiteChangeLogCoverage` (`sqlite-change-log-read-router.ts`): the log's head, its rows, and its seed |
+| `hist`                                                      | every watermark committed at or below the head: where a replica or a backup can be                     |
+| `Major(w)`                                                  | `majorVersionOf` (`types/state-version.ts`)                                                            |
+| `Commit` / `BackfillCommit`                                 | an upstream commit, and a backfill transaction at the next minor (`beginTxFor`, `backfill-manager.ts`) |
+| `Spans(w)`                                                  | `spansInterval` — a `commit` row at exactly `w`, in a log that is only ever purged by prefix           |
+| `SubscribeAt` / `SeedCovers` / `CanCatchUp`                 | the subscribe watermark (`incremental-sync.ts`) and `seedCatchupStart` (`sqlite-change-log-reader.ts`) |
+| `Floor` / `PurgeFloor`                                      | `#getCleanupFloor`, which purges to the major of the floor                                             |
+| `PurgeDispatch` / `PurgeApply`                              | `SQLiteChangeLogPurgeScheduler.purge`, split so a batch can be in flight                               |
+| `OpenReservation` / `PinReservation` / `ConfirmReservation` | `startSnapshotReservation` and `#confirmReservations`                                                  |
+| `ExpireReservation`                                         | `SnapshotReservations.#expire`                                                                         |
+| `Reseed`                                                    | `reconcileChangeLog`, which runs on **every change-stream connection**, and `seedChangeLogStream`      |
 
-Two deliberate over-approximations, both sound for safety: purge deletes to the
-floor itself rather than to `majorVersionOf(floor)`, which retains strictly
-more; and a crashed follower's ACK leaves the floor at once rather than after
-the cleanup grace period.
+A reseed writes a real transaction at the resume watermark, so a freshly seeded
+log serves a subscriber at exactly that watermark. An earlier version of this
+spec modelled the seed as writing no row, which the code has never done.
+
+One deliberate over-approximation, sound for safety: a crashed follower's ACK
+leaves the floor at once rather than after the cleanup grace period. One
+simplification: a reseed lands at the head, not anywhere between the backup and
+the head.
 
 ### Properties
 
@@ -44,6 +61,9 @@ the cleanup grace period.
 - `Prop_NoPermanentPin` — no reservation holds the log forever.
 - `Prop_RestoreCompletes` — a restore that is not wedged ends up serving again.
 
+"Catch up from the watermark it was given" means from where the follower then
+subscribes (`CanCatchUp`): its major, or the seed standing in for it.
+
 ### Results
 
 **The reseed bug, found here and since fixed.** `NoInvalidation` fails: nothing
@@ -51,8 +71,8 @@ in the reservation machinery observed a reseed, and reconciliation runs on every
 change-stream connection. Two windows:
 
 1. `peek()` returns the route stored by `pin()`, coverage and all
-   (`sqlite-change-log-read-router.ts:101`), so a reseed between the pin and
-   the confirmation confirms against a minimum the log no longer has.
+   (`sqlite-change-log-read-router.ts`), so a reseed between the pin and the
+   confirmation confirms against a minimum the log no longer has.
 2. A reseed **after** confirmation silently voids a promise already made.
 
 Both ended the same way: the follower restores, subscribes at the watermark it
@@ -67,6 +87,18 @@ The fix is `SQLiteChangeLogWriterOptions.onReseeded` →
 `SnapshotReservations.closeAll()`. `Fixed` is the shipped behaviour and is the
 baseline every other configuration below varies from.
 
+**The seed-boundary bug, found in review and modelled since.** `NoSeedStandIn`
+fails in seven steps: a backfill transaction takes the head to a minor, a
+backup lands on it, a follower crashes, the log is reseeded at that minor, and
+the follower's reservation is confirmed there. Subscribing at the major, which
+this log has never held, the follower is refused, and restoring the same backup
+repeats it. The earlier spec could not express this: watermarks had no minor,
+every follower subscribed at exactly the watermark it restored to, and the seed
+wrote no row. The fix is `seedCatchupStart` (`SeedStandsIn`): a follower that
+follows runs starts from the seed while the seed is still the log's first
+transaction. `SubscribeExact` passes without it, so it is subscribing at the
+major that needs the stand-in.
+
 **A `truncated` reconcile deliberately does _not_ invalidate**, because it
 deletes above the resume watermark and every reservation is advertised at the
 confirmed backup watermark, which is at or below it. That relationship is load
@@ -75,14 +107,13 @@ holds because a backup covers only what the replica has applied, the replica
 holds only what was forwarded, and invariant 2 puts forwarding after the log's
 commit. Worth an assertion if that chain ever changes.
 
-**`SeedConfirm` fails**, which answers the open question in the soak plan
-§1.5. Confirming on `seedWatermark <= backupWatermark` instead of
-`minWatermark` is not conservatism that can be tightened away: `seedWatermark`
-lives in the meta row and writes no stream row (`change-log-db.ts:191`), so a
-log that has committed nothing since its seed has no catchup boundary at that
-watermark and never will. The four-step counter-example confirms a reservation
-whose subscribe is then rejected. `minWatermark` is exact; the wait it causes
-is real.
+**`SeedConfirm` passes**, which reverses this spec's earlier answer to soak plan
+§1.5. That answer rested on the seed writing no stream row. With the row, the
+log's minimum is the seed until a purge passes it, and a purge never passes the
+backup, so a seed at or below the backup always means a minimum at or below it
+too. Confirming on `seedWatermark <= backupWatermark` is therefore as safe as
+confirming on `minWatermark`. It does not shorten the wait for a backup at or
+above the seed, which is still real.
 
 **`NoPause` passes**, which is a hypothesis rather than a recommendation: at
 this abstraction the purge pause has no safety role, because the floor is

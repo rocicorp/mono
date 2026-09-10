@@ -8,7 +8,7 @@
 // failure means the replica disagrees with Postgres, not that it disagrees
 // with a paraphrase.
 //
-// Two properties, from plans/resumable-backfills-plan.md section 4:
+// Two safety properties, from plans/resumable-backfills-plan.md section 4:
 //
 //   never stale  -- a backfilled column is either still empty or holds the
 //                   current upstream value. A run whose snapshot predates a
@@ -18,6 +18,19 @@
 //                   value. Honoring a completion for rows the replica never
 //                   received publishes a column that is silently, permanently
 //                   half empty (invariant 4).
+//
+// And one liveness property, which neither of those can see: a replica that
+// stops following every run is never stale and never half.
+//
+//   completes    -- once the interleaving stops, and the subscriber stays with
+//                   a manager that honors its backfill requests, the backfill
+//                   completes.
+//
+// That puts the change-streamer's declaration tracker in the loop. It sees
+// exactly what the replica sees, and its requests are the only way a replica
+// that cannot follow a run gets one it can. The subscriber connects before the
+// table exists and declares nothing, so the backfill it tracks is one that the
+// stream itself started.
 //
 // Everything the generator emits is *manager-legal*: a run sends every row
 // after its resume point, in key order, before it completes. What varies is
@@ -31,14 +44,21 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
+import {schemaVersionMigrationMap} from '../change-source/common/replica-schema.ts';
 import type {
   BackfillCompleted,
   BackfillStarted,
   MessageBackfill,
   StreamedChange,
 } from '../change-source/protocol/current/data.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {BackfillRequestMessage} from '../change-source/protocol/current/upstream.ts';
+import {BackfillDeclarations} from '../change-streamer/backfill-declarations.ts';
 import {ChangeProcessor} from './change-processor.ts';
-import {BACKFILLING_TABLE} from './schema/backfilling.ts';
+import {
+  BACKFILLING_TABLE,
+  readBackfillDeclarations,
+} from './schema/backfilling.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 
@@ -76,7 +96,17 @@ type Step =
   // update the way Postgres leaves out an unchanged TOASTed value. The moved
   // row arrives with no value for the column, so only a run that starts below
   // its new key will ever supply one.
-  | {kind: 'keyChangeToasted'; id: Key; to: Key};
+  | {kind: 'keyChangeToasted'; id: Key; to: Key}
+  // The subscriber's change stream reconnects, so the change-streamer's
+  // tracker starts over from what the replica declares.
+  | {kind: 'reconnect'}
+  // A rollback to a v17 zero-cache, which replicates that TOASTed move but
+  // maintains none of the resume columns, then the roll forward to v18.
+  | {kind: 'v17KeyChangeToasted'; id: Key; to: Key};
+
+const keyMove = fc
+  .tuple(fc.constantFrom(...KEYS), fc.constantFrom(...KEYS))
+  .filter(([id, to]) => id !== to);
 
 const stepArb: fc.Arbitrary<Step> = fc.oneof(
   fc.constant<Step>({kind: 'startFromZero'}),
@@ -99,14 +129,10 @@ const stepArb: fc.Arbitrary<Step> = fc.oneof(
   })),
   fc.constantFrom(...KEYS).map<Step>(id => ({kind: 'update', id})),
   fc.constantFrom(...KEYS).map<Step>(id => ({kind: 'delete', id})),
-  fc
-    .tuple(fc.constantFrom(...KEYS), fc.constantFrom(...KEYS))
-    .filter(([id, to]) => id !== to)
-    .map<Step>(([id, to]) => ({kind: 'keyChange', id, to})),
-  fc
-    .tuple(fc.constantFrom(...KEYS), fc.constantFrom(...KEYS))
-    .filter(([id, to]) => id !== to)
-    .map<Step>(([id, to]) => ({kind: 'keyChangeToasted', id, to})),
+  keyMove.map<Step>(([id, to]) => ({kind: 'keyChange', id, to})),
+  keyMove.map<Step>(([id, to]) => ({kind: 'keyChangeToasted', id, to})),
+  fc.constant<Step>({kind: 'reconnect'}),
+  keyMove.map<Step>(([id, to]) => ({kind: 'v17KeyChangeToasted', id, to})),
 );
 
 /** A run in flight at some replication-manager. */
@@ -131,6 +157,8 @@ type Run = {
    * a key change voids marks but not runs.
    */
   canceled: boolean;
+  /** Whether its completion has been sent. A manager re-announces no such run. */
+  completed: boolean;
 };
 
 describe('replicator/backfill rules (model)', () => {
@@ -201,10 +229,33 @@ describe('replicator/backfill rules (model)', () => {
       {kind: 'sendBatch', count: 3},
       {kind: 'complete'},
     ],
-    // A row deleted after the run's snapshot must not be resurrected.
+    // A row deleted after the snapshot must not be resurrected.
     'a row deleted after the snapshot': [
       {kind: 'startFromZero'},
       {kind: 'delete', id: 2},
+      {kind: 'sendBatch', count: 3},
+      {kind: 'complete'},
+    ],
+    // Another subscriber's lower mark replaces the run, which this one, at
+    // mark 2, cannot follow, and the replacement completes. The subscriber
+    // declared nothing, so only the tracker's request for the backfill the
+    // stream started gets it a run it can follow.
+    'a replacement run it cannot follow, with nothing declared': [
+      {kind: 'startFromZero'},
+      {kind: 'sendBatch', count: 2},
+      {kind: 'startFromKey', key: 1},
+      {kind: 'sendBatch', count: 3},
+      {kind: 'complete'},
+    ],
+    // The same move as above, replicated by a v17 zero-cache, which voids no
+    // mark. Rolling forward has to forget the mark, or a run resumed from it
+    // skips the moved row and leaves it empty.
+    'a v17 rollback that replicates a row key change': [
+      {kind: 'startFromZero'},
+      {kind: 'sendBatch', count: 2},
+      {kind: 'delete', id: 1},
+      {kind: 'v17KeyChangeToasted', id: 3, to: 1},
+      {kind: 'startFromDeclaredMark'},
       {kind: 'sendBatch', count: 3},
       {kind: 'complete'},
     ],
@@ -214,7 +265,7 @@ describe('replicator/backfill rules (model)', () => {
     test(name, () => runScenario(lc, steps));
   }
 
-  test('a backfilled column is never stale and never half populated', () => {
+  test('a backfilled column is never stale, never half populated, and completes', () => {
     fc.assert(
       fc.property(fc.array(stepArb, {minLength: 1, maxLength: 14}), steps => {
         runScenario(lc, steps);
@@ -242,20 +293,37 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
     return `${(base36.length - 1).toString(36)}${base36}`;
   };
 
+  // The change-streamer's tracker for this subscriber, made the way
+  // `Subscriber` makes it. The subscriber connects before the table exists,
+  // so it declares nothing.
+  let tracker = BackfillDeclarations.forSubscriber(true, []);
+  const reconnect = () => {
+    tracker = BackfillDeclarations.forSubscriber(
+      true,
+      readBackfillDeclarations(replica),
+    );
+  };
+
   function tx(
     watermark: string,
     backfill: boolean,
     ...changes: StreamedChange[]
   ) {
-    processor.processMessage(lc, [
-      'begin',
-      backfill ? {tag: 'begin', skipAck: true, backfill: true} : {tag: 'begin'},
-      {commitWatermark: watermark},
-    ]);
-    for (const change of changes) {
-      processor.processMessage(lc, ['data', change]);
+    const stream: ChangeStreamData[] = [
+      [
+        'begin',
+        backfill
+          ? {tag: 'begin', skipAck: true, backfill: true}
+          : {tag: 'begin'},
+        {commitWatermark: watermark},
+      ],
+      ...changes.map((change): ChangeStreamData => ['data', change]),
+      ['commit', {tag: 'commit'}, {watermark}],
+    ];
+    for (const message of stream) {
+      processor.processMessage(lc, message);
+      tracker?.apply(message);
     }
-    processor.processMessage(lc, ['commit', {tag: 'commit'}, {watermark}]);
   }
 
   // A run's snapshot is taken at an upstream commit watermark -- a major.
@@ -339,6 +407,10 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
     replica
       .prepare(`SELECT COUNT(*) AS n FROM "${BACKFILLING_TABLE}"`)
       .get<{n: number}>().n === 0;
+  const followedRun = () =>
+    replica
+      .prepare(`SELECT "runID" FROM "${BACKFILLING_TABLE}" WHERE "column" = ?`)
+      .get<{runID: string | null} | undefined>(COLUMN)?.runID ?? null;
   const rows = () =>
     new Map(
       replica
@@ -352,7 +424,16 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
   // moved away from, which have not stopped.
   const runs: Run[] = [];
   const current = () => runs.at(-1);
+  const liveRun = () => {
+    const run = current();
+    return run && !run.canceled && !run.completed ? run : undefined;
+  };
   let runCounter = 0;
+
+  // What the manager that sent the last run knows: whether it still owes the
+  // table a backfill, and the latest row key change on the table.
+  let owed = true;
+  let lastKeyChange = '';
 
   function check(after: string) {
     const actual = rows();
@@ -379,7 +460,7 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
     }
   }
 
-  function startRun(resumeFrom: Key | null) {
+  function startRun(resumeFrom: Key | null): Run {
     runCounter++;
     const watermark = lastMajor;
     const snapshot = new Map(truth);
@@ -395,7 +476,7 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
       runID: `run-${runCounter}`,
       resumeFrom: resumeFrom === null ? null : [String(resumeFrom)],
     };
-    runs.push({
+    const run: Run = {
       runID: started.runID,
       resumeFrom,
       pending,
@@ -405,13 +486,95 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
       started,
       minor: 0,
       canceled: false,
-    });
-    backfillTx(must(current()), started);
+      completed: false,
+    };
+    runs.push(run);
+    owed = true;
+    backfillTx(run, started);
+    return run;
   }
 
   function backfillTx(r: Run, ...changes: StreamedChange[]) {
     r.minor++;
     tx(`${r.watermark}.${String(r.minor).padStart(2, '0')}`, true, ...changes);
+  }
+
+  function sendBatch(run: Run, count: number) {
+    const batch = run.pending.splice(0, count);
+    const rowValues = batch.map(k => [k, run.snapshot.get(k)!]);
+    const lastKey = [String(batch.at(-1))];
+    run.lastBatch = {rowValues, lastKey};
+    backfillTx(run, backfillMsg(run, rowValues, lastKey));
+  }
+
+  function complete(run: Run) {
+    run.completed = true;
+    if (run === current()) {
+      owed = false;
+    }
+    backfillTx(run, completedMsg(run));
+  }
+
+  function moveKey(id: Key, to: Key, toasted: boolean) {
+    const value = truth.get(id)!;
+    truth.delete(id);
+    truth.set(to, value);
+    liveTx(
+      messages.update(
+        'issues',
+        toasted
+          ? {id: to, note: `note-${id}`}
+          : {id: to, note: `note-${id}`, [COLUMN]: value},
+        {id},
+      ),
+    );
+    lastKeyChange = lastMajor;
+    for (const r of runs) {
+      if (r.watermark < lastMajor) {
+        r.canceled = true;
+      }
+    }
+  }
+
+  /**
+   * The manager's side of a forwarded declaration, as
+   * `BackfillManager.onBackfillRequest` decides it: nothing for a subscriber
+   * already following the running run, a re-announcement from its mark when
+   * the run has passed no rows it needs, a restart from its mark when it has,
+   * and a run from the beginning for a table this session already finished.
+   */
+  function honor([, request]: BackfillRequestMessage) {
+    let mark = request.mark === null ? null : (Number(request.mark[0]) as Key);
+    if (mark !== null && (request.markWatermark ?? '') < lastKeyChange) {
+      mark = null; // taken before a row key change on the table
+    }
+    if (!owed) {
+      owed = true; // Scenario B: the next run starts from the beginning
+      return;
+    }
+    const run = liveRun();
+    if (run === undefined) {
+      return; // nothing to compare against: the next run starts from zero
+    }
+    if (request.runID !== null && request.runID === run.runID) {
+      return;
+    }
+    if (run.lastBatch === undefined) {
+      startRun(null);
+      return;
+    }
+    const lastMark = Number(run.lastBatch.lastKey[0]);
+    const needed = [...truth.keys()].some(
+      k => (mark === null || k > mark) && k <= lastMark,
+    );
+    if (needed) {
+      startRun(mark);
+    } else {
+      backfillTx(run, {
+        ...run.started,
+        resumeFrom: mark === null ? null : [String(mark)],
+      });
+    }
   }
 
   for (const [i, step] of steps.entries()) {
@@ -427,22 +590,17 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
         startRun(step.key);
         break;
       case 'reannounce': {
-        const run = current();
-        if (run && !run.canceled) {
+        const run = liveRun();
+        if (run) {
           backfillTx(run, run.started);
         }
         break;
       }
       case 'sendBatch': {
         const run = current();
-        if (!run || run.canceled || run.pending.length === 0) {
-          break;
+        if (run && !run.canceled && run.pending.length > 0) {
+          sendBatch(run, step.count);
         }
-        const batch = run.pending.splice(0, step.count);
-        const rowValues = batch.map(k => [k, run.snapshot.get(k)!]);
-        const lastKey = [String(batch.at(-1))];
-        run.lastBatch = {rowValues, lastKey};
-        backfillTx(run, backfillMsg(run, rowValues, lastKey));
         break;
       }
       case 'resendBatch': {
@@ -459,7 +617,7 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
         // A manager only completes a run it has sent in full.
         const run = current();
         if (run && run.pending.length === 0) {
-          backfillTx(run, completedMsg(run));
+          complete(run);
         }
         break;
       }
@@ -476,7 +634,7 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
       case 'staleComplete': {
         const run = runs.at(-1 - step.back);
         if (run && run.pending.length === 0) {
-          backfillTx(run, completedMsg(run));
+          complete(run);
         }
         break;
       }
@@ -503,32 +661,83 @@ function runScenario(lc: LogContext, steps: readonly Step[]) {
         liveTx(messages.delete('issues', {id: step.id}));
         break;
       case 'keyChange':
-      case 'keyChangeToasted': {
+      case 'keyChangeToasted':
+        if (truth.has(step.id) && !truth.has(step.to)) {
+          moveKey(step.id, step.to, step.kind === 'keyChangeToasted');
+        }
+        break;
+      case 'reconnect':
+        reconnect();
+        break;
+      case 'v17KeyChangeToasted': {
         if (!truth.has(step.id) || truth.has(step.to)) {
           break;
         }
-        const value = truth.get(step.id)!;
-        truth.delete(step.id);
-        truth.set(step.to, value);
-        liveTx(
-          messages.update(
-            'issues',
-            step.kind === 'keyChange'
-              ? {id: step.to, note: `note-${step.id}`, [COLUMN]: value}
-              : {id: step.to, note: `note-${step.id}`},
-            {id: step.id},
-          ),
+        // Rolled back: the v17 zero-cache applies the move, and every resume
+        // column the v18 rules would have changed keeps its old value.
+        const kept = replica
+          .prepare(
+            `SELECT "column", "mark", "markWatermark", "runID", "minSnapshot"
+               FROM "${BACKFILLING_TABLE}"`,
+          )
+          .all<{
+            column: string;
+            mark: string | null;
+            markWatermark: string | null;
+            runID: string | null;
+            minSnapshot: string | null;
+          }>();
+        moveKey(step.id, step.to, true);
+        const restore = replica.prepare(
+          `UPDATE "${BACKFILLING_TABLE}"
+             SET "mark" = ?, "markWatermark" = ?, "runID" = ?, "minSnapshot" = ?
+             WHERE "column" = ?`,
         );
-        for (const r of runs) {
-          if (r.watermark < lastMajor) {
-            r.canceled = true;
-          }
+        for (const r of kept) {
+          restore.run(
+            r.mark,
+            r.markWatermark,
+            r.runID,
+            r.minSnapshot,
+            r.column,
+          );
         }
+        // Rolled forward: migration 18's `migrateData` runs again, and the
+        // subscriber reconnects with what the replica then declares.
+        void must(schemaVersionMigrationMap[18].migrateData)(lc, replica);
+        reconnect();
         break;
       }
     }
     check(at);
   }
+
+  // ---- completes ------------------------------------------------------------
+  // The interleaving stops. The subscriber stays with the manager that sent
+  // the last run, which honors its requests, and nothing changes upstream.
+  const followed = followedRun();
+  if (followed !== null && followed !== current()?.runID) {
+    // It follows a run at a manager it has since left, so its connection to
+    // this one is a new one, which starts from what the replica declares.
+    reconnect();
+  }
+  for (let round = 0; round < 3 && !completed(); round++) {
+    for (const request of tracker?.requests('subscriber') ?? []) {
+      honor(request);
+    }
+    if (owed) {
+      const run = liveRun() ?? startRun(null);
+      if (run.pending.length > 0) {
+        sendBatch(run, run.pending.length);
+      }
+      complete(run);
+    }
+    check(`after the interleaving, round ${round}`);
+  }
+  expect(
+    completed(),
+    'the backfill never completed after the interleaving stopped',
+  ).toBe(true);
   replica.close();
 }
 
