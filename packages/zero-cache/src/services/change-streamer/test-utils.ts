@@ -10,6 +10,7 @@ export function createSubscriber(
   caughtUp = false,
   options: SubscriberOptions = {},
   mode: ReplicatorMode = 'serving',
+  protocolVersion = PROTOCOL_VERSION,
 ): [Subscriber, Downstream[], Subscription<string>] {
   const id = '' + nextID++;
   const received: Downstream[] = [];
@@ -17,7 +18,7 @@ export function createSubscriber(
     cleanup: unconsumed => received.push(...unconsumed.map(m => JSON.parse(m))),
   });
   const subscriber = new Subscriber(
-    PROTOCOL_VERSION,
+    protocolVersion,
     id,
     mode,
     watermark,

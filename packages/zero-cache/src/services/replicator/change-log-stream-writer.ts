@@ -2,7 +2,7 @@ import type {Statement} from '../../../../zqlite/src/db.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import {
   isSchemaChange,
-  type DataOrSchemaChange,
+  type StreamedChange,
 } from '../change-source/protocol/current/data.ts';
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
@@ -134,7 +134,7 @@ export class ChangeLogStreamWriter {
    */
   append(
     json: string,
-    change: DataOrSchemaChange,
+    change: StreamedChange,
     storedChange = extractChangeSubstring(json, change.tag),
   ): void {
     const watermark = this.#requireWatermark();

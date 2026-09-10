@@ -9,7 +9,7 @@ import type {
   ColumnAdd,
   ColumnDrop,
   ColumnUpdate,
-  DataOrSchemaChange,
+  StreamedChange,
   IndexCreate,
   IndexDrop,
   MessageBegin,
@@ -27,10 +27,7 @@ import type {
 import {ChangeProcessor} from './change-processor.ts';
 
 export interface FakeReplicator {
-  processTransaction(
-    finalWatermark: string,
-    ...msgs: DataOrSchemaChange[]
-  ): void;
+  processTransaction(finalWatermark: string, ...msgs: StreamedChange[]): void;
 }
 
 export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
