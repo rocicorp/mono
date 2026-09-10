@@ -657,10 +657,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   readyState(): Promise<'initialized' | 'draining'> {
-    return Promise.race([
-      this.#initialized.promise,
-      this.#drainCoordinator.draining,
-    ]);
+    return new Promise((resolve, reject) => {
+      // Subscribe to the drain rather than racing against a Promise for it:
+      // the coordinator outlives every view-syncer, and a race reaction on a
+      // promise that may never settle would keep this closure alive for the
+      // lifetime of the server. Unsubscribe once initialization settles.
+      const unsubscribe = this.#drainCoordinator.onDraining(() =>
+        resolve('draining'),
+      );
+      this.#initialized.promise.then(
+        state => {
+          unsubscribe();
+          resolve(state);
+        },
+        err => {
+          unsubscribe();
+          reject(err);
+        },
+      );
+    });
   }
 
   async run(): Promise<void> {

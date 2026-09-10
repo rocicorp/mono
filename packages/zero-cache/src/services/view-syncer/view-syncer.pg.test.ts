@@ -6034,6 +6034,28 @@ describe('view-syncer/service', () => {
     expect(drainCoordinator.nextDrainTime).toBeGreaterThan(now);
   });
 
+  test('readyState() releases its drain listener once initialized', async () => {
+    // run() is waiting on readyState() until the first client initializes.
+    expect(drainCoordinator.drainListenerCount).toBe(1);
+
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desired queries
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // hydration, from the run loop
+
+    // The coordinator outlives the view-syncer, so it must not keep a
+    // reference to it after initialization.
+    expect(drainCoordinator.drainListenerCount).toBe(0);
+  });
+
+  test('a drain requested before initialization stops the view-syncer', async () => {
+    drainCoordinator.drainNextIn(0);
+    await viewSyncerDone;
+    expect(drainCoordinator.drainListenerCount).toBe(0);
+  });
+
   test('retracting an exists relationship', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY_WITH_RELATED},
