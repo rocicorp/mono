@@ -931,7 +931,6 @@ test('--enable-query-covering can be disabled', () => {
   expect(config.enableQueryCovering).toBe(false);
 });
 
-
 test('partial-index trigger migration defaults off and can be enabled', () => {
   const defaults = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: 'ZERO_',

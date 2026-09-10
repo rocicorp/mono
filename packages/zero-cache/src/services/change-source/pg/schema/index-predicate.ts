@@ -693,7 +693,7 @@ function isComparison(
 
 function tokenize(sql: string): readonly Token[] {
   const tokens: Token[] = [];
-  for (let i = 0; i < sql.length;) {
+  for (let i = 0; i < sql.length; ) {
     const char = sql[i];
     if (WHITESPACE_RE.test(char)) {
       i++;
