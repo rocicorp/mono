@@ -3357,6 +3357,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       client,
       this.#inspectorDelegate,
       this.id,
+      this,
       this.#cvrStore,
       this.#config,
       connCtx,
@@ -3529,6 +3530,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // cleaning up the pipelines and closing db connections.
     await this.#lock.withLock(() => {});
     this.#pipelines.destroy();
+
+    // Inspector authentication is tracked per client group in a map that
+    // outlives this service. Release the entry this service established so
+    // that the map does not grow with every client group ever served by the
+    // worker. This runs after the lock barrier above so that an
+    // `authenticate` request that was already in flight on the lock cannot
+    // re-add the entry afterwards. Passing `this` leaves an entry alone if a
+    // replacement service for the same client group has authenticated in the
+    // meantime.
+    this.#inspectorDelegate.clearAuthenticated(this.id, this);
   }
 
   /**
