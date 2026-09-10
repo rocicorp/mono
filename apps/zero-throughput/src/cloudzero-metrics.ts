@@ -82,7 +82,8 @@ export function buildCloudZeroSnapshot(
   const memByPod = new Map<string, number>();
   const pipelinesByPod = new Map<string, number>();
   const replLags: number[] = [];
-  const servingLags: number[] = [];
+  const servingLagStatsByStat = new Map<string, number[]>();
+  const servingLagScalars: number[] = [];
 
   for (const m of metrics) {
     const pod = m.labels.pod;
@@ -95,9 +96,15 @@ export function buildCloudZeroSnapshot(
     } else if (m.name === 'zero_replication_total_lag_millisecond') {
       replLags.push(m.value);
     } else if (m.name === 'zero_sync_serving_lag_stats_millisecond') {
-      servingLags.push(m.value);
+      if (m.labels.stat) {
+        const list = servingLagStatsByStat.get(m.labels.stat) ?? [];
+        list.push(m.value);
+        servingLagStatsByStat.set(m.labels.stat, list);
+      } else {
+        servingLagScalars.push(m.value);
+      }
     } else if (m.name === 'zero_sync_serving_lag_millisecond') {
-      servingLags.push(m.value);
+      servingLagScalars.push(m.value);
     }
   }
 
@@ -155,11 +162,54 @@ export function buildCloudZeroSnapshot(
       totalPipelines,
     },
     replicationLagMs: computeStatsFromNumbers(replLags),
-    servingLagMs: computeStatsFromNumbers(servingLags),
+    servingLagMs: computeServingLagStats(
+      servingLagStatsByStat,
+      servingLagScalars,
+    ),
   };
 }
 
-function computeStatsFromNumbers(values: number[]): PercentileStats | null {
+function computeServingLagStats(
+  statsByStat: ReadonlyMap<string, readonly number[]>,
+  scalars: readonly number[],
+): PercentileStats | null {
+  if (statsByStat.size === 0) {
+    return computeStatsFromNumbers(scalars);
+  }
+
+  const mins = statsByStat.get('min') ?? [];
+  const p50s = statsByStat.get('p50') ?? [];
+  const p75s = statsByStat.get('p75') ?? [];
+  const p99s = statsByStat.get('p99') ?? [];
+  const maxs = statsByStat.get('max') ?? (scalars.length > 0 ? scalars : []);
+
+  const min = mins.length > 0 ? Math.min(...mins) : 0;
+  const p50 = p50s.length > 0 ? Math.max(...p50s) : 0;
+  const p75 = p75s.length > 0 ? Math.max(...p75s) : p50;
+  const p99 = p99s.length > 0 ? Math.max(...p99s) : p75;
+  const max = maxs.length > 0 ? Math.max(...maxs) : p99;
+  const p90 = Number((p75 + (p99 - p75) * 0.625).toFixed(2));
+  const p95 = Number((p75 + (p99 - p75) * 0.833).toFixed(2));
+  const avg =
+    p50s.length > 0 ? p50s.reduce((a, b) => a + b, 0) / p50s.length : p50;
+  const count = p50s.length > 0 ? p50s.length : 1;
+
+  return {
+    count,
+    sum: Number((avg * count).toFixed(2)),
+    avg: Number(avg.toFixed(2)),
+    min,
+    p50,
+    p90,
+    p95,
+    p99,
+    max,
+  };
+}
+
+function computeStatsFromNumbers(
+  values: readonly number[],
+): PercentileStats | null {
   if (values.length === 0) {
     return null;
   }
@@ -225,6 +275,7 @@ export class CloudZeroMetricsPoller {
           authorization: `Bearer ${this.#apiKey}`,
           accept: 'text/plain',
         },
+        signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) {
         return null;
@@ -249,11 +300,19 @@ export class CloudZeroMetricsPoller {
     }, this.#intervalMs);
   }
 
-  async stop(): Promise<CloudZeroMetricsSummary | null> {
-    if (this.#timer !== null) {
-      clearInterval(this.#timer);
-      this.#timer = null;
+  reset(): void {
+    this.#snapshots.length = 0;
+    if (this.#latest) {
+      this.#snapshots.push(this.#latest);
     }
+  }
+
+  async stop(): Promise<CloudZeroMetricsSummary | null> {
+    if (this.#timer === null) {
+      return this.#latest;
+    }
+    clearInterval(this.#timer);
+    this.#timer = null;
     // Take final snapshot
     return await this.fetchSnapshot();
   }
@@ -269,7 +328,7 @@ export class CloudZeroMetricsPoller {
 
     // Aggregate peak CPU and memory across all snapshots taken during the run
     let peakRmCpu = latest.rmPod?.cpuCores ?? 0;
-    let peakRmMb = latest.rmPod?.memoryMB ?? 0;
+    let peakRmWorkingSetBytes = latest.rmPod?.memoryWorkingSetBytes ?? 0;
     let peakVsTotalCpu = latest.vsSummary.totalCpuCores;
     let peakVsMaxCpu = latest.vsSummary.maxCpuCores;
     let peakVsTotalMem = latest.vsSummary.totalMemoryMB;
@@ -278,7 +337,10 @@ export class CloudZeroMetricsPoller {
     for (const snap of this.#snapshots) {
       if (snap.rmPod) {
         peakRmCpu = Math.max(peakRmCpu, snap.rmPod.cpuCores);
-        peakRmMb = Math.max(peakRmMb, snap.rmPod.memoryMB);
+        peakRmWorkingSetBytes = Math.max(
+          peakRmWorkingSetBytes,
+          snap.rmPod.memoryWorkingSetBytes,
+        );
       }
       peakVsTotalCpu = Math.max(peakVsTotalCpu, snap.vsSummary.totalCpuCores);
       peakVsMaxCpu = Math.max(peakVsMaxCpu, snap.vsSummary.maxCpuCores);
@@ -286,13 +348,21 @@ export class CloudZeroMetricsPoller {
       peakVsMaxMem = Math.max(peakVsMaxMem, snap.vsSummary.maxMemoryMB);
     }
 
+    const peakRmMb = Number((peakRmWorkingSetBytes / (1024 * 1024)).toFixed(1));
+    const replicationLagMs =
+      aggregateLagStats(this.#snapshots, 'replicationLagMs') ??
+      latest.replicationLagMs;
+    const servingLagMs =
+      aggregateLagStats(this.#snapshots, 'servingLagMs') ?? latest.servingLagMs;
+
     const aggregated: CloudZeroMetricsSummary = {
       ...latest,
       rmPod: latest.rmPod
         ? {
             ...latest.rmPod,
             cpuCores: Number(peakRmCpu.toFixed(4)),
-            memoryMB: Number(peakRmMb.toFixed(1)),
+            memoryWorkingSetBytes: peakRmWorkingSetBytes,
+            memoryMB: peakRmMb,
           }
         : undefined,
       vsSummary: {
@@ -302,14 +372,49 @@ export class CloudZeroMetricsPoller {
         totalMemoryMB: Number(peakVsTotalMem.toFixed(1)),
         maxMemoryMB: Number(peakVsMaxMem.toFixed(1)),
       },
+      replicationLagMs,
+      servingLagMs,
     };
 
     return {
       metricSummary: {
-        replicationLagMs: latest.replicationLagMs,
-        e2eServingLagMs: latest.servingLagMs,
+        replicationLagMs,
+        e2eServingLagMs: servingLagMs,
       },
       cloudzeroSummary: aggregated,
     };
   }
+}
+
+function aggregateLagStats(
+  snapshots: readonly CloudZeroMetricsSummary[],
+  field: 'replicationLagMs' | 'servingLagMs',
+): PercentileStats | null {
+  const statsList = snapshots
+    .map(s => s[field])
+    .filter((s): s is PercentileStats => s !== null);
+  if (statsList.length === 0) {
+    return null;
+  }
+  const max = Math.max(...statsList.map(s => s.max));
+  const p99 = Math.max(...statsList.map(s => s.p99));
+  const p95 = Math.max(...statsList.map(s => s.p95));
+  const p90 = Math.max(...statsList.map(s => s.p90));
+  const p50 = Math.max(...statsList.map(s => s.p50));
+  const min = Math.min(...statsList.map(s => s.min));
+  const count = statsList.reduce((acc, s) => acc + s.count, 0);
+  const sum = statsList.reduce((acc, s) => acc + s.sum, 0);
+  const avg = count > 0 ? sum / count : 0;
+
+  return {
+    count,
+    sum: Number(sum.toFixed(2)),
+    avg: Number(avg.toFixed(2)),
+    min,
+    p50,
+    p90,
+    p95,
+    p99,
+    max,
+  };
 }

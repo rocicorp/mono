@@ -118,7 +118,7 @@ export function buildResult(args: {
     gitCommit: gitCommit(),
     profile: args.config.profile,
     model: args.config.model,
-    config: args.config,
+    config: sanitizeConfig(args.config),
     processes: args.processes,
     environment: {
       node: process.version,
@@ -281,4 +281,19 @@ function gitCommit(): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+export function sanitizeConfig(config: BenchmarkConfig): BenchmarkConfig {
+  return {
+    ...config,
+    adminPassword:
+      config.adminPassword !== undefined ? '<REDACTED>' : undefined,
+    cloudzero:
+      config.cloudzero !== undefined
+        ? {
+            ...config.cloudzero,
+            apiKey: '<REDACTED>',
+          }
+        : undefined,
+  };
 }

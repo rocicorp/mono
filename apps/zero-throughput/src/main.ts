@@ -161,6 +161,7 @@ async function main(): Promise<void> {
     log(
       `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s (concurrency=${config.writeConcurrency}, batch=${config.batchSize})...`,
     );
+    cloudzeroPoller?.reset();
     const writer = new FixedRateWriter(sql, config);
     const samples: MetricSample[] = [];
     const sampleStartedAtMs = Date.now();

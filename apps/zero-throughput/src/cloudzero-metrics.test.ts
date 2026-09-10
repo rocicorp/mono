@@ -203,8 +203,114 @@ describe('CloudZeroMetricsPoller', () => {
       expect(summary.cloudzeroSummary).toBeDefined();
       expect(summary.cloudzeroSummary?.rmPod?.cpuCores).toBe(0.25);
       expect(summary.cloudzeroSummary?.rmPod?.memoryMB).toBe(150);
+      expect(summary.cloudzeroSummary?.rmPod?.memoryWorkingSetBytes).toBe(
+        157286400,
+      );
       expect(summary.cloudzeroSummary?.vsSummary.maxCpuCores).toBe(0.3);
       expect(summary.cloudzeroSummary?.vsSummary.maxMemoryMB).toBe(250);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('parses pre-computed serving lag stat labels directly', () => {
+    const metrics: ParsedMetric[] = [
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'min'},
+        value: 1.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p50'},
+        value: 10.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p75'},
+        value: 20.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p99'},
+        value: 50.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'max'},
+        value: 80.0,
+      },
+    ];
+
+    const snapshot = buildCloudZeroSnapshot(metrics, 'test-stack');
+    expect(snapshot.servingLagMs?.min).toBe(1.0);
+    expect(snapshot.servingLagMs?.p50).toBe(10.0);
+    expect(snapshot.servingLagMs?.p99).toBe(50.0);
+    expect(snapshot.servingLagMs?.max).toBe(80.0);
+  });
+
+  test('aggregates peak lag across snapshots in toMetricSummary', async () => {
+    const poller = new CloudZeroMetricsPoller({
+      metricsUrl: 'http://example.com/metrics',
+      apiKey: 'test-key',
+      stackId: 'test-stack',
+    });
+
+    let call = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      call++;
+      // Call 1 has high lag under load, Call 2 has drained to 0 post-settle
+      const lag = call === 1 ? 2500 : 0;
+      const text = `zero_replication_total_lag_millisecond{stack_id="test-stack"} ${lag}`;
+      return Promise.resolve(new Response(text, {status: 200}));
+    }) as typeof fetch;
+
+    try {
+      await poller.fetchSnapshot();
+      await poller.fetchSnapshot();
+
+      const summary = poller.toMetricSummary();
+      // Latest snapshot is 0, but aggregate peak lag captures 2500
+      expect(poller.latest?.replicationLagMs?.max).toBe(0);
+      expect(summary.cloudzeroSummary?.replicationLagMs?.max).toBe(2500);
+      expect(summary.metricSummary.replicationLagMs?.max).toBe(2500);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('reset clears snapshots and stop is idempotent', async () => {
+    const poller = new CloudZeroMetricsPoller({
+      metricsUrl: 'http://example.com/metrics',
+      apiKey: 'test-key',
+      stackId: 'test-stack',
+    });
+
+    let fetchCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      fetchCount++;
+      return Promise.resolve(
+        new Response('zero_replication_total_lag_millisecond 5', {status: 200}),
+      );
+    }) as typeof fetch;
+
+    try {
+      poller.start();
+      expect(fetchCount).toBe(1);
+
+      // Reset retains latest but clears snapshot history
+      poller.reset();
+      expect(poller.latest).toBeDefined();
+
+      // Stop stops the timer and takes a final snapshot
+      await poller.stop();
+      expect(fetchCount).toBe(2);
+
+      // Subsequent stop call is idempotent (no-op, no extra fetch)
+      await poller.stop();
+      expect(fetchCount).toBe(2);
     } finally {
       globalThis.fetch = originalFetch;
     }
