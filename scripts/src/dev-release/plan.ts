@@ -63,7 +63,8 @@ export function planDevRelease({
   });
   assertGitSha(sourceSha, 'source SHA');
 
-  const imageTag = deriveDevImageTag(trimmedBranch, sourceSha);
+  const shortSha = resolveUniqueShortSha(sourceSha, exec);
+  const imageTag = deriveDevImageTag(trimmedBranch, sourceSha, shortSha);
   validateImageTag(imageTag);
 
   return {
@@ -92,8 +93,31 @@ export function sanitizeBranchName(branch: string): string {
     .replace(edgeHyphenPattern, '');
 }
 
-export function deriveDevImageTag(branch: string, sourceSha: string): string {
-  const shortSha = sourceSha.slice(0, 8);
+export function resolveUniqueShortSha(
+  sourceSha: string,
+  exec: Exec,
+  minLen = 8,
+): string {
+  try {
+    const shortSha = exec('git', [
+      'rev-parse',
+      `--short=${minLen}`,
+      `${sourceSha}^{commit}`,
+    ]).trim();
+    if (shortSha && hexShaPattern.test(shortSha)) {
+      return shortSha;
+    }
+  } catch {
+    // Fallback if git rev-parse fails for any reason
+  }
+  return sourceSha.slice(0, minLen);
+}
+
+export function deriveDevImageTag(
+  branch: string,
+  sourceSha: string,
+  shortSha = sourceSha.slice(0, 8),
+): string {
   if (gitShaPattern.test(branch.trim())) {
     return `0.0.0-dev-${shortSha}`;
   }
@@ -113,6 +137,8 @@ export function deriveDevImageTag(branch: string, sourceSha: string): string {
 
   if (base.endsWith(`-${shortSha}`)) {
     base = base.slice(0, -`-${shortSha}`.length);
+  } else if (base.endsWith(`-${sourceSha.slice(0, 8)}`)) {
+    base = base.slice(0, -`-${sourceSha.slice(0, 8)}`.length);
   }
 
   if (!base) {

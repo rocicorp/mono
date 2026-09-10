@@ -4,13 +4,14 @@ import {
   deriveDevImageTag,
   planDevRelease,
   resolveSourceSha,
+  resolveUniqueShortSha,
   sanitizeBranchName,
   validateImageTag,
 } from './plan.ts';
 
 const dummySha = 'e8cc6889fa6bc2a364e8cb80776991c308601212';
 
-function makeMockExec(resolvedSha = dummySha) {
+function makeMockExec(resolvedSha = dummySha, shortSha?: string) {
   const calls: Array<{
     command: Command;
     args: readonly string[];
@@ -19,6 +20,9 @@ function makeMockExec(resolvedSha = dummySha) {
   const exec: Exec = (command, args, options) => {
     calls.push({command, args, options});
     if (command === 'git' && args[0] === 'rev-parse') {
+      if (args[1]?.startsWith('--short')) {
+        return `${shortSha ?? resolvedSha.slice(0, 8)}\n`;
+      }
       return `${resolvedSha}\n`;
     }
     return '';
@@ -213,4 +217,37 @@ test('resolveSourceSha rejects invalid commitSha format', () => {
       exec,
     }),
   ).toThrowError(/Invalid commit SHA/);
+});
+
+test('resolveUniqueShortSha queries git rev-parse with --short and expands on collision', () => {
+  const expandedSha = 'e8cc6889fa';
+  const {calls, exec} = makeMockExec(dummySha, expandedSha);
+
+  const shortSha = resolveUniqueShortSha(dummySha, exec);
+  expect(shortSha).toBe('e8cc6889fa');
+  expect(calls).toContainEqual({
+    command: 'git',
+    args: ['rev-parse', '--short=8', `${dummySha}^{commit}`],
+    options: undefined,
+  });
+});
+
+test('resolveUniqueShortSha falls back to slicing if git rev-parse fails', () => {
+  const failingExec: Exec = () => {
+    throw new Error('git rev-parse failed');
+  };
+  expect(resolveUniqueShortSha(dummySha, failingExec)).toBe('e8cc6889');
+});
+
+test('planDevRelease incorporates expanded short SHA when git detects collision', () => {
+  const expandedSha = 'e8cc6889fa';
+  const {exec} = makeMockExec(dummySha, expandedSha);
+
+  const plan = planDevRelease({
+    exec,
+    branchInput: 'main',
+    workflowRefName: 'main',
+  });
+
+  expect(plan.image_tag).toBe('0.0.0-dev-main-e8cc6889fa');
 });
