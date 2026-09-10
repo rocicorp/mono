@@ -232,11 +232,18 @@ test('resolveUniqueShortSha queries git rev-parse with --short and expands on co
   });
 });
 
-test('resolveUniqueShortSha falls back to full sourceSha if git rev-parse fails', () => {
+test('resolveUniqueShortSha throws if git rev-parse fails or returns invalid output', () => {
   const failingExec: Exec = () => {
     throw new Error('git rev-parse failed');
   };
-  expect(resolveUniqueShortSha(dummySha, failingExec)).toBe(dummySha);
+  expect(() => resolveUniqueShortSha(dummySha, failingExec)).toThrow(
+    'git rev-parse failed',
+  );
+
+  const invalidExec: Exec = () => 'not-a-valid-sha!';
+  expect(() => resolveUniqueShortSha(dummySha, invalidExec)).toThrow(
+    /Failed to resolve short SHA/,
+  );
 });
 
 test('planDevRelease incorporates expanded short SHA when git detects collision', () => {

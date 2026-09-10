@@ -98,19 +98,17 @@ export function resolveUniqueShortSha(
   exec: Exec,
   minLen = 8,
 ): string {
-  try {
-    const shortSha = exec('git', [
-      'rev-parse',
-      `--short=${minLen}`,
-      `${sourceSha}^{commit}`,
-    ]).trim();
-    if (shortSha && hexShaPattern.test(shortSha)) {
-      return shortSha;
-    }
-  } catch {
-    // Fallback to full SHA to guarantee uniqueness without collision
+  const shortSha = exec('git', [
+    'rev-parse',
+    `--short=${minLen}`,
+    `${sourceSha}^{commit}`,
+  ]).trim();
+  if (!shortSha || !hexShaPattern.test(shortSha)) {
+    throw new Error(
+      `Failed to resolve short SHA for "${sourceSha}": git returned "${shortSha}"`,
+    );
   }
-  return sourceSha;
+  return shortSha;
 }
 
 export function deriveDevImageTag(
