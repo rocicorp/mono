@@ -27,6 +27,7 @@ import {
   type ChangeStreamData,
   type Rollback,
 } from '../change-source/protocol/current/downstream.ts';
+import type {BackfillRequestMessage} from '../change-source/protocol/current/upstream.ts';
 import type {LitestreamVersion} from '../litestream/metrics.ts';
 import {
   publishReplicationError,
@@ -259,6 +260,15 @@ export async function initializeStreamer(
     setTimeoutFn,
   );
 }
+
+// Count requests that remain unresolved after catchup or a live transaction.
+// Following runs need no request until the change-source session restarts.
+const declarationOutcome = getOrCreateCounter(
+  'replication',
+  'backfill_declarations',
+  'Backfill progress declarations from subscribers, by what was done with ' +
+    'them.',
+);
 
 const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
 
@@ -771,6 +781,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           this.#pgChangeLogEnabled ? '' : lastWatermark,
         );
 
+        // A change source that just (re)started has no memory of the backfill
+        // requests forwarded on behalf of already-connected subscribers, and
+        // they will not declare again until they reconnect.
+        for (const subscriber of this.#forwarder.getSubscribers()) {
+          subscriber.requestBackfills(true);
+        }
+
         for await (const change of stream.changes) {
           this.#acker.trackDownstream(change);
 
@@ -966,7 +983,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       watermark,
       downstream,
       () => this.#latestStatus,
-      {},
+      {
+        backfills: ctx.backfills,
+        onBackfillRequests: requests =>
+          this.#forwardBackfillRequests(lc, requests),
+      },
     );
     const lc = this.#lc.withContext('subscriber', subscriber.id);
     const removeFromForwarder = () => {
@@ -1084,10 +1105,39 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
       }
     }
+
     // Any snapshot reservation held by this task can be closed now that
     // it is subscribed to the change stream.
     this.#reservations?.close(ctx.taskID);
     return downstream;
+  }
+
+  #forwardBackfillRequests(
+    lc: LogContext,
+    requests: readonly BackfillRequestMessage[],
+  ): void {
+    declarationOutcome.add(requests.length, {outcome: 'forwarded'});
+    lc.info?.(`forwarding ${requests.length} unresolved backfill request(s)`, {
+      backfillDeclarations: requests.map(([, r]) => ({
+        schema: r.table.schema,
+        table: r.table.name,
+        mark: r.mark,
+        markWatermark: r.markWatermark,
+        runID: r.runID,
+        subscriberID: r.subscriberID,
+      })),
+    });
+    const stream = this.#stream;
+    if (stream === undefined) {
+      lc.info?.(
+        `deferring ${requests.length} backfill request(s) until the change ` +
+          `stream connects`,
+      );
+      return;
+    }
+    for (const request of requests) {
+      stream.acks.push(request);
+    }
   }
 
   async startSnapshotReservation(

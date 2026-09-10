@@ -38,8 +38,6 @@ import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
-import type {SchemaChange} from '../change-source/protocol/current/data.ts';
-import {schemaChangeTags} from '../change-source/protocol/current/schema-change-tags.ts';
 import type {BackfillRequest} from '../change-source/protocol/current/upstream.ts';
 import {
   backfillRequestsFrom,
@@ -51,10 +49,13 @@ import {
   type ChangeLogResumePoint,
 } from '../replicator/change-log-db.ts';
 import {
+  readBackfillDeclarations,
   readBackfillRequests,
   readReplicaCookies,
+  type BackfillDeclaration,
 } from '../replicator/schema/backfilling.ts';
 import {getReplicationState} from '../replicator/schema/replication-state.ts';
+import {readSchemaChanges} from './change-log-range.ts';
 import {SQLITE_CHANGE_LOG_BOUNDARY_SQL} from './sqlite-change-log-reader.ts';
 
 /** Everything one stream connection starts from, read at one position. */
@@ -62,6 +63,14 @@ export type InitializationParameters = {
   readonly lastWatermark: string;
   readonly backfillRequests: BackfillRequest[];
   readonly cookies: CookieSet;
+
+  /**
+   * How far this replication-manager's own replica got with each in-flight
+   * backfill. Present only on the replica-derived parameters -- marks are
+   * subscriber state, not cookies, so no change log carries them -- and used
+   * to resume a run across a manager restart (see {@link withResumeMarks}).
+   */
+  readonly marks?: BackfillDeclaration[] | undefined;
 };
 
 /**
@@ -134,18 +143,6 @@ type Opts = {
   readonly initFromReplica: boolean;
 };
 
-/**
- * The most change-log rows one comparison will scan.
- *
- * The interval is `(replicaWatermark, pgWatermark]`, so it is normally a
- * handful of transactions — but a replicator that has been stalled can leave it
- * arbitrarily large, and this runs on the stream loop between reconciliation and
- * `startStream`, where latency delays the resumption of replication. Over the
- * cap the comparison declines rather than pays: a chronically lagging replicator
- * shows up as `inconclusive`, which is charted, and not as a stall.
- */
-const MAX_FOLD_SCAN_ROWS = 10_000;
-
 export class ChangeLogInitializer {
   readonly #lc: LogContext;
   readonly #initFromPgChangeLog: boolean;
@@ -216,7 +213,10 @@ export class ChangeLogInitializer {
         // Reconciliation makes sure that the log contains that interval.
         this.#lastComparison = this.#compare(pg, replica);
       }
-      return pg;
+      return {
+        ...pg,
+        backfillRequests: withResumeMarks(pg.backfillRequests, replica?.marks),
+      };
     }
 
     // Use the reconciled log position. If the writer is unavailable, use the
@@ -228,7 +228,10 @@ export class ChangeLogInitializer {
       cookies: resumePoint.cookies,
       // Derive the requests from these cookies so that the requests and the
       // watermark describe the same position.
-      backfillRequests: backfillRequestsFrom(resumePoint.cookies),
+      backfillRequests: withResumeMarks(
+        backfillRequestsFrom(resumePoint.cookies),
+        replica?.marks,
+      ),
     };
   }
 
@@ -360,12 +363,13 @@ export function readReplicaInitializationParameters(
   db: Database,
 ): InitializationParameters {
   const runner = new StatementRunner(db);
-  runner.begin(); // deferred, i.e. one read snapshot for the three statements
+  runner.begin(); // deferred, i.e. one read snapshot for the statements
   try {
     return {
       lastWatermark: getReplicationState(runner).stateVersion,
       backfillRequests: readBackfillRequests(db),
       cookies: readReplicaCookies(db),
+      marks: readBackfillDeclarations(db),
     };
   } finally {
     if (db.inTransaction) {
@@ -405,6 +409,57 @@ export function replicaInitializationSource(
 }
 
 /**
+ * Attaches the replication-manager's *own* replica's backfill marks to the
+ * initial requests, so that a manager restart resumes a run where its backup
+ * replicator left off rather than from the beginning.
+ *
+ * The replica is the right authority for this: its marks are what the previous
+ * session of this manager actually got through, and any subscriber that trails
+ * it declares a lower mark on subscribe, which lowers the start again. (A
+ * subscriber's declaration can never *raise* the start, which is what keeps a
+ * run from skipping rows another subscriber still needs.)
+ *
+ * A mark taken at a snapshot older than the table's `minSnapshot` -- the most
+ * recent row key change the cookie jar knows about -- is dropped: a row whose
+ * key moved across it is sent by neither the run that passed it nor a run
+ * resumed after it.
+ */
+function withResumeMarks(
+  requests: readonly BackfillRequest[],
+  marks: readonly BackfillDeclaration[] | undefined,
+): BackfillRequest[] {
+  if (!marks?.length) {
+    return [...requests];
+  }
+  const byTable = new Map(
+    marks.map(mark => [`${mark.schema}.${mark.table}`, mark]),
+  );
+  return requests.map(request => {
+    const {schema, name} = request.table;
+    const declared = byTable.get(`${schema}.${name}`);
+    if (
+      declared === undefined ||
+      declared.mark === null ||
+      declared.markWatermark === null
+    ) {
+      return request;
+    }
+    if (
+      request.minSnapshot !== null &&
+      request.minSnapshot !== undefined &&
+      declared.markWatermark < request.minSnapshot
+    ) {
+      return request;
+    }
+    return {
+      ...request,
+      resumeFrom: declared.mark,
+      resumeFromWatermark: declared.markWatermark,
+    };
+  });
+}
+
+/**
  * Whether the log holds the complete interval above `fromWatermark`, using the
  * same predicate catchup uses to decide `too-old`: the log both reaches back
  * that far and contains that transaction's `commit` row, so the next row after
@@ -430,55 +485,6 @@ function spansInterval(db: Database, fromWatermark: string): boolean {
     fromWatermark >= row.minWatermark &&
     row.boundaryExists === 1
   );
-}
-
-const SCHEMA_CHANGE_TAG_LIST = schemaChangeTags
-  .map(tag => `'${tag}'`)
-  .join(', ');
-
-/**
- * The log's schema changes over `(after, through]`, in stream order, or
- * `undefined` if the interval is too large to scan (see
- * {@link MAX_FOLD_SCAN_ROWS}).
- *
- * The tag is stored beside the verbatim change so this scan never parses the
- * payloads of ordinary data changes. The row count is still checked first so a
- * stalled replicator cannot make the range scan unbounded.
- *
- * The count is itself capped, at one row past the cap it is deciding. A bare
- * `count(*)` over the interval is `O(interval)`, so the unbounded interval this
- * exists to decline would still be walked in full before being declined —
- * which is the latency the cap is here to avoid, not a cheaper form of it. The
- * `LIMIT` makes the decision `O(MAX_FOLD_SCAN_ROWS)`, and the comparison is
- * unaffected: the subquery returns the true count whenever it is within the
- * cap, and `cap + 1` whenever it is not.
- */
-function readSchemaChanges(
-  db: Database,
-  after: string,
-  through: string,
-): SchemaChange[] | undefined {
-  const {rows} = db
-    .prepare(/*sql*/ `
-      SELECT count(*) AS "rows" FROM (
-        SELECT 1 FROM "${CHANGE_LOG_STREAM_TABLE}"
-          WHERE "watermark" > ? AND "watermark" <= ?
-          LIMIT ${MAX_FOLD_SCAN_ROWS + 1}
-      )
-    `)
-    .get<{rows: number}>(after, through);
-  if (rows > MAX_FOLD_SCAN_ROWS) {
-    return undefined;
-  }
-  return db
-    .prepare(/*sql*/ `
-      SELECT "change" FROM "${CHANGE_LOG_STREAM_TABLE}"
-        WHERE "watermark" > ? AND "watermark" <= ?
-          AND "tag" IN (${SCHEMA_CHANGE_TAG_LIST})
-        ORDER BY "watermark", "pos"
-    `)
-    .all<{change: string}>(after, through)
-    .map(({change}) => BigIntJSON.parse(change) as SchemaChange);
 }
 
 function streamTableExists(db: Database): boolean {

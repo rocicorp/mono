@@ -59,6 +59,7 @@ import {
 } from './change-streamer-service.ts';
 import {
   PROTOCOL_VERSION,
+  type BackfillDeclaration,
   type ChangeStreamerService,
   type Downstream,
 } from './change-streamer.ts';
@@ -614,6 +615,442 @@ describe('change-streamer/service', () => {
       deleteChangeLogDB(logFile.path);
       logFile.delete();
     }
+  });
+
+  /**
+   * Slice R6: what the change-streamer does with a subscriber's declared
+   * backfill progress. Every case is driven through `subscribe()` against a
+   * real inline-written change log, and asserted on what reaches the change
+   * source's `acks` -- the forward channel -- because "nothing was forwarded"
+   * is as much a result here as a forwarded request is.
+   */
+  describe('backfill declarations', () => {
+    const FOO_BACKFILL = {
+      tag: 'create-table',
+      spec: {schema: 'my', name: 'foo', columns: {}},
+      metadata: {rowKey: {type: 'default', columns: ['id']}},
+      backfill: {a: {fooID: 1}},
+    } as const;
+
+    const declaration = (
+      overrides: Partial<BackfillDeclaration> = {},
+    ): BackfillDeclaration => ({
+      schema: 'my',
+      table: 'foo',
+      columns: ['a'],
+      metadata: FOO_BACKFILL.metadata,
+      backfill: FOO_BACKFILL.backfill,
+      mark: ['5'],
+      markWatermark: '03',
+      runID: null,
+      ...overrides,
+    });
+
+    /**
+     * Runs one transaction through the stream and waits for the log to hold
+     * it, so that the interval a later subscriber declares over is known to
+     * contain it rather than merely to have been pushed.
+     */
+    async function commitToLog(
+      logFile: DbFile,
+      watermark: string,
+      data: readonly Data[],
+    ): Promise<void> {
+      changes.push(['begin', messages.begin(), {commitWatermark: watermark}]);
+      for (const change of data) {
+        changes.push(change);
+      }
+      changes.push(['commit', messages.commit(), {watermark}]);
+      await vi.waitFor(() => {
+        using log = openChangeLogDB(lc, logFile.path, {readonly: true});
+        expect(readChangeLogHead(log)).toBe(watermark);
+      });
+    }
+
+    /**
+     * Subscribes with `backfills` and returns whatever the change source was
+     * asked to do about them once its batched catchup and live backlog have
+     * drained. Reading the downstream is necessary to release flow control.
+     */
+    async function declare(
+      id: string,
+      watermark: string,
+      backfills: BackfillDeclaration[],
+    ): Promise<{
+      sub: Source<string>;
+      done: Promise<void>;
+      forwarded: () => Promise<ChangeSourceUpstream | undefined>;
+    }> {
+      const sub = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: `${id}-task`,
+        id,
+        mode: 'serving',
+        watermark,
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+        backfills,
+      });
+      const done = (async () => {
+        for await (const _ of sub) {
+          /* catchup must be consumed to reach handoff */
+        }
+      })();
+      return {
+        sub,
+        done,
+        // Resolution follows the delivered catchup, so wait for its handoff
+        // and drain past status ACKs on the same upstream channel.
+        forwarded: async () => {
+          const deadline = Date.now() + 1_000;
+          for (;;) {
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) {
+              return undefined;
+            }
+            const next = await orTimeout(
+              Promise.resolve(acks.dequeue()),
+              remaining,
+            );
+            if (next === 'timed-out') {
+              return undefined;
+            }
+            if (next[0] === 'backfill-request') {
+              return next;
+            }
+          }
+        },
+      };
+    }
+
+    test.each(['ordinary', 'schema'] as const)(
+      'recovery survives over 10k %s events across SQLite read batches',
+      async kind => {
+        const logFile = new DbFile(`backfill-declaration-large-${kind}`);
+        await restartWithInlineChangeLogWriter(logFile, {
+          sqliteCatchup: {readBatchRows: 128, shouldUse: () => true},
+        });
+        const reads = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
+        try {
+          await commitToLog(logFile, '03', [['data', FOO_BACKFILL]]);
+          const data: Data[] = Array.from({length: 10_001}, (_, i) =>
+            kind === 'ordinary'
+              ? [
+                  'data',
+                  {
+                    tag: 'insert',
+                    relation: {
+                      schema: 'other',
+                      name: 'unrelated',
+                      rowKey: {columns: ['id']},
+                    },
+                    new: {id: i},
+                  },
+                ]
+              : [
+                  'data',
+                  {
+                    tag: 'rename-table',
+                    old: {schema: 'my', name: i % 2 === 0 ? 'foo' : 'foo2'},
+                    new: {schema: 'my', name: i % 2 === 0 ? 'foo2' : 'foo'},
+                  },
+                ],
+          );
+          await commitToLog(logFile, '05', data);
+          const {sub, forwarded} = await declare('large', '03', [
+            declaration(),
+          ]);
+          expect(await forwarded()).toMatchObject([
+            'backfill-request',
+            {
+              table: {
+                schema: 'my',
+                name: kind === 'schema' ? 'foo2' : 'foo',
+                metadata: FOO_BACKFILL.metadata,
+              },
+              columns: FOO_BACKFILL.backfill,
+            },
+          ]);
+          expect(reads).toHaveBeenCalled();
+          sub.cancel();
+        } finally {
+          reads.mockRestore();
+          await streamer.stop();
+          await streamerDone;
+          deleteChangeLogDB(logFile.path);
+          logFile.delete();
+        }
+      },
+    );
+
+    test('without SQLite, PG catchup resolves renamed and completed backfills', async () => {
+      changes.push(['begin', messages.begin(), {commitWatermark: '03'}]);
+      changes.push(['data', FOO_BACKFILL]);
+      changes.push(['commit', messages.commit(), {watermark: '03'}]);
+      changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+      changes.push([
+        'data',
+        {
+          tag: 'rename-table',
+          old: {schema: 'my', name: 'foo'},
+          new: {schema: 'my', name: 'foo2'},
+        },
+      ]);
+      changes.push([
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'my', name: 'foo2', rowKey: {columns: ['id']}},
+          columns: ['a'],
+          watermark: '05',
+          runID: 'another-run',
+        },
+      ]);
+      changes.push(['commit', messages.commit(), {watermark: '05'}]);
+      await expectAcks('03', '05');
+      const {sub, forwarded} = await declare('pg-only', '03', [declaration()]);
+      expect(await forwarded()).toMatchObject([
+        'backfill-request',
+        {
+          table: {schema: 'my', name: 'foo2', metadata: FOO_BACKFILL.metadata},
+          columns: FOO_BACKFILL.backfill,
+          mark: null,
+        },
+      ]);
+      sub.cancel();
+    });
+
+    test('a failed catchup ends the subscription; retry still resolves the declaration', async () => {
+      const logFile = new DbFile('backfill-declaration-read-error');
+      await restartWithInlineChangeLogWriter(logFile, {
+        sqliteCatchup: {readBatchRows: 2, shouldUse: () => true},
+      });
+      try {
+        await commitToLog(logFile, '03', [['data', FOO_BACKFILL]]);
+        await commitToLog(logFile, '05', []);
+        vi.spyOn(
+          SQLiteChangeLogReader.prototype,
+          'read',
+        ).mockImplementationOnce(async function* () {
+          yield [];
+          throw new Error('injected catchup read failure');
+        });
+        const failed = await declare('failed', '03', [declaration()]);
+        await failed.done;
+        const retried = await declare('retry', '03', [declaration()]);
+        expect(await retried.forwarded()).toMatchObject([
+          'backfill-request',
+          {columns: FOO_BACKFILL.backfill, subscriberID: 'retry'},
+        ]);
+        retried.sub.cancel();
+      } finally {
+        vi.restoreAllMocks();
+        await streamer.stop();
+        await streamerDone;
+        deleteChangeLogDB(logFile.path);
+        logFile.delete();
+      }
+    });
+
+    test('an announcement in the catchup range suppresses forwarding', async () => {
+      const logFile = new DbFile('backfill-declaration-following');
+      await restartWithInlineChangeLogWriter(logFile);
+      try {
+        await commitToLog(logFile, '03', [['data', FOO_BACKFILL]]);
+        // The run announces itself from the beginning, which covers every
+        // subscriber: catchup carries this message, so the subscriber will
+        // follow the run without the change source ever hearing about it.
+        await commitToLog(logFile, '05', [
+          [
+            'data',
+            {
+              tag: 'backfill-started',
+              relation: {
+                schema: 'my',
+                name: 'foo',
+                rowKey: {columns: ['id']},
+              },
+              columns: ['a'],
+              watermark: '05',
+              runID: 'run-1',
+              resumeFrom: null,
+            },
+          ],
+        ]);
+
+        const {sub, forwarded} = await declare('following', '03', [
+          declaration(),
+        ]);
+        expect(await forwarded()).toBeUndefined();
+        sub.cancel();
+      } finally {
+        await streamer.stop();
+        await streamerDone;
+        deleteChangeLogDB(logFile.path);
+        logFile.delete();
+      }
+    });
+
+    test('an announcement from a different mark is forwarded', async () => {
+      const logFile = new DbFile('backfill-declaration-forwarded');
+      await restartWithInlineChangeLogWriter(logFile);
+      try {
+        await commitToLog(logFile, '03', [['data', FOO_BACKFILL]]);
+        // Announced from a mark the subscriber is not at: it holds the run's
+        // rows only after `['9']`, and the declaring subscriber is at `['5']`.
+        await commitToLog(logFile, '05', [
+          [
+            'data',
+            {
+              tag: 'backfill-started',
+              relation: {
+                schema: 'my',
+                name: 'foo',
+                rowKey: {columns: ['id']},
+              },
+              columns: ['a'],
+              watermark: '05',
+              runID: 'run-1',
+              resumeFrom: ['9'],
+            },
+          ],
+        ]);
+
+        const {sub, forwarded} = await declare('behind', '03', [declaration()]);
+        expect(await forwarded()).toEqual([
+          'backfill-request',
+          {
+            table: {schema: 'my', name: 'foo', metadata: FOO_BACKFILL.metadata},
+            columns: FOO_BACKFILL.backfill,
+            mark: ['5'],
+            markWatermark: '03',
+            runID: null,
+            // Attribution, so that the restart this causes names its cause.
+            subscriberID: 'behind',
+          },
+        ]);
+        sub.cancel();
+      } finally {
+        await streamer.stop();
+        await streamerDone;
+        deleteChangeLogDB(logFile.path);
+        logFile.delete();
+      }
+    });
+
+    test('a declaration is folded over a rename in the catchup range', async () => {
+      const logFile = new DbFile('backfill-declaration-rename');
+      await restartWithInlineChangeLogWriter(logFile);
+      try {
+        await commitToLog(logFile, '03', [['data', FOO_BACKFILL]]);
+        // The subscriber declares the name it knew at '03'; the change source
+        // knows the one the table has now.
+        await commitToLog(logFile, '05', [
+          [
+            'data',
+            {
+              tag: 'rename-table',
+              old: {schema: 'my', name: 'foo'},
+              new: {schema: 'my', name: 'foo2'},
+            },
+          ],
+        ]);
+
+        const {sub, forwarded} = await declare('renamed', '03', [
+          declaration(),
+        ]);
+        expect(await forwarded()).toMatchObject([
+          'backfill-request',
+          {
+            table: {
+              schema: 'my',
+              name: 'foo2',
+              metadata: FOO_BACKFILL.metadata,
+            },
+            mark: ['5'],
+            subscriberID: 'renamed',
+          },
+        ]);
+        sub.cancel();
+      } finally {
+        await streamer.stop();
+        await streamerDone;
+        deleteChangeLogDB(logFile.path);
+        logFile.delete();
+      }
+    });
+
+    test('a table dropped in the catchup range forwards nothing', async () => {
+      const logFile = new DbFile('backfill-declaration-dropped');
+      await restartWithInlineChangeLogWriter(logFile);
+      try {
+        await commitToLog(logFile, '03', [['data', FOO_BACKFILL]]);
+        await commitToLog(logFile, '05', [
+          ['data', {tag: 'drop-table', id: {schema: 'my', name: 'foo'}}],
+        ]);
+
+        // Catchup carries the drop, and the subscriber's own fold clears the
+        // backfill with it.
+        const {sub, forwarded} = await declare('dropped', '03', [
+          declaration(),
+        ]);
+        expect(await forwarded()).toBeUndefined();
+        sub.cancel();
+      } finally {
+        await streamer.stop();
+        await streamerDone;
+        deleteChangeLogDB(logFile.path);
+        logFile.delete();
+      }
+    });
+
+    test('a table this session finished has its mark dropped (Scenario B)', async () => {
+      const logFile = new DbFile('backfill-declaration-scenario-b');
+      await restartWithInlineChangeLogWriter(logFile);
+      try {
+        await commitToLog(logFile, '03', [['data', FOO_BACKFILL]]);
+        // The completion takes `foo` out of the cookie jar, so there is no
+        // `minSnapshot` left with which to judge the declared mark.
+        await commitToLog(logFile, '05', [
+          [
+            'data',
+            {
+              tag: 'backfill-completed',
+              runID: 'another-managers-run',
+              relation: {
+                schema: 'my',
+                name: 'foo',
+                rowKey: {columns: ['id']},
+              },
+              columns: ['a'],
+              watermark: '05',
+            },
+          ],
+        ]);
+
+        const {sub, forwarded} = await declare('scenario-b', '03', [
+          declaration(),
+        ]);
+        expect(await forwarded()).toMatchObject([
+          'backfill-request',
+          {
+            table: {schema: 'my', name: 'foo', metadata: FOO_BACKFILL.metadata},
+            // Dropped: the run starts from the beginning, which every other
+            // subscriber ignores through the column guard.
+            mark: null,
+            markWatermark: null,
+            subscriberID: 'scenario-b',
+          },
+        ]);
+        sub.cancel();
+      } finally {
+        await streamer.stop();
+        await streamerDone;
+        deleteChangeLogDB(logFile.path);
+        logFile.delete();
+      }
+    });
   });
 
   test('serve mode at zero percent measures eligibility but keeps catchup on PG', async () => {
