@@ -55,6 +55,7 @@ export function configForNoPg(url: string) {
         'src/**/*.test.?(c|m)[jt]s?(x)',
         'server/**/*.test.?(c|m)[jt]s?(x)',
         'shared/**/*.test.?(c|m)[jt]s?(x)',
+        'scripts/**/*.test.?(c|m)[jt]s?(x)',
       ],
       exclude: [
         'src/**/*.pg.test.?(c|m)[jt]s?(x)',
@@ -64,7 +65,7 @@ export function configForNoPg(url: string) {
       coverage: {
         enabled: !ci,
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
-        include: ['src/**', 'server/**'],
+        include: ['src/**', 'server/**', 'scripts/**'],
       },
     },
   });
