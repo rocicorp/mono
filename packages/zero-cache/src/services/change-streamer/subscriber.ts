@@ -108,12 +108,10 @@ export class Subscriber {
       options.backlogLowWaterRatio ?? DEFAULT_BACKLOG_LOW_WATER_RATIO,
     );
     this.#onAck = options.onAck;
-    // Every subscriber that follows runs is tracked, including one that
-    // declares nothing: the stream can start a backfill that the subscriber
-    // then cannot follow, and nothing else would request it.
-    this.#backfills = this.followsBackfillRuns
-      ? new BackfillDeclarations(options.backfills ?? [])
-      : undefined;
+    this.#backfills = BackfillDeclarations.forSubscriber(
+      this.followsBackfillRuns,
+      options.backfills,
+    );
     this.#onBackfillRequests = options.onBackfillRequests;
   }
 
