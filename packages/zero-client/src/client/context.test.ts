@@ -52,7 +52,7 @@ test('getSource', () => {
     testBatchViewUpdates,
     () => {},
     assertValidRunOptions,
-  );
+  ).markPipelinesReady();
 
   const source = context.getSource('users');
   assert(
@@ -132,7 +132,7 @@ test('processChanges', () => {
     testBatchViewUpdates,
     () => {},
     assertValidRunOptions,
-  );
+  ).markPipelinesReady();
   const out = new Catch(
     // oxlint-disable-next-line no-non-null-assertion
     context.getSource('t1')!.connect([
@@ -203,7 +203,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     batchViewUpdates,
     () => {},
     assertValidRunOptions,
-  );
+  ).markPipelinesReady();
   const out = new Catch(
     // oxlint-disable-next-line no-non-null-assertion
     context.getSource('t1')!.connect([
@@ -263,7 +263,7 @@ test('transactions', () => {
     testBatchViewUpdates,
     () => {},
     assertValidRunOptions,
-  );
+  ).markPipelinesReady();
   const servers = context.getSource('server')!;
   const flair = context.getSource('flair')!;
   const join = new Join({
@@ -346,7 +346,7 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
     batchViewUpdates,
     () => {},
     assertValidRunOptions,
-  );
+  ).markPipelinesReady();
 
   expect(batchViewUpdatesCalls).toEqual(0);
   expect(() => context.batchViewUpdates(() => {})).toThrowError();
@@ -371,7 +371,7 @@ test('batchViewUpdates returns value', () => {
     batchViewUpdates,
     () => {},
     assertValidRunOptions,
-  );
+  ).markPipelinesReady();
 
   expect(batchViewUpdatesCalls).toEqual(0);
   expect(context.batchViewUpdates(() => 'test value')).toEqual('test value');
