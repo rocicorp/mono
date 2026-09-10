@@ -96,6 +96,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     changes = stream.changes;
     downstream = drainToQueue(changes);
     replicator = createChangeProcessor(replica);
+    announcedRuns = new Set();
   }, 30000);
 
   afterAll(async () => {
@@ -124,6 +125,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     return queue;
   }
 
+  /**
+   * The runs announced so far. Every `backfill` / `backfill-completed` must
+   * name one of them: a run announces itself before it sends anything, which
+   * is what lets a subscriber decide whether it may honor the completion.
+   */
+  let announcedRuns: Set<string>;
+
   async function nextTransaction(): Promise<StreamedChange[]> {
     const data: StreamedChange[] = [];
     for (;;) {
@@ -139,9 +147,23 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       switch (type) {
         case 'begin':
           break;
-        case 'data':
+        case 'data': {
+          const {tag} = change[1];
+          if (tag === 'backfill-started') {
+            // Checked here rather than spelled out in every case below,
+            // which are about the schema changes that trigger the backfills
+            // rather than about how the runs are announced. (The
+            // announcements themselves are covered in
+            // `backfill-stream.pg.test.ts`.)
+            announcedRuns.add(change[1].runID);
+            break; // not part of the expected transaction contents
+          }
+          if (tag === 'backfill' || tag === 'backfill-completed') {
+            expect(announcedRuns).toContain(change[1].runID);
+          }
           data.push(change[1]);
           break;
+        }
         case 'commit':
           if (data.length) {
             return data;

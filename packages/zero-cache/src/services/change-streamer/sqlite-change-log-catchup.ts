@@ -10,7 +10,10 @@ import {
 import type {WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import type {Forwarder} from './forwarder.ts';
-import type {CatchupPlan} from './sqlite-change-log-reader.ts';
+import {
+  seedCatchupStart,
+  type CatchupPlan,
+} from './sqlite-change-log-reader.ts';
 import type {Subscriber} from './subscriber.ts';
 
 export interface SQLiteChangeLogCatchupReader {
@@ -207,12 +210,32 @@ export class SQLiteChangeLogCatchup implements Disposable {
         // have advanced the minimum while registration waited. Once added to
         // the Forwarder, the subscriber's ACK prevents any later purge from
         // crossing this boundary.
-        const plan = this.#reader.plan(subscriber.watermark);
+        let plan = this.#reader.plan(subscriber.watermark);
+        const seed =
+          plan.kind === 'too-old'
+            ? seedCatchupStart(
+                subscriber.watermark,
+                subscriber.followsBackfillRuns,
+                plan,
+              )
+            : undefined;
+        if (seed !== undefined) {
+          plan = this.#reader.plan(seed);
+        }
         if (plan.kind === 'too-old') {
           uncoveredMinWatermark = plan.minWatermark;
           return;
         }
         requiredHead = captureRequiredHead();
+        if (seed !== undefined) {
+          // Moved only once nothing can decline the subscriber to PG catchup,
+          // which has no seed to start it from.
+          this.#lc.info?.(
+            `catching up ${subscriber.id} at ${subscriber.watermark} from ` +
+              `the change log's seed at ${seed}`,
+          );
+          subscriber.startAfter(seed);
+        }
         this.#forwarder.add(subscriber);
         committed = true;
       });

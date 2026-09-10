@@ -71,6 +71,8 @@ export default async function runWorker(
       backPressureLimitHeapProportion,
       flowControlConsensusTimeoutProportion,
       flowControlSlowSubscriberGracePeriodSeconds,
+      backfillResume,
+      backfillResumeMinCorrelation,
       pgChangeLogEnabled,
       sqliteChangeLogMode,
       sqliteChangeLogReadPercent,
@@ -193,6 +195,10 @@ export default async function runWorker(
               {backupV5: litestream.backupUsingV5},
               purgeLock,
               upstream.pgStreamInboundTimeoutMs,
+              {
+                resume: backfillResume === 'on',
+                minKeyCorrelation: backfillResumeMinCorrelation,
+              },
             )
           : await initializeCustomChangeSource(
               lc,

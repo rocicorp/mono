@@ -3,6 +3,7 @@ import {
   PG_UNDEFINED_TABLE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
+import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
@@ -19,7 +20,12 @@ import {TsvParser} from '../../../db/pg-copy.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
-import {connectPgClient, pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {
+  connectPgClient,
+  pgClient,
+  type PostgresDB,
+  type PostgresTransaction,
+} from '../../../types/pg.ts';
 import {
   SchemaIncompatibilityError,
   type BackfillMessage,
@@ -27,16 +33,29 @@ import {
 import type {
   BackfillCompleted,
   BackfillRequest,
+  BackfillStarted,
   DownloadStatus,
   JSONValue,
+  Mark,
 } from '../protocol/current.ts';
 import {
   columnMetadataSchema,
   tableMetadataSchema,
 } from './backfill-metadata.ts';
 import {
+  getKeyCollations,
+  getKeyCorrelation,
+  isCheaplyOrderable,
+  isResumableKey,
+  markOfLastRow,
+  orderByRowKey,
+  resumeWhere,
+  type ResumeColumnSpec,
+} from './backfill-resume.ts';
+import {
   makeBinarySelectExprs,
   makeDownloadStatements,
+  type DownloadOrder,
   type DownloadStatements,
 } from './initial-sync.ts';
 import {toStateVersionString} from './lsn.ts';
@@ -60,6 +79,25 @@ type StreamOptions = {
    * revert to the old code path if needed.
    */
   textCopy?: boolean | undefined;
+
+  /**
+   * Whether to order the backfill by the row key so that it can be resumed.
+   * Defaults to true; the `backfillResume` kill switch turns it off, in which
+   * case the COPY is unordered and no `lastKey` is attached, so no subscriber
+   * ever holds a mark. Run announcements are emitted either way, because a
+   * subscriber needs one in order to honor the run's completion.
+   */
+  resume?: boolean | undefined;
+
+  /**
+   * The minimum `pg_stats.correlation` of the row key's leading column for
+   * the backfill to be ordered. Defaults to `MIN_KEY_CORRELATION`. See
+   * `backfill-resume.ts` for what this costs and why.
+   */
+  minKeyCorrelation?: number | undefined;
+
+  /** Mints the run's ID. Injectable for deterministic tests. */
+  newRunID?: (() => string) | undefined;
 };
 
 // The size of chunks that Postgres sends on COPY stream.
@@ -89,8 +127,13 @@ export async function* streamBackfill(
     .withContext('component', 'backfill')
     .withContext('table', bf.table.name);
 
-  const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE, textCopy = false} =
-    opts;
+  const {
+    flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE,
+    textCopy = false,
+    resume = true,
+    minKeyCorrelation,
+    newRunID = nanoid,
+  } = opts;
   const db = await connectPgClient(lc, upstreamURI, 'backfill-stream', {
     // The COPY is a single stream that must outlive the entire table download,
     // so allow a very long (24h) connection lifetime.
@@ -111,17 +154,36 @@ export async function* streamBackfill(
       db,
       slot,
     ));
-    const {tableSpec, backfill} = await validateSchema(
+    const {tableSpec, backfill, run} = await validateSchema(
+      lc,
       tx,
       publications,
       bf,
       watermark,
+      {resume, minKeyCorrelation, runID: newRunID()},
     );
 
     // Note: validateSchema ensures that the rowKey and columns are disjoint
     const {relation, columns} = backfill;
     const cols = [...relation.rowKey.columns, ...columns];
-    const stmts = makeDownloadStatements(tableSpec, cols);
+    const rowKeyCols = relation.rowKey.columns;
+    const order: DownloadOrder | undefined = run.ordered
+      ? {
+          by: orderByRowKey(rowKeyCols),
+          after:
+            run.resumeFrom === null
+              ? undefined
+              : resumeWhere(rowKeyCols, run.keySpecs, run.resumeFrom),
+        }
+      : undefined;
+    const stmts = makeDownloadStatements(
+      tableSpec,
+      cols,
+      undefined,
+      undefined,
+      undefined,
+      order,
+    );
 
     if (textCopy) {
       const types = await getTypeParsers(db, {returnJsonAsString: true});
@@ -129,6 +191,7 @@ export async function* streamBackfill(
         lc,
         tx,
         backfill,
+        run,
         stmts,
         `COPY (${stmts.select}) TO STDOUT`,
         new TsvParser(),
@@ -145,12 +208,14 @@ export async function* streamBackfill(
         undefined,
         undefined,
         makeBinarySelectExprs(tableSpec, cols),
+        order,
       );
 
       yield* stream(
         lc,
         tx,
         backfill,
+        run,
         stmts,
         `COPY (${binaryStmts.select}) TO STDOUT WITH (FORMAT binary)`,
         new BinaryCopyParser(),
@@ -188,10 +253,41 @@ export async function* streamBackfill(
   }
 }
 
+/**
+ * The identity and shape of a single backfill run: one snapshot, one ordered
+ * (or unordered) pass over the table's rows, one completion.
+ */
+type Run = {
+  /** Random, and unique across replication-managers. */
+  readonly runID: string;
+
+  /**
+   * Whether the COPY is ordered by the row key, which is what makes the run
+   * resumable. False when the key's types or collation rule it out, when
+   * ordering would be too expensive (see `isCheaplyOrderable`), or when
+   * resume is turned off.
+   */
+  readonly ordered: boolean;
+
+  /** The mark this run resumes after, or null for "from the beginning". */
+  readonly resumeFrom: Mark | null;
+
+  /**
+   * The run that got the replica to `resumeFrom` and the position in it of
+   * the batch that did, which this run announces that it resumes; null for a
+   * run from the beginning.
+   */
+  readonly resumes: {runID: string; seq: number} | null;
+
+  /** One spec per row key column, in `relation.rowKey.columns` order. */
+  readonly keySpecs: readonly ResumeColumnSpec[];
+};
+
 async function* stream<T>(
   lc: LogContext,
   tx: TransactionPool,
   backfill: BackfillParams,
+  run: Run,
   {
     getTotalRows,
     getTotalBytes,
@@ -207,6 +303,20 @@ async function* stream<T>(
     !SAMPLE_OR_LIMIT_RE.test(copyCommand),
     `backfill COPY must not sample or limit: ${copyCommand}`,
   );
+  const {runID, ordered, resumes, keySpecs} = run;
+  // The position of each batch in the run, which a following subscriber
+  // records (see `seq` on `backfill`).
+  let seq = 0;
+
+  /**
+   * The mark of the last row of a batch, which a following subscriber
+   * persists so that a later run can resume after it. Only an ordered run
+   * produces one; a batch can also be empty when a chunk boundary falls
+   * inside a row.
+   */
+  const lastKeyOf = (rows: JSONValue[][]): {lastKey?: Mark} =>
+    ordered && rows.length > 0 ? {lastKey: markOfLastRow(keySpecs, rows)} : {};
+
   const start = performance.now();
   const [rows, bytes] = await tx.processReadTask(sql =>
     Promise.all([
@@ -227,6 +337,27 @@ async function* stream<T>(
       status,
     },
   );
+
+  // Announce the run before it sends any rows. A subscriber that has processed
+  // this announcement and every message since holds every row the run sends,
+  // and the announcement says which run this one resumes, which is what lets
+  // a subscriber decide whether it may honor the run's completion without
+  // ever comparing keys.
+  //
+  // Yielded here rather than at the top of the function: yielding suspends
+  // this generator until the manager has reserved the change stream and
+  // pushed the message, and doing that between opening the snapshot
+  // transaction and querying it leaves the transaction idle long enough for
+  // the pool to close it -- which surfaces as the table not existing.
+  const started: BackfillStarted = {
+    tag: 'backfill-started',
+    relation: backfill.relation,
+    columns: backfill.columns,
+    watermark: backfill.watermark,
+    runID,
+    resumes,
+  };
+  yield {message: started, byteSize: 0};
 
   // Drain the COPY stream from *within* a single read task so that the
   // TransactionPool worker holds the transaction for the entire duration of
@@ -285,7 +416,15 @@ async function* stream<T>(
 
     if (bufferedBytes >= flushThresholdBytes) {
       yield {
-        message: {tag: 'backfill', ...backfill, rowValues, status},
+        message: {
+          tag: 'backfill',
+          ...backfill,
+          rowValues,
+          status,
+          runID,
+          seq: ++seq,
+          ...lastKeyOf(rowValues),
+        },
         byteSize: bufferedBytes,
       };
       totalMsgs++;
@@ -304,7 +443,15 @@ async function* stream<T>(
   // Flush the last batch of rows.
   if (rowValues.length > 0) {
     yield {
-      message: {tag: 'backfill', ...backfill, rowValues, status},
+      message: {
+        tag: 'backfill',
+        ...backfill,
+        rowValues,
+        status,
+        runID,
+        seq: ++seq,
+        ...lastKeyOf(rowValues),
+      },
       byteSize: bufferedBytes,
     };
     totalMsgs++;
@@ -312,13 +459,13 @@ async function* stream<T>(
   }
 
   yield {
-    message: {tag: 'backfill-completed', ...backfill, status},
+    message: {tag: 'backfill-completed', ...backfill, status, runID, seq},
     byteSize: 0,
   };
   elapsed = (performance.now() - start).toFixed(3);
   lc.info?.(
-    `Finished streaming ${status.rows} rows, ${totalMsgs} msgs, ${totalBytes} bytes ` +
-      `(${elapsed} ms)`,
+    `Finished streaming run ${runID}: ${status.rows} rows, ${totalMsgs} msgs, ` +
+      `${totalBytes} bytes (${elapsed} ms)`,
   );
 }
 
@@ -367,13 +514,20 @@ async function createSnapshotTransaction(
 }
 
 function validateSchema(
+  lc: LogContext,
   tx: TransactionPool,
   publications: string[],
   bf: BackfillRequest,
   watermark: string,
+  opts: {
+    resume: boolean;
+    minKeyCorrelation: number | undefined;
+    runID: string;
+  },
 ): Promise<{
   tableSpec: PublishedTableSpec;
   backfill: BackfillParams;
+  run: Run;
 }> {
   return tx.processReadTask(async sql => {
     const {tables} = await getPublicationInfo(sql, publications);
@@ -430,17 +584,110 @@ function validateSchema(
         );
       }
     }
+    const rowKeyCols = Object.keys(tableMeta.rowKey);
     const backfill: BackfillParams = {
       relation: {
         schema: bf.table.schema,
         name: bf.table.name,
-        rowKey: {columns: Object.keys(tableMeta.rowKey)},
+        rowKey: {columns: rowKeyCols},
       },
       columns: Object.keys(bf.columns).filter(
         col => !(col in tableMeta.rowKey),
       ),
       watermark,
     };
-    return {tableSpec: spec, backfill};
+    const run = await planRun(lc, sql, spec, rowKeyCols, bf, opts);
+    return {tableSpec: spec, backfill, run};
   });
+}
+
+/**
+ * Decides whether this run is ordered — and therefore resumable — and, if so,
+ * where it resumes from.
+ *
+ * A run is ordered only when every row key column has an exact, safely
+ * inlinable text form (`isResumableKey`) *and* ordering by the key is cheap,
+ * i.e. the heap is already close to key order (`isCheaplyOrderable`).
+ * Otherwise the COPY is unordered, exactly as it is today, and the run
+ * announces itself as one from the beginning, which every subscriber follows.
+ */
+async function planRun(
+  lc: LogContext,
+  sql: PostgresTransaction,
+  spec: PublishedTableSpec,
+  rowKeyCols: string[],
+  bf: BackfillRequest,
+  {
+    resume,
+    minKeyCorrelation,
+    runID,
+  }: {resume: boolean; minKeyCorrelation: number | undefined; runID: string},
+): Promise<Run> {
+  const unordered: Run = {
+    runID,
+    ordered: false,
+    resumeFrom: null,
+    resumes: null,
+    keySpecs: [],
+  };
+  if (!resume || rowKeyCols.length === 0) {
+    return unordered;
+  }
+  const collations = await getKeyCollations(sql, spec.oid, rowKeyCols);
+  const keySpecs = rowKeyCols.map((col): ResumeColumnSpec => ({
+    ...spec.columns[col],
+    collationIsDeterministic: collations.get(col) ?? null,
+  }));
+  if (!isResumableKey(keySpecs)) {
+    lc.info?.(
+      `run ${runID} is not resumable: the row key ` +
+        `(${rowKeyCols.join(',')}) has a type or collation that cannot be ` +
+        `resumed from`,
+    );
+    return unordered;
+  }
+  const correlation = await getKeyCorrelation(sql, spec.oid, rowKeyCols[0]);
+  if (!isCheaplyOrderable(correlation, minKeyCorrelation)) {
+    lc.info?.(
+      `run ${runID} is not resumable: ordering by ${rowKeyCols[0]} would be ` +
+        `a scattered heap scan (correlation ${correlation})`,
+    );
+    return unordered;
+  }
+
+  const fromZero: Run = {
+    runID,
+    ordered: true,
+    resumeFrom: null,
+    resumes: null,
+    keySpecs,
+  };
+  const {resumeFrom = null, resumeRunID = null, resumeSeq = null} = bf;
+  if (resumeFrom === null) {
+    return fromZero;
+  }
+  // A mark with the wrong arity is a mark from a different row key, i.e. one
+  // recorded before a key change the change-streamer did not catch. Start
+  // over rather than resume from it.
+  if (resumeFrom.length !== rowKeyCols.length) {
+    lc.warn?.(
+      `run ${runID} ignoring a mark with ${resumeFrom.length} values for a ` +
+        `${rowKeyCols.length} column row key`,
+    );
+    return fromZero;
+  }
+  // A resumed run must say which run it resumes and from which of its
+  // batches, or no subscriber that was following that run would follow this
+  // one.
+  if (resumeRunID === null || resumeSeq === null) {
+    lc.warn?.(`run ${runID} ignoring a mark that names no run to resume`);
+    return fromZero;
+  }
+  return {
+    runID,
+    ordered: true,
+    resumeFrom,
+    resumes: {runID: resumeRunID, seq: resumeSeq},
+    keySpecs,
+  };
 }

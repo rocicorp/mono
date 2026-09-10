@@ -162,8 +162,9 @@ describe('sqlite change log reader', () => {
     expect(reader.plan('04')).toEqual({kind: 'range', ...bounds});
     expect(reader.plan('06')).toEqual({kind: 'range', ...bounds});
     expect(reader.plan('08')).toEqual({kind: 'range', ...bounds});
-    expect(reader.plan('01')).toEqual({kind: 'too-old', ...bounds});
-    expect(reader.plan('05')).toEqual({kind: 'too-old', ...bounds});
+    const tooOld = {kind: 'too-old', ...bounds, seedWatermark: '02'};
+    expect(reader.plan('01')).toEqual(tooOld);
+    expect(reader.plan('05')).toEqual(tooOld);
     expect(reader.plan('09')).toEqual({
       kind: 'ahead',
       headWatermark: '08',
@@ -179,10 +180,12 @@ describe('sqlite change log reader', () => {
       minWatermark: '04',
       headWatermark: '08',
     });
+    // The meta row still says where the log was seeded, after the purge.
     expect(reader.plan('02')).toEqual({
       kind: 'too-old',
       minWatermark: '04',
       headWatermark: '08',
+      seedWatermark: '02',
     });
   });
 

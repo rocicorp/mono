@@ -162,6 +162,20 @@ export class Subscriber {
   }
 
   /**
+   * Starts the subscription after `watermark` instead of the watermark it
+   * subscribed at, which is only possible before anything has been sent. See
+   * `seedCatchupStart()` in `sqlite-change-log-reader.ts`.
+   */
+  startAfter(watermark: string): void {
+    assert(
+      !this.#initialized && watermark >= this.#watermark,
+      () =>
+        `cannot start subscriber ${this.id} at ${this.#watermark} after ${watermark}`,
+    );
+    this.#watermark = watermark;
+  }
+
+  /**
    * Whether the backlog of live changes buffered during catchup has reached the
    * point at which {@link send()} stops resolving. Past it the subscriber is no
    * longer free: it holds up every subsequent flush, and with no other

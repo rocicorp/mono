@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../../shared/src/must.ts';
@@ -9,16 +10,29 @@ import {
   majorVersionFromString,
   majorVersionToString,
 } from '../../../types/state-version.ts';
+import {BackfillDeclarations} from '../../change-streamer/backfill-declarations.ts';
+import type {BackfillDeclaration} from '../../change-streamer/change-streamer.ts';
 import type {
   BackfillCompleted,
   BackfillRequest,
+  BackfillRequestMessage,
+  BackfillStarted,
   ChangeStreamMessage,
   MessageBackfill,
 } from '../protocol/current.ts';
 import {BackfillManager, type BackfillMessage} from './backfill-manager.ts';
 import {ChangeStreamMultiplexer} from './change-stream-multiplexer.ts';
 
-type TestStreamItem = MessageBackfill | BackfillCompleted | BackfillMessage;
+type TestStreamItem =
+  | BackfillStarted
+  | MessageBackfill
+  | BackfillCompleted
+  | BackfillMessage
+  // Holds the stream open, so that a test can act on a run that is still
+  // running rather than one that has already finished and been replaced.
+  | {hold: Promise<void>}
+  // Fails the stream here, after everything it has already yielded.
+  | Error;
 
 describe('backfill-manager', () => {
   let backfillManager: BackfillManager;
@@ -41,12 +55,15 @@ describe('backfill-manager', () => {
       commitThresholdBytes,
     );
     changeStream.addProducers(backfillManager).addListeners(backfillManager);
-    changes = new Queue<ChangeStreamMessage>();
 
-    // Drain ChangeStreamMessages to the changes queue.
+    // Drain ChangeStreamMessages to this manager's own queue. A run that a
+    // previous test left behind -- one that finishes once its holds are
+    // released at teardown -- must not deliver into the next test's queue.
+    const stream = changeStream;
+    const queue = (changes = new Queue<ChangeStreamMessage>());
     void (async () => {
-      for await (const msg of changeStream.asSource()) {
-        changes.enqueue(msg);
+      for await (const msg of stream.asSource()) {
+        queue.enqueue(msg);
       }
     })();
   }
@@ -75,6 +92,13 @@ describe('backfill-manager', () => {
 
     try {
       for (const item of stream) {
+        if (item instanceof Error) {
+          throw item;
+        }
+        if ('hold' in item) {
+          await item.hold;
+          continue;
+        }
         yield 'message' in item ? item : {message: item, byteSize: 0};
       }
     } finally {
@@ -143,7 +167,7 @@ describe('backfill-manager', () => {
     await expectChanges([
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '123.01'},
       ],
       [
@@ -175,7 +199,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '130'},
       ],
       [
@@ -272,7 +296,7 @@ describe('backfill-manager', () => {
       // First transaction: accumulates two messages (120 bytes >= 100)...
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '123.01'},
       ],
       data([[1, 2]]),
@@ -282,7 +306,7 @@ describe('backfill-manager', () => {
       // Second transaction: the third message opens a fresh transaction.
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '123.02'},
       ],
       data([[5, 6]]),
@@ -290,7 +314,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '123.02'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '130'},
       ],
       [
@@ -389,7 +413,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '125'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '125.01'},
       ],
       [
@@ -516,7 +540,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '130'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '130.01'},
       ],
       [
@@ -701,7 +725,7 @@ describe('backfill-manager', () => {
     expect((await drainChanges(15)).slice(-3)).toMatchObject([
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '130'},
       ],
       [
@@ -1151,7 +1175,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '140'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '140.01'},
       ],
       [
@@ -1450,7 +1474,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '140'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '140.01'},
       ],
       [
@@ -1480,7 +1504,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '140.01'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '140.02'},
       ],
       [
@@ -1565,7 +1589,7 @@ describe('backfill-manager', () => {
     await expectChanges([
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '130'},
       ],
       [
@@ -1614,6 +1638,61 @@ describe('backfill-manager', () => {
         },
       },
     ]);
+  });
+
+  // A stream that fails mid-transaction held the change stream's reservation
+  // with its transaction open, so no producer could ever reserve it again.
+  test('a stream that fails mid-transaction rolls back and releases the change stream', async () => {
+    const relation = {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}};
+    testStreams.push(
+      [
+        {
+          tag: 'backfill-started',
+          relation,
+          columns: ['b'],
+          watermark: '130',
+          runID: 'run-1',
+          resumes: null,
+        },
+        {
+          tag: 'backfill',
+          relation,
+          columns: ['b'],
+          watermark: '130',
+          rowValues: [[1, 'x']],
+          runID: 'run-1',
+        },
+        new Error('lost the COPY connection'),
+      ],
+      [
+        {
+          tag: 'backfill-completed',
+          relation,
+          columns: ['b'],
+          watermark: '130',
+        },
+      ],
+    );
+
+    backfillManager.run('123', [
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {metadata: {rowKey: {a: 123}}, name: 'bar', schema: 'foo'},
+      },
+    ]);
+    changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
+
+    // The failed run's transaction is rolled back, and the retry can reserve
+    // the change stream for its own.
+    await expectChanges([
+      ['begin', {tag: 'begin', backfill: true}, expect.anything()],
+      ['data', {tag: 'backfill-started'}],
+      ['data', {tag: 'backfill'}],
+      ['rollback', {tag: 'rollback'}],
+      ['begin', {tag: 'begin', backfill: true}, expect.anything()],
+      ['data', {tag: 'backfill-completed'}],
+      ['commit', {tag: 'commit'}, expect.anything()],
+    ] as ChangeStreamMessage[]);
   });
 
   test('backfill retried for non-empty table without row key', async () => {
@@ -1682,7 +1761,7 @@ describe('backfill-manager', () => {
     await expectChanges([
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '123.01'},
       ],
       [
@@ -1698,7 +1777,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '188'},
       ],
       [
@@ -1809,7 +1888,7 @@ describe('backfill-manager', () => {
     expect(await drainChanges(15)).toMatchObject([
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '141.01'},
       ],
       [
@@ -1829,7 +1908,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '141.01'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '142.01'},
       ],
       [
@@ -1849,7 +1928,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '142.01'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '143.01'},
       ],
       [
@@ -1869,7 +1948,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '143.01'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '144.01'},
       ],
       [
@@ -1889,7 +1968,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '144.01'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '145.01'},
       ],
       [
@@ -1956,7 +2035,7 @@ describe('backfill-manager', () => {
     expect(await drainChanges(8)).toMatchObject([
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '123.01'},
       ],
       [
@@ -1979,7 +2058,7 @@ describe('backfill-manager', () => {
 
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '131.01'},
       ],
       [
@@ -2046,7 +2125,7 @@ describe('backfill-manager', () => {
     await expectChanges([
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '123.01'},
       ],
       [
@@ -2065,7 +2144,7 @@ describe('backfill-manager', () => {
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '130'},
       ],
       [
@@ -2173,7 +2252,7 @@ describe('backfill-manager', () => {
     await expectChanges([
       [
         'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
+        {tag: 'begin', json: 'p', skipAck: true, backfill: true},
         {commitWatermark: '123.01'},
       ],
       [
@@ -2198,5 +2277,635 @@ describe('backfill-manager', () => {
     // The backfill must not be retried after cancelation.
     await sleep(100);
     expect(backfillRequests).toHaveLength(1);
+  });
+
+  describe('backfill requests from subscribers', () => {
+    const RELATION: BackfillStarted['relation'] = {
+      schema: 'foo',
+      name: 'bar',
+      rowKey: {columns: ['a']},
+    };
+
+    const REQUEST: BackfillRequest = {
+      columns: {b: {id: '234'}},
+      table: {metadata: {rowKey: {a: 123}}, name: 'bar', schema: 'foo'},
+    };
+
+    /** An initial request carrying the manager's own replica's progress. */
+    const RESUMED: BackfillRequest = {
+      ...REQUEST,
+      resumeFrom: ['3'],
+      resumeFromWatermark: '120',
+      resumeRunID: 'run-0',
+      resumeSeq: 2,
+    };
+
+    /**
+     * Releases every held stream at the end of a test, so that the generators
+     * finish rather than being left suspended.
+     */
+    let releases: (() => void)[];
+
+    beforeEach(() => {
+      releases = [];
+      return () => releases.forEach(release => release());
+    });
+
+    /**
+     * Drains `n` changes and lets the manager's own continuations run, so
+     * that the run's recorded announcement reflects what was drained.
+     */
+    async function drainAndSettle(n: number) {
+      await drainChanges(n);
+      await sleep(1);
+    }
+
+    /** A stream whose run stays running until the test ends. */
+    function running(...items: TestStreamItem[]): TestStreamItem[] {
+      return [...items, hold()];
+    }
+
+    /** A hold that is released when the test ends. */
+    function hold(): {hold: Promise<void>} {
+      const {promise, resolve} = resolver<void>();
+      releases.push(resolve);
+      return {hold: promise};
+    }
+
+    /** A hold the test opens itself, to let the run produce its next message. */
+    function gate(): {hold: Promise<void>; open: () => void} {
+      const {promise, resolve} = resolver<void>();
+      releases.push(resolve);
+      return {hold: promise, open: resolve};
+    }
+
+    function announcement(
+      runID: string,
+      resumes: {runID: string; seq: number} | null = null,
+    ): BackfillStarted {
+      return {
+        tag: 'backfill-started',
+        relation: RELATION,
+        columns: ['b'],
+        watermark: '130',
+        runID,
+        resumes,
+      };
+    }
+
+    function rows(seq: number, lastKey?: string[]): MessageBackfill {
+      return {
+        tag: 'backfill',
+        relation: RELATION,
+        columns: ['b'],
+        watermark: '130',
+        rowValues: [[1, 2]],
+        seq,
+        ...(lastKey === undefined ? {} : {lastKey}),
+      };
+    }
+
+    function completion(): BackfillCompleted {
+      return {
+        tag: 'backfill-completed',
+        relation: RELATION,
+        columns: ['b'],
+        watermark: '130',
+      };
+    }
+
+    function declaration(
+      runID: string | null,
+      runSeq: number | null = runID === null ? null : 1,
+    ): BackfillRequestMessage {
+      return [
+        'backfill-request',
+        {
+          table: REQUEST.table,
+          columns: REQUEST.columns,
+          runID,
+          runSeq,
+        },
+      ];
+    }
+
+    /** The manager's `n`th run, once it starts. */
+    async function nthRun(n: number): Promise<BackfillRequest> {
+      await vi.waitFor(() => expect(backfillRequests).toHaveLength(n));
+      return backfillRequests[n - 1];
+    }
+
+    /** Lets a held run finish and checks that nothing runs after it. */
+    async function expectNoRunAfter(done: {open: () => void}, runs: number) {
+      done.open();
+      await vi.waitFor(() => expect(finalizedStreams).toBe(runs));
+      await sleep(20);
+      expect(backfillRequests).toHaveLength(runs);
+    }
+
+    function statusAt(watermark: string) {
+      changeStream.pushStatus(['status', {ack: false}, {watermark}]);
+    }
+
+    test('a subscriber already following the run is a no-op', async () => {
+      const done = gate();
+      testStreams.push([
+        announcement('run-1'),
+        rows(1, ['5']),
+        done,
+        completion(),
+      ]);
+      backfillManager.run('123', [REQUEST]);
+      statusAt('130');
+      await drainAndSettle(3); // begin, backfill-started, backfill
+
+      backfillManager.onBackfillRequest(declaration('run-1', 1));
+      await expectNoRunAfter(done, 1);
+    });
+
+    test('subscribers not following the run get one run from the beginning after it', async () => {
+      const done = gate();
+      testStreams.push([
+        announcement('run-1', {runID: 'run-0', seq: 2}),
+        rows(1, ['5']),
+        done,
+        completion(),
+      ]);
+      testStreams.push(running(announcement('run-2'), rows(1, ['9'])));
+      backfillManager.run('123', [RESUMED]);
+      statusAt('130');
+      await drainAndSettle(3);
+
+      // From another manager's run, following nothing, and behind the point
+      // this run resumed from: none of them has what this run has sent.
+      backfillManager.onBackfillRequest(declaration('elsewhere', 4));
+      backfillManager.onBackfillRequest(declaration(null));
+      backfillManager.onBackfillRequest(declaration('run-0', 1));
+      // The running run is not restarted ...
+      expect(backfillRequests).toHaveLength(1);
+      done.open();
+      // ... and once it completes, the table runs again from the beginning,
+      // once for all of them.
+      expect(await nthRun(2)).toMatchObject({
+        columns: REQUEST.columns,
+        resumeFrom: null,
+        resumeRunID: null,
+      });
+      await sleep(20);
+      expect(backfillRequests).toHaveLength(2);
+    });
+
+    test('a subscriber following the resumed run from a batch it applied follows the run, even before it announces', async () => {
+      const start = gate();
+      const done = gate();
+      testStreams.push([
+        start,
+        announcement('run-1', {runID: 'run-0', seq: 2}),
+        rows(1, ['5']),
+        done,
+        completion(),
+      ]);
+      backfillManager.run('123', [RESUMED]);
+      statusAt('130');
+      await sleep(1); // the run has started, but announced nothing yet
+      expect(backfillRequests).toHaveLength(1);
+
+      backfillManager.onBackfillRequest(declaration('run-0', 2)); // at the point
+      backfillManager.onBackfillRequest(declaration('run-0', 7)); // past it
+      start.open();
+      await drainAndSettle(3);
+      backfillManager.onBackfillRequest(declaration('run-1', 0)); // following
+      await expectNoRunAfter(done, 1);
+    });
+
+    test('a subscriber behind the resume point gets a rerun, even before the run announces', async () => {
+      const start = gate();
+      const done = gate();
+      testStreams.push([
+        start,
+        announcement('run-1', {runID: 'run-0', seq: 2}),
+        rows(1, ['5']),
+        done,
+        completion(),
+      ]);
+      testStreams.push(running(announcement('run-2'), rows(1, ['9'])));
+      backfillManager.run('123', [RESUMED]);
+      statusAt('130');
+      await sleep(1);
+
+      backfillManager.onBackfillRequest(declaration('run-0', 1));
+      start.open();
+      done.open();
+      expect(await nthRun(2)).toMatchObject({
+        resumeFrom: null,
+        resumeRunID: null,
+      });
+    });
+
+    test('a declaration adds columns the manager finished while another column is running', async () => {
+      testStreams.push(running(announcement('run-1'), rows(1, ['5'])));
+      testStreams.push(running(announcement('run-2'), rows(1, ['9'])));
+      backfillManager.run('123', [RESUMED]);
+      await drainAndSettle(3);
+      const [, request] = declaration('run-1', 1);
+      backfillManager.onBackfillRequest([
+        'backfill-request',
+        {
+          ...request,
+          columns: {...request.columns, c: {id: '345'}},
+        },
+      ]);
+      // Restarted at once, from the beginning, with every column.
+      expect(await nthRun(2)).toMatchObject({
+        columns: {...REQUEST.columns, c: {id: '345'}},
+        resumeFrom: null,
+        resumeRunID: null,
+      });
+    });
+
+    test('a table this session already finished is added, from the beginning', async () => {
+      testStreams.push(running(announcement('run-1'), rows(1, ['5'])));
+      backfillManager.run('123', []); // nothing required
+      expect(backfillRequests).toHaveLength(0);
+
+      backfillManager.onBackfillRequest(declaration('run-1'));
+      // Scenario B: this session has no `minSnapshot` for a table it
+      // finished, so it starts from the beginning.
+      expect(await nthRun(1)).toMatchObject({
+        columns: REQUEST.columns,
+        resumeFrom: null,
+        resumeRunID: null,
+      });
+    });
+
+    describe('with no run active', () => {
+      /**
+       * A first attempt that fails at once, so that the manager is between
+       * runs -- backing off before the retry -- when a declaration arrives.
+       */
+      async function failFirst(request: BackfillRequest) {
+        testStreams.push(new Error('the first attempt fails'));
+        backfillManager.run('123', [request]);
+        await sleep(1); // (a macrotask: the failure settles, the retry waits)
+        expect(backfillRequests).toHaveLength(1);
+      }
+
+      test("the initial request's mark is what the first run resumes from", async () => {
+        testStreams.push(
+          running(announcement('run-1', {runID: 'run-0', seq: 2}), rows(1)),
+        );
+        backfillManager.run('123', [RESUMED]);
+        await drainAndSettle(3);
+        expect(backfillRequests[0]).toMatchObject({
+          resumeFrom: ['3'],
+          resumeRunID: 'run-0',
+          resumeSeq: 2,
+        });
+      });
+
+      test('a declaration following the resumed run from a batch applied leaves the resume point alone', async () => {
+        await failFirst(RESUMED);
+        testStreams.push(
+          running(announcement('run-1', {runID: 'run-0', seq: 2}), rows(1)),
+        );
+        backfillManager.onBackfillRequest(declaration('run-0', 3));
+        expect(await nthRun(2)).toMatchObject({
+          resumeFrom: ['3'],
+          resumeRunID: 'run-0',
+          resumeSeq: 2,
+        });
+      });
+
+      for (const request of [
+        declaration('run-0', 1),
+        declaration('elsewhere', 9),
+        declaration(null),
+      ]) {
+        test(`a declaration the resumed run would not cover, ${JSON.stringify(
+          request[1],
+        )}, starts it from the beginning`, async () => {
+          await failFirst(RESUMED);
+          testStreams.push(running(announcement('run-1'), rows(1)));
+          backfillManager.onBackfillRequest(request);
+          expect(await nthRun(2)).toMatchObject({
+            resumeFrom: null,
+            resumeRunID: null,
+            resumeSeq: null,
+          });
+        });
+      }
+    });
+
+    describe('a run canceled mid-way is replaced for its followers', () => {
+      function tx(watermark: string, ...data: ChangeStreamMessage[]) {
+        backfillManager.onChange([
+          'begin',
+          {tag: 'begin'},
+          {commitWatermark: watermark},
+        ]);
+        data.forEach(change => backfillManager.onChange(change));
+        backfillManager.onChange(['commit', {tag: 'commit'}, {watermark}]);
+      }
+
+      const metadataUpdate: ChangeStreamMessage = [
+        'data',
+        {
+          tag: 'update-table-metadata',
+          table: {schema: 'foo', name: 'bar'},
+          old: {rowKey: {a: 123}},
+          new: {rowKey: {a: 456}},
+        },
+      ];
+
+      test('a resumed run is replaced by one that resumes it from its start', async () => {
+        testStreams.push(
+          running(announcement('run-1', {runID: 'run-0', seq: 2}), rows(1)),
+        );
+        testStreams.push(
+          running(announcement('run-2', {runID: 'run-1', seq: 0}), rows(1)),
+        );
+        backfillManager.run('123', [RESUMED]);
+        await drainAndSettle(3);
+
+        tx('140', metadataUpdate);
+        expect(await nthRun(2)).toMatchObject({
+          table: {metadata: {rowKey: {a: 456}}},
+          resumeFrom: ['3'],
+          resumeRunID: 'run-1',
+          resumeSeq: 0,
+        });
+      });
+
+      test('a run from the beginning is replaced by another from the beginning', async () => {
+        // The change source found the table not resumable, and ran it from
+        // the beginning despite the mark.
+        testStreams.push(running(announcement('run-1'), rows(1)));
+        testStreams.push(running(announcement('run-2'), rows(1)));
+        backfillManager.run('123', [RESUMED]);
+        await drainAndSettle(3);
+
+        tx('140', metadataUpdate);
+        expect(await nthRun(2)).toMatchObject({
+          resumeFrom: null,
+          resumeRunID: null,
+        });
+      });
+
+      test('a run that fails is retried where it left off for its followers', async () => {
+        testStreams.push([
+          announcement('run-1', {runID: 'run-0', seq: 2}),
+          rows(1, ['5']),
+          new Error('lost the COPY'),
+        ]);
+        testStreams.push(
+          running(announcement('run-2', {runID: 'run-1', seq: 0}), rows(1)),
+        );
+        backfillManager.run('123', [RESUMED]);
+        expect(await nthRun(2)).toMatchObject({
+          resumeFrom: ['3'],
+          resumeRunID: 'run-1',
+          resumeSeq: 0,
+        });
+      });
+
+      test('a run that has not announced itself is replaced by what it would have been', async () => {
+        const start = gate();
+        testStreams.push([
+          start,
+          announcement('run-1', {runID: 'run-0', seq: 2}),
+          rows(1),
+          hold(),
+        ]);
+        testStreams.push(
+          running(announcement('run-2', {runID: 'run-0', seq: 2}), rows(1)),
+        );
+        backfillManager.run('123', [RESUMED]);
+        await sleep(1);
+
+        tx('140', metadataUpdate);
+        start.open();
+        expect(await nthRun(2)).toMatchObject({
+          resumeFrom: ['3'],
+          resumeRunID: 'run-0',
+          resumeSeq: 2,
+        });
+      });
+
+      test('a rename carries the resume state, and a key change since, with it', async () => {
+        testStreams.push(
+          running(announcement('run-1', {runID: 'run-0', seq: 2}), rows(1)),
+        );
+        testStreams.push(running(announcement('run-2'), rows(1)));
+        backfillManager.run('123', [RESUMED]);
+        await drainAndSettle(3);
+
+        // A key change on the table voids the mark ...
+        tx('140', [
+          'data',
+          {tag: 'update', relation: RELATION, key: {a: 1}, new: {a: 2}},
+        ]);
+        // ... and the rename that follows must not bring it back from the
+        // initial request, nor forget the key change.
+        tx('141', [
+          'data',
+          {
+            tag: 'rename-table',
+            old: {schema: 'foo', name: 'bar'},
+            new: {schema: 'foo', name: 'baz'},
+          },
+        ]);
+        expect(await nthRun(2)).toMatchObject({
+          table: {name: 'baz'},
+          resumeFrom: null,
+          resumeRunID: null,
+          minSnapshot: '140',
+        });
+      });
+    });
+  });
+
+  describe('subscribers arriving mid-run', () => {
+    const KEYS = Array.from({length: 30}, (_, i) => i + 1);
+    const RELATION: BackfillStarted['relation'] = {
+      schema: 'foo',
+      name: 'bar',
+      rowKey: {columns: ['a']},
+    };
+    const REQUEST: BackfillRequest = {
+      columns: {b: {id: '234'}},
+      table: {metadata: {rowKey: {a: 123}}, name: 'bar', schema: 'foo'},
+    };
+
+    function declared(
+      runID: string | null,
+      runSeq: number | null,
+    ): BackfillDeclaration {
+      return {
+        schema: 'foo',
+        table: 'bar',
+        columns: ['b'],
+        metadata: REQUEST.table.metadata,
+        backfill: REQUEST.columns,
+        runID,
+        runSeq,
+      };
+    }
+
+    /**
+     * A replication-manager over a table keyed 1..30, and the change-streamer's
+     * declaration trackers for its subscribers. A tracker sees exactly what its
+     * subscriber is sent, and its requests are how the subscriber's state
+     * reaches the manager.
+     *
+     * The test decides when a run sends its next batch (`advance`) and when the
+     * requests made so far arrive (`deliver`), which is what lets a run get
+     * well under way before a subscriber's request is heard.
+     */
+    function system() {
+      const runs: BackfillRequest[] = [];
+      // (Not `Queue<void>`: a queued `undefined` dequeues as a rejection.)
+      const tokens = new Queue<true>();
+
+      async function* streamer(
+        req: BackfillRequest,
+      ): AsyncGenerator<BackfillMessage> {
+        runs.push(req);
+        const runID = `run-${runs.length}`;
+        const from = req.resumeFrom ?? null;
+        const common = {relation: RELATION, columns: ['b'], watermark: '123'};
+        yield {
+          message: {
+            tag: 'backfill-started',
+            ...common,
+            runID,
+            resumes:
+              from === null
+                ? null
+                : {runID: must(req.resumeRunID), seq: must(req.resumeSeq)},
+          },
+          byteSize: 0,
+        };
+        let seq = 0;
+        for (const key of KEYS) {
+          if (from !== null && key <= Number(from[0])) {
+            continue;
+          }
+          await tokens.dequeue();
+          yield {
+            message: {
+              tag: 'backfill',
+              ...common,
+              rowValues: [[key, `b${key}`]],
+              runID,
+              seq: ++seq,
+              lastKey: [String(key)],
+            },
+            byteSize: 1,
+          };
+        }
+        yield {
+          message: {tag: 'backfill-completed', ...common, runID},
+          byteSize: 0,
+        };
+      }
+
+      const stream = new ChangeStreamMultiplexer(lc, '123');
+      const manager = new BackfillManager(
+        lc,
+        stream,
+        streamer,
+        JSON_PARSED,
+        10,
+        50,
+        1, // every batch is committed before the next one is sent
+      );
+      stream.addProducers(manager).addListeners(manager);
+
+      const subscribers = new Map<
+        string,
+        {
+          tracker: BackfillDeclarations;
+          sent: string;
+          requests: BackfillRequestMessage[];
+        }
+      >();
+
+      void (async () => {
+        for await (const msg of stream.asSource()) {
+          if (msg[0] === 'status' || msg[0] === 'control') {
+            continue;
+          }
+          for (const [id, sub] of subscribers) {
+            sub.tracker.apply(msg);
+            // As `Subscriber` does: at each transaction boundary, a request for
+            // whatever the subscriber is not covered for, when that changes.
+            if (msg[0] === 'commit' || msg[0] === 'rollback') {
+              const requests = sub.tracker.requests(id);
+              const serialized = JSON.stringify(requests);
+              if (requests.length && serialized !== sub.sent) {
+                sub.requests.push(...requests);
+              }
+              sub.sent = serialized;
+            }
+          }
+        }
+      })();
+
+      return {
+        manager,
+        runs,
+        subscribe(id: string, declaration: BackfillDeclaration) {
+          subscribers.set(id, {
+            tracker: new BackfillDeclarations([declaration]),
+            sent: '[]',
+            requests: [],
+          });
+        },
+        /** Lets the running run send `n` more batches. */
+        async advance(n: number) {
+          for (let i = 0; i < n; i++) {
+            tokens.enqueue(true);
+          }
+          for (let i = 0; i < 100 && tokens.size() > 0; i++) {
+            await sleep(1);
+          }
+          await sleep(5);
+        },
+        /** Delivers every request the subscribers have made so far. */
+        deliver() {
+          for (const sub of subscribers.values()) {
+            for (const request of sub.requests.splice(0)) {
+              manager.onBackfillRequest(request);
+            }
+          }
+        },
+        /** Whether every subscriber has completed the backfill. */
+        done: () =>
+          [...subscribers.values()].every(({tracker}) => !tracker.pending),
+      };
+    }
+
+    test('subscribers arriving from elsewhere mid-run are served by one run after the current one, whose followers are never left behind', async () => {
+      const {manager, runs, subscribe, advance, deliver, done} = system();
+      // `f` is there from the start of the first run, and follows it.
+      subscribe('f', declared(null, null));
+      manager.run('123', [REQUEST]);
+      await advance(6);
+
+      // `s` and `t` arrive from another replication-manager, following a run
+      // of its own, at different points in it. Neither has what this run has
+      // sent, and nothing about their runs says what they have.
+      subscribe('s', declared('elsewhere', 10));
+      subscribe('t', declared('elsewhere', 12));
+      for (let round = 0; round < 12 && !done(); round++) {
+        deliver();
+        await advance(6);
+      }
+
+      // The first run ran to its end for `f`; one more, from the beginning,
+      // served both `s` and `t`.
+      expect(runs.map(run => run.resumeFrom ?? null)).toEqual([null, null]);
+      expect(done()).toBe(true);
+    });
   });
 });
