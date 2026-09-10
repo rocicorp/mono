@@ -48,6 +48,7 @@ import {liteTableName} from '../../../types/names.ts';
 import type {
   BackfillID,
   Identifier,
+  MessageUpdate,
   SchemaChange,
   TableMetadata,
 } from '../../change-source/protocol/current/data.ts';
@@ -55,6 +56,7 @@ import type {BackfillRequest} from '../../change-source/protocol/current/upstrea
 import {
   backfillRequestsFrom,
   cookieOps,
+  markOps,
   type CookieOp,
   type CookieSet,
 } from '../change-log-cookies.ts';
@@ -159,6 +161,7 @@ export class BackfillingTracker {
   #columnsOf: Statement | undefined;
   #setRunID: Statement | undefined;
   #advanceMark: Statement | undefined;
+  #invalidateMarks: Statement | undefined;
 
   constructor(db: Database) {
     this.#db = db;
@@ -246,6 +249,26 @@ export class BackfillingTracker {
   }
 
   /**
+   * Voids every mark on the table and records `minSnapshot`, the earliest
+   * snapshot at which a backfill of it is still valid.
+   *
+   * Called for a row-key-changing update: a row whose key moves from above
+   * the mark to below it would be sent by neither the original run (it was
+   * above the mark then) nor a resumed one (which resumes above the mark), and
+   * the replicated update that moved it may omit an unchanged TOASTed value.
+   *
+   * The run itself survives: a run whose rows were all sent before the change
+   * has no such row, and its completion is still valid.
+   */
+  invalidateMarks(table: Identifier, minSnapshot: string): void {
+    (this.#invalidateMarks ??= this.#db.prepare(/*sql*/ `
+      UPDATE "${BACKFILLING_TABLE}"
+        SET "mark" = NULL, "markWatermark" = NULL, "minSnapshot" = ?
+        WHERE "schema" = ? AND "table" = ?
+    `)).run(minSnapshot, table.schema, table.name);
+  }
+
+  /**
    * Applies the change's backfill-cookie ops, returning the ops that were
    * applied. Changes that carry no backfill state — index changes, metadata-only
    * updates, and the `create-table` / `add-column` variants from a change source
@@ -254,12 +277,24 @@ export class BackfillingTracker {
   apply(change: SchemaChange): CookieOp[] {
     const ops = cookieOps(change);
     for (const op of ops) {
-      this.#run(op);
+      this.#run(op, '');
     }
     return ops;
   }
 
-  #run(op: CookieOp): void {
+  /**
+   * Applies the update's mark ops at the given transaction version, returning
+   * the ops that were applied. A no-op for anything but a row key change.
+   */
+  applyUpdate(update: MessageUpdate, version: string): CookieOp[] {
+    const ops = markOps(update);
+    for (const op of ops) {
+      this.#run(op, version);
+    }
+    return ops;
+  }
+
+  #run(op: CookieOp, version: string): void {
     switch (op.op) {
       case 'upsert-metadata':
         // Maintained by TableMetadataTracker in "_zero.tableMetadata".
@@ -311,6 +346,10 @@ export class BackfillingTracker {
         for (const column of op.columns) {
           this.#deleteColumn(op.table, column);
         }
+        break;
+
+      case 'invalidate-marks':
+        this.invalidateMarks(op.table, version);
         break;
 
       default:
@@ -434,18 +473,28 @@ export function readReplicaCookies(db: Database): CookieSet {
       metadata: BigIntJSON.parse(metadata) as TableMetadata,
     }));
 
+  // `mark`, `markWatermark` and `runID` are deliberately excluded: they are
+  // this replica's own progress, not cookies, and the change log's
+  // initialization comparison would report them as a divergence.
   const backfilling = db
     .prepare(/*sql*/ `
-      SELECT "schema", "table", "column", "backfill"
+      SELECT "schema", "table", "column", "backfill", "minSnapshot"
         FROM "${BACKFILLING_TABLE}"
         ORDER BY "schema", "table", "column"
     `)
-    .all<{schema: string; table: string; column: string; backfill: string}>()
-    .map(({schema, table, column, backfill}) => ({
+    .all<{
+      schema: string;
+      table: string;
+      column: string;
+      backfill: string;
+      minSnapshot: string | null;
+    }>()
+    .map(({schema, table, column, backfill, minSnapshot}) => ({
       schema,
       table,
       column,
       backfill: BigIntJSON.parse(backfill) as BackfillID,
+      minSnapshot,
     }));
 
   return {tableMetadata, backfilling};

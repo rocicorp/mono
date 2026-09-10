@@ -613,6 +613,23 @@ class TransactionProcessor {
     }
     this.#logSetOp(table, newKey, getBackfilledColumns(newRow.row, tableSpec));
 
+    // A row whose key moved is sent by neither the run that already passed its
+    // old position nor a run resumed after a mark above its new one, so no
+    // mark on this table taken before this version can be resumed from. The
+    // run itself survives: a run whose rows were all sent before this point
+    // has no such row, and its completion is still valid.
+    // `applyUpdate` only ever yields `invalidate-marks`, but it returns the
+    // full `CookieOp` union, so the tag is checked rather than assumed.
+    for (const op of this.#backfilling.applyUpdate(update, this.#version)) {
+      if (op.op === 'invalidate-marks') {
+        this.#lc.info?.(
+          `row key change on ${op.table.name} voids backfill marks taken ` +
+            `before ${this.#version}`,
+          {minSnapshot: {...op.table, version: this.#version}},
+        );
+      }
+    }
+
     const currKey = oldKey ?? newKey;
     const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
     const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
