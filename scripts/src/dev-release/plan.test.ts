@@ -1,17 +1,17 @@
 import {expect, test} from 'vitest';
 import {type Command, type Exec, type ExecOptions} from '../shared.ts';
 import {
-  deriveDefaultTag,
-  normalizeDevImageTag,
+  deriveDevImageTag,
   planDevRelease,
   resolveSourceSha,
+  resolveUniqueShortSha,
   sanitizeBranchName,
   validateImageTag,
 } from './plan.ts';
 
 const dummySha = 'e8cc6889fa6bc2a364e8cb80776991c308601212';
 
-function makeMockExec(resolvedSha = dummySha) {
+function makeMockExec(resolvedSha = dummySha, shortSha?: string) {
   const calls: Array<{
     command: Command;
     args: readonly string[];
@@ -20,6 +20,9 @@ function makeMockExec(resolvedSha = dummySha) {
   const exec: Exec = (command, args, options) => {
     calls.push({command, args, options});
     if (command === 'git' && args[0] === 'rev-parse') {
+      if (args[1]?.startsWith('--short')) {
+        return `${shortSha ?? resolvedSha.slice(0, 8)}\n`;
+      }
       return `${resolvedSha}\n`;
     }
     return '';
@@ -27,39 +30,49 @@ function makeMockExec(resolvedSha = dummySha) {
   return {calls, exec};
 }
 
-test('sanitizeBranchName strips refs prefix and sanitizes special characters to hyphens', () => {
+test('sanitizeBranchName strips refs prefix, formats PR refs, and sanitizes special characters to hyphens', () => {
+  expect(sanitizeBranchName('main')).toBe('main');
   expect(sanitizeBranchName('refs/heads/greg/sync-opt')).toBe('greg-sync-opt');
-  expect(sanitizeBranchName('refs/pull/123/head')).toBe('123-head');
+  expect(sanitizeBranchName('refs/pull/123/head')).toBe('pr-123');
+  expect(sanitizeBranchName('pull/456')).toBe('pr-456');
   expect(sanitizeBranchName('feat/my_cool.branch!')).toBe(
     'feat-my-cool-branch',
   );
   expect(sanitizeBranchName('---messy--branch---')).toBe('messy-branch');
 });
 
-test('deriveDefaultTag generates 0.0.0-pr-* or 0.0.0-dev-* SemVer tags', () => {
-  expect(deriveDefaultTag(dummySha, dummySha)).toBe('0.0.0-dev-e8cc6889');
-  expect(deriveDefaultTag('greg/sync-opt', dummySha)).toBe(
-    '0.0.0-pr-greg-sync-opt',
+test('deriveDevImageTag generates 0.0.0-dev-<branch>-<shortSha> SemVer tags', () => {
+  expect(deriveDevImageTag('main', dummySha)).toBe('0.0.0-dev-main-e8cc6889');
+  expect(deriveDevImageTag('greg/sync-opt', dummySha)).toBe(
+    '0.0.0-dev-greg-sync-opt-e8cc6889',
   );
-  expect(deriveDefaultTag('pr-1234', dummySha)).toBe('0.0.0-pr-1234');
-  expect(deriveDefaultTag('dev-test', dummySha)).toBe('0.0.0-dev-test');
-  expect(deriveDefaultTag('0.0.0-pr-test', dummySha)).toBe('0.0.0-pr-test');
+  expect(deriveDevImageTag('refs/pull/123/head', dummySha)).toBe(
+    '0.0.0-dev-pr-123-e8cc6889',
+  );
+  expect(deriveDevImageTag(dummySha, dummySha)).toBe('0.0.0-dev-e8cc6889');
+  expect(deriveDevImageTag('dev-benchmark', dummySha)).toBe(
+    '0.0.0-dev-benchmark-e8cc6889',
+  );
+  expect(deriveDevImageTag('sync-opt-e8cc6889', dummySha)).toBe(
+    '0.0.0-dev-sync-opt-e8cc6889',
+  );
 });
 
-test('normalizeDevImageTag ensures 0.0.0- prefix for custom tags', () => {
-  expect(normalizeDevImageTag('custom-bench-1')).toBe(
-    '0.0.0-dev-custom-bench-1',
-  );
-  expect(normalizeDevImageTag('dev-bench-1')).toBe('0.0.0-dev-bench-1');
-  expect(normalizeDevImageTag('pr-1234')).toBe('0.0.0-pr-1234');
-  expect(normalizeDevImageTag('0.0.0-dev-mytest')).toBe('0.0.0-dev-mytest');
+test('deriveDevImageTag truncates excessively long branch names while preserving the short SHA suffix within 128 chars', () => {
+  const longBranch = 'a'.repeat(150);
+  const tag = deriveDevImageTag(longBranch, dummySha);
+  expect(tag.length).toBeLessThanOrEqual(128);
+  expect(tag.endsWith('-e8cc6889')).toBe(true);
+  expect(tag.startsWith('0.0.0-dev-')).toBe(true);
+  expect(() => validateImageTag(tag)).not.toThrow();
 });
 
 test('validateImageTag accepts valid 0.0.0- SemVer tags and blocks invalid/protected tags', () => {
-  expect(() => validateImageTag('0.0.0-pr-1234')).not.toThrow();
+  expect(() => validateImageTag('0.0.0-dev-main-e8cc6889')).not.toThrow();
+  expect(() =>
+    validateImageTag('0.0.0-dev-greg-sync-opt-e8cc6889'),
+  ).not.toThrow();
   expect(() => validateImageTag('0.0.0-dev-e8cc6889')).not.toThrow();
-  expect(() => validateImageTag('0.0.0-pr-greg-sync-opt')).not.toThrow();
-  expect(() => validateImageTag('0.0.0-dev-custom-bench-1')).not.toThrow();
 
   expect(() => validateImageTag('latest')).toThrowError(/protected/);
   expect(() => validateImageTag('HEAD')).toThrowError(/protected/);
@@ -70,9 +83,6 @@ test('validateImageTag accepts valid 0.0.0- SemVer tags and blocks invalid/prote
     /must start with "0.0.0-"/,
   );
   expect(() => validateImageTag('v1.8.0')).toThrowError(
-    /must start with "0.0.0-"/,
-  );
-  expect(() => validateImageTag('pr-1234')).toThrowError(
     /must start with "0.0.0-"/,
   );
   expect(() => validateImageTag('dev-e8cc6889')).toThrowError(
@@ -99,33 +109,53 @@ test('planDevRelease requires workflowRefName to be main', () => {
   expect(() =>
     planDevRelease({
       exec,
-      targetRef: 'greg/test',
+      branchInput: 'greg/test',
       workflowRefName: 'feature-branch',
     }),
   ).toThrow(/must be run from main/);
 });
 
-test('planDevRelease rejects empty target ref', () => {
+test('planDevRelease rejects empty branch', () => {
   const {exec} = makeMockExec();
   expect(() =>
     planDevRelease({
       exec,
-      targetRef: '   ',
+      branchInput: '   ',
       workflowRefName: 'main',
     }),
-  ).toThrow(/Target ref must not be empty/);
+  ).toThrow(/Branch must not be empty/);
 });
 
-test('planDevRelease plans dev release with default 0.0.0-pr-* tag', () => {
+test('planDevRelease defaults to main and derives 0.0.0-dev-main-<shortSha>', () => {
   const {calls, exec} = makeMockExec();
   const plan = planDevRelease({
     exec,
-    targetRef: 'greg/sync-opt',
     workflowRefName: 'main',
   });
 
   expect(plan).toEqual({
-    image_tag: '0.0.0-pr-greg-sync-opt',
+    image_tag: '0.0.0-dev-main-e8cc6889',
+    ref: 'main',
+    source_sha: dummySha,
+  });
+
+  expect(calls).toContainEqual({
+    command: 'git',
+    args: ['fetch', 'origin', 'main'],
+    options: {stdio: 'inherit'},
+  });
+});
+
+test('planDevRelease plans dev release for feature branch with short SHA suffix', () => {
+  const {calls, exec} = makeMockExec();
+  const plan = planDevRelease({
+    exec,
+    branchInput: 'greg/sync-opt',
+    workflowRefName: 'main',
+  });
+
+  expect(plan).toEqual({
+    image_tag: '0.0.0-dev-greg-sync-opt-e8cc6889',
     ref: 'greg/sync-opt',
     source_sha: dummySha,
   });
@@ -137,42 +167,94 @@ test('planDevRelease plans dev release with default 0.0.0-pr-* tag', () => {
   });
 });
 
-test('planDevRelease accepts custom image tag and normalizes to 0.0.0-dev-*', () => {
-  const {exec} = makeMockExec();
+test('planDevRelease accepts optional commitShaInput', () => {
+  const specificSha = '1234567890abcdef1234567890abcdef12345678';
+  const {calls, exec} = makeMockExec(specificSha);
   const plan = planDevRelease({
     exec,
-    targetRef: dummySha,
-    imageTagInput: 'custom-bench-1',
+    branchInput: 'main',
+    commitShaInput: specificSha,
     workflowRefName: 'main',
   });
 
   expect(plan).toEqual({
-    image_tag: '0.0.0-dev-custom-bench-1',
-    ref: dummySha,
-    source_sha: dummySha,
+    image_tag: '0.0.0-dev-main-12345678',
+    ref: 'main',
+    source_sha: specificSha,
+  });
+
+  expect(calls).toContainEqual({
+    command: 'git',
+    args: ['rev-parse', '--verify', `${specificSha}^{commit}`],
+    options: undefined,
   });
 });
 
-test('planDevRelease rejects protected tags in imageTagInput', () => {
+test('resolveSourceSha rejects option-like branch starting with -', () => {
   const {exec} = makeMockExec();
-  for (const tag of ['latest', 'HEAD', 'staging', 'canary']) {
-    expect(() =>
-      planDevRelease({
-        exec,
-        targetRef: dummySha,
-        imageTagInput: tag,
-        workflowRefName: 'main',
-      }),
-    ).toThrowError(/protected/);
-  }
+  expect(() => resolveSourceSha({branch: '--force', exec})).toThrowError(
+    'Branch must not start with "-"',
+  );
 });
 
-test('resolveSourceSha rejects option-like refs starting with -', () => {
+test('resolveSourceSha rejects option-like commitSha starting with -', () => {
   const {exec} = makeMockExec();
-  expect(() => resolveSourceSha('--force', exec)).toThrowError(
-    'Target ref must not start with "-"',
+  expect(() =>
+    resolveSourceSha({
+      branch: 'main',
+      commitSha: '-v',
+      exec,
+    }),
+  ).toThrowError('Commit SHA must not start with "-"');
+});
+
+test('resolveSourceSha rejects invalid commitSha format', () => {
+  const {exec} = makeMockExec();
+  expect(() =>
+    resolveSourceSha({
+      branch: 'main',
+      commitSha: 'not-a-valid-sha!',
+      exec,
+    }),
+  ).toThrowError(/Invalid commit SHA/);
+});
+
+test('resolveUniqueShortSha queries git rev-parse with --short and expands on collision', () => {
+  const expandedSha = 'e8cc6889fa';
+  const {calls, exec} = makeMockExec(dummySha, expandedSha);
+
+  const shortSha = resolveUniqueShortSha(dummySha, exec);
+  expect(shortSha).toBe('e8cc6889fa');
+  expect(calls).toContainEqual({
+    command: 'git',
+    args: ['rev-parse', '--short=8', `${dummySha}^{commit}`],
+    options: undefined,
+  });
+});
+
+test('resolveUniqueShortSha throws if git rev-parse fails or returns invalid output', () => {
+  const failingExec: Exec = () => {
+    throw new Error('git rev-parse failed');
+  };
+  expect(() => resolveUniqueShortSha(dummySha, failingExec)).toThrow(
+    'git rev-parse failed',
   );
-  expect(() => resolveSourceSha('-v', exec)).toThrowError(
-    'Target ref must not start with "-"',
+
+  const invalidExec: Exec = () => 'not-a-valid-sha!';
+  expect(() => resolveUniqueShortSha(dummySha, invalidExec)).toThrow(
+    /Failed to resolve short SHA/,
   );
+});
+
+test('planDevRelease incorporates expanded short SHA when git detects collision', () => {
+  const expandedSha = 'e8cc6889fa';
+  const {exec} = makeMockExec(dummySha, expandedSha);
+
+  const plan = planDevRelease({
+    exec,
+    branchInput: 'main',
+    workflowRefName: 'main',
+  });
+
+  expect(plan.image_tag).toBe('0.0.0-dev-main-e8cc6889fa');
 });

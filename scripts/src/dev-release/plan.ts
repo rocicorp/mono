@@ -1,6 +1,5 @@
 // oxlint-disable no-console
 
-import semver from 'semver';
 import {
   assertGitSha,
   assertMainWorkflowRef,
@@ -11,7 +10,10 @@ import {
 } from '../shared.ts';
 
 const gitShaPattern = /^[0-9a-f]{40}$/;
+const hexShaPattern = /^[0-9a-f]{7,40}$/i;
 const dockerTagPattern = /^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$/;
+const semverRegex =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 const protectedTags = new Set(['latest', 'head', 'staging', 'canary']);
 
 export type DevReleasePlan = {
@@ -21,16 +23,16 @@ export type DevReleasePlan = {
 };
 
 export type PlanDevReleaseOptions = {
+  branchInput?: string | undefined;
+  commitShaInput?: string | undefined;
   exec?: Exec | undefined;
-  imageTagInput?: string | undefined;
-  targetRef: string;
   workflowRefName: string;
 };
 
 export function runDevReleasePlanCli() {
   const plan = planDevRelease({
-    imageTagInput: process.env.IMAGE_TAG_INPUT || undefined,
-    targetRef: mustEnv('TARGET_REF'),
+    branchInput: process.env.BRANCH_INPUT || 'main',
+    commitShaInput: process.env.COMMIT_SHA_INPUT || undefined,
     workflowRefName: mustEnv('WORKFLOW_REF_NAME'),
   });
 
@@ -41,46 +43,50 @@ export function runDevReleasePlanCli() {
 }
 
 export function planDevRelease({
+  branchInput = 'main',
+  commitShaInput,
   exec = defaultExec,
-  imageTagInput,
-  targetRef,
   workflowRefName,
 }: PlanDevReleaseOptions): DevReleasePlan {
   assertMainWorkflowRef('Dev release', workflowRefName);
 
-  if (!targetRef.trim()) {
-    throw new Error('Target ref must not be empty');
+  const trimmedBranch = branchInput.trim();
+  if (!trimmedBranch) {
+    throw new Error('Branch must not be empty');
   }
 
-  const rawInput = imageTagInput?.trim();
-  if (rawInput && protectedTags.has(rawInput.toLowerCase())) {
-    throw new Error(
-      `Tag "${rawInput}" is protected and cannot be overwritten by dev releases.`,
-    );
-  }
+  const trimmedCommitSha = commitShaInput?.trim() || undefined;
 
-  const sourceSha = resolveSourceSha(targetRef.trim(), exec);
+  const sourceSha = resolveSourceSha({
+    branch: trimmedBranch,
+    commitSha: trimmedCommitSha,
+    exec,
+  });
   assertGitSha(sourceSha, 'source SHA');
 
-  const imageTag = rawInput
-    ? normalizeDevImageTag(rawInput)
-    : deriveDefaultTag(targetRef.trim(), sourceSha);
-
+  const shortSha = resolveUniqueShortSha(sourceSha, exec);
+  const imageTag = deriveDevImageTag(trimmedBranch, sourceSha, shortSha);
   validateImageTag(imageTag);
 
   return {
     image_tag: imageTag,
-    ref: targetRef.trim(),
+    ref: trimmedBranch,
     source_sha: sourceSha,
   };
 }
 
-const gitRefPrefixPattern = /^refs\/(heads|remotes\/origin|remotes|pull)\//;
+const gitRefPrefixPattern = /^refs\/(heads|remotes\/origin|remotes)\//;
+const prRefPattern = /(?:refs\/)?pull\/(\d+)(?:\/head)?/;
 const invalidSemVerPrereleaseCharPattern = /[^a-zA-Z0-9-]/g;
 const consecutiveHyphenPattern = /-+/g;
 const edgeHyphenPattern = /^-+|-+$/g;
+const trailingHyphenPattern = /-+$/;
 
 export function sanitizeBranchName(branch: string): string {
+  const prMatch = branch.match(prRefPattern);
+  if (prMatch) {
+    return `pr-${prMatch[1]}`;
+  }
   return branch
     .replace(gitRefPrefixPattern, '')
     .replace(invalidSemVerPrereleaseCharPattern, '-')
@@ -88,35 +94,62 @@ export function sanitizeBranchName(branch: string): string {
     .replace(edgeHyphenPattern, '');
 }
 
-export function deriveDefaultTag(targetRef: string, sourceSha: string): string {
-  const shortSha = sourceSha.slice(0, 8);
-  if (gitShaPattern.test(targetRef)) {
-    return `0.0.0-dev-${shortSha}`;
+export function resolveUniqueShortSha(
+  sourceSha: string,
+  exec: Exec,
+  minLen = 8,
+): string {
+  const shortSha = exec('git', [
+    'rev-parse',
+    `--short=${minLen}`,
+    `${sourceSha}^{commit}`,
+  ]).trim();
+  if (!shortSha || !hexShaPattern.test(shortSha)) {
+    throw new Error(
+      `Failed to resolve short SHA for "${sourceSha}": git returned "${shortSha}"`,
+    );
   }
-  const rawClean = targetRef.replace(gitRefPrefixPattern, '');
-  if (rawClean.startsWith('0.0.0-')) {
-    const prerelease = sanitizeBranchName(rawClean.slice('0.0.0-'.length));
-    return `0.0.0-${prerelease}`.slice(0, 128);
-  }
-  const clean = sanitizeBranchName(targetRef);
-  if (!clean) {
-    return `0.0.0-dev-${shortSha}`;
-  }
-  if (clean.startsWith('pr-') || clean.startsWith('dev-')) {
-    return `0.0.0-${clean}`.slice(0, 128);
-  }
-  return `0.0.0-pr-${clean}`.slice(0, 128);
+  return shortSha;
 }
 
-export function normalizeDevImageTag(input: string): string {
-  const trimmed = input.trim();
-  if (trimmed.startsWith('0.0.0-')) {
-    return trimmed;
+export function deriveDevImageTag(
+  branch: string,
+  sourceSha: string,
+  shortSha = sourceSha.slice(0, 8),
+): string {
+  if (gitShaPattern.test(branch.trim())) {
+    return `0.0.0-dev-${shortSha}`;
   }
-  if (trimmed.startsWith('dev-') || trimmed.startsWith('pr-')) {
-    return `0.0.0-${trimmed}`;
+
+  const rawClean = branch.trim().replace(gitRefPrefixPattern, '');
+
+  let base: string;
+  if (rawClean.startsWith('0.0.0-')) {
+    base = sanitizeBranchName(rawClean.slice('0.0.0-'.length));
+  } else {
+    base = sanitizeBranchName(rawClean);
   }
-  return `0.0.0-dev-${trimmed}`;
+
+  if (base.startsWith('dev-')) {
+    base = base.slice('dev-'.length);
+  }
+
+  if (base.endsWith(`-${shortSha}`)) {
+    base = base.slice(0, -`-${shortSha}`.length);
+  } else if (base.endsWith(`-${sourceSha.slice(0, 8)}`)) {
+    base = base.slice(0, -`-${sourceSha.slice(0, 8)}`.length);
+  }
+
+  if (!base) {
+    return `0.0.0-dev-${shortSha}`;
+  }
+
+  const maxBaseLen = 128 - '0.0.0-dev-'.length - 1 - shortSha.length;
+  const trimmedBase = base
+    .slice(0, maxBaseLen)
+    .replace(trailingHyphenPattern, '');
+
+  return `0.0.0-dev-${trimmedBase}-${shortSha}`;
 }
 
 export function validateImageTag(tag: string): void {
@@ -135,28 +168,48 @@ export function validateImageTag(tag: string): void {
       `Tag "${tag}" must start with "0.0.0-" to ensure CloudZero SemVer compatibility and prevent colliding with official releases.`,
     );
   }
-  if (!semver.valid(tag)) {
+  if (!semverRegex.test(tag)) {
     throw new Error(
       `Tag "${tag}" is not a valid semantic version (SemVer 2.0.0). Prerelease identifiers may only contain alphanumerics and hyphens.`,
     );
   }
 }
 
-export function resolveSourceSha(targetRef: string, exec: Exec): string {
-  if (targetRef.startsWith('-')) {
-    throw new Error('Target ref must not start with "-"');
+export type ResolveSourceShaOptions = {
+  branch: string;
+  commitSha?: string | undefined;
+  exec: Exec;
+};
+
+export function resolveSourceSha({
+  branch,
+  commitSha,
+  exec,
+}: ResolveSourceShaOptions): string {
+  if (branch.startsWith('-')) {
+    throw new Error('Branch must not start with "-"');
   }
 
-  if (gitShaPattern.test(targetRef)) {
+  if (commitSha) {
+    if (commitSha.startsWith('-')) {
+      throw new Error('Commit SHA must not start with "-"');
+    }
+    if (!hexShaPattern.test(commitSha)) {
+      throw new Error(`Invalid commit SHA "${commitSha}"`);
+    }
+
+    if (!gitShaPattern.test(branch)) {
+      exec('git', ['fetch', 'origin', branch], {stdio: 'inherit'});
+    }
+
     try {
       return exec('git', [
         'rev-parse',
         '--verify',
-        `${targetRef}^{commit}`,
+        `${commitSha}^{commit}`,
       ]).trim();
     } catch {
-      // If the commit is not present locally, attempt to fetch it.
-      exec('git', ['fetch', 'origin', targetRef], {stdio: 'inherit'});
+      exec('git', ['fetch', 'origin', commitSha], {stdio: 'inherit'});
       return exec('git', [
         'rev-parse',
         '--verify',
@@ -165,7 +218,23 @@ export function resolveSourceSha(targetRef: string, exec: Exec): string {
     }
   }
 
-  // Target ref is a branch, tag, or PR ref (e.g. refs/pull/123/head).
-  exec('git', ['fetch', 'origin', targetRef], {stdio: 'inherit'});
+  if (gitShaPattern.test(branch)) {
+    try {
+      return exec('git', [
+        'rev-parse',
+        '--verify',
+        `${branch}^{commit}`,
+      ]).trim();
+    } catch {
+      exec('git', ['fetch', 'origin', branch], {stdio: 'inherit'});
+      return exec('git', [
+        'rev-parse',
+        '--verify',
+        'FETCH_HEAD^{commit}',
+      ]).trim();
+    }
+  }
+
+  exec('git', ['fetch', 'origin', branch], {stdio: 'inherit'});
   return exec('git', ['rev-parse', '--verify', 'FETCH_HEAD^{commit}']).trim();
 }
