@@ -52,8 +52,10 @@ const add = (id: string, name: string) => ({
   newValue: {id, name},
 });
 
-test('pipelines are ready by default', () => {
+test('pipelines are ready once marked ready', () => {
   const {context} = newContext();
+  expect(context.pipelinesReady).toBe(false);
+  context.markPipelinesReady();
   expect(context.pipelinesReady).toBe(true);
   context.processChanges(undefined, 'h1' as Hash, [add('e1', 'one')]);
   const view = context.materialize(newQuery(schema, 't1'));
@@ -63,7 +65,6 @@ test('pipelines are ready by default', () => {
 
 test('views materialized while deferred hydrate when pipelines become ready', () => {
   const {context, batchCalls} = newContext();
-  context.deferPipelines();
   expect(context.pipelinesReady).toBe(false);
 
   const view = context.materialize(newQuery(schema, 't1'));
@@ -97,7 +98,6 @@ test('views materialized while deferred hydrate when pipelines become ready', ()
 
 test('markPipelinesReady is idempotent and materialize after it is immediate', () => {
   const {context, batchCalls} = newContext();
-  context.deferPipelines();
   context.processChanges(undefined, 'h1' as Hash, [add('e1', 'one')]);
   context.markPipelinesReady();
   const batches = batchCalls();
@@ -111,7 +111,6 @@ test('markPipelinesReady is idempotent and materialize after it is immediate', (
 
 test('a view destroyed while deferred is not hydrated', () => {
   const {context} = newContext();
-  context.deferPipelines();
   const view = context.materialize(newQuery(schema, 't1'));
   const listener = vi.fn();
   view.addListener(listener);
@@ -125,7 +124,6 @@ test('a view destroyed while deferred is not hydrated', () => {
 
 test('a query for an unknown table throws from materialize, as before deferral', () => {
   const {context} = newContext();
-  context.deferPipelines();
   const otherSchema = createSchema({
     tables: [table('t2').columns({id: string()}).primaryKey('id')],
   });
@@ -135,7 +133,6 @@ test('a query for an unknown table throws from materialize, as before deferral',
 
 test('a deferred pipeline that fails at attach is logged and does not strand the others', async () => {
   const {context} = newContext();
-  context.deferPipelines();
   const view = context.materialize(newQuery(schema, 't1'));
   let type = 'unknown';
   view.addListener((_d, t) => {
