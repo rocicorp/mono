@@ -1085,7 +1085,14 @@ export function restartViewSyncer(params: {
     return queue;
   }
 
-  return {vs, stateChanges, viewSyncerDone, drainCoordinator, connect};
+  return {
+    vs,
+    stateChanges,
+    viewSyncerDone,
+    drainCoordinator,
+    inspectorDelegate,
+    connect,
+  };
 }
 
 /**
