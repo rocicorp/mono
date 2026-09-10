@@ -17,7 +17,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {createChangeProcessor} from '../../replicator/test-utils.ts';
-import type {DataOrSchemaChange} from '../protocol/current/data.ts';
+import type {StreamedChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
 import {TAGS} from './schema/ddl.ts';
@@ -124,8 +124,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     return queue;
   }
 
-  async function nextTransaction(): Promise<DataOrSchemaChange[]> {
-    const data: DataOrSchemaChange[] = [];
+  async function nextTransaction(): Promise<StreamedChange[]> {
+    const data: StreamedChange[] = [];
     for (;;) {
       const change = await downstream.dequeue('timeout', 30_000);
       if (change === 'timeout') {
@@ -161,7 +161,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   type EndToMidCase = [
     name: string,
     statements: string | string[],
-    transactions: Partial<DataOrSchemaChange>[][],
+    transactions: Partial<StreamedChange>[][],
     expectedData: Record<string, JSONValue[]>,
     expectedTables: LiteTableSpec[],
     expectedIndexes: ReplicaIndexSpec[],
