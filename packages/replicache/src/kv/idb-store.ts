@@ -18,11 +18,24 @@ const OBJECT_STORE = 'chunks';
 
 export class IDBStore implements Store {
   #db: Promise<IDBDatabase>;
+  #openError: unknown = null;
   #closed = false;
   #idbDeleted = false;
 
   constructor(name: string) {
     this.#db = openDatabase(name);
+    this.#db.catch(e => {
+      this.#openError = e;
+    });
+  }
+
+  /**
+   * The reason the initial `indexedDB.open` rejected, or `null` while it is
+   * pending or once it succeeded. `read()` and `write()` reject with this same
+   * value, which lets a wrapper tell an open failure from a transaction error.
+   */
+  get openError(): unknown {
+    return this.#openError;
   }
 
   read(): Promise<Read> {
