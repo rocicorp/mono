@@ -1,0 +1,270 @@
+name: Dev Release Zero
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to release (branch name, PR ref, or commit SHA)'
+        required: true
+        type: string
+      image_tag:
+        description: 'Docker image tag (optional; defaults to 0.0.0-pr-<sanitized-branch> or 0.0.0-dev-<sha8>)'
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: zero-dev-release-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan dev release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      image_tag: ${{ steps.plan.outputs.image_tag }}
+      ref: ${{ steps.plan.outputs.ref }}
+      source_sha: ${{ steps.plan.outputs.source_sha }}
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+
+      - name: Plan dev release
+        id: plan
+        env:
+          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+          TARGET_REF: ${{ inputs.ref }}
+          WORKFLOW_REF_NAME: ${{ github.ref_name }}
+        run: node scripts/src/dev-release-plan.ts
+
+  verify-signed-commit-authors:
+    name: Verify signed commit authors
+    runs-on: ubuntu-latest
+    needs: plan
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout target commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.plan.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify Signed Commit Authors
+        uses: rocicorp/.github/.github/actions/verify-signed-commit-authors@c49caa1498b8cf402992126969f2d7c8adc9ca4b # main
+        with:
+          enforce: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  archive-cloudzero-source:
+    name: Archive source for Cloud Zero (staging)
+    runs-on: ubuntu-latest
+    needs: [plan, verify-signed-commit-authors]
+    environment: staging-source-archive
+    permissions:
+      contents: read
+      id-token: write # For AWS OIDC.
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Configure archive credentials
+        uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
+        with:
+          role-to-assume: arn:aws:iam::946232032425:role/github-archive-zero-source
+          role-session-name: archive-zero-source-dev-${{ github.run_id }}
+          aws-region: us-east-1
+          mask-aws-account-id: true
+          unset-current-credentials: true
+
+      - name: Archive source revision
+        env:
+          SOURCE_ARCHIVE_BUCKET: cloudzero-source-archives-946232032425
+          SOURCE_REPOSITORY: rocicorp/mono
+          SOURCE_REVISION: ${{ needs.plan.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          revision=$(git rev-parse --verify "${SOURCE_REVISION}^{commit}")
+          if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]] || [ "$revision" != "$SOURCE_REVISION" ]; then
+            echo "Expected exact commit SHA, got $SOURCE_REVISION -> $revision" >&2
+            exit 1
+          fi
+          archive="$RUNNER_TEMP/source.tar.gz"
+          git archive --format=tar "$revision" | gzip -n > "$archive"
+          key="repositories/$SOURCE_REPOSITORY/$revision/source.tar.gz"
+          if aws s3api head-object --bucket "$SOURCE_ARCHIVE_BUCKET" --key "$key" >/dev/null 2>&1; then
+            echo "Already archived $SOURCE_REPOSITORY@$revision"
+          else
+            aws s3api put-object \
+              --bucket "$SOURCE_ARCHIVE_BUCKET" \
+              --key "$key" \
+              --body "$archive" \
+              --content-type application/gzip \
+              --checksum-algorithm SHA256 >/dev/null
+          fi
+
+  build:
+    name: Build artifacts
+    runs-on: ubuntu-latest
+    needs: [plan, verify-signed-commit-authors]
+    permissions:
+      contents: read
+    outputs:
+      tarball_name: ${{ steps.pack.outputs.filename }}
+    env:
+      IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+      SCRIPTS: ${{ github.workspace }}/ci/scripts/src
+      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+    steps:
+      - name: Checkout workflow scripts
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: main
+          path: ci
+          persist-credentials: false
+          sparse-checkout: scripts
+
+      - name: Checkout release source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: source
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          cache: 'pnpm'
+          cache-dependency-path: source/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Zero
+        working-directory: source
+        run: pnpm --filter @rocicorp/zero run build
+
+      - name: Pack Zero
+        id: pack
+        working-directory: source/packages/zero
+        env:
+          PACK_DEST: ${{ runner.temp }}/npm
+        run: node "$SCRIPTS/release-pack.ts"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Build Docker image archive
+        env:
+          IMAGE_ARCHIVE: ${{ runner.temp }}/docker/zero-image.tar
+          TARBALL: ${{ steps.pack.outputs.filename }}
+          TARBALL_PATH: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
+        run: |
+          set -euo pipefail
+          mkdir -p source/packages/zero/pkgs "$(dirname "$IMAGE_ARCHIVE")"
+          cp "$TARBALL_PATH" "source/packages/zero/pkgs/$TARBALL"
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-context monogo=source/go \
+            --build-arg ZERO_VERSION="$IMAGE_TAG" \
+            --build-arg ZERO_PACKAGE="$TARBALL" \
+            --label org.opencontainers.image.revision="$SOURCE_SHA" \
+            --label org.opencontainers.image.version="$IMAGE_TAG" \
+            --sbom=true \
+            --provenance=mode=max \
+            --output=type=oci,dest="$IMAGE_ARCHIVE" \
+            source/packages/zero
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zero-docker-${{ needs.plan.outputs.image_tag }}
+          if-no-files-found: error
+          retention-days: 1
+          path: ${{ runner.temp }}/docker/zero-image.tar
+
+  publish-docker:
+    name: Publish Docker images
+    runs-on: ubuntu-latest
+    needs: [plan, verify-signed-commit-authors, build, archive-cloudzero-source]
+    concurrency:
+      group: zero-dev-release-tag-${{ needs.plan.outputs.image_tag }}
+      cancel-in-progress: false
+    environment:
+      name: zero-release-docker
+    permissions:
+      id-token: write # For Docker Hub OIDC.
+      packages: write # For GHCR pushes.
+    env:
+      IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+    steps:
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: zero-docker-${{ needs.plan.outputs.image_tag }}
+          path: dist/docker
+
+      - name: Push GHCR Docker image
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        with:
+          args: >-
+            copy --all
+            --dest-creds ${{ github.actor }}:${{ github.token }}
+            oci-archive:dist/docker/zero-image.tar
+            docker://ghcr.io/rocicorp/zero:${{ needs.plan.outputs.image_tag }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+          DOCKERHUB_OIDC_CONNECTIONID: 2b3442aa-9cf7-4a13-afce-535dece25f7a
+        with:
+          username: rocicorp
+
+      - name: Push Docker Hub image
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        env:
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
+        with:
+          args: >-
+            copy --all
+            oci-archive:dist/docker/zero-image.tar
+            docker://docker.io/rocicorp/zero:${{ needs.plan.outputs.image_tag }}
+
+      - name: Summarize dev release
+        run: |
+          {
+            printf '## Dev Release Ready\n\n'
+            printf 'Target Image Tag: `%s`\n' "$IMAGE_TAG"
+            printf 'Source Revision: `%s`\n\n' "$SOURCE_SHA"
+            printf '### Docker Images:\n'
+            printf '- Docker Hub: `rocicorp/zero:%s`\n' "$IMAGE_TAG"
+            printf '- GHCR: `ghcr.io/rocicorp/zero:%s`\n\n' "$IMAGE_TAG"
+            printf '### Deploy to CloudZero Staging:\n'
+            printf 'Deploy this dev image to your staging stack via the CloudZero controller script:\n'
+            printf '```bash\nnode update-stack-zero-version.ts %s stack-ids <stack-id>\n```\n' "$IMAGE_TAG"
+          } >> "$GITHUB_STEP_SUMMARY"
