@@ -627,6 +627,29 @@ class TransactionProcessor {
     }
     this.#logSetOp(table, newKey, getBackfilledColumns(newRow.row, tableSpec));
 
+    // A row whose key moved is sent by neither the run that already passed its
+    // old position nor a run resumed after a mark above its new one, so no
+    // mark on this table taken before this version can be resumed from. The
+    // run itself survives: a run whose rows were all sent before this point
+    // has no such row, and its completion is still valid.
+    // For a FULL identity table the key compared is the one rows are keyed
+    // by here (see `#getKey`), not every column the relation names.
+    // `applyMarkOps` only ever yields `invalidate-marks`, but it returns the
+    // full `CookieOp` union, so the tag is checked rather than assumed.
+    for (const op of this.#backfilling.applyMarkOps(
+      update,
+      this.#version,
+      () => tableSpec.primaryKey,
+    )) {
+      if (op.op === 'invalidate-marks') {
+        this.#lc.info?.(
+          `row key change on ${op.table.name} voids backfill marks taken ` +
+            `before ${this.#version}`,
+          {minSnapshot: {...op.table, version: this.#version}},
+        );
+      }
+    }
+
     const currKey = oldKey ?? newKey;
     const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
     const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
@@ -736,6 +759,17 @@ class TransactionProcessor {
     // opinion about and this store never sees, which is the drift the fold
     // exists to make impossible.
     this.#backfilling.apply(msg);
+    // A row key made of other columns makes every mark on the table a
+    // position in an order no run will use again.
+    for (const op of this.#backfilling.applyMarkOps(msg, this.#version)) {
+      if (op.op === 'invalidate-marks') {
+        this.#lc.info?.(
+          `row key of ${op.table.name} redefined: voids backfill marks ` +
+            `taken before ${this.#version}`,
+          {minSnapshot: {...op.table, version: this.#version}},
+        );
+      }
+    }
   }
 
   processRenameTable(rename: TableRename) {

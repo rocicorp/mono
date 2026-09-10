@@ -39,8 +39,10 @@ import type {Database, Statement} from '../../../../zqlite/src/db.ts';
 import type {
   BackfillID,
   Identifier,
+  MessageUpdate,
   SchemaChange,
   TableMetadata,
+  TableUpdateMetadata,
 } from '../change-source/protocol/current/data.ts';
 import {
   backfillRequestSchema,
@@ -65,10 +67,11 @@ export const CREATE_CHANGE_LOG_COOKIE_SCHEMA = /*sql*/ `
   );
 
   CREATE TABLE "${CHANGE_LOG_BACKFILLING_TABLE}" (
-    "schema"   TEXT NOT NULL,
-    "table"    TEXT NOT NULL,
-    "column"   TEXT NOT NULL,
-    "backfill" TEXT NOT NULL,
+    "schema"      TEXT NOT NULL,
+    "table"       TEXT NOT NULL,
+    "column"      TEXT NOT NULL,
+    "backfill"    TEXT NOT NULL,
+    "minSnapshot" TEXT,
     PRIMARY KEY ("schema", "table", "column")
   );
 `;
@@ -89,6 +92,19 @@ export type BackfillCookie = {
   readonly table: string;
   readonly column: string;
   readonly backfill: BackfillID;
+
+  /**
+   * The earliest snapshot at which a backfill of this column is still valid:
+   * the version of the most recent row-key-changing update on its table.
+   *
+   * Unlike the rest of the cookie set this is not reproduced by folding the
+   * log's schema changes — it moves on `update` messages, which the fold's
+   * tag-filtered, row-capped range read never sees — so it is excluded from
+   * the canonical rendering that the three stores are compared on. Each store
+   * maintains it at write time instead, stamping its own transaction version
+   * (see {@link markOps}).
+   */
+  readonly minSnapshot: string | null;
 };
 
 /**
@@ -122,9 +138,108 @@ export type CookieOp =
   | {op: 'drop-table'; table: Identifier}
   | {op: 'rename-column'; table: Identifier; old: string; new: string}
   | {op: 'drop-column'; table: Identifier; column: string}
-  | {op: 'complete-backfill'; table: Identifier; columns: readonly string[]};
+  | {op: 'complete-backfill'; table: Identifier; columns: readonly string[]}
+  | {op: 'invalidate-marks'; table: Identifier};
 
 export type CookieOpTag = CookieOp['op'];
+
+/**
+ * The fold for the changes that void marks, which is the whole of what an
+ * `update` or a table's new metadata can mean to the cookie jar: a row key
+ * change, or a change of which columns make up the row key, makes every mark
+ * on the table unsafe to resume from, and records the version below which no
+ * snapshot of it is valid.
+ *
+ * Kept separate from {@link cookieOps} because the version each store stamps
+ * is its own: `minSnapshot` is not reproduced by folding the log's schema
+ * changes (see {@link BackfillCookie.minSnapshot}).
+ *
+ * `fullIdentityKey` supplies an update's effective row key when its table has
+ * replica identity FULL; see {@link isRowKeyChange}.
+ */
+export function markOps(
+  change: MessageUpdate | TableUpdateMetadata,
+  fullIdentityKey?: FullIdentityKey,
+): CookieOp[] {
+  const voids =
+    change.tag === 'update'
+      ? isRowKeyChange(change, fullIdentityKey)
+      : isRowKeyRedefinition(change);
+  if (!voids) {
+    return [];
+  }
+  const {schema, name} =
+    change.tag === 'update' ? change.relation : change.table;
+  return [{op: 'invalidate-marks', table: {schema, name}}];
+}
+
+/**
+ * The columns a table with replica identity FULL is keyed by, looked up only
+ * for such a table, or undefined when the caller does not know them.
+ */
+export type FullIdentityKey = () => readonly string[] | undefined;
+
+/**
+ * The row key columns that table metadata names, in the order a backfill of
+ * the table orders its rows by (and so the order of a mark's values).
+ */
+export function rowKeyColumnsOf(
+  metadata: TableMetadata | null | undefined,
+): readonly string[] | undefined {
+  return metadata ? Object.keys(metadata.rowKey) : undefined;
+}
+
+/**
+ * Whether the update moved the row's key, which is the one thing a backfill
+ * cannot handle on its own: it is decomposed into a delete of the old key and
+ * a set of the new one, at which point the backfill algorithm takes the old
+ * row to be deleted but does not know to backfill the new one. A row whose key
+ * moves from above a mark to below it is sent by neither the run that passed
+ * it nor a run resumed after the mark.
+ *
+ * `key` is non-null when the update carries the old row's values: the key's,
+ * for an update that moved it, or every column's, for a table with replica
+ * identity FULL. pgoutput also names every column of a FULL table as a key
+ * column, so for such a table the relation's key columns are every column,
+ * and comparing them would take every update for a key change. What is
+ * compared instead is the table's effective row key -- the one its metadata
+ * names, which is what a backfill orders by -- as `fullIdentityKey` supplies
+ * it. With none known, every column is compared, which voids marks that no
+ * row crossed rather than keeping one that a row did.
+ *
+ * This is the test the {@link BackfillManager} applies to cancel a run, shared
+ * so that the manager, the change logs and the replica cannot disagree about
+ * what a key change is.
+ */
+export function isRowKeyChange(
+  update: MessageUpdate,
+  fullIdentityKey?: FullIdentityKey,
+): boolean {
+  const {relation, key, new: row} = update;
+  if (key === null || key === undefined) {
+    return false;
+  }
+  const columns =
+    (relation.rowKey.type === 'full' ? fullIdentityKey?.() : undefined) ??
+    relation.rowKey.columns;
+  return columns.some(col => key[col] !== row[col]);
+}
+
+/**
+ * Whether the table's row key is now made of other columns (or the same ones
+ * in another order, or a column of the same name that is another column). A
+ * mark is a position in the order of the old key, which is no position at all
+ * in the order of the new one: a run resumed from it would skip whichever rows
+ * sort below it under the new key, having never sent them.
+ */
+export function isRowKeyRedefinition({
+  old,
+  new: metadata,
+}: TableUpdateMetadata): boolean {
+  return (
+    BigIntJSON.stringify(old.rowKey) !== BigIntJSON.stringify(metadata.rowKey)
+  );
+}
 
 /**
  * The fold, and the only place either store decides what a schema change means
@@ -242,6 +357,8 @@ export class ChangeLogCookieWriter {
   readonly #deleteBackfillTable: Statement;
   readonly #renameBackfillColumn: Statement;
   readonly #deleteBackfillColumn: Statement;
+  readonly #invalidateMarks: Statement;
+  readonly #metadataOf: Statement;
 
   constructor(db: Database) {
     this.#upsertMetadata = db.prepare(/*sql*/ `
@@ -280,18 +397,59 @@ export class ChangeLogCookieWriter {
       DELETE FROM "${CHANGE_LOG_BACKFILLING_TABLE}"
         WHERE "schema" = ? AND "table" = ? AND "column" = ?
     `);
+    this.#invalidateMarks = db.prepare(/*sql*/ `
+      UPDATE "${CHANGE_LOG_BACKFILLING_TABLE}" SET "minSnapshot" = ?
+        WHERE "schema" = ? AND "table" = ?
+    `);
+    this.#metadataOf = db.prepare(/*sql*/ `
+      SELECT "metadata" FROM "${CHANGE_LOG_TABLE_METADATA_TABLE}"
+        WHERE "schema" = ? AND "table" = ?
+    `);
   }
 
   /** Applies the change's cookie ops, returning the ops that were applied. */
   apply(change: SchemaChange): CookieOp[] {
     const ops = cookieOps(change);
     for (const op of ops) {
-      this.#run(op);
+      this.#run(op, '');
     }
     return ops;
   }
 
-  #run(op: CookieOp): void {
+  /**
+   * Applies the change's mark ops at the given transaction version, returning
+   * the ops that were applied. A no-op for anything but a row key change or a
+   * redefinition of the row key.
+   */
+  applyMarkOps(
+    change: MessageUpdate | TableUpdateMetadata,
+    version: string,
+  ): CookieOp[] {
+    const ops = markOps(change, () =>
+      change.tag === 'update' ? this.#rowKeyOf(change.relation) : undefined,
+    );
+    for (const op of ops) {
+      this.#run(op, version);
+    }
+    return ops;
+  }
+
+  /**
+   * The row key a table's metadata cookie names, for an update to a table
+   * with replica identity FULL. Read per update rather than cached, so that a
+   * rolled back metadata change can never leave a stale key behind.
+   */
+  #rowKeyOf({schema, name}: Identifier) {
+    const row = this.#metadataOf.get<{metadata: string} | undefined>(
+      schema,
+      name,
+    );
+    return row === undefined
+      ? undefined
+      : rowKeyColumnsOf(BigIntJSON.parse(row.metadata) as TableMetadata);
+  }
+
+  #run(op: CookieOp, version: string): void {
     switch (op.op) {
       case 'upsert-metadata':
         this.#upsertMetadata.run(
@@ -360,6 +518,10 @@ export class ChangeLogCookieWriter {
         }
         break;
 
+      case 'invalidate-marks':
+        this.#invalidateMarks.run(version, op.table.schema, op.table.name);
+        break;
+
       default:
         unreachable(op);
     }
@@ -413,17 +575,18 @@ export function foldCookies(
           });
           break;
 
-        case 'upsert-backfill':
-          backfilling.set(
-            columnKey(op.table.schema, op.table.name, op.column),
-            {
-              schema: op.table.schema,
-              table: op.table.name,
-              column: op.column,
-              backfill: op.backfill,
-            },
-          );
+        case 'upsert-backfill': {
+          const key = columnKey(op.table.schema, op.table.name, op.column);
+          backfilling.set(key, {
+            schema: op.table.schema,
+            table: op.table.name,
+            column: op.column,
+            backfill: op.backfill,
+            // Carried forward, not derived: see `BackfillCookie.minSnapshot`.
+            minSnapshot: backfilling.get(key)?.minSnapshot ?? null,
+          });
           break;
+        }
 
         case 'rename-table': {
           const {old, new: renamed} = op;
@@ -484,6 +647,14 @@ export function foldCookies(
           }
           break;
 
+        case 'invalidate-marks':
+          // Unreachable from `cookieOps`, which never returns it: the fold's
+          // input is the log's *schema* changes. Handled for exhaustiveness,
+          // and correct if a caller ever folds `markOps` through here -- but
+          // the version is the interpreter's, and this interpreter has none,
+          // so it is deliberately inert. See `BackfillCookie.minSnapshot`.
+          break;
+
         default:
           unreachable(op);
       }
@@ -515,7 +686,13 @@ export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
   );
   const requests: BackfillRequest[] = [];
   let curr: BackfillRequest | undefined;
-  for (const {schema, table, column, backfill} of cookies.backfilling) {
+  for (const {
+    schema,
+    table,
+    column,
+    backfill,
+    minSnapshot,
+  } of cookies.backfilling) {
     if (curr?.table.schema !== schema || curr.table.name !== table) {
       curr = {
         table: {
@@ -530,6 +707,13 @@ export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
       requests.push(curr);
     }
     curr.columns[column] = backfill;
+    // The latest key change any of the table's in-flight columns knows about
+    // bounds them all: a snapshot older than it cannot be resumed from for
+    // any of them. Left absent, rather than null, when no column has one, so
+    // that a table that has seen no key change carries nothing.
+    if (minSnapshot !== null && (curr.minSnapshot ?? '') < minSnapshot) {
+      curr.minSnapshot = minSnapshot;
+    }
   }
   return v.parse(requests, backfillRequestsSchema);
 }
@@ -555,16 +739,23 @@ export function readCookies(db: Database): CookieSet {
 
   const backfilling = db
     .prepare(/*sql*/ `
-      SELECT "schema", "table", "column", "backfill"
+      SELECT "schema", "table", "column", "backfill", "minSnapshot"
         FROM "${CHANGE_LOG_BACKFILLING_TABLE}"
         ORDER BY "schema", "table", "column"
     `)
-    .all<{schema: string; table: string; column: string; backfill: string}>()
-    .map(({schema, table, column, backfill}) => ({
+    .all<{
+      schema: string;
+      table: string;
+      column: string;
+      backfill: string;
+      minSnapshot: string | null;
+    }>()
+    .map(({schema, table, column, backfill, minSnapshot}) => ({
       schema,
       table,
       column,
       backfill: BigIntJSON.parse(backfill) as BackfillID,
+      minSnapshot,
     }));
 
   return {tableMetadata, backfilling};
@@ -595,10 +786,23 @@ export function replaceCookies(db: Database, cookies: CookieSet): void {
   if (cookies.backfilling.length > 0) {
     const insert = db.prepare(/*sql*/ `
       INSERT INTO "${CHANGE_LOG_BACKFILLING_TABLE}"
-        ("schema", "table", "column", "backfill") VALUES (?, ?, ?, ?)
+        ("schema", "table", "column", "backfill", "minSnapshot")
+        VALUES (?, ?, ?, ?, ?)
     `);
-    for (const {schema, table, column, backfill} of cookies.backfilling) {
-      insert.run(schema, table, column, BigIntJSON.stringify(backfill));
+    for (const {
+      schema,
+      table,
+      column,
+      backfill,
+      minSnapshot,
+    } of cookies.backfilling) {
+      insert.run(
+        schema,
+        table,
+        column,
+        BigIntJSON.stringify(backfill),
+        minSnapshot,
+      );
     }
   }
 }

@@ -1,12 +1,20 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import type {SchemaChange} from '../change-source/protocol/current/data.ts';
+import type {
+  MessageUpdate,
+  SchemaChange,
+  TableMetadata,
+  TableUpdateMetadata,
+} from '../change-source/protocol/current/data.ts';
 import {
+  backfillRequestsFrom,
   ChangeLogCookieWriter,
   CREATE_CHANGE_LOG_COOKIE_SCHEMA,
   cookieOps,
   EMPTY_COOKIE_SET,
+  foldCookies,
+  markOps,
   readCookieRowCounts,
   readCookies,
   replaceCookies,
@@ -22,8 +30,31 @@ function createCookieJar(): Database {
   return db;
 }
 
+/**
+ * The cookie set after folding `changes`, without `minSnapshot`.
+ *
+ * The schema-change fold never moves `minSnapshot` -- it is stamped at write
+ * time from `update` messages, with the interpreter's own transaction version
+ * (see `BackfillCookie.minSnapshot`) -- so the cases below stay about what the
+ * fold does. `readCookies` is used directly where `minSnapshot` is the point.
+ */
+type FoldedCookies = {
+  tableMetadata: CookieSet['tableMetadata'];
+  backfilling: Omit<CookieSet['backfilling'][number], 'minSnapshot'>[];
+};
+
+function fold(db: Database, ...changes: SchemaChange[]): FoldedCookies {
+  const cookies = foldInto(db, ...changes);
+  return {
+    tableMetadata: cookies.tableMetadata,
+    backfilling: cookies.backfilling.map(
+      ({minSnapshot: _, ...cookie}) => cookie,
+    ),
+  };
+}
+
 /** Folds a change sequence through the SQLite interpreter. */
-function fold(db: Database, ...changes: SchemaChange[]): CookieSet {
+function foldInto(db: Database, ...changes: SchemaChange[]): CookieSet {
   const writer = new ChangeLogCookieWriter(db);
   changes.forEach(change => writer.apply(change));
   return readCookies(db);
@@ -240,6 +271,338 @@ describe('replicator/change-log-cookies', () => {
     });
   });
 
+  describe('markOps', () => {
+    const relation = {
+      schema: 'my',
+      name: 'foo',
+      rowKey: {columns: ['a', 'b']},
+    };
+
+    test('an update with no key is not a key change', () => {
+      expect(
+        markOps({tag: 'update', relation, key: null, new: {a: 1, b: 2}}),
+      ).toEqual([]);
+    });
+
+    test('an update whose key columns are unchanged is not a key change', () => {
+      // Replica identity FULL sends every column as the key, so most of these
+      // carry a key without having moved one.
+      expect(
+        markOps({
+          tag: 'update',
+          relation,
+          key: {a: 1, b: 2, c: 'old'},
+          new: {a: 1, b: 2, c: 'new'},
+        }),
+      ).toEqual([]);
+    });
+
+    test('a moved key column invalidates the table', () => {
+      expect(
+        markOps({
+          tag: 'update',
+          relation,
+          key: {a: 1, b: 2},
+          new: {a: 1, b: 3},
+        }),
+      ).toEqual([{op: 'invalidate-marks', table: {schema: 'my', name: 'foo'}}]);
+    });
+
+    describe('replica identity FULL', () => {
+      // pgoutput names every column of a FULL table as a key column, and
+      // sends the whole old row with every update.
+      const full: MessageUpdate = {
+        tag: 'update',
+        relation: {
+          schema: 'my',
+          name: 'foo',
+          rowKey: {columns: ['a', 'b', 'c'], type: 'full'},
+        },
+        key: {a: 1, b: 2, c: 'old'},
+        new: {a: 1, b: 2, c: 'new'},
+      };
+
+      test('only the effective row key is compared', () => {
+        expect(markOps(full, () => ['a', 'b'])).toEqual([]);
+        expect(
+          markOps({...full, new: {a: 1, b: 3, c: 'old'}}, () => ['a', 'b']),
+        ).toEqual([
+          {op: 'invalidate-marks', table: {schema: 'my', name: 'foo'}},
+        ]);
+      });
+
+      test('with no effective row key known, every column is compared', () => {
+        expect(markOps(full)).toEqual([
+          {op: 'invalidate-marks', table: {schema: 'my', name: 'foo'}},
+        ]);
+        expect(markOps(full, () => undefined)).toEqual([
+          {op: 'invalidate-marks', table: {schema: 'my', name: 'foo'}},
+        ]);
+      });
+
+      test('the key is only looked up for a FULL table', () => {
+        const lookup = () => {
+          throw new Error('looked up');
+        };
+        expect(
+          markOps(
+            {
+              ...full,
+              relation: {...full.relation, rowKey: {columns: ['a', 'b']}},
+            },
+            lookup,
+          ),
+        ).toEqual([]);
+      });
+    });
+  });
+
+  describe('minSnapshot', () => {
+    const keyChange: MessageUpdate = {
+      tag: 'update',
+      relation: {schema: 'my', name: 'foo', rowKey: {columns: ['a']}},
+      key: {a: 1},
+      new: {a: 2},
+    };
+
+    test('a key change stamps every in-flight column of its table', () => {
+      using db = createCookieJar();
+      const writer = new ChangeLogCookieWriter(db);
+      writer.apply(CREATE_FOO);
+      expect(writer.applyMarkOps(keyChange, '0a')).toEqual([
+        {op: 'invalidate-marks', table: {schema: 'my', name: 'foo'}},
+      ]);
+
+      expect(
+        readCookies(db).backfilling.map(({column, minSnapshot}) => ({
+          column,
+          minSnapshot,
+        })),
+      ).toEqual([
+        {column: 'a', minSnapshot: '0a'},
+        {column: 'b', minSnapshot: '0a'},
+      ]);
+
+      // A later key change moves it forward.
+      writer.applyMarkOps(keyChange, '0b');
+      expect(
+        readCookies(db).backfilling.map(({minSnapshot}) => minSnapshot),
+      ).toEqual(['0b', '0b']);
+    });
+
+    test('an update that moves no key stamps nothing', () => {
+      using db = createCookieJar();
+      const writer = new ChangeLogCookieWriter(db);
+      writer.apply(CREATE_FOO);
+      expect(writer.applyMarkOps({...keyChange, key: null}, '0a')).toEqual([]);
+      expect(
+        readCookies(db).backfilling.map(({minSnapshot}) => minSnapshot),
+      ).toEqual([null, null]);
+    });
+
+    test('an update to a FULL table compares the row key its metadata names', () => {
+      using db = createCookieJar();
+      const writer = new ChangeLogCookieWriter(db);
+      writer.apply({
+        ...CREATE_FOO,
+        metadata: {rowKey: {a: {attNum: 1}}},
+      } as SchemaChange);
+      const full: MessageUpdate = {
+        tag: 'update',
+        relation: {
+          schema: 'my',
+          name: 'foo',
+          rowKey: {columns: ['a', 'b', 'c'], type: 'full'},
+        },
+        key: {a: 1, b: 2, c: 'old'},
+        new: {a: 1, b: 3, c: 'new'},
+      };
+      // Every column but the key changed.
+      expect(writer.applyMarkOps(full, '0a')).toEqual([]);
+      expect(
+        readCookies(db).backfilling.map(({minSnapshot}) => minSnapshot),
+      ).toEqual([null, null]);
+
+      expect(
+        writer.applyMarkOps({...full, new: {a: 2, b: 2, c: 'old'}}, '0b'),
+      ).toEqual([{op: 'invalidate-marks', table: {schema: 'my', name: 'foo'}}]);
+      expect(
+        readCookies(db).backfilling.map(({minSnapshot}) => minSnapshot),
+      ).toEqual(['0b', '0b']);
+    });
+
+    test('a redefined row key stamps every in-flight column of its table', () => {
+      using db = createCookieJar();
+      const writer = new ChangeLogCookieWriter(db);
+      writer.apply(CREATE_FOO);
+      const redefinition = (
+        old: TableMetadata,
+        metadata: TableMetadata,
+      ): TableUpdateMetadata => ({
+        tag: 'update-table-metadata',
+        table: {schema: 'my', name: 'foo'},
+        old,
+        new: metadata,
+      });
+
+      // Metadata that changes, but not the row key.
+      expect(
+        writer.applyMarkOps(
+          redefinition({rowKey: {a: 1}}, {rowKey: {a: 1}, other: 2}),
+          '0a',
+        ),
+      ).toEqual([]);
+      // The same columns in another order is another order of marks.
+      for (const [version, rowKey] of [
+        ['0b', {b: 2, a: 1}],
+        ['0c', {a: 3, b: 2}],
+        ['0d', {c: 1}],
+      ] as const) {
+        expect(
+          writer.applyMarkOps(
+            redefinition({rowKey: {a: 1, b: 2}}, {rowKey}),
+            version,
+          ),
+        ).toEqual([
+          {op: 'invalidate-marks', table: {schema: 'my', name: 'foo'}},
+        ]);
+        expect(
+          readCookies(db).backfilling.map(({minSnapshot}) => minSnapshot),
+        ).toEqual([version, version]);
+      }
+    });
+
+    test('a key change on another table stamps nothing', () => {
+      using db = createCookieJar();
+      const writer = new ChangeLogCookieWriter(db);
+      writer.apply(CREATE_FOO);
+      writer.applyMarkOps(
+        {
+          ...keyChange,
+          relation: {schema: 'my', name: 'bar', rowKey: {columns: ['a']}},
+        },
+        '0a',
+      );
+      expect(
+        readCookies(db).backfilling.map(({minSnapshot}) => minSnapshot),
+      ).toEqual([null, null]);
+    });
+
+    test('a column backfilled after the key change starts clean', () => {
+      using db = createCookieJar();
+      const writer = new ChangeLogCookieWriter(db);
+      writer.apply(CREATE_FOO);
+      writer.applyMarkOps(keyChange, '0a');
+      writer.apply({
+        tag: 'add-column',
+        table: {schema: 'my', name: 'foo'},
+        column: {name: 'c', spec: {pos: 3, dataType: 'text'}},
+        backfill: {fooID: 5},
+      });
+      expect(
+        readCookies(db).backfilling.map(({column, minSnapshot}) => ({
+          column,
+          minSnapshot,
+        })),
+      ).toEqual([
+        {column: 'a', minSnapshot: '0a'},
+        {column: 'b', minSnapshot: '0a'},
+        // A backfill started after the key change is not bounded by it.
+        {column: 'c', minSnapshot: null},
+      ]);
+    });
+
+    test('an upsert of an existing column carries its minSnapshot forward', () => {
+      using db = createCookieJar();
+      const writer = new ChangeLogCookieWriter(db);
+      writer.apply(CREATE_FOO);
+      writer.applyMarkOps(keyChange, '0a');
+      // Re-announced (e.g. the change source re-sent the same add-column).
+      writer.apply({
+        tag: 'add-column',
+        table: {schema: 'my', name: 'foo'},
+        column: {name: 'a', spec: {pos: 1, dataType: 'text'}},
+        backfill: {fooID: 987, barID: 'zoo'},
+      });
+      expect(
+        readCookies(db).backfilling.map(({minSnapshot}) => minSnapshot),
+      ).toEqual(['0a', '0a']);
+    });
+
+    test('the fold carries minSnapshot forward across an upsert', () => {
+      const seeded: CookieSet = {
+        tableMetadata: [],
+        backfilling: [
+          {
+            schema: 'my',
+            table: 'foo',
+            column: 'a',
+            backfill: {fooID: 1},
+            minSnapshot: '0a',
+          },
+        ],
+      };
+      const folded = foldCookies(seeded, [
+        {
+          tag: 'add-column',
+          table: {schema: 'my', name: 'foo'},
+          column: {name: 'a', spec: {pos: 1, dataType: 'text'}},
+          backfill: {fooID: 2},
+        },
+      ]);
+      expect(folded.backfilling).toEqual([
+        {
+          schema: 'my',
+          table: 'foo',
+          column: 'a',
+          backfill: {fooID: 2},
+          minSnapshot: '0a',
+        },
+      ]);
+    });
+
+    test("backfillRequestsFrom carries the latest of a table's columns", () => {
+      expect(
+        backfillRequestsFrom({
+          tableMetadata: [],
+          backfilling: [
+            {
+              schema: 'my',
+              table: 'foo',
+              column: 'a',
+              backfill: {fooID: 1},
+              minSnapshot: '0a',
+            },
+            {
+              schema: 'my',
+              table: 'foo',
+              column: 'b',
+              backfill: {fooID: 2},
+              minSnapshot: '0c',
+            },
+            {
+              schema: 'my',
+              table: 'bar',
+              column: 'z',
+              backfill: {fooID: 3},
+              minSnapshot: null,
+            },
+          ],
+        }),
+      ).toEqual([
+        {
+          table: {schema: 'my', name: 'foo', metadata: null},
+          columns: {a: {fooID: 1}, b: {fooID: 2}},
+          minSnapshot: '0c',
+        },
+        {
+          table: {schema: 'my', name: 'bar', metadata: null},
+          columns: {z: {fooID: 3}},
+        },
+      ]);
+    });
+  });
+
   describe('the SQLite interpreter', () => {
     test('create-table seeds both cookies', () => {
       using db = createCookieJar();
@@ -441,7 +804,13 @@ describe('replicator/change-log-cookies', () => {
           },
         ],
         backfilling: [
-          {schema: 'your', table: 'bar', column: 'c', backfill: {fooID: 5}},
+          {
+            schema: 'your',
+            table: 'bar',
+            column: 'c',
+            backfill: {fooID: 5},
+            minSnapshot: null,
+          },
         ],
       };
       replaceCookies(db, replacement);
@@ -468,6 +837,7 @@ describe('replicator/change-log-cookies', () => {
             table: 'foo',
             column: 'a',
             backfill: {snapshotID: '000003E8-1', xmin: 1000},
+            minSnapshot: null,
           },
         ],
       };

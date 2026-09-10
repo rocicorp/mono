@@ -160,6 +160,17 @@ export class ChangeLogStreamWriter {
         this.#cookieMutations.push(op.op);
       }
     }
+    if (tag === 'update' || tag === 'update-table-metadata') {
+      // A row key change is the one data change the cookie jar cares about,
+      // and a redefined row key the one metadata change: either makes every
+      // mark on the table unsafe to resume from. The update check is a
+      // comparison of the key columns and only runs when the update carries a
+      // key at all, which is the cost the BackfillManager already pays (plus a
+      // metadata lookup for a FULL identity table, whose every update does).
+      for (const op of this.#cookies.applyMarkOps(change, watermark)) {
+        this.#cookieMutations.push(op.op);
+      }
+    }
   }
 
   commit(
