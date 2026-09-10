@@ -190,7 +190,7 @@ async function execInBatches<T>(
   getStatement: (n: number) => PreparedStatement,
   toParams: (item: T, out: string[]) => void,
 ): Promise<void> {
-  for (let i = 0; i < items.length;) {
+  for (let i = 0; i < items.length; ) {
     const remaining = Math.min(MAX_BATCH, items.length - i);
     const n = 1 << (31 - Math.clz32(remaining));
     const params: string[] = [];
