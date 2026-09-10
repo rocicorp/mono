@@ -1803,6 +1803,94 @@ describe('change-streamer/service', () => {
     }
   });
 
+  test('a replica at a backfill minor subscribes at its major from the SQLite seed', async () => {
+    const replicaFile = new DbFile('sqlite-change-log-seed-minor');
+    const replica = replicaFile.connect(lc);
+    replica.pragma('journal_mode = wal');
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+    // The last transaction the replica applied was a backfill transaction,
+    // committed at a minor local to it (see `#commitVersionFor`).
+    const seed = `${REPLICA_VERSION}.03`;
+    replica
+      .prepare(/*sql*/ `UPDATE "_zero.replicationState" SET "stateVersion" = ?`)
+      .run(seed);
+
+    try {
+      const startStream = await restartWithInlineChangeLogWriter(replicaFile, {
+        pgChangeLogEnabled: false,
+        backupURL: 's3://foo/bar',
+        backupVersion: 'v5',
+        sqliteCatchup: {barrierPollIntervalMs: 10},
+        sqliteChangeLogPurge: {retentionMs: 60_000, batchRows: 100},
+        sqliteChangeLogServe: {
+          readPercent: 100,
+          coldReadPercent: 100,
+          retentionMs: 60_000,
+        },
+      });
+      // The log is seeded at the replica's whole state version ...
+      expect(startStream).toHaveBeenCalledWith(seed, []);
+
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'after-seed'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      await vi.waitFor(() => {
+        using log = openChangeLogDB(lc, replicaFile.path, {readonly: true});
+        expect(readChangeLogHead(log)).toBe('06');
+      });
+
+      // ... but the replicator that seeded it, like every replica restored
+      // from its backup, subscribes at the major, which the log never held.
+      for (const mode of ['backup', 'serving'] as const) {
+        const sub = await streamer.subscribe({
+          protocolVersion: PROTOCOL_VERSION,
+          taskID: `${mode}-task`,
+          id: `${mode}-at-major`,
+          mode,
+          watermark: REPLICA_VERSION,
+          replicaVersion: REPLICA_VERSION,
+          initial: true,
+          logsChangeStream: false,
+        });
+        const output = drainToQueue(sub);
+        expect(await nextChange(output)).toMatchObject({tag: 'status'});
+        expect(await nextChange(output)).toMatchObject({tag: 'begin'});
+        expect(await nextChange(output)).toMatchObject({
+          tag: 'insert',
+          new: {id: 'after-seed'},
+        });
+        expect(await nextChange(output)).toMatchObject({tag: 'commit'});
+        sub.cancel();
+      }
+
+      // A v6 subscriber honors every completion it is sent, so it cannot be
+      // let past the backfill transactions that the seed stands in for.
+      const v6 = await streamer.subscribe({
+        protocolVersion: 6,
+        taskID: 'v6-task',
+        id: 'v6-at-major',
+        mode: 'serving',
+        watermark: REPLICA_VERSION,
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+      expect(await drainToQueue(v6).dequeue()).toEqual([
+        'error',
+        {
+          type: ErrorType.WatermarkTooOld,
+          message: `earliest supported watermark is ${seed} (requested ${REPLICA_VERSION})`,
+        },
+      ]);
+    } finally {
+      await streamer.stop();
+      await streamerDone;
+      replica.close();
+      deleteChangeLogDB(replicaFile.path);
+      replicaFile.delete();
+    }
+  });
+
   /**
    * The SQLite floor's live constraint is level-triggered, not edge-triggered:
    * backup monitors never resend an unchanged floor, so once a laggard's ACK

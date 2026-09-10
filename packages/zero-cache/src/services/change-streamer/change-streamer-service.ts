@@ -79,7 +79,10 @@ import {
   type ChangeLogReadRoute,
   type SQLiteChangeLogCoverage,
 } from './sqlite-change-log-read-router.ts';
-import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
+import {
+  seedCatchupStart,
+  SQLiteChangeLogReader,
+} from './sqlite-change-log-reader.ts';
 import {
   SQLiteChangeLogWriter,
   type SQLiteChangeLogWriterOptions,
@@ -1017,7 +1020,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#forwarder.add(subscriber);
         this.#storer.catchup(subscriber, mode);
       };
-      const sqliteDecision = this.#selectSQLiteCatchup(lc, ctx);
+      const sqliteDecision = this.#selectSQLiteCatchup(lc, ctx, subscriber);
       if (!sqliteDecision) {
         catchupFromPG();
       } else if (sqliteDecision.kind === 'rejected') {
@@ -1553,6 +1556,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #selectSQLiteCatchup(
     lc: LogContext,
     ctx: SubscriberContext,
+    subscriber: Subscriber,
   ): SQLiteCatchupDecision | undefined {
     const opts = this.#sqliteCatchupOptions;
     if (this.#lastForwardedCommitWatermark === undefined || !opts) {
@@ -1605,7 +1609,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       }
       const coverage = route.coverage;
       assert(coverage, 'a SQLite route must carry its covered range');
-      if (ctx.watermark < coverage.minWatermark) {
+      // The decision registration makes again against the log itself, where
+      // the seed can stand in for a run-following subscriber's major.
+      const start =
+        seedCatchupStart(
+          ctx.watermark,
+          subscriber.followsBackfillRuns,
+          coverage,
+        ) ?? ctx.watermark;
+      if (start < coverage.minWatermark) {
         lc.info?.(
           `serving ${ctx.id} from PG catchup: subscriber watermark ` +
             `${ctx.watermark} is below the SQLite change-log minimum ` +

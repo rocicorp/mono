@@ -766,6 +766,32 @@ export const zeroOptions = {
       ],
     },
 
+    backfillResume: {
+      type: v.literalUnion('off', 'on').default('off'),
+      desc: [
+        `Whether backfills are ordered by the row key so that a subscriber can`,
+        `resume one rather than restart it. {bold off} keeps today's unordered`,
+        `COPY; the column guard, the run-following rule, and replica-local`,
+        `backfill versions are unconditional correctness fixes and apply either`,
+        `way. Ordering is additionally gated on the row key's heap correlation,`,
+        `so a table whose key order is uncorrelated with its physical order`,
+        `(a random uuid or nanoid) is never ordered even when this is on.`,
+      ],
+      hidden: true,
+    },
+
+    backfillResumeMinCorrelation: {
+      type: v.number().default(0.9999),
+      desc: [
+        `The minimum {bold pg_stats.correlation} of a row key's leading column`,
+        `for its table's backfill to be ordered. Correlation saturates near 1,`,
+        `so the threshold has to be tight to hold an ordered COPY within ~2x of`,
+        `an unordered one. {bold 0} orders every resumable key regardless of`,
+        `cost; {bold 1} effectively disables ordering.`,
+      ],
+      hidden: true,
+    },
+
     sqliteChangeLogMode: {
       type: v.literalUnion('off', 'write', 'compare', 'serve').default('off'),
       desc: [

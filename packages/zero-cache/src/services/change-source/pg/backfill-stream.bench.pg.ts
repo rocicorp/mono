@@ -289,7 +289,7 @@ describe('zero-cache/backfill throughput', () => {
                 };
                 sample.last = message.rowValues.at(-1)!;
               }
-            } else {
+            } else if (message.tag === 'backfill-completed') {
               const status = must(message.status);
               completions.push({
                 schema: message.relation.schema,

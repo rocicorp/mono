@@ -902,7 +902,8 @@ function reseed(
 /**
  * Seeds a valid synthetic transaction at the anchor's resume watermark, making
  * an otherwise empty log serviceable as a catchup boundary for a subscriber
- * that is exactly at that watermark.
+ * that is exactly at that watermark, or that resumes at its major (see
+ * `seedCatchupStart()` in `change-streamer/sqlite-change-log-reader.ts`).
  */
 export function seedChangeLogStream(
   db: Database,
