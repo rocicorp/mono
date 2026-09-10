@@ -1,15 +1,17 @@
 import {createServer, type Server} from 'node:http';
 import {gunzipSync} from 'node:zlib';
+import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
 
 export interface PercentileStats {
   readonly count: number;
-  readonly sum: number;
-  readonly avg: number;
+  readonly sum?: number | undefined;
+  readonly avg?: number | undefined;
   readonly min: number;
   readonly p50: number;
-  readonly p90: number;
-  readonly p95: number;
-  readonly p99: number;
+  readonly p75?: number | undefined;
+  readonly p90?: number | undefined;
+  readonly p95?: number | undefined;
+  readonly p99?: number | undefined;
   readonly max: number;
 }
 
@@ -23,6 +25,8 @@ export interface MetricSummary {
   readonly changesReplicated: number;
   readonly flowControlWaits: number;
   readonly flowControlWaitDurationMs: PercentileStats | null;
+  readonly workerRestarts: number;
+  readonly cloudzero?: CloudZeroMetricsSummary | undefined;
 }
 
 interface RawDataPoint {
@@ -40,6 +44,12 @@ export class OTelMetricsCollector {
   #server: Server | null = null;
   #port = 0;
   readonly #metrics = new Map<string, RawDataPoint[]>();
+  // Baseline counter values captured at reset() time, so getSummary() reports
+  // measurement-window deltas rather than process-lifetime totals.
+  readonly #counterBaselines = new Map<string, Map<string, number>>();
+  // Workers whose cumulative counters dropped below baseline, indicating a
+  // process restart during the benchmark.
+  readonly #restartedWorkers = new Set<string>();
 
   async start(port = 0): Promise<number> {
     const server = createServer((req, res) => {
@@ -85,6 +95,21 @@ export class OTelMetricsCollector {
   }
 
   reset(): void {
+    // Snapshot current cumulative counter values as baselines before clearing.
+    // Cumulative counters (e.g., pipeline_resets) keep growing from process start;
+    // subtracting baselines in #computeCounterSum scopes them to the
+    // measurement window — matching CloudZero's reset() semantics.
+    this.#counterBaselines.clear();
+    this.#restartedWorkers.clear();
+    for (const [name, points] of this.#metrics) {
+      const byWorker = new Map<string, number>();
+      for (const p of points) {
+        byWorker.set(p.workerKey, p.value ?? p.count ?? 0);
+      }
+      if (byWorker.size > 0) {
+        this.#counterBaselines.set(name, byWorker);
+      }
+    }
     this.#metrics.clear();
   }
 
@@ -261,6 +286,7 @@ export class OTelMetricsCollector {
         ],
         1000,
       ),
+      workerRestarts: this.#restartedWorkers.size,
     };
   }
 
@@ -280,13 +306,30 @@ export class OTelMetricsCollector {
       return null;
     }
 
+    // Separate gauge readings from cumulative histogram data.
+    // Gauges: keep all values (time-series of instantaneous readings).
+    // Histograms/ExpHistograms: cumulative semantics — each OTLP push from
+    // the same worker already contains ALL events since process start.
+    // Expanding every push would over-count by Npushes×. Keep only the
+    // latest per worker and combine across workers (independent events).
+    const gaugePoints: RawDataPoint[] = [];
+    const histByWorker = new Map<string, RawDataPoint>();
+    for (const p of points) {
+      if (p.value !== undefined) {
+        gaugePoints.push(p);
+      } else {
+        histByWorker.set(p.workerKey, p);
+      }
+    }
+    const deduped = [...gaugePoints, ...histByWorker.values()];
+
     const values: number[] = [];
     let totalCount = 0;
     let totalSum = 0;
     let globalMin = Infinity;
     let globalMax = -Infinity;
 
-    for (const p of points) {
+    for (const p of deduped) {
       if (p.value !== undefined) {
         const val = p.value * multiplier;
         values.push(val);
@@ -348,10 +391,12 @@ export class OTelMetricsCollector {
 
   #computeCounterSum(candidateNames: readonly string[]): number {
     let points: RawDataPoint[] = [];
+    let matchedName: string | undefined;
     for (const name of candidateNames) {
       const found = this.#metrics.get(name);
       if (found && found.length > 0) {
         points = found;
+        matchedName = name;
         break;
       }
     }
@@ -364,9 +409,24 @@ export class OTelMetricsCollector {
       byWorker.set(p.workerKey, p.value ?? p.count ?? 0);
     }
 
+    // Subtract baselines captured at reset() to report measurement-window
+    // deltas rather than process-lifetime cumulative totals.
+    const baselines = matchedName
+      ? this.#counterBaselines.get(matchedName)
+      : undefined;
+
     let total = 0;
-    for (const v of byWorker.values()) {
-      total += v;
+    for (const [worker, value] of byWorker) {
+      const baseline = baselines?.get(worker) ?? 0;
+      if (value < baseline) {
+        // A cumulative counter dropped below its baseline — the process
+        // restarted and its counters reset to 0.  Record the restart and
+        // count the post-restart value as-is.
+        this.#restartedWorkers.add(worker);
+        total += value;
+      } else {
+        total += value - baseline;
+      }
     }
     return total;
   }
@@ -374,10 +434,10 @@ export class OTelMetricsCollector {
 
 function computePercentiles(
   values: number[],
-  totalCount?: number,
-  totalSum?: number,
-  globalMin?: number,
-  globalMax?: number,
+  totalCount?: number | undefined,
+  totalSum?: number | undefined,
+  globalMin?: number | undefined,
+  globalMax?: number | undefined,
 ): PercentileStats | null {
   if (values.length === 0) {
     return null;
@@ -397,8 +457,8 @@ function computePercentiles(
 
   const percentileAt = (p: number) => {
     const idx = Math.min(
-      Math.floor((p / 100) * values.length),
       values.length - 1,
+      Math.max(0, Math.ceil((p / 100) * values.length) - 1),
     );
     return values[idx] ?? 0;
   };
@@ -409,6 +469,7 @@ function computePercentiles(
     avg: count > 0 ? sum / count : 0,
     min,
     p50: percentileAt(50),
+    p75: percentileAt(75),
     p90: percentileAt(90),
     p95: percentileAt(95),
     p99: percentileAt(99),

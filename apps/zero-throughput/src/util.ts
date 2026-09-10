@@ -26,7 +26,7 @@ export function percentile(
     sorted.length - 1,
     Math.max(0, Math.ceil((percentileValue / 100) * sorted.length) - 1),
   );
-  return sorted[index];
+  return sorted[index] ?? 0;
 }
 
 export function average(values: readonly number[]): number {
@@ -37,9 +37,15 @@ export function average(values: readonly number[]): number {
 }
 
 export function max(values: readonly number[]): number {
-  let result = 0;
-  for (const value of values) {
-    result = Math.max(result, value);
+  if (values.length === 0) {
+    return 0;
+  }
+  let result = values[0] ?? 0;
+  for (let i = 1; i < values.length; i++) {
+    const value = values[i] ?? 0;
+    if (value > result) {
+      result = value;
+    }
   }
   return result;
 }

@@ -11,6 +11,8 @@ export const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
 export const DEFAULT_PG_URL =
   'postgresql://user:password@127.0.0.1:6436/postgres';
 const APP_ID_PATTERN = /^[a-z0-9_]+$/;
+const CLOUDZERO_STACK_ID_PATTERN =
+  /:\/\/([a-z0-9]+)\.[a-z0-9-]+\.(?:public|internal)\./i;
 
 const options = {
   profile: v
@@ -49,6 +51,12 @@ const options = {
   profileVS: v.boolean().default(false),
   profileDurationSec: v.number().default(5),
   adminPassword: v.string().optional(),
+
+  cloudzeroApiKey: v.string().optional(),
+  cloudzeroMetricsUrl: v
+    .string()
+    .default('https://console.cloudzero.fun/api/v1/metrics'),
+  cloudzeroStackId: v.string().optional(),
 
   pg: {
     url: v.string().optional(),
@@ -126,6 +134,13 @@ export type BenchmarkConfig = {
     readonly cvrMaxConns: number;
     readonly changeMaxConns: number;
   };
+  readonly cloudzero?:
+    | {
+        readonly apiKey: string;
+        readonly metricsUrl: string;
+        readonly stackId: string;
+      }
+    | undefined;
 };
 
 export function loadConfig(): BenchmarkConfig {
@@ -181,6 +196,28 @@ export function loadConfig(): BenchmarkConfig {
     parsed.resetMode ??
     (!parsed.reset ? 'none' : isZeroManaged ? 'all' : 'data-only');
 
+  const cloudzeroApiKey =
+    parsed.cloudzeroApiKey ??
+    process.env.CLOUDZERO_API_KEY ??
+    process.env.ZERO_THROUGHPUT_CLOUDZERO_API_KEY;
+
+  let cloudzeroStackId = parsed.cloudzeroStackId;
+  if (!cloudzeroStackId && rawCacheURLs) {
+    const match = rawCacheURLs.match(CLOUDZERO_STACK_ID_PATTERN);
+    if (match) {
+      cloudzeroStackId = match[1];
+    }
+  }
+
+  const cloudzero =
+    cloudzeroApiKey && cloudzeroStackId
+      ? {
+          apiKey: cloudzeroApiKey,
+          metricsUrl: parsed.cloudzeroMetricsUrl,
+          stackId: cloudzeroStackId,
+        }
+      : undefined;
+
   return {
     runID: new Date().toISOString().replace(/[:.]/g, '-'),
     profile: parsed.profile,
@@ -229,6 +266,7 @@ export function loadConfig(): BenchmarkConfig {
       start: isZeroManaged,
       numSyncWorkers,
     },
+    cloudzero,
   };
 }
 

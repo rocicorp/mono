@@ -3,6 +3,10 @@ import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {inspect} from 'node:util';
 import {startSyntheticClients, type SyntheticClient} from './client.ts';
+import {
+  CloudZeroMetricsPoller,
+  type CloudZeroMetricsSummary,
+} from './cloudzero-metrics.ts';
 import {appPath, loadConfig, type BenchmarkConfig} from './config.ts';
 import {
   connectBenchmarkDB,
@@ -57,6 +61,22 @@ async function main(): Promise<void> {
     const metricsCollector = new OTelMetricsCollector();
     await metricsCollector.start();
     cleanup.push(() => metricsCollector.stop());
+
+    let cloudzeroPoller: CloudZeroMetricsPoller | undefined;
+    if (config.cloudzero) {
+      log(
+        `Starting CloudZero metrics poller for stack ${config.cloudzero.stackId}...`,
+      );
+      cloudzeroPoller = new CloudZeroMetricsPoller({
+        metricsUrl: config.cloudzero.metricsUrl,
+        apiKey: config.cloudzero.apiKey,
+        stackId: config.cloudzero.stackId,
+      });
+      cloudzeroPoller.start();
+      cleanup.push(async () => {
+        await cloudzeroPoller?.stop();
+      });
+    }
 
     if (config.pg.start) {
       log('Starting PostgreSQL...');
@@ -141,6 +161,8 @@ async function main(): Promise<void> {
     log(
       `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s (concurrency=${config.writeConcurrency}, batch=${config.batchSize})...`,
     );
+    metricsCollector.reset();
+    cloudzeroPoller?.reset();
     const writer = new FixedRateWriter(sql, config);
     const samples: MetricSample[] = [];
     const sampleStartedAtMs = Date.now();
@@ -153,7 +175,12 @@ async function main(): Promise<void> {
       );
       samples.push(sample);
       if (config.progressIntervalMs > 0 && Date.now() >= nextProgressAtMs) {
-        printProgress(sample, config.durationMs, config.users);
+        printProgress(
+          sample,
+          config.durationMs,
+          config.users,
+          cloudzeroPoller?.latest,
+        );
         nextProgressAtMs = Date.now() + config.progressIntervalMs;
       }
     };
@@ -191,7 +218,23 @@ async function main(): Promise<void> {
       );
     }
 
-    const metricsSummary = metricsCollector.getSummary();
+    let metricsSummary = metricsCollector.getSummary();
+    if (cloudzeroPoller) {
+      await cloudzeroPoller.stop();
+      const czSummary = cloudzeroPoller.toMetricSummary();
+      metricsSummary = {
+        ...metricsSummary,
+        replicationLagMs:
+          metricsSummary.replicationLagMs ??
+          czSummary.metricSummary.replicationLagMs ??
+          null,
+        e2eServingLagMs:
+          metricsSummary.e2eServingLagMs ??
+          czSummary.metricSummary.e2eServingLagMs ??
+          null,
+        cloudzero: czSummary.cloudzeroSummary ?? undefined,
+      };
+    }
     result = buildResult({
       config,
       processes,
@@ -261,22 +304,47 @@ function printSummary(
   log(`max seq lag: ${summary.maxSeqLag}`);
   log(`lag slope: ${summary.lagSlopeSeqPerSec.toFixed(2)} seq/s`);
   if (summary.replicationLagMs) {
+    const p95Str =
+      summary.replicationLagMs.p95 !== undefined
+        ? `p95=${summary.replicationLagMs.p95.toFixed(1)}ms, `
+        : '';
     log(
-      `RM replication lag: p50=${summary.replicationLagMs.p50.toFixed(1)}ms, p95=${summary.replicationLagMs.p95.toFixed(1)}ms, max=${summary.replicationLagMs.max.toFixed(1)}ms`,
+      `RM replication lag: p50=${summary.replicationLagMs.p50.toFixed(1)}ms, ${p95Str}max=${summary.replicationLagMs.max.toFixed(1)}ms`,
     );
   }
   if (summary.advancementLatencyMs) {
+    const p95Str =
+      summary.advancementLatencyMs.p95 !== undefined
+        ? `p95=${summary.advancementLatencyMs.p95.toFixed(1)}ms, `
+        : '';
     log(
-      `IVM advance duration: p50=${summary.advancementLatencyMs.p50.toFixed(1)}ms, p95=${summary.advancementLatencyMs.p95.toFixed(1)}ms, max=${summary.advancementLatencyMs.max.toFixed(1)}ms`,
+      `IVM advance duration: p50=${summary.advancementLatencyMs.p50.toFixed(1)}ms, ${p95Str}max=${summary.advancementLatencyMs.max.toFixed(1)}ms`,
     );
   }
   if (summary.e2eServingLagMs) {
+    const lag = summary.e2eServingLagMs;
+    const avgStr = lag.avg !== undefined ? `avg=${lag.avg.toFixed(1)}ms, ` : '';
+    const p75Str = lag.p75 !== undefined ? `p75=${lag.p75.toFixed(1)}ms, ` : '';
+    const p90Str = lag.p90 !== undefined ? `p90=${lag.p90.toFixed(1)}ms, ` : '';
+    const p95Str = lag.p95 !== undefined ? `p95=${lag.p95.toFixed(1)}ms, ` : '';
+    const p99Str = lag.p99 !== undefined ? `p99=${lag.p99.toFixed(1)}ms, ` : '';
     log(
-      `E2E serving lag: avg=${summary.e2eServingLagMs.avg.toFixed(1)}ms, p50=${summary.e2eServingLagMs.p50.toFixed(1)}ms, p95=${summary.e2eServingLagMs.p95.toFixed(1)}ms`,
+      `E2E serving lag: ${avgStr}p50=${lag.p50.toFixed(1)}ms, ${p75Str}${p90Str}${p95Str}${p99Str}max=${lag.max.toFixed(1)}ms`,
     );
   }
   if (summary.pipelineResets !== undefined && summary.pipelineResets > 0) {
     log(`Pipeline resets: ${summary.pipelineResets}`);
+  }
+  if (summary.cloudzero) {
+    const cz = summary.cloudzero;
+    if (cz.rmPod) {
+      log(
+        `CloudZero RM pod: cpu=${cz.rmPod.cpuCores.toFixed(3)} cores, mem=${cz.rmPod.memoryMB}MB`,
+      );
+    }
+    log(
+      `CloudZero VS (${cz.vsSummary.podCount} pods): totalCpu=${cz.vsSummary.totalCpuCores.toFixed(3)} cores (max=${cz.vsSummary.maxCpuCores.toFixed(3)}), totalMem=${cz.vsSummary.totalMemoryMB}MB, pipelines=${cz.vsSummary.totalPipelines}`,
+    );
   }
   if (summary.failureReasons.length > 0) {
     log(`failure reasons: ${summary.failureReasons.join('; ')}`);
@@ -288,9 +356,21 @@ function printProgress(
   sample: MetricSample,
   durationMs: number,
   expectedClients: number,
+  cloudzero?: CloudZeroMetricsSummary | null | undefined,
 ): void {
+  let extra = '';
+  if (cloudzero) {
+    const rmCpu = cloudzero.rmPod
+      ? `${(cloudzero.rmPod.cpuCores * 100).toFixed(0)}%`
+      : 'n/a';
+    const rmMem = cloudzero.rmPod ? `${cloudzero.rmPod.memoryMB}MB` : 'n/a';
+    const vsTotalCpu = `${(cloudzero.vsSummary.totalCpuCores * 100).toFixed(0)}%`;
+    const vsTotalMem = `${cloudzero.vsSummary.totalMemoryMB}MB`;
+    const vsPipes = cloudzero.vsSummary.totalPipelines;
+    extra = `, rm(cpu=${rmCpu}, mem=${rmMem}), vs[${cloudzero.vsSummary.podCount}](cpu=${vsTotalCpu}, mem=${vsTotalMem}, pipes=${vsPipes})`;
+  }
   log(
-    `Progress: ${formatDuration(Math.min(sample.elapsedMs, durationMs))} / ${formatDuration(durationMs)}, committed=${sample.committedSeq}, seqLag=${sample.seqLag}, connected=${sample.connectedClients}/${expectedClients}`,
+    `Progress: ${formatDuration(Math.min(sample.elapsedMs, durationMs))} / ${formatDuration(durationMs)}, committed=${sample.committedSeq}, seqLag=${sample.seqLag}, connected=${sample.connectedClients}/${expectedClients}${extra}`,
   );
 }
 
@@ -311,19 +391,21 @@ async function startSteadyStateProfiling(
     return;
   }
 
+  const warmupDelay = Math.max(1000, Math.floor(config.durationMs / 3));
+  const availableSec = Math.floor((config.durationMs - warmupDelay) / 1000);
+  if (availableSec < 1) {
+    log(
+      `Benchmark duration (${formatDuration(config.durationMs)}) too short for steady-state profiling (requires >= 1s after ${formatDuration(warmupDelay)} warmup); skipping.`,
+    );
+    return;
+  }
+
+  const durationSec = Math.min(config.profileDurationSec, availableSec);
+
   const profileDir = appPath(config.profileDir);
   mkdirSync(profileDir, {recursive: true});
 
-  const warmupDelay = Math.min(
-    2000,
-    Math.max(500, Math.floor(config.durationMs / 4)),
-  );
   await sleep(warmupDelay);
-
-  const durationSec = Math.min(
-    config.profileDurationSec,
-    Math.max(1, Math.floor((config.durationMs - warmupDelay) / 1000)),
-  );
 
   const targets = [
     ...(config.profileVS

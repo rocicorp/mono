@@ -2,6 +2,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import type {ClientStats, SyntheticClient} from './client.ts';
+import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
 import type {BenchmarkConfig} from './config.ts';
 import {appPath, appRoot} from './config.ts';
 import type {MetricSummary, PercentileStats} from './metrics.ts';
@@ -52,6 +53,7 @@ export type BenchmarkResult = {
     readonly advancementLatencyMs?: PercentileStats | null | undefined;
     readonly e2eServingLagMs?: PercentileStats | null | undefined;
     readonly pipelineResets?: number | undefined;
+    readonly cloudzero?: CloudZeroMetricsSummary | undefined;
     readonly writeImpact: WriteImpactSummary;
     readonly pass: boolean;
     readonly failureReasons: readonly string[];
@@ -109,6 +111,7 @@ export function buildResult(args: {
     maxSeqLag,
     lagSlopeSeqPerSec: lagSlope(args.samples),
     pipelineResets: args.metricsSummary?.pipelineResets,
+    workerRestarts: args.metricsSummary?.workerRestarts,
   });
   const writeImpact = summarizeWriteImpact(args.writerStats.writeImpact);
 
@@ -116,7 +119,7 @@ export function buildResult(args: {
     gitCommit: gitCommit(),
     profile: args.config.profile,
     model: args.config.model,
-    config: args.config,
+    config: sanitizeConfig(args.config),
     processes: args.processes,
     environment: {
       node: process.version,
@@ -145,10 +148,15 @@ export function buildResult(args: {
       txLatencyP95Ms: percentile(args.writerStats.transactionLatencyMs, 95),
       txLatencyP99Ms: percentile(args.writerStats.transactionLatencyMs, 99),
       txLatencyAverageMs: average(args.writerStats.transactionLatencyMs),
-      replicationLagMs: args.metricsSummary?.replicationLagMs,
+      replicationLagMs:
+        args.metricsSummary?.replicationLagMs ??
+        args.metricsSummary?.cloudzero?.replicationLagMs,
       advancementLatencyMs: args.metricsSummary?.advancementLatencyMs,
-      e2eServingLagMs: args.metricsSummary?.e2eServingLagMs,
+      e2eServingLagMs:
+        args.metricsSummary?.e2eServingLagMs ??
+        args.metricsSummary?.cloudzero?.servingLagMs,
       pipelineResets: args.metricsSummary?.pipelineResets,
+      cloudzero: args.metricsSummary?.cloudzero,
       writeImpact,
       pass: failureReasons.length === 0,
       failureReasons,
@@ -177,6 +185,7 @@ function failureReasonsFor(args: {
   readonly maxSeqLag: number;
   readonly lagSlopeSeqPerSec: number;
   readonly pipelineResets?: number | undefined;
+  readonly workerRestarts?: number | undefined;
 }): string[] {
   const reasons: string[] = [];
   const disconnected = args.clientStats.filter(client => !client.connected);
@@ -198,6 +207,11 @@ function failureReasonsFor(args: {
   if (args.pipelineResets && args.pipelineResets > 0) {
     reasons.push(
       `${args.pipelineResets} pipeline resets occurred due to lag/timeout`,
+    );
+  }
+  if (args.workerRestarts && args.workerRestarts > 0) {
+    reasons.push(
+      `${args.workerRestarts} zero-cache worker(s) restarted during the benchmark`,
     );
   }
   if (args.config.model === 'hot') {
@@ -248,20 +262,31 @@ function ratio(numerator: number, denominator: number): number {
   return denominator === 0 ? 0 : numerator / denominator;
 }
 
-function lagSlope(samples: readonly MetricSample[]): number {
+export function lagSlope(samples: readonly MetricSample[]): number {
   if (samples.length < 2) {
     return 0;
   }
-  const first = samples.at(0);
-  const last = samples.at(-1);
-  if (first === undefined || last === undefined) {
+  const n = samples.length;
+  let sumT = 0;
+  let sumY = 0;
+  let sumTT = 0;
+  let sumTY = 0;
+
+  for (const s of samples) {
+    const t = s.elapsedMs / 1000;
+    const y = s.seqLag;
+    sumT += t;
+    sumY += y;
+    sumTT += t * t;
+    sumTY += t * y;
+  }
+
+  const denominator = n * sumTT - sumT * sumT;
+  if (denominator <= 0) {
     return 0;
   }
-  const elapsedSeconds = (last.elapsedMs - first.elapsedMs) / 1000;
-  if (elapsedSeconds <= 0) {
-    return 0;
-  }
-  return (last.seqLag - first.seqLag) / elapsedSeconds;
+  const slope = (n * sumTY - sumT * sumY) / denominator;
+  return Number(slope.toFixed(4));
 }
 
 function gitCommit(): string | undefined {
@@ -274,4 +299,36 @@ function gitCommit(): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function sanitizeDatabaseUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    if (url.password) {
+      url.password = '<REDACTED>';
+      return url.toString().replace('%3CREDACTED%3E', '<REDACTED>');
+    }
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+export function sanitizeConfig(config: BenchmarkConfig): BenchmarkConfig {
+  return {
+    ...config,
+    adminPassword:
+      config.adminPassword !== undefined ? '<REDACTED>' : undefined,
+    pg: {
+      ...config.pg,
+      url: sanitizeDatabaseUrl(config.pg.url),
+    },
+    cloudzero:
+      config.cloudzero !== undefined
+        ? {
+            ...config.cloudzero,
+            apiKey: '<REDACTED>',
+          }
+        : undefined,
+  };
 }

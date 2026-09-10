@@ -167,16 +167,19 @@ export function printLinearSweepSummaryTable(
   for (const a of attempts) {
     const s = a.summary;
     const p = a.point;
+    const e2eP95 = s?.e2eServingLagMs?.p95;
     const e2eStr = s?.e2eServingLagMs
-      ? `${s.e2eServingLagMs.p50.toFixed(1)} / ${s.e2eServingLagMs.p95.toFixed(1)}ms`
+      ? `${s.e2eServingLagMs.p50.toFixed(1)} / ${e2eP95 !== undefined ? `${e2eP95.toFixed(1)}ms` : 'N/A'}`
       : s?.p95ClientVisibleLagMs !== undefined
         ? `${s.p50ClientVisibleLagMs.toFixed(1)} / ${s.p95ClientVisibleLagMs.toFixed(1)}ms`
         : 'N/A';
+    const ivmP95 = s?.advancementLatencyMs?.p95;
     const ivmStr = s?.advancementLatencyMs
-      ? `${s.advancementLatencyMs.p50.toFixed(1)} / ${s.advancementLatencyMs.p95.toFixed(1)}ms`
+      ? `${s.advancementLatencyMs.p50.toFixed(1)} / ${ivmP95 !== undefined ? `${ivmP95.toFixed(1)}ms` : 'N/A'}`
       : 'N/A';
+    const rmP95 = s?.replicationLagMs?.p95;
     const rmStr = s?.replicationLagMs
-      ? `${s.replicationLagMs.p50.toFixed(1)} / ${s.replicationLagMs.p95.toFixed(1)}ms`
+      ? `${s.replicationLagMs.p50.toFixed(1)} / ${rmP95 !== undefined ? `${rmP95.toFixed(1)}ms` : 'N/A'}`
       : 'N/A';
     const status = a.status === 'pass' ? 'HEALTHY' : 'COLLAPSED';
 
