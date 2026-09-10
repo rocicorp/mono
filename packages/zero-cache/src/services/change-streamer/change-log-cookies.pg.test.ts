@@ -69,13 +69,32 @@ describe('change-streamer/change-log cookie parity', () => {
     readPgCookies(shard.db, shard.cdcSchema);
 
   /**
+   * The projection the two stores must agree on.
+   *
+   * `minSnapshot` is excluded: the Postgres log does not carry it, and it is
+   * not derived by the fold but stamped at write time with each store's own
+   * transaction version, so it is not part of what the two interpreters agree
+   * about. See `BackfillCookie.minSnapshot`, and `minSnapshot is maintained by
+   * the SQLite store alone` below for what does cover it.
+   */
+  const comparable = (cookies: CookieSet) => ({
+    tableMetadata: cookies.tableMetadata,
+    backfilling: cookies.backfilling.map(
+      ({minSnapshot: _, ...cookie}) => cookie,
+    ),
+  });
+
+  /**
    * Both stores agree, and the agreed-on set is what was expected. The second
    * half matters: two interpreters of the same fold agree vacuously if the fold
    * itself does nothing.
    */
-  async function expectCookies(expected: CookieSet) {
-    const pg = await pgCookies();
-    expect(pg).toEqual(readCookies(changeLog));
+  async function expectCookies(expected: {
+    tableMetadata: CookieSet['tableMetadata'];
+    backfilling: Omit<CookieSet['backfilling'][number], 'minSnapshot'>[];
+  }) {
+    const pg = comparable(await pgCookies());
+    expect(pg).toEqual(comparable(readCookies(changeLog)));
     expect(pg).toEqual(expected);
   }
 
@@ -442,7 +461,13 @@ describe('change-streamer/change-log cookie parity', () => {
       });
       expect(readCookies(changeLog)).toEqual(resumePoint.cookies);
       expect(readCookies(changeLog).backfilling).toEqual([
-        {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+        {
+          schema: 'my',
+          table: 'foo',
+          column: 'a',
+          backfill: {fooID: 1},
+          minSnapshot: null,
+        },
       ]);
     });
 

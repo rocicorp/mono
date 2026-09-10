@@ -395,6 +395,48 @@ describe('replicator/backfill rules', () => {
     });
   });
 
+  describe('a key change voids marks, not runs', () => {
+    test('the mark is cleared, minSnapshot is recorded and the run survives', () => {
+      tx(started());
+      tx(backfill({rowValues: [[1, 'a']], lastKey: ['1']}));
+
+      const keyChange = lexi(++version);
+      txAt(
+        keyChange,
+        messages.update(
+          'issues',
+          {id: 3, note: 'one', description: 'a'},
+          {id: 1},
+        ),
+      );
+
+      expect(backfillingState()).toEqual([
+        {
+          column: 'description',
+          mark: null,
+          markWatermark: null,
+          // The run is kept: a run whose rows were all sent before the change
+          // has no row that moved, so its completion is still valid.
+          runID: RUN,
+          minSnapshot: keyChange,
+        },
+      ]);
+    });
+
+    test('an update that does not move the key leaves the mark alone', () => {
+      tx(started());
+      tx(backfill({rowValues: [[1, 'a']], lastKey: ['1']}));
+      tx(
+        messages.update(
+          'issues',
+          {id: 1, note: 'changed', description: 'a'},
+          {id: 1},
+        ),
+      );
+      expect(backfillingState()).toMatchObject([{mark: '["1"]'}]);
+    });
+  });
+
   describe('replica-local backfill versions', () => {
     function stateVersion() {
       return getSubscriptionState(runner).watermark;

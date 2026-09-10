@@ -235,6 +235,7 @@ describe('change-streamer/change-log-initializer against a shard', () => {
         table: 'bar',
         column: 'c',
         backfill: {barID: 'zoo', fooID: 1},
+        minSnapshot: null,
       },
     ]);
 

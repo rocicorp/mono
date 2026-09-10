@@ -692,7 +692,13 @@ describe('change-streamer/change-log-initializer', () => {
 
       expect(params.lastWatermark).toBe(REPLICA_VERSION);
       expect(params.cookies.backfilling).toEqual([
-        {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 987}},
+        {
+          schema: 'my',
+          table: 'foo',
+          column: 'a',
+          backfill: {fooID: 987},
+          minSnapshot: null,
+        },
       ]);
     });
 

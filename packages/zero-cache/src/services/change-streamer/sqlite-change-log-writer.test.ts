@@ -391,7 +391,13 @@ describe('change-streamer/sqlite-change-log-writer', () => {
           {schema: 'my', table: 'foo', metadata: {rowKey: {columns: ['id']}}},
         ],
         backfilling: [
-          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+          {
+            schema: 'my',
+            table: 'foo',
+            column: 'a',
+            backfill: {fooID: 1},
+            minSnapshot: null,
+          },
         ],
       });
       expect(fixture.writer.state()).toMatchObject({
@@ -440,7 +446,13 @@ describe('change-streamer/sqlite-change-log-writer', () => {
         },
       ],
       backfilling: [
-        {schema: 'my', table: 'bar', column: 'z', backfill: {barID: 9}},
+        {
+          schema: 'my',
+          table: 'bar',
+          column: 'z',
+          backfill: {barID: 9},
+          minSnapshot: null,
+        },
       ],
     };
 
@@ -475,7 +487,13 @@ describe('change-streamer/sqlite-change-log-writer', () => {
         ],
         backfilling: [
           ...pgCookies.backfilling,
-          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+          {
+            schema: 'my',
+            table: 'foo',
+            column: 'a',
+            backfill: {fooID: 1},
+            minSnapshot: null,
+          },
         ],
       });
     });
