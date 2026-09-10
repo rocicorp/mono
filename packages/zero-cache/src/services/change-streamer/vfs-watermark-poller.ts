@@ -173,6 +173,12 @@ export class VfsWatermarkPoller {
         this.#lc.error?.(`received error from vfs-query process`, err);
       })
       .on('close', (code, signal) => {
+        if (this.#remotePoller !== child) {
+          // This child was already stopped by #disableRemotePoller(), and a
+          // replacement may have been spawned since. Its exit must neither
+          // untrack that replacement nor schedule a respawn next to it.
+          return;
+        }
         this.#remotePoller = undefined;
         if (this.#shouldPollRemote) {
           if (code !== 0) {

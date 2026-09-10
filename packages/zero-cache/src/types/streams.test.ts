@@ -388,6 +388,33 @@ describe('streams with internal acks', () => {
     ]);
   });
 
+  test('pipelined: an unexpected ack closes the stream', async () => {
+    // A bad ack used to throw inside a void-ed async closure, which surfaced
+    // as an unhandled rejection instead of closing the stream.
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const result = producer.push({from: 0, to: 1, str: 'foo'}).result;
+
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const closed = resolver<void>();
+      ws.on('close', () => closed.resolve());
+      // Acknowledge the first message with the wrong id.
+      ws.once('message', () => ws.send(JSON.stringify({ack: 42})));
+
+      await closed.promise;
+      expect(await cleanedUp).toEqual([{from: 0, to: 1, str: 'foo'}]);
+      expect(await result).toBe('unconsumed');
+
+      // Give a would-be unhandled rejection a chance to surface.
+      await sleep(10);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
   test('coalesce and cleanup', async () => {
     producer = Subscription.create({
       consumed: m => consumed.enqueue(m),

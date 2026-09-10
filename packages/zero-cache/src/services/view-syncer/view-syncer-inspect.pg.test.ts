@@ -174,29 +174,6 @@ describe('view-syncer/service', () => {
     ]);
   });
 
-  test('inspector authentication is cleared when the view-syncer shuts down', async () => {
-    delegate.clearAuthenticated(serviceID);
-    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
-    await nextPoke(client);
-    stateChanges.push({state: 'version-ready'});
-    await nextPoke(client);
-
-    await vs.inspect(SYNC_CONTEXT, [
-      'inspect',
-      {op: 'authenticate', id: 'auth-1', value: TEST_ADMIN_PASSWORD},
-    ]);
-    expect(await client.dequeue()).toEqual([
-      'inspect',
-      {id: 'auth-1', op: 'authenticated', value: true},
-    ]);
-    expect(delegate.isAuthenticated(serviceID)).toBe(true);
-
-    await vs.stop();
-    await viewSyncerDone;
-
-    expect(delegate.isAuthenticated(serviceID)).toBe(false);
-  });
-
   test('unchanged queries rehydrated on restart are recorded by query id', async () => {
     const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
@@ -241,6 +218,29 @@ describe('view-syncer/service', () => {
       await restarted.vs.stop();
       await restarted.viewSyncerDone;
     }
+  });
+
+  test('inspector authentication is cleared when the view-syncer shuts down', async () => {
+    delegate.clearAuthenticated(serviceID);
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {op: 'authenticate', id: 'auth-1', value: TEST_ADMIN_PASSWORD},
+    ]);
+    expect(await client.dequeue()).toEqual([
+      'inspect',
+      {id: 'auth-1', op: 'authenticated', value: true},
+    ]);
+    expect(delegate.isAuthenticated(serviceID)).toBe(true);
+
+    await vs.stop();
+    await viewSyncerDone;
+
+    expect(delegate.isAuthenticated(serviceID)).toBe(false);
   });
 
   test('an authenticate racing the shutdown leaves no inspector authentication behind', async () => {
