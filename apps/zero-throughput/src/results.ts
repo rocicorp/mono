@@ -255,20 +255,31 @@ function ratio(numerator: number, denominator: number): number {
   return denominator === 0 ? 0 : numerator / denominator;
 }
 
-function lagSlope(samples: readonly MetricSample[]): number {
+export function lagSlope(samples: readonly MetricSample[]): number {
   if (samples.length < 2) {
     return 0;
   }
-  const first = samples.at(0);
-  const last = samples.at(-1);
-  if (first === undefined || last === undefined) {
+  const n = samples.length;
+  let sumT = 0;
+  let sumY = 0;
+  let sumTT = 0;
+  let sumTY = 0;
+
+  for (const s of samples) {
+    const t = s.elapsedMs / 1000;
+    const y = s.seqLag;
+    sumT += t;
+    sumY += y;
+    sumTT += t * t;
+    sumTY += t * y;
+  }
+
+  const denominator = n * sumTT - sumT * sumT;
+  if (denominator <= 0) {
     return 0;
   }
-  const elapsedSeconds = (last.elapsedMs - first.elapsedMs) / 1000;
-  if (elapsedSeconds <= 0) {
-    return 0;
-  }
-  return (last.seqLag - first.seqLag) / elapsedSeconds;
+  const slope = (n * sumTY - sumT * sumY) / denominator;
+  return Number(slope.toFixed(4));
 }
 
 function gitCommit(): string | undefined {

@@ -92,8 +92,23 @@ describe('buildCloudZeroSnapshot', () => {
       },
       {
         name: 'zero_sync_serving_lag_stats_millisecond',
-        labels: {},
+        labels: {stat: 'min'},
+        value: 1.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p50'},
         value: 8.2,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p99'},
+        value: 15.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'max'},
+        value: 20.0,
       },
     ];
 
@@ -122,7 +137,12 @@ describe('buildCloudZeroSnapshot', () => {
 
     // Lags
     expect(snapshot.replicationLagMs?.avg).toBe(12.5);
-    expect(snapshot.servingLagMs?.avg).toBe(8.2);
+    expect(snapshot.servingLagMs?.min).toBe(1.0);
+    expect(snapshot.servingLagMs?.p50).toBe(8.2);
+    expect(snapshot.servingLagMs?.p99).toBe(15.0);
+    expect(snapshot.servingLagMs?.max).toBe(20.0);
+    expect(snapshot.servingLagMs?.avg).toBeUndefined();
+    expect(snapshot.servingLagMs?.sum).toBeUndefined();
   });
 });
 
@@ -252,6 +272,8 @@ describe('CloudZeroMetricsPoller', () => {
     expect(snapshot.servingLagMs?.p95).toBeUndefined();
     expect(snapshot.servingLagMs?.p99).toBe(50.0);
     expect(snapshot.servingLagMs?.max).toBe(80.0);
+    expect(snapshot.servingLagMs?.avg).toBeUndefined();
+    expect(snapshot.servingLagMs?.sum).toBeUndefined();
   });
 
   test('parses pre-computed p90 and p95 when present in stat labels', () => {
@@ -351,10 +373,86 @@ zero_sync_view_syncer_lag_seconds_count{stack_id="test-stack"} 100
       // Latest snapshot is 0, but aggregate peak lag captures 2500
       expect(poller.latest?.replicationLagMs?.max).toBe(0);
       expect(summary.cloudzeroSummary?.replicationLagMs?.max).toBe(2500);
+      expect(summary.cloudzeroSummary?.replicationLagMs?.p50).toBe(2500);
+      expect(summary.cloudzeroSummary?.replicationLagMs?.min).toBe(0);
+      expect(summary.cloudzeroSummary?.replicationLagMs?.count).toBe(2);
+      expect(summary.cloudzeroSummary?.replicationLagMs?.avg).toBe(1250);
       expect(summary.metricSummary.replicationLagMs?.max).toBe(2500);
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  test('preserves cumulative histogram stats in toMetricSummary without double counting across snapshots', async () => {
+    const poller = new CloudZeroMetricsPoller({
+      metricsUrl: 'http://example.com/metrics',
+      apiKey: 'test-key',
+      stackId: 'test-stack',
+    });
+
+    let call = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      call++;
+      // Call 1 at midpoint of run has 50 events, Call 2 at end of run has accumulated 100 events
+      const count = call === 1 ? 50 : 100;
+      const sum = call === 1 ? 1.0 : 2.5;
+      const text = `
+zero_sync_view_syncer_lag_seconds_bucket{le="0.005",stack_id="test-stack"} ${call === 1 ? 5 : 10}
+zero_sync_view_syncer_lag_seconds_bucket{le="0.01",stack_id="test-stack"} ${call === 1 ? 15 : 30}
+zero_sync_view_syncer_lag_seconds_bucket{le="0.025",stack_id="test-stack"} ${call === 1 ? 30 : 60}
+zero_sync_view_syncer_lag_seconds_bucket{le="0.05",stack_id="test-stack"} ${call === 1 ? 40 : 80}
+zero_sync_view_syncer_lag_seconds_bucket{le="0.1",stack_id="test-stack"} ${call === 1 ? 48 : 95}
+zero_sync_view_syncer_lag_seconds_bucket{le="+Inf",stack_id="test-stack"} ${count}
+zero_sync_view_syncer_lag_seconds_sum{stack_id="test-stack"} ${sum}
+zero_sync_view_syncer_lag_seconds_count{stack_id="test-stack"} ${count}
+`;
+      return Promise.resolve(new Response(text, {status: 200}));
+    }) as typeof fetch;
+
+    try {
+      await poller.fetchSnapshot();
+      await poller.fetchSnapshot();
+
+      const summary = poller.toMetricSummary();
+      // Cumulative histogram must NOT sum 50 + 100 = 150; it must report the true cumulative total 100
+      expect(summary.cloudzeroSummary?.servingLagMs?.count).toBe(100);
+      expect(summary.cloudzeroSummary?.servingLagMs?.sum).toBe(2500);
+      expect(summary.cloudzeroSummary?.servingLagMs?.avg).toBe(25);
+      expect(summary.cloudzeroSummary?.servingLagMs?.p50).toBe(20);
+      expect(summary.cloudzeroSummary?.servingLagMs?.max).toBe(100);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('leaves p99 undefined when not present in gauge stat labels', () => {
+    const metrics: ParsedMetric[] = [
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'min'},
+        value: 2.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'p50'},
+        value: 12.0,
+      },
+      {
+        name: 'zero_sync_serving_lag_stats_millisecond',
+        labels: {stat: 'max'},
+        value: 50.0,
+      },
+    ];
+
+    const snapshot = buildCloudZeroSnapshot(metrics, 'test-stack');
+    expect(snapshot.servingLagMs?.min).toBe(2.0);
+    expect(snapshot.servingLagMs?.p50).toBe(12.0);
+    expect(snapshot.servingLagMs?.p75).toBeUndefined();
+    expect(snapshot.servingLagMs?.p90).toBeUndefined();
+    expect(snapshot.servingLagMs?.p95).toBeUndefined();
+    expect(snapshot.servingLagMs?.p99).toBeUndefined();
+    expect(snapshot.servingLagMs?.max).toBe(50.0);
   });
 
   test('reset clears snapshots and stop is idempotent', async () => {
@@ -394,6 +492,58 @@ zero_sync_view_syncer_lag_seconds_count{stack_id="test-stack"} 100
       // Subsequent stop call is idempotent (no-op, no extra fetch)
       await poller.stop();
       expect(fetchCount).toBe(3);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('serializes concurrent fetchSnapshot calls and stop awaits in-flight fetch', async () => {
+    const poller = new CloudZeroMetricsPoller({
+      metricsUrl: 'http://example.com/metrics',
+      apiKey: 'test-key',
+      stackId: 'test-stack',
+    });
+
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    let fetchCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      fetchCount++;
+      activeRequests++;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      return new Promise(resolve => {
+        setTimeout(() => {
+          activeRequests--;
+          resolve(
+            new Response('zero_replication_total_lag_millisecond 10', {
+              status: 200,
+            }),
+          );
+        }, 20);
+      });
+    }) as typeof fetch;
+
+    try {
+      // Fire multiple concurrent fetchSnapshot calls
+      const [p1, p2, p3] = await Promise.all([
+        poller.fetchSnapshot(),
+        poller.fetchSnapshot(),
+        poller.fetchSnapshot(),
+      ]);
+
+      expect(p1).toBe(p2);
+      expect(p2).toBe(p3);
+      expect(maxActiveRequests).toBe(1);
+      expect(fetchCount).toBe(1);
+
+      // Start poller (fires in-flight poll) and immediately call stop()
+      poller.start();
+      const finalSnap = await poller.stop();
+      expect(finalSnap).not.toBeNull();
+      // start() fired 1 poll, stop() awaited it and fired final snapshot = 3 total fetches
+      expect(fetchCount).toBe(3);
+      expect(maxActiveRequests).toBe(1);
     } finally {
       globalThis.fetch = originalFetch;
     }

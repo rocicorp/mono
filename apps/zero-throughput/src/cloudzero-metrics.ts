@@ -264,12 +264,13 @@ function computeHistogramPercentiles(
     firstPositiveIndex <= 0 ? 0 : (sorted[firstPositiveIndex - 1]?.le ?? 0);
   const min = exactMin ?? histMin;
   const max = exactMax ?? highestFiniteBound;
-  const s = sum ?? n * quantile(0.5);
+  const s = sum;
+  const avg = s !== undefined && n > 0 ? Number((s / n).toFixed(2)) : undefined;
 
   return {
     count: n,
-    sum: Number(s.toFixed(2)),
-    avg: Number((s / n).toFixed(2)),
+    sum: s !== undefined ? Number(s.toFixed(2)) : undefined,
+    avg,
     min,
     p50: quantile(0.5),
     p75: quantile(0.75),
@@ -301,16 +302,12 @@ function computeServingLagStats(
   const p75 = p75s.length > 0 ? Math.max(...p75s) : undefined;
   const p90 = p90s.length > 0 ? Math.max(...p90s) : undefined;
   const p95 = p95s.length > 0 ? Math.max(...p95s) : undefined;
-  const p99 = p99s.length > 0 ? Math.max(...p99s) : (p75 ?? p50);
-  const max = maxs.length > 0 ? Math.max(...maxs) : p99;
-  const avg =
-    p50s.length > 0 ? p50s.reduce((a, b) => a + b, 0) / p50s.length : p50;
+  const p99 = p99s.length > 0 ? Math.max(...p99s) : undefined;
+  const max = maxs.length > 0 ? Math.max(...maxs) : (p99 ?? p75 ?? p50);
   const count = p50s.length > 0 ? p50s.length : 1;
 
   return {
     count,
-    sum: Number((avg * count).toFixed(2)),
-    avg: Number(avg.toFixed(2)),
     min,
     p50,
     p75,
@@ -362,6 +359,7 @@ export class CloudZeroMetricsPoller {
   #timer: NodeJS.Timeout | null = null;
   #latest: CloudZeroMetricsSummary | null = null;
   readonly #snapshots: CloudZeroMetricsSummary[] = [];
+  #inFlightFetch: Promise<CloudZeroMetricsSummary | null> | null = null;
 
   constructor(options: {
     metricsUrl: string;
@@ -384,26 +382,35 @@ export class CloudZeroMetricsPoller {
   }
 
   async fetchSnapshot(): Promise<CloudZeroMetricsSummary | null> {
-    try {
-      const res = await fetch(this.#metricsUrl, {
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          accept: 'text/plain',
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) {
-        return null;
-      }
-      const text = await res.text();
-      const parsed = parsePrometheusText(text, this.#stackId);
-      const snapshot = buildCloudZeroSnapshot(parsed, this.#stackId);
-      this.#latest = snapshot;
-      this.#snapshots.push(snapshot);
-      return snapshot;
-    } catch {
-      return null;
+    if (this.#inFlightFetch) {
+      return await this.#inFlightFetch;
     }
+    const fetchPromise = (async () => {
+      try {
+        const res = await fetch(this.#metricsUrl, {
+          headers: {
+            authorization: `Bearer ${this.#apiKey}`,
+            accept: 'text/plain',
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) {
+          return null;
+        }
+        const text = await res.text();
+        const parsed = parsePrometheusText(text, this.#stackId);
+        const snapshot = buildCloudZeroSnapshot(parsed, this.#stackId);
+        this.#latest = snapshot;
+        this.#snapshots.push(snapshot);
+        return snapshot;
+      } catch {
+        return null;
+      } finally {
+        this.#inFlightFetch = null;
+      }
+    })();
+    this.#inFlightFetch = fetchPromise;
+    return await fetchPromise;
   }
 
   start(): void {
@@ -423,11 +430,16 @@ export class CloudZeroMetricsPoller {
   }
 
   async stop(): Promise<CloudZeroMetricsSummary | null> {
-    if (this.#timer === null) {
+    if (this.#timer === null && !this.#inFlightFetch) {
       return this.#latest;
     }
-    clearInterval(this.#timer);
-    this.#timer = null;
+    if (this.#timer !== null) {
+      clearInterval(this.#timer);
+      this.#timer = null;
+    }
+    if (this.#inFlightFetch) {
+      await this.#inFlightFetch;
+    }
     // Take final snapshot
     return await this.fetchSnapshot();
   }
@@ -472,8 +484,13 @@ export class CloudZeroMetricsPoller {
     const replicationLagMs =
       aggregateLagStats(this.#snapshots, 'replicationLagMs') ??
       latest.replicationLagMs;
+    // A Prometheus cumulative histogram already spans all events across the entire run in latest.
+    // Only gauge-based stats (which drop to 0 after drain) need aggregation across snapshots.
     const servingLagMs =
-      aggregateLagStats(this.#snapshots, 'servingLagMs') ?? latest.servingLagMs;
+      latest.servingLagMs?.sum !== undefined
+        ? latest.servingLagMs
+        : (aggregateLagStats(this.#snapshots, 'servingLagMs') ??
+          latest.servingLagMs);
 
     const podCount = latest.vsSummary.podCount;
     const peakVsAvgCpu =
@@ -523,13 +540,10 @@ function aggregateLagStats(
     return null;
   }
   const max = Math.max(...statsList.map(s => s.max));
-  const p99 = Math.max(...statsList.map(s => s.p99));
   const min = Math.min(...statsList.map(s => s.min));
 
   const p50s = statsList.map(s => s.p50);
-  const p50 = Number(
-    (p50s.reduce((a, b) => a + b, 0) / p50s.length).toFixed(2),
-  );
+  const p50 = Math.max(...p50s);
 
   const p75s = statsList
     .map(s => s.p75)
@@ -546,14 +560,25 @@ function aggregateLagStats(
     .filter((v): v is number => v !== undefined && !Number.isNaN(v));
   const p95 = p95s.length > 0 ? Math.max(...p95s) : undefined;
 
-  const count = statsList.reduce((acc, s) => acc + s.count, 0);
-  const sum = statsList.reduce((acc, s) => acc + s.sum, 0);
-  const avg = count > 0 ? sum / count : 0;
+  const p99s = statsList
+    .map(s => s.p99)
+    .filter((v): v is number => v !== undefined && !Number.isNaN(v));
+  const p99 = p99s.length > 0 ? Math.max(...p99s) : undefined;
+
+  const hasAllSums = statsList.every(s => s.sum !== undefined);
+  const count = hasAllSums
+    ? statsList.reduce((acc, s) => acc + s.count, 0)
+    : Math.max(...statsList.map(s => s.count));
+  const sum = hasAllSums
+    ? Number(statsList.reduce((acc, s) => acc + (s.sum ?? 0), 0).toFixed(2))
+    : undefined;
+  const avg =
+    hasAllSums && count > 0 ? Number((sum! / count).toFixed(2)) : undefined;
 
   return {
     count,
-    sum: Number(sum.toFixed(2)),
-    avg: Number(avg.toFixed(2)),
+    sum,
+    avg,
     min,
     p50,
     p75,

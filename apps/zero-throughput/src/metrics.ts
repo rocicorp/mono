@@ -4,14 +4,14 @@ import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
 
 export interface PercentileStats {
   readonly count: number;
-  readonly sum: number;
-  readonly avg: number;
+  readonly sum?: number | undefined;
+  readonly avg?: number | undefined;
   readonly min: number;
   readonly p50: number;
   readonly p75?: number | undefined;
   readonly p90?: number | undefined;
   readonly p95?: number | undefined;
-  readonly p99: number;
+  readonly p99?: number | undefined;
   readonly max: number;
 }
 
