@@ -144,6 +144,10 @@ export function validateImageTag(tag: string): void {
 }
 
 export function resolveSourceSha(targetRef: string, exec: Exec): string {
+  if (targetRef.startsWith('-')) {
+    throw new Error('Target ref must not start with "-"');
+  }
+
   if (gitShaPattern.test(targetRef)) {
     try {
       return exec('git', [

@@ -4,6 +4,7 @@ import {
   deriveDefaultTag,
   normalizeDevImageTag,
   planDevRelease,
+  resolveSourceSha,
   sanitizeBranchName,
   validateImageTag,
 } from './plan.ts';
@@ -14,7 +15,7 @@ function makeMockExec(resolvedSha = dummySha) {
   const calls: Array<{
     command: Command;
     args: readonly string[];
-    options?: ExecOptions;
+    options?: ExecOptions | undefined;
   }> = [];
   const exec: Exec = (command, args, options) => {
     calls.push({command, args, options});
@@ -164,4 +165,14 @@ test('planDevRelease rejects protected tags in imageTagInput', () => {
       }),
     ).toThrowError(/protected/);
   }
+});
+
+test('resolveSourceSha rejects option-like refs starting with -', () => {
+  const {exec} = makeMockExec();
+  expect(() => resolveSourceSha('--force', exec)).toThrowError(
+    'Target ref must not start with "-"',
+  );
+  expect(() => resolveSourceSha('-v', exec)).toThrowError(
+    'Target ref must not start with "-"',
+  );
 });

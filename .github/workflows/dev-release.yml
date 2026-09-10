@@ -210,6 +210,9 @@ jobs:
     name: Publish Docker images
     runs-on: ubuntu-latest
     needs: [plan, verify-signed-commit-authors, build, archive-cloudzero-source]
+    concurrency:
+      group: zero-dev-release-tag-${{ needs.plan.outputs.image_tag }}
+      cancel-in-progress: false
     environment:
       name: zero-release-docker
     permissions:
