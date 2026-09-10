@@ -111,6 +111,7 @@ export function buildResult(args: {
     maxSeqLag,
     lagSlopeSeqPerSec: lagSlope(args.samples),
     pipelineResets: args.metricsSummary?.pipelineResets,
+    workerRestarts: args.metricsSummary?.workerRestarts,
   });
   const writeImpact = summarizeWriteImpact(args.writerStats.writeImpact);
 
@@ -184,6 +185,7 @@ function failureReasonsFor(args: {
   readonly maxSeqLag: number;
   readonly lagSlopeSeqPerSec: number;
   readonly pipelineResets?: number | undefined;
+  readonly workerRestarts?: number | undefined;
 }): string[] {
   const reasons: string[] = [];
   const disconnected = args.clientStats.filter(client => !client.connected);
@@ -205,6 +207,11 @@ function failureReasonsFor(args: {
   if (args.pipelineResets && args.pipelineResets > 0) {
     reasons.push(
       `${args.pipelineResets} pipeline resets occurred due to lag/timeout`,
+    );
+  }
+  if (args.workerRestarts && args.workerRestarts > 0) {
+    reasons.push(
+      `${args.workerRestarts} zero-cache worker(s) restarted during the benchmark`,
     );
   }
   if (args.config.model === 'hot') {
