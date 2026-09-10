@@ -2,7 +2,11 @@ import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {Database, type Statement} from '../../../../zqlite/src/db.ts';
-import {CHANGE_LOG_STREAM_TABLE} from '../replicator/change-log-db.ts';
+import {majorVersionOf} from '../../types/state-version.ts';
+import {
+  CHANGE_LOG_META_TABLE,
+  CHANGE_LOG_STREAM_TABLE,
+} from '../replicator/change-log-db.ts';
 import {
   reconstructWatermarkedChange,
   type ChangeLogEntry,
@@ -20,12 +24,58 @@ export type CatchupPlan =
       readonly kind: 'too-old';
       readonly minWatermark: string;
       readonly headWatermark: string;
+      /**
+       * Where the log was seeded, which can stand in for a watermark the log
+       * does not hold: see {@link seedCatchupStart}. Optional so that a reader
+       * that does not know it can say so.
+       */
+      readonly seedWatermark?: string | undefined;
     }
   // The log exists as a file but has no content to serve: the replicator has
   // not created or reconciled it yet. Subscriber selection treats this as
   // "decline and fall back to PG catchup", which is why it is a plan rather
   // than an error.
   | {readonly kind: 'not-ready'};
+
+/**
+ * Where a subscriber at `watermark` can be caught up from when the log holds no
+ * transaction at `watermark`: the log's seed, for a subscriber that follows
+ * backfill runs, at the major of the seed, while the seed is still the log's
+ * first transaction. Otherwise undefined.
+ *
+ * A log is seeded at its anchor replica's whole state version, and a replica's
+ * minor is the version of a backfill transaction committed locally to it (see
+ * `#commitVersionFor` in `change-processor.ts`). A subscriber that follows runs
+ * subscribes at the major of its state version, so the replicator that seeded
+ * the log, and every replica restored from its backup, names a watermark the
+ * log has never held, and no later commit can give it one.
+ *
+ * The seed can stand in for that major because what such a subscriber is not
+ * sent -- the backfill transactions between the major and the seed -- is the
+ * one thing it does not need replayed. It commits backfill transactions at
+ * versions local to its replica, it honors a completion only for a run that it
+ * follows, and a run that it cannot follow is re-requested from its
+ * declarations. A subscriber below protocol v7 does none of that: it honors
+ * every completion, so skipping a run's rows could publish half a column.
+ */
+export function seedCatchupStart(
+  watermark: string,
+  followsBackfillRuns: boolean,
+  log: {
+    readonly minWatermark: string;
+    readonly seedWatermark?: string | undefined;
+  },
+): string | undefined {
+  const {minWatermark, seedWatermark} = log;
+  return followsBackfillRuns &&
+    seedWatermark !== undefined &&
+    // Once purged, nothing stands in for the seed's major.
+    seedWatermark === minWatermark &&
+    watermark < seedWatermark &&
+    majorVersionOf(seedWatermark) === watermark
+    ? seedWatermark
+    : undefined;
+}
 
 type PlanRow = {
   readonly headWatermark: string | null;
@@ -93,6 +143,10 @@ export const SQLITE_CHANGE_LOG_READ_BATCH_SQL = /*sql*/ `
   LIMIT ?
 `;
 
+const SEED_WATERMARK_SQL = /*sql*/ `
+  SELECT "seedWatermark" FROM "${CHANGE_LOG_META_TABLE}"
+`;
+
 const TABLE_EXISTS_SQL = /*sql*/ `
   SELECT 1 FROM "sqlite_master" WHERE "type" = 'table' AND "name" = ?
 `;
@@ -115,6 +169,7 @@ const TABLE_EXISTS_SQL = /*sql*/ `
 export class SQLiteChangeLogReader implements Disposable {
   readonly #db: Database;
   #statements: PreparedStatements | undefined;
+  #seedWatermark: Statement | undefined;
   #closed = false;
 
   constructor(lc: LogContext, changeLogFile: string) {
@@ -141,7 +196,12 @@ export class SQLiteChangeLogReader implements Disposable {
       return {kind: 'ahead', headWatermark};
     }
     if (fromWatermark < minWatermark || row.boundaryExists === 0) {
-      return {kind: 'too-old', minWatermark, headWatermark};
+      return {
+        kind: 'too-old',
+        minWatermark,
+        headWatermark,
+        seedWatermark: this.#readSeedWatermark(),
+      };
     }
     return {kind: 'range', minWatermark, headWatermark};
   }
@@ -254,6 +314,16 @@ export class SQLiteChangeLogReader implements Disposable {
       };
     }
     return this.#statements;
+  }
+
+  /**
+   * Prepared on first use, since only a too-old plan reads it. The meta row is
+   * written with the stream table, so it exists whenever a plan does.
+   */
+  #readSeedWatermark(): string | undefined {
+    this.#seedWatermark ??= this.#db.prepare(SEED_WATERMARK_SQL);
+    return this.#seedWatermark.get<{seedWatermark: string} | undefined>()
+      ?.seedWatermark;
   }
 
   #streamTableExists(): boolean {

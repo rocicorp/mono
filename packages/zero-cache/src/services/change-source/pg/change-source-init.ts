@@ -16,6 +16,7 @@ import {
 } from '../common/replica-restore.ts';
 import {initReplica} from '../common/replica-schema.ts';
 import {PostgresChangeSource} from './change-source.ts';
+import type {BackfillOptions} from './change-source.ts';
 import {
   initialSync,
   type InitialSyncOptions,
@@ -53,6 +54,7 @@ export async function initializePostgresChangeSource(
   {backupV5}: ReplicaOptions = {backupV5: true},
   purgeLock?: PurgeLock | null,
   streamInboundTimeoutMs?: number | undefined,
+  backfillOptions: BackfillOptions = {},
 ): Promise<InitializeResult> {
   const db = await connectPgClient(lc, upstreamURI, 'change-source-init');
   try {
@@ -130,6 +132,7 @@ export async function initializePostgresChangeSource(
       lagReportIntervalMs,
       syncOptions.textCopy,
       streamInboundTimeoutMs,
+      backfillOptions,
     );
 
     const destinationBackupURL =

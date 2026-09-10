@@ -504,6 +504,7 @@ describe('replicator/sqlite-change-log-purger', () => {
           kind: 'too-old',
           minWatermark: v(4),
           headWatermark: v(6),
+          seedWatermark: SEED_WATERMARK,
         });
       } finally {
         close();

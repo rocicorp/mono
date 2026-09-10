@@ -732,4 +732,72 @@ describe('change-streamer/subscriber', () => {
       ).toEqual(expectedTags);
     }
   });
+
+  // A rerun is of columns the replication-manager had already completed, run
+  // again for a subscriber that declared it still needs them. A subscriber that
+  // does not follow runs completed them too, and applies whatever it is sent.
+  test('a rerun is withheld from a subscriber that does not follow runs', async () => {
+    const relation = {
+      schema: 'public',
+      name: 'issue',
+      rowKey: {columns: ['id']},
+    };
+    const rows = (rerun: boolean, rowValues: unknown[][]) =>
+      json([
+        'data',
+        {
+          tag: 'backfill',
+          relation,
+          columns: ['description'],
+          watermark: '02',
+          rowValues,
+          runID: rerun ? 'rerun' : 'run',
+          ...(rerun ? {rerun: true} : {}),
+        },
+      ]);
+    const completion = (rerun: boolean) =>
+      json([
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation,
+          columns: ['description'],
+          watermark: '02',
+          runID: rerun ? 'rerun' : 'run',
+          ...(rerun ? {rerun: true} : {}),
+        },
+      ]);
+
+    for (const [version, expected] of [
+      [6, ['run', 'run', 'run']],
+      [7, ['rerun', 'rerun', 'run', 'run', 'run']],
+    ] as [number, string[]][]) {
+      const [sub, received, downstream] = createSubscriber(
+        '00',
+        true,
+        {},
+        'serving',
+        version,
+      );
+      void sub.send(['02', 'backfill', rows(true, [['1', 'a']])]);
+      // As a store that keeps the text it is given might have it.
+      void sub.send([
+        '03',
+        'backfill-completed',
+        completion(true).replace('"rerun":true', '"rerun" : true'),
+      ]);
+      void sub.send(['04', 'backfill', rows(false, [['1', 'b']])]);
+      // Looks like a rerun to a substring search, and is not one.
+      void sub.send(['05', 'backfill', rows(false, [['2', {rerun: true}]])]);
+      void sub.send(['06', 'backfill-completed', completion(false)]);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      downstream.cancel();
+
+      expect(
+        received
+          .filter(([type]) => type === 'data')
+          .map(([, change]) => (change as {runID: string}).runID),
+      ).toEqual(expected);
+    }
+  });
 });

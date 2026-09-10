@@ -54,10 +54,13 @@ test('protocol versions', () => {
   // answered exactly as before. Likewise the optional `seq` on `backfill`: a
   // subscriber records no position for a batch without one, and so follows
   // no run that resumes after it, which costs a run from the beginning.
+  // And the optional `rerun` flag on a run's messages, which only the
+  // change-streamer reads, to withhold a rerun from a subscriber that does not
+  // follow runs; a change source that never sets it never has one withheld.
   // No new version directory was needed.
-  t(current, 'w78tl2d8fztq', '/changes/v0/stream');
+  t(current, '2v6mqolo2tern', '/changes/v0/stream');
   // During initial development, we use v0 as a non-stable
   // version (i.e. breaking change are allowed). Once the
   // protocol graduates to v1, versions must be stable.
-  t(v0, 'w78tl2d8fztq', '/changes/v0/stream');
+  t(v0, '2v6mqolo2tern', '/changes/v0/stream');
 });

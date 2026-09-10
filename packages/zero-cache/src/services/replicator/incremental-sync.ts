@@ -108,9 +108,11 @@ export class IncrementalSyncer {
       // answers with a full replica restore. The major is always a real
       // upstream commit, which both catchup implementations can resume from,
       // and which the change-streamer's purge floor keeps for exactly this
-      // reason. What it costs is re-delivery of the backfill transactions
-      // since that commit, which a following subscriber re-applies
-      // idempotently.
+      // reason. (A SQLite change log seeded from a replica at a minor holds no
+      // transaction at the major; its seed stands in for it, as described in
+      // `seedCatchupStart()`.) What it costs is re-delivery of the backfill
+      // transactions since that commit, which a following subscriber
+      // re-applies idempotently.
       const subscribeWatermark = majorVersionOf(watermark);
 
       let downstream: Source<SizedDownstream> | undefined;

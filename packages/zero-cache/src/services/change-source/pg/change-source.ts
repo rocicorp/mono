@@ -90,6 +90,28 @@ import {
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
 
+/** See the `backfillResume` and `backfillResumeMinCorrelation` config. */
+export type BackfillOptions = {
+  /**
+   * Whether backfills are ordered by the row key so that a subscriber can
+   * resume one. Off by default: the correctness fixes that go with resumable
+   * backfills -- the column guard, the run-following rule, and replica-local
+   * backfill versions -- are unconditional and do not depend on this.
+   */
+  resume?: boolean | undefined;
+
+  /** The heap-correlation gate; see `backfill-resume.ts`. */
+  minKeyCorrelation?: number | undefined;
+
+  /**
+   * The number of backfill bytes after which the manager commits and reopens
+   * its transaction. Defaults to the manager's own threshold; overridden in
+   * tests that need a run to span more than one transaction without moving
+   * megabytes to get there.
+   */
+  commitThresholdBytes?: number | undefined;
+};
+
 // Parameterize this if necessary. In practice starvation may never happen.
 const MAX_LOW_PRIORITY_DELAY_MS = 1000;
 
@@ -112,6 +134,7 @@ export class PostgresChangeSource implements ChangeSource {
   readonly #context: ServerContext;
   readonly #lagReporter: LagReporter | null;
   readonly #textCopy: boolean;
+  readonly #backfillOptions: BackfillOptions;
   readonly #streamInboundTimeoutMs: number | undefined;
   readonly #subscribe: typeof subscribe;
   readonly #streamBackfill: typeof streamBackfill;
@@ -128,6 +151,7 @@ export class PostgresChangeSource implements ChangeSource {
     lagReportIntervalMs: number,
     textCopy?: boolean | undefined,
     streamInboundTimeoutMs?: number | undefined,
+    backfillOptions: BackfillOptions = {},
     // Injectable dependencies, overridable in tests. Default to the production
     // implementations.
     deps: {
@@ -156,6 +180,7 @@ export class PostgresChangeSource implements ChangeSource {
     this.#backupOptions = backupOptions;
     this.#context = context;
     this.#textCopy = textCopy ?? false;
+    this.#backfillOptions = backfillOptions;
     this.#streamInboundTimeoutMs = streamInboundTimeoutMs;
     this.#lagReporter =
       lagReportIntervalMs > 0
@@ -258,10 +283,19 @@ export class PostgresChangeSource implements ChangeSource {
     // the main replication stream and backfill streams initiated by the
     // BackfillManager.
     const changes = new ChangeStreamMultiplexer(this.#lc, clientWatermark);
-    const backfillManager = new BackfillManager(this.#lc, changes, req =>
-      this.#streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
-        textCopy: this.#textCopy,
-      }),
+    const backfillManager = new BackfillManager(
+      this.#lc,
+      changes,
+      req =>
+        this.#streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
+          textCopy: this.#textCopy,
+          resume: this.#backfillOptions.resume ?? false,
+          minKeyCorrelation: this.#backfillOptions.minKeyCorrelation,
+        }),
+      undefined,
+      undefined,
+      undefined,
+      this.#backfillOptions.commitThresholdBytes,
     );
     changes
       .addProducers(messages, backfillManager)
@@ -400,10 +434,17 @@ export class PostgresChangeSource implements ChangeSource {
       changes: changes.asSource(),
       acks: {
         push: msg => {
-          // `backfill-request` messages are not acted on yet: only the status
-          // messages that ACK stored commits are.
           if (msg[0] === 'status') {
             acker.ack(msg[2].watermark);
+          } else {
+            // A subscriber's declaration of an in-flight backfill, forwarded by the
+            // change-streamer because it could not resolve it from its own
+            // change log.
+            try {
+              backfillManager.onBackfillRequest(msg);
+            } catch (e) {
+              this.#lc.warn?.(`error handling a backfill request`, e);
+            }
           }
         },
       },

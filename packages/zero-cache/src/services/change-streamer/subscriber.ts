@@ -162,6 +162,20 @@ export class Subscriber {
   }
 
   /**
+   * Starts the subscription after `watermark` instead of the watermark it
+   * subscribed at, which is only possible before anything has been sent. See
+   * `seedCatchupStart()` in `sqlite-change-log-reader.ts`.
+   */
+  startAfter(watermark: string): void {
+    assert(
+      !this.#initialized && watermark >= this.#watermark,
+      () =>
+        `cannot start subscriber ${this.id} at ${this.#watermark} after ${watermark}`,
+    );
+    this.#watermark = watermark;
+  }
+
+  /**
    * Whether the backlog of live changes buffered during catchup has reached the
    * point at which {@link send()} stops resolving. Past it the subscriber is no
    * longer free: it holds up every subsequent flush, and with no other
@@ -283,7 +297,7 @@ export class Subscriber {
     if (watermark <= this.watermark) {
       return;
     }
-    if (!this.supportsMessage(tag)) {
+    if (!this.supportsMessage(tag) || this.#isRerunItMustNotApply(tag, json)) {
       return;
     }
     const backfills = this.#backfills;
@@ -462,6 +476,25 @@ export class Subscriber {
   }
 
   /**
+   * Whether the change is part of a *rerun* (see `rerun` on `backfill`) and
+   * this subscriber does not follow runs. Such a subscriber applies every row
+   * and every completion it is sent, and a rerun is of columns that it has
+   * completed: its older values would overwrite newer ones.
+   *
+   * Only the tags of a run's rows and completion are inspected, and a message
+   * is parsed only if it could carry the flag at all. (The announcement is
+   * never sent to such a subscriber; see {@link supportsMessage}.)
+   */
+  #isRerunItMustNotApply(tag: ChangeTag, json: string): boolean {
+    return (
+      !this.followsBackfillRuns &&
+      (tag === 'backfill' || tag === 'backfill-completed') &&
+      MAY_BE_RERUN.test(json) &&
+      isRerun(BigIntJSON.parse(json) as ChangeStreamData)
+    );
+  }
+
+  /**
    * Ends the subscription without sending a downstream `['error', ...]`.
    *
    * This is deliberate, and not the same as reporting the failure to the
@@ -629,4 +662,15 @@ class ByteBackpressureGate {
       waiter.resolve();
     }
   }
+}
+
+// Matches every serialization of the flag, and anything else that happens to
+// contain it (a row value, say), which the parse then rules out.
+const MAY_BE_RERUN = /"rerun"\s*:\s*true/;
+
+function isRerun([, change]: ChangeStreamData): boolean {
+  return (
+    (change.tag === 'backfill' || change.tag === 'backfill-completed') &&
+    change.rerun === true
+  );
 }

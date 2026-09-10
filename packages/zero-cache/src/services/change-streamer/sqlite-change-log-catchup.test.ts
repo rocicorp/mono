@@ -361,6 +361,48 @@ describe('SQLiteChangeLogCatchup', () => {
     ]);
   });
 
+  test('starts a run-following subscriber at its major from the seed that stands in for it', async () => {
+    const fixture = createFixture();
+    fixture.reader.seed = '04.03';
+    fixture.reader.min = '04.03';
+    fixture.reader.boundaries.add('04.03');
+    fixture.reader.entries.push(...transaction('06'));
+    fixture.reader.boundaries.add('06');
+    fixture.reader.head = '06';
+
+    const {subscriber, output} = createSubscriber('04', {}, 7);
+    expect(await fixture.coordinator.catchup(subscriber, () => '06')).toEqual({
+      kind: 'registered',
+    });
+    expect(await takeMarkers(output, 4)).toEqual([
+      'status',
+      ...transactionMarkers('06'),
+    ]);
+    expect(fixture.reader.reads).toEqual([
+      {from: '04.03', through: '06', batchSize: 2},
+    ]);
+  });
+
+  test.each([
+    ['a subscriber that does not follow runs', 6, '04.03', '04.03'],
+    ['a log purged past its seed', 7, '04.03', '04.05'],
+    ['a seed under another major', 7, '03.02', '03.02'],
+  ])(
+    'does not start %s from the seed',
+    async (_, protocolVersion, seed, min) => {
+      const fixture = createFixture();
+      fixture.reader.seed = seed;
+      fixture.reader.min = min;
+      fixture.reader.boundaries.add(min);
+      fixture.reader.head = '06';
+
+      const {subscriber} = createSubscriber('04', {}, protocolVersion);
+      expect(await fixture.coordinator.catchup(subscriber, () => '06')).toEqual(
+        {kind: 'uncovered', minWatermark: min},
+      );
+    },
+  );
+
   test('declines an uncovered watermark before registering', async () => {
     const fixture = createFixture();
     fixture.reader.min = '04';
@@ -619,6 +661,8 @@ class TestReader implements SQLiteChangeLogCatchupReader {
   readonly reads: {from: string; through: string; batchSize: number}[] = [];
   min = '01';
   head = '01';
+  // The change log's seed watermark, which a too-old plan reports.
+  seed: string | undefined;
   beforeRead: Promise<void> | undefined;
   planError: Error | undefined;
   readError: Error | undefined;
@@ -636,6 +680,7 @@ class TestReader implements SQLiteChangeLogCatchupReader {
         kind: 'too-old',
         minWatermark: this.min,
         headWatermark: this.head,
+        seedWatermark: this.seed,
       };
     }
     return {
@@ -680,10 +725,14 @@ class TestReader implements SQLiteChangeLogCatchupReader {
   }
 }
 
-function createSubscriber(watermark: string, options: SubscriberOptions = {}) {
+function createSubscriber(
+  watermark: string,
+  options: SubscriberOptions = {},
+  protocolVersion = 5,
+) {
   const downstream = Subscription.create<string>();
   const subscriber = new Subscriber(
-    5,
+    protocolVersion,
     `subscriber-${watermark}`,
     'serving',
     watermark,

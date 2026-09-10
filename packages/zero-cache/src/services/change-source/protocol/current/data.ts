@@ -328,6 +328,14 @@ export const backfillSchema = v.object({
   // in which case subscribers hold no mark for the table and every run of it
   // starts from the beginning.
   lastKey: v.array(v.string()).optional(),
+
+  // Set on every message of a *rerun*: a run of columns the
+  // replication-manager had already completed, run again from the beginning
+  // for subscribers that declared they still need them. A subscriber that
+  // does not follow runs has completed those columns, and must not be sent
+  // the run: no version is kept for a completed column, so the run's older
+  // values would overwrite newer ones.
+  rerun: v.boolean().optional(),
 });
 
 // Announces a backfill run, as its first message.
@@ -372,6 +380,14 @@ export const backfillStartedSchema = v.object({
       seq: v.number(),
     })
     .nullable(),
+
+  // Set on every message of a *rerun*: a run of columns the
+  // replication-manager had already completed, run again from the beginning
+  // for subscribers that declared they still need them. A subscriber that
+  // does not follow runs has completed those columns, and must not be sent
+  // the run: no version is kept for a completed column, so the run's older
+  // values would overwrite newer ones.
+  rerun: v.boolean().optional(),
 });
 
 // Indicates that the backfill for the specified columns have
@@ -406,6 +422,14 @@ export const backfillCompletedSchema = v.object({
   // that has missed a batch of the run has not got every row it sent. Absent
   // with `runID`.
   seq: v.number().optional(),
+
+  // Set on every message of a *rerun*: a run of columns the
+  // replication-manager had already completed, run again from the beginning
+  // for subscribers that declared they still need them. A subscriber that
+  // does not follow runs has completed those columns, and must not be sent
+  // the run: no version is kept for a completed column, so the run's older
+  // values would overwrite newer ones.
+  rerun: v.boolean().optional(),
 });
 
 export type MessageBegin = v.Infer<typeof beginSchema>;
