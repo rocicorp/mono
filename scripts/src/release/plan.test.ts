@@ -19,11 +19,12 @@ afterEach(() => {
 
 const sourceSha = 'e8cc6889fa6bc2a364e8cb80776991c308601212';
 
-test('release branch validation allows only main and Zero maintenance branches', () => {
+test('release branch validation allows main and named Zero maintenance branches', () => {
   expect(isAllowedReleaseBranch('main')).toBe(true);
   expect(isAllowedReleaseBranch('maint/zero/v1.7')).toBe(true);
+  expect(isAllowedReleaseBranch('maint/zero/v1.10-margins')).toBe(true);
 
-  expect(isAllowedReleaseBranch('maint/zero/v1')).toBe(false);
+  expect(isAllowedReleaseBranch('maint/zero/')).toBe(false);
   expect(isAllowedReleaseBranch('feature/release')).toBe(false);
   expect(isAllowedReleaseBranch(sourceSha)).toBe(false);
   expect(isAllowedReleaseBranch('refs/tags/zero/v1.7.0')).toBe(false);
@@ -245,7 +246,7 @@ test('planRelease enforces workflow ref and release branch restrictions', () => 
       workflowRefName: 'main',
     }),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: Unsupported release branch e8cc6889fa6bc2a364e8cb80776991c308601212. Expected main or maint/zero/vX.Y]`,
+    `[Error: Unsupported release branch e8cc6889fa6bc2a364e8cb80776991c308601212. Expected main or maint/zero/<name>]`,
   );
 });
 

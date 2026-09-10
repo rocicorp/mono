@@ -25,7 +25,7 @@ import {
   type ZeroVersion,
 } from '../shared.ts';
 
-const maintenanceBranchPattern = /^maint\/zero\/v\d+\.\d+$/;
+const maintenanceBranchPattern = /^maint\/zero\/.+$/;
 
 export type ReleasePlan = {
   mode: ReleaseMode;
@@ -72,7 +72,7 @@ export function planRelease({
   assertMainWorkflowRef('Release', workflowRefName);
   if (!isAllowedReleaseBranch(releaseBranch)) {
     throw new Error(
-      `Unsupported release branch ${releaseBranch}. Expected main or maint/zero/vX.Y`,
+      `Unsupported release branch ${releaseBranch}. Expected main or maint/zero/<name>`,
     );
   }
   if (mode === 'head' && releaseBranch !== 'main') {
