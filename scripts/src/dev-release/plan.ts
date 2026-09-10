@@ -1,6 +1,5 @@
 // oxlint-disable no-console
 
-import semver from 'semver';
 import {
   assertGitSha,
   assertMainWorkflowRef,
@@ -13,6 +12,8 @@ import {
 const gitShaPattern = /^[0-9a-f]{40}$/;
 const hexShaPattern = /^[0-9a-f]{7,40}$/i;
 const dockerTagPattern = /^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$/;
+const semverRegex =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 const protectedTags = new Set(['latest', 'head', 'staging', 'canary']);
 
 export type DevReleasePlan = {
@@ -167,7 +168,7 @@ export function validateImageTag(tag: string): void {
       `Tag "${tag}" must start with "0.0.0-" to ensure CloudZero SemVer compatibility and prevent colliding with official releases.`,
     );
   }
-  if (!semver.valid(tag)) {
+  if (!semverRegex.test(tag)) {
     throw new Error(
       `Tag "${tag}" is not a valid semantic version (SemVer 2.0.0). Prerelease identifiers may only contain alphanumerics and hyphens.`,
     );

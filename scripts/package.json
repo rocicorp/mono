@@ -13,12 +13,8 @@
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },
-  "dependencies": {
-    "semver": "^7.5.4"
-  },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "@types/semver": "^7.5.1",
     "oxfmt": "^0.65.0",
     "typescript": "~7.0.2",
     "vitest": "^4.1.6"
