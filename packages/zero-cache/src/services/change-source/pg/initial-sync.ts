@@ -55,6 +55,7 @@ import {id} from '../../../types/sql.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
+import {publicationRowFilter} from './backfill-resume.ts';
 import {toStateVersionString} from './lsn.ts';
 import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
@@ -811,20 +812,16 @@ export function makeDownloadStatements(
   selectExprs?: string[] | undefined,
   order?: DownloadOrder | undefined,
 ): DownloadStatements {
-  const filterConditions = Object.values(table.publications)
-    .map(({rowFilter}) => rowFilter)
-    .filter(f => !!f); // remove nulls
+  const publicationFilter = publicationRowFilter(table);
   const after = order?.after;
   const conditions =
     after === undefined
-      ? filterConditions.join(' OR ')
+      ? publicationFilter
       : [
-          ...(filterConditions.length
-            ? [`(${filterConditions.join(' OR ')})`]
-            : []),
+          ...(publicationFilter === null ? [] : [publicationFilter]),
           after,
         ].join(' AND ');
-  const where = conditions.length === 0 ? '' : /*sql*/ `WHERE ${conditions}`;
+  const where = conditions === null ? '' : /*sql*/ `WHERE ${conditions}`;
   const sample = tableSampleClause(sampleRate);
   const limit = limitClause(maxRowsPerTable);
   const orderBy = order ? /*sql*/ ` ORDER BY ${order.by}` : '';

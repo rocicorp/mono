@@ -193,6 +193,14 @@ describe('publicationRowFilter', () => {
       ),
     ).toBe('(a > 10 OR b < 5)');
   });
+
+  test('an unfiltered publication publishes all rows', () => {
+    expect(
+      publicationRowFilter(
+        spec({p: {rowFilter: 'a > 10'}, q: {rowFilter: null}}),
+      ),
+    ).toBe(null);
+  });
 });
 
 describe('textKey', () => {

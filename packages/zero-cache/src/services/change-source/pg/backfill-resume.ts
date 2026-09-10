@@ -182,9 +182,16 @@ function rowComparison(
  * expression, or `null` if the table is published without a filter.
  */
 export function publicationRowFilter(table: PublishedTableSpec): string | null {
-  const filters = Object.values(table.publications)
-    .map(({rowFilter}) => rowFilter)
-    .filter(f => !!f);
+  const rowFilters = Object.values(table.publications).map(
+    ({rowFilter}) => rowFilter,
+  );
+  // PostgreSQL publishes the union of all publications. An unfiltered
+  // publication therefore makes every row eligible, regardless of filters on
+  // any other publication containing the table.
+  if (rowFilters.some(filter => filter === null)) {
+    return null;
+  }
+  const filters = rowFilters.filter((filter): filter is string => !!filter);
   return filters.length === 0 ? null : `(${filters.join(' OR ')})`;
 }
 

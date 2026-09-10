@@ -80,8 +80,18 @@ describe('makeDownloadStatements', () => {
       0.5,
     );
     expect(stmts.select).toMatch(
-      /FROM "public"\."t" TABLESAMPLE BERNOULLI\(50\) WHERE a > 10/,
+      /FROM "public"\."t" TABLESAMPLE BERNOULLI\(50\) WHERE \(a > 10\)/,
     );
+  });
+
+  test('an unfiltered publication makes every row eligible', () => {
+    const stmts = makeDownloadStatements(
+      spec({p: {rowFilter: 'a > 10'}, q: {rowFilter: null}}),
+      ['a'],
+    );
+    expect(stmts.select).not.toMatch(/\bWHERE\b/);
+    expect(stmts.getTotalRows).not.toMatch(/\bWHERE\b/);
+    expect(stmts.getTotalBytes).not.toMatch(/\bWHERE\b/);
   });
 
   test('order.by appends ORDER BY', () => {
