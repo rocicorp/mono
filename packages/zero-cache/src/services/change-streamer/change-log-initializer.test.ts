@@ -429,24 +429,19 @@ describe('change-streamer/change-log-initializer', () => {
       .run(lastPos, watermark);
   }
 
-  test('an interval too large to scan is inconclusive', async () => {
+  test('ordinary changes above the old scan cap do not prevent comparison', async () => {
     await transaction([CREATE_FOO]);
     const head = await transaction([], {toReplica: false});
-    // Above MAX_FOLD_SCAN_ROWS. A replicator that has been stalled can leave
-    // the interval arbitrarily large, and this runs between reconciliation and
-    // `startStream`, so the comparison declines rather than pays.
+    // Only relevant schema changes consume the advisory fold's budget.
     padTransaction(head, 10_002);
 
-    expect(await compare()).toBe('inconclusive');
+    expect(await compare()).toBe('equal-after-fold');
   });
 
-  test('an interval exactly at the cap is still folded', async () => {
+  test('an interval at the old scan cap is still folded', async () => {
     await transaction([CREATE_FOO]);
     const head = await transaction([], {toReplica: false});
-    // Exactly MAX_FOLD_SCAN_ROWS, i.e. the last interval that is scanned
-    // rather than declined. Pinned because the guard counts to one row *past*
-    // the cap in SQL so that an unbounded interval is not walked in full, and
-    // an off-by-one there would silently stop folding a legal interval.
+    // The former all-events boundary is no longer a special case.
     padTransaction(head, 9_999);
 
     expect(await compare()).toBe('equal-after-fold');

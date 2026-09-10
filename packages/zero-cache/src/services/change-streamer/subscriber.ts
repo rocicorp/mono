@@ -7,8 +7,12 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {BackfillRequestMessage} from '../change-source/protocol/current/upstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
+import {BackfillDeclarations} from './backfill-declarations.ts';
 import type {
+  BackfillDeclaration,
   ChangeTag,
   Downstream,
   Status,
@@ -31,6 +35,10 @@ export type SubscriberOptions = {
    * therefore lags the subscriber's replica rather than leading it.
    */
   onAck?: ((watermark: string) => void) | undefined;
+  backfills?: readonly BackfillDeclaration[] | undefined;
+  onBackfillRequests?:
+    | ((requests: readonly BackfillRequestMessage[]) => void)
+    | undefined;
 };
 
 export type BacklogFullWait = {
@@ -72,6 +80,11 @@ export class Subscriber {
   readonly #backlogBackpressure: ByteBackpressureGate;
   readonly #backlogFullWaiters = new Set<Resolver<void>>();
   readonly #onAck: ((watermark: string) => void) | undefined;
+  readonly #backfills: BackfillDeclarations | undefined;
+  readonly #onBackfillRequests: SubscriberOptions['onBackfillRequests'];
+  #lastBackfillRequests = '';
+  #requestCoveredBackfills = false;
+  #closed = false;
 
   constructor(
     protocolVersion: number,
@@ -95,6 +108,39 @@ export class Subscriber {
       options.backlogLowWaterRatio ?? DEFAULT_BACKLOG_LOW_WATER_RATIO,
     );
     this.#onAck = options.onAck;
+    // Every subscriber that follows runs is tracked, including one that
+    // declares nothing: the stream can start a backfill that the subscriber
+    // then cannot follow, and nothing else would request it.
+    this.#backfills = this.followsBackfillRuns
+      ? new BackfillDeclarations(options.backfills ?? [])
+      : undefined;
+    this.#onBackfillRequests = options.onBackfillRequests;
+  }
+
+  /**
+   * Resolve against the committed stream delivered to this subscriber. When
+   * the source reconnects, also request runs covered by its previous session.
+   * Catchup and a partially delivered transaction defer this until the next
+   * safe boundary; their regular reads continue with no declaration scan cap.
+   */
+  requestBackfills(sourceRestarted = false): void {
+    if (!this.#backfills?.pending) {
+      return;
+    }
+    this.#requestCoveredBackfills ||= sourceRestarted;
+    if (this.#closed || this.#backlog || this.#backfills?.inTransaction) {
+      return;
+    }
+    const requests =
+      this.#backfills?.requests(this.id, this.#requestCoveredBackfills) ?? [];
+    const serialized = BigIntJSON.stringify(requests);
+    const changed = serialized !== this.#lastBackfillRequests;
+    this.#lastBackfillRequests = serialized;
+    const force = this.#requestCoveredBackfills;
+    this.#requestCoveredBackfills = false;
+    if (requests.length && (changed || force)) {
+      this.#onBackfillRequests?.(requests);
+    }
   }
 
   get watermark() {
@@ -103,6 +149,16 @@ export class Subscriber {
 
   get acked() {
     return this.#acked;
+  }
+
+  /**
+   * Whether the subscriber follows backfill runs, which every subscriber at
+   * protocol v7 or above does: it subscribes at the major of its state
+   * version, commits backfill transactions at versions local to its replica,
+   * and honors a backfill's completion only for a run that it is following.
+   */
+  get followsBackfillRuns(): boolean {
+    return this.#protocolVersion >= 7;
   }
 
   /**
@@ -213,10 +269,34 @@ export class Subscriber {
     if (!this.supportsMessage(tag)) {
       return;
     }
+    const backfills = this.#backfills;
+    if (backfills) {
+      // Transaction boundaries carry nothing the tracker reads, so they are
+      // applied without parsing them.
+      if (tag === 'begin') {
+        backfills.begin();
+      } else if (tag === 'commit') {
+        backfills.commit();
+      } else if (tag === 'rollback') {
+        backfills.rollback();
+      } else if (backfills.tracks(tag)) {
+        backfills.apply(BigIntJSON.parse(json) as ChangeStreamData);
+      }
+      if (tag === 'backfill-completed' || tag === 'rollback') {
+        // A run can finish while the manager is checking a previous request.
+        // If this completion did not cover us, request the remaining work
+        // again, even when its mark and identity have not changed.
+        this.#lastBackfillRequests = '';
+      }
+    }
     if (tag === 'commit') {
       this.#watermark = watermark;
     }
-    const result = await this.#sendStringifiedDownstream(json);
+    const sent = this.#sendStringifiedDownstream(json);
+    if (tag === 'commit' || tag === 'rollback') {
+      this.requestBackfills();
+    }
+    const result = await sent;
     if (tag === 'commit' && result === 'consumed') {
       // Sends can complete out of order (e.g. the bounded window in
       // #drainBacklog), so the ack only advances monotonically, and listeners
@@ -359,7 +439,7 @@ export class Subscriber {
         // Backfill run announcements are only understood by subscribers
         // >= protocol v7. An older subscriber never follows a run, and so
         // completes backfills unconditionally, exactly as it does today.
-        return this.#protocolVersion >= 7;
+        return this.followsBackfillRuns;
     }
     return true;
   }
@@ -381,6 +461,7 @@ export class Subscriber {
   }
 
   close(error?: ErrorType, message?: string) {
+    this.#closed = true;
     // Closing the subscriber must also release producers that are blocked on
     // backlog capacity; there is no future drain that could wake them.
     this.#backlog = null;
@@ -449,6 +530,7 @@ export class Subscriber {
           this.#backlogBackpressure.releaseIfUnderLowWater(
             this.#bufferedBacklogBytes,
           );
+          this.requestBackfills();
           break;
         }
 
