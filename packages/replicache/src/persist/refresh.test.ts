@@ -38,9 +38,14 @@ import {
   getClient,
   setClient,
 } from '../persist/clients.ts';
+import type {ZeroOption, ZeroTxData} from '../replicache-options.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {addData, testSubscriptionsManagerOptions} from '../test-util.ts';
-import type {WriteTransaction} from '../transactions.ts';
+import {
+  type WriteTransaction,
+  type WriteTransactionImpl,
+  zeroData,
+} from '../transactions.ts';
 import type {MutatorDefs} from '../types.ts';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {refresh} from './refresh.ts';
@@ -294,6 +299,72 @@ describe('refresh', () => {
     await assertRefreshHashes(perdag, clientID, [
       perdagChainBuilder.chain.at(-1)?.chunk.hash,
     ]);
+  });
+
+  // refresh replays its memdag mutations in one inline loop. All it uniquely
+  // does with the zero tx data is hand each mutation what the previous one
+  // returned; `rebaseMutation` itself is covered in db/rebase.test.ts.
+  test('each replayed mutation is handed what the previous one returned', async () => {
+    const {perdag, memdag} = makeStores();
+    const clientID = 'client-id-1';
+
+    const makeTxData = (rows: ReadonlySet<string>): ZeroTxData => ({
+      ivmSources: new Set(rows),
+      token: undefined,
+      context: undefined,
+      fork(): ZeroTxData {
+        return makeTxData(this.ivmSources as Set<string>);
+      },
+    });
+    const rowsOf = (tx: WriteTransaction) =>
+      (tx as WriteTransactionImpl)[zeroData]?.ivmSources as Set<string>;
+    const seen: string[][] = [];
+
+    const mutators: MutatorDefs = new Proxy(
+      {},
+      {
+        get(_target, prop) {
+          return async (tx: WriteTransaction, args: JSONValue) => {
+            seen.push([...rowsOf(tx)]);
+            rowsOf(tx).add(String(prop));
+            await tx.set(`from ${String(prop)}`, args);
+          };
+        },
+      },
+    );
+
+    await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
+    const {chainBuilder: memdagChainBuilder} = await makeMemdagChain(
+      memdag,
+      clientID,
+      1,
+    );
+    // Two mutations to replay, so the handoff between them is observable.
+    await memdagChainBuilder.addLocal(clientID, []);
+    await memdagChainBuilder.addLocal(clientID, []);
+
+    const zero = {
+      getTxData: () => Promise.resolve(makeTxData(new Set())),
+      advance: () => undefined,
+    } as unknown as ZeroOption;
+
+    const refreshResult = await refresh(
+      new LogContext(),
+      memdag,
+      perdag,
+      clientID,
+      mutators,
+      testSubscriptionsManagerOptions,
+      () => false,
+      formatVersion,
+      zero,
+    );
+    assert(refreshResult, 'Expected refreshResult to be defined');
+
+    // The second mutation sees what the first wrote. Without the handoff both
+    // entries are empty.
+    expect(seen.length).toBe(2);
+    expect(seen.map(rows => rows.length)).toEqual([0, 1]);
   });
 
   test('memdag has a newer cookie', async () => {

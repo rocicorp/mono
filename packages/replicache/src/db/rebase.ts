@@ -22,6 +22,19 @@ import {newWriteLocal} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
+/**
+ * The result of replaying one mutation.
+ *
+ * `zeroData` is the Zero transaction data to use for the next mutation in the
+ * same replay. Each mutation runs against its own fork. On success that fork is
+ * returned, and if the mutator throws the caller gets back the one it passed
+ * in, without the failed mutation's IVM writes. See `rebaseMutation`.
+ */
+export type RebaseResult<T> = {
+  result: T;
+  zeroData: ZeroTxData | undefined;
+};
+
 async function rebaseMutation(
   mutation: Commit<LocalMetaDD31>,
   dagWrite: DagWrite,
@@ -31,7 +44,7 @@ async function rebaseMutation(
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
   zeroData: ZeroTxData | undefined,
-): Promise<Write> {
+): Promise<RebaseResult<Write>> {
   const localMeta = mutation.meta;
   const name = localMeta.mutatorName;
   if (isLocalMetaDD31(localMeta)) {
@@ -75,27 +88,59 @@ async function rebaseMutation(
     assertLocalMetaDD31(localMeta);
   }
 
-  const dbWrite = await newWriteLocal(
-    basisHash,
-    name,
-    args,
-    mutation.chunk.hash,
-    dagWrite,
-    localMeta.timestamp,
-    mutationClientID,
-    formatVersion,
-  );
+  const newWrite = () =>
+    newWriteLocal(
+      basisHash,
+      name,
+      args,
+      mutation.chunk.hash,
+      dagWrite,
+      localMeta.timestamp,
+      mutationClientID,
+      formatVersion,
+    );
+
+  const dbWrite = await newWrite();
+
+  // Run the mutator against a fork so that if it throws, its IVM writes are
+  // discarded along with its `Write`.
+  const txData = zeroData?.fork();
 
   const tx = new WriteTransactionImpl(
     mutationClientID,
     await dbWrite.getMutationID(),
     'rebase',
-    zeroData,
+    txData,
     dbWrite,
     lc,
   );
-  await mutatorImpl(tx, args);
-  return dbWrite;
+
+  try {
+    await mutatorImpl(tx, args);
+  } catch (e) {
+    // A mutator can throw here without anything being wrong: it is being run
+    // again against a newer server snapshot, so a check that passed when the
+    // user first ran it can fail now. Rethrowing fails the whole rebase, which
+    // in Zero fails the poke and disconnects the client. The mutation stays
+    // pending, so the next poke fails the same way.
+    //
+    // Only the local prediction is dropped. The mutation is still pending and
+    // is still sent to the server, which decides whether it applied.
+    //
+    // `dbWrite` is dropped rather than closed: it shares `dagWrite` with the
+    // caller. Dropping it is enough because a `Write` does not modify anything
+    // outside itself and only writes chunks when it is committed.
+    //
+    // Engine errors raised inside the mutator are retired the same way, rather
+    // than being sorted out here. A client whose state was garbage collected
+    // throws ChunkNotFoundError from its reads, and that is detected on its
+    // next mutation, where replicache-impl converts it to a
+    // ClientStateNotFoundError and calls onClientStateNotFound.
+    lc.info?.(`Rebase of mutator ${name} threw, abandoning its prediction`, e);
+    return {result: await newWrite(), zeroData};
+  }
+
+  return {result: dbWrite, zeroData: txData};
 }
 
 export async function rebaseMutationAndPutCommit(
@@ -109,8 +154,8 @@ export async function rebaseMutationAndPutCommit(
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
   zeroData: ZeroTxData | undefined,
-): Promise<Commit<Meta>> {
-  const tx = await rebaseMutation(
+): Promise<RebaseResult<Commit<Meta>>> {
+  const {result: tx, zeroData: next} = await rebaseMutation(
     mutation,
     dagWrite,
     basis,
@@ -120,7 +165,7 @@ export async function rebaseMutationAndPutCommit(
     formatVersion,
     zeroData,
   );
-  return tx.putCommit();
+  return {result: await tx.putCommit(), zeroData: next};
 }
 
 export async function rebaseMutationAndCommit(
@@ -135,8 +180,8 @@ export async function rebaseMutationAndCommit(
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
   zeroData: ZeroTxData | undefined,
-): Promise<Hash> {
-  const dbWrite = await rebaseMutation(
+): Promise<RebaseResult<Hash>> {
+  const {result: dbWrite, zeroData: next} = await rebaseMutation(
     mutation,
     dagWrite,
     basis,
@@ -146,5 +191,5 @@ export async function rebaseMutationAndCommit(
     formatVersion,
     zeroData,
   );
-  return dbWrite.commit(headName);
+  return {result: await dbWrite.commit(headName), zeroData: next};
 }
