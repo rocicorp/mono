@@ -43,7 +43,7 @@ export type BackfillMessage = {
   byteSize: number;
 };
 
-type BackfillStreamer = (
+export type BackfillStreamer = (
   req: BackfillRequest,
 ) => AsyncGenerator<BackfillMessage>;
 
