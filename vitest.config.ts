@@ -30,8 +30,15 @@ function* getProjects(): Iterable<string> {
 
     // Process files in this directory first
     const fileNames = entries.filter(e => e.isFile()).map(e => e.name);
-    const configNames = fileNames.filter(name =>
-      /^vitest\.config.*\.ts$/.test(name),
+    const configNames = fileNames.filter(
+      name =>
+        /^vitest\.config.*\.ts$/.test(name) &&
+        // Drop bench configs up front — those are run separately via
+        // `pnpm run bench`. They must not count towards `hasSuffixed` below,
+        // or a package whose only suffixed config is a bench one (e.g.
+        // zero-client) would have its base config suppressed by a config that
+        // is then itself skipped, silently contributing no projects at all.
+        !name.includes('.bench'),
     );
     const hasSuffixed = configNames.some(name =>
       /^vitest\.config\.[^.]+\.ts$/.test(name),
@@ -42,8 +49,6 @@ function* getProjects(): Iterable<string> {
       if (basePath === '' && name === 'vitest.config.ts') continue;
       // If any suffixed config exists in this dir, exclude the base config
       if (name === 'vitest.config.ts' && hasSuffixed) continue;
-      // Skip bench configs — those are run separately via `pnpm run bench`
-      if (name.includes('.bench')) continue;
       yield `${basePath}${name}`;
     }
 
