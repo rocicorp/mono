@@ -154,19 +154,32 @@ export function applyPragmas(db: Database, pragmas: PragmaConfig) {
 }
 
 /**
- * Delegates SQLite writes to a worker_thread,
- * keeping the main event loop free for WebSocket heartbeats and IPC.
+ * How a {@link TransportWriteWorkerClient} reaches its worker: a worker thread
+ * in production, or the worker's API (`write-worker-api.ts`) hosted in the
+ * calling thread.
  */
-export class ThreadWriteWorkerClient implements WriteWorkerClient {
-  readonly #worker: Worker;
+export interface WriteWorkerTransport {
+  postMessage(msg: Request): void;
+  onMessage(handler: (msg: Response | WriteError) => void): void;
+  onError(handler: (err: Error) => void): void;
+  onExit(handler: (code: number) => void): void;
+  terminate(): Promise<unknown>;
+}
+
+/**
+ * The client of a write worker, over any {@link WriteWorkerTransport}. One
+ * request is in flight at a time, except for `abort`, which gets no response.
+ */
+export class TransportWriteWorkerClient implements WriteWorkerClient {
+  readonly #transport: WriteWorkerTransport;
   #pending: Resolver<unknown, Error> | null = null;
   #errorHandler: ErrorHandler = () => {};
   #terminated = false;
 
-  constructor() {
-    this.#worker = new Worker(WRITE_WORKER_URL);
+  constructor(transport: WriteWorkerTransport) {
+    this.#transport = transport;
 
-    this.#worker.on('message', (msg: Response | WriteError) => {
+    transport.onMessage(msg => {
       if ('writeError' in msg) {
         const error = deserializeError(msg.writeError);
         this.#rejectAll(error);
@@ -183,12 +196,12 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
       }
     });
 
-    this.#worker.on('error', (err: Error) => {
+    transport.onError(err => {
       this.#rejectAll(err);
       this.#errorHandler(err);
     });
 
-    this.#worker.on('exit', (code: number) => {
+    transport.onExit(code => {
       this.#terminated = true;
       if (code !== 0) {
         const err = new Error(`Worker exited with code ${code}`);
@@ -210,7 +223,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     assert(this.#pending === null, `concurrent call: ${method}`);
     const r = resolver<ResultMap[M]>();
     this.#pending = r as Resolver<unknown, Error>;
-    this.#worker.postMessage({method, args} satisfies Request);
+    this.#transport.postMessage({method, args} satisfies Request);
     return r.promise;
   }
 
@@ -240,18 +253,38 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 
   abort(): void {
     if (!this.#terminated) {
-      this.#worker.postMessage({method: 'abort', args: []} satisfies Request);
+      this.#transport.postMessage({
+        method: 'abort',
+        args: [],
+      } satisfies Request);
     }
   }
 
   async stop(): Promise<void> {
     await this.#call('stop', []);
     if (!this.#terminated) {
-      await this.#worker.terminate();
+      await this.#transport.terminate();
     }
   }
 
   onError(handler: ErrorHandler): void {
     this.#errorHandler = handler;
+  }
+}
+
+/**
+ * Delegates SQLite writes to a worker_thread,
+ * keeping the main event loop free for WebSocket heartbeats and IPC.
+ */
+export class ThreadWriteWorkerClient extends TransportWriteWorkerClient {
+  constructor() {
+    const worker = new Worker(WRITE_WORKER_URL);
+    super({
+      postMessage: msg => worker.postMessage(msg),
+      onMessage: handler => worker.on('message', handler),
+      onError: handler => worker.on('error', handler),
+      onExit: handler => worker.on('exit', handler),
+      terminate: () => worker.terminate(),
+    });
   }
 }
