@@ -506,7 +506,7 @@ export class PostgresChangeSource implements ChangeSource {
       undefined,
       this.#streamInboundTimeoutMs,
     );
-    const acker = new Acker(acks);
+    const acker = new Acker(acks, clientWatermark);
 
     // The ChangeStreamMultiplexer facilitates cooperative streaming from
     // the main replication stream and backfill streams initiated by the
@@ -762,10 +762,19 @@ export class PostgresChangeSource implements ChangeSource {
 // Exported for testing.
 export class Acker implements Listener {
   #acks: Sink<bigint>;
-  #waitingForDownstreamAck: string | null = null;
+  #waitingForDownstreamAck: string | null;
 
-  constructor(acks: Sink<bigint>) {
+  /**
+   * @param resumeWatermark the watermark the stream resumes after. What came
+   *     before it was received on an earlier connection, and only the
+   *     change-streamer knows whether it has persisted it, so keepalives are
+   *     not acked until the change-streamer has acked it. A change-streamer
+   *     whose SQLite change log is ahead of its backup would otherwise have
+   *     the slot moved past transactions that only that log holds.
+   */
+  constructor(acks: Sink<bigint>, resumeWatermark: string | null) {
     this.#acks = acks;
+    this.#waitingForDownstreamAck = resumeWatermark;
   }
 
   onChange(change: ChangeStreamMessage): void {

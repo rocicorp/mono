@@ -50,9 +50,25 @@ export class UpstreamAcker {
     this.#trackBackup = trackBackup;
   }
 
-  reset(upstream: Sink<ChangeSourceUpstream>) {
+  /**
+   * Starts tracking a new upstream connection, which resumes the change stream
+   * after `resumeWatermark`.
+   *
+   * Everything at or before `resumeWatermark` was committed on an earlier
+   * connection, so it counts as committed on this one: a status watermark past
+   * it waits for the tracked stores to reach it, as it would for a commit on
+   * this connection. Otherwise the first keepalive of a stream that resumes
+   * ahead of the stores -- a SQLite change log ahead of its backup, which is
+   * the normal state -- would move the replication slot past transactions that
+   * no store has persisted, and a task restored from the backup would then
+   * resume below the slot, which the upstream moves forward without a word.
+   *
+   * Pass `''` when the stream resumes from what a tracked store has itself
+   * persisted, which leaves nothing before it outstanding.
+   */
+  reset(upstream: Sink<ChangeSourceUpstream>, resumeWatermark: string) {
     this.#upstream = upstream;
-    this.#lastTx = '';
+    this.#lastTx = resumeWatermark;
     this.#lastStatus = '';
     this.#lastAck = '';
   }
@@ -67,7 +83,8 @@ export class UpstreamAcker {
         this.#maybeAck();
         break;
       case 'commit':
-        this.#lastTx = downstream[2].watermark;
+        // A commit replayed from below the resume watermark does not lower it.
+        this.#lastTx = max(this.#lastTx, downstream[2].watermark);
         this.#maybeAck();
         break;
     }

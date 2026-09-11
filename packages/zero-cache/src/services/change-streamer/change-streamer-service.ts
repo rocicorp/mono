@@ -761,7 +761,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
         watermark = null;
 
-        this.#acker.reset(stream.acks);
+        // With the PG change log enabled, the stream resumes from what it has
+        // persisted, so nothing before the stream is outstanding. Otherwise it
+        // resumes from the SQLite change log's head, which the backup can
+        // trail.
+        this.#acker.reset(
+          stream.acks,
+          this.#pgChangeLogEnabled ? '' : lastWatermark,
+        );
+
         for await (const change of stream.changes) {
           this.#acker.trackDownstream(change);
 
@@ -826,10 +834,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           this.#changeLogWriter?.write(change, json, serialized.change);
           const entry: WatermarkedChange = [watermark, change[1].tag, json];
           unflushedBytes += json.length;
+          let flowControl: Promise<void> | undefined;
           if (unflushedBytes < flushBytesThreshold) {
             // pipeline changes until flushBytesThreshold
             this.#forwarder.forward(entry);
-            this.#recordForwardedTransactionBoundary(type, entry[0]);
           } else {
             // Wait for messages to clear socket buffers to ensure that they
             // make their way to subscribers. Without this `await`, the
@@ -838,22 +846,25 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             // (2) prevents subscribers from processing the messages as they
             //     arrive, instead getting them in a large batch after being
             //     idle while they were queued (causing further delays).
-            const forwarded = this.#forwarder.forwardWithFlowControl(entry);
-            // forwardWithFlowControl synchronously sends the entry and updates
-            // the Forwarder's transaction state before returning its flow-
-            // control promise. Record the boundary before awaiting that promise
-            // so registrations during the wait observe the forwarded state.
-            this.#recordForwardedTransactionBoundary(type, entry[0]);
+            flowControl = this.#forwarder.forwardWithFlowControl(entry);
+          }
+          // Both forwards send the entry and update the Forwarder's transaction
+          // state synchronously. Record the boundary, and end the transaction at
+          // its commit or rollback, before awaiting flow control: registrations
+          // during the wait then observe the forwarded state, and a stream that
+          // is interrupted during the wait does not roll back a transaction
+          // that was already forwarded whole.
+          this.#recordForwardedTransactionBoundary(type, entry[0]);
+          if (type === 'commit' || type === 'rollback') {
+            watermark = null;
+          }
+          if (flowControl) {
             await promiseOrAbort(
-              forwarded,
+              flowControl,
               stream.changes.signal,
               this.#state.signal,
             );
             unflushedBytes = 0;
-          }
-
-          if (type === 'commit' || type === 'rollback') {
-            watermark = null;
           }
 
           // Allow the PG storer to exert back pressure when it is enabled.
