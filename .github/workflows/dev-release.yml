@@ -270,8 +270,8 @@ jobs:
             printf 'Target Image Tag: `%s`\n' "$IMAGE_TAG"
             printf 'Source Revision: `%s`\n\n' "$SOURCE_SHA"
             printf '### Docker Images:\n'
-            printf '- Docker Hub: `rocicorp/zero:%s`\n' "$IMAGE_TAG"
-            printf '- GHCR: `ghcr.io/rocicorp/zero:%s`\n\n' "$IMAGE_TAG"
+            printf -- '- Docker Hub: `rocicorp/zero:%s`\n' "$IMAGE_TAG"
+            printf -- '- GHCR: `ghcr.io/rocicorp/zero:%s`\n\n' "$IMAGE_TAG"
             printf '### Deploy to CloudZero Staging:\n'
             printf 'Deploy this dev image to your staging stack via the CloudZero controller script:\n'
             printf '```bash\nnode update-stack-zero-version.ts %s stack-ids <stack-id>\n```\n' "$IMAGE_TAG"
