@@ -7,6 +7,8 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   reserveAndGetSnapshotStatus,
+  RESTORE_RETRY_INTERVAL_MS,
+  restoreUnderReservation,
   type ReserveSnapshot,
   type SnapshotMessage,
   type SnapshotStatus,
@@ -140,5 +142,27 @@ describe('change-streamer/snapshot', () => {
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
       AbortError,
     );
+  });
+
+  test('restoreUnderReservation reserves again after a restore that produced nothing', async () => {
+    const reserve = vi.fn(() => Promise.resolve(status));
+    const restore = vi
+      .fn<(s: SnapshotStatus) => Promise<{restored: boolean; result: string}>>()
+      .mockResolvedValueOnce({restored: false, result: 'invalid_replica'})
+      .mockResolvedValueOnce({restored: true, result: 'success'});
+
+    const restored = restoreUnderReservation(lc, reserve, restore);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(restore).toHaveBeenCalledTimes(1);
+
+    // Not before the retry interval.
+    await vi.advanceTimersByTimeAsync(RESTORE_RETRY_INTERVAL_MS - 1);
+    expect(reserve).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await restored).toBe('success');
+    expect(reserve).toHaveBeenCalledTimes(2);
+    expect(restore).toHaveBeenLastCalledWith(status);
   });
 });
