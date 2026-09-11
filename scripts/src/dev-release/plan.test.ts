@@ -2,6 +2,7 @@ import {expect, test} from 'vitest';
 import {type Command, type Exec, type ExecOptions} from '../shared.ts';
 import {
   deriveDevImageTag,
+  nextPatchVersion,
   planDevRelease,
   resolveSourceSha,
   resolveUniqueShortSha,
@@ -11,7 +12,11 @@ import {
 
 const dummySha = 'e8cc6889fa6bc2a364e8cb80776991c308601212';
 
-function makeMockExec(resolvedSha = dummySha, shortSha?: string) {
+function makeMockExec(
+  resolvedSha = dummySha,
+  shortSha?: string,
+  packageVersion = '1.11.0',
+) {
   const calls: Array<{
     command: Command;
     args: readonly string[];
@@ -25,10 +30,28 @@ function makeMockExec(resolvedSha = dummySha, shortSha?: string) {
       }
       return `${resolvedSha}\n`;
     }
+    if (
+      command === 'git' &&
+      args[0] === 'show' &&
+      args[1]?.endsWith(':packages/zero/package.json')
+    ) {
+      return `${JSON.stringify({version: packageVersion})}\n`;
+    }
     return '';
   };
   return {calls, exec};
 }
+
+test('nextPatchVersion increments patch component of version string', () => {
+  expect(nextPatchVersion('1.11.0')).toBe('1.11.1');
+  expect(nextPatchVersion('0.25.1')).toBe('0.25.2');
+  expect(nextPatchVersion('0.24.0')).toBe('0.24.1');
+  expect(nextPatchVersion('0.0.0')).toBe('0.0.1');
+  expect(nextPatchVersion('1.2.3-canary.1')).toBe('1.2.4');
+  expect(() => nextPatchVersion('invalid')).toThrow(
+    /Cannot derive next patch version/,
+  );
+});
 
 test('sanitizeBranchName strips refs prefix, formats PR refs, and sanitizes special characters to hyphens', () => {
   expect(sanitizeBranchName('main')).toBe('main');
@@ -41,38 +64,43 @@ test('sanitizeBranchName strips refs prefix, formats PR refs, and sanitizes spec
   expect(sanitizeBranchName('---messy--branch---')).toBe('messy-branch');
 });
 
-test('deriveDevImageTag generates 0.0.0-dev-<branch>-<shortSha> SemVer tags', () => {
-  expect(deriveDevImageTag('main', dummySha)).toBe('0.0.0-dev-main-e8cc6889');
-  expect(deriveDevImageTag('greg/sync-opt', dummySha)).toBe(
-    '0.0.0-dev-greg-sync-opt-e8cc6889',
+test('deriveDevImageTag generates <nextPatch>-dev-<branch>-<shortSha> SemVer tags', () => {
+  expect(deriveDevImageTag('main', dummySha, '1.11.1')).toBe(
+    '1.11.1-dev-main-e8cc6889',
   );
-  expect(deriveDevImageTag('refs/pull/123/head', dummySha)).toBe(
-    '0.0.0-dev-pr-123-e8cc6889',
+  expect(deriveDevImageTag('greg/sync-opt', dummySha, '1.11.1')).toBe(
+    '1.11.1-dev-greg-sync-opt-e8cc6889',
   );
-  expect(deriveDevImageTag(dummySha, dummySha)).toBe('0.0.0-dev-e8cc6889');
-  expect(deriveDevImageTag('dev-benchmark', dummySha)).toBe(
-    '0.0.0-dev-benchmark-e8cc6889',
+  expect(deriveDevImageTag('refs/pull/123/head', dummySha, '1.11.1')).toBe(
+    '1.11.1-dev-pr-123-e8cc6889',
   );
-  expect(deriveDevImageTag('sync-opt-e8cc6889', dummySha)).toBe(
-    '0.0.0-dev-sync-opt-e8cc6889',
+  expect(deriveDevImageTag(dummySha, dummySha, '1.11.1')).toBe(
+    '1.11.1-dev-e8cc6889',
+  );
+  expect(deriveDevImageTag('dev-benchmark', dummySha, '1.11.1')).toBe(
+    '1.11.1-dev-benchmark-e8cc6889',
+  );
+  expect(deriveDevImageTag('sync-opt-e8cc6889', dummySha, '1.11.1')).toBe(
+    '1.11.1-dev-sync-opt-e8cc6889',
   );
 });
 
 test('deriveDevImageTag truncates excessively long branch names while preserving the short SHA suffix within 128 chars', () => {
   const longBranch = 'a'.repeat(150);
-  const tag = deriveDevImageTag(longBranch, dummySha);
+  const tag = deriveDevImageTag(longBranch, dummySha, '1.11.1');
   expect(tag.length).toBeLessThanOrEqual(128);
   expect(tag.endsWith('-e8cc6889')).toBe(true);
-  expect(tag.startsWith('0.0.0-dev-')).toBe(true);
+  expect(tag.startsWith('1.11.1-dev-')).toBe(true);
   expect(() => validateImageTag(tag)).not.toThrow();
 });
 
-test('validateImageTag accepts valid 0.0.0- SemVer tags and blocks invalid/protected tags', () => {
-  expect(() => validateImageTag('0.0.0-dev-main-e8cc6889')).not.toThrow();
+test('validateImageTag accepts valid SemVer dev tags and blocks invalid/protected/stable tags', () => {
+  expect(() => validateImageTag('1.11.1-dev-main-e8cc6889')).not.toThrow();
   expect(() =>
-    validateImageTag('0.0.0-dev-greg-sync-opt-e8cc6889'),
+    validateImageTag('1.11.1-dev-greg-sync-opt-e8cc6889'),
   ).not.toThrow();
-  expect(() => validateImageTag('0.0.0-dev-e8cc6889')).not.toThrow();
+  expect(() => validateImageTag('1.11.1-dev-e8cc6889')).not.toThrow();
+  expect(() => validateImageTag('0.0.0-dev-main-e8cc6889')).not.toThrow();
 
   expect(() => validateImageTag('latest')).toThrowError(/protected/);
   expect(() => validateImageTag('HEAD')).toThrowError(/protected/);
@@ -80,19 +108,19 @@ test('validateImageTag accepts valid 0.0.0- SemVer tags and blocks invalid/prote
   expect(() => validateImageTag('canary')).toThrowError(/protected/);
 
   expect(() => validateImageTag('1.8.0')).toThrowError(
-    /must start with "0.0.0-"/,
+    /must be a prerelease version/,
   );
   expect(() => validateImageTag('v1.8.0')).toThrowError(
-    /must start with "0.0.0-"/,
-  );
-  expect(() => validateImageTag('dev-e8cc6889')).toThrowError(
-    /must start with "0.0.0-"/,
-  );
-
-  expect(() => validateImageTag('0.0.0-dev_underscore')).toThrowError(
     /not a valid semantic version/,
   );
-  expect(() => validateImageTag('0.0.0-dev.0123')).toThrowError(
+  expect(() => validateImageTag('dev-e8cc6889')).toThrowError(
+    /not a valid semantic version/,
+  );
+
+  expect(() => validateImageTag('1.11.1-dev_underscore')).toThrowError(
+    /not a valid semantic version/,
+  );
+  expect(() => validateImageTag('1.11.1-dev.0123')).toThrowError(
     /not a valid semantic version/,
   );
 
@@ -126,7 +154,7 @@ test('planDevRelease rejects empty branch', () => {
   ).toThrow(/Branch must not be empty/);
 });
 
-test('planDevRelease defaults to main and derives 0.0.0-dev-main-<shortSha>', () => {
+test('planDevRelease defaults to main and derives 1.11.1-dev-main-<shortSha>', () => {
   const {calls, exec} = makeMockExec();
   const plan = planDevRelease({
     exec,
@@ -134,7 +162,7 @@ test('planDevRelease defaults to main and derives 0.0.0-dev-main-<shortSha>', ()
   });
 
   expect(plan).toEqual({
-    image_tag: '0.0.0-dev-main-e8cc6889',
+    image_tag: '1.11.1-dev-main-e8cc6889',
     ref: 'main',
     source_sha: dummySha,
   });
@@ -155,7 +183,7 @@ test('planDevRelease plans dev release for feature branch with short SHA suffix'
   });
 
   expect(plan).toEqual({
-    image_tag: '0.0.0-dev-greg-sync-opt-e8cc6889',
+    image_tag: '1.11.1-dev-greg-sync-opt-e8cc6889',
     ref: 'greg/sync-opt',
     source_sha: dummySha,
   });
@@ -178,7 +206,7 @@ test('planDevRelease accepts optional commitShaInput', () => {
   });
 
   expect(plan).toEqual({
-    image_tag: '0.0.0-dev-main-12345678',
+    image_tag: '1.11.1-dev-main-12345678',
     ref: 'main',
     source_sha: specificSha,
   });
@@ -188,6 +216,17 @@ test('planDevRelease accepts optional commitShaInput', () => {
     args: ['rev-parse', '--verify', `${specificSha}^{commit}`],
     options: undefined,
   });
+});
+
+test('planDevRelease derives next patch for older base commits (e.g. 0.24.0 -> 0.24.1-dev)', () => {
+  const {exec} = makeMockExec(dummySha, undefined, '0.24.0');
+  const plan = planDevRelease({
+    exec,
+    branchInput: 'maint/fix',
+    workflowRefName: 'main',
+  });
+
+  expect(plan.image_tag).toBe('0.24.1-dev-maint-fix-e8cc6889');
 });
 
 test('resolveSourceSha rejects option-like branch starting with -', () => {
@@ -256,5 +295,5 @@ test('planDevRelease incorporates expanded short SHA when git detects collision'
     workflowRefName: 'main',
   });
 
-  expect(plan.image_tag).toBe('0.0.0-dev-main-e8cc6889fa');
+  expect(plan.image_tag).toBe('1.11.1-dev-main-e8cc6889fa');
 });

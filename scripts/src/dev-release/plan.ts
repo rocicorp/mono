@@ -5,6 +5,7 @@ import {
   assertMainWorkflowRef,
   defaultExec,
   mustEnv,
+  readZeroPackageVersionAt,
   writeGithubOutput,
   type Exec,
 } from '../shared.ts';
@@ -14,6 +15,7 @@ const hexShaPattern = /^[0-9a-f]{7,40}$/i;
 const dockerTagPattern = /^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$/;
 const semverRegex =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+const semverPrefixPattern = /^(\d+)\.(\d+)\.(\d+)/;
 const protectedTags = new Set(['latest', 'head', 'staging', 'canary']);
 
 export type DevReleasePlan = {
@@ -28,6 +30,17 @@ export type PlanDevReleaseOptions = {
   exec?: Exec | undefined;
   workflowRefName: string;
 };
+
+export function nextPatchVersion(version: string): string {
+  const match = version.match(semverPrefixPattern);
+  if (!match) {
+    throw new Error(`Cannot derive next patch version from "${version}"`);
+  }
+  const major = match[1];
+  const minor = match[2];
+  const patch = Number(match[3]) + 1;
+  return `${major}.${minor}.${patch}`;
+}
 
 export function runDevReleasePlanCli() {
   const plan = planDevRelease({
@@ -65,7 +78,14 @@ export function planDevRelease({
   assertGitSha(sourceSha, 'source SHA');
 
   const shortSha = resolveUniqueShortSha(sourceSha, exec);
-  const imageTag = deriveDevImageTag(trimmedBranch, sourceSha, shortSha);
+  const sourceVersion = readZeroPackageVersionAt(sourceSha, exec);
+  const nextPatch = nextPatchVersion(sourceVersion);
+  const imageTag = deriveDevImageTag(
+    trimmedBranch,
+    sourceSha,
+    nextPatch,
+    shortSha,
+  );
   validateImageTag(imageTag);
 
   return {
@@ -115,16 +135,20 @@ export function resolveUniqueShortSha(
 export function deriveDevImageTag(
   branch: string,
   sourceSha: string,
+  nextPatch = '0.0.1',
   shortSha = sourceSha.slice(0, 8),
 ): string {
+  const prefix = `${nextPatch}-dev-`;
   if (gitShaPattern.test(branch.trim())) {
-    return `0.0.0-dev-${shortSha}`;
+    return `${prefix}${shortSha}`;
   }
 
   const rawClean = branch.trim().replace(gitRefPrefixPattern, '');
 
   let base: string;
-  if (rawClean.startsWith('0.0.0-')) {
+  if (rawClean.startsWith(prefix)) {
+    base = sanitizeBranchName(rawClean.slice(prefix.length));
+  } else if (rawClean.startsWith('0.0.0-')) {
     base = sanitizeBranchName(rawClean.slice('0.0.0-'.length));
   } else {
     base = sanitizeBranchName(rawClean);
@@ -141,15 +165,15 @@ export function deriveDevImageTag(
   }
 
   if (!base) {
-    return `0.0.0-dev-${shortSha}`;
+    return `${prefix}${shortSha}`;
   }
 
-  const maxBaseLen = 128 - '0.0.0-dev-'.length - 1 - shortSha.length;
+  const maxBaseLen = 128 - prefix.length - 1 - shortSha.length;
   const trimmedBase = base
     .slice(0, maxBaseLen)
     .replace(trailingHyphenPattern, '');
 
-  return `0.0.0-dev-${trimmedBase}-${shortSha}`;
+  return `${prefix}${trimmedBase}-${shortSha}`;
 }
 
 export function validateImageTag(tag: string): void {
@@ -163,14 +187,14 @@ export function validateImageTag(tag: string): void {
       `Tag "${tag}" is protected and cannot be overwritten by dev releases.`,
     );
   }
-  if (!tag.startsWith('0.0.0-')) {
-    throw new Error(
-      `Tag "${tag}" must start with "0.0.0-" to ensure CloudZero SemVer compatibility and prevent colliding with official releases.`,
-    );
-  }
   if (!semverRegex.test(tag)) {
     throw new Error(
       `Tag "${tag}" is not a valid semantic version (SemVer 2.0.0). Prerelease identifiers may only contain alphanumerics and hyphens.`,
+    );
+  }
+  if (!tag.includes('-')) {
+    throw new Error(
+      `Tag "${tag}" must be a prerelease version (e.g. contain a "-dev-" suffix) to prevent colliding with official releases.`,
     );
   }
 }
