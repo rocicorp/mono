@@ -14,6 +14,7 @@
  */
 
 import {must} from '../../../../shared/src/must.ts';
+import type {Rng} from '../../../../shared/src/rng.ts';
 import type {
   AST,
   Condition,
@@ -34,7 +35,6 @@ import {
 } from './axes.ts';
 import {existsCondition} from './cover.ts';
 import {filterCondition} from './literals.ts';
-import type {Rng} from './rng.ts';
 
 type Twist = 'addFilter' | 'addExists' | 'addOrder' | 'addLimit' | 'flipDir';
 

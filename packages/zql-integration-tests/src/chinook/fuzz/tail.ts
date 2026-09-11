@@ -11,6 +11,7 @@
  * is covered by L1/swarm; `select` remains absent because mono ZQL has no projection.
  */
 
+import type {Rng} from '../../../../shared/src/rng.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {
   FILTER_VALS,
@@ -22,7 +23,6 @@ import {
 } from './axes.ts';
 import {applyLimit, applyOrder} from './cover.ts';
 import {filterCondition} from './literals.ts';
-import type {Rng} from './rng.ts';
 import {
   type ChildKind,
   isExistsBearing,

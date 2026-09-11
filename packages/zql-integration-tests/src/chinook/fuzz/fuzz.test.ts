@@ -8,6 +8,7 @@
 
 import {describe, expect, test} from 'vitest';
 import {must} from '../../../../shared/src/must.ts';
+import {rng} from '../../../../shared/src/rng.ts';
 import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
@@ -51,7 +52,6 @@ import {
   regressionsDir,
   serializeRegression,
 } from './regressions.ts';
-import {rng} from './rng.ts';
 import {
   hasScalarSubquery,
   scalarizableExistsCount,
