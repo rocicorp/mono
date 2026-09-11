@@ -35,7 +35,7 @@
     "rn-bench": "workspace:*",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
-    "vitest": "^4.1.6",
+    "vitest": "^5.0.0",
     "zero-cache": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
