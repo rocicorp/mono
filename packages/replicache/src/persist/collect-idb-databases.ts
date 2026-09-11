@@ -153,7 +153,7 @@ export async function collectIDBDatabases(
   }
 }
 
-async function dropDatabaseInternal(
+export async function dropDatabaseInternal(
   name: string,
   idbDatabasesStore: IDBDatabasesStore,
   kvDropStore: DropStore,

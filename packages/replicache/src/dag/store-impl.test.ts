@@ -19,7 +19,7 @@ import {
 import {Chunk, createChunk, type Refs, toRefs} from './chunk.ts';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.ts';
 import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.ts';
-import {ChunkNotFoundError} from './store.ts';
+import {ChunkNotFoundError, InvalidRefCountError} from './store.ts';
 import {TestStore} from './test-store.ts';
 
 describe('read', () => {
@@ -199,7 +199,7 @@ describe('write', () => {
   test('ref count invalid', async () => {
     const chunkHasher = makeNewFakeHashFunction();
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const t = async (v: any, expectError?: string) => {
+    const t = async (v: any, expectError = false) => {
       const kv = new TestMemStore();
       const h = fakeHash('face1');
       await withWrite(kv, async kvw => {
@@ -215,8 +215,13 @@ describe('write', () => {
           err = e;
         }
         if (expectError) {
-          expect(err).toBeInstanceOf(Error);
-          expect(err).toHaveProperty('message', expectError);
+          expect(err).toBeInstanceOf(InvalidRefCountError);
+          expect(err).toHaveProperty(
+            'message',
+            `Invalid ref count ${String(v)} for ${h}. We expect the value to be a Uint16`,
+          );
+          expect(err).toHaveProperty('hash', h);
+          expect(err).toHaveProperty('value', v);
         } else {
           expect(err, 'No error expected').toBeUndefined();
         }
@@ -227,22 +232,14 @@ describe('write', () => {
     await t(1);
     await t(42);
     await t(0xffff);
-    await t(-1, 'Invalid ref count -1. We expect the value to be a Uint16');
-    await t(-1, 'Invalid ref count -1. We expect the value to be a Uint16');
-    await t(1.5, 'Invalid ref count 1.5. We expect the value to be a Uint16');
-    await t(NaN, 'Invalid ref count NaN. We expect the value to be a Uint16');
-    await t(
-      Infinity,
-      'Invalid ref count Infinity. We expect the value to be a Uint16',
-    );
-    await t(
-      -Infinity,
-      'Invalid ref count -Infinity. We expect the value to be a Uint16',
-    );
-    await t(
-      2 ** 16,
-      'Invalid ref count 65536. We expect the value to be a Uint16',
-    );
+    await t(-1, true);
+    await t(1.5, true);
+    await t(NaN, true);
+    await t(Infinity, true);
+    await t(-Infinity, true);
+    await t(2 ** 16, true);
+    await t('42', true);
+    await t(null, true);
   });
 
   test('commit rollback', async () => {

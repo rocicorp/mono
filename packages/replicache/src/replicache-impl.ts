@@ -15,7 +15,12 @@ import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.ts';
 import {assertCookie, type Cookie} from './cookies.ts';
 import {LazyStore} from './dag/lazy-store.ts';
 import {StoreImpl} from './dag/store-impl.ts';
-import {ChunkNotFoundError, mustGetHeadHash, type Store} from './dag/store.ts';
+import {
+  ChunkNotFoundError,
+  InvalidRefCountError,
+  mustGetHeadHash,
+  type Store,
+} from './dag/store.ts';
 import {
   baseSnapshotFromHash,
   DEFAULT_HEAD_NAME,
@@ -68,6 +73,7 @@ import {
 } from './persist/clients.ts';
 import {
   COLLECT_IDB_INTERVAL,
+  dropDatabaseInternal,
   initCollectIDBDatabases,
   INITIAL_COLLECT_IDB_DELAY,
 } from './persist/collect-idb-databases.ts';
@@ -1225,6 +1231,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       } catch (e) {
         if (e instanceof ClientStateNotFoundError) {
           this.#clientStateNotFoundOnClient(clientID);
+        } else if (e instanceof InvalidRefCountError) {
+          await this.#invalidRefCountOnClient(clientID, e);
         } else if (this.#closed) {
           this.#lc.debug?.('Exception persisting during close', e);
         } else {
@@ -1260,6 +1268,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     } catch (e) {
       if (e instanceof ClientStateNotFoundError) {
         this.#clientStateNotFoundOnClient(clientID);
+      } else if (e instanceof InvalidRefCountError) {
+        await this.#invalidRefCountOnClient(clientID, e);
       } else if (this.#closed) {
         this.#lc.debug?.('Exception refreshing during close', e);
       } else {
@@ -1277,6 +1287,39 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   #clientStateNotFoundOnClient(clientID: ClientID) {
     this.#lc.error?.(`Client state not found on client, clientID: ${clientID}`);
+    this.#fireOnClientStateNotFound();
+  }
+
+  /**
+   * The persistent dag store contains an invalid ref count. This means the
+   * store is corrupt (due to some unknown bug) and every subsequent persist
+   * would fail the same way. There is no way to repair it, so we treat it like
+   * the client state was lost and fire `onClientStateNotFound`.
+   *
+   * Disabling the client group is not enough: the corrupt ref count stays in
+   * the underlying kv store and any later write that touches that chunk (for
+   * example rewriting the `clients` chunk when a new client starts) would hit
+   * it again. Instead we drop the whole database so that the reload starts
+   * from a fresh store. Pending local mutations in this database are lost.
+   */
+  async #invalidRefCountOnClient(clientID: ClientID, e: InvalidRefCountError) {
+    this.#lc.error?.(
+      `Client state is corrupt on client, clientID: ${clientID}. Dropping database ${this.idbName}`,
+      e,
+    );
+    try {
+      await dropDatabaseInternal(
+        this.idbName,
+        this.#idbDatabases,
+        this.#kvStoreProvider.drop,
+      );
+    } catch (dropError) {
+      // Still fire onClientStateNotFound so the app can recover.
+      this.#lc.error?.(
+        `Failed to drop database ${this.idbName}, clientID: ${clientID}`,
+        dropError,
+      );
+    }
     this.#fireOnClientStateNotFound();
   }
 

@@ -1,4 +1,3 @@
-import {assertNumber} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {type Hash, assertHash} from '../hash.ts';
 import type {
@@ -15,7 +14,13 @@ import {
 } from './chunk.ts';
 import {type RefCountUpdatesDelegate, computeRefCountUpdates} from './gc.ts';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.ts';
-import {type Read, type Store, type Write, mustGetChunk} from './store.ts';
+import {
+  InvalidRefCountError,
+  type Read,
+  type Store,
+  type Write,
+  mustGetChunk,
+} from './store.ts';
 
 export class StoreImpl implements Store {
   readonly #kv: KVStore;
@@ -201,11 +206,13 @@ export class WriteImpl
     if (value === undefined) {
       return undefined;
     }
-    assertNumber(value);
-    if (value < 0 || value > 0xffff || value !== (value | 0)) {
-      throw new Error(
-        `Invalid ref count ${value}. We expect the value to be a Uint16`,
-      );
+    if (
+      typeof value !== 'number' ||
+      value < 0 ||
+      value > 0xffff ||
+      value !== (value | 0)
+    ) {
+      throw new InvalidRefCountError(hash, value);
     }
     return value;
   }

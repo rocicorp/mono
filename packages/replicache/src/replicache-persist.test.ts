@@ -1,7 +1,8 @@
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
 import {sleep} from '../../shared/src/sleep.ts';
-import {StoreImpl} from './dag/store-impl.ts';
+import {chunkRefCountKey} from './dag/key.ts';
+import {StoreImpl, WriteImpl} from './dag/store-impl.ts';
 import type {Store} from './dag/store.ts';
 import {assertHash, newRandomHash} from './hash.ts';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
@@ -14,9 +15,11 @@ import {
 import {deleteClientForTesting} from './persist/clients-test-helpers.ts';
 import {
   assertClientV6,
+  CLIENTS_HEAD_NAME,
   ClientStateNotFoundError,
   getClient,
 } from './persist/clients.ts';
+import {IDBDatabasesStore} from './persist/idb-databases-store.ts';
 import type {ReplicacheTest} from './test-util.ts';
 import {
   addData,
@@ -163,6 +166,75 @@ describe('onClientStateNotFound', () => {
       rep,
       `Client state not found on client, clientID: ${clientID}`,
     );
+  });
+
+  test('Called in persist if the perdag has an invalid ref count', async () => {
+    const consoleErrorStub = vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+
+    const rep = await replicacheForTesting(
+      'called-in-persist-invalid-ref',
+      {
+        pullURL,
+        mutators: {addData},
+      },
+      disableAllBackgroundProcesses,
+    );
+
+    await rep.mutate.addData({foo: 'bar'});
+    await rep.persist();
+
+    // Pull a newer snapshot so that the next persist writes it to the perdag
+    // and rewrites the clients chunk.
+    fetchMocker.postOnce(
+      pullURL,
+      makePullResponseV1(rep.clientID, 1, [{op: 'put', key: 'a', value: 1}]),
+    );
+    await rep.pull();
+
+    // Corrupt the ref count of the current clients chunk. The next persist
+    // replaces the clients head, which reads (and decrements) this ref count.
+    // Disabling the client group does not touch this chunk.
+    const clientsHash = await withRead(rep.perdag, read =>
+      read.getHead(CLIENTS_HEAD_NAME),
+    );
+    assert(clientsHash, 'Expected clients head to be defined');
+    await withWriteNoImplicitCommit(rep.perdag, async dagWrite => {
+      assert(dagWrite instanceof WriteImpl, 'Expected WriteImpl');
+      await dagWrite.kvWrite.put(chunkRefCountKey(clientsHash), -1);
+      await dagWrite.commit();
+    });
+
+    const onClientStateNotFound = vi.fn();
+    rep.onClientStateNotFound = onClientStateNotFound;
+    await rep.persist();
+
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    expect(onClientStateNotFound.mock.lastCall).toEqual([]);
+
+    // Disabling the client group would not be enough since the corrupt ref
+    // count stays in the kv store. The whole database is dropped so that the
+    // reload starts from a fresh store.
+    const idbDatabases = new IDBDatabasesStore(name => new IDBStore(name));
+    expect(Object.keys(await idbDatabases.getDatabases())).not.toContain(
+      rep.idbName,
+    );
+    await idbDatabases.close();
+    if (indexedDB.databases) {
+      // Firefox does not support indexedDB.databases
+      const names = (await indexedDB.databases()).map(db => db.name);
+      expect(names).not.toContain(rep.idbName);
+    }
+
+    expect(consoleErrorStub.mock.calls.length).toBeGreaterThan(0);
+    const [context, message, error] = consoleErrorStub.mock.calls[0];
+    expect(context).toBe(`name=${rep.name}`);
+    expect(message).toBe(
+      `Client state is corrupt on client, clientID: ${rep.clientID}. Dropping database ${rep.idbName}`,
+    );
+    // The LogContext serializes errors to JSON before logging them.
+    expect(error).toContain('"name":"InvalidRefCountError"');
+    expect(error).toContain(`Invalid ref count -1 for ${clientsHash}`);
   });
 
   test('Called in query if collected', async () => {
