@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789115403083,
+  "lastUpdate": 1789126815878,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57677,6 +57677,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/43dbb3284f91ffa568918ea114144d78538383e3"
         },
         "date": 1789115389424,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319750,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57619,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 118189,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33765,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a8fda3a2b5c2a64efda41798b6b1efecdfc7708d",
+          "message": "chore(deps): upgrade to vitest 5 (#6552)\n\n## Summary\n- upgrade Vitest and its browser, Playwright, and V8 coverage companions\nfrom 4.1.6 to 5.0.0 across the workspace\n- remove unused `@vitest/runner` declarations\n- use the existing shared benchmark adapter for Replicache B-tree\nbenchmarks because Vitest 5 no longer exports `bench` directly\n\n## Validation\n- `pnpm check-fmt`\n- `pnpm lint`\n- `pnpm check-types`\n- `pnpm --filter replicache run check-types`\n- `pnpm --filter shared run test -- --config vitest.config.node.ts` (78\nfiles, 774 tests)\n\n## Performance spot check\nMeasured serial full package runs on the same machine:\n\n| Package | Vitest 4.1.6 | Vitest 5.0.0 | Change |\n| --- | ---: | ---: | ---: |\n| shared | 8.01s | 6.58s | 17.9% faster |\n| zero-client | 9.68s | 9.16s | 5.4% faster |\n| zero-cache | 177.64s | 178.37s | effectively unchanged |\n\n`zero-client` and `zero-cache` each had pre-existing timing-sensitive or\nintegration failures in both benchmark runs; the package-level timings\nare included as directional measurements.\n\n---------\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>",
+          "timestamp": "2026-09-11T11:30:28Z",
+          "tree_id": "dda5bdd2325154092b0e416247678474ad06ddb4",
+          "url": "https://github.com/rocicorp/mono/commit/a8fda3a2b5c2a64efda41798b6b1efecdfc7708d"
+        },
+        "date": 1789126803701,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
