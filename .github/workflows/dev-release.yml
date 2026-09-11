@@ -127,7 +127,9 @@ jobs:
 
   build:
     name: Build artifacts
-    runs-on: ubuntu-latest
+    # Cloud Zero staging runs on arm64, so use a native arm64 runner instead
+    # of emulating arm64 on the default x64 runner.
+    runs-on: ubuntu-24.04-arm
     needs: [plan, verify-signed-commit-authors]
     permissions:
       contents: read
@@ -193,7 +195,7 @@ jobs:
           mkdir -p source/packages/zero/pkgs "$(dirname "$IMAGE_ARCHIVE")"
           cp "$TARBALL_PATH" "source/packages/zero/pkgs/$TARBALL"
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/arm64 \
             --build-context monogo=source/go \
             --build-arg ZERO_VERSION="$IMAGE_TAG" \
             --build-arg ZERO_PACKAGE="$TARBALL" \
