@@ -83,7 +83,6 @@
     "@rocicorp/zero-sqlite3": "^1.1.4",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.4",
-    "@vitest/runner": "^4.1.6",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.2.3",
@@ -95,7 +94,7 @@
     "playwright": "^1.60.0",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
-    "vitest": "^4.1.6",
+    "vitest": "^5.0.0",
     "xbytes": "^1.7.0"
   },
   "peerDependencies": {

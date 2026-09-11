@@ -2825,7 +2825,17 @@ test('Connect timeout', async () => {
   await step(RUN_LOOP_INTERVAL_MS);
   await step(RUN_LOOP_INTERVAL_MS);
 
-  expect(connectionStates.length).toEqual(1 + 4 * 2);
+  // The 60s disconnect watchdog polls on its own interval independently of
+  // each retry's connect-timeout, so when both land at (approximately) the
+  // same simulated instant, the fake-timer implementation's tie-breaking
+  // order decides whether one more "connecting" state sneaks in before the
+  // watchdog fires. Assert a small range rather than an exact count to avoid
+  // depending on that ordering, while still requiring the loop to have made
+  // the expected number of connect attempts (each contributing at least one
+  // "connecting" state) and to have ended up disconnected.
+  expect(connectionStates.length).toBeGreaterThanOrEqual(1 + 4 * 2);
+  expect(connectionStates.length).toBeLessThanOrEqual(1 + 4 * 2 + 1);
+  expect(connectionStates.at(-1)?.name).toEqual('disconnected');
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
     'connecting',
     'disconnected',

@@ -1,4 +1,4 @@
-import {bench, describe} from 'vitest';
+import {bench, describe} from '../../../shared/src/bench.ts';
 import {getSizeOfEntry} from '../../../shared/src/size-of-value.ts';
 import {TestStore} from '../dag/test-store.ts';
 import * as FormatVersion from '../format-version-enum.ts';
