@@ -1013,6 +1013,10 @@ class TransactionProcessor {
   abort(lc: LogContext) {
     lc.info?.(`aborting transaction ${this.#version}`);
     this.#db.rollback();
+    // A schema change in the transaction reloaded the table specs, which now
+    // describe the schema that the rollback undid. Clearing them makes the
+    // next transaction reload them from the database.
+    this.#tableSpecs.clear();
   }
 }
 

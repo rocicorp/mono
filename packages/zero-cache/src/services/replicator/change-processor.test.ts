@@ -3832,6 +3832,72 @@ describe('replicator/change-processor-errors', () => {
     expect(replica.inTransaction).toBe(false);
   });
 
+  // A rollback message ends a transaction that the stream interrupted. When
+  // that transaction had changed the schema, the processor kept the table
+  // specs of the schema the rollback undid, so the replayed transaction failed
+  // on a table or column that, as far as it knew, no longer existed.
+  test('a rolled back schema change leaves the table specs as they were', () => {
+    const failures: unknown[] = [];
+    const processor = createChangeProcessor(replica, (_, err) =>
+      failures.push(err),
+    );
+    const bar = new ReplicationMessages({bar: 'id'});
+
+    processor.processMessage(lc, [
+      'begin',
+      bar.begin(),
+      {commitWatermark: '0a'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      bar.createTable({
+        schema: 'public',
+        name: 'bar',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          value: {pos: 1, dataType: 'text'},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, ['commit', bar.commit(), {watermark: '0a'}]);
+
+    // Interrupted: a rename, then the rollback the change-streamer sends.
+    processor.processMessage(lc, [
+      'begin',
+      bar.begin(),
+      {commitWatermark: '0b'},
+    ]);
+    processor.processMessage(lc, ['data', bar.renameTable('bar', 'baz')]);
+    processor.processMessage(lc, ['rollback', {tag: 'rollback'}]);
+
+    // Interrupted: a dropped column, then the rollback.
+    processor.processMessage(lc, [
+      'begin',
+      bar.begin(),
+      {commitWatermark: '0b'},
+    ]);
+    processor.processMessage(lc, ['data', bar.dropColumn('bar', 'value')]);
+    processor.processMessage(lc, ['rollback', {tag: 'rollback'}]);
+
+    // The replayed transaction writes to the schema as it still is.
+    processor.processMessage(lc, [
+      'begin',
+      bar.begin(),
+      {commitWatermark: '0b'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      bar.insert('bar', {id: 1, value: 'kept'}),
+    ]);
+    processor.processMessage(lc, ['commit', bar.commit(), {watermark: '0b'}]);
+
+    expect(failures).toEqual([]);
+    expectTables(replica, {
+      bar: [{id: 1, value: 'kept', ['_0_version']: '0b'}],
+    });
+  });
+
   test('wraps oversized update binding errors with context', () => {
     const failures: unknown[] = [];
     const processor = new ChangeProcessor(

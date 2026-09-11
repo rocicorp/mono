@@ -214,7 +214,7 @@ test('acker', () => {
     expect(sink.push).toBeCalledTimes(acks);
   };
 
-  const acker = new Acker(sink);
+  const acker = new Acker(sink, null);
 
   acker.onChange(['status', {ack: false}, {watermark: '0a'}]);
   expectAck(10n);
@@ -248,6 +248,29 @@ test('acker', () => {
   // Now that downstream is caught up, this should respond
   acker.onChange(['status', {ack: false}, {watermark: '0h'}]);
   expectAck(17n);
+});
+
+// A stream resumes from the change-streamer's change log, which can be ahead of
+// what it has persisted durably (its backup). Until the change-streamer acks
+// the resume watermark, a keepalive past it is not acked: the slot would move
+// past transactions that a task restored from that backup still needs.
+test('acker waits for the resume watermark before acking keepalives', () => {
+  const sink = {push: vi.fn()};
+  const acker = new Acker(sink, '0c');
+
+  acker.onChange(['status', {ack: false}, {watermark: '0d'}]);
+  expect(sink.push).not.toHaveBeenCalled();
+
+  // The backup is behind the resume watermark: acked, but still waiting.
+  acker.ack('0a');
+  expect(sink.push).toHaveBeenLastCalledWith(10n);
+  acker.onChange(['status', {ack: false}, {watermark: '0e'}]);
+  expect(sink.push).toHaveBeenCalledTimes(1);
+
+  acker.ack('0c');
+  expect(sink.push).toHaveBeenLastCalledWith(12n);
+  acker.onChange(['status', {ack: false}, {watermark: '0f'}]);
+  expect(sink.push).toHaveBeenLastCalledWith(15n);
 });
 
 test('lag reporter retries missing reports', async () => {

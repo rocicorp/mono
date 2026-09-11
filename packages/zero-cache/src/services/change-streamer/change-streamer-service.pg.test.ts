@@ -1,4 +1,5 @@
 import {existsSync, writeFileSync} from 'node:fs';
+import {getDefaultHighWaterMark, setDefaultHighWaterMark} from 'node:stream';
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -4571,6 +4572,106 @@ describe('change-streamer/service', () => {
     });
 
     await streamer.stop();
+  });
+
+  // A commit forwarded with flow control is whole while the streamer waits for
+  // a slow subscriber to consume it. A source that dies during that wait must
+  // not roll it back: the subscriber would be sent a rollback after the commit,
+  // and the streamer's transaction bookkeeping failed its run.
+  test('a source that dies while a forwarded commit awaits flow control does not roll it back', async () => {
+    const highWaterMark = getDefaultHighWaterMark(false);
+    // Read by run() as the flush threshold: every forward awaits flow control.
+    setDefaultHighWaterMark(false, 1);
+    try {
+      const changes1 = Subscription.create<ChangeStreamMessage>();
+      const reconnected = resolver<void>();
+      const startStream = vi
+        .fn()
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            initialWatermark: '01',
+            changes: changes1,
+            acks: {push: () => {}},
+          }),
+        )
+        .mockImplementation(() => {
+          reconnected.resolve();
+          return resolver().promise;
+        });
+      const source = {
+        startStream,
+        startLagReporter: () => null,
+        stop: () => Promise.resolve(),
+      } satisfies ChangeSource;
+
+      const streamer = await initializeStreamer(
+        lc,
+        shard,
+        'task-id',
+        'change.streamer:54321',
+        'ws',
+        sql,
+        source,
+        ReplicationStatusPublisher.forTesting(),
+        replicaConfig,
+        null,
+        null,
+        true,
+        opts,
+      );
+      await run(streamer);
+
+      const sub = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
+        id: 'myid',
+        mode: 'serving',
+        watermark: '01',
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+      // Pulled one at a time. A message is consumed, which is what completes
+      // its flow control, only when the next one is pulled.
+      const downstream = sub[Symbol.asyncIterator]();
+      const next = async () => {
+        const {value} = await downstream.next();
+        return (BigIntJSON.parse(value) as Downstream)[1];
+      };
+
+      expect(await next()).toMatchObject({tag: 'status'});
+      // Until its catchup ends, a subscriber buffers live changes in a backlog,
+      // which does not wait for them to be consumed.
+      await vi.waitFor(() =>
+        expect(
+          logSink.messages.some(
+            ([, , [msg]]) =>
+              typeof msg === 'string' &&
+              msg.includes('myid') &&
+              (msg.startsWith('caught up') ||
+                msg.includes('ahead of the latest durable watermark')),
+          ),
+        ).toBe(true),
+      );
+
+      changes1.push(['begin', messages.begin(), {commitWatermark: '09'}]);
+      changes1.push(['data', messages.insert('foo', {id: 'hello'})]);
+      changes1.push(['commit', messages.commit(), {watermark: '09'}]);
+
+      expect(await next()).toMatchObject({tag: 'begin'});
+      expect(await next()).toMatchObject({tag: 'insert'});
+      expect(await next()).toMatchObject({tag: 'commit'});
+
+      // The commit is not consumed, so the streamer is waiting on it.
+      changes1.fail(new Error('source died'));
+
+      expect(await orTimeout(reconnected.promise, 2_000)).toBeUndefined();
+      expect(await orTimeout(downstream.next(), 100)).toBe('timed-out');
+
+      await streamer.stop();
+    } finally {
+      setDefaultHighWaterMark(false, highWaterMark);
+    }
   });
 
   test('ownership takeover before tx begins', async () => {
