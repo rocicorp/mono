@@ -377,9 +377,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   onSync: ((syncing: boolean) => void) | null = null;
 
   /**
-   * `onClientStateNotFound` is called when the persistent client has been
-   * garbage collected. This can happen if the client has no pending mutations
-   * and has not been used for a while.
+   * `onClientStateNotFound` is called when the persistent client state can no
+   * longer be used. This happens when:
+   * - the persistent client has been garbage collected. This can happen if the
+   *   client has no pending mutations and has not been used for a while.
+   * - the persistent store was found to be corrupt. Replicache then drops the
+   *   database, including any pending mutations, so that a fresh one is
+   *   created on reload.
    *
    * The default behavior is to reload the page (using `location.reload()`). Set
    * this to `null` or provide your own function to prevent the page from
@@ -486,7 +490,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const perKVStore = kvStoreProvider.create(this.idbName);
 
     this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
-    this.perdag = new StoreImpl(perKVStore, newRandomHash, assertHash);
+    this.perdag = new StoreImpl(perKVStore, newRandomHash, assertHash, e => {
+      void this.#handleInvalidRefCount(e);
+    });
     this.memdag = new LazyStore(
       this.perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
@@ -557,7 +563,16 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       clientGroupIDResolver.resolve,
       readyResolver.resolve,
       onClientsDeleted,
-    );
+    ).catch(e => {
+      if (e instanceof InvalidRefCountError) {
+        // The perdag already started recovery (drop the database and fire
+        // onClientStateNotFound) when it detected the corruption. Nothing
+        // else can be done with this instance; `#ready` stays pending.
+        this.#lc.debug?.('Open failed because the persistent store is corrupt');
+        return;
+      }
+      throw e;
+    });
   }
 
   async #open(
@@ -1232,7 +1247,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         if (e instanceof ClientStateNotFoundError) {
           this.#clientStateNotFoundOnClient(clientID);
         } else if (e instanceof InvalidRefCountError) {
-          await this.#invalidRefCountOnClient(clientID, e);
+          await this.#handleInvalidRefCount(e);
         } else if (this.#closed) {
           this.#lc.debug?.('Exception persisting during close', e);
         } else {
@@ -1269,7 +1284,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       if (e instanceof ClientStateNotFoundError) {
         this.#clientStateNotFoundOnClient(clientID);
       } else if (e instanceof InvalidRefCountError) {
-        await this.#invalidRefCountOnClient(clientID, e);
+        await this.#handleInvalidRefCount(e);
       } else if (this.#closed) {
         this.#lc.debug?.('Exception refreshing during close', e);
       } else {
@@ -1291,10 +1306,18 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   /**
+   * Set once the perdag reports an invalid ref count. Every write path into
+   * the perdag (open, persist, refresh, heartbeat, GC, ...) can trip on the
+   * same corrupt key, so recovery runs once and later reports await it.
+   */
+  #invalidRefCountRecovery: Promise<void> | undefined;
+
+  /**
    * The persistent dag store contains an invalid ref count. This means the
-   * store is corrupt (due to some unknown bug) and every subsequent persist
-   * would fail the same way. There is no way to repair it, so we treat it like
-   * the client state was lost and fire `onClientStateNotFound`.
+   * store is corrupt (due to some unknown bug) and every subsequent write that
+   * touches that chunk would fail the same way. There is no way to repair it,
+   * so we treat it like the client state was lost and fire
+   * `onClientStateNotFound`.
    *
    * Disabling the client group is not enough: the corrupt ref count stays in
    * the underlying kv store and any later write that touches that chunk (for
@@ -1302,7 +1325,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * it again. Instead we drop the whole database so that the reload starts
    * from a fresh store. Pending local mutations in this database are lost.
    */
-  async #invalidRefCountOnClient(clientID: ClientID, e: InvalidRefCountError) {
+  #handleInvalidRefCount(e: InvalidRefCountError): Promise<void> {
+    this.#invalidRefCountRecovery ??= this.#invalidRefCountOnClient(e);
+    return this.#invalidRefCountRecovery;
+  }
+
+  async #invalidRefCountOnClient(e: InvalidRefCountError): Promise<void> {
+    const {clientID} = this;
     this.#lc.error?.(
       `Client state is corrupt on client, clientID: ${clientID}. Dropping database ${this.idbName}`,
       e,

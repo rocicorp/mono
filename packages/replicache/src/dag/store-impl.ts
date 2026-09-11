@@ -22,19 +22,29 @@ import {
   mustGetChunk,
 } from './store.ts';
 
+/**
+ * Called when a write finds an invalid ref count in the store. This is the
+ * single place where store corruption is detected, so the owner of the store
+ * can start recovery no matter which code path performed the write.
+ */
+export type OnInvalidRefCount = (e: InvalidRefCountError) => void;
+
 export class StoreImpl implements Store {
   readonly #kv: KVStore;
   readonly #chunkHasher: ChunkHasher;
   readonly #assertValidHash: (hash: Hash) => void;
+  readonly #onInvalidRefCount: OnInvalidRefCount | undefined;
 
   constructor(
     kv: KVStore,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
+    onInvalidRefCount?: OnInvalidRefCount | undefined,
   ) {
     this.#kv = kv;
     this.#chunkHasher = chunkHasher;
     this.#assertValidHash = assertValidHash;
+    this.#onInvalidRefCount = onInvalidRefCount;
   }
 
   async read(): Promise<Read> {
@@ -46,6 +56,7 @@ export class StoreImpl implements Store {
       await this.#kv.write(),
       this.#chunkHasher,
       this.#assertValidHash,
+      this.#onInvalidRefCount,
     );
   }
 
@@ -122,6 +133,7 @@ export class WriteImpl
 {
   declare protected readonly _tx: KVWrite;
   readonly #chunkHasher: ChunkHasher;
+  readonly #onInvalidRefCount: OnInvalidRefCount | undefined;
 
   readonly #putChunks = new Set<Hash>();
   readonly #changedHeads = new Map<string, HeadChange>();
@@ -130,9 +142,11 @@ export class WriteImpl
     kvw: KVWrite,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
+    onInvalidRefCount?: OnInvalidRefCount | undefined,
   ) {
     super(kvw, assertValidHash);
     this.#chunkHasher = chunkHasher;
+    this.#onInvalidRefCount = onInvalidRefCount;
   }
 
   createChunk = <V>(data: V, refs: Refs): Chunk<V> =>
@@ -212,7 +226,9 @@ export class WriteImpl
       value > 0xffff ||
       value !== (value | 0)
     ) {
-      throw new InvalidRefCountError(hash, value);
+      const e = new InvalidRefCountError(hash, value);
+      this.#onInvalidRefCount?.(e);
+      throw e;
     }
     return value;
   }

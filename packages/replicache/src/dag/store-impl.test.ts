@@ -1,4 +1,4 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {deepFreeze} from '../frozen-json.ts';
@@ -205,8 +205,14 @@ describe('write', () => {
       await withWrite(kv, async kvw => {
         await kvw.put(chunkRefCountKey(h), v);
       });
+      const onInvalidRefCount = vi.fn();
       await withWriteNoImplicitCommit(kv, async kvw => {
-        const w = new WriteImpl(kvw, chunkHasher, assertHash);
+        const w = new WriteImpl(
+          kvw,
+          chunkHasher,
+          assertHash,
+          onInvalidRefCount,
+        );
         let err;
         try {
           await w.setHead('fakehead', h);
@@ -222,8 +228,12 @@ describe('write', () => {
           );
           expect(err).toHaveProperty('hash', h);
           expect(err).toHaveProperty('value', v);
+          // The store owner is told before the error propagates so it can
+          // start recovery regardless of which code path did the write.
+          expect(onInvalidRefCount).toHaveBeenCalledExactlyOnceWith(err);
         } else {
           expect(err, 'No error expected').toBeUndefined();
+          expect(onInvalidRefCount).not.toHaveBeenCalled();
         }
       });
     };

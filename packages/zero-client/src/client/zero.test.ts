@@ -3399,7 +3399,7 @@ test('local onClientStateNotFound default handler', async () => {
 
   expect(reload).toHaveBeenCalledTimes(1);
   expect(storage[RELOAD_REASON_STORAGE_KEY]).toBe(
-    '["ClientNotFound","The local persistent state needed to synchronize this client has been garbage collected."]',
+    '["ClientNotFound","The local persistent state needed to synchronize this client has been garbage collected or was found to be corrupt and dropped."]',
   );
 });
 
