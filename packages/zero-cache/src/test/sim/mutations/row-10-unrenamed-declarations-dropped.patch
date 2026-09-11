@@ -1,0 +1,21 @@
+--- a/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts
++++ b/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts
+@@ -70,12 +70,18 @@
+   #inTransaction = false;
+ 
+   constructor(declarations: readonly BackfillDeclaration[]) {
++    // Each declared table's current identity, by the renames found
++    // since it was declared. Seeded lazily.
++    const renames = new Map<string, Identifier | null>();
+     for (const declaration of declarations) {
+       const table = {
+         schema: declaration.schema,
+         name: declaration.table,
+         metadata: declaration.metadata ?? null,
+       };
++      if ((renames.get(key(table)) ?? null) === null) {
++        continue; // dropped-table
++      }
+       this.#tables.set(key(table), {
+         table,
+         columns: new Map(

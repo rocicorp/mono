@@ -221,6 +221,31 @@ throughout -- a reservation pins the floor but not the upstream ACK, which is
 gated: WAL is retained in whole segments, which makes it too lumpy to assert on
 over a short run.
 
+## Covered by the replication simulation
+
+`packages/zero-cache/src/test/sim/` runs the replication-manager and its
+followers deterministically in one process, with the PG change log off
+(`rm.sim.test.ts`, `backfill.sim.test.ts`, and the resumable-backfill scenarios
+end to end in `backfill-system.sim.test.ts`). Triage a soak failure in a row it
+covers there first: a failing sweep prints `ZERO_SIM_SEED` and
+`ZERO_SIM_PATH` to replay it, and `ZERO_SIM_SHRINK=1` shrinks it.
+
+| #       | In the simulation                                                                                             |
+| ------- | ------------------------------------------------------------------------------------------------------------- |
+| C1, C2  | `vsRestart`. A graceful drain and an abrupt kill are the same fenced incarnation there                        |
+| C3      | `vsWipe`                                                                                                      |
+| C4      | `vsDisconnect` and `advance` past retention reach `watermark-uncovered`; `vsRestart` restores a stale replica |
+| C5      | `rmCrash` then `rmRestart`; pinned as "a crash and restart keeps the log, and resumes from its head"          |
+| C6      | `deleteChangeLog`, then `vsWipe`; pinned as "a deleted change log is reseeded at the next start"              |
+| C7      | Not covered: there is no freeze step yet                                                                      |
+| C8      | `rmCrashAt` at four crash points, and `rmCrash` mid-burst. With the PG log off, reconcile keeps the log       |
+| C9      | `backupStall` and `backupResume`, which reach the checkpointer's soft wait but not its hard pause             |
+| C10-C12 | Not covered: the simulation serves at 100/100 only                                                            |
+| C13     | Composed by the sweep from the steps of C4 and C6                                                             |
+| C14     | `rmReplace`, and `slotTakeover` with the old task still running                                               |
+| C15     | `rmRestart` mid-run with `backfillFault`; pinned as scenario E in `backfill-system.sim.test.ts`               |
+| C16     | `vsHoldReservation`, which also covers the lease expiring                                                     |
+
 ## Gotchas worth knowing
 
 **Every zero-cache worker is its own process group.** `childWorker` forks with

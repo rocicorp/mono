@@ -1,0 +1,34 @@
+--- a/packages/zero-cache/src/services/change-streamer/sqlite-change-log-catchup.ts
++++ b/packages/zero-cache/src/services/change-streamer/sqlite-change-log-catchup.ts
+@@ -211,14 +211,7 @@
+         // the Forwarder, the subscriber's ACK prevents any later purge from
+         // crossing this boundary.
+         let plan = this.#reader.plan(subscriber.watermark);
+-        const seed =
+-          plan.kind === 'too-old'
+-            ? seedCatchupStart(
+-                subscriber.watermark,
+-                subscriber.followsBackfillRuns,
+-                plan,
+-              )
+-            : undefined;
++        const seed: string | undefined = undefined;
+         if (seed !== undefined) {
+           plan = this.#reader.plan(seed);
+         }
+--- a/packages/zero-cache/src/services/change-streamer/change-streamer-service.ts
++++ b/packages/zero-cache/src/services/change-streamer/change-streamer-service.ts
+@@ -1783,12 +1783,7 @@
+       assert(coverage, 'a SQLite route must carry its covered range');
+       // The decision registration makes again against the log itself, where
+       // the seed can stand in for a run-following subscriber's major.
+-      const start =
+-        seedCatchupStart(
+-          ctx.watermark,
+-          subscriber.followsBackfillRuns,
+-          coverage,
+-        ) ?? ctx.watermark;
++      const start = ctx.watermark;
+       if (start < coverage.minWatermark) {
+         lc.info?.(
+           `serving ${ctx.id} from PG catchup: subscriber watermark ` +

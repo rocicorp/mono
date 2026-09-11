@@ -1,0 +1,13 @@
+diff --git a/packages/zero-cache/src/services/replicator/sqlite-change-log-purger.ts b/packages/zero-cache/src/services/replicator/sqlite-change-log-purger.ts
+index e0bcdc3bf..17baabb7a 100644
+--- a/packages/zero-cache/src/services/replicator/sqlite-change-log-purger.ts
++++ b/packages/zero-cache/src/services/replicator/sqlite-change-log-purger.ts
+@@ -49,7 +49,7 @@ export const SQLITE_CHANGE_LOG_ELIGIBLE_COMMITS_SQL = /*sql*/ `
+   FROM "${CHANGE_LOG_STREAM_TABLE}"
+   WHERE "writeTimeMs" IS NOT NULL
+     AND "writeTimeMs" < @retentionCutoffMs
+-    AND "watermark" < @externalFloor
++    AND "watermark" <= @externalFloor
+     AND "watermark" < (SELECT max("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
+   ORDER BY "writeTimeMs", "watermark"
+   LIMIT @limit

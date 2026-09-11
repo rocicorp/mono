@@ -1,0 +1,11 @@
+--- a/packages/zero-cache/src/services/change-streamer/change-streamer-service.ts
++++ b/packages/zero-cache/src/services/change-streamer/change-streamer-service.ts
+@@ -1353,7 +1353,7 @@
+    * untouched.
+    */
+   #invalidateReservations(reason: ReseedReason): void {
+-    const taskIDs = this.#reservations?.closeAll() ?? [];
++    const taskIDs: string[] = [];
+     if (taskIDs.length) {
+       this.#reservationInvalidations.add(taskIDs.length, {reason});
+       this.#lc.warn?.(

@@ -1,0 +1,13 @@
+--- a/packages/zero-cache/src/test/sim/steps.ts
++++ b/packages/zero-cache/src/test/sim/steps.ts
+@@ -142,8 +142,8 @@
+   purgeBatchRows: fc.integer({min: 1, max: 16}),
+   readBatchRows: fc.integer({min: 1, max: 8}),
+   barrierTimeoutMs: fc.constantFrom(1_000, 10_000),
+-  reservationMaxAgeMs: fc.constantFrom(60_000, 600_000),
+-  restoreDurationMs: fc.constantFrom(50, 2_000, 20_000),
++  reservationMaxAgeMs: fc.constantFrom(60_000),
++  restoreDurationMs: fc.constantFrom(120_000),
+   vsRestartDelayMs: fc.constantFrom(100, 5_000),
+   checkpointThresholdPages: fc.integer({min: 1, max: 32}),
+   maxWalPages: fc.option(fc.integer({min: 32, max: 256}), {nil: undefined}),

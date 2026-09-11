@@ -1,0 +1,15 @@
+diff --git a/packages/zero-cache/src/services/change-source/common/replica-schema.ts b/packages/zero-cache/src/services/change-source/common/replica-schema.ts
+index 5c1b90fd5..16dfe2f32 100644
+--- a/packages/zero-cache/src/services/change-source/common/replica-schema.ts
++++ b/packages/zero-cache/src/services/change-source/common/replica-schema.ts
+@@ -369,10 +369,6 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
+     migrateSchema: (_, db) => {
+       db.exec(ADD_BACKFILLING_RESUME_COLUMNS);
+     },
+-
+-    migrateData: (_, db) => {
+-      clearBackfillingMarks(db);
+-    },
+   },
+ };
+ 
