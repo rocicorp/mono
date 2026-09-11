@@ -129,10 +129,17 @@ class RefCountUpdates {
       await this.#changeRefCount(o, -1);
     }
 
-    if (!skipGCAsserts) {
-      for (const [hash, update] of this.#refCountUpdates) {
-        assert(
-          update >= 0,
+    // This check is deliberately not gated on `skipGCAsserts`. A negative
+    // ref count can only come from a corrupted read of the store (for example
+    // a kv delegate returning the wrong row), and if the caller writes it the
+    // store is corrupted for good: every later write that touches the chunk
+    // fails with an invalid ref count. Throwing here instead makes the caller
+    // roll back the transaction, so a transient bad read costs one failed
+    // write rather than a wedged database. The cost is one pass over the
+    // update map per commit.
+    for (const [hash, update] of this.#refCountUpdates) {
+      if (update < 0) {
+        throw new Error(
           `ref count update must be non-negative. ${hash}:${update}`,
         );
       }
