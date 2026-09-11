@@ -210,11 +210,21 @@ export class WriteImpl
   }
 
   async commit(): Promise<void> {
-    const refCountUpdates = await computeRefCountUpdates(
-      this.#changedHeads.values(),
-      this.#putChunks,
-      this,
-    );
+    let refCountUpdates: Map<Hash, number>;
+    try {
+      refCountUpdates = await computeRefCountUpdates(
+        this.#changedHeads.values(),
+        this.#putChunks,
+        this,
+      );
+    } catch (e) {
+      if (e instanceof InvalidRefCountError) {
+        // Reported from release() rather than here: the owner may drop the
+        // store in response and the kv transaction still needs to roll back.
+        this.#invalidRefCountError = e;
+      }
+      throw e;
+    }
     await this.#applyRefCountUpdates(refCountUpdates);
     await this._tx.commit();
   }
@@ -230,11 +240,7 @@ export class WriteImpl
       value > 0xffff ||
       value !== (value | 0)
     ) {
-      const e = new InvalidRefCountError(hash, value);
-      // Report it from release() rather than here: the owner may drop the
-      // store in response and the kv transaction still needs to roll back.
-      this.#invalidRefCountError ??= e;
-      throw e;
+      throw new InvalidRefCountError(hash, value);
     }
     return value;
   }
@@ -273,10 +279,8 @@ export class WriteImpl
 
   release(): void {
     this._tx.release();
-    const e = this.#invalidRefCountError;
-    if (e !== undefined) {
-      this.#invalidRefCountError = undefined;
-      this.#onInvalidRefCount?.(e);
+    if (this.#invalidRefCountError) {
+      this.#onInvalidRefCount?.(this.#invalidRefCountError);
     }
   }
 }

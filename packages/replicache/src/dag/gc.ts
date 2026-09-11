@@ -2,6 +2,7 @@ import {assert, assertNumber} from '../../../shared/src/asserts.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {skipGCAsserts} from '../config.ts';
 import {type Hash, emptyHash} from '../hash.ts';
+import {InvalidRefCountError} from './store.ts';
 
 export type HeadChange = {
   new: Hash | undefined;
@@ -129,12 +130,13 @@ class RefCountUpdates {
       await this.#changeRefCount(o, -1);
     }
 
-    if (!skipGCAsserts) {
-      for (const [hash, update] of this.#refCountUpdates) {
-        assert(
-          update >= 0,
-          `ref count update must be non-negative. ${hash}:${update}`,
-        );
+    // A negative count means a chunk that is still referenced had no (or too
+    // low a) ref count in the store, so the store is already corrupt. Always
+    // check this, even in production: writing the negative count would only
+    // spread the corruption, and the typed error lets the store owner recover.
+    for (const [hash, update] of this.#refCountUpdates) {
+      if (update < 0) {
+        throw new InvalidRefCountError(hash, update);
       }
     }
 

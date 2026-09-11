@@ -254,6 +254,41 @@ describe('write', () => {
     await t(null, true);
   });
 
+  test('ref count missing for a referenced chunk', async () => {
+    // The old head points at a chunk that has no ref count key at all. Moving
+    // the head away would take the count to -1, which means the store is
+    // already corrupt. This must surface as the typed error and reach the
+    // store owner like any other invalid ref count, not as a generic assert.
+    const chunkHasher = makeNewFakeHashFunction();
+    const kv = new TestMemStore();
+    const h0 = fakeHash('face0');
+    const h1 = fakeHash('face1');
+    await withWrite(kv, async kvw => {
+      await kvw.put(headKey('h'), h0);
+    });
+    const onInvalidRefCount = vi.fn();
+    const store = new StoreImpl(kv, chunkHasher, assertHash, onInvalidRefCount);
+    let err: unknown;
+    await withWriteNoImplicitCommit(store, async w => {
+      try {
+        await w.setHead('h', h1);
+        await w.commit();
+      } catch (e) {
+        err = e;
+      }
+      expect(onInvalidRefCount).not.toHaveBeenCalled();
+    });
+    expect(err).toBeInstanceOf(InvalidRefCountError);
+    expect(err).toHaveProperty('hash', h0);
+    expect(err).toHaveProperty('value', -1);
+    expect(onInvalidRefCount).toHaveBeenCalledExactlyOnceWith(err);
+    // Nothing was written.
+    await withRead(kv, async kvr => {
+      expect(await kvr.get(headKey('h'))).toBe(h0);
+      expect(await kvr.get(chunkRefCountKey(h0))).toBeUndefined();
+    });
+  });
+
   test('commit rollback', async () => {
     const chunkHasher = makeNewFakeHashFunction();
     const t = async (commit: boolean, setHead: boolean) => {
