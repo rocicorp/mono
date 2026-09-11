@@ -280,6 +280,34 @@ describe('write', () => {
     await t(true, true);
   });
 
+  test('commit with a missing ref count for an old head rolls back', async () => {
+    // A head whose ref count key is missing means the store is corrupt: moving
+    // the head would decrement 0 to -1. The commit must fail before anything
+    // reaches the kv store so that the corruption does not become permanent.
+    const chunkHasher = makeNewFakeHashFunction();
+    const kv = new TestMemStore();
+    const h0 = fakeHash('0');
+    const h1 = fakeHash('1');
+    await withWrite(kv, async kvw => {
+      await kvw.put(headKey('test'), h0);
+      await kvw.put(chunkDataKey(h0), 'old');
+      // Note: no ref count key for h0.
+    });
+    const before = kv.snapshot();
+
+    await expect(
+      withWriteNoImplicitCommit(kv, async kvw => {
+        const w = new WriteImpl(kvw, chunkHasher, assertHash);
+        await w.putChunk(new Chunk(h1, deepFreeze('new'), []));
+        await w.setHead('test', h1);
+        await w.commit();
+      }),
+    ).rejects.toThrow(`ref count update must be non-negative. ${h0}:-1`);
+
+    // Nothing from the failed write, and no negative ref count, was persisted.
+    expect(kv.snapshot()).toEqual(before);
+  });
+
   test('roundtrip', async () => {
     const chunkHasher = makeNewFakeHashFunction();
     const t = async (name: string, data: ReadonlyJSONValue, refs: Refs) => {

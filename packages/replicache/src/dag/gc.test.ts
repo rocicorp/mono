@@ -325,3 +325,31 @@ test('computeRefCountUpdates for heads updating to same hash should have no refc
   );
   expectRefCountUpdates(refCountUpdates, {});
 });
+
+test('computeRefCountUpdates rejects a negative ref count instead of returning it', async () => {
+  // The store says R is a head but reports its ref count as 0. That can only
+  // happen if the stored count was lost or misread (a corrupted store), and
+  // decrementing it would write -1 to the store, wedging it for good.
+  //
+  //   R
+  //   |
+  //   A
+  const {hashes, delegate} = createGraph({
+    graph: {
+      '000': ['a'],
+      'a': [],
+    },
+    heads: [],
+    allZeroRefCounts: true,
+  });
+
+  await expect(
+    computeRefCountUpdates(
+      [{old: hashes['000'], new: undefined}],
+      new Set(),
+      delegate,
+    ),
+  ).rejects.toThrow(
+    `ref count update must be non-negative. ${hashes['000']}:-1`,
+  );
+});
