@@ -255,6 +255,16 @@ export interface ZeroTxData {
   ivmSources: unknown;
   token: string | undefined;
   context: unknown;
+
+  /**
+   * A cheap copy, used for one mutation's speculative writes.
+   *
+   * Replaying a mutation writes to two places: Replicache's `Write` and the
+   * IVM sources held here. If the mutator throws, the `Write` is discarded,
+   * and the fork lets the IVM writes be discarded with it. The caller adopts
+   * the fork when the mutator succeeds and drops it when it throws.
+   */
+  fork(): ZeroTxData;
 }
 
 export type ZeroReadOptions = {
