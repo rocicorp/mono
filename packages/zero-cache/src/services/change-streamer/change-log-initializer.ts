@@ -424,7 +424,7 @@ export function replicaInitializationSource(
  * key moved across it is sent by neither the run that passed it nor a run
  * resumed after it.
  */
-function withResumeMarks(
+export function withResumeMarks(
   requests: readonly BackfillRequest[],
   marks: readonly BackfillDeclaration[] | undefined,
 ): BackfillRequest[] {
