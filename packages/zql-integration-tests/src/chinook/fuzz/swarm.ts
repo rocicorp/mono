@@ -10,11 +10,11 @@
  * {@link decorate} / {@link decorateChild}.
  */
 
+import type {Rng} from '../../../../shared/src/rng.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {AXES, N_AXES, tables} from './axes.ts';
 import {childDecorationPairs, decorate, decorateChild} from './cover.ts';
 import type {Data} from './literals.ts';
-import type {Rng} from './rng.ts';
 
 /**
  * A feature mask: which decoration axes are **enabled** this run, and whether to nest the
