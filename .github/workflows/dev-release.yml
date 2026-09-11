@@ -57,18 +57,23 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout target commit
+      - name: Checkout source repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ needs.plan.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Fetch main branch
+        run: git fetch origin +refs/heads/main:refs/remotes/origin/main
+
       - name: Verify Signed Commit Authors
-        uses: rocicorp/.github/.github/actions/verify-signed-commit-authors@c49caa1498b8cf402992126969f2d7c8adc9ca4b # main
+        uses: rocicorp/.github/.github/actions/verify-signed-commit-authors@b0bc55c1abf942d3c04a4fbe911f7882a90526b0 # main
         with:
           enforce: 'true'
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          head-sha: ${{ needs.plan.outputs.source_sha }}
+          base-ref: origin/main
 
   archive-cloudzero-source:
     name: Archive source for Cloud Zero (staging)
