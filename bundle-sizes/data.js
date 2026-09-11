@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788871304501,
+  "lastUpdate": 1789115403083,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57653,6 +57653,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33661,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "aaron@aaronboodman.com",
+            "name": "Aaron Boodman",
+            "username": "aboodman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "43dbb3284f91ffa568918ea114144d78538383e3",
+          "message": "fix(replicache): abandon a failed rebase prediction instead of the sync (#6555)\n\nA custom mutator body runs three times: optimistically at the gesture,\nagain on every client rebase, and authoritatively on the server. A guard\nthat held at the gesture can legitimately fail on rebase, because the\nserver has since told the client something it did not know.\n\n`rebaseMutation` had no catch around the mutator call, and there is none\nanywhere else on the rebase path (rebase.ts -> maybeEndPull -> poke ->\nPokeHandler.#processPokesForFrame). So that throw surfaced as a poke\nprocessing failure, and the poke handler's answer is to disconnect with\nClientError{kind: Internal}. The mutation stays pending, so the next\npoke fails the same way and the client never stays connected.\n\nCatch the throw and retire that one mutation as a no-op prediction:\ndiscard the partially staged `Write` and return a fresh `newWriteLocal`\noff the same basis, so the caller commits a well formed local commit\nwhose value tree equals the basis. Discarding is safe because a `Write`\nstages nothing outside itself and only creates chunks at commit time.\nThe mutation is not abandoned -- it stays pending, is still pushed, and\nthe server remains the authority on whether it applied.\n\nThis mirrors the existing handling of an unknown mutator name a few\nlines above, which already stubs in a no-op so sync can move forward. It\nis logged at info rather than error: a mutator throwing on replay is\nexpected, and an error level log would reach the app's error reporting\nas though something were wrong. The unknown mutator case stays at error,\nsince that one is a deployment mistake.\n\nEngine errors raised inside the mutator are retired the same way rather\nthan being sorted out here, which would mean naming error classes in a\nmodule that has no business knowing about client lifecycle. A garbage\ncollected client throws ChunkNotFoundError from its reads; that\ncondition persists, so it is detected on the client's next mutation,\nwhere replicache-impl already converts it to a ClientStateNotFoundError\nand calls onClientStateNotFound.\n\nDiscarding the `Write` is not sufficient on its own. In Zero a mutator\nwrites to two places: that `Write` and the IVM sources carried in\n`zeroData`. A rebase shares one `zeroData` across every mutation in the\nreplay, which is what keeps it in step with the b-tree: each mutator\nwrites to both. Dropping only the `Write` breaks that, and mutations\nreplayed after an abandoned one could read rows it never committed, then\neither mispredict or trip `assert(!exists(row))` in MemorySource.\n\nSo give the IVM sources the same lifecycle the `Write` already has. Each\nreplayed mutation runs against its own fork, adopted when the mutator\nsucceeds and dropped when it throws, which takes the failed mutation's\nIVM writes with it. This needs one method on the `ZeroTxData` contract,\n`fork()`, implemented by Zero on `IVMSourceBranch.fork` -- copy on\nwrite, so a handful of pointer copies. `ivmSources` stays `unknown` to\nReplicache.\n\n`rebaseMutation` returns the branch to use for the next mutation: the\nfork on success, the one it was handed on failure. Callers assign what\ncomes back, so none of them has to know abandonment exists.\n\nThe replicache tests cover this with a stand-in for the IVM sources,\nsince that package cannot see `IVMSourceBranch`.\nzero-client/rebase-ivm.test.ts covers the same ground against the real\nones: mutators writing through `crud-impl` to both the b-tree and a real\nbranch, and a real ZQL read of what the next mutation sees.\n\n\nClaude-Session: https://claude.ai/code/session_01KmdF59DV8QN3Tm9FtoxF91\n\nCo-authored-by: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-09-11T08:21:10Z",
+          "tree_id": "a23c0c285f1ae65d8228a5053d934e746be34f1a",
+          "url": "https://github.com/rocicorp/mono/commit/43dbb3284f91ffa568918ea114144d78538383e3"
+        },
+        "date": 1789115389424,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319750,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57619,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 118189,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33765,
             "unit": "bytes"
           }
         ]
