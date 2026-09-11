@@ -501,7 +501,7 @@ export class PostgresChangeSource implements ChangeSource {
       // The slot cleanup monitor runs when a replication slot is active.
       // If no slots are active, they are all available for claiming by a
       // replication-manager; inactive slots are only cleaned up when at
-      // least one a stream is being processed.
+      // least one stream is being processed.
       this.#slotCleanupMonitor.start();
       signal.addEventListener('abort', () => this.#slotCleanupMonitor.stop());
     }
