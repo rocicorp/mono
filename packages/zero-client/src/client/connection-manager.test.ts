@@ -42,19 +42,15 @@ describe('ConnectionManager', () => {
 
   describe('constructor', () => {
     test('starts in initializing state without a timeout', () => {
-      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
-      try {
-        const manager = new ConnectionManager({
-          disconnectTimeout: DEFAULT_TIMEOUT_MS,
-        });
+      using setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
 
-        expect(manager.state).toEqual({name: ConnectionStatus.Initializing});
-        expect(manager.shouldContinueRunLoop()).toBe(true);
-        expect(manager.isInTerminalState()).toBe(false);
-        expect(setIntervalSpy).not.toHaveBeenCalled();
-      } finally {
-        setIntervalSpy.mockRestore();
-      }
+      expect(manager.state).toEqual({name: ConnectionStatus.Initializing});
+      expect(manager.shouldContinueRunLoop()).toBe(true);
+      expect(manager.isInTerminalState()).toBe(false);
+      expect(setIntervalSpy).not.toHaveBeenCalled();
     });
 
     test('never times out while initializing', () => {
