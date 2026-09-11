@@ -37,7 +37,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: false,
     });
     const {sink: upstream, acked} = sink();
-    acker.reset(upstream);
+    acker.reset(upstream, '01');
 
     acker.trackDownstream(commit('05'));
     expect(acked).toEqual([]);
@@ -52,7 +52,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: true,
     });
     const {sink: upstream, acked} = sink();
-    acker.reset(upstream);
+    acker.reset(upstream, '01');
 
     acker.trackDownstream(commit('05'));
     expect(acked).toEqual([]);
@@ -67,7 +67,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: true,
     });
     const {sink: upstream, acked} = sink();
-    acker.reset(upstream);
+    acker.reset(upstream, '01');
 
     acker.trackDownstream(commit('05'));
 
@@ -87,7 +87,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: true,
     });
     const {sink: upstream, acked} = sink();
-    acker.reset(upstream);
+    acker.reset(upstream, '01');
 
     acker.trackDownstream(commit('05'));
     acker.trackDownstream(commit('0a'));
@@ -111,7 +111,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: false,
     });
     const {sink: upstream, acked} = sink();
-    acker.reset(upstream);
+    acker.reset(upstream, '01');
 
     acker.trackDownstream(commit('05'));
     acker.trackPgChangeLog('05');
@@ -125,7 +125,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: false,
     });
     const {sink: upstream, acked} = sink();
-    acker.reset(upstream);
+    acker.reset(upstream, '01');
 
     acker.trackDownstream(commit('05'));
     acker.trackDownstream(status('06'));
@@ -139,16 +139,45 @@ describe('change-streamer/upstream-acker', () => {
     ]);
   });
 
-  test('acks a status watermark immediately if there are no outstanding commits', () => {
+  test('acks a status watermark immediately if the stores are at the resume watermark', () => {
     const acker = new UpstreamAcker({
       trackPgChangeLog: true,
       trackBackup: false,
     });
+    acker.trackPgChangeLog('01');
     const {sink: upstream, acked} = sink();
-    acker.reset(upstream);
+    acker.reset(upstream, '01');
 
     acker.trackDownstream(status('06'));
-    expect(acked).toEqual([['status', {ack: true}, {watermark: '06'}]]);
+    expect(acked).toEqual([
+      ['status', {tag: 'commit'}, {watermark: '01'}],
+      ['status', {ack: true}, {watermark: '06'}],
+    ]);
+  });
+
+  // A stream resumes from the head of the SQLite change log, which is normally
+  // ahead of its backup. The transactions in between were committed on an
+  // earlier connection, and only the log holds them. A keepalive past them is
+  // not acked until the backup has them: acking it would move the slot past
+  // them, and a task restored from the backup would resume below the slot.
+  test('does not ack a status watermark past a resume watermark that the stores have not reached', () => {
+    const acker = new UpstreamAcker({
+      trackPgChangeLog: false,
+      trackBackup: true,
+    });
+    acker.trackBackup('03');
+    const {sink: upstream, acked} = sink();
+    acker.reset(upstream, '05');
+
+    acker.trackDownstream(status('06'));
+    expect(acked).toEqual([['status', {tag: 'commit'}, {watermark: '03'}]]);
+
+    acker.trackBackup('05');
+    expect(acked).toEqual([
+      ['status', {tag: 'commit'}, {watermark: '03'}],
+      ['status', {tag: 'commit'}, {watermark: '05'}],
+      ['status', {ack: true}, {watermark: '06'}],
+    ]);
   });
 
   test('ignores status messages that do not request an ack', () => {
@@ -157,7 +186,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: false,
     });
     const {sink: upstream, acked} = sink();
-    acker.reset(upstream);
+    acker.reset(upstream, '01');
 
     acker.trackDownstream(status('06', false));
     expect(acked).toEqual([]);
@@ -169,7 +198,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: false,
     });
     const {sink: upstream1, acked: acked1} = sink();
-    acker.reset(upstream1);
+    acker.reset(upstream1, '01');
 
     acker.trackDownstream(commit('0a'));
     acker.trackPgChangeLog('0a');
@@ -182,7 +211,7 @@ describe('change-streamer/upstream-acker', () => {
     // without waiting for another trackPgChangeLog() call, which may never
     // come for a watermark that was already processed.
     const {sink: upstream2, acked: acked2} = sink();
-    acker.reset(upstream2);
+    acker.reset(upstream2, '05');
     acker.trackDownstream(commit('05'));
     expect(acked2).toEqual([['status', {tag: 'commit'}, {watermark: '0a'}]]);
   });
@@ -193,7 +222,7 @@ describe('change-streamer/upstream-acker', () => {
       trackBackup: false,
     });
     const {sink: upstream1, acked: acked1} = sink();
-    acker.reset(upstream1);
+    acker.reset(upstream1, '01');
 
     acker.trackDownstream(commit('05'));
     acker.trackPgChangeLog('05');
@@ -203,7 +232,7 @@ describe('change-streamer/upstream-acker', () => {
     // watermark once persisted, since the store watermarks (unlike the
     // per-connection tracking) survive the reset.
     const {sink: upstream2, acked: acked2} = sink();
-    acker.reset(upstream2);
+    acker.reset(upstream2, '05');
     expect(acked2).toEqual([]);
 
     acker.trackPgChangeLog('05');

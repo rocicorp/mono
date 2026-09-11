@@ -761,7 +761,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
         watermark = null;
 
-        this.#acker.reset(stream.acks);
+        // With the PG change log enabled, the stream resumes from what it has
+        // persisted, so nothing before the stream is outstanding. Otherwise it
+        // resumes from the SQLite change log's head, which the backup can
+        // trail.
+        this.#acker.reset(
+          stream.acks,
+          this.#pgChangeLogEnabled ? '' : lastWatermark,
+        );
+
         for await (const change of stream.changes) {
           this.#acker.trackDownstream(change);
 
