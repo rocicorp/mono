@@ -23,9 +23,12 @@ import {
 } from './store.ts';
 
 /**
- * Called when a write finds an invalid ref count in the store. This is the
+ * Called when a write found an invalid ref count in the store. This is the
  * single place where store corruption is detected, so the owner of the store
  * can start recovery no matter which code path performed the write.
+ *
+ * The callback runs after the write transaction has been released, so it is
+ * safe for it to close or drop the underlying kv store.
  */
 export type OnInvalidRefCount = (e: InvalidRefCountError) => void;
 
@@ -134,6 +137,7 @@ export class WriteImpl
   declare protected readonly _tx: KVWrite;
   readonly #chunkHasher: ChunkHasher;
   readonly #onInvalidRefCount: OnInvalidRefCount | undefined;
+  #invalidRefCountError: InvalidRefCountError | undefined;
 
   readonly #putChunks = new Set<Hash>();
   readonly #changedHeads = new Map<string, HeadChange>();
@@ -227,7 +231,9 @@ export class WriteImpl
       value !== (value | 0)
     ) {
       const e = new InvalidRefCountError(hash, value);
-      this.#onInvalidRefCount?.(e);
+      // Report it from release() rather than here: the owner may drop the
+      // store in response and the kv transaction still needs to roll back.
+      this.#invalidRefCountError ??= e;
       throw e;
     }
     return value;
@@ -267,5 +273,10 @@ export class WriteImpl
 
   release(): void {
     this._tx.release();
+    const e = this.#invalidRefCountError;
+    if (e !== undefined) {
+      this.#invalidRefCountError = undefined;
+      this.#onInvalidRefCount?.(e);
+    }
   }
 }

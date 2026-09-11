@@ -206,36 +206,38 @@ describe('write', () => {
         await kvw.put(chunkRefCountKey(h), v);
       });
       const onInvalidRefCount = vi.fn();
-      await withWriteNoImplicitCommit(kv, async kvw => {
-        const w = new WriteImpl(
-          kvw,
-          chunkHasher,
-          assertHash,
-          onInvalidRefCount,
-        );
-        let err;
+      const store = new StoreImpl(
+        kv,
+        chunkHasher,
+        assertHash,
+        onInvalidRefCount,
+      );
+      let err: unknown;
+      await withWriteNoImplicitCommit(store, async w => {
         try {
           await w.setHead('fakehead', h);
           await w.commit();
         } catch (e) {
           err = e;
         }
-        if (expectError) {
-          expect(err).toBeInstanceOf(InvalidRefCountError);
-          expect(err).toHaveProperty(
-            'message',
-            `Invalid ref count ${String(v)} for ${h}. We expect the value to be a Uint16`,
-          );
-          expect(err).toHaveProperty('hash', h);
-          expect(err).toHaveProperty('value', v);
-          // The store owner is told before the error propagates so it can
-          // start recovery regardless of which code path did the write.
-          expect(onInvalidRefCount).toHaveBeenCalledExactlyOnceWith(err);
-        } else {
-          expect(err, 'No error expected').toBeUndefined();
-          expect(onInvalidRefCount).not.toHaveBeenCalled();
-        }
+        // The owner is only told once the transaction has been released, so
+        // it can safely drop the store in response.
+        expect(onInvalidRefCount).not.toHaveBeenCalled();
       });
+      if (expectError) {
+        expect(err).toBeInstanceOf(InvalidRefCountError);
+        expect(err).toHaveProperty(
+          'message',
+          `Invalid ref count ${String(v)} for ${h}. We expect the value to be a Uint16`,
+        );
+        expect(err).toHaveProperty('hash', h);
+        expect(err).toHaveProperty('value', v);
+        // The store owner is told regardless of which code path did the write.
+        expect(onInvalidRefCount).toHaveBeenCalledExactlyOnceWith(err);
+      } else {
+        expect(err, 'No error expected').toBeUndefined();
+        expect(onInvalidRefCount).not.toHaveBeenCalled();
+      }
     };
 
     await t(0);

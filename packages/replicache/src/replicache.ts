@@ -171,9 +171,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * longer be used. This happens when:
    * - the persistent client has been garbage collected. This can happen if the
    *   client has no pending mutations and has not been used for a while.
-   * - the persistent store was found to be corrupt. Replicache then drops the
-   *   database, including any pending mutations, so that a fresh one is
-   *   created on reload.
+   * - the persistent store was found to be corrupt. Replicache then tries to
+   *   drop the database, including any pending mutations, so that a fresh one
+   *   is created on reload.
    *
    * The default behavior is to reload the page (using `location.reload()`). Set
    * this to `null` or provide your own function to prevent the page from

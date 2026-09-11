@@ -47,6 +47,7 @@ export function initCollectIDBDatabases(
   onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
+  newDagStore: NewDagStore = defaultNewDagStore,
 ): void {
   let initial = true;
   initBgIntervalProcess(
@@ -59,6 +60,7 @@ export function initCollectIDBDatabases(
         kvStoreProvider,
         enableMutationRecovery,
         onClientsDeleted,
+        newDagStore,
       );
     },
     () => {
@@ -83,7 +85,7 @@ export async function collectIDBDatabases(
   kvStoreProvider: StoreProvider,
   enableMutationRecovery: boolean,
   onClientsDeleted: OnClientsDeleted,
-  newDagStore = defaultNewDagStore,
+  newDagStore: NewDagStore = defaultNewDagStore,
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
 
@@ -189,6 +191,13 @@ async function dropDatabases(
   return {dropped, errors};
 }
 
+/**
+ * Creates the dag store used to inspect and update a database during
+ * collection. Callers can override it to install store hooks, for example so
+ * a corrupt ref count found while writing deleted clients is recovered from.
+ */
+export type NewDagStore = (name: string, kvCreateStore: CreateStore) => Store;
+
 function defaultNewDagStore(name: string, kvCreateStore: CreateStore): Store {
   const perKvStore = kvCreateStore(name);
   return new StoreImpl(perKvStore, newRandomHash, assertHash);
@@ -204,7 +213,7 @@ function gatherDatabaseInfoForCollect(
   maxAge: number,
   enableMutationRecovery: boolean,
   kvCreateStore: CreateStore,
-  newDagStore: typeof defaultNewDagStore,
+  newDagStore: NewDagStore,
 ): MaybePromise<
   [canCollect: false] | [canCollect: true, deletedClients: DeletedClients]
 > {

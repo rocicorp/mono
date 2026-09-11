@@ -334,7 +334,7 @@ function onClientStateNotFoundServerReason(serverErrMsg: string) {
   return `Server could not find state needed to synchronize this client. ${serverErrMsg}`;
 }
 const ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT =
-  'The local persistent state needed to synchronize this client has been garbage collected or was found to be corrupt and dropped.';
+  'The local persistent state needed to synchronize this client has been garbage collected or was found to be corrupt.';
 
 // Keep in sync with packages/replicache/src/replicache-options.ts
 export interface ReplicacheInternalAPI {

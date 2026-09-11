@@ -381,9 +381,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * longer be used. This happens when:
    * - the persistent client has been garbage collected. This can happen if the
    *   client has no pending mutations and has not been used for a while.
-   * - the persistent store was found to be corrupt. Replicache then drops the
-   *   database, including any pending mutations, so that a fresh one is
-   *   created on reload.
+   * - the persistent store was found to be corrupt. Replicache then tries to
+   *   drop the database, including any pending mutations, so that a fresh one
+   *   is created on reload.
    *
    * The default behavior is to reload the page (using `location.reload()`). Set
    * this to `null` or provide your own function to prevent the page from
@@ -490,9 +490,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const perKVStore = kvStoreProvider.create(this.idbName);
 
     this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
-    this.perdag = new StoreImpl(perKVStore, newRandomHash, assertHash, e => {
-      void this.#handleInvalidRefCount(e);
-    });
+    this.perdag = new StoreImpl(
+      perKVStore,
+      newRandomHash,
+      assertHash,
+      this.#onInvalidRefCount,
+    );
     this.memdag = new LazyStore(
       this.perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
@@ -661,6 +664,16 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       onClientsDeleted,
       this.#lc,
       signal,
+      // Collection writes deleted clients into every surviving database using
+      // its own dag store. When that is our database, a corrupt ref count
+      // found there must reach the same recovery as writes through `perdag`.
+      (name, createKVStore) =>
+        new StoreImpl(
+          createKVStore(name),
+          newRandomHash,
+          assertHash,
+          name === this.idbName ? this.#onInvalidRefCount : undefined,
+        ),
     );
     initClientGroupGC(this.perdag, enableMutationRecovery, this.#lc, signal);
     initNewClientChannel(
@@ -1311,6 +1324,15 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * same corrupt key, so recovery runs once and later reports await it.
    */
   #invalidRefCountRecovery: Promise<void> | undefined;
+
+  /**
+   * Installed on every dag store that writes to our database. The store calls
+   * it after the failing transaction has been released, so dropping the
+   * database from here does not race with the rollback.
+   */
+  readonly #onInvalidRefCount = (e: InvalidRefCountError): void => {
+    void this.#handleInvalidRefCount(e);
+  };
 
   /**
    * The persistent dag store contains an invalid ref count. This means the
