@@ -97,15 +97,15 @@ import type {
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe, type StreamMessage} from './logical-replication/stream.ts';
 import {fromBigInt, toBigInt, toStateVersionString, type LSN} from './lsn.ts';
+import {ReplicationSlotCleanupMonitor} from './replication-slot-cleanup-monitor.ts';
 import {registerReplicationSlotHealthMetrics} from './replication-slot-health.ts';
-import {dropOldReplicasAndSlots} from './replication-slots.ts';
 import {replicationEventSchema, type ReplicationEvent} from './schema/ddl.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {
   getPublicationInfo,
+  warnForSkippedIndexes,
   type PublishedSchema,
   type PublishedTableWithReplicaIdentity,
-  warnForSkippedIndexes,
 } from './schema/published.ts';
 import {
   dropShard,
@@ -121,8 +121,6 @@ import {
   type ReplicaState,
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
-
-const REPLICA_SLOT_CLEANUP_INTERVAL_MS = 30_000;
 
 interface PurgeLock {
   release(): Promise<void>;
@@ -194,7 +192,7 @@ export async function initializePostgresChangeSource(
 
     // Check that upstream is properly setup, and throw an AutoReset to re-run
     // initial sync if not.
-    const upstreamReplica = await checkAndUpdateUpstream(
+    const {upstreamReplica, pgVersion} = await checkAndUpdateUpstream(
       lc,
       db,
       shard,
@@ -216,6 +214,7 @@ export async function initializePostgresChangeSource(
       upstreamURI,
       shard,
       upstreamReplica,
+      pgVersion,
       {backupPath, backupV5},
       context,
       lagReportIntervalMs,
@@ -360,7 +359,9 @@ async function checkAndUpdateUpstream(
       `replication slot ${slot} has been invalidated for exceeding the max_slot_wal_keep_size`,
     );
   }
-  return upstreamReplica;
+  const [{pgVersion}] = await sql<{pgVersion: number}[]> /*sql*/ `
+    SELECT current_setting('server_version_num')::int as "pgVersion"`;
+  return {upstreamReplica, pgVersion};
 }
 
 // Parameterize this if necessary. In practice starvation may never happen.
@@ -380,6 +381,7 @@ export class PostgresChangeSource implements ChangeSource {
   readonly #upstreamUri: string;
   readonly #shard: ShardID;
   readonly #replica: Replica;
+  readonly #slotCleanupMonitor: ReplicationSlotCleanupMonitor;
   readonly #backupOptions: BackupOptions;
   readonly #context: ServerContext;
   readonly #lagReporter: LagReporter | null;
@@ -394,6 +396,7 @@ export class PostgresChangeSource implements ChangeSource {
     upstreamUri: string,
     shard: ShardID,
     replica: Replica,
+    pgVersion: number,
     backupOptions: BackupOptions,
     context: ServerContext,
     lagReportIntervalMs: number,
@@ -409,14 +412,21 @@ export class PostgresChangeSource implements ChangeSource {
     this.#lc = lc.withContext('component', 'change-source');
     this.#subscribe = deps.subscribe ?? subscribe;
     this.#streamBackfill = deps.streamBackfill ?? streamBackfill;
+    // used for schema changes, lag reporting, and slot cleanup
     this.#db = pgClient(lc, upstreamUri, 'replication-monitor', {
-      max: 1,
-      // used occasionally for schema changes, periodically for lag reporting
-      ['idle_timeout']: 60,
+      max: 3,
+      idle_timeout: 60,
     });
     this.#upstreamUri = upstreamUri;
     this.#shard = shard;
     this.#replica = replica;
+    this.#slotCleanupMonitor = new ReplicationSlotCleanupMonitor(
+      lc.withContext('component', 'replication-slot-monitor'),
+      shard,
+      this.#db,
+      pgVersion,
+      replica.slot,
+    );
     this.#backupOptions = backupOptions;
     this.#context = context;
     this.#textCopy = textCopy ?? false;
@@ -427,6 +437,7 @@ export class PostgresChangeSource implements ChangeSource {
             lc.withContext('component', 'lag-reporter'),
             shard,
             this.#db,
+            pgVersion,
             lagReportIntervalMs,
           )
         : null;
@@ -441,7 +452,6 @@ export class PostgresChangeSource implements ChangeSource {
   async stop(): Promise<void> {
     this.#stopped = true;
     this.#lagReporter?.stop();
-    clearTimeout(this.#cleanupTimer);
     await this.#db.end();
   }
 
@@ -480,12 +490,22 @@ export class PostgresChangeSource implements ChangeSource {
     const config = await getInternalShardConfig(this.#db, this.#shard);
     const {slot} = this.#replica;
     this.#lc.info?.(`starting replication stream@${slot}`);
-    return this.startStreamInternal(
+    const changeStream = await this.startStreamInternal(
       slot,
       clientWatermark,
       config,
       backfillRequests,
     );
+    const {signal} = changeStream.changes;
+    if (!signal.aborted) {
+      // The slot cleanup monitor runs when a replication slot is active.
+      // If no slots are active, they are all available for claiming by a
+      // replication-manager; inactive slots are only cleaned up when at
+      // least one a stream is being processed.
+      this.#slotCleanupMonitor.start();
+      signal.addEventListener('abort', () => this.#slotCleanupMonitor.stop());
+    }
+    return changeStream;
   }
 
   // Exported for testing.
@@ -728,34 +748,6 @@ export class PostgresChangeSource implements ChangeSource {
             "backupPath" = ${this.#backupOptions.backupPath},
             "backupV5" = ${this.#backupOptions.backupV5}
         WHERE id = ${replicaID}`;
-    void this.#cleanUpOlderReplicasAndSlots();
-  }
-
-  #cleanupTimer: NodeJS.Timeout | undefined;
-
-  async #cleanUpOlderReplicasAndSlots() {
-    clearTimeout(this.#cleanupTimer);
-
-    try {
-      const result = await dropOldReplicasAndSlots(
-        this.#lc,
-        this.#db,
-        this.#shard,
-        this.#replica.rank,
-      );
-      if (result.draining === 0) {
-        this.#lc.info?.(`finished cleaning up replicas and slots`, {result});
-        return;
-      }
-      this.#lc.info?.(`old slots still draining`, {result});
-    } catch (e) {
-      this.#lc.warn?.(`error dropping replication slots`, e);
-    }
-
-    this.#cleanupTimer = setTimeout(
-      () => this.#cleanUpOlderReplicasAndSlots(),
-      REPLICA_SLOT_CLEANUP_INTERVAL_MS,
-    );
   }
 }
 
@@ -861,7 +853,7 @@ export class LagReporter {
     },
   );
 
-  #pgVersion: number | undefined;
+  readonly #pgVersion: number;
   #expectingLagReport: InitiatedLagReport | null = null;
   #timer: NodeJS.Timeout | undefined;
 
@@ -869,21 +861,14 @@ export class LagReporter {
     lc: LogContext,
     shard: ShardID,
     db: PostgresDB,
+    pgVersion: number,
     lagIntervalMs: number,
   ) {
     this.#lc = lc;
     this.messagePrefix = `${shard.appID}/${shard.shardNum}${LagReporter.MESSAGE_SUFFIX}`;
     this.#db = db;
+    this.#pgVersion = pgVersion;
     this.#lagIntervalMs = lagIntervalMs;
-  }
-
-  async #getPgVersion() {
-    if (this.#pgVersion === undefined) {
-      const [{pgVersion}] = await this.#db<{pgVersion: number}[]> /*sql*/ `
-        SELECT current_setting('server_version_num')::int as "pgVersion"`;
-      this.#pgVersion = pgVersion;
-    }
-    return this.#pgVersion;
   }
 
   get pgVersion() {
@@ -891,7 +876,6 @@ export class LagReporter {
   }
 
   async initiateLagReport(log = false) {
-    const pgVersion = this.#pgVersion ?? (await this.#getPgVersion());
     const now = Date.now();
     const id = nanoid();
 
@@ -903,7 +887,7 @@ export class LagReporter {
     let lsn: string;
 
     try {
-      if (pgVersion >= PG_17) {
+      if (this.#pgVersion >= PG_17) {
         [{commitTimeMs, lsn}] = await this.#db /*sql*/ `
           WITH CTE AS (SELECT extract(epoch from now()) * 1000 AS "commitTimeMs")
           SELECT "commitTimeMs", pg_logical_emit_message(

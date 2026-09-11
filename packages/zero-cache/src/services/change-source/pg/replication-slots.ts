@@ -257,33 +257,41 @@ export async function createReplicaAndSlot<T>(
   }
 }
 
-/**
- * Deletes "old" replicas (i.e. those with a lower rank than the current)
- * and attempts to drop replication slots that are not associated with any
- * replica.
- *
- * If a slot could not be dropped because there is still an active subscriber,
- * it will be reflected in the `draining` count that is returned. When there
- * are draining slots, the method should be retried until all orphaned slots
- * have been dropped.
- */
-export async function dropOldReplicasAndSlots(
+export function dropInactiveSlotsAndReplicas(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
-  beforeRank: bigint,
-): Promise<{dropped: number; active: number; draining: number}> {
+  slots: string[],
+) {
+  const lockName = replicationSlotManagementLock(shard);
   const replicasTable = `${upstreamSchema(shard)}.replicas`;
-  const oldReplicas = await sql`
-    SELECT id, rank::float8, slot, version, "initialSyncContext", "subscriberContext"
-     FROM ${sql(replicasTable)} WHERE rank < ${beforeRank};
-  `;
-  if (oldReplicas.length) {
-    lc.info?.(`Deleting ${oldReplicas.length} old replica(s)`, {oldReplicas});
-    await sql`DELETE FROM ${sql(replicasTable)} WHERE rank < ${beforeRank}`;
-  }
 
-  return dropUnclaimedSlots(lc, sql, shard);
+  return runTx(sql, async tx => {
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
+
+    const dropped = await tx<{slot: string; replicaID: string | null}[]>
+    /*sql*/ `
+      SELECT slot_name as slot, replica.id as "replicaID", pg_drop_replication_slot(slot_name) 
+        FROM pg_replication_slots
+        LEFT JOIN ${tx(replicasTable)} replica on slot_name = slot
+        WHERE slot_name IN ${tx(slots)} AND NOT active;
+    `;
+    if (dropped.length) {
+      lc.info?.(`dropped ${dropped.length} inactive replication slot(s)`, {
+        dropped,
+      });
+    }
+
+    const replicas = dropped
+      .map(({replicaID}) => replicaID)
+      .filter(id => id !== null);
+    if (replicas.length) {
+      // Delete replicas associated with the inactive (and now dropped) slots.
+      await tx
+      /*sql*/ `DELETE FROM ${tx(replicasTable)} WHERE id IN ${tx(replicas)}`;
+      lc.info?.(`deleted ${replicas.length} old replica(s)`, {replicas});
+    }
+  });
 }
 
 function dropUnclaimedSlots(

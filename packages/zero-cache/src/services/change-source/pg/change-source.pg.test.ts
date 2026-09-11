@@ -1181,50 +1181,49 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {watermark: expect.stringMatching(WATERMARK_REGEX)},
     ]);
 
-    // Verify that the older replica state has been cleaned up.
-    // The newer replica state should remain.
-    const replicasAfterSource2 = await upstream.unsafe(`
-      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas ORDER BY slot
-    `);
-    expect(replicasAfterSource2).toEqual(replicas3.slice(1));
+    // Taking over on the new slot is non-disruptive: under the time-based
+    // cleanup model, it does NOT proactively delete older replicas or drop
+    // their slots (that is deferred to the ReplicationSlotCleanupMonitor once
+    // a slot has been inactive for the configured timeout, and is covered by
+    // replication-slot-cleanup-monitor.pg.test.ts). All replica rows and
+    // slots therefore remain.
+    const replicaSlotsAfterSource2 = await upstream<{slot: string}[]>`
+      SELECT slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas
+        ORDER BY slot
+    `.values();
+    expect(replicaSlotsAfterSource2).toEqual(slots2);
 
-    // However, all 3 replication slots should remain because [1] is still
-    // active and [3], although not yet active, is a newer replica.
-    const slots3 = await upstream<{slot: string}[]>`
+    const slotsAfterSource2 = await upstream<{slot: string}[]>`
         SELECT slot_name as slot FROM pg_replication_slots
           WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
           ORDER BY slot_name
       `.values();
-    expect(slots3).toHaveLength(3);
+    expect(slotsAfterSource2).toEqual(slots2);
 
-    // Shut down the first replica slot and then start the third one.
+    // Shut down the first replica's stream and take over on the third slot.
     changes1.cancel();
     const {changes: changes3} = await startStream('00', source3);
 
-    // Now there should only be one replica left.
-    const replicasAfterSource3 = await upstream.unsafe(`
-      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas ORDER BY slot
-    `);
-    expect(replicasAfterSource3).toEqual(replicas3.slice(2));
+    // Cancelling the first stream and taking over on the third is likewise
+    // non-disruptive: all replica rows and slots still remain. Cleanup of
+    // the now-inactive first slot is left to the inactivity monitor.
+    const replicaSlotsAfterSource3 = await upstream<{slot: string}[]>`
+      SELECT slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas
+        ORDER BY slot
+    `.values();
+    expect(replicaSlotsAfterSource3).toEqual(slots2);
 
-    // Verify that the two latter slots remain. The first one should have
-    // been dropped because the source stopped subscribing. The second
-    // one is allowed to drain.
-    // (Use waitFor to reduce flakiness because the drop is non-transactional.)
-    await vi.waitFor(
-      async () => {
-        const slots3 = await upstream<{slot: string}[]>`
+    const slotsAfterSource3 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
         WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
         ORDER BY slot_name
     `.values();
-        expect(slots3).toEqual(slots2.slice(1));
-      },
-      {interval: 100},
-    );
+    expect(slotsAfterSource3).toEqual(slots2);
 
     changes2.cancel();
     changes3.cancel();
+    await source2.stop();
+    await source3.stop();
     replicaFile2.delete();
     replicaFile3.delete();
   });
