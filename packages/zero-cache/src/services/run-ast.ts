@@ -114,13 +114,16 @@ export async function runAst(
     options.tableSpecs,
     executor,
   );
-  for (const {table, uniqueKeys} of ignoredScalarHints) {
+  for (const {table, uniqueKeys, reason} of ignoredScalarHints) {
     lc.warn?.(
-      `Ignoring {scalar: true} on the "${table}" subquery: it does not ` +
-        `constrain every column of any unique key ` +
-        `[${uniqueKeys.map(k => `(${k.join(', ')})`).join(', ')}] to a ` +
-        `literal with "=", so it is not provably limited to one row. ` +
-        `The gate runs as a plain EXISTS.`,
+      `Ignoring {scalar: true} on the "${table}" subquery: ` +
+        (reason === 'compoundCorrelation'
+          ? `its relationship correlates more than one column, and a scalar ` +
+            `rewrite can only compare one`
+          : `it does not constrain every column of any unique key ` +
+            `[${uniqueKeys.map(k => `(${k.join(', ')})`).join(', ')}] to a ` +
+            `literal with "=", so it is not provably limited to one row`) +
+        `. The gate runs as a plain EXISTS.`,
     );
   }
 

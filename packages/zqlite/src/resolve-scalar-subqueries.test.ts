@@ -1009,3 +1009,157 @@ test('resolves nested scalar subqueries in subquery where clause', () => {
   // Both the config and users subqueries become companions.
   expect(companions).toHaveLength(2);
 });
+
+// ---------- compound correlations ----------
+
+/**
+ * The rewrite replaces the gate with one comparison against one value read
+ * from one child column. A compound correlation needs one comparison per pair,
+ * so honoring the hint keeps the first pair and silently drops the rest —
+ * admitting parent rows the EXISTS excludes. Proving the subquery returns a
+ * single row does not license the reduction, so the hint has to be refused.
+ */
+const COMPOUND_SPECS = makeTableSpecs({parent: [['id']], child: [['id']]});
+
+const COMPOUND_AST: AST = {
+  table: 'parent',
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    scalar: true,
+    related: {
+      correlation: {parentField: ['a', 'b'], childField: ['x', 'y']},
+      subquery: {
+        table: 'child',
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: 'c1'},
+        },
+      },
+    },
+  },
+};
+
+test('a compound correlation degrades to EXISTS even though the subquery is pinned', () => {
+  // The subquery *is* provably single-row: `child.id = 'c1'` covers its
+  // unique key. That is exactly what made this shape dangerous.
+  const compoundGate = COMPOUND_AST.where as CorrelatedSubqueryCondition;
+  expect(isSimpleSubquery(compoundGate.related.subquery, COMPOUND_SPECS)).toBe(
+    true,
+  );
+
+  const {
+    ast: resolved,
+    companions,
+    ignoredScalarHints,
+  } = resolveSimpleScalarSubqueries(COMPOUND_AST, COMPOUND_SPECS, () => {
+    throw new Error('the executor must not run for a compound correlation');
+  });
+
+  expect(resolved).toEqual(COMPOUND_AST);
+  expect(companions).toEqual([]);
+  expect(ignoredScalarHints).toEqual([
+    {table: 'child', uniqueKeys: [['id']], reason: 'compoundCorrelation'},
+  ]);
+});
+
+test('a compound correlation degrades for NOT EXISTS too', () => {
+  const gate = COMPOUND_AST.where as CorrelatedSubqueryCondition;
+  const ast: AST = {...COMPOUND_AST, where: {...gate, op: 'NOT EXISTS'}};
+
+  const {ast: resolved, ignoredScalarHints} = resolveSimpleScalarSubqueries(
+    ast,
+    COMPOUND_SPECS,
+    () => 'x1',
+  );
+
+  expect(resolved).toEqual(ast);
+  expect(ignoredScalarHints[0].reason).toBe('compoundCorrelation');
+});
+
+test('a compound correlation nested inside a subquery also degrades', () => {
+  const gate = COMPOUND_AST.where as CorrelatedSubqueryCondition;
+  const ast: AST = {
+    table: 'grandparent',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        correlation: {parentField: ['id'], childField: ['parentID']},
+        subquery: {table: 'parent', where: gate},
+      },
+    },
+  };
+
+  const {ignoredScalarHints} = resolveSimpleScalarSubqueries(
+    ast,
+    COMPOUND_SPECS,
+    () => 'x1',
+  );
+
+  expect(ignoredScalarHints).toEqual([
+    {table: 'child', uniqueKeys: [['id']], reason: 'compoundCorrelation'},
+  ]);
+});
+
+test('a single-pair correlation is still honored, and says so', () => {
+  const gate = COMPOUND_AST.where as CorrelatedSubqueryCondition;
+  const ast: AST = {
+    ...COMPOUND_AST,
+    where: {
+      ...gate,
+      related: {
+        ...gate.related,
+        correlation: {parentField: ['a'], childField: ['x']},
+      },
+    },
+  };
+
+  const {ast: resolved, ignoredScalarHints} = resolveSimpleScalarSubqueries(
+    ast,
+    COMPOUND_SPECS,
+    () => 'x1',
+  );
+
+  expect(ignoredScalarHints).toEqual([]);
+  expect(resolved.where).toEqual({
+    type: 'simple',
+    op: '=',
+    left: {type: 'column', name: 'a'},
+    right: {type: 'literal', value: 'x1'},
+  });
+});
+
+test('an unpinned subquery is reported as unpinned, not as compound', () => {
+  const gate = COMPOUND_AST.where as CorrelatedSubqueryCondition;
+  const ast: AST = {
+    ...COMPOUND_AST,
+    where: {
+      ...gate,
+      related: {
+        correlation: {parentField: ['a'], childField: ['x']},
+        subquery: {
+          table: 'child',
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'y'},
+            right: {type: 'literal', value: 'y1'},
+          },
+        },
+      },
+    },
+  };
+
+  const {ignoredScalarHints} = resolveSimpleScalarSubqueries(
+    ast,
+    COMPOUND_SPECS,
+    () => 'x1',
+  );
+
+  expect(ignoredScalarHints).toEqual([
+    {table: 'child', uniqueKeys: [['id']], reason: 'unpinned'},
+  ]);
+});
