@@ -1,0 +1,135 @@
+{
+  "clients": 16,
+  "run": 3,
+  "wallSeconds": 10.858512278000001,
+  "results": [
+    {
+      "index": 1,
+      "exitCode": 0,
+      "clientGroup": "9ouqb4hj7euodikfu5",
+      "totalSettleSeconds": 9.566,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 2,
+      "exitCode": 0,
+      "clientGroup": "th75es7a5jmdmbnu4e",
+      "totalSettleSeconds": 9.259,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 3,
+      "exitCode": 0,
+      "clientGroup": "ikc3aphhhjrdc59mtp",
+      "totalSettleSeconds": 8.973,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 4,
+      "exitCode": 0,
+      "clientGroup": "0bjgkir3fne2enlrto",
+      "totalSettleSeconds": 9.601,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 5,
+      "exitCode": 0,
+      "clientGroup": "4jurimj3gclp1dq9us",
+      "totalSettleSeconds": 9.582,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 6,
+      "exitCode": 0,
+      "clientGroup": "74kokt8ikd1jq9ie3p",
+      "totalSettleSeconds": 9.446,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 7,
+      "exitCode": 0,
+      "clientGroup": "45pos0lkpm5vgvme6v",
+      "totalSettleSeconds": 8.57,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 8,
+      "exitCode": 0,
+      "clientGroup": "86u0sbfe54ktuf0m6b",
+      "totalSettleSeconds": 9.584,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 9,
+      "exitCode": 0,
+      "clientGroup": "4hql0hmuqi662k7ard",
+      "totalSettleSeconds": 8.99,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 10,
+      "exitCode": 0,
+      "clientGroup": "qdtd6eiumtknpfqdcm",
+      "totalSettleSeconds": 9.794,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 11,
+      "exitCode": 0,
+      "clientGroup": "i4dfjrp3saln04nck7",
+      "totalSettleSeconds": 9.581,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 12,
+      "exitCode": 0,
+      "clientGroup": "i7ku7sbq75gv94ogpu",
+      "totalSettleSeconds": 9.663,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 13,
+      "exitCode": 0,
+      "clientGroup": "0j9k2r92o9kg3qskh9",
+      "totalSettleSeconds": 9.962,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 14,
+      "exitCode": 0,
+      "clientGroup": "maa19esrep1n6skop9",
+      "totalSettleSeconds": 9.565,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 15,
+      "exitCode": 0,
+      "clientGroup": "8345ok36h4t9faj55q",
+      "totalSettleSeconds": 8.4,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 16,
+      "exitCode": 0,
+      "clientGroup": "eag8u4fl2p2ftmiu2m",
+      "totalSettleSeconds": 9.553,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    }
+  ]
+}

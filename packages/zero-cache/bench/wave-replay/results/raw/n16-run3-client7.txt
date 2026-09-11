@@ -1,0 +1,13 @@
+
+mode=wave  cache=http://localhost:49700  assignment=assignment_emu_lag_136  client_group=45pos0lkpm5vgvme6v
+query                            registered  first-data  complete  duration  rows  completed-at
+-------------------------------  ----------  ----------  --------  --------  ----  ------------
+assignment.basic                 0.000s      8.569s      8.570s    8.570s    1     01:49:39.902
+assignment.summary               0.010s      --          8.570s    8.561s    0     01:49:39.902
+assignment.roster                0.042s      8.569s      8.570s    8.528s    1     01:49:39.902
+assignment.with_problems         0.060s      8.569s      8.570s    8.511s    1     01:49:39.902
+problem_trackers.for_assignment  0.062s      8.569s      8.570s    8.508s    973   01:49:39.902
+misconduct.for_assignment_count  0.077s      --          8.570s    8.493s    0     01:49:39.902
+
+fastest complete 8.570s  slowest complete 8.570s  spread 0.000s
+first-content 8.569s  total settle 8.570s

@@ -3,5 +3,10 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["src", "bench", "tool"]
+  "include": ["src", "bench", "tool"],
+  // The wave-replay drivers run under bun, not node: they spawn one bun client
+  // process per client group and that client imports the goblins Zero client.
+  // Typechecking them here would need @types/bun in a package that has no other
+  // reason to depend on it.
+  "exclude": ["bench/wave-replay"]
 }

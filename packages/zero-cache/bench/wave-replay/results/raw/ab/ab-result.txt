@@ -1,0 +1,14 @@
+N=1 replay, 6 measured runs each, alternating, same database, both instances warm
+metric                              A main 16019afa4   B ac5eb2311    B/A   diagnosis
+assignment.basic                                31.7          33.7   1.06        21.3
+assignment.summary                              31.8          32.2   1.01        39.4
+assignment.roster                               42.5          51.4   1.21        49.8
+assignment.with_problems                        17.5          18.7   1.07        19.8
+problem_trackers.for_assignment                190.4         231.5   1.22       537.7
+misconduct.for_assignment_count                 67.5          76.0   1.13        68.9
+queryProcessingCpuMs                           391.2         447.8   1.14       730.6
+waveTotalMs                                    480.7         546.9   1.14       818.2
+
+tracker samples A: [200.7, 180.5, 179.3, 224.6, 200.2, 180.2]
+tracker samples B: [243.1, 220.0, 214.3, 206.8, 245.8, 261.4]
+queryCount A: [8] B: [8]

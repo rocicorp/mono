@@ -1,0 +1,23 @@
+{
+  "clients": 2,
+  "run": 2,
+  "wallSeconds": 1.8063456679999998,
+  "results": [
+    {
+      "index": 1,
+      "exitCode": 0,
+      "clientGroup": "7v9qrl5d13hmf69uao",
+      "totalSettleSeconds": 1.424,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 2,
+      "exitCode": 0,
+      "clientGroup": "0i71iecqk36lle0c0a",
+      "totalSettleSeconds": 1.372,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    }
+  ]
+}

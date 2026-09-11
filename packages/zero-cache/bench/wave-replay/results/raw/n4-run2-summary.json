@@ -1,0 +1,39 @@
+{
+  "clients": 4,
+  "run": 2,
+  "wallSeconds": 2.996098109,
+  "results": [
+    {
+      "index": 1,
+      "exitCode": 0,
+      "clientGroup": "t3bb2uk9jlqrtlfhl1",
+      "totalSettleSeconds": 2.499,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 2,
+      "exitCode": 0,
+      "clientGroup": "v3ciu82qbcmlaor71j",
+      "totalSettleSeconds": 2.497,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 3,
+      "exitCode": 0,
+      "clientGroup": "nge2g4hjmues4j92fk",
+      "totalSettleSeconds": 2.573,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 4,
+      "exitCode": 0,
+      "clientGroup": "87jco3avgakcf9a6cn",
+      "totalSettleSeconds": 2.449,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    }
+  ]
+}
