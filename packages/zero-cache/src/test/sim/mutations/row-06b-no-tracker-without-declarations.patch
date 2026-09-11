@@ -1,0 +1,15 @@
+diff --git a/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts b/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts
+index c7531e32b..3a2557f33 100644
+--- a/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts
++++ b/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts
+@@ -105,8 +105,8 @@ export class BackfillDeclarations {
+     followsBackfillRuns: boolean,
+     declarations: readonly BackfillDeclaration[] | undefined,
+   ): BackfillDeclarations | undefined {
+-    return followsBackfillRuns
+-      ? new BackfillDeclarations(declarations ?? [])
++    return followsBackfillRuns && declarations?.length
++      ? new BackfillDeclarations(declarations)
+       : undefined;
+   }
+ 

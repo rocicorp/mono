@@ -1,0 +1,16 @@
+diff --git a/packages/zero-cache/src/services/change-streamer/snapshot-reservations.ts b/packages/zero-cache/src/services/change-streamer/snapshot-reservations.ts
+index 202f0d5cc..97152c4c0 100644
+--- a/packages/zero-cache/src/services/change-streamer/snapshot-reservations.ts
++++ b/packages/zero-cache/src/services/change-streamer/snapshot-reservations.ts
+@@ -71,10 +71,7 @@ export class SnapshotReservations {
+     // Armed from `open()` rather than from the confirmation: the purge pause
+     // that `startSnapshotReservation` takes begins here, so this is when the
+     // log starts being held.
+-    const expiry = this.#setTimeoutFn(
+-      () => this.#expire(taskID, instanceID),
+-      this.#maxAgeMs,
+-    );
++    const expiry = this.#setTimeoutFn(() => {}, this.#maxAgeMs);
+     // An hour-scale timer must not be the thing that keeps a stopping process
+     // alive. (Optional because a test may inject a plainer timer.)
+     expiry.unref?.();

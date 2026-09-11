@@ -1,0 +1,11 @@
+--- a/packages/zero-cache/src/test/sim/simulation.ts
++++ b/packages/zero-cache/src/test/sim/simulation.ts
+@@ -358,7 +358,7 @@
+         this.rm.restart();
+         break;
+       case 'rmReplace': {
+-        const latest = this.backup.latest;
++        const latest = this.backup.records[0];
+         if (latest) {
+           this.rm.replace(latest);
+         }

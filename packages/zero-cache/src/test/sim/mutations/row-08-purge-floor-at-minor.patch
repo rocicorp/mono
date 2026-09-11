@@ -1,0 +1,11 @@
+--- a/packages/zero-cache/src/services/change-streamer/change-streamer-service.ts
++++ b/packages/zero-cache/src/services/change-streamer/change-streamer-service.ts
+@@ -1571,7 +1571,7 @@
+       // What this retains beyond the min ACK is exactly the backfill
+       // transactions since the last upstream commit, which is exactly what
+       // such a reconnect replays.
+-      purgeWatermark: majorVersionOf(minWatermark),
++      purgeWatermark: minWatermark,
+       current,
+     };
+   }

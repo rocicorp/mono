@@ -1,0 +1,13 @@
+diff --git a/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts b/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts
+index c7531e32b..a773642cd 100644
+--- a/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts
++++ b/packages/zero-cache/src/services/change-streamer/backfill-declarations.ts
+@@ -225,7 +225,7 @@ export class BackfillDeclarations {
+       const id = op.op === 'rename-table' ? op.old : op.table;
+       let table = this.#writableTable(id);
+       if (!table) {
+-        if (op.op !== 'upsert-backfill') {
++        if (true) {
+           continue;
+         }
+         // A backfill that the stream started, on a table with nothing else in
