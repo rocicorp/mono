@@ -55,6 +55,7 @@ import {
 import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
 import {
+  assumeChangeStreamerOwnership,
   AutoResetSignal,
   ensureReplicationConfig,
   markResetRequired,
@@ -153,7 +154,10 @@ export type SQLiteChangeLogServeOptions = {
   inspect?: (() => SQLiteChangeLogCoverage | undefined) | undefined;
 };
 
-export type TuningOptions = StorerOptions & {
+export type TuningOptions = StorerOptions & ChangeStreamerOptions;
+
+/** The options of a change-streamer, apart from those of its PG change log. */
+export type ChangeStreamerOptions = {
   /**
    * Keeps the legacy Postgres change log on the initialization, persistence,
    * catchup, purge, and ACK paths. Disable only after SQLite and the replica
@@ -254,20 +258,157 @@ export async function initializeStreamer(
   const {replicaVersion} = subscriptionState;
   return new ChangeStreamerImpl(
     lc,
+    new PostgresChangeStreamerRegistry(
+      lc,
+      changeDB,
+      shard,
+      taskID,
+      discoveryAddress,
+      discoveryProtocol,
+      purgeLock,
+      opts.statementTimeoutMs,
+    ),
+    opts.pgChangeLogEnabled
+      ? (onCommitted, onFatal) =>
+          new Storer(
+            lc,
+            shard,
+            taskID,
+            discoveryAddress,
+            discoveryProtocol,
+            changeDBProvider,
+            replicaVersion,
+            consumed => onCommitted(consumed[2].watermark),
+            onFatal,
+            opts,
+          )
+      : undefined,
     shard,
-    taskID,
-    discoveryAddress,
-    discoveryProtocol,
-    changeDBProvider,
     replicaVersion,
     changeSource,
     replicationStatusPublisher,
     backupConfig,
-    purgeLock,
     autoReset,
     opts,
     setTimeoutFn,
   );
+}
+
+/**
+ * Creates a change-streamer that has no Postgres change DB: its PG change log
+ * is disabled, and its discovery and resets go through `registry`. Nothing
+ * here migrates or configures a change DB, as `initializeStreamer` does.
+ */
+export function createChangeStreamer(
+  lc: LogContext,
+  registry: ChangeStreamerRegistry,
+  shard: ShardID,
+  replicaVersion: string,
+  changeSource: ChangeSource,
+  replicationStatusPublisher: ReplicationStatusPublisher,
+  backupConfig: BackupConfig | null,
+  autoReset: boolean,
+  opts: ChangeStreamerOptions,
+  setTimeoutFn = setTimeout,
+): ChangeStreamerService {
+  assert(
+    !opts.pgChangeLogEnabled,
+    'the PG change log requires a change DB: use initializeStreamer',
+  );
+  return new ChangeStreamerImpl(
+    lc,
+    registry,
+    undefined,
+    shard,
+    replicaVersion,
+    changeSource,
+    replicationStatusPublisher,
+    backupConfig,
+    autoReset,
+    opts,
+    setTimeoutFn,
+  );
+}
+
+/**
+ * Where a change-streamer makes itself discoverable, and records what must
+ * outlive it. Neither is part of the PG change log, so both remain when that
+ * log is disabled: subscribers still discover the change-streamer by the
+ * owner in `replicationState`.
+ */
+export interface ChangeStreamerRegistry {
+  /**
+   * Makes this task the change-streamer that subscribers discover. Called
+   * once, before the first stream connection.
+   */
+  assumeOwnership(): Promise<void>;
+
+  /** Records that the replica must be reset, for a `reset-required` message. */
+  markResetRequired(): Promise<void>;
+}
+
+/**
+ * Builds the PG change log's {@link Storer}, which reports the watermarks it
+ * commits and the failures that must stop the change-streamer.
+ */
+type StorerFactory = (
+  onCommitted: (watermark: string) => void,
+  onFatal: (err: Error) => void,
+) => Storer;
+
+/** The {@link ChangeStreamerRegistry} in the change DB. */
+class PostgresChangeStreamerRegistry implements ChangeStreamerRegistry {
+  readonly #lc: LogContext;
+  readonly #db: PostgresDB;
+  readonly #shard: ShardID;
+  readonly #taskID: string;
+  readonly #discoveryAddress: string;
+  readonly #discoveryProtocol: string;
+  readonly #timeoutMs: number;
+  #purgeLock: PurgeLock | null;
+
+  constructor(
+    lc: LogContext,
+    db: PostgresDB,
+    shard: ShardID,
+    taskID: string,
+    discoveryAddress: string,
+    discoveryProtocol: string,
+    purgeLock: PurgeLock | null,
+    timeoutMs: number,
+  ) {
+    this.#lc = lc.withContext('component', 'change-log');
+    this.#db = db;
+    this.#shard = shard;
+    this.#taskID = taskID;
+    this.#discoveryAddress = discoveryAddress;
+    this.#discoveryProtocol = discoveryProtocol;
+    this.#purgeLock = purgeLock;
+    this.#timeoutMs = timeoutMs;
+  }
+
+  async assumeOwnership() {
+    await assumeChangeStreamerOwnership(
+      this.#lc,
+      this.#db,
+      this.#shard,
+      this.#taskID,
+      this.#discoveryAddress,
+      this.#discoveryProtocol,
+      this.#timeoutMs,
+    );
+    // Once ownership has been assumed, any initial purge-lock preventing the
+    // purging of change-log records can be released, as a change-streamer
+    // that was attempting to purge records will correspondingly abort on the
+    // ownership check.
+    const purgeLock = this.#purgeLock;
+    this.#purgeLock = null;
+    void purgeLock?.release();
+  }
+
+  markResetRequired() {
+    return markResetRequired(this.#db, this.#shard);
+  }
 }
 
 // Count requests that remain unresolved after catchup or a live transaction.
@@ -430,11 +571,11 @@ const DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS = 60_000;
 class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #shard: ShardID;
-  readonly #changeDBProvider: PostgresDBProvider;
+  readonly #registry: ChangeStreamerRegistry;
   readonly #replicaVersion: string;
   readonly #source: ChangeSource;
-  readonly #storer: Storer;
+  /** Present exactly when the PG change log is enabled. */
+  readonly #storer: Storer | undefined;
   readonly #pgChangeLogEnabled: boolean;
   readonly #forwarder: Forwarder;
   readonly #reservations: SnapshotReservations | undefined;
@@ -518,7 +659,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
    */
   #loggedBehindWatermark: string | undefined;
   #sqlitePurgeContinuation: PurgeContinuation | undefined;
-  #purgeLock: PurgeLock | null;
   // PG and SQLite intentionally own separate level-triggered loops. Neither
   // waits for, advances, or retries the other.
   #pgPurgeScheduled = false;
@@ -536,27 +676,27 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   constructor(
     lc: LogContext,
+    registry: ChangeStreamerRegistry,
+    storer: StorerFactory | undefined,
     shard: ShardID,
-    taskID: string,
-    discoveryAddress: string,
-    discoveryProtocol: string,
-    changeDBProvider: PostgresDBProvider,
     replicaVersion: string,
     source: ChangeSource,
     replicationStatusPublisher: ReplicationStatusPublisher,
     backupConfig: BackupConfig | null,
-    initialPurgeLock: PurgeLock | null,
     autoReset: boolean,
-    opts: TuningOptions,
+    opts: ChangeStreamerOptions,
     setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
-    this.#shard = shard;
-    this.#changeDBProvider = changeDBProvider;
+    this.#registry = registry;
     this.#replicaVersion = replicaVersion;
     this.#source = source;
     this.#pgChangeLogEnabled = opts.pgChangeLogEnabled;
+    assert(
+      (storer !== undefined) === this.#pgChangeLogEnabled,
+      'a Storer is required for, and only for, the PG change log',
+    );
     if (!this.#pgChangeLogEnabled) {
       assert(
         opts.sqliteChangeLogWriter &&
@@ -572,17 +712,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         'SQLite change-log comparison requires the PG change log',
       );
     }
-    this.#storer = new Storer(
-      lc,
-      shard,
-      taskID,
-      discoveryAddress,
-      discoveryProtocol,
-      changeDBProvider,
-      replicaVersion,
-      consumed => this.#acker.trackPgChangeLog(consumed[2].watermark),
+    this.#storer = storer?.(
+      watermark => this.#acker.trackPgChangeLog(watermark),
       err => this.stop(err),
-      opts,
     );
     this.#forwarder = new Forwarder(lc, {
       flowControlConsensusTimeoutProportion:
@@ -689,7 +821,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       },
       {
         pgChangeLog: () =>
-          this.#storer.getStartStreamInitializationParameters(),
+          must(this.#storer).getStartStreamInitializationParameters(),
         // Only reached when `initFromReplica` is set, i.e. when the option
         // that supplies the file is present.
         replica: () => must(replicaSource)(),
@@ -714,7 +846,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       : undefined;
     // Compare mode requires the writer and catchup configuration.
     this.#comparator =
-      this.#pgChangeLogEnabled &&
+      this.#storer &&
       opts.sqliteChangeLogCompare &&
       opts.sqliteChangeLogWriter &&
       opts.sqliteCatchup
@@ -727,7 +859,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             {setTimeoutFn, ...opts.sqliteChangeLogCompare},
           )
         : undefined;
-    this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
     this.#latestStatus = {tag: 'status'};
@@ -752,8 +883,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     // Once this change-streamer acquires "ownership" of the change DB,
     // it is safe to start the storer.
-    await this.#storer.assumeOwnership(this.#purgeLock);
-    this.#purgeLock = null;
+    await this.#registry.assumeOwnership();
 
     // The threshold in (estimated number of) bytes to send() on subscriber
     // websockets before `await`-ing the I/O buffers to be ready for more.
@@ -777,9 +907,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           lastWatermark,
           backfillRequests,
         );
-        if (this.#pgChangeLogEnabled) {
-          this.#storer.run().catch(e => stream.changes.cancel(e));
-        }
+        this.#storer?.run().catch(e => stream.changes.cancel(e));
 
         this.#stream = stream;
         if (
@@ -861,9 +989,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
           const serialized = serializeChangeStreamDataWithChange(change);
           const {json} = serialized;
-          if (this.#pgChangeLogEnabled) {
-            this.#storer.store(watermark, change, serialized);
-          }
+          this.#storer?.store(watermark, change, serialized);
           // The SQLite change log commits at transaction boundaries, and its
           // commit for this transaction lands here -- before the forward of the
           // `commit` message, and before #recordForwardedTransactionBoundary
@@ -910,9 +1036,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           }
 
           // Allow the PG storer to exert back pressure when it is enabled.
-          const readyForMore = this.#pgChangeLogEnabled
-            ? this.#storer.readyForMore()
-            : undefined;
+          const readyForMore = this.#storer?.readyForMore();
           if (readyForMore) {
             await promiseOrAbort(
               readyForMore,
@@ -931,9 +1055,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       // When the change stream is interrupted, abort any pending transaction.
       if (watermark) {
         this.#lc.warn?.(`aborting interrupted transaction ${watermark}`);
-        if (this.#pgChangeLogEnabled) {
-          this.#storer.abort();
-        }
+        this.#storer?.abort();
         // Rolling back the log leaves no rows for the interrupted transaction,
         // so the next connection's reconciliation sees a head at or below its
         // resume watermark rather than a partial transaction.
@@ -947,7 +1069,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
       // Backoff and drain any pending entries in the storer before reconnecting.
       await Promise.all([
-        this.#storer.stop(),
+        this.#storer?.stop(),
         this.#state.backoff(this.#lc, err),
         this.#state.retryDelay > REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
           ? publishCriticalEvent(
@@ -968,10 +1090,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     switch (tag) {
       case 'reset-required':
-        await markResetRequired(
-          this.#changeDBProvider('change-streamer-reset', 1),
-          this.#shard,
-        );
+        await this.#registry.markResetRequired();
         await publishReplicationError(
           this.#lc,
           'Replicating',
@@ -1039,7 +1158,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         // SQLite was not selected before Forwarder.add().
         cleanupSubscriber = removeFromForwarder;
         this.#forwarder.add(subscriber);
-        this.#storer.catchup(subscriber, mode);
+        must(this.#storer).catchup(subscriber, mode);
       };
       const sqliteDecision = this.#selectSQLiteCatchup(lc, ctx, subscriber);
       if (!sqliteDecision) {
@@ -1404,7 +1523,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     replicaVersion: string;
     minWatermark: string;
   }> {
-    const minWatermark = await this.#storer.getMinWatermarkForCatchup();
+    const minWatermark = await must(this.#storer).getMinWatermarkForCatchup();
     if (!minWatermark) {
       this.#lc.warn?.(
         `Unexpected empty changeLog. Resync if "Local replica watermark" errors arise`,
@@ -1477,7 +1596,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       }
       this.#lc.info?.(`Purging PG changes before ${purgeWatermark} ...`);
       const start = performance.now();
-      const deleted = await this.#storer.purgeRecordsBefore(purgeWatermark);
+      const deleted = await must(this.#storer).purgeRecordsBefore(
+        purgeWatermark,
+      );
       const elapsed = (performance.now() - start).toFixed(2);
       this.#lc.info?.(
         `Purged ${deleted} PG changes before ${purgeWatermark} (${elapsed} ms)`,
@@ -1535,7 +1656,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#comparator?.stop();
     this.#sqliteCatchup?.close();
     this.#changeLogWriter?.close();
-    await Promise.allSettled([this.#storer.stop(), this.#source.stop()]);
+    await Promise.allSettled([this.#storer?.stop(), this.#source.stop()]);
   }
 
   #recordForwardedTransactionBoundary(

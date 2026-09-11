@@ -51,6 +51,7 @@ import {
 } from './change-log-codec.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {
+  assumeChangeStreamerOwnership,
   AutoResetSignal,
   markResetRequired,
   type BackfillingColumn,
@@ -241,7 +242,8 @@ export class Storer implements Service {
    * Bounds a one-off db call (i.e. not part of the main storer loop or the
    * background catchup read, which are tracked by the ProgressMonitor
    * instead) with a plain timeout. This covers calls like
-   * {@link assumeOwnership} and {@link getStartStreamInitializationParameters}
+   * {@link getStartStreamInitializationParameters} (and, through
+   * `assumeChangeStreamerOwnership`, {@link assumeOwnership})
    * that are made by the caller *before* {@link run()} -- and thus before the
    * ProgressMonitor's polling starts -- as well as ones made well after,
    * where a continuously-polling watchdog would be overkill for a single
@@ -263,24 +265,14 @@ export class Storer implements Service {
   }
 
   async assumeOwnership(purgeLock?: PurgeLock | null) {
-    const db = this.#db;
-    const owner = this.#taskID;
-    const ownerAddress = this.#discoveryAddress;
-    const ownerProtocol = this.#discoveryProtocol;
-    // we omit `ws://` so that old view syncer versions that are not expecting the protocol continue to not get it
-    const addressWithProtocol =
-      ownerProtocol === 'ws'
-        ? ownerAddress
-        : `${ownerProtocol}://${ownerAddress}`;
-    this.#lc.info?.(`assuming ownership at ${addressWithProtocol}`);
-    const start = performance.now();
-    await this.#withTimeout(
-      'assume-ownership',
-      db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner, ownerAddress: addressWithProtocol})}`,
-    );
-    const elapsed = (performance.now() - start).toFixed(2);
-    this.#lc.info?.(
-      `assumed ownership at ${addressWithProtocol} (${elapsed} ms)`,
+    await assumeChangeStreamerOwnership(
+      this.#lc,
+      this.#db,
+      this.#shard,
+      this.#taskID,
+      this.#discoveryAddress,
+      this.#discoveryProtocol,
+      this.#statementTimeoutMs,
     );
 
     if (purgeLock) {
