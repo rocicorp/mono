@@ -282,6 +282,56 @@ describe('onClientStateNotFound', () => {
     expect(rep2.closed).toBe(true);
   });
 
+  test('Called in other instances sharing the database when it is dropped', async () => {
+    vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+
+    const rep1 = await replicacheForTesting(
+      'shared-db-invalid-ref',
+      {pullURL, mutators: {addData}},
+      disableAllBackgroundProcesses,
+    );
+    // A second instance with the same name shares the IndexedDB database, like
+    // the same app open in another tab.
+    const {promise: rep2Notified, resolve} = resolver();
+    const onClientStateNotFound2 = vi.fn(resolve);
+    const rep2 = await replicacheForTesting(
+      rep1.name,
+      {
+        pullURL,
+        mutators: {addData},
+        onClientStateNotFound: onClientStateNotFound2,
+      },
+      disableAllBackgroundProcesses,
+      {useUniqueName: false},
+    );
+    expect(rep2.idbName).toBe(rep1.idbName);
+
+    await rep1.mutate.addData({foo: 'bar'});
+    await rep1.persist();
+    fetchMocker.postOnce(
+      pullURL,
+      makePullResponseV1(rep1.clientID, 1, [{op: 'put', key: 'a', value: 1}]),
+    );
+    await rep1.pull();
+    await corruptClientsRefCountForTesting(rep1.perdag);
+
+    const onClientStateNotFound1 = vi.fn();
+    rep1.onClientStateNotFound = onClientStateNotFound1;
+    await rep1.persist();
+    expect(onClientStateNotFound1).toHaveBeenCalledTimes(1);
+    await expectDatabaseDropped(rep1.idbName);
+
+    // rep2 did not touch the corrupt chunk itself. It learns about the reset
+    // from rep1 instead of failing every later persist with a storage error.
+    await rep2Notified;
+    expect(onClientStateNotFound2).toHaveBeenCalledTimes(1);
+
+    // A later local failure on the dropped store must not fire it again.
+    await rep2.persist().catch(() => undefined);
+    expect(onClientStateNotFound2).toHaveBeenCalledTimes(1);
+  });
+
   test('Called from heartbeat if the perdag has an invalid ref count', async () => {
     vi.spyOn(console, 'error');
 

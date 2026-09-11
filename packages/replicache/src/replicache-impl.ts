@@ -21,6 +21,7 @@ import {
   mustGetHeadHash,
   type Store,
 } from './dag/store.ts';
+import {initDatabaseResetChannel} from './database-reset-channel.ts';
 import {
   baseSnapshotFromHash,
   DEFAULT_HEAD_NAME,
@@ -554,6 +555,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         clientGroupIDPromise: this.#clientGroupIDPromise,
       });
     }
+
+    this.#notifyDatabaseReset = initDatabaseResetChannel(
+      this.idbName,
+      this.#closeAbortController.signal,
+      () => this.#databaseResetByOtherInstance(),
+    );
 
     this.#onPersist = initOnPersistChannel(
       this.name,
@@ -1335,6 +1342,30 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #invalidRefCountRecovery: Promise<void> | undefined;
 
   /**
+   * Tells the other instances sharing our database that it was dropped. See
+   * {@link initDatabaseResetChannel}.
+   */
+  readonly #notifyDatabaseReset: () => void;
+
+  /**
+   * Another instance sharing our database found it corrupt and dropped it. Our
+   * store connection is gone with it, so treat it like our own recovery: fire
+   * `onClientStateNotFound` once so the app reloads into a fresh database.
+   */
+  #databaseResetByOtherInstance(): void {
+    if (this.#closed || this.#invalidRefCountRecovery !== undefined) {
+      return;
+    }
+    // Reuse the recovery slot so a later local detection (the dropped store
+    // will fail its next write) does not fire the callback a second time.
+    this.#invalidRefCountRecovery = promiseVoid;
+    this.#lc.error?.(
+      `Database ${this.idbName} was found corrupt and dropped by another instance, clientID: ${this.clientID}`,
+    );
+    this.#fireOnClientStateNotFound();
+  }
+
+  /**
    * Installed on every dag store that writes to our database. The store calls
    * it after the failing transaction has been released, so dropping the
    * database from here does not race with the rollback.
@@ -1380,6 +1411,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         dropError,
       );
     }
+    // The other tabs lost their connection to this database as well, and
+    // would otherwise only see generic storage errors from now on.
+    this.#notifyDatabaseReset();
     this.#fireOnClientStateNotFound();
   }
 
