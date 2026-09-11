@@ -97,6 +97,7 @@ import {
 } from './test-utils.ts'; // Why use fakes when we can use the real thing!
 import {
   CONNECT_TIMEOUT_MS,
+  DEFAULT_DISCONNECT_TIMEOUT_MS,
   createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   DEFAULT_PING_TIMEOUT_MS,
@@ -2767,7 +2768,11 @@ test('Connect timeout', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connecting);
   let currentSocket = await z.socket;
 
+  // Leaving initializing, then the first connect attempt.
   expect(connectionStates).toEqual([
+    {
+      name: 'connecting',
+    },
     {
       name: 'connecting',
     },
@@ -2832,9 +2837,10 @@ test('Connect timeout', async () => {
   // watchdog fires. Assert a small range rather than an exact count to avoid
   // depending on that ordering, while still requiring the loop to have made
   // the expected number of connect attempts (each contributing at least one
-  // "connecting" state) and to have ended up disconnected.
-  expect(connectionStates.length).toBeGreaterThanOrEqual(1 + 4 * 2);
-  expect(connectionStates.length).toBeLessThanOrEqual(1 + 4 * 2 + 1);
+  // "connecting" state) and to have ended up disconnected. The leading 2 is
+  // leaving initializing plus the first attempt.
+  expect(connectionStates.length).toBeGreaterThanOrEqual(2 + 4 * 2);
+  expect(connectionStates.length).toBeLessThanOrEqual(2 + 4 * 2 + 1);
   expect(connectionStates.at(-1)?.name).toEqual('disconnected');
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
     'connecting',
@@ -2858,13 +2864,15 @@ test('slow setup does not spend the server acknowledgement budget', async () => 
   // Setup that finishes just inside its own deadline. Before the deadlines
   // were split this left the server almost no time, and a healthy server was
   // reported as unreachable.
-  const realCreate = ActiveClientsManager.create;
-  vi.spyOn(ActiveClientsManager, 'create').mockImplementation(
-    async (...args: Parameters<typeof ActiveClientsManager.create>) => {
-      await sleep(CONNECT_TIMEOUT_MS - 1_000);
-      return realCreate(...args);
-    },
-  );
+  const realGetDeletedClients =
+    DeleteClientsManager.prototype.getDeletedClients;
+  vi.spyOn(
+    DeleteClientsManager.prototype,
+    'getDeletedClients',
+  ).mockImplementation(async function (this: DeleteClientsManager) {
+    await sleep(CONNECT_TIMEOUT_MS - 1_000);
+    return realGetDeletedClients.call(this);
+  });
 
   const z = zeroForTest();
   await z.waitForConnectionStatus(ConnectionStatus.Connecting);
@@ -2879,6 +2887,36 @@ test('slow setup does not spend the server acknowledgement budget', async () => 
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 1_000);
   await tickAFewTimes(vi);
   expect(connectTimeoutErrors(z)).toEqual([]);
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+
+  await z.triggerConnected();
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+});
+
+test('slow initialization does not spend any connect budget', async () => {
+  // Loading the local store can take tens of seconds on a slow device with a
+  // large replica. None of that says anything about the server, so it happens
+  // in `initializing`, before the connecting window and the setup deadline
+  // start.
+  const realCreate = ActiveClientsManager.create;
+  vi.spyOn(ActiveClientsManager, 'create').mockImplementation(
+    async (...args: Parameters<typeof ActiveClientsManager.create>) => {
+      await sleep(DEFAULT_DISCONNECT_TIMEOUT_MS * 2);
+      return realCreate(...args);
+    },
+  );
+
+  const z = zeroForTest();
+  expect(z.connectionStatus).toBe(ConnectionStatus.Initializing);
+
+  // Longer than both the setup deadline and the whole connecting window.
+  await vi.advanceTimersByTimeAsync(DEFAULT_DISCONNECT_TIMEOUT_MS * 2 - 1);
+  await tickAFewTimes(vi, 0);
+  expect(z.connectionStatus).toBe(ConnectionStatus.Initializing);
+  expect(connectTimeoutErrors(z)).toEqual([]);
+
+  await vi.advanceTimersByTimeAsync(1);
+  await tickAFewTimes(vi, 0);
   expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
 
   await z.triggerConnected();
@@ -2932,37 +2970,6 @@ test('connect timeout retries when AbortController drops abort reasons', async (
   } finally {
     vi.unstubAllGlobals();
   }
-});
-
-test('slow setup does not spend the server acknowledgement budget', async () => {
-  // Setup that finishes just inside its own deadline. Before the deadlines
-  // were split this left the server almost no time, and a healthy server was
-  // reported as unreachable.
-  const realCreate = ActiveClientsManager.create;
-  vi.spyOn(ActiveClientsManager, 'create').mockImplementation(
-    async (...args: Parameters<typeof ActiveClientsManager.create>) => {
-      await sleep(CONNECT_TIMEOUT_MS - 1_000);
-      return realCreate(...args);
-    },
-  );
-
-  const z = zeroForTest();
-  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-
-  // Wait out the slow setup.
-  await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 1_000);
-  await tickAFewTimes(vi);
-  expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
-
-  // The old single budget would have expired 1s from here. The server gets a
-  // full budget of its own instead.
-  await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 1_000);
-  await tickAFewTimes(vi);
-  expect(connectTimeoutErrors(z)).toEqual([]);
-  expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
-
-  await z.triggerConnected();
-  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 });
 
 test('connect timeout retries when AbortController drops abort reasons', async () => {
@@ -3022,7 +3029,7 @@ test('connect timeout during setup retries without an unhandled rejection', asyn
   };
   window.addEventListener('unhandledrejection', onUnhandled);
 
-  vi.spyOn(ActiveClientsManager, 'create').mockReturnValue(
+  vi.spyOn(DeleteClientsManager.prototype, 'getDeletedClients').mockReturnValue(
     new Promise(() => {}),
   );
 
@@ -3057,6 +3064,8 @@ test('connect timeout during setup retries without an unhandled rejection', asyn
       'reading the cookie',
       'reading the client group ID',
       'initializing active clients',
+      'reading the profile ID',
+      'reading deleted clients',
     ]);
 
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
@@ -3064,6 +3073,27 @@ test('connect timeout during setup retries without an unhandled rejection', asyn
   } finally {
     window.removeEventListener('unhandledrejection', onUnhandled);
   }
+});
+
+test('a hung initialization stays initializing and makes no connect attempt', async () => {
+  // Retrying cannot unstick the local store, since every attempt would await
+  // the same promise, and the server has not been asked anything, so there is
+  // nothing to time out.
+  vi.spyOn(ActiveClientsManager, 'create').mockReturnValue(
+    new Promise(() => {}),
+  );
+
+  const z = zeroForTest({logLevel: 'debug'});
+  await vi.advanceTimersByTimeAsync(DEFAULT_DISCONNECT_TIMEOUT_MS * 2);
+  await tickAFewTimes(vi, 0);
+
+  expect(z.connectionStatus).toBe(ConnectionStatus.Initializing);
+  expect(
+    z.testLogSink.messages.filter(
+      ([level, _context, messages]) =>
+        level === 'info' && messages.includes('Connecting...'),
+    ),
+  ).toEqual([]);
 });
 
 test('socketOrigin', async () => {
@@ -4983,11 +5013,15 @@ test('We should send a deleteClient when a Zero instance is closed', async () =>
 
 describe('Zero replicache refresh integration', () => {
   describe('enableRefresh', () => {
-    test('enableRefresh is false when Connecting or Connected, true when Error', async () => {
+    test('enableRefresh is false when Initializing, Connecting or Connected, true when Error', async () => {
       const z = zeroForTest();
 
-      // Initial state: Connecting
-      expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+      // Initial state: Initializing
+      expect(z.connectionStatus).toBe(ConnectionStatus.Initializing);
+      // enableRefresh should be false while about to connect
+      expect(z.enableRefresh()).toBe(false);
+
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
       // enableRefresh should be false during connecting
       expect(z.enableRefresh()).toBe(false);
 

@@ -15,6 +15,9 @@ const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
 
 export type ConnectionManagerState =
   | {
+      name: ConnectionStatus.Initializing;
+    }
+  | {
       name: ConnectionStatus.Disconnected;
       reason: DisconnectedReason;
     }
@@ -106,19 +109,13 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   constructor(options: ConnectionManagerOptions) {
     super();
 
-    const now = Date.now();
-
     this.#disconnectTimeout = options.disconnectTimeout;
     this.#timeoutCheckIntervalMs =
       options.timeoutCheckIntervalMs ?? DEFAULT_TIMEOUT_CHECK_INTERVAL_MS;
-    this.#state = {
-      name: ConnectionStatus.Connecting,
-      attempt: 0,
-      disconnectAt: now + this.#disconnectTimeout,
-    };
-    this.#connectingStartedAt = now;
-    this.#lastTimeoutCheckAt = now;
-    this.#maybeStartTimeoutInterval();
+    // The connecting window, and the timer that enforces it, start in
+    // initialized(), once the local store is loaded.
+    this.#state = {name: ConnectionStatus.Initializing};
+    this.#lastTimeoutCheckAt = Date.now();
   }
 
   get state(): ConnectionManagerState {
@@ -205,6 +202,38 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
     }
     this.connecting();
     return true;
+  }
+
+  /**
+   * Transition from initializing to connecting, once the local store is
+   * loaded.
+   *
+   * This is where the connecting window starts. Loading the local store can
+   * take tens of seconds on a slow device with a large replica, and none of
+   * that says anything about whether the server is reachable, so it is not
+   * charged against the disconnect timeout. No connect attempt has been made
+   * yet, so `attempt` is 0.
+   *
+   * A no-op in any other state: something else, like `close()`, has already
+   * moved the state on.
+   *
+   * @returns An object containing a promise that resolves on the next state change.
+   */
+  initialized(): {nextStatePromise: Promise<ConnectionManagerState>} {
+    if (this.#state.name !== ConnectionStatus.Initializing) {
+      return {nextStatePromise: this.#nextStatePromise()};
+    }
+
+    const now = Date.now();
+    this.#connectingStartedAt = now;
+    this.#state = {
+      name: ConnectionStatus.Connecting,
+      attempt: 0,
+      disconnectAt: now + this.#disconnectTimeout,
+    };
+    const nextStatePromise = this.#publishStateAndGetPromise();
+    this.#maybeStartTimeoutInterval();
+    return {nextStatePromise};
   }
 
   /**

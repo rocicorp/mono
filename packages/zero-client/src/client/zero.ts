@@ -920,14 +920,15 @@ export class Zero<
   }
 
   #enableRefresh(): boolean {
-    // Don't refresh if connected or connecting, unless #forceEnableRefresh to
-    // avoid receiving new snapshots from refresh before receiving the new
-    // snapshot via poke from the connection (which results in a "unexpected
-    // base cookie for poke" error).
+    // Don't refresh if connected, connecting, or about to connect, unless
+    // #forceEnableRefresh to avoid receiving new snapshots from refresh before
+    // receiving the new snapshot via poke from the connection (which results
+    // in a "unexpected base cookie for poke" error).
     return (
       this.#forceEnableRefresh ||
       (!this.#connectionManager.is(ConnectionStatus.Connected) &&
-        !this.#connectionManager.is(ConnectionStatus.Connecting))
+        !this.#connectionManager.is(ConnectionStatus.Connecting) &&
+        !this.#connectionManager.is(ConnectionStatus.Initializing))
     );
   }
 
@@ -1972,6 +1973,7 @@ export class Zero<
         lc.debug?.('disconnect() called while closed');
         return;
 
+      case ConnectionStatus.Initializing:
       case ConnectionStatus.Disconnected:
       case ConnectionStatus.Connecting:
       case ConnectionStatus.NeedsAuth:
@@ -2196,6 +2198,24 @@ export class Zero<
     const {auth} = this.#options;
     this.#setAuth(auth);
 
+    // Wait for the local work every connect attempt starts with: the replica
+    // loaded (the cookie is read once it is), the client group ID and the
+    // active clients. On a slow device with a large replica this takes tens of
+    // seconds, and none of it depends on the server, so it happens in
+    // `initializing` instead of spending the connecting window and the setup
+    // deadline of the first attempts.
+    try {
+      await Promise.all([
+        this.#rep.cookie,
+        this.clientGroupID,
+        this.#activeClientsManager,
+      ]);
+    } catch {
+      // The first connect attempt awaits the same promises and reports the
+      // failure through the usual disconnect path.
+    }
+    this.#connectionManager.initialized();
+
     let backoffMs: number | undefined;
     let additionalConnectParams: Record<string, string> | undefined;
 
@@ -2404,6 +2424,10 @@ export class Zero<
           case ConnectionStatus.Closed:
             // run loop will terminate
             break;
+
+          case ConnectionStatus.Initializing:
+            // initialized() is called before the loop starts.
+            unreachable();
 
           default:
             unreachable(currentState);
