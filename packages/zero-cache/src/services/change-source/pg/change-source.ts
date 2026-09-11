@@ -33,7 +33,6 @@ import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
 } from '../../../observability/metrics.ts';
-import {type LexiVersion} from '../../../types/lexi-version.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
 import {
   connectPgClient,
@@ -50,18 +49,13 @@ import {
   majorVersionFromString,
   majorVersionToString,
 } from '../../../types/state-version.ts';
-import type {Sink} from '../../../types/streams.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
   getSubscriptionStateAndContext,
   type SubscriptionStateAndContext,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
-import {BackfillManager} from '../common/backfill-manager.ts';
-import {
-  ChangeStreamMultiplexer,
-  type Listener,
-} from '../common/change-stream-multiplexer.ts';
+import {startMultiplexedChangeStream} from '../common/multiplexed-change-stream.ts';
 import {
   restoreReplica,
   type InitializeResult,
@@ -407,12 +401,8 @@ async function checkAndUpdateUpstream(
   return upstreamReplica;
 }
 
-// Parameterize this if necessary. In practice starvation may never happen.
-const MAX_LOW_PRIORITY_DELAY_MS = 1000;
-
-type ReservationState = {
-  lastWatermark?: string;
-};
+/** A replication message that belongs to a transaction. */
+type TransactionalMessage = [lsn: bigint, Message];
 
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
@@ -543,7 +533,7 @@ export class PostgresChangeSource implements ChangeSource {
     backfillRequests: BackfillRequest[],
   ): Promise<ChangeStream> {
     const clientStart = majorVersionFromString(clientWatermark) + 1n;
-    const {messages, acks} = await this.#subscribe(
+    const upstream = await this.#subscribe(
       this.#lc,
       this.#db,
       slot,
@@ -553,32 +543,6 @@ export class PostgresChangeSource implements ChangeSource {
       undefined,
       this.#streamInboundTimeoutMs,
     );
-    const acker = new Acker(acks, clientWatermark);
-
-    // The ChangeStreamMultiplexer facilitates cooperative streaming from
-    // the main replication stream and backfill streams initiated by the
-    // BackfillManager.
-    const changes = new ChangeStreamMultiplexer(this.#lc, clientWatermark);
-    const backfillManager = new BackfillManager(
-      this.#lc,
-      changes,
-      req =>
-        this.#streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
-          textCopy: this.#textCopy,
-          resume: this.#backfillOptions.resume ?? false,
-          minKeyCorrelation: this.#backfillOptions.minKeyCorrelation,
-        }),
-      (req, from, to) => this.#rowsExistUpstream(req, from, to),
-      undefined,
-      undefined,
-      undefined,
-      this.#backfillOptions.commitThresholdBytes,
-    );
-    changes
-      .addProducers(messages, backfillManager)
-      .addListeners(backfillManager, acker);
-    backfillManager.run(clientWatermark, backfillRequests);
-
     const changeMaker = new ChangeMaker(
       this.#shard,
       shardConfig,
@@ -590,26 +554,27 @@ export class PostgresChangeSource implements ChangeSource {
      * Determines if the incoming message is transactional, otherwise handling
      * non-transactional messages with a downstream status message.
      */
-    const isTransactionalMessage = (
-      lsn: bigint,
-      msg: StreamMessage[1],
-    ): msg is Message => {
+    const isTransactional = (
+      message: StreamMessage,
+      pushStatus: (status: DownstreamStatusMessage) => void,
+    ): message is TransactionalMessage => {
+      const [lsn, msg] = message;
       if (
         msg.tag === 'message' &&
         msg.prefix === this.#lagReporter?.messagePrefix
       ) {
-        changes.pushStatus(this.#lagReporter.processLagReportMessage(msg));
+        pushStatus(this.#lagReporter.processLagReportMessage(msg));
         return false;
       }
       // Checks if we are passed the LSN of the expected lag report, in which
       // case a new one is initiated.
       const status = this.#lagReporter?.checkCurrentLSN(lsn);
       if (status) {
-        changes.pushStatus(status);
+        pushStatus(status);
       }
 
       if (msg.tag === 'keepalive') {
-        changes.pushStatus([
+        pushStatus([
           'status',
           {ack: msg.shouldRespond},
           {watermark: majorVersionToString(lsn)},
@@ -633,100 +598,53 @@ export class PostgresChangeSource implements ChangeSource {
       return true;
     };
 
-    void (async () => {
-      try {
-        let reservation: ReservationState | null = null;
-        let inTransaction = false;
-
-        for await (const [lsn, msg] of messages) {
-          if (!isTransactionalMessage(lsn, msg)) {
-            // If we're not in a transaction but the last reservation was kept
-            // because of pending keepalives or lag reports in the queue,
-            // release the reservation.
-            if (!inTransaction && reservation?.lastWatermark) {
-              changes.release(reservation.lastWatermark);
-              reservation = null;
-            }
-            continue;
-          }
-
-          if (!reservation) {
-            const res = changes.reserve('replication');
-            const lastWatermark = typeof res === 'string' ? res : await res;
-            reservation = {lastWatermark};
-          }
-
-          let lastChange: ChangeStreamMessage | undefined;
-          for (const change of await changeMaker.makeChanges(
+    const stream = startMultiplexedChangeStream(
+      this.#lc,
+      clientWatermark,
+      backfillRequests,
+      upstream,
+      {
+        isTransactional,
+        makeChanges: ([lsn, msg]) =>
+          changeMaker.makeChanges(
             this.#lc.withContext('lsn', fromBigInt(lsn)),
             lsn,
             msg,
-          )) {
-            await changes.push(change); // Allow the change-streamer to push back.
-            lastChange = change;
+          ),
+        onError: async e => {
+          const err = translateError(e);
+          if (err instanceof ShutdownSignal) {
+            // Log the new state of the replica to surface information about
+            // the server that sent the shutdown signal, if any.
+            await this.#logCurrentReplicaInfo();
           }
-
-          switch (lastChange?.[0]) {
-            case 'begin':
-              inTransaction = true;
-              break;
-            case 'commit':
-              inTransaction = false;
-              reservation.lastWatermark = lastChange[2].watermark;
-              if (
-                messages.queued === 0 ||
-                changes.waiterDelay() > MAX_LOW_PRIORITY_DELAY_MS
-              ) {
-                // After each transaction, release the reservation:
-                // - if there are no pending upstream messages
-                // - or if a low priority request has been waiting for longer
-                //   than MAX_LOW_PRIORITY_DELAY_MS. This is to prevent
-                //   (backfill) starvation on very active upstreams.
-                changes.release(reservation.lastWatermark);
-                reservation = null;
-              }
-              break;
-          }
-        }
-      } catch (e) {
-        // Note: no need to worry about reservations here since downstream
-        //       is being completely canceled.
-        const err = translateError(e);
-        if (err instanceof ShutdownSignal) {
-          // Log the new state of the replica to surface information about the
-          // server that sent the shutdown signal, if any.
-          await this.#logCurrentReplicaInfo();
-        }
-        changes.fail(err);
-      }
-    })();
+          return err;
+        },
+      },
+      {
+        streamer: req =>
+          this.#streamBackfill(
+            this.#lc,
+            this.#upstreamUri,
+            this.#replica,
+            req,
+            {
+              textCopy: this.#textCopy,
+              resume: this.#backfillOptions.resume ?? false,
+              minKeyCorrelation: this.#backfillOptions.minKeyCorrelation,
+            },
+          ),
+        rowsExist: (req, from, to) => this.#rowsExistUpstream(req, from, to),
+        commitThresholdBytes: this.#backfillOptions.commitThresholdBytes,
+      },
+    );
 
     this.#lc.info?.(
       `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${
         this.#replica.generation
       })`,
     );
-
-    return {
-      changes: changes.asSource(),
-      acks: {
-        push: msg => {
-          if (msg[0] === 'status') {
-            acker.ack(msg[2].watermark);
-          } else {
-            // A subscriber's declared backfill progress, forwarded by the
-            // change-streamer because it could not resolve it from its own
-            // change log. Handled asynchronously (it may query upstream); a
-            // failure costs a backfill that restarts rather than resumes.
-            void backfillManager
-              .onBackfillRequest(msg)
-              .catch(e =>
-                this.#lc.warn?.(`error handling a backfill request`, e),
-              );
-          }
-        },
-      },
-    };
+    return stream;
   }
 
   /**
@@ -874,78 +792,6 @@ export class PostgresChangeSource implements ChangeSource {
       () => this.#cleanUpOlderReplicasAndSlots(),
       REPLICA_SLOT_CLEANUP_INTERVAL_MS,
     );
-  }
-}
-
-// Exported for testing.
-export class Acker implements Listener {
-  #acks: Sink<bigint>;
-  #waitingForDownstreamAck: string | null;
-
-  /**
-   * @param resumeWatermark the watermark the stream resumes after. What came
-   *     before it was received on an earlier connection, and only the
-   *     change-streamer knows whether it has persisted it, so keepalives are
-   *     not acked until the change-streamer has acked it. A change-streamer
-   *     whose SQLite change log is ahead of its backup would otherwise have
-   *     the slot moved past transactions that only that log holds.
-   */
-  constructor(acks: Sink<bigint>, resumeWatermark: string | null) {
-    this.#acks = acks;
-    this.#waitingForDownstreamAck = resumeWatermark;
-  }
-
-  onChange(change: ChangeStreamMessage): void {
-    switch (change[0]) {
-      case 'status':
-        const {watermark} = change[2];
-        if (change[1].ack) {
-          this.#expectDownstreamAck(watermark);
-        } else {
-          // Keepalives with shouldRespond = false are sent to Listeners,
-          // but for efficiency they are not sent downstream to the
-          // change-streamer. Ack them here if the change-streamer is caught
-          // up. This updates the replication slot's `confirmed_flush_lsn`
-          // more quickly (rather than waiting for the periodic shouldRespond),
-          // which is useful for monitoring replication slot lag.
-          this.#ackIfDownstreamIsCaughtUp(watermark);
-        }
-        break;
-      case 'begin':
-        // Mark the commit watermark as being expected so that any intermediate
-        // shouldRespond=false watermarks, which will be at the
-        // commitWatermark, are *not* acked, as the ack must come from
-        // change-streamer after it commits the transaction.
-        if (!change[1].skipAck) {
-          this.#expectDownstreamAck(change[2].commitWatermark);
-        }
-        break;
-    }
-  }
-
-  #expectDownstreamAck(watermark: string) {
-    this.#waitingForDownstreamAck = watermark;
-  }
-
-  ack(watermark: LexiVersion) {
-    if (
-      this.#waitingForDownstreamAck &&
-      this.#waitingForDownstreamAck <= watermark
-    ) {
-      this.#waitingForDownstreamAck = null;
-    }
-    this.#sendAck(watermark);
-  }
-
-  #ackIfDownstreamIsCaughtUp(watermark: string) {
-    if (this.#waitingForDownstreamAck === null) {
-      this.#sendAck(watermark);
-    }
-  }
-
-  #sendAck(watermark: LexiVersion) {
-    const lsn = majorVersionFromString(watermark);
-    this.#acks.push(lsn);
   }
 }
 
