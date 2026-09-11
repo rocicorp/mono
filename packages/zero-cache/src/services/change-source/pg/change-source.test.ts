@@ -82,6 +82,7 @@ test('a non-transactional foreign-shard message does not interrupt a running bac
       publications: ['zero_pub'],
       initialSchema: {},
     } as unknown as Replica,
+    170000, // pgVersion (PG 17)
     {backupPath: null, backupV5: false} as unknown as BackupOptions,
     {} as ServerContext,
     0, // lagReportIntervalMs: no LagReporter
@@ -277,24 +278,21 @@ test('lag reporter retries missing reports', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(1_000);
 
-  const dbMock = vi.fn((strings: TemplateStringsArray) => {
-    if (strings.join('').includes('current_setting')) {
-      return [{pgVersion: 170000}];
-    }
-
-    return [
-      {
-        commitTimeMs: Date.now(),
-        lsn: `0/${dbMock.mock.calls.length.toString(16)}`,
-      },
-    ];
-  });
+  // pgVersion is now supplied to the LagReporter constructor, so it no longer
+  // queries current_setting; every call is an emit-message report.
+  const dbMock = vi.fn(() => [
+    {
+      commitTimeMs: Date.now(),
+      lsn: `0/${dbMock.mock.calls.length.toString(16)}`,
+    },
+  ]);
   const db = dbMock as unknown as PostgresDB;
 
   const reporter = new LagReporter(
     createSilentLogContext(),
     {appID: 'test', shardNum: 0},
     db,
+    170000, // pgVersion (PG 17)
     10,
   );
 
@@ -303,16 +301,16 @@ test('lag reporter retries missing reports', async () => {
       firstCommitTimeMs: 1_000,
       nextSendTimeMs: 1_000,
     });
-    expect(dbMock).toHaveBeenCalledTimes(2);
+    expect(dbMock).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(9);
-    expect(dbMock).toHaveBeenCalledTimes(2);
+    expect(dbMock).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(dbMock).toHaveBeenCalledTimes(3);
+    expect(dbMock).toHaveBeenCalledTimes(2);
 
     await vi.advanceTimersByTimeAsync(10);
-    expect(dbMock).toHaveBeenCalledTimes(4);
+    expect(dbMock).toHaveBeenCalledTimes(3);
   } finally {
     reporter.stop();
     vi.useRealTimers();

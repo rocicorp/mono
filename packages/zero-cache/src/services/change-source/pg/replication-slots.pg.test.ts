@@ -9,7 +9,7 @@ import type {ShardID} from '../../../types/shards.ts';
 import {
   createReplicaAndSlot,
   createReplicationSlot,
-  dropOldReplicasAndSlots,
+  dropInactiveSlotsAndReplicas,
   slotPoolSuffix,
   type ReplicationSlotResult,
 } from './replication-slots.ts';
@@ -103,7 +103,11 @@ describe('createReplicationSlot', () => {
     }
 
     // Cleanup
-    await dropOldReplicasAndSlots(lc, upstream, shard, 100n);
+    await dropInactiveSlotsAndReplicas(lc, upstream, shard, [
+      'zero_18_a',
+      'zero_18_b',
+      'zero_18_c',
+    ]);
   });
 
   test('createReplicationSlot times out behind an older idle transaction', async () => {
@@ -255,11 +259,11 @@ describe('createReplicationSlot', () => {
     ]);
 
     // Cleanup
-    expect(await dropOldReplicasAndSlots(lc, upstream, shard, 100n)).toEqual({
-      dropped: 0,
-      active: 0,
-      draining: 3,
-    });
+    await dropInactiveSlotsAndReplicas(lc, upstream, shard, [
+      'zero_18_a',
+      'zero_18_b',
+      'zero_18_c',
+    ]);
   });
 
   test('concurrent replica creation uses different slot names', async () => {
@@ -290,11 +294,11 @@ describe('createReplicationSlot', () => {
     expect(new Set(replicaSlots.flat())).toEqual(expectedSlots);
 
     // Cleanup
-    expect(await dropOldReplicasAndSlots(lc, upstream, shard, 100n)).toEqual({
-      dropped: 0,
-      active: 0,
-      draining: 3,
-    });
+    await dropInactiveSlotsAndReplicas(lc, upstream, shard, [
+      'zero_18_a',
+      'zero_18_b',
+      'zero_18_c',
+    ]);
   });
 
   test('failure from captureSnapshot cleans up slot', async () => {
@@ -321,7 +325,7 @@ describe('createReplicationSlot', () => {
     expect(replicaSlots).toEqual([]);
   });
 
-  test('dropReplicaAndSlots', async () => {
+  test('dropInactiveSlotsAndReplicas', async () => {
     const lc = createSilentLogContext();
     const results: ReplicationSlotResult<string>[] = [];
     const create = async (id: string) => {
@@ -332,42 +336,56 @@ describe('createReplicationSlot', () => {
         shard,
         id,
         false,
-        {
-          backupPath: id,
-          backupV5: true,
-        },
+        {backupPath: id, backupV5: true},
         snapshot => Promise.resolve(`captured(${snapshot})`),
       );
       results.push(result);
     };
 
-    await create('rep_1');
-    await create('rep_2');
-    await create('rep_3');
+    // Creates slots zero_18_{a,b,c,d} from the pool, all initially active.
+    await create('rep_a');
+    await create('rep_b');
+    await create('rep_c');
+    await create('rep_d');
 
-    // Close end the first replication slot but leave the second
-    // one active.
-    results[0].initialSession.destroy();
-
-    await vi.waitFor(async () => {
-      expect(await dropOldReplicasAndSlots(lc, upstream, shard, 3n)).toEqual({
-        active: 1,
-        draining: 1,
-        dropped: 1,
-      });
-    });
-
-    // Now close the rest.
+    // Keep 'a' active; make b, c, and d inactive.
     results[1].initialSession.destroy();
     results[2].initialSession.destroy();
+    results[3].initialSession.destroy();
 
     await vi.waitFor(async () => {
-      expect(
-        await dropOldReplicasAndSlots(lc, upstream, shard, 4n),
-      ).toMatchObject({
-        active: 0,
-        draining: 0,
-      });
+      const inactive = await upstream<{slot: string}[]>`
+        SELECT slot_name as slot FROM pg_replication_slots
+          WHERE slot_name LIKE 'zero_18_%' AND NOT active
+          ORDER BY slot_name`.values();
+      expect(inactive).toEqual([['zero_18_b'], ['zero_18_c'], ['zero_18_d']]);
     });
+
+    // Request cleanup of a (active, must be skipped) and b, c. Slot d is
+    // inactive but not in the list, so it must be left alone.
+    await dropInactiveSlotsAndReplicas(lc, upstream, shard, [
+      'zero_18_a',
+      'zero_18_b',
+      'zero_18_c',
+    ]);
+
+    // Only the inactive, listed slots (b, c) were dropped. 'a' remains
+    // because it is still active; 'd' remains because it wasn't listed.
+    expect(
+      await upstream`
+        SELECT slot_name FROM pg_replication_slots
+          WHERE slot_name LIKE 'zero_18_%' ORDER BY slot_name`.values(),
+    ).toEqual([['zero_18_a'], ['zero_18_d']]);
+
+    // The replica rows for the dropped slots (b, c) were deleted; the rows
+    // for the surviving slots (a, d) remain.
+    expect(
+      await upstream`
+        SELECT id, slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas
+          ORDER BY slot`,
+    ).toMatchObject([
+      {id: 'rep_a', slot: 'zero_18_a'},
+      {id: 'rep_d', slot: 'zero_18_d'},
+    ]);
   });
 });
