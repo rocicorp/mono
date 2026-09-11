@@ -67,12 +67,6 @@ export default defineConfig({
     silent: 'passed-only',
     browser,
 
-    // Vitest 5 changed the default to `true`. Several existing tests rely on
-    // mock call history (e.g. `vi.fn()` calls) persisting across tests within
-    // a file, matching Vitest 4's default of `false`. Restore that default
-    // rather than rewriting the affected tests.
-    clearMocks: false,
-
     coverage: {
       provider: 'v8',
       include: coverageInclude,
