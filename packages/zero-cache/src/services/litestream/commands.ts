@@ -14,7 +14,10 @@ import {
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {deleteChangeLogDB} from '../replicator/change-log-db.ts';
-import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
+import {
+  getSubscriptionState,
+  type SubscriptionState,
+} from '../replicator/schema/replication-state.ts';
 import {litestreamSocketPath} from './litestream-controller.ts';
 import {
   litestreamBackupListDuration,
@@ -41,7 +44,7 @@ export type RestoreResult =
   | 'invalid_replica'
   | 'error';
 
-type RestoreAttempt = {
+export type RestoreAttempt = {
   restored: boolean;
   backupURL: string | undefined;
   result: RestoreResult;
@@ -353,29 +356,11 @@ function replicaIsValid(
     // Note: Open the database and read the subscription state as a
     // sanity / corruption check, even if there are no constraints.
     db = new Database(lc, replica);
-    const {replicaVersion, watermark} = getSubscriptionState(
-      new StatementRunner(db),
+    return replicaStateIsValid(
+      lc,
+      getSubscriptionState(new StatementRunner(db)),
+      constraints,
     );
-    if (constraints) {
-      if (replicaVersion !== constraints.replicaVersion) {
-        lc.warn?.(
-          `Local replica version ${replicaVersion} does not match expected replicaVersion ${constraints.replicaVersion}`,
-          constraints,
-        );
-        return false;
-      }
-      if (watermark < constraints.minWatermark) {
-        lc.warn?.(
-          `Local replica watermark ${watermark} is earlier than minWatermark ${constraints.minWatermark}`,
-        );
-        return false;
-      }
-      lc.info?.(
-        `Local replica at version ${replicaVersion} and watermark ${watermark} is compatible`,
-        constraints,
-      );
-    }
-    return true;
   } catch (e) {
     if (isSQLiteCorruption(e)) {
       logSQLiteCorruptionDiagnostics(lc, 'restored replica', replica, e);
@@ -385,6 +370,42 @@ function replicaIsValid(
   } finally {
     db?.close();
   }
+}
+
+/**
+ * Whether a replica at `state` is compatible with the change-streamer whose
+ * snapshot reservation returned `constraints`: the same replica version, and a
+ * watermark it can still catch up from. With no constraints, any readable
+ * replica is.
+ */
+export function replicaStateIsValid(
+  lc: LogContext,
+  {
+    replicaVersion,
+    watermark,
+  }: Pick<SubscriptionState, 'replicaVersion' | 'watermark'>,
+  constraints: ReplicaConstraints | undefined,
+): boolean {
+  if (constraints) {
+    if (replicaVersion !== constraints.replicaVersion) {
+      lc.warn?.(
+        `Local replica version ${replicaVersion} does not match expected replicaVersion ${constraints.replicaVersion}`,
+        constraints,
+      );
+      return false;
+    }
+    if (watermark < constraints.minWatermark) {
+      lc.warn?.(
+        `Local replica watermark ${watermark} is earlier than minWatermark ${constraints.minWatermark}`,
+      );
+      return false;
+    }
+    lc.info?.(
+      `Local replica at version ${replicaVersion} and watermark ${watermark} is compatible`,
+      constraints,
+    );
+  }
+  return true;
 }
 
 export function startReplicaBackupProcess(
