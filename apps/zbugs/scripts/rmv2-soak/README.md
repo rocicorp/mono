@@ -48,7 +48,7 @@ pnpm run build-litestream        # idempotent; --force to rebuild
 | Binary          | Source                                   | Why                                                                                                                                              |
 | --------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `litestream-v3` | `rocicorp/litestream` @ `zero@v0.0.10`   | the `PurgeLocker` branch is gated on `litestream.executable` -- the _v3_ path. Omitting it silently skips the purge lock and diverges from prod. |
-| `litestream-v5` | `rocicorp/litestream` @ `v0.5.17-zero.1` | does all of the backing up and restoring                                                                                                         |
+| `litestream-v5` | `rocicorp/litestream` @ `v0.5.18-zero.8` | does all of the backing up and restoring                                                                                                         |
 | `vfs-query`     | `mono/go`, `make build`                  | reads the backup watermark back out of S3 through the litestream VFS                                                                             |
 
 Both litestream binaries link `mattn/go-sqlite3` via cgo, so they must be built
