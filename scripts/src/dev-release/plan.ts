@@ -187,14 +187,16 @@ export function validateImageTag(tag: string): void {
       `Tag "${tag}" is protected and cannot be overwritten by dev releases.`,
     );
   }
-  if (!semverRegex.test(tag)) {
+  const match = tag.match(semverRegex);
+  if (!match) {
     throw new Error(
       `Tag "${tag}" is not a valid semantic version (SemVer 2.0.0). Prerelease identifiers may only contain alphanumerics and hyphens.`,
     );
   }
-  if (!tag.includes('-dev-')) {
+  const prerelease = match[4];
+  if (!prerelease?.startsWith('dev-')) {
     throw new Error(
-      `Tag "${tag}" must be a dev prerelease version containing "-dev-" to prevent colliding with official releases.`,
+      `Tag "${tag}" must be a dev prerelease version with a "-dev-" prefix immediately following the core version (e.g. <x>.<y>.<z>-dev-...).`,
     );
   }
 }

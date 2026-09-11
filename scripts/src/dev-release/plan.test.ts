@@ -119,6 +119,14 @@ test('validateImageTag accepts valid SemVer dev tags and blocks invalid/protecte
   expect(() => validateImageTag('1.8.0-rc.1')).toThrowError(
     /must be a dev prerelease version/,
   );
+  expect(() => validateImageTag('1.8.0+foo-dev-bar')).toThrowError(
+    /Invalid Docker image tag/,
+  );
+  expect(() => validateImageTag('1.8.0-rc-dev-bar')).toThrowError(
+    /must be a dev prerelease version/,
+  );
+  expect(() => validateImageTag('1.11.1-dev-main-01234567')).not.toThrow();
+  expect(() => validateImageTag('1.11.1-dev-01234567')).not.toThrow();
   expect(() => validateImageTag('v1.8.0')).toThrowError(
     /not a valid semantic version/,
   );
@@ -305,4 +313,18 @@ test('planDevRelease incorporates expanded short SHA when git detects collision'
   });
 
   expect(plan.image_tag).toBe('1.11.1-dev-main-e8cc6889fa');
+});
+
+test('planDevRelease handles short SHA with leading zeroes (e.g. 01234567)', () => {
+  const leadingZeroSha = '0123456789abcdef0123456789abcdef01234567';
+  const {exec} = makeMockExec(leadingZeroSha, '01234567');
+
+  const plan = planDevRelease({
+    exec,
+    branchInput: 'main',
+    workflowRefName: 'main',
+  });
+
+  expect(plan.image_tag).toBe('1.11.1-dev-main-01234567');
+  expect(() => validateImageTag(plan.image_tag)).not.toThrow();
 });
