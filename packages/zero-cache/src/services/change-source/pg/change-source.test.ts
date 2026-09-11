@@ -5,13 +5,13 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import type {Sink} from '../../../types/streams.ts';
 import {Subscription} from '../../../types/subscription.ts';
 import type {BackfillMessage} from '../common/backfill-manager.ts';
+import {Acker} from '../common/multiplexed-change-stream.ts';
 import type {
   BackfillRequest,
   ChangeStreamMessage,
   MessageBackfill,
 } from '../protocol/current.ts';
 import {
-  Acker,
   isIndexStructurallyChanged,
   LagReporter,
   PostgresChangeSource,
