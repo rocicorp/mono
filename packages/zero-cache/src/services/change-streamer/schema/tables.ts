@@ -7,6 +7,7 @@ import {equals} from '../../../../../shared/src/set-utils.ts';
 import {runTx} from '../../../db/run-transaction.ts';
 import {type PostgresDB} from '../../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../../types/shards.ts';
+import {orTimeout} from '../../../types/timeout.ts';
 import type {
   BackfillID,
   Change,
@@ -77,6 +78,40 @@ export async function discoverChangeStreamerAddress(
   const result = await sql<{ownerAddress: string | null}[]> /*sql*/ `
     SELECT "ownerAddress" FROM ${sql(cdcSchema(shard))}."replicationState"`;
   return result[0].ownerAddress;
+}
+
+/**
+ * Makes `taskID` the change-streamer that {@link discoverChangeStreamerAddress}
+ * finds. Gives up after `timeoutMs`: a postgres.js query cannot be canceled,
+ * so a hung UPDATE is abandoned, and its eventual rejection ignored.
+ */
+export async function assumeChangeStreamerOwnership(
+  lc: LogContext,
+  sql: PostgresDB,
+  shard: ShardID,
+  taskID: string,
+  discoveryAddress: string,
+  discoveryProtocol: string,
+  timeoutMs: number,
+): Promise<void> {
+  // we omit `ws://` so that old view syncer versions that are not expecting the protocol continue to not get it
+  const ownerAddress =
+    discoveryProtocol === 'ws'
+      ? discoveryAddress
+      : `${discoveryProtocol}://${discoveryAddress}`;
+  lc.info?.(`assuming ownership at ${ownerAddress}`);
+  const start = performance.now();
+  const update = sql`
+    UPDATE ${sql(cdcSchema(shard))}."replicationState"
+      SET ${sql({owner: taskID, ownerAddress})}`;
+  if ((await orTimeout(update, timeoutMs)) === 'timed-out') {
+    void update.catch(() => {});
+    throw new AbortError(
+      `assume-ownership did not complete within ${timeoutMs}ms`,
+    );
+  }
+  const elapsed = (performance.now() - start).toFixed(2);
+  lc.info?.(`assumed ownership at ${ownerAddress} (${elapsed} ms)`);
 }
 
 /**
