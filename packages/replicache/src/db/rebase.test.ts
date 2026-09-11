@@ -7,8 +7,13 @@ import type {Read} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import type {Hash} from '../hash.ts';
+import type {ZeroTxData} from '../replicache-options.ts';
 import {SYNC_HEAD_NAME} from '../sync/sync-head-name.ts';
-import type {WriteTransaction} from '../transactions.ts';
+import {
+  type WriteTransaction,
+  type WriteTransactionImpl,
+  zeroData,
+} from '../transactions.ts';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
   type Commit,
@@ -203,6 +208,98 @@ async function createMissingMutatorFixture() {
   return fixture;
 }
 
+async function createThrowingMutatorFixture() {
+  const formatVersion = FormatVersion.Latest;
+  const consoleInfoStub = vi.spyOn(console, 'info');
+  const clientID = 'test_client_id';
+  const store = new TestStore();
+  const b = new ChainBuilder(store, undefined, formatVersion);
+  await b.addGenesis(clientID);
+  await b.addSnapshot([['foo', 'bar']], clientID);
+  await b.addLocal(clientID);
+  const localCommit = b.chain.at(-1) as Commit<LocalMetaDD31>;
+  const syncChain = await b.addSyncSnapshot(1, clientID);
+  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
+
+  const error = new Error('mutator precondition no longer holds');
+
+  // Writes before throwing, so the test shows the staged write is discarded
+  // rather than never made.
+  const throwingMutator = async (tx: WriteTransaction) => {
+    await tx.set('whiz', 'bang');
+    fixture.throwingMutatorCallCount++;
+    throw error;
+  };
+
+  const fixture = {
+    formatVersion: formatVersion as FormatVersion,
+    clientID,
+    store,
+    localCommit,
+    syncSnapshotCommit,
+    error,
+    throwingMutatorCallCount: 0,
+    mutators: {
+      [localCommit.meta.mutatorName]: throwingMutator,
+    },
+    expectRebasedCommit: async (
+      rebasedCommit: Commit<Meta>,
+      btreeRead: BTreeRead,
+    ) => {
+      // The fixture pins formatVersion to Latest, so this is always a local
+      // DD31 commit. Asserting rather than branching means a commit of the
+      // wrong shape fails here instead of skipping every check below it.
+      assertLocalCommitDD31(rebasedCommit);
+      assertLocalCommitDD31(localCommit);
+      const meta = rebasedCommit.meta;
+      expect(meta.basisHash).toBe(syncSnapshotCommit.chunk.hash);
+      expect(meta.mutationID).toBe(localCommit.meta.mutationID);
+      expect(meta.mutatorName).toBe(localCommit.meta.mutatorName);
+      expect(meta.originalHash).toBe(localCommit.chunk.hash);
+      expect(meta.timestamp).toBe(localCommit.meta.timestamp);
+      expect(meta.clientID).toBe(localCommit.meta.clientID);
+      // The value tree equals the basis: the mutation predicts nothing, and
+      // the write staged before the throw is gone.
+      expect(await btreeRead.get('foo')).toBe('bar');
+      expect(await btreeRead.get('whiz')).toBeUndefined();
+    },
+    expectThrowingMutatorInfoLog: () => {
+      expect(fixture.throwingMutatorCallCount).toBe(1);
+      expect(consoleInfoStub).toBeCalledTimes(1);
+      const args = consoleInfoStub.mock.calls[0];
+      expect(args[0]).toBe(
+        `Rebase of mutator ${localCommit.meta.mutatorName} threw, abandoning its prediction`,
+      );
+      // The browser runner serializes console arguments, so match on the
+      // message rather than on error identity.
+      expect(String(args[1])).toContain(error.message);
+    },
+  };
+  return fixture;
+}
+
+/**
+ * Stands in for an IVMSourceBranch. `fork` copies, so a write to the copy is
+ * invisible to the original, which is the property `rebaseMutation` relies on.
+ */
+function makeTxData(rows: ReadonlySet<string>): ZeroTxData {
+  return {
+    ivmSources: new Set(rows),
+    token: undefined,
+    context: undefined,
+    fork(): ZeroTxData {
+      return makeTxData(this.ivmSources as Set<string>);
+    },
+  };
+}
+
+const rowsOf = (tx: WriteTransaction) =>
+  (tx as WriteTransactionImpl)[zeroData]?.ivmSources as Set<string>;
+
+const rowsIn = (data: ZeroTxData | undefined) => [
+  ...((data?.ivmSources as Set<string>) ?? []),
+];
+
 async function commitAndBTree(
   name = SYNC_HEAD_NAME,
   read: Read,
@@ -213,10 +310,104 @@ async function commitAndBTree(
   return [commit, btreeRead];
 }
 
+describe('zero tx data', () => {
+  // The contract the callers depend on: each replayed mutation runs against
+  // its own fork, and what comes back is the branch the next mutation should
+  // use. Every caller does nothing with it but pass it along, so this is where
+  // the behavior itself is pinned.
+  test('a mutation that succeeds runs against a fork, which is returned', async () => {
+    const fixture = await createMutationSequenceFixture();
+    const passedIn = makeTxData(new Set(['before']));
+    const mutators = {
+      ...fixture.mutators,
+      [fixture.localCommit1.meta.mutatorName]: async (tx: WriteTransaction) => {
+        rowsOf(tx).add('written');
+        await tx.set('written', true);
+      },
+    };
+
+    const {zeroData: returned} = await withWriteNoImplicitCommit(
+      fixture.store,
+      write =>
+        rebaseMutationAndCommit(
+          fixture.localCommit1,
+          write,
+          fixture.syncSnapshotCommit.chunk.hash,
+          SYNC_HEAD_NAME,
+          mutators,
+          new LogContext(),
+          fixture.clientID,
+          fixture.formatVersion,
+          passedIn,
+        ),
+    );
+
+    // The write landed on the fork that came back, not on the one passed in.
+    expect(returned).not.toBe(passedIn);
+    expect(rowsIn(returned)).toEqual(['before', 'written']);
+    expect(rowsIn(passedIn)).toEqual(['before']);
+  });
+
+  test('a mutation that throws gives back the branch it was handed', async () => {
+    const fixture = await createThrowingMutatorFixture();
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const passedIn = makeTxData(new Set(['before']));
+    const mutators = {
+      [fixture.localCommit.meta.mutatorName]: async (tx: WriteTransaction) => {
+        // Writes to its fork before throwing, so the test shows the write is
+        // discarded rather than never made.
+        rowsOf(tx).add('written');
+        await tx.set('written', true);
+        throw fixture.error;
+      },
+    };
+
+    const {zeroData: returned} = await withWriteNoImplicitCommit(
+      fixture.store,
+      write =>
+        rebaseMutationAndCommit(
+          fixture.localCommit,
+          write,
+          fixture.syncSnapshotCommit.chunk.hash,
+          SYNC_HEAD_NAME,
+          mutators,
+          new LogContext(),
+          fixture.clientID,
+          fixture.formatVersion,
+          passedIn,
+        ),
+    );
+
+    // The fork went away with the failed mutation.
+    expect(returned).toBe(passedIn);
+    expect(rowsIn(returned)).toEqual(['before']);
+  });
+
+  test('undefined zero tx data stays undefined', async () => {
+    const fixture = await createMutationSequenceFixture();
+    const {zeroData: returned} = await withWriteNoImplicitCommit(
+      fixture.store,
+      write =>
+        rebaseMutationAndCommit(
+          fixture.localCommit1,
+          write,
+          fixture.syncSnapshotCommit.chunk.hash,
+          SYNC_HEAD_NAME,
+          fixture.mutators,
+          new LogContext(),
+          fixture.clientID,
+          fixture.formatVersion,
+          undefined,
+        ),
+    );
+    expect(returned).toBeUndefined();
+  });
+});
+
 describe('rebaseMutationAndCommit', () => {
   test('with sequence of mutations', async () => {
     const fixture = await createMutationSequenceFixture();
-    const hashOfRebasedLocalCommit1 = await withWriteNoImplicitCommit(
+    const {result: hashOfRebasedLocalCommit1} = await withWriteNoImplicitCommit(
       fixture.store,
       write =>
         rebaseMutationAndCommit(
@@ -242,7 +433,7 @@ describe('rebaseMutationAndCommit', () => {
       expect(hashOfRebasedLocalCommit1).toBe(rebasedLocalCommit1.chunk.hash);
       await fixture.expectRebasedCommit1(rebasedLocalCommit1, btreeRead);
     });
-    const hashOfRebasedLocalCommit2 = await withWriteNoImplicitCommit(
+    const {result: hashOfRebasedLocalCommit2} = await withWriteNoImplicitCommit(
       fixture.store,
       write =>
         rebaseMutationAndCommit(
@@ -276,7 +467,7 @@ describe('rebaseMutationAndCommit', () => {
 
   test("with missing mutator, still rebases but doesn't modify btree", async () => {
     const fixture = await createMissingMutatorFixture();
-    const hashOfRebasedLocalCommit = await withWriteNoImplicitCommit(
+    const {result: hashOfRebasedLocalCommit} = await withWriteNoImplicitCommit(
       fixture.store,
       write =>
         rebaseMutationAndCommit(
@@ -303,6 +494,105 @@ describe('rebaseMutationAndCommit', () => {
     });
   });
 
+  test('with a mutator that throws, abandons its prediction but still rebases', async () => {
+    const fixture = await createThrowingMutatorFixture();
+    const {result: hashOfRebasedLocalCommit} = await withWriteNoImplicitCommit(
+      fixture.store,
+      write =>
+        rebaseMutationAndCommit(
+          fixture.localCommit,
+          write,
+          fixture.syncSnapshotCommit.chunk.hash,
+          SYNC_HEAD_NAME,
+          fixture.mutators,
+          new LogContext(),
+          fixture.clientID,
+          fixture.formatVersion,
+          undefined,
+        ),
+    );
+    await withRead(fixture.store, async read => {
+      const [rebasedLocalCommit, btreeRead] = await commitAndBTree(
+        SYNC_HEAD_NAME,
+        read,
+        fixture.formatVersion,
+      );
+      expect(hashOfRebasedLocalCommit).toBe(rebasedLocalCommit.chunk.hash);
+      await fixture.expectRebasedCommit(rebasedLocalCommit, btreeRead);
+      fixture.expectThrowingMutatorInfoLog();
+    });
+  });
+
+  test('a mutator that throws does not block replay of later mutations', async () => {
+    const fixture = await createMutationSequenceFixture();
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const mutators = {
+      ...fixture.mutators,
+      [fixture.localCommit1.meta.mutatorName]: async (tx: WriteTransaction) => {
+        await tx.set('whiz', 'bang');
+        throw new Error('mutator precondition no longer holds');
+      },
+    };
+
+    const {result: hashOfRebasedLocalCommit1} = await withWriteNoImplicitCommit(
+      fixture.store,
+      write =>
+        rebaseMutationAndCommit(
+          fixture.localCommit1,
+          write,
+          fixture.syncSnapshotCommit.chunk.hash,
+          SYNC_HEAD_NAME,
+          mutators,
+          new LogContext(),
+          fixture.clientID,
+          fixture.formatVersion,
+          undefined,
+        ),
+    );
+    const {result: hashOfRebasedLocalCommit2} = await withWriteNoImplicitCommit(
+      fixture.store,
+      write =>
+        rebaseMutationAndCommit(
+          fixture.localCommit2,
+          write,
+          hashOfRebasedLocalCommit1,
+          SYNC_HEAD_NAME,
+          mutators,
+          new LogContext(),
+          fixture.clientID,
+          fixture.formatVersion,
+          undefined,
+        ),
+    );
+    expect(fixture.testMutator2CallCount).toBe(1);
+
+    await withRead(fixture.store, async read => {
+      const [rebasedLocalCommit2, btreeRead] = await commitAndBTree(
+        SYNC_HEAD_NAME,
+        read,
+        fixture.formatVersion,
+      );
+      expect(hashOfRebasedLocalCommit2).toBe(rebasedLocalCommit2.chunk.hash);
+      assert(
+        commitIsLocalDD31(rebasedLocalCommit2),
+        'expected a local DD31 commit',
+      );
+      // Mutation 2 is chained onto the abandoned mutation 1, so the replay
+      // runs to completion and sync moves forward.
+      expect(rebasedLocalCommit2.meta.basisHash).toBe(
+        hashOfRebasedLocalCommit1,
+      );
+      expect(rebasedLocalCommit2.meta.mutationID).toBe(
+        fixture.localCommit2.meta.mutationID,
+      );
+      expect(await btreeRead.get('foo')).toBe('bar');
+      // Mutation 1's prediction was abandoned ...
+      expect(await btreeRead.get('whiz')).toBeUndefined();
+      // ... but mutation 2's was kept.
+      expect(await btreeRead.get('fuzzy')).toBe('wuzzy');
+    });
+  });
+
   test("throws error if DD31 and mutationClientID does not match mutation's clientID", async () => {
     await testThrowsErrorOnClientIDMismatch('commit', FormatVersion.Latest);
   });
@@ -319,7 +609,7 @@ describe('rebaseMutationAndPutCommit', () => {
     const hashOfRebasedLocalCommit1 = await withWriteNoImplicitCommit(
       fixture.store,
       async (write): Promise<Hash> => {
-        const commit = await rebaseMutationAndPutCommit(
+        const {result: commit} = await rebaseMutationAndPutCommit(
           fixture.localCommit1,
           write,
           fixture.syncSnapshotCommit.chunk.hash,
@@ -352,7 +642,7 @@ describe('rebaseMutationAndPutCommit', () => {
     const hashOfRebasedLocalCommit2 = await withWriteNoImplicitCommit(
       fixture.store,
       async write => {
-        const commit = await rebaseMutationAndPutCommit(
+        const {result: commit} = await rebaseMutationAndPutCommit(
           fixture.localCommit2,
           write,
           hashOfRebasedLocalCommit1,
@@ -395,7 +685,7 @@ describe('rebaseMutationAndPutCommit', () => {
     const hashOfRebasedLocalCommit = await withWriteNoImplicitCommit(
       fixture.store,
       async write => {
-        const commit = await rebaseMutationAndPutCommit(
+        const {result: commit} = await rebaseMutationAndPutCommit(
           fixture.localCommit,
           write,
           fixture.syncSnapshotCommit.chunk.hash,

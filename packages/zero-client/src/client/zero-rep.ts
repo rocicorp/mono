@@ -33,6 +33,7 @@ type TxData = {
   ivmSources: IVMSourceBranch;
   token: string | undefined;
   context: unknown;
+  fork: () => TxData;
 };
 
 export class ZeroRep implements ZeroOption {
@@ -97,12 +98,15 @@ export class ZeroRep implements ZeroOption {
 
     return this.#ivmMain
       .forkToHead(must(this.#store), desiredHead, readOptions)
-      .then(branch => ({
-        ivmSources: branch,
-        token: fromReplicacheAuthToken(this.#auth),
-        context: this.#context,
-      }));
+      .then(branch => this.#makeTxData(branch));
   };
+
+  #makeTxData = (branch: IVMSourceBranch): TxData => ({
+    ivmSources: branch,
+    token: fromReplicacheAuthToken(this.#auth),
+    context: this.#context,
+    fork: () => this.#makeTxData(branch.fork()),
+  });
 
   advance = (expectedHash: Hash, newHash: Hash, diffs: InternalDiff): void => {
     this.#context.processChanges(expectedHash, newHash, diffs);
