@@ -275,6 +275,11 @@ describe('onClientStateNotFound', () => {
 
     expect(rep2.idbName).toBe(rep.idbName);
     await expectDatabaseDropped(rep.idbName);
+
+    // An app with a non-reloading onClientStateNotFound handler must be able
+    // to dispose the failed instance even though it never became ready.
+    await rep2.close();
+    expect(rep2.closed).toBe(true);
   });
 
   test('Called from heartbeat if the perdag has an invalid ref count', async () => {

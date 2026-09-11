@@ -283,6 +283,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #online = true;
   readonly #clientID = makeClientID();
   readonly #ready: Promise<void>;
+  /**
+   * Resolves if open fails for good (the persistent store was found to be
+   * corrupt). `#ready` never resolves in that case, so `close()` waits on
+   * whichever of the two settles first instead of hanging forever.
+   */
+  readonly #openFailed = resolver<void>();
   readonly #profileIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;
   readonly #mutatorRegistry: MutatorDefs = {};
@@ -570,8 +576,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       if (e instanceof InvalidRefCountError) {
         // The perdag already started recovery (drop the database and fire
         // onClientStateNotFound) when it detected the corruption. Nothing
-        // else can be done with this instance; `#ready` stays pending.
+        // else can be done with this instance; `#ready` stays pending so
+        // reads and writes never run against the dropped store, but
+        // `close()` must still be able to dispose the instance.
         this.#lc.debug?.('Open failed because the persistent store is corrupt');
+        this.#openFailed.resolve();
         return;
       }
       throw e;
@@ -794,7 +803,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.#onVisibilityChange,
     );
 
-    await this.#ready;
+    await Promise.race([this.#ready, this.#openFailed.promise]);
     const closingPromises = [
       this.memdag.close(),
       this.perdag.close(),
