@@ -45,6 +45,15 @@ export type SyncOptions = {
 };
 
 /**
+ * The part of {@link LitestreamController} that the write path uses, so that
+ * something other than a litestream process can answer it.
+ */
+export interface LitestreamSyncClient {
+  sync(opts?: SyncOptions, signal?: AbortSignal): Promise<SyncResponse>;
+  close(): void;
+}
+
+/**
  * IPC client for the litestream control server. litestream serves an HTTP API
  * over a Unix domain socket (enabled via the `socket:` block in config-v5.yml);
  * because zero-cache runs litestream as a subprocess in the same container, the
@@ -54,7 +63,7 @@ export type SyncOptions = {
  * high-frequency caller (e.g. write-path backpressure) does not pay a
  * connect/handshake per request.
  */
-export class LitestreamController {
+export class LitestreamController implements LitestreamSyncClient {
   readonly #lc: LogContext;
   readonly #replicaFile: string;
   readonly #socketPath: string;
