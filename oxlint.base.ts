@@ -1,9 +1,15 @@
+import {join} from 'node:path';
 import type {OxlintConfig} from 'oxlint';
 
-const zeroPlugin = new URL(
-  './tools/oxlint-plugin-zero/index.js',
-  import.meta.url,
-).pathname;
+// `import.meta.dirname`, not a file: URL's `.pathname`: a pathname is a URL path,
+// so on Windows it is '/C:/…' and oxlint cannot load a plugin from it — which
+// aborts the whole lint run rather than degrading. Taking the directory directly
+// means no URL is constructed, so there is nothing to convert and nothing to get
+// wrong.
+const zeroPlugin = join(
+  import.meta.dirname,
+  'tools/oxlint-plugin-zero/index.js',
+);
 
 /**
  * Shared oxlint configuration for all packages in the monorepo.
