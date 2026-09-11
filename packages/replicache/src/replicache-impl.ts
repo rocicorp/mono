@@ -807,7 +807,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       }
 
       // Replay.
-      const zeroData = await this.#zero?.getTxData?.(syncHead);
+      let zeroData = await this.#zero?.getTxData?.(syncHead);
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -816,19 +816,25 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           await Promise.resolve();
         }
         const {meta} = mutation;
-        syncHead = await withWriteNoImplicitCommit(this.memdag, dagWrite =>
-          rebaseMutationAndCommit(
-            mutation,
-            dagWrite,
-            syncHead,
-            SYNC_HEAD_NAME,
-            this.#mutatorRegistry,
-            lc,
-            isLocalMetaDD31(meta) ? meta.clientID : clientID,
-            FormatVersion.Latest,
-            zeroData,
-          ),
+        const {result, zeroData: next} = await withWriteNoImplicitCommit(
+          this.memdag,
+          dagWrite =>
+            rebaseMutationAndCommit(
+              mutation,
+              dagWrite,
+              syncHead,
+              SYNC_HEAD_NAME,
+              this.#mutatorRegistry,
+              lc,
+              isLocalMetaDD31(meta) ? meta.clientID : clientID,
+              FormatVersion.Latest,
+              zeroData,
+            ),
         );
+        syncHead = result;
+        // The fork the mutation ran against when it succeeded, or the branch we
+        // came in with when it threw.
+        zeroData = next;
       }
     }
   }
