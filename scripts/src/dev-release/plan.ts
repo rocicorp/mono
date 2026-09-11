@@ -192,9 +192,9 @@ export function validateImageTag(tag: string): void {
       `Tag "${tag}" is not a valid semantic version (SemVer 2.0.0). Prerelease identifiers may only contain alphanumerics and hyphens.`,
     );
   }
-  if (!tag.includes('-')) {
+  if (!tag.includes('-dev-')) {
     throw new Error(
-      `Tag "${tag}" must be a prerelease version (e.g. contain a "-dev-" suffix) to prevent colliding with official releases.`,
+      `Tag "${tag}" must be a dev prerelease version containing "-dev-" to prevent colliding with official releases.`,
     );
   }
 }

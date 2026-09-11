@@ -108,7 +108,16 @@ test('validateImageTag accepts valid SemVer dev tags and blocks invalid/protecte
   expect(() => validateImageTag('canary')).toThrowError(/protected/);
 
   expect(() => validateImageTag('1.8.0')).toThrowError(
-    /must be a prerelease version/,
+    /must be a dev prerelease version/,
+  );
+  expect(() => validateImageTag('1.8.0-canary.1')).toThrowError(
+    /must be a dev prerelease version/,
+  );
+  expect(() => validateImageTag('1.8.0-head-e8cc6889-20260708')).toThrowError(
+    /must be a dev prerelease version/,
+  );
+  expect(() => validateImageTag('1.8.0-rc.1')).toThrowError(
+    /must be a dev prerelease version/,
   );
   expect(() => validateImageTag('v1.8.0')).toThrowError(
     /not a valid semantic version/,
