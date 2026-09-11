@@ -1,8 +1,6 @@
 import {expect, test} from 'vitest';
 import {hasMemStore} from '../../../replicache/src/kv/mem-store.ts';
-import {makeIDBName} from '../../../replicache/src/make-idb-name.ts';
 import {h64} from '../../../shared/src/hash.ts';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {LOGGED_OUT_STORAGE_USER_ID, Zero} from './zero.ts';
@@ -167,18 +165,8 @@ test('logged-out client uses a private storage sentinel for idb naming', async (
     kvStore: 'mem',
   });
 
-  // Derive everything that moves on its own (the format version, the protocol
-  // version, the name hash) so a bump elsewhere cannot silently rot this
-  // expectation. Only the ClientSchema hash of `schema` is pinned.
-  const hashedKey = h64(
-    JSON.stringify({storageKey, mutateUrl: '', queryUrl: ''}),
-  ).toString(36);
-
   expect(zero.idbName).toEqual(
-    makeIDBName(
-      `zero-${LOGGED_OUT_STORAGE_USER_ID}-${hashedKey}`,
-      `${PROTOCOL_VERSION}.32bj126fs2e3f`,
-    ),
+    `rep:zero-${LOGGED_OUT_STORAGE_USER_ID}-o92aeop6ci3f:7:53.32bj126fs2e3f`,
   );
 
   await zero.close();
