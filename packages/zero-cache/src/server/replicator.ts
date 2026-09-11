@@ -4,7 +4,6 @@ import type {ObservableCallback} from '@opentelemetry/api';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {
   LitestreamConfig,
@@ -15,7 +14,10 @@ import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.
 import {initEventSink} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
-import {reserveAndGetSnapshotStatus} from '../services/change-streamer/snapshot.ts';
+import {
+  reserveAndGetSnapshotStatus,
+  restoreUnderReservation,
+} from '../services/change-streamer/snapshot.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
   tryRestore,
@@ -229,41 +231,27 @@ function observeSQLiteFileBytes(
   return async o => o.observe(await sqliteFileBytes(lc, file));
 }
 
-const RETRY_INTERVAL_MS = 3000;
-
-// View-syncers (no replicaConstraints) wait indefinitely for the
-// replication-manager to publish a restorable backup. On a fresh stack the
-// first backup is not durable until the initial sync completes and litestream
-// uploads the initial snapshot, which can take many minutes for a large
-// replica. The platform's startup probe budget (which scales with replica
-// size) is the backstop, so restoreReplica must not impose its own shorter
-// cap and self-terminate while the backup is still being produced.
 async function restoreReplica(lc: LogContext, config: NormalizedZeroConfig) {
   const start = performance.now();
   let backupURL: string | undefined;
   let result: RestoreResult | undefined;
   try {
-    for (;;) {
-      const snapshotStatus = await reserveAndGetSnapshotStatus(lc, config);
-      // The backupURL comes from the replication-manager's snapshot response.
-      ({backupURL} = snapshotStatus);
-      const litestream: LitestreamConfig = {...config.litestream, backupURL};
-      const attempt = await tryRestore(
-        lc,
-        litestream,
-        config.replica.file,
-        snapshotStatus,
-        'view_syncer',
-      );
-      if (attempt.restored) {
-        result = attempt.result;
-        return;
-      }
-      lc.info?.(
-        `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
-      );
-      await sleep(RETRY_INTERVAL_MS);
-    }
+    result = await restoreUnderReservation(
+      lc,
+      () => reserveAndGetSnapshotStatus(lc, config),
+      snapshotStatus => {
+        // The backupURL comes from the replication-manager's snapshot response.
+        ({backupURL} = snapshotStatus);
+        const litestream: LitestreamConfig = {...config.litestream, backupURL};
+        return tryRestore(
+          lc,
+          litestream,
+          config.replica.file,
+          snapshotStatus,
+          'view_syncer',
+        );
+      },
+    );
   } finally {
     const attrs = litestreamRestoreMetricAttrs(
       config.litestream,

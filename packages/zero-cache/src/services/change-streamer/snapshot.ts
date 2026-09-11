@@ -139,6 +139,46 @@ export function reserveAndGetSnapshotStatus(
 }
 
 /**
+ * How long to wait before reserving again, after a restore that produced no
+ * replica that the reservation's bounds accept.
+ */
+export const RESTORE_RETRY_INTERVAL_MS = 3000;
+
+/**
+ * Restores a replica under a snapshot reservation, and retries until a restore
+ * produces one that the reservation's bounds accept. Each attempt reserves a
+ * snapshot, which holds the change log at the backup the reservation names,
+ * and then restores against that reservation's status.
+ *
+ * View-syncers (no replicaConstraints) wait indefinitely for the
+ * replication-manager to publish a restorable backup. On a fresh stack the
+ * first backup is not durable until the initial sync completes and litestream
+ * uploads the initial snapshot, which can take many minutes for a large
+ * replica. The platform's startup probe budget (which scales with replica
+ * size) is the backstop, so this must not impose its own shorter cap and
+ * self-terminate while the backup is still being produced.
+ *
+ * @returns the result of the restore that succeeded.
+ */
+export async function restoreUnderReservation<R>(
+  lc: LogContext,
+  reserve: () => Promise<SnapshotStatus>,
+  restore: (status: SnapshotStatus) => Promise<{restored: boolean; result: R}>,
+  retryIntervalMs = RESTORE_RETRY_INTERVAL_MS,
+): Promise<R> {
+  for (;;) {
+    const attempt = await restore(await reserve());
+    if (attempt.restored) {
+      return attempt.result;
+    }
+    lc.info?.(
+      `replica not found. retrying in ${retryIntervalMs / 1000} seconds`,
+    );
+    await sleep(retryIntervalMs);
+  }
+}
+
+/**
  * Resolves with the reserved stream, or rejects with an AbortError if the
  * `signal` is aborted while the reservation is pending (in which case a
  * stream that arrives later is canceled rather than held open).

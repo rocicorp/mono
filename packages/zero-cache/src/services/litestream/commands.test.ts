@@ -22,6 +22,7 @@ import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   getLastBackupTime,
   parseBackupCreatedTimes,
+  replicaStateIsValid,
   startReplicaBackupProcess,
   tryRestore,
 } from './commands.ts';
@@ -90,6 +91,48 @@ function writeSQLiteFamily(file: string, contents = 'test data') {
     writeFileSync(familyFile, contents);
   }
 }
+
+describe('litestream/commands replicaStateIsValid', () => {
+  const lc = createSilentLogContext();
+  const constraints = {replicaVersion: '01', minWatermark: '0a'};
+
+  test('accepts any readable replica without constraints', () => {
+    expect(
+      replicaStateIsValid(
+        lc,
+        {replicaVersion: '02', watermark: '00'},
+        undefined,
+      ),
+    ).toBe(true);
+  });
+
+  test('rejects a replica of another version', () => {
+    expect(
+      replicaStateIsValid(
+        lc,
+        {replicaVersion: '02', watermark: '0b'},
+        constraints,
+      ),
+    ).toBe(false);
+  });
+
+  test('rejects a watermark below the minimum, and accepts one at it', () => {
+    expect(
+      replicaStateIsValid(
+        lc,
+        {replicaVersion: '01', watermark: '09'},
+        constraints,
+      ),
+    ).toBe(false);
+    expect(
+      replicaStateIsValid(
+        lc,
+        {replicaVersion: '01', watermark: '0a'},
+        constraints,
+      ),
+    ).toBe(true);
+  });
+});
 
 describe('litestream/commands parseBackupCreatedTimes', () => {
   const lc = createSilentLogContext();
