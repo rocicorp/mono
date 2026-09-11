@@ -473,6 +473,15 @@ describe('canonicalKey', () => {
     );
   });
 
+  test('JSON value and the string spelling its own tag do not collide', () => {
+    // A `json` column can hold a plain string, so the rendering of an
+    // object -- 'j' + JSON.stringify(v) -- is itself a possible column
+    // value. Both sides need a tag for the two to stay apart.
+    expect(canonicalKeyForTest({k: {a: 1}}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: 'j{"a":1}'}, ['k']),
+    );
+  });
+
   test('compound key: per-position type tagging', () => {
     // [1, "2"] vs ["1", 2] — same string concat without tags would
     // both look like "1<sep>2".
