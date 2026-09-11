@@ -428,7 +428,7 @@ export function replicaInitializationSource(
  * produced it or on their position in it, since a resumed run must name the
  * run it resumes and the batch it resumes after.
  */
-function withResumeMarks(
+export function withResumeMarks(
   requests: readonly BackfillRequest[],
   marks: readonly BackfillProgress[] | undefined,
 ): BackfillRequest[] {
