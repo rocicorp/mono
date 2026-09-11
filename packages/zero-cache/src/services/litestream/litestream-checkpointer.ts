@@ -4,7 +4,7 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import type {ForceCheckpointConfig} from '../replicator/write-worker-client.ts';
 import {RunningState} from '../running-state.ts';
 import type {
-  LitestreamController,
+  LitestreamSyncClient,
   SyncResponse,
 } from './litestream-controller.ts';
 
@@ -53,7 +53,7 @@ const PAUSE_LOG_INTERVAL_POLLS = 30;
 export class LitestreamCheckpointer {
   readonly #lc: LogContext;
   readonly #db: Database;
-  readonly #litestream: LitestreamController;
+  readonly #litestream: LitestreamSyncClient;
   readonly #attemptChunk: number;
   readonly #maxWalPages: number | undefined;
   readonly #state = new RunningState('litestream-checkpointer');
@@ -63,7 +63,7 @@ export class LitestreamCheckpointer {
   constructor(
     lc: LogContext,
     db: Database,
-    litestream: LitestreamController,
+    litestream: LitestreamSyncClient,
     config: ForceCheckpointConfig,
   ) {
     this.#lc = lc.withContext('component', 'litestream-checkpointer');
