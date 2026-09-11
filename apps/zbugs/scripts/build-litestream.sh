@@ -4,7 +4,7 @@
 # apps/zbugs/.litestream/bin (gitignored):
 #
 #   litestream-v3  rocicorp/litestream @ zero@v0.0.10        (packages/zero/Dockerfile)
-#   litestream-v5  rocicorp/litestream @ v0.5.17-zero.1      (packages/zero/Dockerfile)
+#   litestream-v5  rocicorp/litestream @ v0.5.18-zero.8      (packages/zero/Dockerfile)
 #   vfs-query      mono/go, `make build` (cgo, -tags vfs)    (go/Makefile)
 #
 # The v3 binary is needed even though v5 does all of the backing up: the
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 LITESTREAM_V3_REF="zero@v0.0.10"
-LITESTREAM_V5_VERSION="0.5.17-zero.1"
+LITESTREAM_V5_VERSION="0.5.18-zero.8"
 LITESTREAM_REPO="https://github.com/rocicorp/litestream.git"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -58,7 +58,8 @@ needs_build() {
   [[ "$(cat "${stamp}")" != "${want}" ]]
 }
 
-# $1 ref, $2 checkout dir
+# $1 ref, $2 checkout dir. Callers key the dir by ref, so bumping a pin
+# clones the new ref instead of rebuilding a stale checkout.
 clone_litestream() {
   local ref="$1" dir="$2"
   if [[ -d "${dir}/.git" ]]; then
@@ -77,7 +78,7 @@ build_litestream_v3() {
     log "litestream-v3 up to date (${LITESTREAM_V3_REF})"
     return
   fi
-  local dir="${SRC_DIR}/litestream-v3"
+  local dir="${SRC_DIR}/litestream-v3-${LITESTREAM_V3_REF}"
   clone_litestream "${LITESTREAM_V3_REF}" "${dir}"
   log "building litestream-v3"
   # The Dockerfile pins GOTOOLCHAIN=local so the vendored `toolchain`
@@ -102,7 +103,7 @@ build_litestream_v5() {
     log "litestream-v5 up to date (${LITESTREAM_V5_VERSION})"
     return
   fi
-  local dir="${SRC_DIR}/litestream-v5"
+  local dir="${SRC_DIR}/litestream-v5-${LITESTREAM_V5_VERSION}"
   clone_litestream "v${LITESTREAM_V5_VERSION}" "${dir}"
   log "building litestream-v5"
   (
