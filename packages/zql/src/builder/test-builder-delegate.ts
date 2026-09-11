@@ -7,8 +7,11 @@ import type {Input, Storage} from '../ivm/operator.ts';
 import {FilterSnitch, Snitch, type SnitchMessage} from '../ivm/snitch.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import type {BuilderDelegate} from './builder.ts';
+import type {PlanCache} from './plan-cache.ts';
 
 export class TestBuilderDelegate implements BuilderDelegate {
+  planCache: PlanCache | undefined;
+
   readonly #sources: Readonly<Record<string, Source>>;
   readonly #storage: Record<string, MemoryStorage> = {};
   readonly #shouldLog: boolean;

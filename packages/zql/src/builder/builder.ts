@@ -36,7 +36,7 @@ import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
 import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
-import {planQuery} from '../planner/planner-builder.ts';
+import {applyFlipBlueprint, planQuery} from '../planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../planner/planner-connection.ts';
 import type {PlanDebugger} from '../planner/planner-debug.ts';
 import {completeOrdering} from '../query/complete-ordering.ts';
@@ -46,6 +46,7 @@ import {
   transformFilters,
   type NoSubqueryCondition,
 } from './filter.ts';
+import {planWithCache, type PlanCache} from './plan-cache.ts';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
@@ -101,6 +102,16 @@ export interface BuilderDelegate {
    * to allow tests to remap the AST.
    */
   mapAst?: ((ast: AST) => AST) | undefined;
+
+  /**
+   * Lets the host reuse planner decisions across structurally identical
+   * queries. Planning is skipped entirely on a hit; every operator and storage
+   * object is still built from scratch.
+   *
+   * Ignored when no cost model is supplied (nothing is planned) and when a
+   * {@link PlanDebugger} is supplied (a hit has no attempts to report).
+   */
+  readonly planCache?: PlanCache | undefined;
 }
 
 /**
@@ -142,7 +153,11 @@ export function buildPipeline(
   );
 
   if (costModel) {
-    ast = planQuery(ast, costModel, planDebugger, lc);
+    const {planCache} = delegate;
+    ast =
+      planCache && !planDebugger
+        ? applyFlipBlueprint(ast, planWithCache(planCache, ast, costModel, lc))
+        : planQuery(ast, costModel, planDebugger, lc);
   }
   return buildPipelineInternal(ast, delegate, queryID, '');
 }
