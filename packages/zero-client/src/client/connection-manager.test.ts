@@ -131,6 +131,42 @@ describe('ConnectionManager', () => {
     });
   });
 
+  describe('closing from a connecting notification', () => {
+    const closeOnConnecting = (manager: ConnectionManager) =>
+      manager.subscribe(state => {
+        if (state.name === ConnectionStatus.Connecting) {
+          manager.closed();
+        }
+      });
+
+    test('initialized() leaves no timeout interval behind', () => {
+      const timersBefore = vi.getTimerCount();
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+      closeOnConnecting(manager);
+
+      manager.initialized();
+
+      expect(manager.is(ConnectionStatus.Closed)).toBe(true);
+      expect(vi.getTimerCount()).toBe(timersBefore);
+    });
+
+    test('connecting() leaves no timeout interval behind', () => {
+      const timersBefore = vi.getTimerCount();
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+      manager.connected();
+      closeOnConnecting(manager);
+
+      manager.connecting();
+
+      expect(manager.is(ConnectionStatus.Closed)).toBe(true);
+      expect(vi.getTimerCount()).toBe(timersBefore);
+    });
+  });
+
   describe('connect request', () => {
     test('waitForConnectRequest resolves after requestConnect', async () => {
       const manager = new ConnectionManager({

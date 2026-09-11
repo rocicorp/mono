@@ -231,8 +231,10 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
       attempt: 0,
       disconnectAt: now + this.#disconnectTimeout,
     };
-    const nextStatePromise = this.#publishStateAndGetPromise();
+    // Start the interval before publishing: a subscriber may close the manager
+    // synchronously, and closed() can only stop an interval that exists.
     this.#maybeStartTimeoutInterval();
+    const nextStatePromise = this.#publishStateAndGetPromise();
     return {nextStatePromise};
   }
 
@@ -282,8 +284,9 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
         attempt: this.#state.attempt + 1,
         reason,
       };
-      const nextStatePromise = this.#publishStateAndGetPromise();
+      // See initialized() for why the interval starts before publishing.
       this.#maybeStartTimeoutInterval();
+      const nextStatePromise = this.#publishStateAndGetPromise();
       return {nextStatePromise};
     }
 
@@ -302,8 +305,10 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
       disconnectAt,
       reason,
     };
-    const nextStatePromise = this.#publishStateAndGetPromise();
+    // Start the interval before publishing: a subscriber may close the manager
+    // synchronously, and closed() can only stop an interval that exists.
     this.#maybeStartTimeoutInterval();
+    const nextStatePromise = this.#publishStateAndGetPromise();
     return {nextStatePromise};
   }
 

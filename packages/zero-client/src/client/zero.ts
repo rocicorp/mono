@@ -2204,15 +2204,30 @@ export class Zero<
     // seconds, and none of it depends on the server, so it happens in
     // `initializing` instead of spending the connecting window and the setup
     // deadline of the first attempts.
+    // A local store that never finishes loading must not keep the run loop
+    // alive past close().
+    const {signal: closeSignal} = this.#closeAbortController;
+    const closed = resolver<void>();
+    const onClose = () => closed.resolve();
+    closeSignal.addEventListener('abort', onClose, {once: true});
     try {
-      await Promise.all([
-        this.#rep.cookie,
-        this.clientGroupID,
-        this.#activeClientsManager,
-      ]);
+      const result = await promiseRace({
+        initialized: Promise.all([
+          this.#rep.cookie,
+          this.clientGroupID,
+          this.#activeClientsManager,
+        ]),
+        closed: closed.promise,
+      });
+      if (result.key === 'closed') {
+        this.#lc.debug?.('Closed while initializing, not connecting');
+        return;
+      }
     } catch {
       // The first connect attempt awaits the same promises and reports the
       // failure through the usual disconnect path.
+    } finally {
+      closeSignal.removeEventListener('abort', onClose);
     }
     this.#connectionManager.initialized();
 

@@ -3096,6 +3096,28 @@ test('a hung initialization stays initializing and makes no connect attempt', as
   ).toEqual([]);
 });
 
+test('close() while initialization is hung ends the run loop', async () => {
+  vi.spyOn(ActiveClientsManager, 'create').mockReturnValue(
+    new Promise(() => {}),
+  );
+
+  const z = zeroForTest({logLevel: 'debug'});
+  await tickAFewTimes(vi, 0);
+  expect(z.connectionStatus).toBe(ConnectionStatus.Initializing);
+
+  await z.close();
+  await tickAFewTimes(vi, 0);
+
+  expect(z.connectionStatus).toBe(ConnectionStatus.Closed);
+  expect(
+    z.testLogSink.messages.some(
+      ([level, _context, messages]) =>
+        level === 'debug' &&
+        messages.includes('Closed while initializing, not connecting'),
+    ),
+  ).toBe(true);
+});
+
 test('socketOrigin', async () => {
   const cases: {
     name: string;
