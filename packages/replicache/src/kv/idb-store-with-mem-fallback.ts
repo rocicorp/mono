@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import {navigator} from '../../../shared/src/navigator.ts';
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {IDBStore} from './idb-store.ts';
 import {MemStore, dropMemStore} from './mem-store.ts';
 import type {Read, Store, Write} from './store.ts';
@@ -8,8 +7,15 @@ import type {Read, Store, Write} from './store.ts';
 /**
  * This store uses an {@link IDBStore} by default. If the {@link IDBStore} fails
  * to open the DB with an exception that matches
- * {@link isFirefoxPrivateBrowsingError} we switch out the implementation to use
- * a {@link MemStore} instead.
+ * {@link isFirefoxPrivateBrowsingError}, or if `indexedDB.open` itself rejects
+ * (WebKit's "Unable to open database file on disk" and "Error creating Records
+ * table (13) - database or disk is full"), we switch out the implementation to
+ * use a {@link MemStore} instead. Only the open failure qualifies, matched by
+ * identity through {@link IDBStore.openError}: a transaction error on a
+ * database that did open is rethrown, so a store that has data is never
+ * swapped for an empty one behind the caller's back. Every caller whose call
+ * failed with that open error retries on the memory store, so concurrent
+ * first calls all succeed and the switch is logged once.
  *
  * The reason this is relatively complicated is that when {@link IDBStore} is
  * created, it calls `openDatabase` synchronously, but that returns a `Promise`
@@ -21,11 +27,13 @@ import type {Read, Store, Write} from './store.ts';
 export class IDBStoreWithMemFallback implements Store {
   readonly #lc: LogContext;
   readonly #name: string;
+  readonly #idbStore: IDBStore;
   #store: Store;
   constructor(lc: LogContext, name: string) {
     this.#lc = lc;
     this.#name = name;
-    this.#store = new IDBStore(name);
+    this.#idbStore = new IDBStore(name);
+    this.#store = this.#idbStore;
   }
 
   read(): Promise<Read> {
@@ -48,6 +56,17 @@ export class IDBStoreWithMemFallback implements Store {
         if (this.#store instanceof IDBStore) {
           this.#lc.info?.(
             'Switching to MemStore because of Firefox private browsing error',
+          );
+          this.#store = new MemStore(this.#name);
+        }
+        return f(this.#store);
+      }
+      const {openError} = this.#idbStore;
+      if (openError !== null && e === openError) {
+        if (this.#store === this.#idbStore) {
+          this.#lc.info?.(
+            'Switching to MemStore because IndexedDB failed to open',
+            e,
           );
           this.#store = new MemStore(this.#name);
         }
@@ -84,24 +103,16 @@ export function newIDBStoreWithMemFallback(
   lc: LogContext,
   name: string,
 ): Store {
-  if (isFirefox()) {
-    return new IDBStoreWithMemFallback(lc, name);
-  }
-  return new IDBStore(name);
+  return new IDBStoreWithMemFallback(lc, name);
 }
 
 export function dropIDBStoreWithMemFallback(name: string): Promise<void> {
-  if (!isFirefox()) {
-    return dropIDBStore(name);
-  }
-  try {
-    return dropIDBStore(name);
-  } catch (e) {
-    if (isFirefoxPrivateBrowsingError(e)) {
+  return dropIDBStore(name).catch((e: unknown) => {
+    if (e instanceof DOMException) {
       return dropMemStore(name);
     }
-  }
-  return promiseVoid;
+    throw e;
+  });
 }
 
 function dropIDBStore(name: string): Promise<void> {
