@@ -1,5 +1,11 @@
 import {expect, test, vi} from 'vitest';
+import {promiseVoid} from '../../shared/src/resolved-promises.ts';
 import type {VersionNotSupportedResponse} from './error-responses.ts';
+import type {
+  EphemeralID,
+  ZeroOption,
+  ZeroTxData,
+} from './replicache-options.ts';
 import {
   addData,
   disableAllBackgroundProcesses,
@@ -7,7 +13,11 @@ import {
   makePullResponseV1,
   replicacheForTesting,
 } from './test-util.ts';
-import type {WriteTransaction} from './transactions.ts';
+import {
+  type WriteTransaction,
+  type WriteTransactionImpl,
+  zeroData,
+} from './transactions.ts';
 import type {Poke, UpdateNeededReason} from './types.ts';
 
 initReplicacheTesting();
@@ -205,4 +215,78 @@ test('Version not supported on server', async () => {
     {error: 'VersionNotSupported', versionType: 'schema'},
     {type: 'VersionNotSupported', versionType: 'schema'},
   );
+});
+
+// The replay loop in replicache-impl hands each mutation the zero tx data the
+// previous one returned. That handoff is all this layer does with it;
+// `rebaseMutation`'s own behavior is covered in db/rebase.test.ts.
+test('each replayed mutation is handed what the previous one returned', async () => {
+  const makeTxData = (rows: ReadonlySet<string>): ZeroTxData => ({
+    ivmSources: new Set(rows),
+    token: undefined,
+    context: undefined,
+    fork(): ZeroTxData {
+      return makeTxData(this.ivmSources as Set<string>);
+    },
+  });
+
+  const zero = {
+    auth: '',
+    init: () => promiseVoid,
+    getTxData: () => Promise.resolve(makeTxData(new Set())),
+    advance: () => undefined,
+    trackMutation: () => ({
+      ephemeralID: 0 as EphemeralID,
+      serverPromise: Promise.resolve(),
+    }),
+    mutationIDAssigned: () => undefined,
+    rejectMutation: () => undefined,
+  } as unknown as ZeroOption;
+
+  const rowsOf = (tx: WriteTransaction) =>
+    (tx as WriteTransactionImpl)[zeroData]?.ivmSources as Set<string>;
+  const seen: string[][] = [];
+
+  const rep = await replicacheForTesting(
+    'poke-zero-tx-data-handoff',
+    {
+      mutators: {
+        first: async (tx: WriteTransaction) => {
+          if (tx.reason === 'rebase') {
+            seen.push([...rowsOf(tx)]);
+          }
+          rowsOf(tx)?.add('first');
+          await tx.set('/first', true);
+        },
+        second: async (tx: WriteTransaction) => {
+          if (tx.reason === 'rebase') {
+            seen.push([...rowsOf(tx)]);
+          }
+          rowsOf(tx)?.add('second');
+          await tx.set('/second', true);
+        },
+      },
+      ...disableAllBackgroundProcesses,
+    },
+    {zero},
+  );
+  const {clientID} = rep;
+
+  await rep.mutate.first();
+  await rep.mutate.second();
+
+  // Acks neither mutation, so both are replayed.
+  await rep.poke({
+    baseCookie: null,
+    pullResponse: makePullResponseV1(
+      clientID,
+      0,
+      [{op: 'put', key: '/server', value: true}],
+      'c1',
+    ),
+  } as Poke);
+
+  // The second replayed mutation sees what the first wrote. Without the
+  // handoff both entries are empty.
+  expect(seen).toEqual([[], ['first']]);
 });

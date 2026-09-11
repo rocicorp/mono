@@ -27,8 +27,13 @@ import {
 } from '../db/test-helpers.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {type Hash, assertHash, makeNewFakeHashFunction} from '../hash.ts';
+import type {ZeroTxData} from '../replicache-options.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
-import type {WriteTransaction} from '../transactions.ts';
+import {
+  type WriteTransaction,
+  type WriteTransactionImpl,
+  zeroData,
+} from '../transactions.ts';
 import type {MutatorDefs} from '../types.ts';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
@@ -817,6 +822,71 @@ describe('persistDD31', () => {
         afterPersistPerdagClientGroupBaseSnapshotHash,
       ),
     ).toEqual(updatedPerdagClientGroupSnapshot);
+  });
+
+  // persistDD31 replays in two batches: the perdag client group's own local
+  // mutations, then the new memdag ones on top. The second batch has to
+  // continue from the branch the first ended on, or its mutators read rows the
+  // first batch never wrote.
+  test('the second rebase batch continues from the first batch branch', async () => {
+    const memdagMutationIDs = {
+      [clients[0].clientID]: 1,
+      [clients[2].clientID]: 2,
+    };
+    await setupSnapshots({
+      perdagClientGroupCookie: 'cookie1',
+      memdagCookie: 'cookie2',
+      memdagValueMap: [['k1', 'value1']],
+      memdagMutationIDs,
+    });
+    await setupPerdagClientGroupLocals();
+    await memdagChainBuilder.addLocal(clients[1].clientID);
+    await memdagChainBuilder.addLocal(clients[0].clientID);
+    await perdagClientGroupChainBuilder.removeHead();
+
+    // Stands in for an IVMSourceBranch: `fork` copies, writes go to the copy.
+    const makeTxData = (rows: ReadonlySet<string>): ZeroTxData => ({
+      ivmSources: new Set(rows),
+      token: undefined,
+      context: undefined,
+      fork(): ZeroTxData {
+        return makeTxData(this.ivmSources as Set<string>);
+      },
+    });
+
+    const rowsOf = (tx: WriteTransaction) =>
+      (tx as WriteTransactionImpl)[zeroData]?.ivmSources as Set<string>;
+    const seen: string[][] = [];
+
+    const zeroMutators: MutatorDefs = {};
+    for (let i = 0; i < 10; i++) {
+      const name = createMutatorName(i);
+      zeroMutators[name] = async (tx: WriteTransaction, args: JSONValue) => {
+        seen.push([...rowsOf(tx)]);
+        rowsOf(tx).add(name);
+        await tx.set(`key-${i}`, args);
+      };
+    }
+
+    await persistDD31(
+      new LogContext(),
+      clients[0].clientID,
+      memdag,
+      perdag,
+      zeroMutators,
+      () => false,
+      FormatVersion.Latest,
+      () => Promise.resolve(makeTxData(new Set())),
+    );
+
+    // Every replayed mutation after the first sees what the ones before it
+    // wrote, across the batch boundary as well as within a batch. Without the
+    // branch being carried out of the first batch, the counts restart at 0
+    // partway through.
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen.map(rows => rows.length)).toEqual(
+      seen.map((_, index) => index),
+    );
   });
 
   test('persist throws a ClientStateNotFoundError if client is missing', async () => {

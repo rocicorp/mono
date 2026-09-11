@@ -145,7 +145,9 @@ export async function persistDD31(
   }
 
   let memdagBaseSnapshotPersisted = false;
-  const zeroDataForMemdagBaseSnapshot =
+  // Carried across both rebase batches below: each batch continues from the
+  // branch the previous one ended on.
+  let zeroDataForRebase =
     getZeroData && (await getZeroData(memdagBaseSnapshot.chunk.hash));
 
   await withWrite(perdag, async perdagWrite => {
@@ -207,7 +209,7 @@ export async function persistDD31(
         lastServerAckdMutationIDs = memdagBaseSnapshot.meta.lastMutationIDs;
         mutationIDs = {...lastServerAckdMutationIDs};
 
-        newMainClientGroupHeadHash = await rebase(
+        const rebased = await rebase(
           mainClientGroupLocalMutations,
           newMainClientGroupHeadHash,
           perdagWrite,
@@ -215,8 +217,12 @@ export async function persistDD31(
           mutationIDs,
           lc,
           formatVersion,
-          zeroDataForMemdagBaseSnapshot,
+          zeroDataForRebase,
         );
+        newMainClientGroupHeadHash = rebased.hash;
+        // The mutations rebased below run after these, so they have to see
+        // what these wrote.
+        zeroDataForRebase = rebased.zeroData;
       }
     }
 
@@ -230,16 +236,18 @@ export async function persistDD31(
     }
 
     // rebase new memdag mutations onto perdag
-    newMainClientGroupHeadHash = await rebase(
-      newMemdagMutations,
-      newMainClientGroupHeadHash,
-      perdagWrite,
-      mutators,
-      mutationIDs,
-      lc,
-      formatVersion,
-      zeroDataForPerdagHeadCommit ?? zeroDataForMemdagBaseSnapshot,
-    );
+    newMainClientGroupHeadHash = (
+      await rebase(
+        newMemdagMutations,
+        newMainClientGroupHeadHash,
+        perdagWrite,
+        mutators,
+        mutationIDs,
+        lc,
+        formatVersion,
+        zeroDataForPerdagHeadCommit ?? zeroDataForRebase,
+      )
+    ).hash;
 
     const newMainClientGroup = {
       ...mainClientGroup,
@@ -267,6 +275,11 @@ async function getClientGroupInfo(
   return [clientGroup, await commitFromHash(clientGroup.headHash, perdagRead)];
 }
 
+type RebasedBatch = {
+  hash: Hash;
+  zeroData: ZeroTxData | undefined;
+};
+
 async function rebase(
   mutations: Commit<LocalMetaDD31>[],
   basis: Hash,
@@ -276,7 +289,7 @@ async function rebase(
   lc: LogContext,
   formatVersion: FormatVersion,
   zeroData: ZeroTxData | undefined,
-): Promise<Hash> {
+): Promise<RebasedBatch> {
   const basisMutationIDs = new Map<Hash, Map<ClientID, Promise<number>>>();
   const getBasisMutationID = (
     basisHash: Hash,
@@ -295,19 +308,19 @@ async function rebase(
     const {meta} = mutationCommit;
     if (meta.mutationID > (await getBasisMutationID(basis, meta.clientID))) {
       mutationIDs[meta.clientID] = meta.mutationID;
-      basis = (
-        await rebaseMutationAndPutCommit(
-          mutationCommit,
-          write,
-          basis,
-          mutators,
-          lc,
-          meta.clientID,
-          formatVersion,
-          zeroData,
-        )
-      ).chunk.hash;
+      const {result, zeroData: next} = await rebaseMutationAndPutCommit(
+        mutationCommit,
+        write,
+        basis,
+        mutators,
+        lc,
+        meta.clientID,
+        formatVersion,
+        zeroData,
+      );
+      basis = result.chunk.hash;
+      zeroData = next;
     }
   }
-  return basis;
+  return {hash: basis, zeroData};
 }
