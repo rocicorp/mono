@@ -240,6 +240,8 @@ export type ZeroOptions<
    * - the local persistent synchronization state has been garbage collected.
    *   This can happen if the client has no pending mutations and has not been
    *   used for a while (e.g. the client's tab has been hidden for a long time).
+   * - the local persistent synchronization state was found to be corrupt. The
+   *   local Replicache database is reset so that a reload starts fresh.
    * - zero-cache fails to find the server side synchronization state for
    *   this client.
    * - zero-cache rejects this client's persisted synchronization state,

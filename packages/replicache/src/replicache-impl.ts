@@ -15,7 +15,13 @@ import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.ts';
 import {assertCookie, type Cookie} from './cookies.ts';
 import {LazyStore} from './dag/lazy-store.ts';
 import {StoreImpl} from './dag/store-impl.ts';
-import {ChunkNotFoundError, mustGetHeadHash, type Store} from './dag/store.ts';
+import {
+  ChunkNotFoundError,
+  InvalidRefCountError,
+  mustGetHeadHash,
+  type Store,
+} from './dag/store.ts';
+import {initDatabaseResetChannel} from './database-reset-channel.ts';
 import {
   baseSnapshotFromHash,
   DEFAULT_HEAD_NAME,
@@ -68,6 +74,7 @@ import {
 } from './persist/clients.ts';
 import {
   COLLECT_IDB_INTERVAL,
+  dropDatabaseInternal,
   initCollectIDBDatabases,
   INITIAL_COLLECT_IDB_DELAY,
 } from './persist/collect-idb-databases.ts';
@@ -277,6 +284,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #online = true;
   readonly #clientID = makeClientID();
   readonly #ready: Promise<void>;
+  /**
+   * Resolves if open fails for good (the persistent store was found to be
+   * corrupt). `#ready` never resolves in that case, so `close()` waits on
+   * whichever of the two settles first instead of hanging forever.
+   */
+  readonly #openFailed = resolver<void>();
   readonly #profileIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;
   readonly #mutatorRegistry: MutatorDefs = {};
@@ -371,9 +384,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   onSync: ((syncing: boolean) => void) | null = null;
 
   /**
-   * `onClientStateNotFound` is called when the persistent client has been
-   * garbage collected. This can happen if the client has no pending mutations
-   * and has not been used for a while.
+   * `onClientStateNotFound` is called when the persistent client state can no
+   * longer be used. This happens when:
+   * - the persistent client has been garbage collected. This can happen if the
+   *   client has no pending mutations and has not been used for a while.
+   * - the persistent store was found to be corrupt. Replicache then tries to
+   *   drop the database, including any pending mutations, so that a fresh one
+   *   is created on reload.
    *
    * The default behavior is to reload the page (using `location.reload()`). Set
    * this to `null` or provide your own function to prevent the page from
@@ -480,7 +497,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const perKVStore = kvStoreProvider.create(this.idbName);
 
     this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
-    this.perdag = new StoreImpl(perKVStore, newRandomHash, assertHash);
+    this.perdag = new StoreImpl(
+      perKVStore,
+      newRandomHash,
+      assertHash,
+      this.#onInvalidRefCount,
+    );
     this.memdag = new LazyStore(
       this.perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
@@ -534,6 +556,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       });
     }
 
+    this.#notifyDatabaseReset = initDatabaseResetChannel(
+      this.idbName,
+      this.#closeAbortController.signal,
+      () => this.#databaseResetByOtherInstance(),
+    );
+
     this.#onPersist = initOnPersistChannel(
       this.name,
       this.#closeAbortController.signal,
@@ -551,7 +579,19 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       clientGroupIDResolver.resolve,
       readyResolver.resolve,
       onClientsDeleted,
-    );
+    ).catch(e => {
+      if (e instanceof InvalidRefCountError) {
+        // The perdag already started recovery (drop the database and fire
+        // onClientStateNotFound) when it detected the corruption. Nothing
+        // else can be done with this instance; `#ready` stays pending so
+        // reads and writes never run against the dropped store, but
+        // `close()` must still be able to dispose the instance.
+        this.#lc.debug?.('Open failed because the persistent store is corrupt');
+        this.#openFailed.resolve();
+        return;
+      }
+      throw e;
+    });
   }
 
   async #open(
@@ -640,6 +680,16 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       onClientsDeleted,
       this.#lc,
       signal,
+      // Collection writes deleted clients into every surviving database using
+      // its own dag store. When that is our database, a corrupt ref count
+      // found there must reach the same recovery as writes through `perdag`.
+      (name, createKVStore) =>
+        new StoreImpl(
+          createKVStore(name),
+          newRandomHash,
+          assertHash,
+          name === this.idbName ? this.#onInvalidRefCount : undefined,
+        ),
     );
     initClientGroupGC(this.perdag, enableMutationRecovery, this.#lc, signal);
     initNewClientChannel(
@@ -760,7 +810,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.#onVisibilityChange,
     );
 
-    await this.#ready;
+    await Promise.race([this.#ready, this.#openFailed.promise]);
     const closingPromises = [
       this.memdag.close(),
       this.perdag.close(),
@@ -1225,6 +1275,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       } catch (e) {
         if (e instanceof ClientStateNotFoundError) {
           this.#clientStateNotFoundOnClient(clientID);
+        } else if (e instanceof InvalidRefCountError) {
+          await this.#handleInvalidRefCount(e);
         } else if (this.#closed) {
           this.#lc.debug?.('Exception persisting during close', e);
         } else {
@@ -1260,6 +1312,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     } catch (e) {
       if (e instanceof ClientStateNotFoundError) {
         this.#clientStateNotFoundOnClient(clientID);
+      } else if (e instanceof InvalidRefCountError) {
+        await this.#handleInvalidRefCount(e);
       } else if (this.#closed) {
         this.#lc.debug?.('Exception refreshing during close', e);
       } else {
@@ -1277,6 +1331,89 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   #clientStateNotFoundOnClient(clientID: ClientID) {
     this.#lc.error?.(`Client state not found on client, clientID: ${clientID}`);
+    this.#fireOnClientStateNotFound();
+  }
+
+  /**
+   * Set once the perdag reports an invalid ref count. Every write path into
+   * the perdag (open, persist, refresh, heartbeat, GC, ...) can trip on the
+   * same corrupt key, so recovery runs once and later reports await it.
+   */
+  #invalidRefCountRecovery: Promise<void> | undefined;
+
+  /**
+   * Tells the other instances sharing our database that it was dropped. See
+   * {@link initDatabaseResetChannel}.
+   */
+  readonly #notifyDatabaseReset: () => void;
+
+  /**
+   * Another instance sharing our database found it corrupt and dropped it. Our
+   * store connection is gone with it, so treat it like our own recovery: fire
+   * `onClientStateNotFound` once so the app reloads into a fresh database.
+   */
+  #databaseResetByOtherInstance(): void {
+    if (this.#closed || this.#invalidRefCountRecovery !== undefined) {
+      return;
+    }
+    // Reuse the recovery slot so a later local detection (the dropped store
+    // will fail its next write) does not fire the callback a second time.
+    this.#invalidRefCountRecovery = promiseVoid;
+    this.#lc.error?.(
+      `Database ${this.idbName} was found corrupt and dropped by another instance, clientID: ${this.clientID}`,
+    );
+    this.#fireOnClientStateNotFound();
+  }
+
+  /**
+   * Installed on every dag store that writes to our database. The store calls
+   * it after the failing transaction has been released, so dropping the
+   * database from here does not race with the rollback.
+   */
+  readonly #onInvalidRefCount = (e: InvalidRefCountError): void => {
+    void this.#handleInvalidRefCount(e);
+  };
+
+  /**
+   * The persistent dag store contains an invalid ref count. This means the
+   * store is corrupt (due to some unknown bug) and every subsequent write that
+   * touches that chunk would fail the same way. There is no way to repair it,
+   * so we treat it like the client state was lost and fire
+   * `onClientStateNotFound`.
+   *
+   * Disabling the client group is not enough: the corrupt ref count stays in
+   * the underlying kv store and any later write that touches that chunk (for
+   * example rewriting the `clients` chunk when a new client starts) would hit
+   * it again. Instead we drop the whole database so that the reload starts
+   * from a fresh store. Pending local mutations in this database are lost.
+   */
+  #handleInvalidRefCount(e: InvalidRefCountError): Promise<void> {
+    this.#invalidRefCountRecovery ??= this.#invalidRefCountOnClient(e);
+    return this.#invalidRefCountRecovery;
+  }
+
+  async #invalidRefCountOnClient(e: InvalidRefCountError): Promise<void> {
+    const {clientID} = this;
+    this.#lc.error?.(
+      `Client state is corrupt on client, clientID: ${clientID}. Dropping database ${this.idbName}`,
+      e,
+    );
+    try {
+      await dropDatabaseInternal(
+        this.idbName,
+        this.#idbDatabases,
+        this.#kvStoreProvider.drop,
+      );
+    } catch (dropError) {
+      // Still fire onClientStateNotFound so the app can recover.
+      this.#lc.error?.(
+        `Failed to drop database ${this.idbName}, clientID: ${clientID}`,
+        dropError,
+      );
+    }
+    // The other tabs lost their connection to this database as well, and
+    // would otherwise only see generic storage errors from now on.
+    this.#notifyDatabaseReset();
     this.#fireOnClientStateNotFound();
   }
 

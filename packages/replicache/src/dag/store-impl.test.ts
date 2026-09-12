@@ -1,4 +1,4 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {deepFreeze} from '../frozen-json.ts';
@@ -19,7 +19,7 @@ import {
 import {Chunk, createChunk, type Refs, toRefs} from './chunk.ts';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.ts';
 import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.ts';
-import {ChunkNotFoundError} from './store.ts';
+import {ChunkNotFoundError, InvalidRefCountError} from './store.ts';
 import {TestStore} from './test-store.ts';
 
 describe('read', () => {
@@ -199,50 +199,94 @@ describe('write', () => {
   test('ref count invalid', async () => {
     const chunkHasher = makeNewFakeHashFunction();
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const t = async (v: any, expectError?: string) => {
+    const t = async (v: any, expectError = false) => {
       const kv = new TestMemStore();
       const h = fakeHash('face1');
       await withWrite(kv, async kvw => {
         await kvw.put(chunkRefCountKey(h), v);
       });
-      await withWriteNoImplicitCommit(kv, async kvw => {
-        const w = new WriteImpl(kvw, chunkHasher, assertHash);
-        let err;
+      const onInvalidRefCount = vi.fn();
+      const store = new StoreImpl(
+        kv,
+        chunkHasher,
+        assertHash,
+        onInvalidRefCount,
+      );
+      let err: unknown;
+      await withWriteNoImplicitCommit(store, async w => {
         try {
           await w.setHead('fakehead', h);
           await w.commit();
         } catch (e) {
           err = e;
         }
-        if (expectError) {
-          expect(err).toBeInstanceOf(Error);
-          expect(err).toHaveProperty('message', expectError);
-        } else {
-          expect(err, 'No error expected').toBeUndefined();
-        }
+        // The owner is only told once the transaction has been released, so
+        // it can safely drop the store in response.
+        expect(onInvalidRefCount).not.toHaveBeenCalled();
       });
+      if (expectError) {
+        expect(err).toBeInstanceOf(InvalidRefCountError);
+        expect(err).toHaveProperty(
+          'message',
+          `Invalid ref count ${String(v)} for ${h}. We expect the value to be a Uint16`,
+        );
+        expect(err).toHaveProperty('hash', h);
+        expect(err).toHaveProperty('value', v);
+        // The store owner is told regardless of which code path did the write.
+        expect(onInvalidRefCount).toHaveBeenCalledExactlyOnceWith(err);
+      } else {
+        expect(err, 'No error expected').toBeUndefined();
+        expect(onInvalidRefCount).not.toHaveBeenCalled();
+      }
     };
 
     await t(0);
     await t(1);
     await t(42);
     await t(0xffff);
-    await t(-1, 'Invalid ref count -1. We expect the value to be a Uint16');
-    await t(-1, 'Invalid ref count -1. We expect the value to be a Uint16');
-    await t(1.5, 'Invalid ref count 1.5. We expect the value to be a Uint16');
-    await t(NaN, 'Invalid ref count NaN. We expect the value to be a Uint16');
-    await t(
-      Infinity,
-      'Invalid ref count Infinity. We expect the value to be a Uint16',
-    );
-    await t(
-      -Infinity,
-      'Invalid ref count -Infinity. We expect the value to be a Uint16',
-    );
-    await t(
-      2 ** 16,
-      'Invalid ref count 65536. We expect the value to be a Uint16',
-    );
+    await t(-1, true);
+    await t(1.5, true);
+    await t(NaN, true);
+    await t(Infinity, true);
+    await t(-Infinity, true);
+    await t(2 ** 16, true);
+    await t('42', true);
+    await t(null, true);
+  });
+
+  test('ref count missing for a referenced chunk', async () => {
+    // The old head points at a chunk that has no ref count key at all. Moving
+    // the head away would take the count to -1, which means the store is
+    // already corrupt. This must surface as the typed error and reach the
+    // store owner like any other invalid ref count, not as a generic assert.
+    const chunkHasher = makeNewFakeHashFunction();
+    const kv = new TestMemStore();
+    const h0 = fakeHash('face0');
+    const h1 = fakeHash('face1');
+    await withWrite(kv, async kvw => {
+      await kvw.put(headKey('h'), h0);
+    });
+    const onInvalidRefCount = vi.fn();
+    const store = new StoreImpl(kv, chunkHasher, assertHash, onInvalidRefCount);
+    let err: unknown;
+    await withWriteNoImplicitCommit(store, async w => {
+      try {
+        await w.setHead('h', h1);
+        await w.commit();
+      } catch (e) {
+        err = e;
+      }
+      expect(onInvalidRefCount).not.toHaveBeenCalled();
+    });
+    expect(err).toBeInstanceOf(InvalidRefCountError);
+    expect(err).toHaveProperty('hash', h0);
+    expect(err).toHaveProperty('value', -1);
+    expect(onInvalidRefCount).toHaveBeenCalledExactlyOnceWith(err);
+    // Nothing was written.
+    await withRead(kv, async kvr => {
+      expect(await kvr.get(headKey('h'))).toBe(h0);
+      expect(await kvr.get(chunkRefCountKey(h0))).toBeUndefined();
+    });
   });
 
   test('commit rollback', async () => {
