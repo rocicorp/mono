@@ -83,6 +83,32 @@ describe('change-streamer/forwarder', () => {
     expect(receiver.queued).toBe(6);
   });
 
+  test('coalesces forward() across async microtask turns into single batch', async () => {
+    const forwarder = new Forwarder(createSilentLogContext());
+    const [sub, _, receiver] = createSubscriber('00', true);
+    forwarder.add(sub);
+
+    const sendBatchSpy = vi.spyOn(sub, 'sendBatch');
+
+    for (let i = 1; i <= 5; i++) {
+      forwarder.forward([
+        `1${i}`,
+        'insert',
+        json(['data', messages.insert('issues', {id: `issue_${i}`})]),
+      ]);
+      await Promise.resolve(); // Simulates async await boundary between stream.changes items
+    }
+
+    expect(sendBatchSpy).not.toHaveBeenCalled();
+
+    await nextEventLoopTurn();
+
+    expect(sendBatchSpy).toHaveBeenCalledTimes(1);
+    const batchedChanges = sendBatchSpy.mock.calls[0][0];
+    expect(batchedChanges).toHaveLength(5);
+    expect(receiver.queued).toBe(6);
+  });
+
   test('flushes immediately when batch reaches FORWARD_BATCH_SIZE (64)', () => {
     const forwarder = new Forwarder(createSilentLogContext());
     const [sub, _, receiver] = createSubscriber('00', true);

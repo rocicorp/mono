@@ -43,6 +43,7 @@ export class Forwarder {
 
   #pending: WatermarkedChange[] = [];
   #flushScheduled = false;
+  #flushImmediateId: NodeJS.Immediate | undefined = undefined;
 
   #currentBroadcast: Broadcast | undefined;
   #progressMonitor: NodeJS.Timeout | undefined;
@@ -202,6 +203,10 @@ export class Forwarder {
 
   stopProgressMonitor() {
     clearInterval(this.#progressMonitor);
+    if (this.#flushImmediateId !== undefined) {
+      clearImmediate(this.#flushImmediateId);
+      this.#flushImmediateId = undefined;
+    }
   }
 
   /**
@@ -249,7 +254,9 @@ export class Forwarder {
       this.#flushPendingWithoutTracking();
     } else if (!this.#flushScheduled && this.#pending.length > 0) {
       this.#flushScheduled = true;
-      queueMicrotask(() => this.#flushPendingWithoutTracking());
+      this.#flushImmediateId = setImmediate(() =>
+        this.#flushPendingWithoutTracking(),
+      );
     }
   }
 
@@ -295,6 +302,10 @@ export class Forwarder {
   }
 
   #drainPending(): WatermarkedChange[] {
+    if (this.#flushImmediateId !== undefined) {
+      clearImmediate(this.#flushImmediateId);
+      this.#flushImmediateId = undefined;
+    }
     this.#flushScheduled = false;
     if (this.#pending.length === 0) {
       return [];
