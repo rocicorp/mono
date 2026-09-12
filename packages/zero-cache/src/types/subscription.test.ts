@@ -724,4 +724,82 @@ describe('types/subscription', () => {
       await expect(raced).rejects.toThrow('canceled');
     });
   });
+
+  describe('pipelineBatched', () => {
+    test('eagerly drains multiple queued messages up to maxBatch', async () => {
+      const consumed = new Set<number>();
+      const cleanup = vi.fn();
+      const results: Promise<Result>[] = [];
+
+      const sub = Subscription.create<number>({
+        cleanup,
+        consumed: m => consumed.add(m),
+      });
+
+      for (let i = 0; i < 10; i++) {
+        results.push(sub.push(i).result);
+      }
+
+      const batched = sub.pipelineBatched(5);
+      assert(batched, 'must support batched pipeline');
+
+      const batches: number[][] = [];
+      for await (const {values, consumed: signalConsumed} of batched) {
+        batches.push(values);
+        signalConsumed();
+        if (batches.length === 2) {
+          break;
+        }
+      }
+
+      expect(batches).toEqual([
+        [0, 1, 2, 3, 4],
+        [5, 6, 7, 8, 9],
+      ]);
+      expect(consumed).toEqual(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+      for (const r of results) {
+        expect(await r).toBe('consumed');
+      }
+    });
+
+    test('yields single messages as they arrive when queue is empty', async () => {
+      const sub = Subscription.create<number>();
+      const batched = sub.pipelineBatched(10);
+      assert(batched, 'must support batched pipeline');
+
+      const it = batched[Symbol.asyncIterator]();
+
+      const nextPromise = it.next();
+      sub.push(42);
+
+      const res = await nextPromise;
+      expect(res.done).toBe(false);
+      expect(res.value?.values).toEqual([42]);
+      res.value?.consumed();
+    });
+
+    test('cleanup on cancel with pending batch', async () => {
+      const cleanup = vi.fn();
+      const sub = Subscription.create<number>({cleanup});
+      const results: Promise<Result>[] = [];
+      for (let i = 0; i < 5; i++) {
+        results.push(sub.push(i).result);
+      }
+
+      const batched = sub.pipelineBatched(3);
+      assert(batched, 'must support batched pipeline');
+
+      const it = batched[Symbol.asyncIterator]();
+      const first = await it.next();
+      expect(first.value?.values).toEqual([0, 1, 2]);
+
+      // Cancel before consuming first batch
+      sub.cancel();
+
+      for (const r of results) {
+        expect(await r).toBe('unconsumed');
+      }
+      expect(cleanup).toHaveBeenCalledWith([0, 1, 2, 3, 4], undefined);
+    });
+  });
 });

@@ -277,6 +277,7 @@ describe('change-streamer/http', () => {
         initial: true,
         // Non-default so that the roundtrip below pins the parameter.
         logsChangeStream: true,
+        wsBatched: true,
       } as const;
       await setChangeStreamerAddress(addr());
       const client = autoDiscover
@@ -302,14 +303,17 @@ describe('change-streamer/http', () => {
       downstream.push(begin);
       downstream.push(commit);
 
+      const batchedFrame = `{"id":1,"batch":[${begin},${commit}]}`;
+      const batchedSize = Math.round(batchedFrame.length / 2);
+
       expect(await drain(2, sub)).toEqual([
         {
           data: ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
-          size: `{"id":1,"msg":${begin}}`.length,
+          size: batchedSize,
         },
         {
           data: ['commit', {tag: 'commit'}, {watermark: '456'}],
-          size: `{"id":2,"msg":${commit}}`.length,
+          size: batchedSize,
         },
       ]);
 
