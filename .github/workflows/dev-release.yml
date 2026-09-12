@@ -373,17 +373,19 @@ jobs:
 
       - name: Create multi-platform Docker image tags
         env:
+          AMD64_DIGEST: ${{ steps.digests.outputs.amd64 }}
+          ARM64_DIGEST: ${{ steps.digests.outputs.arm64 }}
           DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
         run: |
           set -euo pipefail
           docker buildx imagetools create \
             --tag "ghcr.io/rocicorp/zero:$IMAGE_TAG" \
-            "ghcr.io/rocicorp/zero@${{ steps.digests.outputs.amd64 }}" \
-            "ghcr.io/rocicorp/zero@${{ steps.digests.outputs.arm64 }}"
+            "ghcr.io/rocicorp/zero@$AMD64_DIGEST" \
+            "ghcr.io/rocicorp/zero@$ARM64_DIGEST"
           docker buildx imagetools create \
             --tag "docker.io/rocicorp/zero:$IMAGE_TAG" \
-            "docker.io/rocicorp/zero@${{ steps.digests.outputs.amd64 }}" \
-            "docker.io/rocicorp/zero@${{ steps.digests.outputs.arm64 }}"
+            "docker.io/rocicorp/zero@$AMD64_DIGEST" \
+            "docker.io/rocicorp/zero@$ARM64_DIGEST"
 
       - name: Verify multi-platform Docker image tags
         env:
