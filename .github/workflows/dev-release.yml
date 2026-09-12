@@ -126,19 +126,15 @@ jobs:
           fi
 
   build:
-    name: Build artifacts
-    # Cloud Zero staging runs on arm64, so use a native arm64 runner instead
-    # of emulating arm64 on the default x64 runner.
-    runs-on: ubuntu-24.04-arm
+    name: Build package
+    runs-on: ubuntu-latest
     needs: [plan, verify-signed-commit-authors]
     permissions:
       contents: read
     outputs:
       tarball_name: ${{ steps.pack.outputs.filename }}
     env:
-      IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
       SCRIPTS: ${{ github.workspace }}/ci/scripts/src
-      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
     steps:
       - name: Checkout workflow scripts
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -182,42 +178,102 @@ jobs:
           PACK_DEST: ${{ runner.temp }}/npm
         run: node "$SCRIPTS/release-pack.ts"
 
+      - name: Upload npm package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zero-npm-${{ needs.plan.outputs.image_tag }}
+          if-no-files-found: error
+          retention-days: 1
+          path: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
+
+  build-docker:
+    name: Build Docker image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: [plan, verify-signed-commit-authors, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    env:
+      ARCH: ${{ matrix.arch }}
+      IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+      PLATFORM: ${{ matrix.platform }}
+      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+      TARBALL: ${{ needs.build.outputs.tarball_name }}
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: source
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Download npm package artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: zero-npm-${{ needs.plan.outputs.image_tag }}
+          path: ${{ runner.temp }}/npm
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Build Docker image archive
         env:
-          IMAGE_ARCHIVE: ${{ runner.temp }}/docker/zero-image.tar
-          TARBALL: ${{ steps.pack.outputs.filename }}
-          TARBALL_PATH: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
+          IMAGE_ARCHIVE: ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.tar
+          IMAGE_DIGEST: ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.digest
+          IMAGE_METADATA: ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.json
+          TARBALL_PATH: ${{ runner.temp }}/npm/${{ needs.build.outputs.tarball_name }}
         run: |
           set -euo pipefail
           mkdir -p source/packages/zero/pkgs "$(dirname "$IMAGE_ARCHIVE")"
           cp "$TARBALL_PATH" "source/packages/zero/pkgs/$TARBALL"
           docker buildx build \
-            --platform linux/arm64 \
+            --platform "$PLATFORM" \
             --build-context monogo=source/go \
             --build-arg ZERO_VERSION="$IMAGE_TAG" \
             --build-arg ZERO_PACKAGE="$TARBALL" \
             --label org.opencontainers.image.revision="$SOURCE_SHA" \
             --label org.opencontainers.image.version="$IMAGE_TAG" \
+            --metadata-file "$IMAGE_METADATA" \
             --sbom=true \
             --provenance=mode=max \
             --output=type=oci,dest="$IMAGE_ARCHIVE" \
             source/packages/zero
+          digest=$(jq -r '."containerimage.digest"' "$IMAGE_METADATA")
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid $ARCH image digest: $digest" >&2
+            exit 1
+          fi
+          printf '%s\n' "$digest" > "$IMAGE_DIGEST"
 
       - name: Upload Docker image artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: zero-docker-${{ needs.plan.outputs.image_tag }}
+          name: zero-docker-${{ needs.plan.outputs.image_tag }}-${{ matrix.arch }}
           if-no-files-found: error
           retention-days: 1
-          path: ${{ runner.temp }}/docker/zero-image.tar
+          path: |
+            ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.tar
+            ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.digest
 
   publish-docker:
     name: Publish Docker images
     runs-on: ubuntu-latest
-    needs: [plan, verify-signed-commit-authors, build, archive-cloudzero-source]
+    needs:
+      [
+        plan,
+        verify-signed-commit-authors,
+        build-docker,
+        archive-cloudzero-source,
+      ]
     concurrency:
       group: zero-dev-release-tag-${{ needs.plan.outputs.image_tag }}
       cancel-in-progress: false
@@ -230,20 +286,42 @@ jobs:
       IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
       SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
     steps:
-      - name: Download Docker image artifact
+      - name: Download amd64 Docker image artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: zero-docker-${{ needs.plan.outputs.image_tag }}
+          name: zero-docker-${{ needs.plan.outputs.image_tag }}-amd64
           path: dist/docker
 
-      - name: Push GHCR Docker image
-        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+      - name: Download arm64 Docker image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          args: >-
-            copy --all
-            --dest-creds ${{ github.actor }}:${{ github.token }}
-            oci-archive:dist/docker/zero-image.tar
-            docker://ghcr.io/rocicorp/zero:${{ needs.plan.outputs.image_tag }}
+          name: zero-docker-${{ needs.plan.outputs.image_tag }}-arm64
+          path: dist/docker
+
+      - name: Read Docker image digests
+        id: digests
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            digest=$(<"dist/docker/zero-image-$arch.digest")
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid $arch image digest: $digest" >&2
+              exit 1
+            fi
+            echo "$arch=$digest" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -253,15 +331,78 @@ jobs:
         with:
           username: rocicorp
 
-      - name: Push Docker Hub image
+      - name: Push GHCR amd64 image by digest
         uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
         env:
           REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
         with:
           args: >-
-            copy --all
-            oci-archive:dist/docker/zero-image.tar
-            docker://docker.io/rocicorp/zero:${{ needs.plan.outputs.image_tag }}
+            copy --all --preserve-digests
+            oci-archive:dist/docker/zero-image-amd64.tar
+            docker://ghcr.io/rocicorp/zero@${{ steps.digests.outputs.amd64 }}
+
+      - name: Push GHCR arm64 image by digest
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        env:
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
+        with:
+          args: >-
+            copy --all --preserve-digests
+            oci-archive:dist/docker/zero-image-arm64.tar
+            docker://ghcr.io/rocicorp/zero@${{ steps.digests.outputs.arm64 }}
+
+      - name: Push Docker Hub amd64 image by digest
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        env:
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
+        with:
+          args: >-
+            copy --all --preserve-digests
+            oci-archive:dist/docker/zero-image-amd64.tar
+            docker://docker.io/rocicorp/zero@${{ steps.digests.outputs.amd64 }}
+
+      - name: Push Docker Hub arm64 image by digest
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        env:
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
+        with:
+          args: >-
+            copy --all --preserve-digests
+            oci-archive:dist/docker/zero-image-arm64.tar
+            docker://docker.io/rocicorp/zero@${{ steps.digests.outputs.arm64 }}
+
+      - name: Create multi-platform Docker image tags
+        env:
+          AMD64_DIGEST: ${{ steps.digests.outputs.amd64 }}
+          ARM64_DIGEST: ${{ steps.digests.outputs.arm64 }}
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "ghcr.io/rocicorp/zero:$IMAGE_TAG" \
+            "ghcr.io/rocicorp/zero@$AMD64_DIGEST" \
+            "ghcr.io/rocicorp/zero@$ARM64_DIGEST"
+          docker buildx imagetools create \
+            --tag "docker.io/rocicorp/zero:$IMAGE_TAG" \
+            "docker.io/rocicorp/zero@$AMD64_DIGEST" \
+            "docker.io/rocicorp/zero@$ARM64_DIGEST"
+
+      - name: Verify multi-platform Docker image tags
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+        run: |
+          set -euo pipefail
+          for image in \
+            "ghcr.io/rocicorp/zero:$IMAGE_TAG" \
+            "docker.io/rocicorp/zero:$IMAGE_TAG"; do
+            platforms=$(docker buildx imagetools inspect "$image" --raw |
+              jq -r '.manifests[].platform | select(.os == "linux") | .architecture' |
+              sort -u | paste -sd, -)
+            if [ "$platforms" != 'amd64,arm64' ]; then
+              echo "Expected $image to contain linux/amd64 and linux/arm64, got: $platforms" >&2
+              exit 1
+            fi
+          done
 
       - name: Summarize dev release
         run: |
