@@ -58,6 +58,15 @@ export type Source<T> = AsyncIterable<T> & {
    * asynchronously as the receiving end processes the messages.
    */
   pipeline?: AsyncIterable<{value: T; consumed: () => void}> | undefined;
+
+  /**
+   * Pipelined batching support: eagerly drains available queued messages up to `maxBatch`.
+   */
+  pipelineBatched?:
+    | ((
+        maxBatch?: number,
+      ) => AsyncIterable<{values: T[]; consumed: () => void}> | undefined)
+    | undefined;
 };
 
 export type Sink<T> = {
@@ -229,12 +238,18 @@ export type Sized<T> = {
   size: number;
 };
 
+export type StreamOutOptions = {
+  batched?: boolean | undefined;
+  maxBatchSize?: number | undefined;
+};
+
 export function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, BigIntJSON.stringify);
+  return streamOutInternal(lc, source, sink, BigIntJSON.stringify, options);
 }
 
 /**
@@ -244,8 +259,9 @@ export function streamOutStringified(
   lc: LogContext,
   source: Source<string>,
   sink: WebSocket,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, json => json);
+  return streamOutInternal(lc, source, sink, json => json, options);
 }
 
 async function streamOutInternal<T extends JSONValue>(
@@ -253,6 +269,7 @@ async function streamOutInternal<T extends JSONValue>(
   source: Source<T>,
   sink: WebSocket,
   stringify: (payload: T) => string,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
 
@@ -274,6 +291,36 @@ async function streamOutInternal<T extends JSONValue>(
   try {
     let nextID = 0;
     const {pipeline} = source;
+    const batched = options?.batched ?? false;
+    const maxBatchSize = options?.maxBatchSize ?? 64;
+
+    if (batched && source.pipelineBatched) {
+      const batchedIterable = source.pipelineBatched(maxBatchSize);
+      if (batchedIterable) {
+        lc.debug?.(
+          `started batched outbound stream (maxBatchSize=${maxBatchSize})`,
+        );
+        for await (const {values, consumed} of batchedIterable) {
+          const id = ++nextID;
+          const data =
+            values.length === 1
+              ? `{"id":${id},"msg":${stringify(values[0])}}`
+              : `{"id":${id},"batch":[${values.map(stringify).join(',')}]}`;
+          sink.send(data);
+
+          void (async () => {
+            const {ack} = await acks.dequeue();
+            if (ack !== id) {
+              throw new Error(`Unexpected ack for ${id}: ${ack}`);
+            }
+            consumed();
+          })().catch(e => closer.close(e));
+        }
+        closer.close();
+        return;
+      }
+    }
+
     if (pipeline) {
       lc.debug?.(`started pipelined outbound stream`);
       for await (const {value: msg, consumed} of pipeline) {
@@ -334,9 +381,9 @@ export function streamInWithSize<T extends JSONValue>(
   source: WebSocket,
   schema: v.Type<T>,
 ): Promise<Source<Sized<T>>> {
-  return streamInInternal(lc, source, schema, (data, frame) => ({
+  return streamInInternal(lc, source, schema, (data, _frame, _id, size) => ({
     data,
-    size: frame.length,
+    size,
   }));
 }
 
@@ -344,21 +391,24 @@ async function streamInInternal<T extends JSONValue, Out>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
-  transform: (data: T, frame: string, id: number) => Out,
+  transform: (data: T, frame: string, id: number, size: number) => Out,
 ): Promise<Source<Out>> {
   expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
 
   const streamedSchema = v.object({
-    msg: schema,
     id: v.number(),
+    msg: schema.optional(),
+    batch: v.array(schema).optional(),
   });
 
-  const sink: Subscription<Out, {id: number; data: Out}> = new Subscription<
-    Out,
-    {id: number; data: Out}
-  >(
+  type SinkEntry = {
+    consumed: () => void;
+    data: Out;
+  };
+
+  const sink: Subscription<Out, SinkEntry> = new Subscription<Out, SinkEntry>(
     {
-      consumed: ({id}) => source.send(JSON.stringify({ack: id} satisfies Ack)),
+      consumed: ({consumed}) => consumed(),
       cleanup: () => closer.close(),
     },
     ({data}) => data,
@@ -374,10 +424,41 @@ async function streamInInternal<T extends JSONValue, Out>(
     }
     try {
       const value = BigIntJSON.parse(data);
-      const msg = v.parse(value, streamedSchema, 'passthrough');
-      // Enable for debugging. Otherwise too verbose.
-      // lc.debug?.(`received`, data);
-      sink.push({id: msg.id, data: transform(msg.msg, data, msg.id)});
+      const parsed = v.parse(value, streamedSchema, 'passthrough');
+      const {id, msg, batch} = parsed;
+
+      const sendAck = () => {
+        if (source.readyState === source.OPEN) {
+          source.send(JSON.stringify({ack: id} satisfies Ack));
+        }
+      };
+
+      if (batch !== undefined) {
+        let remaining = batch.length;
+        if (remaining === 0) {
+          sendAck();
+          return;
+        }
+        const onConsumed = () => {
+          if (--remaining === 0) {
+            sendAck();
+          }
+        };
+        const itemSize = Math.max(1, Math.round(data.length / batch.length));
+        for (const item of batch) {
+          sink.push({
+            consumed: onConsumed,
+            data: transform(item, data, id, itemSize),
+          });
+        }
+      } else if (msg !== undefined) {
+        sink.push({
+          consumed: sendAck,
+          data: transform(msg, data, id, data.length),
+        });
+      } else {
+        throw new Error(`Message ${id} has neither "msg" nor "batch"`);
+      }
     } catch (e) {
       closer.close(e);
     }

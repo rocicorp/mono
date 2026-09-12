@@ -18,6 +18,8 @@ export type ProgressMonitorOptions = {
   clearTimeoutFn?: typeof clearTimeout | undefined;
 };
 
+const FORWARD_BATCH_SIZE = 64;
+
 export class Forwarder {
   readonly #lc: LogContext;
   readonly #setTimeout: typeof setTimeout;
@@ -38,6 +40,10 @@ export class Forwarder {
     'Time replication waits at flow-control checkpoints.',
   );
   #inTransaction = false;
+
+  #pending: WatermarkedChange[] = [];
+  #flushScheduled = false;
+  #flushImmediateId: NodeJS.Immediate | undefined = undefined;
 
   #currentBroadcast: Broadcast | undefined;
   #progressMonitor: NodeJS.Timeout | undefined;
@@ -197,6 +203,10 @@ export class Forwarder {
 
   stopProgressMonitor() {
     clearInterval(this.#progressMonitor);
+    if (this.#flushImmediateId !== undefined) {
+      clearImmediate(this.#flushImmediateId);
+      this.#flushImmediateId = undefined;
+    }
   }
 
   /**
@@ -205,6 +215,7 @@ export class Forwarder {
    * currently being streamed.
    */
   add(sub: Subscriber) {
+    this.#flushPendingWithoutTracking();
     if (this.#inTransaction) {
       this.#queued.add(sub);
     } else {
@@ -213,6 +224,7 @@ export class Forwarder {
   }
 
   remove(sub: Subscriber) {
+    this.#flushPendingWithoutTracking();
     this.#active.delete(sub);
     this.#queued.delete(sub);
     sub.close();
@@ -223,16 +235,33 @@ export class Forwarder {
    * two components have an equivalent interpretation of whether a Transaction is
    * currently being streamed.
    *
-   * This version of forward is fire-and-forget, with no flow control. The
-   * change-streamer should call and await {@link forwardWithFlowControl()}
-   * occasionally to avoid memory blowup.
+   * This version of forward buffers changes across the current event loop turn
+   * and dispatches them in batches. The change-streamer should call and await
+   * {@link forwardWithFlowControl()} occasionally to avoid memory blowup.
    */
   forward(entry: WatermarkedChange) {
-    Broadcast.withoutTracking(this.#active.values(), entry);
+    this.#pending.push(entry);
+
+    if (
+      this.#queued.size > 0 &&
+      (entry[1] === 'commit' || entry[1] === 'rollback')
+    ) {
+      this.#flushPendingWithoutTracking();
+    }
     this.#updateActiveSubscribers(entry[1]);
+
+    if (this.#pending.length >= FORWARD_BATCH_SIZE) {
+      this.#flushPendingWithoutTracking();
+    } else if (!this.#flushScheduled && this.#pending.length > 0) {
+      this.#flushScheduled = true;
+      this.#flushImmediateId = setImmediate(() =>
+        this.#flushPendingWithoutTracking(),
+      );
+    }
   }
 
   sendStatus(status: Status) {
+    this.#flushPendingWithoutTracking();
     for (const sub of this.#active.values()) {
       sub.sendStatus(status);
     }
@@ -243,11 +272,14 @@ export class Forwarder {
    * Promise that resolves when replication should continue.
    */
   async forwardWithFlowControl(entry: WatermarkedChange) {
+    this.#pending.push(entry);
+
+    const batch = this.#drainPending();
     const start = performance.now();
     const broadcast = new Broadcast(
       this.#lc,
       this.#active.values(),
-      entry,
+      batch,
       this.#earlyReleaseOptions,
     );
     this.#updateActiveSubscribers(entry[1]);
@@ -266,6 +298,27 @@ export class Forwarder {
       if (this.#currentBroadcast === broadcast) {
         this.#currentBroadcast = undefined;
       }
+    }
+  }
+
+  #drainPending(): WatermarkedChange[] {
+    if (this.#flushImmediateId !== undefined) {
+      clearImmediate(this.#flushImmediateId);
+      this.#flushImmediateId = undefined;
+    }
+    this.#flushScheduled = false;
+    if (this.#pending.length === 0) {
+      return [];
+    }
+    const batch = this.#pending;
+    this.#pending = [];
+    return batch;
+  }
+
+  #flushPendingWithoutTracking() {
+    const batch = this.#drainPending();
+    if (batch.length > 0) {
+      Broadcast.withoutTracking(this.#active.values(), batch);
     }
   }
 

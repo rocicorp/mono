@@ -244,6 +244,10 @@ describe('streams with internal acks', () => {
       void streamOut(lc, producer, ws);
       void streamOutStringified(lc, stringifiedProducer, ws);
     });
+    server.get('/batched', {websocket: true}, ws => {
+      void streamOut(lc, producer, ws, {batched: true});
+      void streamOutStringified(lc, stringifiedProducer, ws, {batched: true});
+    });
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
@@ -271,6 +275,26 @@ describe('streams with internal acks', () => {
 
   async function startSizedReceiver() {
     ws = new WebSocket(`http://localhost:${port}/`);
+    return {
+      ws,
+      consumer: await streamInWithSize(lc, ws, messageSchema),
+    };
+  }
+
+  async function startBatchedReceiver() {
+    ws = new WebSocket(`http://localhost:${port}/batched`);
+    return {
+      ws,
+      consumer: (await streamIn(
+        lc,
+        ws,
+        messageSchema,
+      )) as Subscription<Message>,
+    };
+  }
+
+  async function startBatchedSizedReceiver() {
+    ws = new WebSocket(`http://localhost:${port}/batched`);
     return {
       ws,
       consumer: await streamInWithSize(lc, ws, messageSchema),
@@ -582,5 +606,164 @@ describe('streams with internal acks', () => {
       err = e;
     }
     expect(err).toBeInstanceOf(Error);
+  });
+
+  describe('batched streaming', () => {
+    test('eagerly batches messages under burst traffic and preserves ACKs', async () => {
+      const rawFrames: Array<{id: number; msg?: Message; batch?: Message[]}> =
+        [];
+      const total = 50;
+
+      const {ws: clientWs, consumer} = await startBatchedReceiver();
+      clientWs.on('message', data => {
+        try {
+          rawFrames.push(JSON.parse(data.toString()));
+        } catch {
+          // ignore non-json
+        }
+      });
+
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'burst-' + i});
+      }
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+      for (let i = 0; i < total; i++) {
+        expect(received[i]).toEqual({from: i, to: i + 1, str: 'burst-' + i});
+        expect(await consumed.dequeue()).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'burst-' + i,
+        });
+      }
+
+      // Verify that batching actually happened: fewer frames than individual messages
+      expect(rawFrames.length).toBeLessThan(total);
+      expect(
+        rawFrames.some(f => Array.isArray(f.batch) && f.batch.length > 1),
+      ).toBe(true);
+    });
+
+    test('batched stringified stream', async () => {
+      const total = 25;
+      for (let i = 0; i < total; i++) {
+        stringifiedProducer.push(
+          JSON.stringify({from: i, to: i + 1, str: 'stringified-' + i}),
+        );
+      }
+
+      const {consumer} = await startBatchedReceiver();
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+      for (let i = 0; i < total; i++) {
+        expect(received[i]).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'stringified-' + i,
+        });
+      }
+    });
+
+    test('batched streaming with streamInWithSize assigns proportionate sizes', async () => {
+      const total = 20;
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'sized-' + i});
+      }
+
+      const {consumer} = await startBatchedSizedReceiver();
+      let count = 0;
+      for await (const {data, size} of consumer) {
+        expect(data).toEqual({
+          from: count,
+          to: count + 1,
+          str: 'sized-' + count,
+        });
+        expect(size).toBeGreaterThan(0);
+        count++;
+        if (count === total) {
+          break;
+        }
+      }
+      expect(count).toBe(total);
+    });
+
+    test('backward compatibility: receiver handles mixed msg and batch frames', async () => {
+      const {consumer} = await startReceiver();
+
+      // Send single frame
+      producer.push({from: 100, to: 101, str: 'single'});
+      for await (const msg of consumer) {
+        expect(msg).toEqual({from: 100, to: 101, str: 'single'});
+        break;
+      }
+      expect(await consumed.dequeue()).toEqual({
+        from: 100,
+        to: 101,
+        str: 'single',
+      });
+    });
+
+    test('receiver handles mixed msg and batch frames from raw websocket', async () => {
+      let serverWs: WebSocket | undefined;
+      const wsServer = Fastify();
+      await wsServer.register(websocket);
+      wsServer.get('/mixed', {websocket: true}, client => {
+        serverWs = client;
+      });
+      const mixedPort = 8000 + Math.floor(randInt(0, 1000));
+      await wsServer.listen({port: mixedPort});
+
+      const clientWs = new WebSocket(`http://localhost:${mixedPort}/mixed`);
+      const receiver = await streamIn(lc, clientWs, messageSchema);
+
+      await vi.waitFor(() => expect(serverWs).toBeDefined());
+
+      // Send single frame
+      serverWs?.send(
+        JSON.stringify({id: 1, msg: {from: 1, to: 2, str: 'single'}}),
+      );
+
+      // Send batched frame
+      serverWs?.send(
+        JSON.stringify({
+          id: 2,
+          batch: [
+            {from: 2, to: 3, str: 'batch-1'},
+            {from: 3, to: 4, str: 'batch-2'},
+          ],
+        }),
+      );
+
+      const received: Message[] = [];
+      for await (const msg of receiver) {
+        received.push(msg);
+        if (received.length === 3) {
+          break;
+        }
+      }
+
+      expect(received).toEqual([
+        {from: 1, to: 2, str: 'single'},
+        {from: 2, to: 3, str: 'batch-1'},
+        {from: 3, to: 4, str: 'batch-2'},
+      ]);
+
+      await wsServer.close();
+    });
   });
 });
