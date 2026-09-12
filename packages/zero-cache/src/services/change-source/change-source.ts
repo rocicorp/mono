@@ -12,6 +12,11 @@ export type ChangeStream = {
    * A Sink to push the {@link StatusMessage}s that reflect Commits
    * that have been successfully stored by the {@link Storer}, or
    * downstream {@link StatusMessage}s henceforth.
+   *
+   * It also carries `backfill-request` messages, with which the
+   * change-streamer forwards a subscriber's backfill progress declaration to
+   * the change source. A change source that does not support backfills
+   * ignores everything but `status`.
    */
   acks: Sink<ChangeSourceUpstream>;
 }; /** Encapsulates an upstream-specific implementation of a stream of Changes. */

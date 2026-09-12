@@ -200,13 +200,13 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v4 ... v6]`,
+        `Cannot service client at protocol v8. Supported protocols: [v4 ... v7]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true&id=foo`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v4 ... v6]`,
+        `Cannot service client at protocol v8. Supported protocols: [v4 ... v7]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
@@ -277,7 +277,25 @@ describe('change-streamer/http', () => {
         initial: true,
         // Non-default so that the roundtrip below pins the parameter.
         logsChangeStream: true,
-      } as const;
+        backfills: [
+          {
+            schema: 'public',
+            table: 'issue',
+            columns: ['description', 'assignee'],
+            mark: ['1234', `it's`],
+            markWatermark: '0a',
+            runID: 'run-abc',
+          },
+          {
+            schema: 'public',
+            table: 'comment',
+            columns: ['body'],
+            mark: null,
+            markWatermark: null,
+            runID: null,
+          },
+        ],
+      } satisfies SubscriberContext;
       await setChangeStreamerAddress(addr());
       const client = autoDiscover
         ? changeStreamerClient

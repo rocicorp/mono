@@ -177,7 +177,22 @@ class CustomChangeSource implements ChangeSource {
       // only the last ACK is kept / buffered.
       {coalesce: (curr: ChangeSourceUpstream) => curr},
     );
-    return {changes: instream, acks: outstream};
+    return {
+      changes: instream,
+      acks: {
+        push: msg => {
+          // Custom change sources do not support backfills (`startStream`
+          // rejects backfill requests), so `backfill-request` messages are
+          // dropped rather than forwarded to an endpoint that would not
+          // understand them. Dropping one means a backfill of that table
+          // restarts from the beginning, which is what a source without
+          // backfill support does anyway.
+          if (msg[0] === 'status') {
+            outstream.push(msg);
+          }
+        },
+      },
+    };
   }
 }
 
