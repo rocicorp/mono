@@ -1,6 +1,5 @@
 # Rocicorp Monorepo
 
-TOUCH
 This is the mono repo for [Rocicorp](https://rocicorp.dev/)'s two main products (as of 2024).
 
 ## Zero
