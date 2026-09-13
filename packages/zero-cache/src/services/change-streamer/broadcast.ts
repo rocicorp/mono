@@ -266,6 +266,9 @@ type Completed = {
 function toBatch(
   change: WatermarkedChange | readonly WatermarkedChange[],
 ): readonly WatermarkedChange[] {
+  if (change.length === 0) {
+    return [];
+  }
   return Array.isArray(change[0])
     ? (change as readonly WatermarkedChange[])
     : [change as WatermarkedChange];
