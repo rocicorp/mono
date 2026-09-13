@@ -1,10 +1,31 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../../shared/src/must.ts';
+import type {PreSerialized} from '../../types/streams.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
 export type BroadcastReleaseMode = 'all-subscribers' | 'consensus-timeout';
+
+export type PreSerializedBatch = PreSerialized & {
+  readonly changes: readonly WatermarkedChange[];
+};
+
+export function preSerializeBatch(
+  changes: readonly WatermarkedChange[],
+): PreSerializedBatch {
+  const jsonList = changes.map(c => c[2]);
+  const joined = jsonList.join(',');
+  const payload = Buffer.from(
+    changes.length === 1 ? `,"msg":${jsonList[0]}}` : `,"batch":[${joined}]}`,
+    'utf8',
+  );
+  return {
+    changes,
+    payload,
+    byteLength: payload.length,
+  };
+}
 
 /**
  * Enables event-driven early release of a {@link Broadcast}. When provided and a
@@ -87,8 +108,9 @@ export class Broadcast {
     change: WatermarkedChange | readonly WatermarkedChange[],
   ) {
     const changes = toBatch(change);
+    const preSerialized = preSerializeBatch(changes);
     for (const sub of subscribers) {
-      void sub.sendBatch(changes);
+      void sub.sendBatch(changes, preSerialized);
     }
   }
 
@@ -127,6 +149,7 @@ export class Broadcast {
     earlyRelease?: EarlyReleaseOptions,
   ) {
     const changes = toBatch(change);
+    const preSerialized = preSerializeBatch(changes);
     this.#lc = lc;
     this.#pending = new Set(subscribers);
     this.#completed = [];
@@ -145,7 +168,7 @@ export class Broadcast {
         this.#needsBackupResponse ||= !sub.isBacklogged();
       }
       void sub
-        .sendBatch(changes)
+        .sendBatch(changes, preSerialized)
         .catch(() => {})
         .finally(() => this.#markCompleted(sub, totalChanges));
     }

@@ -15,7 +15,7 @@ import {
 import {min} from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {ShardID} from '../../types/shards.ts';
-import type {Source} from '../../types/streams.ts';
+import type {PreSerialized, Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {
   ChangeSource,
@@ -38,6 +38,7 @@ import {
   RunningState,
   UnrecoverableError,
 } from '../running-state.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
 import {serializeChangeStreamDataWithChange} from './change-log-codec.ts';
 import {
   ChangeLogInitializer,
@@ -935,13 +936,16 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     }
   }
 
-  async subscribe(ctx: SubscriberContext): Promise<Source<string>> {
-    const {protocolVersion, id, mode, replicaVersion, watermark} = ctx;
+  async subscribe(
+    ctx: SubscriberContext,
+  ): Promise<Source<string | PreSerialized>> {
+    const {protocolVersion, id, mode, replicaVersion, watermark, wsBatched} =
+      ctx;
     if (mode === 'serving') {
       this.#serving.resolve();
     }
     let cleanupSubscriber = () => {};
-    const downstream = Subscription.create<string>({
+    const downstream = Subscription.create<string | PreSerializedBatch>({
       cleanup: () => cleanupSubscriber(),
     });
     // No subscriber's ACK advances the SQLite change log's head any more: the
@@ -954,7 +958,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       watermark,
       downstream,
       () => this.#latestStatus,
-      {},
+      {
+        wsBatched,
+      },
     );
     const lc = this.#lc.withContext('subscriber', subscriber.id);
     const removeFromForwarder = () => {
