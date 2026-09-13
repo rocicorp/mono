@@ -278,6 +278,7 @@ describe('change-streamer/http', () => {
         // Non-default so that the roundtrip below pins the parameter.
         logsChangeStream: true,
         wsBatched: true,
+        cumulativeAck: true,
       } as const;
       await setChangeStreamerAddress(addr());
       const client = autoDiscover
