@@ -766,4 +766,226 @@ describe('streams with internal acks', () => {
       await wsServer.close();
     });
   });
+
+  describe('cumulative acknowledgment protocol', () => {
+    function createAckSpy(ws: WebSocket) {
+      const acksSent: number[] = [];
+      const originalSend = ws.send.bind(ws);
+      ws.send = (
+        data: Parameters<WebSocket['send']>[0],
+        ...rest: unknown[]
+      ) => {
+        try {
+          const parsed = JSON.parse(data.toString());
+          if (typeof parsed.ack === 'number') {
+            acksSent.push(parsed.ack);
+          }
+        } catch {
+          // ignore non-json
+        }
+        return (originalSend as (...args: unknown[]) => void)(data, ...rest);
+      };
+      return acksSent;
+    }
+
+    test('coalesces reverse frames and retires multiple in-flight frames simultaneously', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const acksSent = createAckSpy(ws);
+      const consumer = (await streamIn(lc, ws, messageSchema, {
+        cumulativeAck: true,
+        maxAckStride: 16,
+      })) as Subscription<Message>;
+
+      const total = 32;
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'cumul-' + i});
+      }
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+
+      // Verify all 32 messages were acknowledged and retired on producer
+      for (let i = 0; i < total; i++) {
+        expect(await consumed.dequeue()).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'cumul-' + i,
+        });
+      }
+
+      // Instead of 32 individual ACKs, the receiver sent dramatically fewer frames (e.g. 2 ACKs: 16 and 32)
+      expect(acksSent.length).toBeLessThanOrEqual(4);
+      expect(acksSent.at(-1)).toBe(total);
+    });
+
+    test('turn coalescing flushes single cumulative ACK for small burst', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const acksSent = createAckSpy(ws);
+      const consumer = (await streamIn(lc, ws, messageSchema, {
+        cumulativeAck: true,
+        maxAckStride: 16,
+      })) as Subscription<Message>;
+
+      const total = 5;
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'turn-' + i});
+      }
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+
+      for (let i = 0; i < total; i++) {
+        expect(await consumed.dequeue()).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'turn-' + i,
+        });
+      }
+
+      // Turn coalescing reduces ACK messages (< total)
+      expect(acksSent.length).toBeLessThan(total);
+      expect(acksSent.at(-1)).toBe(total);
+    });
+
+    test('backward compatibility: sender handles legacy 1:1 ACKs sequentially', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const acksSent = createAckSpy(ws);
+      // Legacy receiver without cumulativeAck
+      const consumer = (await streamIn(
+        lc,
+        ws,
+        messageSchema,
+      )) as Subscription<Message>;
+
+      const total = 6;
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'legacy-' + i});
+      }
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+      for (let i = 0; i < total; i++) {
+        expect(await consumed.dequeue()).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'legacy-' + i,
+        });
+      }
+
+      // 1:1 legacy receiver sent an ACK for every single message
+      expect(acksSent).toEqual([1, 2, 3, 4, 5, 6]);
+    });
+
+    test('duplicate ACKs are gracefully ignored by sliding window sender', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const consumer = (await streamIn(
+        lc,
+        ws,
+        messageSchema,
+      )) as Subscription<Message>;
+
+      producer.push({from: 0, to: 1, str: 'dup-0'});
+
+      let num = 0;
+      for await (const msg of consumer) {
+        if (num > 0) {
+          expect(await consumed.dequeue()).toEqual({
+            from: num - 1,
+            to: num,
+            str: `dup-${num - 1}`,
+          });
+        }
+        expect(msg).toEqual({from: num, to: num + 1, str: `dup-${num}`});
+
+        if (num === 1) {
+          // Resend duplicate ACK for frame 1
+          ws.send(JSON.stringify({ack: 1}));
+          await sleep(10);
+        }
+
+        if (num === 2) {
+          break;
+        }
+        num++;
+        producer.push({from: num, to: num + 1, str: `dup-${num}`});
+      }
+
+      expect(await consumed.dequeue()).toEqual({
+        from: 2,
+        to: 3,
+        str: 'dup-2',
+      });
+    });
+
+    test('contiguous watermark tracking advances only on contiguous completed IDs', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const acksSent = createAckSpy(ws);
+      const consumer = (await streamIn(lc, ws, messageSchema, {
+        cumulativeAck: true,
+        maxAckStride: 1,
+      })) as Subscription<Message>;
+
+      producer.push({from: 0, to: 1, str: 'frame-1'});
+      producer.push({from: 1, to: 2, str: 'frame-2'});
+      producer.push({from: 2, to: 3, str: 'frame-3'});
+
+      const pipelined = consumer.pipeline!;
+      const it = pipelined[Symbol.asyncIterator]();
+
+      const item1 = (await it.next()).value!;
+      const item2 = (await it.next()).value!;
+      const item3 = (await it.next()).value!;
+
+      // Consume item 1 -> contiguous watermark becomes 1
+      item1.consumed();
+      await vi.waitFor(() => expect(acksSent).toEqual([1]));
+
+      // Out of order: consume item 3 before item 2
+      item3.consumed();
+      await sleep(20);
+      // ACK must NOT advance to 3 because frame 2 is still missing!
+      expect(acksSent).toEqual([1]);
+
+      // Now consume item 2 -> contiguous watermark jumps to 3!
+      item2.consumed();
+      await vi.waitFor(() => expect(acksSent).toEqual([1, 3]));
+
+      consumer.cancel();
+    });
+
+    test('protocol error: ACK with id < 1 terminates connection', async () => {
+      producer.push({from: 0, to: 1, str: 'zero-ack'});
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const closed = resolver<void>();
+      ws.on('close', () => closed.resolve());
+
+      ws.once('message', () => {
+        ws.send(JSON.stringify({ack: 0}));
+      });
+
+      await closed.promise;
+      expect(await cleanedUp).toEqual([{from: 0, to: 1, str: 'zero-ack'}]);
+    });
+  });
 });

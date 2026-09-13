@@ -161,6 +161,11 @@ export type SubscriberContext = {
    * Whether the subscriber supports batched WebSocket frames.
    */
   wsBatched?: boolean | undefined;
+
+  /**
+   * Whether the subscriber acknowledges frames cumulatively via high-watermark ACKs.
+   */
+  cumulativeAck?: boolean | undefined;
 };
 
 /**
