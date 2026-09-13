@@ -641,7 +641,7 @@ describe('change-streamer/subscriber', () => {
     });
 
     test('an on-time response resets the lagging clock', () => {
-      const [sub] = createSubscriber('00', true);
+      const [sub] = createSubscriber('00');
       sub.trackResponseResult('timed-out');
       expect(sub.reportChangeRate(1000, 'lagging')).toBe(0);
       expect(sub.reportChangeRate(1800, 'lagging')).toBe(800);
@@ -651,6 +651,38 @@ describe('change-streamer/subscriber', () => {
       sub.trackResponseResult('timed-out');
       expect(sub.reportChangeRate(2000, 'lagging')).toBe(0);
       expect(sub.reportChangeRate(2300, 'lagging')).toBe(300);
+    });
+
+    test('an on-time response does not reset the clock while changes remain pending', async () => {
+      const [sub, , receiver] = createSubscriber('00', true);
+      const iterator = receiver[Symbol.asyncIterator]();
+      await iterator.next();
+      const pendingMessage = iterator.next();
+      await Promise.resolve();
+      void sub.send([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ]);
+      expect(sub.numPending).toBe(1);
+
+      sub.trackResponseResult('timed-out');
+      expect(sub.reportChangeRate(1000, 'lagging')).toBe(0);
+      expect(sub.reportChangeRate(1800, 'lagging')).toBe(800);
+
+      sub.trackResponseResult('on-time');
+      sub.trackResponseResult('timed-out');
+      expect(sub.reportChangeRate(2000, 'lagging')).toBe(1000);
+
+      await pendingMessage;
+      const end = iterator.next();
+      await Promise.resolve();
+      expect(sub.numPending).toBe(0);
+      sub.trackResponseResult('on-time');
+      sub.trackResponseResult('timed-out');
+      expect(sub.reportChangeRate(2200, 'lagging')).toBe(0);
+      sub.close();
+      await end;
     });
   });
 });

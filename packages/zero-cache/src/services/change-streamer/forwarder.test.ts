@@ -362,7 +362,7 @@ describe('change-streamer/forwarder', () => {
       stats: {processRate: number; missedLastTimeout: boolean},
       mode: ReplicatorMode = 'serving',
     ) {
-      const [sub] = createSubscriber('00', true, {}, mode);
+      const [sub] = createSubscriber('00', false, {}, mode);
       vi.spyOn(sub, 'getStats').mockReturnValue({
         processRate: stats.processRate,
         pending: 0,
@@ -552,6 +552,43 @@ describe('change-streamer/forwarder', () => {
       forwarder.checkSubscriberProgress(2400); // clock restarts here
       forwarder.checkSubscriberProgress(3200); // only 800ms of lagging so far
       expect(close).not.toHaveBeenCalled();
+    });
+
+    test('an intermittent on-time response does not protect a subscriber with pending changes', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      const {sub, close} = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+      void sub.send([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ]);
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(1500);
+
+      sub.trackResponseResult('on-time');
+      vi.spyOn(sub, 'getStats').mockReturnValue({
+        processRate: 1,
+        pending: 1,
+        backlog: 1,
+        backlogBytes: 1,
+        totalBufferedBytes: 1,
+        missedLastTimeout: true,
+      });
+      sub.trackResponseResult('timed-out');
+
+      forwarder.checkSubscriberProgress(2400);
+      expect(close).toHaveBeenCalledWith(
+        StreamTooFarBehind,
+        expect.stringContaining('lagging'),
+      );
     });
 
     test('detection is disabled when no grace period is configured', () => {

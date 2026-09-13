@@ -321,7 +321,7 @@ export class Subscriber {
 
   trackResponseResult(result: 'on-time' | 'timed-out') {
     this.#missedLastTimeout = result === 'timed-out';
-    if (result === 'on-time') {
+    if (result === 'on-time' && this.numPending === 0) {
       this.#laggingSinceMs = undefined;
     }
   }
