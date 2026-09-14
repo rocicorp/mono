@@ -2636,6 +2636,26 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
     expect(gotCallback).nthCalledWith(2, true);
   });
 
+  test('a throwing subscriber does not starve the others of the same query', () => {
+    const {queryManager, watchCallback} = setup();
+    const throwing = vi.fn<GotCallback>(got => {
+      if (got !== false) {
+        throw new Error('listener failed');
+      }
+    });
+    const other = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, throwing);
+    queryManager.addCustom(ast, nameAndArgs, 200, other);
+
+    expect(() => watchCallback([gotAdd])).toThrow('listener failed');
+    expect(other).nthCalledWith(2, 'cached');
+
+    expect(() => queryManager.markGotQueriesAuthoritative()).toThrow(
+      'listener failed',
+    );
+    expect(other).nthCalledWith(3, true);
+  });
+
   test('a throwing got callback does not leave the persisted diff pending', () => {
     const {queryManager, watchCallback} = setup();
     const throwing = vi.fn<GotCallback>(got => {

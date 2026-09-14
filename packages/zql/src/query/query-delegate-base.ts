@@ -350,6 +350,12 @@ export function preloadImpl<
   const cleanup = customQueryID
     ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
     : delegate.addServerQuery(ast, ttl, gotCallback);
+  if (delegate.defaultQueryComplete) {
+    // A delegate whose results are complete from the start (a server-side
+    // one) has no got callback to drive the waiters.
+    cachedResolver.resolve();
+    completeResolver.resolve();
+  }
   return {
     cleanup,
     complete,

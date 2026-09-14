@@ -155,11 +155,8 @@ export class QueryManager implements InspectorDelegate {
         // rethrown once the sets are consistent.
         let thrown: unknown;
         const fire = (queryHash: string, got: boolean | 'cached') => {
-          try {
-            this.#fireGotCallbacks(queryHash, got);
-          } catch (e) {
-            thrown ??= e;
-          }
+          const e = this.#fireGotCallbacks(queryHash, got);
+          thrown ??= e;
         };
         for (const diffOp of diff) {
           const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
@@ -206,14 +203,28 @@ export class QueryManager implements InspectorDelegate {
     return mapAST(ast, this.#clientToServer);
   }
 
-  #fireGotCallbacks(queryHash: string, got: boolean | 'cached') {
+  /**
+   * Notifies every subscriber of the query. A throwing subscriber does not
+   * keep the others from being notified; the first error is returned so the
+   * caller can rethrow it once its own bookkeeping is consistent.
+   */
+  #fireGotCallbacks(
+    queryHash: string,
+    got: boolean | 'cached',
+  ): unknown | undefined {
     const entry = this.#queries.get(queryHash);
     if (!entry) {
-      return;
+      return undefined;
     }
+    let thrown: unknown;
     for (const gotCallback of entry.gotCallbacks) {
-      gotCallback(got);
+      try {
+        gotCallback(got);
+      } catch (e) {
+        thrown ??= e;
+      }
     }
+    return thrown;
   }
 
   /**
@@ -233,10 +244,15 @@ export class QueryManager implements InspectorDelegate {
     // initial run), the next diff is live too.
     this.#cachedQueries.clear();
     this.#awaitingPersistedGotDiff = false;
+    let thrown: unknown;
     for (const queryHash of this.#queries.keys()) {
       if (this.#gotQueries.has(queryHash)) {
-        this.#fireGotCallbacks(queryHash, true);
+        const e = this.#fireGotCallbacks(queryHash, true);
+        thrown ??= e;
       }
+    }
+    if (thrown !== undefined) {
+      throw thrown;
     }
   }
 

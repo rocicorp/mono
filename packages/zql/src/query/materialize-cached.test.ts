@@ -184,6 +184,17 @@ describe('cached result type', () => {
     cleanup();
   });
 
+  test('preload() waiters resolve at once when results are complete by default', async () => {
+    const delegate = newDelegate();
+    // As on a server-side delegate; the field is only readonly to callers.
+    (delegate as {defaultQueryComplete: boolean}).defaultQueryComplete = true;
+    const {complete, cached, cleanup} = delegate.preload(
+      newQuery(schema, 'issue'),
+    );
+    await Promise.all([cached, complete]);
+    cleanup();
+  });
+
   test('preload() rejects both waiters on a query error', async () => {
     const delegate = newDelegate();
     const {complete, cached, cleanup} = delegate.preload(
