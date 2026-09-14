@@ -278,9 +278,15 @@ export class WriteImpl
   }
 
   release(): void {
-    this._tx.release();
-    if (this.#invalidRefCountError) {
-      this.#onInvalidRefCount?.(this.#invalidRefCountError);
+    try {
+      this._tx.release();
+    } finally {
+      // Report even if the kv release threw (for example a failed SQLite
+      // ROLLBACK): the store is corrupt either way and the owner must still
+      // recover. The release error keeps propagating to the caller.
+      if (this.#invalidRefCountError) {
+        this.#onInvalidRefCount?.(this.#invalidRefCountError);
+      }
     }
   }
 }

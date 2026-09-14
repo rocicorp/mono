@@ -288,9 +288,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly #clientID = makeClientID();
   readonly #ready: Promise<void>;
   /**
-   * Resolves if open fails for good (the persistent store was found to be
-   * corrupt). `#ready` never resolves in that case, so `close()` waits on
-   * whichever of the two settles first instead of hanging forever.
+   * Resolves if open fails, for whatever reason. `#ready` never resolves in
+   * that case, so `close()` waits on whichever of the two settles first
+   * instead of hanging forever.
    */
   readonly #openFailed = resolver<void>();
   readonly #profileIDPromise: Promise<string>;
@@ -583,6 +583,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       readyResolver.resolve,
       onClientsDeleted,
     ).catch(e => {
+      // Whatever the reason, this open is over: `#ready` stays pending so
+      // reads and writes never run against a store that failed to open, but
+      // `close()` must still be able to dispose the instance. This must not
+      // depend on why the open failed. When another instance drops the shared
+      // database, the open fails with a generic storage error and usually
+      // before the reset message arrives, so at this point nothing may tell
+      // the two apart.
+      this.#openFailed.resolve();
       if (
         e instanceof InvalidRefCountError ||
         this.#corruptDatabaseRecovery !== undefined
@@ -590,13 +598,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         // Recovery (drop the database and fire onClientStateNotFound) already
         // started, either because this open tripped on the corruption itself
         // or because another instance dropped the shared database while the
-        // open was in flight, in which case the open fails with whatever
-        // storage error the drop caused. Nothing else can be done with this
-        // instance; `#ready` stays pending so reads and writes never run
-        // against the dropped store, but `close()` must still be able to
-        // dispose the instance.
+        // open was in flight. Nothing else can be done with this instance.
         this.#lc.debug?.('Open failed because the persistent store is corrupt');
-        this.#openFailed.resolve();
         return;
       }
       throw e;
@@ -1445,8 +1448,16 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         `Failed to drop database ${idbName}, clientID: ${clientID}`,
         dropError,
       );
-    } finally {
+    }
+    try {
       await idbDatabases.close();
+    } catch (closeError) {
+      // Closing the registry handle is best effort. The callback below must
+      // fire regardless, and the drop outcome was already logged.
+      this.#lc.debug?.(
+        `Failed to close the databases registry after dropping ${idbName}, clientID: ${clientID}`,
+        closeError,
+      );
     }
     if (notifyOtherInstances) {
       notifyDatabaseReset(idbName, dropped);

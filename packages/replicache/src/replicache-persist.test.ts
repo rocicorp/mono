@@ -6,7 +6,10 @@ import {sleep} from '../../shared/src/sleep.ts';
 import {chunkRefCountKey} from './dag/key.ts';
 import {StoreImpl, WriteImpl} from './dag/store-impl.ts';
 import type {Store} from './dag/store.ts';
-import {makeDatabaseResetChannelNameForTesting} from './database-reset-channel.ts';
+import {
+  makeDatabaseResetChannelNameForTesting,
+  notifyDatabaseReset,
+} from './database-reset-channel.ts';
 import {assertHash, type Hash, newRandomHash} from './hash.ts';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.ts';
@@ -396,6 +399,55 @@ describe('onClientStateNotFound', () => {
     expect(rep.closed).toBe(true);
   });
 
+  test('Still called when closing the databases registry handle fails', async () => {
+    const consoleErrorStub = vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+    const onClientStateNotFound = vi.fn();
+
+    // The instance creates its own registry handle first, in the constructor.
+    // Recovery opens a second one to drop the database with; make closing
+    // that one fail, like an IndexedDB registry connection that never opened.
+    let registryHandles = 0;
+    const kvStore: StoreProvider = {
+      create: storeName => {
+        const store = new MemStore(storeName);
+        if (storeName.startsWith('rep:') || registryHandles++ === 0) {
+          return store;
+        }
+        return {
+          read: () => store.read(),
+          write: () => store.write(),
+          close: () => Promise.reject(new Error('close failed')),
+          get closed() {
+            return store.closed;
+          },
+        };
+      },
+      drop: dropMemStore,
+    };
+    const rep = await replicacheForTesting(
+      'registry-close-fails-invalid-ref',
+      {pullURL, mutators: {addData}, onClientStateNotFound, kvStore},
+      disableAllBackgroundProcesses,
+    );
+    await setUpCorruptPersist(rep, pullURL);
+
+    await rep.persist();
+
+    // The drop itself went through; only the registry cleanup failed, which
+    // must not stop the callback.
+    expect(registryHandles).toBe(2);
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    expect(hasMemStore(rep.idbName)).toBe(false);
+    const messages = consoleErrorStub.mock.calls.map(args => String(args[1]));
+    expect(messages).not.toContainEqual(
+      expect.stringContaining('Failed to drop database'),
+    );
+
+    await rep.close();
+    expect(rep.closed).toBe(true);
+  });
+
   test('Other instances drop the database themselves when the detecting instance could not', async () => {
     vi.spyOn(console, 'error');
     const pullURL = 'https://diff.com/pull';
@@ -498,6 +550,94 @@ describe('onClientStateNotFound', () => {
     releaseWrite.resolve();
     await rep.close();
     expect(rep.closed).toBe(true);
+  });
+
+  test('close() settles when open fails before the reset message from another instance arrives', async () => {
+    vi.spyOn(console, 'error');
+    const name = 'reset-before-message-during-open';
+
+    // Dropping the shared database closes this instance's connection at once,
+    // but the other instance only posts the reset message after the drop has
+    // completed. So the write that open is doing fails first, with a generic
+    // storage error, and the message arrives afterwards.
+    const openError = new Error('database was deleted');
+    const writeFailed = resolver();
+    let failed = false;
+    const kvStore: StoreProvider = {
+      create: storeName => {
+        const store = new MemStore(storeName);
+        if (!storeName.startsWith('rep:')) {
+          return store;
+        }
+        return {
+          read: () => store.read(),
+          write: () => {
+            if (!failed) {
+              failed = true;
+              writeFailed.resolve();
+              return Promise.reject(openError);
+            }
+            return store.write();
+          },
+          close: () => store.close(),
+          get closed() {
+            return store.closed;
+          },
+        };
+      },
+      drop: dropMemStore,
+    };
+
+    // A failed open that is not the corruption itself still surfaces as an
+    // unhandled rejection, like any other failed open. Keep the test run from
+    // failing on it while making sure it is the one we expect.
+    const unhandled: unknown[] = [];
+    const onUnhandled = (event: PromiseRejectionEvent) => {
+      unhandled.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener('unhandledrejection', onUnhandled);
+    // Timers are faked, but the unhandledrejection event needs a real task
+    // to be dispatched. MessageChannel is not faked.
+    const yieldToRealTask = () =>
+      new Promise<void>(resolve => {
+        const {port1, port2} = new MessageChannel();
+        port1.onmessage = () => {
+          port1.close();
+          resolve();
+        };
+        port2.postMessage(null);
+      });
+    try {
+      const rep = new ReplicacheTest(
+        {name, mutators: {addData}, pullURL: '', pushURL: '', kvStore},
+        disableAllBackgroundProcesses,
+      );
+      const {promise: notified, resolve: onNotified} = resolver();
+      const onClientStateNotFound = vi.fn(onNotified);
+      rep.onClientStateNotFound = onClientStateNotFound;
+
+      await writeFailed.promise;
+      // The event is dispatched once the failure has propagated out of open,
+      // which takes a few tasks.
+      for (let i = 0; i < 100 && unhandled.length === 0; i++) {
+        await yieldToRealTask();
+      }
+      expect(unhandled).toEqual([openError]);
+      expect(onClientStateNotFound).not.toHaveBeenCalled();
+
+      // Only now does the other instance say why.
+      notifyDatabaseReset(rep.idbName, true);
+      await notified;
+      expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+
+      // Open already failed with nothing marking it as a reset at the time.
+      // close() must still settle for a handler that disposes the instance.
+      await rep.close();
+      expect(rep.closed).toBe(true);
+    } finally {
+      window.removeEventListener('unhandledrejection', onUnhandled);
+    }
   });
 
   test('Called from heartbeat if the perdag has an invalid ref count', async () => {

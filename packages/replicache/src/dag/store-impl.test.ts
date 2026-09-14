@@ -289,6 +289,65 @@ describe('write', () => {
     });
   });
 
+  test('ref count invalid is reported even if the kv release throws', async () => {
+    // SQLiteWrite.release() rethrows a failed ROLLBACK. The store is corrupt
+    // either way, so the owner must still be told so it can recover, and the
+    // release error must still reach the caller.
+    const chunkHasher = makeNewFakeHashFunction();
+    const kv = new TestMemStore();
+    const h = fakeHash('face1');
+    await withWrite(kv, async kvw => {
+      await kvw.put(chunkRefCountKey(h), -1);
+    });
+    const releaseError = new Error('ROLLBACK failed');
+    const kvWithFailingRelease: Store = {
+      read: () => kv.read(),
+      write: async () => {
+        const w = await kv.write();
+        return {
+          has: key => w.has(key),
+          get: key => w.get(key),
+          put: (key, value) => w.put(key, value),
+          del: key => w.del(key),
+          commit: () => w.commit(),
+          release: () => {
+            w.release();
+            throw releaseError;
+          },
+          get closed() {
+            return w.closed;
+          },
+        };
+      },
+      close: () => kv.close(),
+      get closed() {
+        return kv.closed;
+      },
+    };
+    const onInvalidRefCount = vi.fn();
+    const store = new StoreImpl(
+      kvWithFailingRelease,
+      chunkHasher,
+      assertHash,
+      onInvalidRefCount,
+    );
+    let err: unknown;
+    try {
+      await withWriteNoImplicitCommit(store, async w => {
+        await w.setHead('fakehead', h);
+        await w.commit();
+      });
+    } catch (e) {
+      err = e;
+    }
+    // `using` combines the two errors, so the caller no longer sees the typed
+    // error. That is why the hook has to fire regardless.
+    assert(err instanceof Error, 'Expected an Error');
+    expect(err.message).toContain('release error = Error: ROLLBACK failed');
+    expect(err.cause).toBeInstanceOf(InvalidRefCountError);
+    expect(onInvalidRefCount).toHaveBeenCalledExactlyOnceWith(err.cause);
+  });
+
   test('commit rollback', async () => {
     const chunkHasher = makeNewFakeHashFunction();
     const t = async (commit: boolean, setHead: boolean) => {
