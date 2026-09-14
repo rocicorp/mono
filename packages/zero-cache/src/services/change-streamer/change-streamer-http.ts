@@ -145,6 +145,11 @@ export class ChangeStreamerHttpServer extends HttpService {
       const downstream = await this.#changeStreamer.subscribe(ctx);
       void streamOutStringified(this._lc, downstream, ws, {
         batched: ctx.wsBatched,
+        ackConfig: ctx.cumulativeAck
+          ? {
+              maxAckBytes: 64 * 1024,
+            }
+          : undefined,
       });
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);

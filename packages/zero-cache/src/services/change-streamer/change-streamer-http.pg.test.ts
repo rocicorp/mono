@@ -304,7 +304,7 @@ describe('change-streamer/http', () => {
       downstream.push(begin);
       downstream.push(commit);
 
-      const batchedFrame = `{"id":1,"batch":[${begin},${commit}]}`;
+      const batchedFrame = `{"id":1,"ackConfig":{"maxAckBytes":65536},"batch":[${begin},${commit}]}`;
       const batchedSize = Math.round(batchedFrame.length / 2);
 
       expect(await drain(2, sub)).toEqual([
@@ -355,7 +355,10 @@ describe('change-streamer/http', () => {
     const json = BigIntJSON.stringify(['data', insert]);
     downstream.push(json);
     expect(await drain(1, sub)).toEqual([
-      {data: ['data', insert], size: `{"id":1,"msg":${json}}`.length},
+      {
+        data: ['data', insert],
+        size: `{"id":1,"ackConfig":{"maxAckBytes":65536},"msg":${json}}`.length,
+      },
     ]);
   });
 });

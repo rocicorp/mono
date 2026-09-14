@@ -237,9 +237,15 @@ export type Sized<T> = {
   size: number;
 };
 
+export type AckConfig = {
+  maxAckBytes?: number | undefined;
+  maxAckStride?: number | undefined;
+};
+
 export type StreamOutOptions = {
   batched?: boolean | undefined;
   maxBatchSize?: number | undefined;
+  ackConfig?: AckConfig | undefined;
 };
 
 export function streamOut<T extends JSONValue>(
@@ -292,13 +298,11 @@ async function streamOutInternal<T extends JSONValue>(
 
   sink.addEventListener('message', ({data}) => {
     try {
-      if (typeof data !== 'string') {
-        throw new Error('Expected string message');
-      }
+      const text = typeof data === 'string' ? data : data.toString();
       if (nextID === 0) {
         return;
       }
-      const {ack} = v.parse(JSON.parse(data), ackSchema);
+      const {ack} = v.parse(JSON.parse(text), ackSchema);
       if (ack > nextID || ack < 1) {
         throw new Error(`Unexpected ack ${ack} (nextID=${nextID})`);
       }
@@ -311,6 +315,18 @@ async function streamOutInternal<T extends JSONValue>(
       close(e);
     }
   });
+
+  const formatFrame = (
+    id: number,
+    payloadField: 'msg' | 'batch',
+    payloadStr: string,
+  ) => {
+    const ackPart =
+      id === 1 && options?.ackConfig
+        ? `,"ackConfig":${JSON.stringify(options.ackConfig)}`
+        : '';
+    return `{"id":${id}${ackPart},"${payloadField}":${payloadStr}}`;
+  };
 
   try {
     const {pipeline} = source;
@@ -327,8 +343,12 @@ async function streamOutInternal<T extends JSONValue>(
           const id = ++nextID;
           const data =
             values.length === 1
-              ? `{"id":${id},"msg":${stringify(values[0])}}`
-              : `{"id":${id},"batch":[${values.map(stringify).join(',')}]}`;
+              ? formatFrame(id, 'msg', stringify(values[0]))
+              : formatFrame(
+                  id,
+                  'batch',
+                  `[${values.map(stringify).join(',')}]`,
+                );
           inFlight.push({id, consumed});
           sink.send(data);
         }
@@ -341,7 +361,7 @@ async function streamOutInternal<T extends JSONValue>(
       lc.debug?.(`started pipelined outbound stream`);
       for await (const {value: msg, consumed} of pipeline) {
         const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
+        const data = formatFrame(id, 'msg', stringify(msg));
         inFlight.push({id, consumed});
         sink.send(data);
       }
@@ -352,7 +372,7 @@ async function streamOutInternal<T extends JSONValue>(
     lc.debug?.(`started synchronous outbound stream`);
     for await (const msg of source) {
       const id = ++nextID;
-      const data = `{"id":${id},"msg":${stringify(msg)}}`;
+      const data = formatFrame(id, 'msg', stringify(msg));
       const r = resolver();
       inFlight.push({id, consumed: r.resolve, reject: r.reject});
       sink.send(data);
@@ -367,6 +387,7 @@ async function streamOutInternal<T extends JSONValue>(
 export type StreamInOptions = {
   cumulativeAck?: boolean | undefined;
   maxAckStride?: number | undefined;
+  maxAckBytes?: number | undefined;
 };
 
 export function streamIn<T extends JSONValue>(
@@ -409,10 +430,16 @@ async function streamInInternal<T extends JSONValue, Out>(
 ): Promise<Source<Out>> {
   expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
 
+  const ackConfigSchema = v.object({
+    maxAckBytes: v.number().optional(),
+    maxAckStride: v.number().optional(),
+  });
+
   const streamedSchema = v.object({
     id: v.number(),
     msg: schema.optional(),
     batch: v.array(schema).optional(),
+    ackConfig: ackConfigSchema.optional(),
   });
 
   type SinkEntry = {
@@ -421,10 +448,12 @@ async function streamInInternal<T extends JSONValue, Out>(
   };
 
   const cumulativeAck = options?.cumulativeAck ?? false;
-  const maxAckStride = options?.maxAckStride ?? 16;
+  let maxAckStride = options?.maxAckStride ?? 16;
+  let maxAckBytes = options?.maxAckBytes ?? 64 * 1024;
 
   let lastAckSent = 0;
   let highestContiguousConsumedId = 0;
+  let unackedBytes = 0;
   const completedIds = new Set<number>();
   let flushImmediateId: NodeJS.Immediate | undefined;
 
@@ -433,6 +462,7 @@ async function streamInInternal<T extends JSONValue, Out>(
       clearImmediate(flushImmediateId);
       flushImmediateId = undefined;
     }
+    unackedBytes = 0;
     if (
       highestContiguousConsumedId > lastAckSent &&
       source.readyState === source.OPEN
@@ -448,7 +478,7 @@ async function streamInInternal<T extends JSONValue, Out>(
     }
   };
 
-  const onFrameConsumed = (id: number) => {
+  const onFrameConsumed = (id: number, frameSize = 0) => {
     if (!cumulativeAck) {
       if (source.readyState === source.OPEN) {
         try {
@@ -470,7 +500,13 @@ async function streamInInternal<T extends JSONValue, Out>(
       return;
     }
 
-    if (highestContiguousConsumedId - lastAckSent >= maxAckStride) {
+    unackedBytes += frameSize;
+
+    if (
+      highestContiguousConsumedId - lastAckSent >= maxAckStride ||
+      unackedBytes >= maxAckBytes ||
+      sink.queued === 0
+    ) {
       flushAck();
     } else if (flushImmediateId === undefined) {
       flushImmediateId = setImmediate(flushAck);
@@ -504,7 +540,16 @@ async function streamInInternal<T extends JSONValue, Out>(
     try {
       const value = BigIntJSON.parse(data);
       const parsed = v.parse(value, streamedSchema, 'passthrough');
-      const {id, msg, batch} = parsed;
+      const {id, msg, batch, ackConfig} = parsed;
+
+      if (ackConfig) {
+        if (typeof ackConfig.maxAckBytes === 'number') {
+          maxAckBytes = ackConfig.maxAckBytes;
+        }
+        if (typeof ackConfig.maxAckStride === 'number') {
+          maxAckStride = ackConfig.maxAckStride;
+        }
+      }
 
       if (batch !== undefined && msg !== undefined) {
         throw new Error(`Message ${id} has both "msg" and "batch"`);
@@ -512,12 +557,12 @@ async function streamInInternal<T extends JSONValue, Out>(
       if (batch !== undefined) {
         let remaining = batch.length;
         if (remaining === 0) {
-          onFrameConsumed(id);
+          onFrameConsumed(id, data.length);
           return;
         }
         const onConsumed = () => {
           if (--remaining === 0) {
-            onFrameConsumed(id);
+            onFrameConsumed(id, data.length);
           }
         };
         const itemSize = Math.max(1, Math.round(data.length / batch.length));
@@ -529,9 +574,11 @@ async function streamInInternal<T extends JSONValue, Out>(
         }
       } else if (msg !== undefined) {
         sink.push({
-          consumed: () => onFrameConsumed(id),
+          consumed: () => onFrameConsumed(id, data.length),
           data: transform(msg, data, id, data.length),
         });
+      } else if (ackConfig !== undefined) {
+        onFrameConsumed(id, data.length);
       } else {
         throw new Error(`Message ${id} has neither "msg" nor "batch"`);
       }
