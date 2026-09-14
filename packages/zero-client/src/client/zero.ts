@@ -145,7 +145,6 @@ import {
   type ZeroError,
   getBackoffParams,
   getErrorConnectionTransition,
-  isAuthError,
   isClientError,
   isServerError,
   isZeroError,
@@ -2451,11 +2450,27 @@ export class Zero<
         const isClientClosedError =
           isClientError(ex) && ex.kind === ClientErrorKind.ClientClosed;
 
+        const transition = getErrorConnectionTransition(ex);
+
         if (
           !this.#connectionManager.is(ConnectionStatus.Connected) &&
           !isClientClosedError
         ) {
-          const level = isAuthError(ex) ? 'warn' : 'error';
+          // Only errors that stop the run loop are logged at error. Routine
+          // reconnects (dropped sockets, timeouts, rebalances) and auth
+          // failures are expected in practice.
+          let level: LogLevel;
+          switch (transition.status) {
+            case ConnectionStatus.Error:
+              level = 'error';
+              break;
+            case ConnectionStatus.Disconnected:
+            case ConnectionStatus.Closed:
+              level = 'info';
+              break;
+            default:
+              level = 'warn';
+          }
           const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
           lc[level]?.('Failed to connect', ex, ...getErrorCauses(ex), kind, {
             lmid: this.#lastMutationIDReceived,
@@ -2471,7 +2486,6 @@ export class Zero<
           ex,
         );
 
-        const transition = getErrorConnectionTransition(ex);
         let sleepMs: number | undefined = undefined;
         switch (transition.status) {
           case NO_STATUS_TRANSITION: {
