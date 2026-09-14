@@ -21,10 +21,9 @@ export type CommitListener = () => void;
  * - `true`: the server confirmed the complete result on this connection.
  * - `false`: the result is not (or no longer) known to be complete.
  * - `'cached'`: the store holds the server-confirmed complete result from a
- *   previous sync (the persisted got-queries key exists, pre-authoritative,
- *   and its stored AST fingerprint matches the current registration's body).
- *   Never satisfies complete-waiters — freshness stays a promise only the
- *   connection can keep.
+ *   previous session (the persisted got-queries key exists and the server has
+ *   not yet reconciled the got set on this connection). Never satisfies
+ *   complete-waiters — freshness stays a promise only the connection can keep.
  */
 export type GotCallback = (
   got: boolean | 'cached',

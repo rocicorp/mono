@@ -402,7 +402,7 @@ export function materializeImpl<
   // for any other factory the optional calls are no-ops.
   let viewForCached: CachedMarkableView | undefined;
   // The store holds this query's server-confirmed result from a previous
-  // session (the persisted got key exists and its fingerprint matches). The
+  // session (the persisted got key exists). The
   // registration path can report this synchronously, before the view below
   // exists, so it is remembered here and applied once it can be.
   let cached = false;

@@ -51,8 +51,6 @@ type Entry = {
   count: number;
   gotCallbacks: GotCallback[];
   ttl: TTL;
-  // Lazily computed `hashOfAST(normalized)`; see `#fingerprintOf`.
-  astFingerprint?: string | undefined;
 };
 
 type ClientMetric = {
@@ -79,13 +77,7 @@ export class QueryManager implements InspectorDelegate {
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
-  // The got-queries keys, each with the value it was written with: the AST
-  // fingerprint of the registration that earned it (or null when unknown, e.g.
-  // keys written by an older client). A 'cached' claim requires the CURRENT
-  // registration's fingerprint to match, so a query-body edit under an
-  // unchanged name/args reads 'unknown' (safe) instead of vouching for rows a
-  // different body synced.
-  readonly #gotQueries: Map<string, ReadonlyJSONValue | null> = new Map();
+  readonly #gotQueries: Set<string> = new Set();
   // Whether `#gotQueries` can be trusted. The persisted set loaded from
   // IndexedDB may be stale (a query 'got' in a previous session can be evicted
   // server-side); see `markGotQueriesAuthoritative`.
@@ -143,34 +135,19 @@ export class QueryManager implements InspectorDelegate {
     // reported as got once the poke has been applied (see
     // `markGotQueriesAuthoritative`), or another tab's state arriving via
     // replicache refresh. A live diff can therefore only revoke a cached
-    // claim, never grant one.
+    // claim (a deleted key), never grant one.
     let persistedDiff = true;
     experimentalWatch(
       diff => {
         for (const diffOp of diff) {
           const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
           switch (diffOp.op) {
-            case 'change': {
-              // A fingerprint refresh (see `gotFingerprintRefreshEntries`)
-              // rewrote the value of an existing got key.
-              this.#gotQueries.set(queryHash, diffOp.newValue ?? null);
-              if (!this.#gotQueriesAuthoritative) {
-                const entry = this.#queries.get(queryHash);
-                if (entry && !this.#hasCachedClaim(queryHash, entry)) {
-                  this.#fireGotCallbacks(queryHash, false);
-                }
-              }
-              break;
-            }
             case 'add':
-              this.#gotQueries.set(queryHash, diffOp.newValue ?? null);
+              this.#gotQueries.add(queryHash);
               if (this.#gotQueriesAuthoritative) {
                 this.#fireGotCallbacks(queryHash, true);
               } else if (persistedDiff) {
-                const entry = this.#queries.get(queryHash);
-                if (entry && this.#hasCachedClaim(queryHash, entry)) {
-                  this.#fireGotCallbacks(queryHash, 'cached');
-                }
+                this.#fireGotCallbacks(queryHash, 'cached');
               }
               break;
             case 'del':
@@ -186,65 +163,6 @@ export class QueryManager implements InspectorDelegate {
         initialValuesInFirstDiff: true,
       },
     );
-  }
-
-  /**
-   * The entry's body fingerprint. A legacy query's hash already is the hash of
-   * its body, so it is recorded at registration for free; a custom query's is
-   * computed lazily from its (server-mapped) AST, since eager hashing would
-   * put a full AST walk + stringify on every registration at cold start.
-   */
-  #fingerprintOf(entry: Entry): string {
-    return (entry.astFingerprint ??= hashOfAST(entry.normalized));
-  }
-
-  /**
-   * The one spelling of "the stored got value was earned by this entry's
-   * body" — both 'cached' fire sites and the refresh scan share it. The value
-   * is checked first so no fingerprint is computed for a query that has no
-   * got key, which is every query on a first run.
-   */
-  #hasCachedClaim(queryHash: string, entry: Entry): boolean {
-    const value = this.#gotQueries.get(queryHash);
-    return typeof value === 'string' && value === this.#fingerprintOf(entry);
-  }
-
-  /**
-   * Fingerprint-refresh entries the poke handler appends to a poke it is
-   * about to apply. A registered query whose stored got value disagrees with
-   * its current body's fingerprint is refreshed to the current one — the
-   * server never re-sends a got put for an already-got hash, so without this
-   * a body-edit release would refuse the 'cached' claim on every subsequent
-   * boot, forever, for a never-evicted query. No authoritative gate: this
-   * only runs from `mergePokes`, i.e. while building a server poke, and
-   * APPLYING that poke is exactly what marks the session authoritative —
-   * gating on the flag (set only after apply) would make the refresh miss
-   * the first poke and land one poke late. The refresh rides the same
-   * transaction as the poke's own rows, so it commits iff the catch-up it
-   * vouches for commits.
-   */
-  gotFingerprintRefreshEntries(): {hash: string; value: string}[] {
-    const refresh: {hash: string; value: string}[] = [];
-    for (const [hash, entry] of this.#queries) {
-      if (!this.#gotQueries.has(hash)) {
-        continue;
-      }
-      if (!this.#hasCachedClaim(hash, entry)) {
-        refresh.push({hash, value: this.#fingerprintOf(entry)});
-      }
-    }
-    return refresh;
-  }
-
-  /**
-   * The current registration's AST fingerprint for a query hash, or null —
-   * the value the poke handler writes into the got-queries key so a later
-   * boot can tell whether the bit was earned by the SAME body it is about to
-   * vouch for.
-   */
-  astFingerprintForHash(queryID: string): string | null {
-    const entry = this.#queries.get(queryID);
-    return entry ? this.#fingerprintOf(entry) : null;
   }
 
   getAST(queryID: string): AST | undefined {
@@ -460,7 +378,6 @@ export class QueryManager implements InspectorDelegate {
         count: 1,
         gotCallbacks: gotCallback ? [gotCallback] : [],
         ttl,
-        astFingerprint: name === undefined ? queryId : undefined,
       };
       this.#queries.set(queryId, entry);
       this.#queueQueryChange({
@@ -481,16 +398,10 @@ export class QueryManager implements InspectorDelegate {
     }
 
     if (gotCallback) {
-      if (
-        !this.#gotQueriesAuthoritative &&
-        this.#hasCachedClaim(queryId, entry)
-      ) {
-        gotCallback('cached');
-      } else {
-        gotCallback(
-          this.#gotQueriesAuthoritative && this.#gotQueries.has(queryId),
-        );
-      }
+      // A got key that is not yet authoritative was persisted by a previous
+      // session: the store holds that session's server-confirmed result.
+      const got = this.#gotQueries.has(queryId);
+      gotCallback(this.#gotQueriesAuthoritative ? got : got && 'cached');
     }
 
     let removed = false;

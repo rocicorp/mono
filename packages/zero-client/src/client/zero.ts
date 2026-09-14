@@ -889,8 +889,6 @@ export class Zero<
       schema,
       this.#lc,
       this.#mutationTracker,
-      hash => this.#queryManager.astFingerprintForHash(hash),
-      () => this.#queryManager.gotFingerprintRefreshEntries(),
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
