@@ -2,6 +2,56 @@ import {describe, expect, test} from 'vitest';
 import {RingBuffer} from './ring-buffer.ts';
 
 describe('RingBuffer', () => {
+  test('tail replacement appends when empty and preserves undefined values', () => {
+    const buf = new RingBuffer<number | undefined>();
+    expect(buf.last()).toBeUndefined();
+    buf.replaceLast(1);
+    buf.replaceLast(undefined);
+    expect(buf.size).toBe(1);
+    expect(buf.last()).toBeUndefined();
+    expect(buf.shift()).toBeUndefined();
+    expect(buf.size).toBe(0);
+    buf.replaceLast(2);
+    expect(buf.last()).toBe(2);
+    expect(buf.drain()).toEqual([2]);
+  });
+
+  test('tail access and snapshots survive wrapping, growth, and shrinkage', () => {
+    const buf = new RingBuffer<number>();
+    for (let i = 0; i < 16; i++) buf.push(i);
+    for (let i = 0; i < 12; i++) expect(buf.shift()).toBe(i);
+    for (let i = 16; i < 44; i++) buf.push(i);
+
+    const snapshot = buf.toArray();
+    expect(snapshot).toEqual(Array.from({length: 32}, (_, i) => i + 12));
+    expect(buf.last()).toBe(43);
+    buf.replaceLast(99);
+    expect(buf.size).toBe(32);
+    expect(snapshot.at(-1)).toBe(43);
+
+    for (let i = 12; i < 37; i++) expect(buf.shift()).toBe(i);
+    expect(buf.last()).toBe(99);
+    buf.replaceLast(100);
+    expect(buf.toArray()).toEqual([37, 38, 39, 40, 41, 42, 100]);
+    expect(buf.drain()).toEqual([37, 38, 39, 40, 41, 42, 100]);
+    expect(buf.last()).toBeUndefined();
+  });
+
+  test('clear discards a wrapped queue and permits reuse', () => {
+    const buf = new RingBuffer<number>();
+    for (let i = 0; i < 16; i++) buf.push(i);
+    for (let i = 0; i < 8; i++) buf.shift();
+    for (let i = 16; i < 24; i++) buf.push(i);
+
+    buf.clear();
+    expect(buf.size).toBe(0);
+    expect(buf.toArray()).toEqual([]);
+    expect(buf.last()).toBeUndefined();
+    expect(buf.shift()).toBeUndefined();
+    buf.replaceLast(42);
+    expect(buf.drain()).toEqual([42]);
+  });
+
   test('push and shift in FIFO order', () => {
     const buf = new RingBuffer<string>();
     buf.push('a');
