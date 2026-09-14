@@ -2651,13 +2651,29 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
     const otherCallback = vi.fn<GotCallback>();
     queryManager.addCustom(ast, other, 200, otherCallback);
 
-    expect(() => watchCallback([gotAdd])).toThrow('listener failed');
+    // The rest of the persisted diff is still applied before the error
+    // surfaces: the other key is a claim too.
+    expect(() =>
+      watchCallback([gotAdd, {op: 'add', key: otherKey, newValue: null}]),
+    ).toThrow('listener failed');
+    expect(otherCallback).nthCalledWith(2, 'cached');
 
     // The next diff is live, not the persisted set.
-    watchCallback([{op: 'add', key: otherKey, newValue: null}]);
-    expect(otherCallback.mock.calls).toEqual([[false]]);
+    const third = {name: 'third', args: []};
+    const thirdCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, third, 200, thirdCallback);
+    watchCallback([
+      {
+        op: 'add',
+        key: toGotQueriesKey(
+          hashOfNameAndArgs(third.name, third.args),
+        ) as string & IndexKey,
+        newValue: null,
+      },
+    ]);
+    expect(thirdCallback.mock.calls).toEqual([[false]]);
     queryManager.markGotQueriesAuthoritative();
-    expect(otherCallback).nthCalledWith(2, true);
+    expect(thirdCallback).nthCalledWith(2, true);
   });
 
   test('eviction before the first poke reverts cached to not-got', () => {

@@ -150,24 +150,38 @@ export class QueryManager implements InspectorDelegate {
       diff => {
         const persisted = this.#awaitingPersistedGotDiff;
         this.#awaitingPersistedGotDiff = false;
+        // A throwing callback must not leave the rest of the diff unapplied,
+        // or later keys would never enter the got set. The first error is
+        // rethrown once the sets are consistent.
+        let thrown: unknown;
+        const fire = (queryHash: string, got: boolean | 'cached') => {
+          try {
+            this.#fireGotCallbacks(queryHash, got);
+          } catch (e) {
+            thrown ??= e;
+          }
+        };
         for (const diffOp of diff) {
           const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
           switch (diffOp.op) {
             case 'add':
               this.#gotQueries.add(queryHash);
               if (this.#gotQueriesAuthoritative) {
-                this.#fireGotCallbacks(queryHash, true);
+                fire(queryHash, true);
               } else if (persisted) {
                 this.#cachedQueries.add(queryHash);
-                this.#fireGotCallbacks(queryHash, 'cached');
+                fire(queryHash, 'cached');
               }
               break;
             case 'del':
               this.#gotQueries.delete(queryHash);
               this.#cachedQueries.delete(queryHash);
-              this.#fireGotCallbacks(queryHash, false);
+              fire(queryHash, false);
               break;
           }
+        }
+        if (thrown !== undefined) {
+          throw thrown;
         }
       },
       {
