@@ -137,8 +137,9 @@ class RefCountUpdates {
     // roll back the transaction, so a transient bad read costs one failed
     // write rather than a wedged database. The cost is one pass over the
     // update map per commit.
+    // Written as `!(update >= 0)` so that NaN is rejected as well.
     for (const [hash, update] of this.#refCountUpdates) {
-      if (update < 0) {
+      if (!(update >= 0)) {
         throw new Error(
           `ref count update must be non-negative. ${hash}:${update}`,
         );

@@ -353,3 +353,32 @@ test('computeRefCountUpdates rejects a negative ref count instead of returning i
     `ref count update must be non-negative. ${hashes['000']}:-1`,
   );
 });
+
+test('computeRefCountUpdates treats a NaN ref count as 0 and rejects it', async () => {
+  // `ensureRefCountLoaded` coerces a falsy count (including NaN) to 0, so this
+  // is rejected as -1 like a missing count. The check itself is written as
+  // `!(update >= 0)` so that a NaN update, should one ever reach it, is
+  // rejected too.
+  const {hashes, delegate} = createGraph({
+    graph: {
+      '000': ['a'],
+      'a': [],
+    },
+    heads: [],
+    allZeroRefCounts: true,
+  });
+  const badDelegate: RefCountUpdatesDelegate = {
+    ...delegate,
+    getRefCount: hash => (hash === hashes['000'] ? NaN : 0),
+  };
+
+  await expect(
+    computeRefCountUpdates(
+      [{old: hashes['000'], new: undefined}],
+      new Set(),
+      badDelegate,
+    ),
+  ).rejects.toThrow(
+    `ref count update must be non-negative. ${hashes['000']}:-1`,
+  );
+});
