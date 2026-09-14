@@ -1,3 +1,4 @@
+import {makeEmptyIteratorWithReturn} from '../../../shared/src/iterables.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 import type {Change} from './change.ts';
 import {type Node} from './data.ts';
@@ -34,7 +35,7 @@ export interface FilterOutput extends Output {
   // nodes. E.g., so the operator can cache results for the
   // duration of the loop.
   beginFilter(): void;
-  filter(node: Node): Generator<'yield', boolean>;
+  filter(node: Node): IterableIterator<'yield', boolean>;
   endFilter(): void;
 }
 
@@ -46,11 +47,13 @@ export interface FilterOperator extends FilterInput, FilterOutput {}
  * set.
  */
 export const throwFilterOutput: FilterOutput = {
+  // oxlint-disable-next-line require-yield
   *push(_change: Change): Stream<'yield'> {
     throw new Error('Output not set');
   },
 
-  *filter(_node: Node): Generator<'yield', boolean> {
+  // oxlint-disable-next-line require-yield
+  *filter(_node: Node): IterableIterator<'yield', boolean> {
     throw new Error('Output not set');
   },
 
@@ -79,8 +82,8 @@ export class FilterStart implements FilterInput, Output {
     return this.#input.getSchema();
   }
 
-  *push(change: Change) {
-    yield* this.#output.push(change, this);
+  push(change: Change) {
+    return this.#output.push(change, this);
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
@@ -115,17 +118,15 @@ export class FilterEnd implements Input, FilterOutput {
     input.setFilterOutput(this);
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    for (const node of this.#start.fetch(req)) {
-      yield node;
-    }
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    return this.#start.fetch(req);
   }
 
   beginFilter() {}
   endFilter() {}
 
-  *filter(_node: Node) {
-    return true;
+  filter(_node: Node) {
+    return returnTrueEmptyIterator;
   }
 
   setOutput(output: Output) {
@@ -140,10 +141,12 @@ export class FilterEnd implements Input, FilterOutput {
     return this.#input.getSchema();
   }
 
-  *push(change: Change) {
-    yield* this.#output.push(change, this);
+  push(change: Change) {
+    return this.#output.push(change, this);
   }
 }
+
+const returnTrueEmptyIterator = makeEmptyIteratorWithReturn(true);
 
 export function buildFilterPipeline(
   input: Input,

@@ -77,7 +77,7 @@ export class Exists implements FilterOperator {
     this.#output.endFilter();
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
+  *filter(node: Node): IterableIterator<'yield', boolean> {
     let exists: boolean | undefined;
     if (!this.#noSizeReuse && !this.#inPush) {
       const key = this.#getCacheKey(node, this.#parentJoinKey);
@@ -216,7 +216,7 @@ export class Exists implements FilterOperator {
    * relationship with this.#relationshipName (this computed size is also
    * stored).
    */
-  *#filter(node: Node, exists?: boolean): Generator<'yield', boolean> {
+  *#filter(node: Node, exists?: boolean): IterableIterator<'yield', boolean> {
     exists = exists ?? (yield* this.#fetchExists(node));
     return this.#not ? !exists : exists;
   }
@@ -238,14 +238,14 @@ export class Exists implements FilterOperator {
     }
   }
 
-  *#fetchExists(node: Node): Generator<'yield', boolean> {
+  *#fetchExists(node: Node): IterableIterator<'yield', boolean> {
     // While it seems like this should be able to fetch just 1 node
     // to check for exists, we can't because Take does not support
     // early return during initial fetch.
     return (yield* this.#fetchSize(node)) > 0;
   }
 
-  *#fetchSize(node: Node): Generator<'yield', number> {
+  *#fetchSize(node: Node): IterableIterator<'yield', number> {
     const relationship = node.relationships[this.#relationshipName];
     assert(
       relationship,
