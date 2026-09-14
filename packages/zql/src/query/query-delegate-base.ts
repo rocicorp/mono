@@ -134,6 +134,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
   ): {
     cleanup: () => void;
     complete: Promise<void>;
+    cached: Promise<void>;
   } {
     return preloadImpl(query, this, options);
   }
@@ -282,10 +283,13 @@ export async function runImpl<
       ttl: options?.ttl,
     },
   );
-  if (options?.type === 'complete') {
+  if (options?.type === 'complete' || options?.type === 'cached') {
+    // 'cached' is satisfied by a result the server confirmed on a previous
+    // connection, or by this connection confirming it, whichever comes first.
+    const acceptCached = options.type === 'cached';
     return new Promise(resolve => {
       v.addListener((data, type) => {
-        if (type === 'complete') {
+        if (type === 'complete' || (acceptCached && type === 'cached')) {
           v.destroy();
           resolve(data as HumanReadable<TReturn>);
         } else if (type === 'error') {
@@ -314,33 +318,30 @@ export function preloadImpl<
 ): {
   cleanup: () => void;
   complete: Promise<void>;
+  cached: Promise<void>;
 } {
   const qi = asQueryInternals(query);
   const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
-  const {resolve, promise: complete} = resolver<void>();
+  const {resolve: resolveComplete, promise: complete} = resolver<void>();
+  const {resolve: resolveCached, promise: cached} = resolver<void>();
   const {customQueryID, ast} = qi;
-  if (customQueryID) {
-    const cleanup = delegate.addCustomQuery(ast, customQueryID, ttl, got => {
-      // 'cached' never satisfies complete-waiters; only a server confirmation
-      // on this connection resolves `complete`.
-      if (got === true) {
-        resolve();
-      }
-    });
-    return {
-      cleanup,
-      complete,
-    };
-  }
-
-  const cleanup = delegate.addServerQuery(ast, ttl, got => {
+  const gotCallback: GotCallback = got => {
+    // Only a server confirmation on this connection resolves `complete`;
+    // `cached` is also satisfied by one from a previous connection.
     if (got === true) {
-      resolve();
+      resolveComplete();
+      resolveCached();
+    } else if (got === 'cached') {
+      resolveCached();
     }
-  });
+  };
+  const cleanup = customQueryID
+    ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
+    : delegate.addServerQuery(ast, ttl, gotCallback);
   return {
     cleanup,
     complete,
+    cached,
   };
 }
 

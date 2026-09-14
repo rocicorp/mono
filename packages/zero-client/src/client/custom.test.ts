@@ -845,7 +845,7 @@ describe('error handling', () => {
     expect(result.error.type).toBe('app');
     assert(result.error.type === 'app', 'Expected error type to be app');
     expect(result.error.message).toBe(
-      'Cannot wait for complete results in custom mutations',
+      'Cannot wait for cached or complete results in custom mutations',
     );
 
     await z.close();

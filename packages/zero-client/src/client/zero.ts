@@ -1012,8 +1012,11 @@ export class Zero<
    * This function is useful when you want to populate the cache ahead of time,
    * for example after login, to avoid a flash of loading screen on the next page.
    *
-   * Returns an object with two properties:
-   * - `complete`: a Promise that resolves when the data is loaded
+   * Returns an object with three properties:
+   * - `complete`: a Promise that resolves when the server has confirmed the
+   *   data on this connection
+   * - `cached`: a Promise that resolves as soon as the store holds a
+   *   server-confirmed result, from this connection or a previous one
    * - `cleanup`: a function that can be called to cancel the preload
    *
    * @example
@@ -1042,7 +1045,9 @@ export class Zero<
    * Executes a query once and returns the results.
    *
    * By default, runs immediately with whatever data is available locally.
-   * Use `{type: 'complete'}` to wait for fresh results from the server.
+   * Use `{type: 'complete'}` to wait for fresh results from the server, or
+   * `{type: 'cached'}` to accept a result the server confirmed on a previous
+   * connection when the store holds one.
    *
    * @param query - The query to execute
    * @param runOptions - Options controlling query execution

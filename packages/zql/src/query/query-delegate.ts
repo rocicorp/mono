@@ -173,5 +173,6 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
   ): {
     cleanup: () => void;
     complete: Promise<void>;
+    cached: Promise<void>;
   };
 }

@@ -129,6 +129,60 @@ describe('cached result type', () => {
     expect(await p).toMatchObject([{id: 'i1'}]);
   });
 
+  test('run({type: cached}) resolves on a cached result', async () => {
+    const delegate = newDelegate();
+    delegate.initialGot = 'cached';
+    expect(
+      await delegate.run(newQuery(schema, 'issue'), {type: 'cached'}),
+    ).toMatchObject([{id: 'i1'}]);
+  });
+
+  test('run({type: cached}) resolves on complete when nothing is cached', async () => {
+    const delegate = newDelegate();
+    let resolved = false;
+    const p = delegate
+      .run(newQuery(schema, 'issue'), {type: 'cached'})
+      .then(data => {
+        resolved = true;
+        return data;
+      });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    delegate.lastGot(true);
+    expect(await p).toMatchObject([{id: 'i1'}]);
+  });
+
+  test('preload().cached resolves on cached, complete only on confirmation', async () => {
+    const delegate = newDelegate();
+    delegate.initialGot = 'cached';
+    const {complete, cached, cleanup} = delegate.preload(
+      newQuery(schema, 'issue'),
+    );
+    await cached;
+    let completed = false;
+    void complete.then(() => {
+      completed = true;
+    });
+    await Promise.resolve();
+    expect(completed).toBe(false);
+
+    delegate.lastGot(true);
+    await complete;
+    cleanup();
+  });
+
+  test('preload().cached also resolves on a confirmation', async () => {
+    const delegate = newDelegate();
+    const {complete, cached, cleanup} = delegate.preload(
+      newQuery(schema, 'issue'),
+    );
+    delegate.lastGot(true);
+    await Promise.all([cached, complete]);
+    cleanup();
+  });
+
   test('cached does not satisfy preload().complete', async () => {
     const delegate = newDelegate();
     delegate.initialGot = 'cached';
