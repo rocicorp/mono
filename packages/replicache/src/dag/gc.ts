@@ -134,8 +134,9 @@ class RefCountUpdates {
     // low a) ref count in the store, so the store is already corrupt. Always
     // check this, even in production: writing the negative count would only
     // spread the corruption, and the typed error lets the store owner recover.
+    // Written as `!(update >= 0)` so that NaN is rejected as well.
     for (const [hash, update] of this.#refCountUpdates) {
-      if (update < 0) {
+      if (!(update >= 0)) {
         throw new InvalidRefCountError(hash, update);
       }
     }

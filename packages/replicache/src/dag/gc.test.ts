@@ -1,6 +1,7 @@
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {fakeHash, type Hash} from '../hash.ts';
 import {computeRefCountUpdates, type RefCountUpdatesDelegate} from './gc.ts';
+import {InvalidRefCountError} from './store.ts';
 
 function createGraph(args: {
   graph: Record<string, string[]>;
@@ -324,4 +325,52 @@ test('computeRefCountUpdates for heads updating to same hash should have no refc
     delegate,
   );
   expectRefCountUpdates(refCountUpdates, {});
+});
+
+describe('computeRefCountUpdates rejects an invalid ref count update instead of returning it', () => {
+  // The store says R is a head but reports a ref count that cannot be
+  // decremented. That can only happen if the stored count was lost or misread
+  // (a corrupted store), and writing the result would wedge it for good.
+  //
+  //   R
+  //   |
+  //   A
+  const compute = (refCount: number) => {
+    const {hashes, delegate} = createGraph({
+      graph: {
+        '000': ['a'],
+        'a': [],
+      },
+      heads: [],
+      allZeroRefCounts: true,
+    });
+    const badDelegate: RefCountUpdatesDelegate = {
+      ...delegate,
+      getRefCount: hash => (hash === hashes['000'] ? refCount : 0),
+    };
+    return {
+      hash: hashes['000'],
+      p: computeRefCountUpdates(
+        [{old: hashes['000'], new: undefined}],
+        new Set(),
+        badDelegate,
+      ),
+    };
+  };
+
+  test('negative', async () => {
+    const {hash, p} = compute(0);
+    await expect(p).rejects.toThrow(InvalidRefCountError);
+    await expect(p).rejects.toThrow(`Invalid ref count -1 for ${hash}`);
+  });
+
+  test('NaN from the store is treated as 0', async () => {
+    // `ensureRefCountLoaded` coerces a falsy count (including NaN) to 0, so
+    // this is rejected as -1 like a missing count. The check itself is written
+    // as `!(update >= 0)` so that a NaN update, should one ever reach it, is
+    // rejected too.
+    const {hash, p} = compute(NaN);
+    await expect(p).rejects.toThrow(InvalidRefCountError);
+    await expect(p).rejects.toThrow(`Invalid ref count -1 for ${hash}`);
+  });
 });
