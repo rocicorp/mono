@@ -82,6 +82,7 @@ export interface RelationColumn {
   typeSchema: string | null;
   typeName: string | null;
   parser: (raw: any) => any;
+  binaryDecoder?: ((buf: Buffer) => unknown) | undefined;
 }
 
 export interface MessageTruncate {
