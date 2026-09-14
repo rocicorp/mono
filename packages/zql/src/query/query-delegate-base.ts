@@ -329,8 +329,8 @@ export function preloadImpl<
     // Only a server confirmation on this connection resolves `complete`;
     // `cached` is also satisfied by one from a previous connection.
     if (got === true) {
-      resolveComplete();
       resolveCached();
+      resolveComplete();
     } else if (got === 'cached') {
       resolveCached();
     }
