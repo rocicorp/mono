@@ -110,11 +110,23 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
     }
   }
 
-  test('logical replication messages', async () => {
-    const {messages} = await subscribe(lc, db, SLOT, ['foo_pub', 'my_pub'], 0n);
-    const msgs = drainToQueue(messages);
+  test.each([true, false])(
+    'logical replication messages (binary=%s)',
+    async binary => {
+      const {messages} = await subscribe(
+        lc,
+        db,
+        SLOT,
+        ['foo_pub', 'my_pub'],
+        0n,
+        undefined,
+        undefined,
+        undefined,
+        binary,
+      );
+      const msgs = drainToQueue(messages);
 
-    await db.unsafe(`
+      await db.unsafe(`
     -- tag: "insert"
     INSERT INTO foo (id, int, big, flt, bool, date, time, json, num, ints, times, jsons)
       VALUES (
@@ -148,105 +160,106 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
     SELECT pg_logical_emit_message(true, 'foo/bar', 'baz');
     `);
 
-    expect(await msgs.dequeue()).toMatchObject({tag: 'begin'});
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'relation',
-      schema: 'public',
-      name: 'foo',
-      keyColumns: ['id'],
-      relationOid: expect.any(Number),
-      replicaIdentity: 'default',
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'insert',
-      relation: {name: 'foo'},
-      new: {
-        big: 123456789098765432n,
-        bool: true,
-        date: 1742342400000,
-        flt: 456.789,
-        id: 'bar',
-        int: 123,
-        json: '{"zoo":"dar"}',
-        num: 12345.678909876,
-        time: 1547253035381.101,
-        ints: [1, 2, 3],
-        times: [1547253035654.321, 1547253035123.456],
-        jsons: [1, '2', {a: 123}],
-      },
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'update',
-      relation: {name: 'foo'},
-      key: null,
-      new: {
-        big: 123456789098765432n,
-        bool: false,
-        date: 1742342400000,
-        flt: 456.789,
-        id: 'bar',
-        int: 123,
-        json: '{"zoo":"dar"}',
-        num: 12345.678909876,
-        time: 1547253035381.101,
-        jsons: [1, '2', {a: 123}],
-      },
-      old: null,
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'delete',
-      relation: {name: 'foo'},
-      key: {id: 'bar'},
-      old: null,
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'relation',
-      schema: 'my',
-      name: 'boo',
-      relationOid: expect.any(Number),
-      replicaIdentity: 'default',
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'insert',
-      new: {a: '1', b: '2', c: '3', d: '4'},
-      relation: {name: 'boo'},
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'relation',
-      schema: 'my',
-      name: 'boo',
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'relation',
-      schema: 'public',
-      name: 'foo',
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'truncate',
-      restartIdentity: false,
-      cascade: false,
-      relations: [
-        {
-          tag: 'relation',
-          schema: 'my',
-          name: 'boo',
+      expect(await msgs.dequeue()).toMatchObject({tag: 'begin'});
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'relation',
+        schema: 'public',
+        name: 'foo',
+        keyColumns: ['id'],
+        relationOid: expect.any(Number),
+        replicaIdentity: 'default',
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'insert',
+        relation: {name: 'foo'},
+        new: {
+          big: 123456789098765432n,
+          bool: true,
+          date: 1742342400000,
+          flt: 456.789,
+          id: 'bar',
+          int: 123,
+          json: '{"zoo":"dar"}',
+          num: 12345.678909876,
+          time: 1547253035381.101,
+          ints: [1, 2, 3],
+          times: [1547253035654.321, 1547253035123.456],
+          jsons: [1, '2', {a: 123}],
         },
-        {
-          tag: 'relation',
-          schema: 'public',
-          name: 'foo',
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'update',
+        relation: {name: 'foo'},
+        key: null,
+        new: {
+          big: 123456789098765432n,
+          bool: false,
+          date: 1742342400000,
+          flt: 456.789,
+          id: 'bar',
+          int: 123,
+          json: '{"zoo":"dar"}',
+          num: 12345.678909876,
+          time: 1547253035381.101,
+          jsons: [1, '2', {a: 123}],
         },
-      ],
-    });
-    expect(await msgs.dequeue()).toMatchObject({
-      tag: 'message',
-      prefix: 'foo/bar',
-      content: Buffer.from([98, 97, 122]), // 'b', 'a', 'z'
-      flags: 1,
-      transactional: true,
-    });
-    expect(await msgs.dequeue()).toMatchObject({tag: 'commit'});
-  });
+        old: null,
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'delete',
+        relation: {name: 'foo'},
+        key: {id: 'bar'},
+        old: null,
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'relation',
+        schema: 'my',
+        name: 'boo',
+        relationOid: expect.any(Number),
+        replicaIdentity: 'default',
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'insert',
+        new: {a: '1', b: '2', c: '3', d: '4'},
+        relation: {name: 'boo'},
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'relation',
+        schema: 'my',
+        name: 'boo',
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'relation',
+        schema: 'public',
+        name: 'foo',
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'truncate',
+        restartIdentity: false,
+        cascade: false,
+        relations: [
+          {
+            tag: 'relation',
+            schema: 'my',
+            name: 'boo',
+          },
+          {
+            tag: 'relation',
+            schema: 'public',
+            name: 'foo',
+          },
+        ],
+      });
+      expect(await msgs.dequeue()).toMatchObject({
+        tag: 'message',
+        prefix: 'foo/bar',
+        content: Buffer.from([98, 97, 122]), // 'b', 'a', 'z'
+        flags: 1,
+        transactional: true,
+      });
+      expect(await msgs.dequeue()).toMatchObject({tag: 'commit'});
+    },
+  );
 
   test('acks', async () => {
     const {messages, acks} = await subscribe(
