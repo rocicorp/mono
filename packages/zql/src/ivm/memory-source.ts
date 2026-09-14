@@ -797,7 +797,7 @@ function computeOverlays(
   // comparator, not the one used to splice the overlay into the row stream.
   startAtCompare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
-  multiConstraints?: readonly MultiConstraint[] | undefined,
+  multiConstraints?: readonly MultiConstraint[],
 ): Overlays {
   let overlays: Overlays = {
     add: undefined,
@@ -1130,7 +1130,7 @@ export function* mergeSortedStreams(
   // True while iterators[i] hasn't yet returned `done`. The finally
   // block uses this to skip already-exhausted streams when propagating
   // `.return()`.
-  const active: boolean[] = new Array(iterators.length).fill(true);
+  const active = Array.from({length: iterators.length}).fill(true) as boolean[];
 
   // Min-heap of entries; `idx` tells us which stream to refill from
   // after the entry's row is emitted.
@@ -1170,7 +1170,7 @@ export function* mergeSortedStreams(
   // Returns the Node, or `undefined` once the stream is exhausted.
   const pullNext = function* (
     idx: number,
-  ): Generator<'yield', Node | undefined, undefined> {
+  ): IterableIterator<'yield', Node | undefined, undefined> {
     while (true) {
       const r = iterators[idx].next();
       if (r.done) {

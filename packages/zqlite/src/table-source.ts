@@ -112,9 +112,10 @@ export class TableSource implements Source {
     this.#stmts = this.#getStatementsFor(db);
     this.#shouldYield = shouldYield;
 
+    const primaryKeyStr = JSON.stringify(primaryKey.toSorted());
     assert(
-      this.#uniqueIndexes.has(JSON.stringify(primaryKey.toSorted())),
-      `primary key ${primaryKey} does not have a UNIQUE index`,
+      this.#uniqueIndexes.has(primaryKeyStr),
+      `primary key ${primaryKeyStr} does not have a UNIQUE index`,
     );
   }
 
@@ -659,12 +660,13 @@ function fromSQLiteType(
     case 'string':
     case 'null':
       if (typeof v === 'bigint') {
-        if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
+        const bi = v as bigint;
+        if (bi > Number.MAX_SAFE_INTEGER || bi < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
-            `value ${v} (in ${tableName}.${column}) is outside of supported bounds`,
+            `value ${bi} (in ${tableName}.${column}) is outside of supported bounds`,
           );
         }
-        return Number(v);
+        return Number(bi);
       }
       return v;
     case 'json':

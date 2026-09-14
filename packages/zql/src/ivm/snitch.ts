@@ -151,7 +151,7 @@ export class FilterSnitch implements FilterOperator {
     this.#output?.endFilter();
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
+  *filter(node: Node): IterableIterator<'yield', boolean> {
     this.#log([this.#name, 'filter', node.row]);
     assert(this.#output, 'Snitch: output must be set before filter is called');
     return yield* this.#output.filter(node);

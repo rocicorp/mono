@@ -1036,7 +1036,6 @@ export class PipelineDriver {
         const advanceContext = must(this.#advanceContext);
         advanceContext.currentChangeStartMs = start;
 
-        let type;
         try {
           try {
             const tableSource = this.#tables.get(table);
@@ -1090,7 +1089,6 @@ export class PipelineDriver {
         const elapsed = timer.totalElapsed() - start;
         this.#advanceTime.recordMs(elapsed, {
           table,
-          type,
         });
       }
 
@@ -1594,7 +1592,7 @@ function mustGetPrimaryKey(
     rv,
     () =>
       // oxlint-disable-next-line e18e/prefer-array-to-sorted
-      `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
+      `table '${table}' is not one of: ${JSON.stringify([...pKeys.keys()].sort())}. ` +
       `Check the spelling and ensure that the table has a primary key.`,
   );
   return rv;

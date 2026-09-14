@@ -120,12 +120,13 @@ test('some works after filter', () => {
 describe('makeEmptyIteratorWithReturn', () => {
   // The reference behavior: a generator that yields nothing and returns value.
   function makeGenerator<T>(value: T): Generator<unknown, T, unknown> {
+    // oxlint-disable-next-line require-yield
     return (function* () {
       return value;
     })();
   }
 
-  function* delegate<T>(inner: Generator<unknown, T, unknown>) {
+  function* delegate<T>(inner: IterableIterator<unknown, T, unknown>) {
     return yield* inner;
   }
 
@@ -164,20 +165,6 @@ describe('makeEmptyIteratorWithReturn', () => {
       const it = makeEmptyIteratorWithReturn(value);
       expect(delegate(it).next()).toEqual({done: true, value});
       expect(delegate(it).next()).toEqual({done: true, value});
-    });
-
-    test('return() returns value, not its argument', () => {
-      // A real generator returns {done: true, value: 'r'}.
-      const it = makeEmptyIteratorWithReturn(value);
-      expect(it.return('r' as never)).toEqual({done: true, value});
-      expect(it.next()).toEqual({done: true, value});
-    });
-
-    test('throw() returns value instead of throwing', () => {
-      // A real generator rethrows the error.
-      const it = makeEmptyIteratorWithReturn(value);
-      expect(it.throw(new Error('e'))).toEqual({done: true, value});
-      expect(it.next()).toEqual({done: true, value});
     });
   });
 

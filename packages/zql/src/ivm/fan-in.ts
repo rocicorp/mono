@@ -65,7 +65,7 @@ export class FanIn implements FilterOperator {
     this.#output.endFilter();
   }
 
-  filter(node: Node): Generator<'yield', boolean> {
+  filter(node: Node): IterableIterator<'yield', boolean> {
     return this.#output.filter(node);
   }
 

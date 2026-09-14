@@ -36,7 +36,7 @@ export interface FilterOutput extends Output {
   // nodes. E.g., so the operator can cache results for the
   // duration of the loop.
   beginFilter(): void;
-  filter(node: Node): Generator<'yield', boolean>;
+  filter(node: Node): IterableIterator<'yield', boolean>;
   endFilter(): void;
 }
 
@@ -48,11 +48,13 @@ export interface FilterOperator extends FilterInput, FilterOutput {}
  * set.
  */
 export const throwFilterOutput: FilterOutput = {
+  // oxlint-disable-next-line require-yield
   *push(_change: Change): Stream<'yield'> {
     throw new Error('Output not set');
   },
 
-  *filter(_node: Node): Generator<'yield', boolean> {
+  // oxlint-disable-next-line require-yield
+  *filter(_node: Node): IterableIterator<'yield', boolean> {
     throw new Error('Output not set');
   },
 
@@ -65,7 +67,7 @@ export class FilterStart implements FilterInput, Output {
   readonly #condition: NoSubqueryCondition | undefined;
   #output: FilterOutput = throwFilterOutput;
 
-  constructor(input: Input, condition?: NoSubqueryCondition | undefined) {
+  constructor(input: Input, condition?: NoSubqueryCondition) {
     this.#input = input;
     this.#condition = condition;
     input.setOutput(this);
@@ -169,7 +171,7 @@ export function buildFilterPipeline(
   input: Input,
   delegate: BuilderDelegate,
   pipeline: (filterInput: FilterInput) => FilterInput,
-  condition?: NoSubqueryCondition | undefined,
+  condition?: NoSubqueryCondition,
 ): Input {
   const filterStart = new FilterStart(input, condition);
   delegate.addEdge(input, filterStart);
