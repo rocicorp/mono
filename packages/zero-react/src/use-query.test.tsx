@@ -674,6 +674,28 @@ describe('ViewStore', () => {
       cleanup();
     });
 
+    test('empty cached result satisfies nonEmpty but not complete', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      // A server-confirmed empty result from a previous session is enough
+      // for suspendUntil: 'partial' to render while offline.
+      listeners.forEach(cb => cb([], 'cached'));
+      expect(view.nonEmpty).toBe(true);
+      expect(view.complete).toBe(false);
+
+      cleanup();
+    });
+
     test('cached does not satisfy complete-waiters', () => {
       const viewStore = new ViewStore();
       const q = newMockQuery('query1');

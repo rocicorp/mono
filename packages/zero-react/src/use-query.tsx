@@ -681,10 +681,14 @@ class ViewWrapper<
       this.#nonEmptyResolver.resolve();
     }
 
+    // A 'cached' result is the server-confirmed answer from a previous
+    // session, so even an empty one is something to render. It never
+    // satisfies `complete`; only a confirmation on this connection does.
     if (
-      this.#singular
+      resultType === 'cached' ||
+      (this.#singular
         ? this.#snapshot[0] !== undefined
-        : (this.#snapshot[0] as unknown[]).length !== 0
+        : (this.#snapshot[0] as unknown[]).length !== 0)
     ) {
       this.#nonEmpty = true;
       this.#nonEmptyResolver.resolve();

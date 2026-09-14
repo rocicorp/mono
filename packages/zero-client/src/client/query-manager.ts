@@ -79,14 +79,13 @@ export class QueryManager implements InspectorDelegate {
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
-  readonly #gotQueries: Set<string> = new Set();
-  // The value each got-queries key was written with — the AST fingerprint of
-  // the registration that earned it (or null when unknown, e.g. keys written
-  // by an older client). A 'cached' claim requires the CURRENT registration's
-  // fingerprint to match, so a query-body edit under an unchanged name/args
-  // reads 'unknown' (safe) instead of vouching for rows a different body
-  // synced.
-  readonly #gotQueryValues: Map<string, ReadonlyJSONValue | null> = new Map();
+  // The got-queries keys, each with the value it was written with: the AST
+  // fingerprint of the registration that earned it (or null when unknown, e.g.
+  // keys written by an older client). A 'cached' claim requires the CURRENT
+  // registration's fingerprint to match, so a query-body edit under an
+  // unchanged name/args reads 'unknown' (safe) instead of vouching for rows a
+  // different body synced.
+  readonly #gotQueries: Map<string, ReadonlyJSONValue | null> = new Map();
   // Whether `#gotQueries` can be trusted. The persisted set loaded from
   // IndexedDB may be stale (a query 'got' in a previous session can be evicted
   // server-side); see `markGotQueriesAuthoritative`.
@@ -146,11 +145,10 @@ export class QueryManager implements InspectorDelegate {
             case 'change':
               // A fingerprint refresh (see `gotFingerprintRefreshEntries`)
               // rewrites the value of an existing got key.
-              this.#gotQueryValues.set(queryHash, diffOp.newValue ?? null);
+              this.#gotQueries.set(queryHash, diffOp.newValue ?? null);
               break;
             case 'add':
-              this.#gotQueries.add(queryHash);
-              this.#gotQueryValues.set(queryHash, diffOp.newValue ?? null);
+              this.#gotQueries.set(queryHash, diffOp.newValue ?? null);
               if (this.#gotQueriesAuthoritative) {
                 this.#fireGotCallbacks(queryHash, true);
               } else {
@@ -162,7 +160,6 @@ export class QueryManager implements InspectorDelegate {
               break;
             case 'del':
               this.#gotQueries.delete(queryHash);
-              this.#gotQueryValues.delete(queryHash);
               this.#fireGotCallbacks(queryHash, false);
               break;
           }
@@ -176,9 +173,10 @@ export class QueryManager implements InspectorDelegate {
   }
 
   /**
-   * Lazily computed `hashOfAST` of the entry's (server-mapped) AST — eager
-   * hashing would put a full AST walk + stringify on every registration at
-   * cold start, paid before any consumer asked.
+   * The entry's body fingerprint. A legacy query's hash already is the hash of
+   * its body, so it is recorded at registration for free; a custom query's is
+   * computed lazily from its (server-mapped) AST, since eager hashing would
+   * put a full AST walk + stringify on every registration at cold start.
    */
   #fingerprintOf(entry: Entry): string {
     return (entry.astFingerprint ??= hashOfAST(entry.normalized));
@@ -186,10 +184,13 @@ export class QueryManager implements InspectorDelegate {
 
   /**
    * The one spelling of "the stored got value was earned by this entry's
-   * body" — both 'cached' fire sites and the refresh scan share it.
+   * body" — both 'cached' fire sites and the refresh scan share it. The value
+   * is checked first so no fingerprint is computed for a query that has no
+   * got key, which is every query on a first run.
    */
   #hasCachedClaim(queryHash: string, entry: Entry): boolean {
-    return this.#gotQueryValues.get(queryHash) === this.#fingerprintOf(entry);
+    const value = this.#gotQueries.get(queryHash);
+    return typeof value === 'string' && value === this.#fingerprintOf(entry);
   }
 
   /**
@@ -443,6 +444,7 @@ export class QueryManager implements InspectorDelegate {
         count: 1,
         gotCallbacks: gotCallback ? [gotCallback] : [],
         ttl,
+        astFingerprint: name === undefined ? queryId : undefined,
       };
       this.#queries.set(queryId, entry);
       this.#queueQueryChange({
