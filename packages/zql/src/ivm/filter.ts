@@ -40,7 +40,7 @@ export class Filter implements FilterOperator {
     if (this.#predicate(node.row)) {
       return this.#output.filter(node);
     }
-    return emptyGeneratorReturnFalse;
+    return emptyIteratorReturnFalse;
   }
 
   setFilterOutput(output: FilterOutput) {
@@ -60,4 +60,4 @@ export class Filter implements FilterOperator {
   }
 }
 
-const emptyGeneratorReturnFalse = makeEmptyIteratorWithReturn(false);
+const emptyIteratorReturnFalse = makeEmptyIteratorWithReturn(false);
