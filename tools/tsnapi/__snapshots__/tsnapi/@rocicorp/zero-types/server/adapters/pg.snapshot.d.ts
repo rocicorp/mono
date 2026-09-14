@@ -6,6 +6,7 @@ export type NodePgTransaction = Pool | PoolClient | Client;
 export declare class NodePgConnection implements DBConnection<NodePgTransaction> {
     #private;
     constructor(_: NodePgTransaction);
+    query(_: string, _: unknown[]): Promise<Row[]>;
     transaction<TRet>(_: (_: DBTransaction<NodePgTransaction>) => Promise<TRet>): Promise<TRet>;
 }
 export declare class NodePgTransactionInternal implements DBTransaction<NodePgTransaction> {

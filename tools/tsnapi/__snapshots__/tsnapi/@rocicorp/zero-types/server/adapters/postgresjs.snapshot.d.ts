@@ -6,6 +6,7 @@ export type PostgresJsTransaction<T extends Record<string, unknown> = Record<str
 export declare class PostgresJSConnection<T extends Record<string, unknown>> implements DBConnection<PostgresJsTransaction<T>> {
     #private;
     constructor(_: postgres.Sql<T>);
+    query(_: string, _: unknown[]): Promise<Row[]>;
     transaction<TRet>(_: (_: DBTransaction<PostgresJsTransaction<T>>) => Promise<TRet>): Promise<TRet>;
 }
 export declare class PostgresJsTransactionInternal<T extends Record<string, unknown>> implements DBTransaction<PostgresJsTransaction<T>> {

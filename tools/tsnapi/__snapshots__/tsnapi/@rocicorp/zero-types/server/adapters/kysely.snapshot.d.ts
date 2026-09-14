@@ -7,6 +7,7 @@ export type KyselyTransaction<TDbOrSchema = KyselyDatabase> = TDbOrSchema extend
 export declare class KyselyConnection<TDatabase> implements DBConnection<WrappedKyselyTransaction<TDatabase>> {
     #private;
     constructor(_: Kysely<TDatabase>);
+    query(_: string, _: unknown[]): Promise<Row[]>;
     transaction<T>(_: (_: DBTransaction<WrappedKyselyTransaction<TDatabase>>) => Promise<T>): Promise<T>;
 }
 // #endregion

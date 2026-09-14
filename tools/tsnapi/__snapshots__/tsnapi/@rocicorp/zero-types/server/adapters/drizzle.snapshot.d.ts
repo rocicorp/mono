@@ -1,5 +1,5 @@
 // #region Types
-export type DrizzleDatabase<TTransaction extends DrizzleTransactionLike = DrizzleTransactionLike> = {
+export type DrizzleDatabase<TTransaction extends DrizzleTransactionLike = DrizzleTransactionLike> = DrizzleTransactionLike & {
     transaction<T>(_: (_: TTransaction) => Promise<T>, _?: never): Promise<T>;
 };
 export type DrizzleTransaction<TDbOrSchema = Record<string, unknown>> = TDbOrSchema extends DrizzleDatabase<infer TTransaction> ? TTransaction : DrizzleTransactionFromSchema<TDbOrSchema>;
@@ -9,6 +9,7 @@ export type DrizzleTransaction<TDbOrSchema = Record<string, unknown>> = TDbOrSch
 export declare class DrizzleConnection<TDrizzle, TTransaction extends DrizzleTransactionLike = DrizzleTransaction<TDrizzle>> implements DBConnection<TTransaction> {
     #private;
     constructor(_: TDrizzle & DrizzleDatabase<TTransaction>);
+    query(_: string, _: unknown[]): Promise<Iterable<Row>>;
     transaction<T>(_: (_: DBTransaction<TTransaction>) => Promise<T>): Promise<T>;
 }
 // #endregion

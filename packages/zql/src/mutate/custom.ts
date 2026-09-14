@@ -87,6 +87,31 @@ export interface DBConnection<TWrappedTransaction> {
   transaction: <T>(
     cb: (tx: DBTransaction<TWrappedTransaction>) => Promise<T>,
   ) => Promise<T>;
+
+  /**
+   * Executes a single SQL statement on the connection without opening,
+   * committing, or rolling back a transaction of its own. With a pooled
+   * handle this is a plain autocommit statement. With a single dedicated
+   * connection, driver semantics apply: a `pg` `Client` queues it behind, and
+   * inside, whatever transaction is open on that connection, while postgres.js
+   * waits for the reserved connection to be released.
+   *
+   * Optional. When present, `ZQLDatabase.run` uses it for single-statement
+   * reads instead of `transaction`, so no `BEGIN`/`COMMIT` round-trips are
+   * needed and any setup done inside `transaction` does not apply to those
+   * reads. Custom adapters must implement this to get that behavior; when
+   * absent, `ZQLDatabase.run` falls back to `transaction`.
+   */
+  query?: Queryable['query'] | undefined;
+
+  /**
+   * Mirrors {@linkcode DBTransaction.runQuery} for reads issued through
+   * {@linkcode query}. An adapter that customizes `DBTransaction.runQuery`
+   * should implement this too so that `ZQLDatabase.run` and `tx.run` execute
+   * a query the same way. Optional; when absent, the default Postgres
+   * executor is used.
+   */
+  runQuery?: DBTransaction<TWrappedTransaction>['runQuery'] | undefined;
 }
 
 export interface DBTransaction<T> extends Queryable {
@@ -99,7 +124,7 @@ export interface DBTransaction<T> extends Queryable {
   ): Promise<HumanReadable<TReturn>>;
 }
 
-interface Queryable {
+export interface Queryable {
   query: (query: string, args: unknown[]) => Promise<Iterable<Row>>;
 }
 

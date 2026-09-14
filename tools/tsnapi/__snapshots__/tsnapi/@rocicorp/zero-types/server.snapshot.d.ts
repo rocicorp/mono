@@ -1,5 +1,5 @@
 // #region Re-exports
-export type { AnyTransaction, ClientTransaction, DBConnection, DBTransaction, Location, MutateCRUD, Row, ServerTransaction, Transaction, TransactionBase, TransactionReason, } from '../../zql/src/mutate/custom.ts';
+export type { AnyTransaction, ClientTransaction, DBConnection, DBTransaction, Location, MutateCRUD, Queryable, Row, ServerTransaction, Transaction, TransactionBase, TransactionReason, } from '../../zql/src/mutate/custom.ts';
 export { ApplicationError, isApplicationError, type ApplicationErrorOptions, } from '../../zero-protocol/src/application-error.ts';
 export { CRUDMutatorFactory, makeSchemaCRUD, type CustomMutatorDefs, } from './custom.ts';
 export { executePostgresQuery } from './pg-query-executor.ts';

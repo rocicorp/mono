@@ -1,5 +1,5 @@
 // #region Types
-export type PrismaClientLike<TTransaction extends PrismaTransactionLike = PrismaTransactionLike> = {
+export type PrismaClientLike<TTransaction extends PrismaTransactionLike = PrismaTransactionLike> = PrismaTransactionLike & {
     $transaction: <T>(_: (_: TTransaction) => Promise<T>) => Promise<T>;
 };
 export type PrismaTransaction<TClient extends PrismaClientLike = PrismaClientLike> = TClient extends PrismaClientLike<infer TTransaction> ? TTransaction : PrismaTransactionLike;
@@ -12,6 +12,7 @@ export type PrismaTransactionLike = {
 export declare class PrismaConnection<TClient extends PrismaClientLike> implements DBConnection<PrismaTransaction<TClient>> {
     #private;
     constructor(_: TClient);
+    query(_: string, _: unknown[]): Promise<Iterable<Row>>;
     transaction<T>(_: (_: DBTransaction<PrismaTransaction<TClient>>) => Promise<T>): Promise<T>;
 }
 // #endregion
