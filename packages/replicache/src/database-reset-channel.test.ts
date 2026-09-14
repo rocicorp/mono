@@ -2,8 +2,9 @@ import {resolver} from '@rocicorp/resolver';
 import {afterEach, expect, test, vi} from 'vitest';
 import {BroadcastChannel} from '../../shared/src/broadcast-channel.ts';
 import {
-  initDatabaseResetChannel,
+  listenForDatabaseReset,
   makeDatabaseResetChannelNameForTesting,
+  notifyDatabaseReset,
 } from './database-reset-channel.ts';
 
 const controllers: AbortController[] = [];
@@ -14,53 +15,56 @@ afterEach(() => {
   controllers.length = 0;
 });
 
-function init(idbName: string, onReset: () => void) {
+function listen(idbName: string, onReset: (dropped: boolean) => void) {
   const controller = new AbortController();
   controllers.push(controller);
-  return initDatabaseResetChannel(idbName, controller.signal, onReset);
+  listenForDatabaseReset(idbName, controller.signal, onReset);
+  return controller;
 }
 
-test('notifies other instances on the same database but not the sender', async () => {
+test('notifies listeners on the same database, with whether it was dropped', async () => {
   const {promise, resolve} = resolver();
-  const onReset1 = vi.fn();
-  const onReset2 = vi.fn(resolve);
+  const onReset = vi.fn((_dropped: boolean) => resolve());
   const onResetOther = vi.fn();
-  const notify1 = init('db-a', onReset1);
-  init('db-a', onReset2);
-  init('db-b', onResetOther);
+  listen('db-a', onReset);
+  listen('db-b', onResetOther);
 
-  notify1();
+  notifyDatabaseReset('db-a', true);
   await promise;
 
-  expect(onReset2).toHaveBeenCalledTimes(1);
-  // BroadcastChannel does not deliver to the posting channel.
-  expect(onReset1).not.toHaveBeenCalled();
+  expect(onReset).toHaveBeenCalledExactlyOnceWith(true);
   expect(onResetOther).not.toHaveBeenCalled();
+});
+
+test('passes along a failed drop', async () => {
+  const {promise, resolve} = resolver();
+  const onReset = vi.fn((_dropped: boolean) => resolve());
+  listen('db-a', onReset);
+
+  notifyDatabaseReset('db-a', false);
+  await promise;
+
+  expect(onReset).toHaveBeenCalledExactlyOnceWith(false);
 });
 
 test('ignores messages for a different database on the same channel', async () => {
   const onReset = vi.fn();
-  init('db-a', onReset);
+  listen('db-a', onReset);
   const channel = new BroadcastChannel(
     makeDatabaseResetChannelNameForTesting('db-a'),
   );
-  channel.postMessage({idbName: 'db-other'});
+  channel.postMessage({idbName: 'db-other', dropped: true});
   await new Promise(r => setTimeout(r, 10));
   channel.close();
   expect(onReset).not.toHaveBeenCalled();
 });
 
-test('does nothing once aborted', async () => {
-  const controller = new AbortController();
+test('stops listening once aborted', async () => {
   const onReset = vi.fn();
-  const notify = initDatabaseResetChannel('db-a', controller.signal, onReset);
-  const {promise, resolve} = resolver();
-  const onOther = vi.fn(resolve);
-  init('db-a', onOther);
-
+  const controller = listen('db-a', onReset);
   controller.abort();
-  notify();
-  // Give a message time to arrive if one was (wrongly) sent.
-  await Promise.race([promise, new Promise(r => setTimeout(r, 10))]);
-  expect(onOther).not.toHaveBeenCalled();
+
+  notifyDatabaseReset('db-a', true);
+  await new Promise(r => setTimeout(r, 10));
+  expect(onReset).not.toHaveBeenCalled();
 });

@@ -21,7 +21,10 @@ import {
   mustGetHeadHash,
   type Store,
 } from './dag/store.ts';
-import {initDatabaseResetChannel} from './database-reset-channel.ts';
+import {
+  listenForDatabaseReset,
+  notifyDatabaseReset,
+} from './database-reset-channel.ts';
 import {
   baseSnapshotFromHash,
   DEFAULT_HEAD_NAME,
@@ -556,10 +559,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       });
     }
 
-    this.#notifyDatabaseReset = initDatabaseResetChannel(
+    listenForDatabaseReset(
       this.idbName,
       this.#closeAbortController.signal,
-      () => this.#databaseResetByOtherInstance(),
+      dropped => this.#databaseResetByOtherInstance(dropped),
     );
 
     this.#onPersist = initOnPersistChannel(
@@ -580,12 +583,18 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       readyResolver.resolve,
       onClientsDeleted,
     ).catch(e => {
-      if (e instanceof InvalidRefCountError) {
-        // The perdag already started recovery (drop the database and fire
-        // onClientStateNotFound) when it detected the corruption. Nothing
-        // else can be done with this instance; `#ready` stays pending so
-        // reads and writes never run against the dropped store, but
-        // `close()` must still be able to dispose the instance.
+      if (
+        e instanceof InvalidRefCountError ||
+        this.#corruptDatabaseRecovery !== undefined
+      ) {
+        // Recovery (drop the database and fire onClientStateNotFound) already
+        // started, either because this open tripped on the corruption itself
+        // or because another instance dropped the shared database while the
+        // open was in flight, in which case the open fails with whatever
+        // storage error the drop caused. Nothing else can be done with this
+        // instance; `#ready` stays pending so reads and writes never run
+        // against the dropped store, but `close()` must still be able to
+        // dispose the instance.
         this.#lc.debug?.('Open failed because the persistent store is corrupt');
         this.#openFailed.resolve();
         return;
@@ -1277,6 +1286,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           this.#clientStateNotFoundOnClient(clientID);
         } else if (e instanceof InvalidRefCountError) {
           await this.#handleInvalidRefCount(e);
+          // Nothing was persisted and the database is gone. Do not tell this
+          // or other instances to refresh from it.
+          return;
         } else if (this.#closed) {
           this.#lc.debug?.('Exception persisting during close', e);
         } else {
@@ -1335,34 +1347,40 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * Set once the perdag reports an invalid ref count. Every write path into
-   * the perdag (open, persist, refresh, heartbeat, GC, ...) can trip on the
-   * same corrupt key, so recovery runs once and later reports await it.
+   * Set once recovery from a corrupt database has started, either because a
+   * write into the perdag reported an invalid ref count or because another
+   * instance sharing the database reset it. Every write path into the perdag
+   * (open, persist, refresh, heartbeat, GC, ...) can trip on the same corrupt
+   * key, so recovery runs once and later reports await it.
    */
-  #invalidRefCountRecovery: Promise<void> | undefined;
+  #corruptDatabaseRecovery: Promise<void> | undefined;
 
   /**
-   * Tells the other instances sharing our database that it was dropped. See
-   * {@link initDatabaseResetChannel}.
+   * Another instance sharing our database found it corrupt. Our store
+   * connection is gone with the drop, so treat it like our own recovery and
+   * fire `onClientStateNotFound` once so the app reloads into a fresh
+   * database. If the other instance could not drop the database, try to drop
+   * it from here so the corrupt content does not survive the reload.
    */
-  readonly #notifyDatabaseReset: () => void;
-
-  /**
-   * Another instance sharing our database found it corrupt and dropped it. Our
-   * store connection is gone with it, so treat it like our own recovery: fire
-   * `onClientStateNotFound` once so the app reloads into a fresh database.
-   */
-  #databaseResetByOtherInstance(): void {
-    if (this.#closed || this.#invalidRefCountRecovery !== undefined) {
+  #databaseResetByOtherInstance(dropped: boolean): void {
+    if (this.#closed || this.#corruptDatabaseRecovery !== undefined) {
       return;
     }
-    // Reuse the recovery slot so a later local detection (the dropped store
-    // will fail its next write) does not fire the callback a second time.
-    this.#invalidRefCountRecovery = promiseVoid;
-    this.#lc.error?.(
-      `Database ${this.idbName} was found corrupt and dropped by another instance, clientID: ${this.clientID}`,
-    );
-    this.#fireOnClientStateNotFound();
+    if (dropped) {
+      this.#lc.error?.(
+        `Database ${this.idbName} was found corrupt and dropped by another instance, clientID: ${this.clientID}`,
+      );
+      // Take the recovery slot so a later local detection (the dropped store
+      // fails its next write) does not fire the callback a second time.
+      this.#corruptDatabaseRecovery = promiseVoid;
+      this.#fireOnClientStateNotFound();
+    } else {
+      this.#lc.error?.(
+        `Database ${this.idbName} was found corrupt by another instance that could not drop it, clientID: ${this.clientID}. Dropping it from this instance`,
+      );
+      this.#corruptDatabaseRecovery =
+        this.#dropDatabaseAndFireOnClientStateNotFound(false);
+    }
   }
 
   /**
@@ -1388,32 +1406,51 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * from a fresh store. Pending local mutations in this database are lost.
    */
   #handleInvalidRefCount(e: InvalidRefCountError): Promise<void> {
-    this.#invalidRefCountRecovery ??= this.#invalidRefCountOnClient(e);
-    return this.#invalidRefCountRecovery;
+    if (this.#corruptDatabaseRecovery === undefined) {
+      this.#lc.error?.(
+        `Client state is corrupt on client, clientID: ${this.clientID}. Dropping database ${this.idbName}`,
+        e,
+      );
+      this.#corruptDatabaseRecovery =
+        this.#dropDatabaseAndFireOnClientStateNotFound(true);
+    }
+    return this.#corruptDatabaseRecovery;
   }
 
-  async #invalidRefCountOnClient(e: InvalidRefCountError): Promise<void> {
-    const {clientID} = this;
-    this.#lc.error?.(
-      `Client state is corrupt on client, clientID: ${clientID}. Dropping database ${this.idbName}`,
-      e,
-    );
+  /**
+   * Drops our database, then fires `onClientStateNotFound` whether or not the
+   * drop succeeded so the app can still recover. With `notifyOtherInstances`
+   * the instances sharing the database are told as well, including whether
+   * the drop succeeded, since they lost their connection to it and would
+   * otherwise only see generic storage errors from now on.
+   *
+   * Uses its own handle on the databases registry rather than `#idbDatabases`
+   * so it works even when `close()` is already closing this instance.
+   */
+  async #dropDatabaseAndFireOnClientStateNotFound(
+    notifyOtherInstances: boolean,
+  ): Promise<void> {
+    const {idbName, clientID} = this;
+    let dropped = false;
+    const idbDatabases = new IDBDatabasesStore(this.#kvStoreProvider.create);
     try {
       await dropDatabaseInternal(
-        this.idbName,
-        this.#idbDatabases,
+        idbName,
+        idbDatabases,
         this.#kvStoreProvider.drop,
       );
+      dropped = true;
     } catch (dropError) {
-      // Still fire onClientStateNotFound so the app can recover.
       this.#lc.error?.(
-        `Failed to drop database ${this.idbName}, clientID: ${clientID}`,
+        `Failed to drop database ${idbName}, clientID: ${clientID}`,
         dropError,
       );
+    } finally {
+      await idbDatabases.close();
     }
-    // The other tabs lost their connection to this database as well, and
-    // would otherwise only see generic storage errors from now on.
-    this.#notifyDatabaseReset();
+    if (notifyOtherInstances) {
+      notifyDatabaseReset(idbName, dropped);
+    }
     this.#fireOnClientStateNotFound();
   }
 

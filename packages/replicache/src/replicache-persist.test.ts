@@ -1,13 +1,17 @@
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
+import {BroadcastChannel} from '../../shared/src/broadcast-channel.ts';
 import {sleep} from '../../shared/src/sleep.ts';
 import {chunkRefCountKey} from './dag/key.ts';
 import {StoreImpl, WriteImpl} from './dag/store-impl.ts';
 import type {Store} from './dag/store.ts';
+import {makeDatabaseResetChannelNameForTesting} from './database-reset-channel.ts';
 import {assertHash, type Hash, newRandomHash} from './hash.ts';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.ts';
+import {dropMemStore, hasMemStore, MemStore} from './kv/mem-store.ts';
+import type {StoreProvider} from './kv/store.ts';
 import {
   type ClientGroup,
   deleteClientGroup,
@@ -330,6 +334,170 @@ describe('onClientStateNotFound', () => {
     // A later local failure on the dropped store must not fire it again.
     await rep2.persist().catch(() => undefined);
     expect(onClientStateNotFound2).toHaveBeenCalledTimes(1);
+  });
+
+  const memStoreProvider = (drop: StoreProvider['drop']): StoreProvider => ({
+    create: name => new MemStore(name),
+    drop,
+  });
+
+  /**
+   * Gets `rep` into a state where its next persist rewrites the `clients`
+   * chunk and trips on a corrupt ref count.
+   */
+  async function setUpCorruptPersist(
+    rep: ReplicacheTest<{addData: typeof addData}>,
+    pullURL: string,
+  ) {
+    await rep.mutate.addData({foo: 'bar'});
+    await rep.persist();
+    fetchMocker.postOnce(
+      pullURL,
+      makePullResponseV1(rep.clientID, 1, [{op: 'put', key: 'a', value: 1}]),
+    );
+    await rep.pull();
+    await corruptClientsRefCountForTesting(rep.perdag);
+  }
+
+  test('Still called, and the failure logged, when the database cannot be dropped', async () => {
+    const consoleErrorStub = vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+    const onClientStateNotFound = vi.fn();
+    const rep = await replicacheForTesting(
+      'drop-fails-invalid-ref',
+      {
+        pullURL,
+        mutators: {addData},
+        onClientStateNotFound,
+        kvStore: memStoreProvider(() =>
+          Promise.reject(new Error('disk on fire')),
+        ),
+      },
+      disableAllBackgroundProcesses,
+    );
+    await setUpCorruptPersist(rep, pullURL);
+
+    await rep.persist();
+
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    // The corrupt database is still there; the app has to recover some other
+    // way (the default handler reloads).
+    expect(hasMemStore(rep.idbName)).toBe(true);
+    const messages = consoleErrorStub.mock.calls.map(args => String(args[1]));
+    expect(messages).toContainEqual(
+      expect.stringContaining(`Failed to drop database ${rep.idbName}`),
+    );
+
+    // A second failing persist does not fire the callback again, and the
+    // instance can still be disposed.
+    await rep.persist();
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    await rep.close();
+    expect(rep.closed).toBe(true);
+  });
+
+  test('Other instances drop the database themselves when the detecting instance could not', async () => {
+    vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+
+    const rep1 = await replicacheForTesting(
+      'peer-drops-invalid-ref',
+      {
+        pullURL,
+        mutators: {addData},
+        kvStore: memStoreProvider(() =>
+          Promise.reject(new Error('disk on fire')),
+        ),
+      },
+      disableAllBackgroundProcesses,
+    );
+    const {promise: rep2Notified, resolve} = resolver();
+    const onClientStateNotFound2 = vi.fn(resolve);
+    const rep2 = await replicacheForTesting(
+      rep1.name,
+      {
+        pullURL,
+        mutators: {addData},
+        onClientStateNotFound: onClientStateNotFound2,
+        kvStore: memStoreProvider(dropMemStore),
+      },
+      disableAllBackgroundProcesses,
+      {useUniqueName: false},
+    );
+    expect(rep2.idbName).toBe(rep1.idbName);
+    await setUpCorruptPersist(rep1, pullURL);
+
+    const onClientStateNotFound1 = vi.fn();
+    rep1.onClientStateNotFound = onClientStateNotFound1;
+    await rep1.persist();
+    expect(onClientStateNotFound1).toHaveBeenCalledTimes(1);
+    expect(hasMemStore(rep1.idbName)).toBe(true);
+
+    // rep1 told rep2 that the drop failed, so rep2 drops the database itself
+    // instead of trusting that the corrupt content is gone.
+    await rep2Notified;
+    expect(onClientStateNotFound2).toHaveBeenCalledTimes(1);
+    expect(hasMemStore(rep1.idbName)).toBe(false);
+  });
+
+  test('close() settles when another instance resets the database while open is in flight', async () => {
+    vi.spyOn(console, 'error');
+    const name = 'reset-during-open';
+
+    // Block the first write into the perdag so that open is stuck mid-flight,
+    // then make that write fail with a generic storage error, which is what
+    // the other instance dropping the database looks like from here.
+    const writeReached = resolver();
+    const releaseWrite = resolver();
+    let gated = false;
+    const kvStore: StoreProvider = {
+      create: storeName => {
+        const store = new MemStore(storeName);
+        if (!storeName.startsWith('rep:')) {
+          return store;
+        }
+        return {
+          read: () => store.read(),
+          write: async () => {
+            if (!gated) {
+              gated = true;
+              writeReached.resolve();
+              await releaseWrite.promise;
+              throw new Error('database was deleted');
+            }
+            return store.write();
+          },
+          close: () => store.close(),
+          get closed() {
+            return store.closed;
+          },
+        };
+      },
+      drop: dropMemStore,
+    };
+    const rep = new ReplicacheTest(
+      {name, mutators: {addData}, pullURL: '', pushURL: '', kvStore},
+      disableAllBackgroundProcesses,
+    );
+    const {promise: notified, resolve: onNotified} = resolver();
+    const onClientStateNotFound = vi.fn(onNotified);
+    rep.onClientStateNotFound = onClientStateNotFound;
+    await writeReached.promise;
+
+    const channel = new BroadcastChannel(
+      makeDatabaseResetChannelNameForTesting(rep.idbName),
+    );
+    channel.postMessage({idbName: rep.idbName, dropped: true});
+    channel.close();
+    await notified;
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+
+    // Open now fails with the storage error. Without treating that as the
+    // terminal failed-open state, ready and openFailed would both stay
+    // pending and close() would hang.
+    releaseWrite.resolve();
+    await rep.close();
+    expect(rep.closed).toBe(true);
   });
 
   test('Called from heartbeat if the perdag has an invalid ref count', async () => {
