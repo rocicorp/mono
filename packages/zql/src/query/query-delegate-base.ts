@@ -134,6 +134,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
   ): {
     cleanup: () => void;
     complete: Promise<void>;
+    cached: Promise<void>;
   } {
     return preloadImpl(query, this, options);
   }
@@ -282,10 +283,13 @@ export async function runImpl<
       ttl: options?.ttl,
     },
   );
-  if (options?.type === 'complete') {
+  if (options?.type === 'complete' || options?.type === 'cached') {
+    // 'cached' is satisfied by a result the server confirmed on a previous
+    // connection, or by this connection confirming it, whichever comes first.
+    const acceptCached = options.type === 'cached';
     return new Promise(resolve => {
       v.addListener((data, type) => {
-        if (type === 'complete') {
+        if (type === 'complete' || (acceptCached && type === 'cached')) {
           v.destroy();
           resolve(data as HumanReadable<TReturn>);
         } else if (type === 'error') {
@@ -314,31 +318,48 @@ export function preloadImpl<
 ): {
   cleanup: () => void;
   complete: Promise<void>;
+  cached: Promise<void>;
 } {
   const qi = asQueryInternals(query);
   const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
-  const {resolve, promise: complete} = resolver<void>();
+  const completeResolver = resolver<void>();
+  const cachedResolver = resolver<void>();
+  const {promise: complete} = completeResolver;
+  const {promise: cached} = cachedResolver;
+  // A caller may ignore either promise; a query error must not surface as an
+  // unhandled rejection through the one nobody awaits.
+  void complete.catch(() => {});
+  void cached.catch(() => {});
   const {customQueryID, ast} = qi;
-  if (customQueryID) {
-    const cleanup = delegate.addCustomQuery(ast, customQueryID, ttl, got => {
-      if (got) {
-        resolve();
-      }
-    });
-    return {
-      cleanup,
-      complete,
-    };
-  }
-
-  const cleanup = delegate.addServerQuery(ast, ttl, got => {
-    if (got) {
-      resolve();
+  const gotCallback: GotCallback = (got, error) => {
+    if (error) {
+      // The query cannot be satisfied; neither waiter should hang.
+      cachedResolver.reject(error);
+      completeResolver.reject(error);
+      return;
     }
-  });
+    // Only a server confirmation on this connection resolves `complete`;
+    // `cached` is also satisfied by one from a previous connection.
+    if (got === true) {
+      cachedResolver.resolve();
+      completeResolver.resolve();
+    } else if (got === 'cached') {
+      cachedResolver.resolve();
+    }
+  };
+  const cleanup = customQueryID
+    ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
+    : delegate.addServerQuery(ast, ttl, gotCallback);
+  if (delegate.defaultQueryComplete) {
+    // A delegate whose results are complete from the start (a server-side
+    // one) has no got callback to drive the waiters.
+    cachedResolver.resolve();
+    completeResolver.resolve();
+  }
   return {
     cleanup,
     complete,
+    cached,
   };
 }
 
@@ -374,8 +395,11 @@ export function materializeImpl<
   // both the server's "got" and the pipeline being attached.
   const deferPipeline = !delegate.pipelinesReady;
   let attached = !deferPipeline;
-  let gotQueries = delegate.defaultQueryComplete;
-  let queryComplete: boolean | ErroredQuery = attached && gotQueries;
+  // The last got report: `true` once the server confirmed the query on this
+  // connection, `'cached'` while the store holds a previous connection's
+  // confirmed result, `false` otherwise.
+  let got: boolean | 'cached' = delegate.defaultQueryComplete;
+  let queryComplete: boolean | ErroredQuery = attached && got === true;
   const updateTTL = customQueryID
     ? (newTTL: TTL) => delegate.updateCustomQuery(customQueryID, newTTL)
     : (newTTL: TTL) => delegate.updateServerQuery(ast, newTTL);
@@ -383,7 +407,7 @@ export function materializeImpl<
   // Completion, and the end-to-end metric, require both the server's "got"
   // and the pipeline being attached: until then the view is still empty.
   const maybeResolveComplete = () => {
-    if (attached && gotQueries && queryComplete !== true) {
+    if (attached && got === true && queryComplete !== true) {
       delegate.addMetric(
         'query-materialization-end-to-end',
         performance.now() - t0,
@@ -395,15 +419,48 @@ export function materializeImpl<
     }
   };
 
-  const gotCallback: GotCallback = (got, error) => {
+  // The view, seen as the optional cached-marking surface. Only views that
+  // implement `markCached`/`unmarkCached` (e.g. ArrayView) surface 'cached';
+  // for any other factory the optional calls are no-ops. The registration
+  // path can report 'cached' synchronously, before the view below exists, so
+  // this stays undefined until then and the mark is applied afterwards.
+  let viewForCached: CachedMarkableView | undefined;
+
+  // Like 'complete', 'cached' is a claim about the rows the view holds, so it
+  // waits for the view to exist and its pipeline to be attached. Once the
+  // server has confirmed the query on this connection, 'complete' supersedes
+  // it and the mark is skipped.
+  const maybeMarkCached = () => {
+    // Only while the query is still incomplete: 'complete' supersedes the
+    // mark, and an error that arrived before attach must not be preceded by
+    // a 'cached' notification.
+    if (attached && got === 'cached' && queryComplete === false) {
+      viewForCached?.markCached?.();
+    }
+  };
+
+  let destroyed = false;
+  const gotCallback: GotCallback = (value, error) => {
+    if (destroyed) {
+      // The delegate may keep this callback registered for a while after
+      // destroy (removals are deferred while mutations are pending); a dead
+      // view must not be driven, nor its listeners fired.
+      return;
+    }
     if (error) {
       queryCompleteResolver.reject(error);
       queryComplete = error;
       return;
     }
 
-    if (got) {
-      gotQueries = true;
+    got = value;
+    if (got === 'cached') {
+      maybeMarkCached();
+    } else if (got === false) {
+      // The got key was deleted (eviction) before the server confirmed the
+      // query on this connection.
+      viewForCached?.unmarkCached?.();
+    } else {
       maybeResolveComplete();
     }
   };
@@ -411,6 +468,7 @@ export function materializeImpl<
   let removeCommitObserver: (() => void) | undefined;
   let removePendingAttach: (() => void) | undefined;
   const onDestroy = () => {
+    destroyed = true;
     removePendingAttach?.();
     removePendingAttach = undefined;
     input.destroy();
@@ -484,8 +542,12 @@ export function materializeImpl<
         queryID,
       );
       maybeResolveComplete();
+      maybeMarkCached();
     });
   }
+
+  viewForCached = view as CachedMarkableView;
+  maybeMarkCached();
 
   return view as T;
 }
@@ -516,6 +578,15 @@ function newDeferredInput(
     probe.destroy();
   }
 }
+
+/**
+ * The optional surface a view exposes to be marked 'cached'. Views that do
+ * not implement it (custom factories) simply never surface the state.
+ */
+type CachedMarkableView = {
+  markCached?: (() => void) | undefined;
+  unmarkCached?: (() => void) | undefined;
+};
 
 function arrayViewFactory<
   TTable extends string,

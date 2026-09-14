@@ -468,6 +468,7 @@ export interface Query<
   preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
+    cached: Promise<void>;
   };
 
   /**
@@ -512,6 +513,11 @@ export type HumanReadableRecursive<T> = undefined extends T
  * `unknown` means we don't want to wait for the server to return results. The result is a
  * snapshot of the data at the time the query was run.
  *
+ * `cached` means we want a result the server has confirmed, but one confirmed by a previous
+ * connection is fine: it resolves as soon as the result is `cached` or `complete`. Use it
+ * on the launch path when the client may be offline and the store holds last session's
+ * complete result for this query. If nothing is cached it waits like `complete`.
+ *
  * `complete` means we want to ensure that we have the latest result from the server. The
  * result is a complete and up-to-date view of the data. In some cases this means that we
  * have to wait for the server to return results. To ensure that we have the result for
@@ -523,7 +529,7 @@ export type HumanReadableRecursive<T> = undefined extends T
  * time to keep the rows associated with this query after the promise has resolved.
  */
 export type RunOptions = {
-  type: 'unknown' | 'complete';
+  type: 'unknown' | 'cached' | 'complete';
   ttl?: TTL | undefined;
 };
 

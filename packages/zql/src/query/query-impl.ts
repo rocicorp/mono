@@ -328,6 +328,7 @@ export class QueryImpl<
   preload(_options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
+    cached: Promise<void>;
   } {
     throwQueryNotRunnable();
   }

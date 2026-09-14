@@ -123,6 +123,7 @@ export class RunnableQueryImpl<
   override preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
+    cached: Promise<void>;
   } {
     return this.#delegate.preload<TTable, TSchema, TReturn>(this, options);
   }
