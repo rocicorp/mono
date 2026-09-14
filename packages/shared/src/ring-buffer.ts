@@ -35,6 +35,22 @@ export class RingBuffer<T> {
     this.#size++;
   }
 
+  /** Returns the last element, or `undefined` if empty. */
+  last(): T | undefined {
+    return this.#size === 0
+      ? undefined
+      : this.#buffer[(this.#head + this.#size - 1) % this.#capacity];
+  }
+
+  /** Replaces the last element, or appends it if empty. */
+  replaceLast(value: T): void {
+    if (this.#size === 0) {
+      this.push(value);
+    } else {
+      this.#buffer[(this.#head + this.#size - 1) % this.#capacity] = value;
+    }
+  }
+
   /** Removes and returns the front element, or `undefined` if empty. */
   shift(): T | undefined {
     if (this.#size === 0) {
@@ -90,14 +106,28 @@ export class RingBuffer<T> {
    * Removes and returns all elements in FIFO order, resetting the buffer.
    */
   drain(): T[] {
-    const result = Array.from<T>({length: this.#size});
-    for (let i = 0; i < this.#size; i++) {
-      result[i] = this.#buffer[(this.#head + i) % this.#capacity] as T;
-    }
+    const result = this.toArray();
     this.#head = 0;
     this.#size = 0;
     this.#buffer = Array.from({length: this.#capacity});
     return result;
+  }
+
+  /** Copies all elements in FIFO order without removing them. */
+  toArray(): T[] {
+    const result = Array.from<T>({length: this.#size});
+    for (let i = 0; i < this.#size; i++) {
+      result[i] = this.#buffer[(this.#head + i) % this.#capacity] as T;
+    }
+    return result;
+  }
+
+  /** Removes all elements and releases extra capacity. */
+  clear(): void {
+    this.#head = 0;
+    this.#size = 0;
+    this.#capacity = MIN_CAPACITY;
+    this.#buffer = Array.from({length: this.#capacity});
   }
 
   /**
