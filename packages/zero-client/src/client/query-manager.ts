@@ -221,7 +221,9 @@ export class QueryManager implements InspectorDelegate {
       return undefined;
     }
     let thrown: ThrownBy | undefined;
-    for (const gotCallback of entry.gotCallbacks) {
+    // A subscriber may unregister during dispatch (a run() waiter destroys its
+    // view on the notification it was waiting for), so iterate a snapshot.
+    for (const gotCallback of [...entry.gotCallbacks]) {
       try {
         gotCallback(got);
       } catch (error) {

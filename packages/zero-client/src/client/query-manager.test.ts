@@ -2636,6 +2636,23 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
     expect(gotCallback).nthCalledWith(2, true);
   });
 
+  test('a subscriber unregistering during dispatch does not skip the next', () => {
+    const {queryManager, watchCallback} = setup();
+    let remove = () => {};
+    const first = vi.fn<GotCallback>(got => {
+      if (got === 'cached') {
+        remove();
+      }
+    });
+    const second = vi.fn<GotCallback>();
+    remove = queryManager.addCustom(ast, nameAndArgs, 200, first);
+    queryManager.addCustom(ast, nameAndArgs, 200, second);
+
+    watchCallback([gotAdd]);
+    expect(first).nthCalledWith(2, 'cached');
+    expect(second).nthCalledWith(2, 'cached');
+  });
+
   test('a throwing subscriber does not starve the others of the same query', () => {
     const {queryManager, watchCallback} = setup();
     const throwing = vi.fn<GotCallback>(got => {
