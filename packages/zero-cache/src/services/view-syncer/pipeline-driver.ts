@@ -1011,7 +1011,6 @@ export class PipelineDriver {
         const advanceContext = must(this.#advanceContext);
         advanceContext.currentChangeStartMs = start;
 
-        let type;
         try {
           try {
             const tableSource = this.#tables.get(table);
@@ -1065,7 +1064,6 @@ export class PipelineDriver {
         const elapsed = timer.totalElapsed() - start;
         this.#advanceTime.recordMs(elapsed, {
           table,
-          type,
         });
       }
 
@@ -1519,7 +1517,7 @@ function getRowKey(cols: PrimaryKey, row: Row): RowKey {
  * function for reuse by the analyze-query RPC path so that analysis hydrates
  * queries the same way the view-syncer does in production.
  */
-export function* hydrate(
+export function hydrate(
   input: Input,
   hash: string,
   clientSchema: ClientSchema,
@@ -1530,10 +1528,10 @@ export function* hydrate(
     buildPrimaryKeys(clientSchema),
     tableSpecs,
   ).accumulate(hash, input.getSchema(), toAdds(res));
-  yield* streamer.stream();
+  return streamer.stream();
 }
 
-export function* hydrateInternal(
+export function hydrateInternal(
   input: Input,
   hash: string,
   primaryKeys: Map<string, PrimaryKey>,
@@ -1545,7 +1543,7 @@ export function* hydrateInternal(
     input.getSchema(),
     toAdds(res),
   );
-  yield* streamer.stream();
+  return streamer.stream();
 }
 
 function buildPrimaryKeys(
@@ -1569,7 +1567,7 @@ function mustGetPrimaryKey(
     rv,
     () =>
       // oxlint-disable-next-line e18e/prefer-array-to-sorted
-      `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
+      `table '${table}' is not one of: ${JSON.stringify([...pKeys.keys()].sort())}. ` +
       `Check the spelling and ensure that the table has a primary key.`,
   );
   return rv;

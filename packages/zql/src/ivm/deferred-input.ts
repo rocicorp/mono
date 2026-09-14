@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import {makeAddChange} from './change.ts';
 import type {Node} from './data.ts';
 import type {FetchRequest, Input, Output} from './operator.ts';
@@ -53,10 +54,8 @@ export class DeferredInput implements Input {
     return this.#schema;
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    if (this.#input) {
-      yield* this.#input.fetch(req);
-    }
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    return this.#input ? this.#input.fetch(req) : emptyArray;
   }
 
   destroy(): void {
