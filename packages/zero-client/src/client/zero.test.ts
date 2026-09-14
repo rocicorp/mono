@@ -3068,6 +3068,13 @@ test('connect timeout during setup retries without an unhandled rejection', asyn
       'reading deleted clients',
     ]);
 
+    // A timed out attempt is retried, so it is not logged as an error.
+    expect(
+      z.testLogSink.messages
+        .filter(([_level, _context, args]) => args[0] === 'Failed to connect')
+        .map(([level]) => level),
+    ).toEqual(['warn']);
+
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     expect(connectAttempts()).toBe(2);
   } finally {
