@@ -1,6 +1,10 @@
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {getESLibVersion} from './get-es-lib-version.ts';
-import {wrapIterable} from './iterables.ts';
+import {
+  emptyIterator,
+  makeEmptyIteratorWithReturn,
+  wrapIterable,
+} from './iterables.ts';
 
 function* range(start = 0, end = Infinity, step = 1) {
   for (let i = start; i < end; i += step) {
@@ -111,4 +115,65 @@ test('some works after filter', () => {
       .filter(x => x % 2 === 0)
       .some(x => x === 6),
   ).toBe(true);
+});
+
+describe('makeEmptyIteratorWithReturn', () => {
+  // The reference behavior: a generator that yields nothing and returns value.
+  function makeGenerator<T>(value: T): Generator<unknown, T, unknown> {
+    // oxlint-disable-next-line require-yield
+    return (function* () {
+      return value;
+    })();
+  }
+
+  function* delegate<T>(inner: IterableIterator<unknown, T, unknown>) {
+    return yield* inner;
+  }
+
+  describe.each([1, false, undefined, {a: 1}])('value %o', value => {
+    test('first next() matches function* () { return v }', () => {
+      expect(makeEmptyIteratorWithReturn(value).next()).toEqual(
+        makeGenerator(value).next(),
+      );
+    });
+
+    test('Symbol.iterator returns itself', () => {
+      const it = makeEmptyIteratorWithReturn(value);
+      expect(it[Symbol.iterator]()).toBe(it);
+    });
+
+    test('yield* matches function* () { return v }', () => {
+      expect([...delegate(makeEmptyIteratorWithReturn(value))]).toEqual([
+        ...delegate(makeGenerator(value)),
+      ]);
+      expect(delegate(makeEmptyIteratorWithReturn(value)).next()).toEqual(
+        delegate(makeGenerator(value)).next(),
+      );
+    });
+
+    // The remaining tests cover where it intentionally differs from a real
+    // generator: it is stateless so a single instance can be shared.
+
+    test('next() keeps returning value', () => {
+      // A real generator returns {done: true, value: undefined} once done.
+      const it = makeEmptyIteratorWithReturn(value);
+      expect(it.next()).toEqual({done: true, value});
+      expect(it.next()).toEqual({done: true, value});
+    });
+
+    test('can be reused with yield*', () => {
+      const it = makeEmptyIteratorWithReturn(value);
+      expect(delegate(it).next()).toEqual({done: true, value});
+      expect(delegate(it).next()).toEqual({done: true, value});
+    });
+  });
+
+  test('emptyIterator yields nothing and returns undefined', () => {
+    expect([...emptyIterator]).toEqual([]);
+    expect(emptyIterator.next()).toEqual({done: true, value: undefined});
+    expect(delegate(emptyIterator).next()).toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
 });

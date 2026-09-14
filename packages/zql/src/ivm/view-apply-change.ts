@@ -104,18 +104,17 @@ export interface RefCountMap {
 /**
  * Get child nodes from a relationship, handling both lazy (Node) and expanded (ExpandedNode).
  */
-function* getChildNodes(
+function getChildNodes(
   node: ViewNode,
   relationship: string,
-): Generator<ViewNode> {
+): Iterable<ViewNode> {
   const children = node.relationships[relationship];
   if (Array.isArray(children)) {
     // ExpandedNode: already an array
-    yield* children;
-  } else {
-    // Node: lazy generator function
-    yield* skipYields(children());
+    return children;
   }
+  // Node: lazy generator function
+  return skipYields(children());
 }
 
 type Mutate = boolean;

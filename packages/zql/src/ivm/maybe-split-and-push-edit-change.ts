@@ -1,3 +1,4 @@
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {makeAddChange, makeRemoveChange, type EditChange} from './change.ts';
@@ -8,7 +9,7 @@ import type {InputBase, Output} from './operator.ts';
  * should be present based on the row's data. It then splits the change and
  * pushes the appropriate changes to the output based on the predicate.
  */
-export function* maybeSplitAndPushEditChange(
+export function maybeSplitAndPushEditChange(
   change: EditChange,
   predicate: (row: Row) => boolean,
   output: Output,
@@ -18,10 +19,14 @@ export function* maybeSplitAndPushEditChange(
   const newIsPresent = predicate(change[ChangeIndex.NODE].row);
 
   if (oldWasPresent && newIsPresent) {
-    yield* output.push(change, pusher);
-  } else if (oldWasPresent && !newIsPresent) {
-    yield* output.push(makeRemoveChange(change[ChangeIndex.OLD_NODE]), pusher);
-  } else if (!oldWasPresent && newIsPresent) {
-    yield* output.push(makeAddChange(change[ChangeIndex.NODE]), pusher);
+    return output.push(change, pusher);
   }
+  if (oldWasPresent && !newIsPresent) {
+    return output.push(makeRemoveChange(change[ChangeIndex.OLD_NODE]), pusher);
+  }
+  if (!oldWasPresent && newIsPresent) {
+    return output.push(makeAddChange(change[ChangeIndex.NODE]), pusher);
+  }
+
+  return emptyArray;
 }

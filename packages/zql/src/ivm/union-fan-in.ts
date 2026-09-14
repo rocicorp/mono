@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
@@ -113,12 +114,12 @@ export class UnionFanIn implements Operator {
     return this.#schema;
   }
 
-  *push(change: Change, pusher: InputBase): Stream<'yield'> {
+  push(change: Change, pusher: InputBase): Stream<'yield'> {
     if (!this.#fanOutPushStarted) {
-      yield* this.#pushInternalChange(change, pusher);
-    } else {
-      this.#accumulatedPushes.push(change);
+      return this.#pushInternalChange(change, pusher);
     }
+    this.#accumulatedPushes.push(change);
+    return emptyArray;
   }
 
   /**
@@ -207,23 +208,23 @@ export class UnionFanIn implements Operator {
     this.#fanOutPushStarted = true;
   }
 
-  *fanOutDonePushing(fanOutChangeType: ChangeType): Stream<'yield'> {
+  fanOutDonePushing(fanOutChangeType: ChangeType): Stream<'yield'> {
     assert(
       this.#fanOutPushStarted,
       'UnionFanIn: fanOutDonePushing called without fanOutStartedPushing',
     );
     this.#fanOutPushStarted = false;
     if (this.#inputs.length === 0) {
-      return;
+      return emptyArray;
     }
 
     if (this.#accumulatedPushes.length === 0) {
       // It is possible for no forks to pass along the push.
       // E.g., if no filters match in any fork.
-      return;
+      return emptyArray;
     }
 
-    yield* pushAccumulatedChanges(
+    return pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
       this,
