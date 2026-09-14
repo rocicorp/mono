@@ -29,6 +29,7 @@ export type State = [Entry, QueryResultDetails];
 
 export const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
 export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
+export const CACHED: QueryResultDetails = Object.freeze({type: 'cached'});
 
 /**
  * SolidView bridges Zero's incremental view updates with Solid's reactive
@@ -167,6 +168,25 @@ export class SolidView implements Output {
 
   destroy(): void {
     this.#onDestroy();
+  }
+
+  /**
+   * The store holds the server-confirmed result of this query from a
+   * previous connection. Never downgrades 'complete'/'error'; freshness stays
+   * a promise only the connection can keep, so nothing that waits on
+   * 'complete' resolves here.
+   */
+  markCached(): void {
+    this.#setState(prev =>
+      prev[1].type === 'unknown' ? [prev[0], CACHED] : prev,
+    );
+  }
+
+  /** The got key was deleted (eviction) before this connection confirmed it. */
+  unmarkCached(): void {
+    this.#setState(prev =>
+      prev[1].type === 'cached' ? [prev[0], UNKNOWN] : prev,
+    );
   }
 
   #onTransactionCommit = () => {
