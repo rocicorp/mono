@@ -492,6 +492,30 @@ describe('onClientStateNotFound', () => {
     expect(hasMemStore(rep1.idbName)).toBe(false);
   });
 
+  test('Ignores a reset that another instance completed before this instance was created', async () => {
+    const before = Date.now();
+    const {promise: notified, resolve} = resolver();
+    const onClientStateNotFound = vi.fn(resolve);
+    const rep = await replicacheForTesting(
+      'reset-before-creation',
+      {mutators: {addData}, onClientStateNotFound},
+      disableAllBackgroundProcesses,
+    );
+
+    // The sender only posts once its drop is done. An instance created after
+    // that opened a fresh database, so a successful drop is not its reset.
+    notifyDatabaseReset(rep.idbName, true, before - 1);
+    // Same channel, so this is delivered after the one above. A drop that
+    // completed after creation is a reset of the database we opened.
+    notifyDatabaseReset(rep.idbName, true, Date.now());
+    await notified;
+
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    // The database was not touched by either message.
+    await rep.mutate.addData({foo: 'bar'});
+    await rep.persist();
+  });
+
   test('close() settles when another instance resets the database while open is in flight', async () => {
     vi.spyOn(console, 'error');
     const name = 'reset-during-open';
@@ -539,7 +563,11 @@ describe('onClientStateNotFound', () => {
     const channel = new BroadcastChannel(
       makeDatabaseResetChannelNameForTesting(rep.idbName),
     );
-    channel.postMessage({idbName: rep.idbName, dropped: true});
+    channel.postMessage({
+      idbName: rep.idbName,
+      dropped: true,
+      droppedAt: Date.now(),
+    });
     channel.close();
     await notified;
     expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
@@ -627,7 +655,7 @@ describe('onClientStateNotFound', () => {
       expect(onClientStateNotFound).not.toHaveBeenCalled();
 
       // Only now does the other instance say why.
-      notifyDatabaseReset(rep.idbName, true);
+      notifyDatabaseReset(rep.idbName, true, Date.now());
       await notified;
       expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
 

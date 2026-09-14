@@ -1,5 +1,6 @@
 import {
   assertBoolean,
+  assertNumber,
   assertObject,
   assertString,
 } from '../../shared/src/asserts.ts';
@@ -15,8 +16,17 @@ export {makeChannelName as makeDatabaseResetChannelNameForTesting};
  * `dropped` tells whether the sender managed to drop the database. If it did
  * not, the database may still exist with its corrupt content, and the
  * receivers should try to drop it themselves.
+ *
+ * `droppedAt` is when the sender's drop attempt finished (`Date.now()`). An
+ * instance created after that already opened a fresh database and must not
+ * treat a successful drop as its own reset. Tabs on the same origin share the
+ * wall clock, so comparing it to the receiver's creation time is sound.
  */
-export type DatabaseResetMessage = {idbName: string; dropped: boolean};
+export type DatabaseResetMessage = {
+  idbName: string;
+  dropped: boolean;
+  droppedAt: number;
+};
 
 function assertDatabaseResetMessage(
   value: unknown,
@@ -24,9 +34,10 @@ function assertDatabaseResetMessage(
   assertObject(value);
   assertString(value.idbName);
   assertBoolean(value.dropped);
+  assertNumber(value.droppedAt);
 }
 
-export type OnDatabaseReset = (dropped: boolean) => void;
+export type OnDatabaseReset = (dropped: boolean, droppedAt: number) => void;
 
 /**
  * Listens for database resets from the other Replicache instances that share a
@@ -55,7 +66,7 @@ export function listenForDatabaseReset(
     const {data} = e;
     assertDatabaseResetMessage(data);
     if (data.idbName === idbName) {
-      onDatabaseReset(data.dropped);
+      onDatabaseReset(data.dropped, data.droppedAt);
     }
   };
   signal.addEventListener('abort', () => channel.close(), {once: true});
@@ -70,8 +81,16 @@ export function listenForDatabaseReset(
  * drop regardless. A message posted right before the channel is closed is
  * still delivered.
  */
-export function notifyDatabaseReset(idbName: string, dropped: boolean): void {
+export function notifyDatabaseReset(
+  idbName: string,
+  dropped: boolean,
+  droppedAt: number,
+): void {
   const channel = new BroadcastChannel(makeChannelName(idbName));
-  channel.postMessage({idbName, dropped} satisfies DatabaseResetMessage);
+  channel.postMessage({
+    idbName,
+    dropped,
+    droppedAt,
+  } satisfies DatabaseResetMessage);
   channel.close();
 }

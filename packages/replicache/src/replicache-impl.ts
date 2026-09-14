@@ -293,6 +293,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * instead of hanging forever.
    */
   readonly #openFailed = resolver<void>();
+  /**
+   * When this instance was created. A database reset that another instance
+   * completed before this is not ours: we opened the fresh database.
+   */
+  readonly #createdAt = Date.now();
   readonly #profileIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;
   readonly #mutatorRegistry: MutatorDefs = {};
@@ -562,7 +567,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     listenForDatabaseReset(
       this.idbName,
       this.#closeAbortController.signal,
-      dropped => this.#databaseResetByOtherInstance(dropped),
+      (dropped, droppedAt) =>
+        this.#databaseResetByOtherInstance(dropped, droppedAt),
     );
 
     this.#onPersist = initOnPersistChannel(
@@ -1365,8 +1371,17 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * database. If the other instance could not drop the database, try to drop
    * it from here so the corrupt content does not survive the reload.
    */
-  #databaseResetByOtherInstance(dropped: boolean): void {
+  #databaseResetByOtherInstance(dropped: boolean, droppedAt: number): void {
     if (this.#closed || this.#corruptDatabaseRecovery !== undefined) {
+      return;
+    }
+    if (dropped && droppedAt < this.#createdAt) {
+      // The drop finished before this instance existed, so we opened a fresh
+      // database and there is nothing to recover from. A failed drop is
+      // different: the corrupt database is still there and it is ours too.
+      this.#lc.debug?.(
+        `Ignoring a reset of database ${this.idbName} that completed before this instance was created`,
+      );
       return;
     }
     if (dropped) {
@@ -1449,6 +1464,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         dropError,
       );
     }
+    // Taken right after the drop attempt, before anything else is awaited: an
+    // instance created from here on opened a fresh database and must ignore a
+    // successful drop. Erring towards "before" is the safe side, since that
+    // only costs such an instance a reload.
+    const droppedAt = Date.now();
     try {
       await idbDatabases.close();
     } catch (closeError) {
@@ -1460,7 +1480,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       );
     }
     if (notifyOtherInstances) {
-      notifyDatabaseReset(idbName, dropped);
+      notifyDatabaseReset(idbName, dropped, droppedAt);
     }
     this.#fireOnClientStateNotFound();
   }
