@@ -137,6 +137,14 @@ export class QueryManager implements InspectorDelegate {
       }
     });
 
+    // The first diff is the got set persisted by a previous session, the only
+    // state the watch may report as 'cached'. Every later diff is live: this
+    // tab's own poke, whose keys are confirmations on this connection and are
+    // reported as got once the poke has been applied (see
+    // `markGotQueriesAuthoritative`), or another tab's state arriving via
+    // replicache refresh. A live diff can therefore only revoke a cached
+    // claim, never grant one.
+    let persistedDiff = true;
     experimentalWatch(
       diff => {
         for (const diffOp of diff) {
@@ -144,17 +152,12 @@ export class QueryManager implements InspectorDelegate {
           switch (diffOp.op) {
             case 'change': {
               // A fingerprint refresh (see `gotFingerprintRefreshEntries`)
-              // rewrote the value of an existing got key, from this tab's own
-              // poke or from another tab's via replicache refresh. Until the
-              // got set is authoritative that can make or break the claim.
+              // rewrote the value of an existing got key.
               this.#gotQueries.set(queryHash, diffOp.newValue ?? null);
               if (!this.#gotQueriesAuthoritative) {
                 const entry = this.#queries.get(queryHash);
-                if (entry) {
-                  this.#fireGotCallbacks(
-                    queryHash,
-                    this.#hasCachedClaim(queryHash, entry) ? 'cached' : false,
-                  );
+                if (entry && !this.#hasCachedClaim(queryHash, entry)) {
+                  this.#fireGotCallbacks(queryHash, false);
                 }
               }
               break;
@@ -163,7 +166,7 @@ export class QueryManager implements InspectorDelegate {
               this.#gotQueries.set(queryHash, diffOp.newValue ?? null);
               if (this.#gotQueriesAuthoritative) {
                 this.#fireGotCallbacks(queryHash, true);
-              } else {
+              } else if (persistedDiff) {
                 const entry = this.#queries.get(queryHash);
                 if (entry && this.#hasCachedClaim(queryHash, entry)) {
                   this.#fireGotCallbacks(queryHash, 'cached');
@@ -176,6 +179,7 @@ export class QueryManager implements InspectorDelegate {
               break;
           }
         }
+        persistedDiff = false;
       },
       {
         prefix: GOT_QUERIES_KEY_PREFIX,

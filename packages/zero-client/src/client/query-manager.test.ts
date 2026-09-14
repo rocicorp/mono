@@ -2628,6 +2628,8 @@ describe('gotCallback, persisted got with matching fingerprint is cached', () =>
     expect(queryManager.gotFingerprintRefreshEntries()).toEqual([
       {hash: queryHash, value: fingerprint},
     ]);
+    // The refresh rides a poke, so the rewritten value is not a new claim; the
+    // poke that carried it then makes the got set authoritative.
     watchCallback([
       {
         op: 'change',
@@ -2637,15 +2639,32 @@ describe('gotCallback, persisted got with matching fingerprint is cached', () =>
       },
     ]);
     expect(queryManager.gotFingerprintRefreshEntries()).toEqual([]);
-    // The rewritten value makes the claim hold; the poke that carried the
-    // refresh then makes the got set authoritative.
-    expect(gotCallback).toBeCalledTimes(2);
-    expect(gotCallback).nthCalledWith(2, 'cached');
+    expect(gotCallback).toBeCalledTimes(1);
     queryManager.markGotQueriesAuthoritative();
-    expect(gotCallback).nthCalledWith(3, true);
+    expect(gotCallback).nthCalledWith(2, true);
   });
 
-  test('a value rewrite from another tab re-evaluates the claim', () => {
+  test('a got key added by the first poke is confirmed, not cached', () => {
+    const {queryManager, watchCallback} = setup();
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, false);
+
+    // Nothing persisted from a previous session.
+    watchCallback([]);
+    // The first poke of the connection carries the got put with this
+    // registration's fingerprint; the watch fires while it is applied.
+    watchCallback([
+      {op: 'add', key: gotKey, newValue: fingerprintOf(queryManager)},
+    ]);
+    expect(gotCallback).toBeCalledTimes(1);
+
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).toBeCalledTimes(2);
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+
+  test('a live value rewrite can revoke a cached claim but not grant one', () => {
     const {queryManager, watchCallback} = setup();
     const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
@@ -2653,25 +2672,41 @@ describe('gotCallback, persisted got with matching fingerprint is cached', () =>
     watchCallback([{op: 'add', key: gotKey, newValue: fingerprint}]);
     expect(gotCallback).nthCalledWith(2, 'cached');
 
-    // A tab running a different body rewrote the value: no longer a claim.
+    // Another tab running a different body rewrote the value: no longer a
+    // claim.
     watchCallback([
       {op: 'change', key: gotKey, oldValue: fingerprint, newValue: 'other'},
     ]);
     expect(gotCallback).nthCalledWith(3, false);
 
-    // And back again.
+    // Rewritten back: the key is not persisted state anymore, so no claim.
     watchCallback([
       {op: 'change', key: gotKey, oldValue: 'other', newValue: fingerprint},
     ]);
-    expect(gotCallback).nthCalledWith(4, 'cached');
+    expect(gotCallback).toBeCalledTimes(3);
 
     // Once authoritative, value rewrites are not got-state changes.
     queryManager.markGotQueriesAuthoritative();
-    expect(gotCallback).nthCalledWith(5, true);
+    expect(gotCallback).nthCalledWith(4, true);
     watchCallback([
       {op: 'change', key: gotKey, oldValue: fingerprint, newValue: 'other'},
     ]);
-    expect(gotCallback).toBeCalledTimes(5);
+    expect(gotCallback).toBeCalledTimes(4);
+  });
+
+  test('a got key added by another tab is not a cached claim', () => {
+    const {queryManager, watchCallback} = setup();
+    watchCallback([]);
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    watchCallback([
+      {op: 'add', key: gotKey, newValue: fingerprintOf(queryManager)},
+    ]);
+    expect(gotCallback.mock.calls).toEqual([[false]]);
+    // A later registration reads the same state and may make the claim.
+    const gotCallback2 = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback2);
+    expect(gotCallback2).nthCalledWith(1, 'cached');
   });
 
   test('refresh entries only cover registered queries that are got', () => {
