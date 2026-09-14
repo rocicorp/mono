@@ -228,6 +228,12 @@ export class QueryManager implements InspectorDelegate {
 
   /** Called on disconnect. The next connect must re-confirm `#gotQueries`. */
   clearGotQueriesAuthoritative(): void {
+    if (!this.#gotQueriesAuthoritative) {
+      // The connection never confirmed the got set, so the persisted
+      // classification still stands. Keys a live diff added in the meantime
+      // were not confirmed by this connection and stay unclaimed.
+      return;
+    }
     this.#gotQueriesAuthoritative = false;
     // Everything got at this point was confirmed by the connection just torn
     // down, which for a new registration is the cached claim.

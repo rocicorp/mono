@@ -2621,6 +2621,21 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
     expect(gotCallback2).nthCalledWith(2, true);
   });
 
+  test('disconnecting before the first poke does not promote live keys', () => {
+    const {queryManager, watchCallback} = setup();
+    watchCallback([]);
+    // Another tab's refresh adds the key while this connection has not yet
+    // confirmed the got set.
+    watchCallback([gotAdd]);
+    queryManager.clearGotQueriesAuthoritative();
+
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback.mock.calls).toEqual([[false]]);
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+
   test('a throwing got callback does not leave the persisted diff pending', () => {
     const {queryManager, watchCallback} = setup();
     const throwing = vi.fn<GotCallback>(got => {
