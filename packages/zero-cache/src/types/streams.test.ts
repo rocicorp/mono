@@ -248,6 +248,14 @@ describe('streams with internal acks', () => {
       void streamOut(lc, producer, ws, {batched: true});
       void streamOutStringified(lc, stringifiedProducer, ws, {batched: true});
     });
+    server.get('/custom-ack-config', {websocket: true}, ws => {
+      void streamOut(lc, producer, ws, {
+        ackConfig: {
+          maxAckBytes: 200,
+          maxAckStride: 100,
+        },
+      });
+    });
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
@@ -971,6 +979,34 @@ describe('streams with internal acks', () => {
       item2.consumed();
       await vi.waitFor(() => expect(acksSent).toEqual([1, 3]));
 
+      consumer.cancel();
+    });
+
+    test('adopts ackConfig communicated on frame 1 and flushes on maxAckBytes threshold', async () => {
+      ws = new WebSocket(`http://localhost:${port}/custom-ack-config`);
+      const acksSent = createAckSpy(ws);
+      const consumer = (await streamIn(lc, ws, messageSchema, {
+        cumulativeAck: true,
+        maxAckStride: 100, // higher than default
+        maxAckBytes: 1000000, // higher initial fallback overridden by server ackConfig
+      })) as Subscription<Message>;
+
+      // Frame 1 arrives with ackConfig setting maxAckBytes = 200, maxAckStride = 100.
+      producer.push({from: 0, to: 1, str: 'a'.repeat(80)});
+      producer.push({from: 1, to: 2, str: 'b'.repeat(80)});
+      producer.push({from: 2, to: 3, str: 'c'.repeat(80)});
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === 3) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(3);
+      // Wait for ACKs to be flushed
+      await vi.waitFor(() => expect(acksSent.at(-1)).toBe(3));
       consumer.cancel();
     });
 
