@@ -203,7 +203,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       return;
     }
     this.#resultType = 'cached';
-    this.#fireListeners();
+    this.#fireListenersUnlessDirty();
   }
 
   /** The got key was deleted (eviction) while still pre-authoritative. */
@@ -212,6 +212,16 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       return;
     }
     this.#resultType = 'unknown';
-    this.#fireListeners();
+    this.#fireListenersUnlessDirty();
+  }
+
+  // A dirty view is mid-transaction: rows were pushed and not yet flushed, and
+  // the objects in #txnDirty are still mutable. Firing now would hand those to
+  // listeners and then fire again at flush() with the same data, so let the
+  // pending flush deliver the new result type instead.
+  #fireListenersUnlessDirty() {
+    if (!this.#dirty) {
+      this.#fireListeners();
+    }
   }
 }

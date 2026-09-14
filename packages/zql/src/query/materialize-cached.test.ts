@@ -83,13 +83,11 @@ function newDelegate() {
 
 function observe(delegate: CachedDelegate) {
   const view = delegate.materialize(newQuery(schema, 'issue'));
-  // Consecutive duplicates are collapsed: a commit flush re-fires listeners
-  // with the current type, and these tests are about transitions.
+  // Every notification is recorded, so a test also pins that a result type
+  // change arrives in exactly one notification.
   const types: ResultType[] = [];
   view.addListener((_data, type) => {
-    if (types.at(-1) !== type) {
-      types.push(type);
-    }
+    types.push(type);
   });
   return {view, types};
 }
@@ -202,7 +200,8 @@ describe('cached result type', () => {
       const {view, types} = observe(delegate);
       delegate.lastGot(false);
       delegate.markReady();
-      expect(types).toEqual(['unknown']);
+      // The attach flush delivers the rows, still at 'unknown'.
+      expect(types).toEqual(['unknown', 'unknown']);
       view.destroy();
     });
 
@@ -214,7 +213,9 @@ describe('cached result type', () => {
       delegate.lastGot(true);
       delegate.markReady();
       await vi.waitFor(() => expect(types.at(-1)).toBe('complete'));
-      expect(types).toEqual(['unknown', 'complete']);
+      // The attach flush delivers the rows at 'unknown'; 'cached' is never
+      // shown because the server confirmation arrived first.
+      expect(types).toEqual(['unknown', 'unknown', 'complete']);
       view.destroy();
     });
   });
