@@ -8,6 +8,9 @@ export type QueryResultDetails =
       readonly type: 'unknown';
     }
   | {
+      readonly type: 'cached';
+    }
+  | {
       readonly type: 'error';
       readonly retry: () => void;
       /** @deprecated Use `retry` instead */

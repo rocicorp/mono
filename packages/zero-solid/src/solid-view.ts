@@ -29,6 +29,7 @@ export type State = [Entry, QueryResultDetails];
 
 export const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
 export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
+export const CACHED: QueryResultDetails = Object.freeze({type: 'cached'});
 
 /**
  * SolidView bridges Zero's incremental view updates with Solid's reactive
@@ -90,6 +91,10 @@ export class SolidView implements Output {
   // optimization reduced #applyChanges time from 743ms to 133ms.
   #builderRoot: Entry | undefined;
   #pendingChanges: ViewChange[] = [];
+  // A result type transition requested while row changes are waiting for the
+  // next commit. It is applied with them, so a cached claim never reaches the
+  // store before the rows it is about.
+  #pendingResultType: ((prev: State) => State) | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
 
   constructor(
@@ -169,6 +174,42 @@ export class SolidView implements Output {
     this.#onDestroy();
   }
 
+  /**
+   * The store holds the server-confirmed result of this query from a
+   * previous connection. Never downgrades 'complete'/'error'; freshness stays
+   * a promise only the connection can keep, so nothing that waits on
+   * 'complete' resolves here.
+   */
+  markCached(): void {
+    this.#transitionResultType(prev =>
+      prev[1].type === 'unknown' ? [prev[0], CACHED] : prev,
+    );
+  }
+
+  /** The got key was deleted (eviction) before this connection confirmed it. */
+  unmarkCached(): void {
+    this.#transitionResultType(prev =>
+      prev[1].type === 'cached' ? [prev[0], UNKNOWN] : prev,
+    );
+  }
+
+  #transitionResultType(transition: (prev: State) => State): void {
+    if (this.#hasUncommittedChanges()) {
+      // The last requested transition wins; each is a no-op unless the state
+      // it expects is current, so the net effect at commit is correct.
+      this.#pendingResultType = transition;
+    } else {
+      this.#setState(transition);
+    }
+  }
+
+  #hasUncommittedChanges(): boolean {
+    return (
+      (this.#builderRoot !== undefined && !isEmptyRoot(this.#builderRoot)) ||
+      this.#pendingChanges.length > 0
+    );
+  }
+
   #onTransactionCommit = () => {
     const builderRoot = this.#builderRoot;
     if (builderRoot) {
@@ -188,6 +229,11 @@ export class SolidView implements Output {
       } finally {
         this.#pendingChanges = [];
       }
+    }
+    const pendingResultType = this.#pendingResultType;
+    if (pendingResultType) {
+      this.#pendingResultType = undefined;
+      this.#setState(pendingResultType);
     }
   };
 

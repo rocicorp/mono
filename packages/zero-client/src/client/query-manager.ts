@@ -53,6 +53,10 @@ type Entry = {
   ttl: TTL;
 };
 
+// A thrown value, boxed so that `throw undefined` is still distinguishable
+// from "nothing thrown".
+type ThrownBy = {readonly error: unknown};
+
 type ClientMetric = {
   [K in keyof ClientMetricMap]: TDigest;
 };
@@ -82,6 +86,16 @@ export class QueryManager implements InspectorDelegate {
   // IndexedDB may be stale (a query 'got' in a previous session can be evicted
   // server-side); see `markGotQueriesAuthoritative`.
   #gotQueriesAuthoritative = false;
+  // The got keys whose result the store holds from a previous connection: the
+  // set persisted by a previous session, and on disconnect everything the
+  // connection just torn down had confirmed. Until the got set is
+  // authoritative, a registration reports these as 'cached'. Keys added by a
+  // live diff are not in it; see the watch below.
+  readonly #cachedQueries: Set<string> = new Set();
+  // Whether the got-queries watch has yet to deliver its first diff, the
+  // persisted set. Cleared before that diff is processed, so a throwing
+  // callback cannot leave it set.
+  #awaitingPersistedGotDiff = true;
   readonly #mutationTracker: MutationTracker;
   readonly #pendingQueryChanges: UpQueriesPatchOp[] = [];
   readonly #queryChangeThrottleMs: number;
@@ -129,22 +143,46 @@ export class QueryManager implements InspectorDelegate {
       }
     });
 
+    // The first diff is the got set persisted by a previous session, the only
+    // state the watch may report as 'cached'. Every later diff is live: this
+    // tab's own poke, whose keys are confirmations on this connection and are
+    // reported as got once the poke has been applied (see
+    // `markGotQueriesAuthoritative`), or another tab's state arriving via
+    // replicache refresh. A live diff can therefore only revoke a cached
+    // claim (a deleted key), never grant one.
     experimentalWatch(
       diff => {
+        const persisted = this.#awaitingPersistedGotDiff;
+        this.#awaitingPersistedGotDiff = false;
+        // A throwing callback must not leave the rest of the diff unapplied,
+        // or later keys would never enter the got set. The first error is
+        // rethrown once the sets are consistent.
+        let thrown: ThrownBy | undefined;
+        const fire = (queryHash: string, got: boolean | 'cached') => {
+          const e = this.#fireGotCallbacks(queryHash, got);
+          thrown ??= e;
+        };
         for (const diffOp of diff) {
           const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
           switch (diffOp.op) {
             case 'add':
               this.#gotQueries.add(queryHash);
               if (this.#gotQueriesAuthoritative) {
-                this.#fireGotCallbacks(queryHash, true);
+                fire(queryHash, true);
+              } else if (persisted) {
+                this.#cachedQueries.add(queryHash);
+                fire(queryHash, 'cached');
               }
               break;
             case 'del':
               this.#gotQueries.delete(queryHash);
-              this.#fireGotCallbacks(queryHash, false);
+              this.#cachedQueries.delete(queryHash);
+              fire(queryHash, false);
               break;
           }
+        }
+        if (thrown) {
+          throw thrown.error;
         }
       },
       {
@@ -169,11 +207,30 @@ export class QueryManager implements InspectorDelegate {
     return mapAST(ast, this.#clientToServer);
   }
 
-  #fireGotCallbacks(queryHash: string, got: boolean) {
-    const gotCallbacks = this.#queries.get(queryHash)?.gotCallbacks ?? [];
-    for (const gotCallback of gotCallbacks) {
-      gotCallback(got);
+  /**
+   * Notifies every subscriber of the query. A throwing subscriber does not
+   * keep the others from being notified; the first error is returned so the
+   * caller can rethrow it once its own bookkeeping is consistent.
+   */
+  #fireGotCallbacks(
+    queryHash: string,
+    got: boolean | 'cached',
+  ): ThrownBy | undefined {
+    const entry = this.#queries.get(queryHash);
+    if (!entry) {
+      return undefined;
     }
+    let thrown: ThrownBy | undefined;
+    // A subscriber may unregister during dispatch (a run() waiter destroys its
+    // view on the notification it was waiting for), so iterate a snapshot.
+    for (const gotCallback of [...entry.gotCallbacks]) {
+      try {
+        gotCallback(got);
+      } catch (error) {
+        thrown ??= {error};
+      }
+    }
+    return thrown;
   }
 
   /**
@@ -188,16 +245,37 @@ export class QueryManager implements InspectorDelegate {
       return;
     }
     this.#gotQueriesAuthoritative = true;
+    // Whatever the previous connection held, this one has now confirmed or
+    // deleted. Should the watch's first diff have been skipped (a failed
+    // initial run), the next diff is live too.
+    this.#cachedQueries.clear();
+    this.#awaitingPersistedGotDiff = false;
+    let thrown: ThrownBy | undefined;
     for (const queryHash of this.#queries.keys()) {
       if (this.#gotQueries.has(queryHash)) {
-        this.#fireGotCallbacks(queryHash, true);
+        const e = this.#fireGotCallbacks(queryHash, true);
+        thrown ??= e;
       }
+    }
+    if (thrown) {
+      throw thrown.error;
     }
   }
 
   /** Called on disconnect. The next connect must re-confirm `#gotQueries`. */
   clearGotQueriesAuthoritative(): void {
+    if (!this.#gotQueriesAuthoritative) {
+      // The connection never confirmed the got set, so the persisted
+      // classification still stands. Keys a live diff added in the meantime
+      // were not confirmed by this connection and stay unclaimed.
+      return;
+    }
     this.#gotQueriesAuthoritative = false;
+    // Everything got at this point was confirmed by the connection just torn
+    // down, which for a new registration is the cached claim.
+    for (const queryHash of this.#gotQueries) {
+      this.#cachedQueries.add(queryHash);
+    }
   }
 
   /**
@@ -388,7 +466,9 @@ export class QueryManager implements InspectorDelegate {
 
     if (gotCallback) {
       gotCallback(
-        this.#gotQueriesAuthoritative && this.#gotQueries.has(queryId),
+        this.#gotQueriesAuthoritative
+          ? this.#gotQueries.has(queryId)
+          : this.#cachedQueries.has(queryId) && 'cached',
       );
     }
 
