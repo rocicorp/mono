@@ -14,6 +14,7 @@ import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts'
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
+import {toGotQueriesKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {PokeHandler, mergePokes} from './zero-poke-handler.ts';
 
@@ -1789,6 +1790,137 @@ describe('poke handler', () => {
             value: {id: 'issue1', title: 'foo1'},
           },
         ],
+      },
+    });
+  });
+
+  test('mergePokes writes the registered fingerprint as the got value', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {pokeID: 'p1', baseCookie: '1'},
+          parts: [
+            {
+              pokeID: 'p1',
+              gotQueriesPatch: [
+                {op: 'put', hash: 'h1'},
+                {op: 'put', hash: 'h2'},
+              ],
+            },
+          ],
+          pokeEnd: {pokeID: 'p1', cookie: '2'},
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+      hash => (hash === 'h1' ? 'fp1' : null),
+    );
+    expect(result).toMatchObject({
+      pullResponse: {
+        patch: [
+          {op: 'put', key: toGotQueriesKey('h1'), value: 'fp1'},
+          // Not registered on this client: no fingerprint to vouch for.
+          {op: 'put', key: toGotQueriesKey('h2'), value: null},
+        ],
+      },
+    });
+  });
+
+  test('mergePokes without a fingerprint source writes null got values', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {pokeID: 'p1', baseCookie: '1'},
+          parts: [{pokeID: 'p1', gotQueriesPatch: [{op: 'put', hash: 'h1'}]}],
+          pokeEnd: {pokeID: 'p1', cookie: '2'},
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+    expect(result).toMatchObject({
+      pullResponse: {
+        patch: [{op: 'put', key: toGotQueriesKey('h1'), value: null}],
+      },
+    });
+  });
+
+  test('mergePokes appends fingerprint refresh puts after the poke ops', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {pokeID: 'p1', baseCookie: '1'},
+          parts: [{pokeID: 'p1', gotQueriesPatch: [{op: 'put', hash: 'h1'}]}],
+          pokeEnd: {pokeID: 'p1', cookie: '2'},
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+      () => 'fp1',
+      () => [
+        {hash: 'stale1', value: 'fp-stale1'},
+        {hash: 'stale2', value: 'fp-stale2'},
+      ],
+    );
+    expect(result).toMatchObject({
+      pullResponse: {
+        patch: [
+          {op: 'put', key: toGotQueriesKey('h1'), value: 'fp1'},
+          {op: 'put', key: toGotQueriesKey('stale1'), value: 'fp-stale1'},
+          {op: 'put', key: toGotQueriesKey('stale2'), value: 'fp-stale2'},
+        ],
+      },
+    });
+  });
+
+  test('mergePokes never refreshes a hash the same poke deletes', () => {
+    // A refresh put appended after the del would re-insert the got bit while
+    // the poke deletes the rows it vouches for.
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {pokeID: 'p1', baseCookie: '1'},
+          parts: [
+            {pokeID: 'p1', gotQueriesPatch: [{op: 'del', hash: 'stale1'}]},
+          ],
+          pokeEnd: {pokeID: 'p1', cookie: '2'},
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+      () => null,
+      () => [
+        {hash: 'stale1', value: 'fp-stale1'},
+        {hash: 'stale2', value: 'fp-stale2'},
+      ],
+    );
+    expect(result).toMatchObject({
+      pullResponse: {
+        patch: [
+          {op: 'del', key: toGotQueriesKey('stale1')},
+          {op: 'put', key: toGotQueriesKey('stale2'), value: 'fp-stale2'},
+        ],
+      },
+    });
+  });
+
+  test('mergePokes never refreshes when the poke clears the got set', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {pokeID: 'p1', baseCookie: '1'},
+          parts: [{pokeID: 'p1', gotQueriesPatch: [{op: 'clear'}]}],
+          pokeEnd: {pokeID: 'p1', cookie: '2'},
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+      () => null,
+      () => [{hash: 'stale1', value: 'fp-stale1'}],
+    );
+    expect(result).toMatchObject({
+      pullResponse: {
+        patch: [{op: 'clear'}],
       },
     });
   });

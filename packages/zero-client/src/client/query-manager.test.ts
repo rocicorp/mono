@@ -2521,3 +2521,189 @@ describe('gotCallback, persisted got is not trusted until authoritative', () => 
     expect(gotCallback).nthCalledWith(2, true);
   });
 });
+
+// A persisted got key whose value is the fingerprint of the registered query
+// body is reported as 'cached' before the server has reconciled the got set:
+// the store holds the server-confirmed complete result from a previous
+// session. It never counts as got === true; only the first applied poke does.
+describe('gotCallback, persisted got with matching fingerprint is cached', () => {
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+  };
+  const nameAndArgs = {name: 'issueList', args: [1]};
+  const queryHash = hashOfNameAndArgs(nameAndArgs.name, nameAndArgs.args);
+  const gotKey = toGotQueriesKey(queryHash) as string & IndexKey;
+
+  function setup() {
+    const experimentalWatch = createExperimentalWatchMock();
+    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const queryManager = new QueryManager(
+      lc,
+      mutationTracker,
+      'client1',
+      schema.tables,
+      send,
+      experimentalWatch,
+      0,
+      queryChangeThrottleMs,
+      slowMaterializeThreshold,
+      onFatalError,
+    );
+    const watchCallback = experimentalWatch.mock.calls[0][0];
+    return {queryManager, watchCallback};
+  }
+
+  function fingerprintOf(queryManager: QueryManager): string {
+    const fingerprint = queryManager.astFingerprintForHash(queryHash);
+    expect(fingerprint).toBeTypeOf('string');
+    return fingerprint as string;
+  }
+
+  test('fingerprint is the hash of the registered body, null when unregistered', () => {
+    const {queryManager} = setup();
+    expect(queryManager.astFingerprintForHash(queryHash)).toBeNull();
+    queryManager.addCustom(ast, nameAndArgs, 200);
+    // The got key is keyed by name+args, the fingerprint by the body.
+    expect(fingerprintOf(queryManager)).not.toBe(queryHash);
+    expect(fingerprintOf(queryManager)).toBe(
+      hashOfAST(queryManager.mapClientASTToServer(ast)),
+    );
+  });
+
+  test('got key loaded after registration: cached, then complete on first poke', () => {
+    const {queryManager, watchCallback} = setup();
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, false);
+
+    watchCallback([
+      {op: 'add', key: gotKey, newValue: fingerprintOf(queryManager)},
+    ]);
+    expect(gotCallback).toBeCalledTimes(2);
+    expect(gotCallback).nthCalledWith(2, 'cached');
+
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).toBeCalledTimes(3);
+    expect(gotCallback).nthCalledWith(3, true);
+    // Nothing to refresh: the stored value already matches the body.
+    expect(queryManager.gotFingerprintRefreshEntries()).toEqual([]);
+  });
+
+  test('got key loaded before registration: cached synchronously at add', () => {
+    // Learn the fingerprint from a throwaway manager; it only depends on the
+    // body and the schema's name mapping.
+    const probe = setup().queryManager;
+    probe.addCustom(ast, nameAndArgs, 200);
+    const fingerprint = fingerprintOf(probe);
+
+    const {queryManager, watchCallback} = setup();
+    watchCallback([{op: 'add', key: gotKey, newValue: fingerprint}]);
+
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).toBeCalledTimes(1);
+    expect(gotCallback).nthCalledWith(1, 'cached');
+
+    // A second subscriber to the same query sees the same claim.
+    const gotCallback2 = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback2);
+    expect(gotCallback2).nthCalledWith(1, 'cached');
+  });
+
+  test('a different body under the same name/args is not cached, and is refreshed', () => {
+    const {queryManager, watchCallback} = setup();
+    // Value written by last session's build, or null from an older client.
+    watchCallback([{op: 'add', key: gotKey, newValue: 'stale-fingerprint'}]);
+
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).toBeCalledTimes(1);
+    expect(gotCallback).nthCalledWith(1, false);
+
+    // The next applied poke rewrites the value to the current body's
+    // fingerprint so later boots can make the claim.
+    const fingerprint = fingerprintOf(queryManager);
+    expect(queryManager.gotFingerprintRefreshEntries()).toEqual([
+      {hash: queryHash, value: fingerprint},
+    ]);
+    watchCallback([
+      {
+        op: 'change',
+        key: gotKey,
+        oldValue: 'stale-fingerprint',
+        newValue: fingerprint,
+      },
+    ]);
+    expect(queryManager.gotFingerprintRefreshEntries()).toEqual([]);
+    // A value change alone is not a new claim; the poke that carried the
+    // refresh is what makes the got set authoritative.
+    expect(gotCallback).toBeCalledTimes(1);
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+
+  test('refresh entries only cover registered queries that are got', () => {
+    const {queryManager, watchCallback} = setup();
+    // Registered but not got: nothing to refresh.
+    queryManager.addCustom(ast, nameAndArgs, 200);
+    expect(queryManager.gotFingerprintRefreshEntries()).toEqual([]);
+    // Got but not registered: nothing to refresh either.
+    watchCallback([
+      {
+        op: 'add',
+        key: toGotQueriesKey('unregistered') as string & IndexKey,
+        newValue: null,
+      },
+    ]);
+    expect(queryManager.gotFingerprintRefreshEntries()).toEqual([]);
+  });
+
+  test('eviction before the first poke reverts cached to not-got', () => {
+    const {queryManager, watchCallback} = setup();
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    watchCallback([
+      {op: 'add', key: gotKey, newValue: fingerprintOf(queryManager)},
+    ]);
+    expect(gotCallback).nthCalledWith(2, 'cached');
+
+    // The catch-up poke reveals the query was evicted server-side.
+    watchCallback([{op: 'del', key: gotKey, oldValue: 'unused'}]);
+    expect(gotCallback).toBeCalledTimes(3);
+    expect(gotCallback).nthCalledWith(3, false);
+
+    queryManager.markGotQueriesAuthoritative();
+    expect(
+      gotCallback.mock.calls.slice(2).every(([got]) => got === false),
+    ).toBe(true);
+  });
+
+  test('once authoritative, a matching got key is complete, not cached', () => {
+    const {queryManager, watchCallback} = setup();
+    queryManager.markGotQueriesAuthoritative();
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    watchCallback([
+      {op: 'add', key: gotKey, newValue: fingerprintOf(queryManager)},
+    ]);
+    expect(gotCallback.mock.calls).toEqual([[false], [true]]);
+  });
+
+  test('after disconnect, a new subscription is cached again until reconciled', () => {
+    const {queryManager, watchCallback} = setup();
+    queryManager.addCustom(ast, nameAndArgs, 200);
+    watchCallback([
+      {op: 'add', key: gotKey, newValue: fingerprintOf(queryManager)},
+    ]);
+    queryManager.markGotQueriesAuthoritative();
+    queryManager.clearGotQueriesAuthoritative();
+
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, 'cached');
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+});
