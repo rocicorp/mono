@@ -14,6 +14,7 @@ import {pipe, type Sink, type Source} from '../../../../types/streams.ts';
 import {Subscription} from '../../../../types/subscription.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {fromBigInt} from '../lsn.ts';
+import {getBinaryDecoders} from './pgoutput-binary-decoders.ts';
 import {PgoutputParser} from './pgoutput-parser.ts';
 import type {Message} from './pgoutput.types.ts';
 
@@ -65,6 +66,7 @@ export async function subscribe(
   retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
   applicationName = 'zero-replicator',
   inboundTimeoutOverrideMs?: number | undefined,
+  binary = true,
 ): Promise<{
   messages: SourceWithPendingQueue<StreamMessage>;
   acks: Sink<bigint>;
@@ -107,6 +109,7 @@ export async function subscribe(
     publications,
     lsn,
     retriesIfReplicationSlotActive + 1,
+    binary,
   );
 
   let lastAckTime = Date.now();
@@ -160,8 +163,11 @@ export async function subscribe(
     : undefined;
 
   let destroyed = false;
-  const typeParsers = await getTypeParsers(db, {returnJsonAsString: true});
-  const parser = new PgoutputParser(typeParsers);
+  const [typeParsers, binaryDecoders] = await Promise.all([
+    getTypeParsers(db, {returnJsonAsString: true}),
+    binary ? getBinaryDecoders(db) : undefined,
+  ]);
+  const parser = new PgoutputParser(typeParsers, binaryDecoders);
   const messages = Subscription.create<StreamMessage>({
     cleanup: () => {
       destroyed = true;
@@ -327,15 +333,21 @@ async function startReplicationStream(
   publications: string[],
   lsn: bigint,
   maxAttempts: number,
+  binary = true,
 ) {
+  const options = [
+    `proto_version '${binary ? '2' : '1'}'`,
+    `publication_names '${formatPublicationNames(publications)}'`,
+    `messages 'true'`,
+    ...(binary ? [`binary 'true'`] : []),
+  ].join(',\n        ');
+
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const stream = session
         .unsafe(
           `START_REPLICATION SLOT ${id(slot)} LOGICAL ${fromBigInt(lsn)} (
-        proto_version '1',
-        publication_names '${formatPublicationNames(publications)}',
-        messages 'true'
+        ${options}
       )`,
         )
         .execute();

@@ -1,6 +1,6 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {Sized, Source} from '../../types/streams.ts';
+import type {PreSerialized, Sized, Source} from '../../types/streams.ts';
 import {
   changeStreamDataSchema,
   type ChangeStreamData,
@@ -156,6 +156,16 @@ export type SubscriberContext = {
    * subscriber's ACK advances its head or releases its catchup barrier.
    */
   logsChangeStream: boolean;
+
+  /**
+   * Whether the subscriber supports batched WebSocket frames.
+   */
+  wsBatched?: boolean | undefined;
+
+  /**
+   * Whether the subscriber acknowledges frames cumulatively via high-watermark ACKs.
+   */
+  cumulativeAck?: boolean | undefined;
 };
 
 /**
@@ -235,9 +245,9 @@ export interface ChangeStreamerService
   extends Omit<ChangeStreamer, 'subscribe'>, Service {
   /**
    * The server-side interface overrides `subscribe()` to return a stream
-   * of already-stringified {@link Downstream} payloads.
+   * of already-stringified {@link Downstream} payloads or pre-serialized Buffers.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<string>>;
+  subscribe(ctx: SubscriberContext): Promise<Source<string | PreSerialized>>;
 
   /**
    * Starts a snapshot reservation to preserve change-log entries while

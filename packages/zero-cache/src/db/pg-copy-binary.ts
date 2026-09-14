@@ -504,7 +504,7 @@ function decodeNumericViaString(
  *
  * Result is JSON.stringify'd for storage in SQLite (matching text path behavior).
  */
-export function decodeArray(buf: Buffer): string {
+export function decodeArrayValues(buf: Buffer): unknown[] {
   let offset = 0;
 
   const ndim = buf.readInt32BE(offset);
@@ -515,7 +515,7 @@ export function decodeArray(buf: Buffer): string {
   offset += 4;
 
   if (ndim === 0) {
-    return '[]';
+    return [];
   }
 
   // Read dimension sizes.
@@ -551,8 +551,11 @@ export function decodeArray(buf: Buffer): string {
     return arr;
   }
 
-  const result = readDimension(0);
-  return stringify(result);
+  return readDimension(0);
+}
+
+export function decodeArray(buf: Buffer): string {
+  return stringify(decodeArrayValues(buf));
 }
 
 /**

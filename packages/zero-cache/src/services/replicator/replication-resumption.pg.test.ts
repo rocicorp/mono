@@ -10,7 +10,11 @@ import {getConnectionURI, test, type PgTest} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {forkChildWorker, type Worker} from '../../types/processes.ts';
-import type {Source} from '../../types/streams.ts';
+import {
+  isPreSerialized,
+  type PreSerialized,
+  type Source,
+} from '../../types/streams.ts';
 import type {
   ChangeSource,
   ChangeStream,
@@ -168,7 +172,7 @@ function sendChild(child: Worker, msg: ChildMessage): void {
 }
 
 type ActiveBridge = {
-  source: Source<string>;
+  source: Source<string | PreSerialized>;
   waiters: Map<number, Resolver<void, Error>>;
 };
 
@@ -277,13 +281,16 @@ class ForkedReplicator {
 
       for await (const {value, consumed} of pipeline) {
         const seq = ++this.#seq;
+        const raw = isPreSerialized(value)
+          ? value.payload.toString('utf-8')
+          : value;
         sendChild(this.#child, [
           'replication-resumption:downstream',
           {
             seq,
             msg: {
-              data: BigIntJSON.parse(value) as Downstream,
-              size: value.length,
+              data: BigIntJSON.parse(raw) as Downstream,
+              size: raw.length,
             },
           },
         ]);

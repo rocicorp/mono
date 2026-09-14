@@ -8,6 +8,7 @@ import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
 import type {
   ChangeTag,
   Downstream,
@@ -24,6 +25,7 @@ const DEFAULT_BACKLOG_LOW_WATER_RATIO = 0.8;
 export type SubscriberOptions = {
   backlogHighWaterBytes?: number | undefined;
   backlogLowWaterRatio?: number | undefined;
+  wsBatched?: boolean | undefined;
 
   /**
    * Called whenever the subscriber's acked watermark advances, i.e. when it
@@ -58,8 +60,9 @@ export class Subscriber {
   readonly #protocolVersion: number;
   readonly id: string;
   readonly mode: ReplicatorMode;
-  readonly #downstream: Subscription<string>;
+  readonly #downstream: Subscription<string | PreSerializedBatch>;
   readonly #latestStatus: () => Status;
+  readonly #wsBatched: boolean;
   #watermark: string;
   #acked: string;
   #backlog: RingBuffer<WatermarkedChange> | null;
@@ -78,7 +81,7 @@ export class Subscriber {
     id: string,
     mode: ReplicatorMode,
     watermark: string,
-    downstream: Subscription<string>,
+    downstream: Subscription<string | PreSerializedBatch>,
     latestStatus: () => Status,
     options: SubscriberOptions = {},
   ) {
@@ -87,6 +90,7 @@ export class Subscriber {
     this.mode = mode;
     this.#downstream = downstream;
     this.#latestStatus = latestStatus;
+    this.#wsBatched = options.wsBatched ?? false;
     this.#watermark = watermark;
     this.#acked = watermark;
     this.#backlog = new RingBuffer();
@@ -158,6 +162,52 @@ export class Subscriber {
       return this.#sendChange(change);
     }
     return promiseVoid;
+  }
+
+  sendBatch(
+    changes: readonly WatermarkedChange[],
+    preSerialized?: PreSerializedBatch | undefined,
+  ): Promise<void> {
+    if (changes.length === 0) {
+      return promiseVoid;
+    }
+
+    if (
+      this.#wsBatched &&
+      preSerialized &&
+      !this.#backlog &&
+      this.#initialized &&
+      changes[0][0] > this.#watermark &&
+      (this.#protocolVersion >= 5 ||
+        changes.every(c => this.supportsMessage(c[1])))
+    ) {
+      let commitWatermark: string | undefined;
+      for (let i = changes.length - 1; i >= 0; i--) {
+        if (changes[i][1] === 'commit') {
+          commitWatermark = changes[i][0];
+          break;
+        }
+      }
+      if (commitWatermark) {
+        this.#watermark = commitWatermark;
+      }
+      return this.#sendPreSerializedDownstream(preSerialized, commitWatermark);
+    }
+
+    const promises: Promise<void>[] = [];
+    for (const change of changes) {
+      const p = this.send(change);
+      if (p !== promiseVoid) {
+        promises.push(p);
+      }
+    }
+    if (promises.length === 0) {
+      return promiseVoid;
+    }
+    if (promises.length === 1) {
+      return promises[0];
+    }
+    return Promise.all(promises).then(() => {});
   }
 
   #initialized = false;
@@ -244,6 +294,30 @@ export class Subscriber {
       this.#pending--;
       this.#pendingBytes -= size;
       this.#processed++;
+    }
+  }
+
+  async #sendPreSerializedDownstream(
+    batch: PreSerializedBatch,
+    commitWatermark?: string | undefined,
+  ): Promise<void> {
+    const size = batch.byteLength;
+    this.#pending += batch.changes.length;
+    this.#pendingBytes += size;
+    const {result} = this.#downstream.push(batch);
+    try {
+      const outcome = await result;
+      if (commitWatermark && outcome === 'consumed') {
+        const acked = max(this.#acked, commitWatermark);
+        if (acked !== this.#acked) {
+          this.#acked = acked;
+          this.#onAck?.(acked);
+        }
+      }
+    } finally {
+      this.#pending -= batch.changes.length;
+      this.#pendingBytes -= size;
+      this.#processed += batch.changes.length;
     }
   }
 

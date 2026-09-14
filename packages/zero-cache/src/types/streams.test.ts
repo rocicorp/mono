@@ -15,11 +15,13 @@ import {randInt} from '../../../shared/src/rand.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {
+  isPreSerialized,
   stream,
   streamIn,
   streamInWithSize,
   streamOut,
   streamOutStringified,
+  type PreSerialized,
   type Sink,
   type Source,
 } from './streams.ts';
@@ -216,7 +218,7 @@ describe('streams with internal acks', () => {
 
   let server: FastifyInstance;
   let producer: Subscription<Message>;
-  let stringifiedProducer: Subscription<string>;
+  let stringifiedProducer: Subscription<string | PreSerialized>;
   let consumed: Queue<Message>;
   let cleanedUp: Promise<Message[]>;
   let cleanup: (m: Message[]) => void;
@@ -243,6 +245,10 @@ describe('streams with internal acks', () => {
     server.get('/', {websocket: true}, ws => {
       void streamOut(lc, producer, ws);
       void streamOutStringified(lc, stringifiedProducer, ws);
+    });
+    server.get('/batched', {websocket: true}, ws => {
+      void streamOut(lc, producer, ws, {batched: true});
+      void streamOutStringified(lc, stringifiedProducer, ws, {batched: true});
     });
 
     // Run the server for real instead of using `injectWS()`, as that has a
@@ -271,6 +277,26 @@ describe('streams with internal acks', () => {
 
   async function startSizedReceiver() {
     ws = new WebSocket(`http://localhost:${port}/`);
+    return {
+      ws,
+      consumer: await streamInWithSize(lc, ws, messageSchema),
+    };
+  }
+
+  async function startBatchedReceiver() {
+    ws = new WebSocket(`http://localhost:${port}/batched`);
+    return {
+      ws,
+      consumer: (await streamIn(
+        lc,
+        ws,
+        messageSchema,
+      )) as Subscription<Message>,
+    };
+  }
+
+  async function startBatchedSizedReceiver() {
+    ws = new WebSocket(`http://localhost:${port}/batched`);
     return {
       ws,
       consumer: await streamInWithSize(lc, ws, messageSchema),
@@ -582,5 +608,462 @@ describe('streams with internal acks', () => {
       err = e;
     }
     expect(err).toBeInstanceOf(Error);
+  });
+
+  describe('batched streaming', () => {
+    test('eagerly batches messages under burst traffic and preserves ACKs', async () => {
+      const rawFrames: Array<{id: number; msg?: Message; batch?: Message[]}> =
+        [];
+      const total = 50;
+
+      const {ws: clientWs, consumer} = await startBatchedReceiver();
+      clientWs.on('message', data => {
+        try {
+          rawFrames.push(JSON.parse(data.toString()));
+        } catch {
+          // ignore non-json
+        }
+      });
+
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'burst-' + i});
+      }
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+      for (let i = 0; i < total; i++) {
+        expect(received[i]).toEqual({from: i, to: i + 1, str: 'burst-' + i});
+        expect(await consumed.dequeue()).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'burst-' + i,
+        });
+      }
+
+      // Verify that batching actually happened: fewer frames than individual messages
+      expect(rawFrames.length).toBeLessThan(total);
+      expect(
+        rawFrames.some(f => Array.isArray(f.batch) && f.batch.length > 1),
+      ).toBe(true);
+    });
+
+    test('batched stringified stream', async () => {
+      const total = 25;
+      for (let i = 0; i < total; i++) {
+        stringifiedProducer.push(
+          JSON.stringify({from: i, to: i + 1, str: 'stringified-' + i}),
+        );
+      }
+
+      const {consumer} = await startBatchedReceiver();
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+      for (let i = 0; i < total; i++) {
+        expect(received[i]).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'stringified-' + i,
+        });
+      }
+    });
+
+    test('batched pre-serialized shared buffer stream', async () => {
+      const total = 20;
+      const batch1: Message[] = [];
+      const batch2: Message[] = [];
+      for (let i = 0; i < 10; i++) {
+        batch1.push({from: i, to: i + 1, str: 'preserialized-' + i});
+      }
+      for (let i = 10; i < total; i++) {
+        batch2.push({from: i, to: i + 1, str: 'preserialized-' + i});
+      }
+
+      const p1 = Buffer.from(
+        `,"batch":[${batch1.map(m => JSON.stringify(m)).join(',')}]}`,
+        'utf8',
+      );
+      const p2 = Buffer.from(
+        `,"batch":[${batch2.map(m => JSON.stringify(m)).join(',')}]}`,
+        'utf8',
+      );
+
+      const r1 = stringifiedProducer.push({payload: p1, byteLength: p1.length});
+      const r2 = stringifiedProducer.push({payload: p2, byteLength: p2.length});
+
+      const {consumer} = await startBatchedReceiver();
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+      for (let i = 0; i < total; i++) {
+        expect(received[i]).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'preserialized-' + i,
+        });
+      }
+
+      // Consuming all messages must resolve the push results via ACKs
+      expect(await r1.result).toBe('consumed');
+      expect(await r2.result).toBe('consumed');
+    });
+
+    test('single pre-serialized buffer stream', async () => {
+      const msg: Message = {from: 42, to: 43, str: 'single-preserialized'};
+      const payload = Buffer.from(`,"msg":${JSON.stringify(msg)}}`, 'utf8');
+
+      const {result} = stringifiedProducer.push({
+        payload,
+        byteLength: payload.length,
+      });
+
+      const {consumer} = await startReceiver();
+      for await (const received of consumer) {
+        expect(received).toEqual(msg);
+        break;
+      }
+
+      expect(await result).toBe('consumed');
+    });
+
+    test('isPreSerialized type guard', () => {
+      expect(
+        isPreSerialized({payload: Buffer.from('test'), byteLength: 4}),
+      ).toBe(true);
+      expect(isPreSerialized(null)).toBe(false);
+      expect(isPreSerialized(undefined)).toBe(false);
+      expect(isPreSerialized('string')).toBe(false);
+      expect(isPreSerialized({payload: 'not a buffer', byteLength: 4})).toBe(
+        false,
+      );
+    });
+
+    test('batched streaming with streamInWithSize assigns proportionate sizes', async () => {
+      const total = 20;
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'sized-' + i});
+      }
+
+      const {consumer} = await startBatchedSizedReceiver();
+      let count = 0;
+      for await (const {data, size} of consumer) {
+        expect(data).toEqual({
+          from: count,
+          to: count + 1,
+          str: 'sized-' + count,
+        });
+        expect(size).toBeGreaterThan(0);
+        count++;
+        if (count === total) {
+          break;
+        }
+      }
+      expect(count).toBe(total);
+    });
+
+    test('backward compatibility: receiver handles mixed msg and batch frames', async () => {
+      const {consumer} = await startReceiver();
+
+      // Send single frame
+      producer.push({from: 100, to: 101, str: 'single'});
+      for await (const msg of consumer) {
+        expect(msg).toEqual({from: 100, to: 101, str: 'single'});
+        break;
+      }
+      expect(await consumed.dequeue()).toEqual({
+        from: 100,
+        to: 101,
+        str: 'single',
+      });
+    });
+
+    test('receiver handles mixed msg and batch frames from raw websocket', async () => {
+      let serverWs: WebSocket | undefined;
+      const wsServer = Fastify();
+      await wsServer.register(websocket);
+      wsServer.get('/mixed', {websocket: true}, client => {
+        serverWs = client;
+      });
+      const mixedPort = 8000 + Math.floor(randInt(0, 1000));
+      await wsServer.listen({port: mixedPort});
+
+      const clientWs = new WebSocket(`http://localhost:${mixedPort}/mixed`);
+      const receiver = await streamIn(lc, clientWs, messageSchema);
+
+      await vi.waitFor(() => expect(serverWs).toBeDefined());
+
+      // Send single frame
+      serverWs?.send(
+        JSON.stringify({id: 1, msg: {from: 1, to: 2, str: 'single'}}),
+      );
+
+      // Send batched frame
+      serverWs?.send(
+        JSON.stringify({
+          id: 2,
+          batch: [
+            {from: 2, to: 3, str: 'batch-1'},
+            {from: 3, to: 4, str: 'batch-2'},
+          ],
+        }),
+      );
+
+      const received: Message[] = [];
+      for await (const msg of receiver) {
+        received.push(msg);
+        if (received.length === 3) {
+          break;
+        }
+      }
+
+      expect(received).toEqual([
+        {from: 1, to: 2, str: 'single'},
+        {from: 2, to: 3, str: 'batch-1'},
+        {from: 3, to: 4, str: 'batch-2'},
+      ]);
+
+      await wsServer.close();
+    });
+  });
+
+  describe('cumulative acknowledgment protocol', () => {
+    function createAckSpy(ws: WebSocket) {
+      const acksSent: number[] = [];
+      const originalSend = ws.send.bind(ws);
+      ws.send = (
+        data: Parameters<WebSocket['send']>[0],
+        ...rest: unknown[]
+      ) => {
+        try {
+          const parsed = JSON.parse(data.toString());
+          if (typeof parsed.ack === 'number') {
+            acksSent.push(parsed.ack);
+          }
+        } catch {
+          // ignore non-json
+        }
+        return (originalSend as (...args: unknown[]) => void)(data, ...rest);
+      };
+      return acksSent;
+    }
+
+    test('coalesces reverse frames and retires multiple in-flight frames simultaneously', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const acksSent = createAckSpy(ws);
+      const consumer = (await streamIn(lc, ws, messageSchema, {
+        cumulativeAck: true,
+        maxAckStride: 16,
+      })) as Subscription<Message>;
+
+      const total = 32;
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'cumul-' + i});
+      }
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+
+      // Verify all 32 messages were acknowledged and retired on producer
+      for (let i = 0; i < total; i++) {
+        expect(await consumed.dequeue()).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'cumul-' + i,
+        });
+      }
+
+      // Instead of 32 individual ACKs, the receiver sent dramatically fewer frames (e.g. 2 ACKs: 16 and 32)
+      expect(acksSent.length).toBeLessThanOrEqual(4);
+      expect(acksSent.at(-1)).toBe(total);
+    });
+
+    test('turn coalescing flushes single cumulative ACK for small burst', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const acksSent = createAckSpy(ws);
+      const consumer = (await streamIn(lc, ws, messageSchema, {
+        cumulativeAck: true,
+        maxAckStride: 16,
+      })) as Subscription<Message>;
+
+      const total = 5;
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'turn-' + i});
+      }
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+
+      for (let i = 0; i < total; i++) {
+        expect(await consumed.dequeue()).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'turn-' + i,
+        });
+      }
+
+      // Turn coalescing reduces ACK messages (< total)
+      expect(acksSent.length).toBeLessThan(total);
+      expect(acksSent.at(-1)).toBe(total);
+    });
+
+    test('backward compatibility: sender handles legacy 1:1 ACKs sequentially', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const acksSent = createAckSpy(ws);
+      // Legacy receiver without cumulativeAck
+      const consumer = (await streamIn(
+        lc,
+        ws,
+        messageSchema,
+      )) as Subscription<Message>;
+
+      const total = 6;
+      for (let i = 0; i < total; i++) {
+        producer.push({from: i, to: i + 1, str: 'legacy-' + i});
+      }
+
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+      for (let i = 0; i < total; i++) {
+        expect(await consumed.dequeue()).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'legacy-' + i,
+        });
+      }
+
+      // 1:1 legacy receiver sent an ACK for every single message
+      expect(acksSent).toEqual([1, 2, 3, 4, 5, 6]);
+    });
+
+    test('duplicate ACKs are gracefully ignored by sliding window sender', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const consumer = (await streamIn(
+        lc,
+        ws,
+        messageSchema,
+      )) as Subscription<Message>;
+
+      producer.push({from: 0, to: 1, str: 'dup-0'});
+
+      let num = 0;
+      for await (const msg of consumer) {
+        if (num > 0) {
+          expect(await consumed.dequeue()).toEqual({
+            from: num - 1,
+            to: num,
+            str: `dup-${num - 1}`,
+          });
+        }
+        expect(msg).toEqual({from: num, to: num + 1, str: `dup-${num}`});
+
+        if (num === 1) {
+          // Resend duplicate ACK for frame 1
+          ws.send(JSON.stringify({ack: 1}));
+          await sleep(10);
+        }
+
+        if (num === 2) {
+          break;
+        }
+        num++;
+        producer.push({from: num, to: num + 1, str: `dup-${num}`});
+      }
+
+      expect(await consumed.dequeue()).toEqual({
+        from: 2,
+        to: 3,
+        str: 'dup-2',
+      });
+    });
+
+    test('contiguous watermark tracking advances only on contiguous completed IDs', async () => {
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const acksSent = createAckSpy(ws);
+      const consumer = (await streamIn(lc, ws, messageSchema, {
+        cumulativeAck: true,
+        maxAckStride: 1,
+      })) as Subscription<Message>;
+
+      producer.push({from: 0, to: 1, str: 'frame-1'});
+      producer.push({from: 1, to: 2, str: 'frame-2'});
+      producer.push({from: 2, to: 3, str: 'frame-3'});
+
+      const pipelined = consumer.pipeline!;
+      const it = pipelined[Symbol.asyncIterator]();
+
+      const item1 = (await it.next()).value!;
+      const item2 = (await it.next()).value!;
+      const item3 = (await it.next()).value!;
+
+      // Consume item 1 -> contiguous watermark becomes 1
+      item1.consumed();
+      await vi.waitFor(() => expect(acksSent).toEqual([1]));
+
+      // Out of order: consume item 3 before item 2
+      item3.consumed();
+      await sleep(20);
+      // ACK must NOT advance to 3 because frame 2 is still missing!
+      expect(acksSent).toEqual([1]);
+
+      // Now consume item 2 -> contiguous watermark jumps to 3!
+      item2.consumed();
+      await vi.waitFor(() => expect(acksSent).toEqual([1, 3]));
+
+      consumer.cancel();
+    });
+
+    test('protocol error: ACK with id < 1 terminates connection', async () => {
+      producer.push({from: 0, to: 1, str: 'zero-ack'});
+      ws = new WebSocket(`http://localhost:${port}/`);
+      const closed = resolver<void>();
+      ws.on('close', () => closed.resolve());
+
+      ws.once('message', () => {
+        ws.send(JSON.stringify({ack: 0}));
+      });
+
+      await closed.promise;
+      expect(await cleanedUp).toEqual([{from: 0, to: 1, str: 'zero-ack'}]);
+    });
   });
 });

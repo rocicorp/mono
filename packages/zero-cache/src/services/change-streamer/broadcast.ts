@@ -1,9 +1,31 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {must} from '../../../../shared/src/must.ts';
+import type {PreSerialized} from '../../types/streams.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
 export type BroadcastReleaseMode = 'all-subscribers' | 'consensus-timeout';
+
+export type PreSerializedBatch = PreSerialized & {
+  readonly changes: readonly WatermarkedChange[];
+};
+
+export function preSerializeBatch(
+  changes: readonly WatermarkedChange[],
+): PreSerializedBatch {
+  const jsonList = changes.map(c => c[2]);
+  const joined = jsonList.join(',');
+  const payload = Buffer.from(
+    changes.length === 1 ? `,"msg":${jsonList[0]}}` : `,"batch":[${joined}]}`,
+    'utf8',
+  );
+  return {
+    changes,
+    payload,
+    byteLength: payload.length,
+  };
+}
 
 /**
  * Enables event-driven early release of a {@link Broadcast}. When provided and a
@@ -83,10 +105,12 @@ export class Broadcast {
    */
   static withoutTracking(
     subscribers: Iterable<Subscriber>,
-    change: WatermarkedChange,
+    change: WatermarkedChange | readonly WatermarkedChange[],
   ) {
+    const changes = toBatch(change);
+    const preSerialized = preSerializeBatch(changes);
     for (const sub of subscribers) {
-      void sub.send(change);
+      void sub.sendBatch(changes, preSerialized);
     }
   }
 
@@ -121,13 +145,15 @@ export class Broadcast {
   constructor(
     lc: LogContext,
     subscribers: Iterable<Subscriber>,
-    change: WatermarkedChange,
+    change: WatermarkedChange | readonly WatermarkedChange[],
     earlyRelease?: EarlyReleaseOptions,
   ) {
+    const changes = toBatch(change);
+    const preSerialized = preSerializeBatch(changes);
     this.#lc = lc;
     this.#pending = new Set(subscribers);
     this.#completed = [];
-    this.#watermark = change[0];
+    this.#watermark = must(changes.at(-1))[0];
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
     this.#earlyReleaseTimeoutProportion =
       earlyRelease?.consensusTimeoutProportion;
@@ -135,16 +161,16 @@ export class Broadcast {
     this.#clearTimeout = earlyRelease?.clearTimeoutFn ?? clearTimeout;
 
     for (const sub of this.#pending) {
-      const changes = sub.numPending + 1; // add one for this `change`
+      const totalChanges = sub.numPending + changes.length;
       if (sub.mode === 'backup') {
         // Only gate consensus on the backup-replicator after it has finished
         // its initial catchup.
         this.#needsBackupResponse ||= !sub.isBacklogged();
       }
       void sub
-        .send(change)
+        .sendBatch(changes, preSerialized)
         .catch(() => {})
-        .finally(() => this.#markCompleted(sub, changes));
+        .finally(() => this.#markCompleted(sub, totalChanges));
     }
 
     // set done if there are no subscribers (mainly for tests)
@@ -259,3 +285,14 @@ type Completed = {
   /** The elapsed milliseconds. */
   elapsed: number;
 };
+
+function toBatch(
+  change: WatermarkedChange | readonly WatermarkedChange[],
+): readonly WatermarkedChange[] {
+  if (change.length === 0) {
+    return [];
+  }
+  return Array.isArray(change[0])
+    ? (change as readonly WatermarkedChange[])
+    : [change as WatermarkedChange];
+}
