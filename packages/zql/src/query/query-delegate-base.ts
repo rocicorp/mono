@@ -431,7 +431,10 @@ export function materializeImpl<
   // server has confirmed the query on this connection, 'complete' supersedes
   // it and the mark is skipped.
   const maybeMarkCached = () => {
-    if (attached && got === 'cached' && queryComplete !== true) {
+    // Only while the query is still incomplete: 'complete' supersedes the
+    // mark, and an error that arrived before attach must not be preceded by
+    // a 'cached' notification.
+    if (attached && got === 'cached' && queryComplete === false) {
       viewForCached?.markCached?.();
     }
   };

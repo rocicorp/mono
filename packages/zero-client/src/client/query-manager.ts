@@ -53,6 +53,10 @@ type Entry = {
   ttl: TTL;
 };
 
+// A thrown value, boxed so that `throw undefined` is still distinguishable
+// from "nothing thrown".
+type ThrownBy = {readonly error: unknown};
+
 type ClientMetric = {
   [K in keyof ClientMetricMap]: TDigest;
 };
@@ -153,7 +157,7 @@ export class QueryManager implements InspectorDelegate {
         // A throwing callback must not leave the rest of the diff unapplied,
         // or later keys would never enter the got set. The first error is
         // rethrown once the sets are consistent.
-        let thrown: unknown;
+        let thrown: ThrownBy | undefined;
         const fire = (queryHash: string, got: boolean | 'cached') => {
           const e = this.#fireGotCallbacks(queryHash, got);
           thrown ??= e;
@@ -177,8 +181,8 @@ export class QueryManager implements InspectorDelegate {
               break;
           }
         }
-        if (thrown !== undefined) {
-          throw thrown;
+        if (thrown) {
+          throw thrown.error;
         }
       },
       {
@@ -211,17 +215,17 @@ export class QueryManager implements InspectorDelegate {
   #fireGotCallbacks(
     queryHash: string,
     got: boolean | 'cached',
-  ): unknown | undefined {
+  ): ThrownBy | undefined {
     const entry = this.#queries.get(queryHash);
     if (!entry) {
       return undefined;
     }
-    let thrown: unknown;
+    let thrown: ThrownBy | undefined;
     for (const gotCallback of entry.gotCallbacks) {
       try {
         gotCallback(got);
-      } catch (e) {
-        thrown ??= e;
+      } catch (error) {
+        thrown ??= {error};
       }
     }
     return thrown;
@@ -244,15 +248,15 @@ export class QueryManager implements InspectorDelegate {
     // initial run), the next diff is live too.
     this.#cachedQueries.clear();
     this.#awaitingPersistedGotDiff = false;
-    let thrown: unknown;
+    let thrown: ThrownBy | undefined;
     for (const queryHash of this.#queries.keys()) {
       if (this.#gotQueries.has(queryHash)) {
         const e = this.#fireGotCallbacks(queryHash, true);
         thrown ??= e;
       }
     }
-    if (thrown !== undefined) {
-      throw thrown;
+    if (thrown) {
+      throw thrown.error;
     }
   }
 

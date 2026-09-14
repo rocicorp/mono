@@ -146,10 +146,11 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
    * Whether to suspend until:
    * - 'partial': the query has partial results (partial array or defined
    *   value for singular results) which may be of result type 'unknown',
-   *   or the query result type is 'complete' (in which case results may be
-   *   empty).  This is useful for suspending until there are partial
-   *   optimistic local results, or the query has completed loading from the
-   *   server.
+   *   or the query result type is 'complete' or 'cached' (in which case
+   *   results may be empty: a server-confirmed empty answer, from this
+   *   connection or a previous one, is something to render). This is useful
+   *   for suspending until there are partial optimistic local results, or
+   *   the query has completed loading from the server.
    * - 'complete': the query result type is 'complete'.
    *
    * Default is 'partial'.
