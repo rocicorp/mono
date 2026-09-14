@@ -233,6 +233,58 @@ pnpm --filter zero-throughput start -- \
   --duration-ms 30000
 ```
 
+## Upstream PostgreSQL & Aurora Tuning for High-Throughput Benchmarks
+
+When benchmarking write rates above **2,000–3,000 writes/sec**, upstream PostgreSQL logical replication ingestion (`walsender` / `pg_logical`) often becomes the system bottleneck before Zero's downstream pipeline does. Default PostgreSQL and AWS Aurora configurations are tuned for standard OLTP workloads and will encounter logical decoding stalls, WAL cache evictions, and disk spilling under sustained high-throughput replication.
+
+### 1. Amazon Aurora PostgreSQL Tuning
+
+Amazon Aurora uses a distributed storage architecture ("the log is the database") rather than local disk WAL. Traditional PostgreSQL parameters like `max_wal_size` and `checkpoint_timeout` do not exist in Aurora parameter groups because Aurora manages WAL volume and crash-recovery checkpoints automatically in the storage tier.
+
+Instead, Aurora logical replication performance is governed by Aurora-specific memory buffers:
+
+#### DB Cluster Parameter Group Settings
+
+Create a custom **DB Cluster Parameter Group** (family `aurora-postgresql<version>`, e.g., `aurora-pg17-zero-high-throughput`) and tune:
+
+| Parameter                               |     Default     |               Recommended                |            Type            | Impact                                                                                                                                                                                                                                   |
+| :-------------------------------------- | :-------------: | :--------------------------------------: | :------------------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`rds.logical_wal_cache`**             |  `512` (4 MB)   | **`65536` (512 MB)** or `32768` (256 MB) | Static (_Reboot required_) | Dedicated shared-memory buffer for logical decoding in RAM. Units are 8 KB pages (`65536` = 512 MB). Keeps WAL blocks in memory during decoding, completely eliminating storage fleet I/O stalls during high write bursts. Essential for sustaining >2,500 writes/sec. |
+| **`rds.logical_slot_prefetch_max`**     |  `32` (256 KB)  |             **`256` (2 MB)**             | Dynamic / Cluster          | WAL read-ahead buffer in 8 KB pages. `256` (2 MB) provides optimal pipelining with fastest backlog drain slope (-72 seq/s). **Do not set to 1024 (8 MB)**, which adds +500–1,500 ms of lookahead batching delay inside `walsender`.   |
+| **`logical_decoding_work_mem`**         | `65536` (64 MB) |          **`524288` (512 MB)**           |          Dynamic           | Sets RAM available to transaction `reorderbuffer`. At default 64 MB, concurrent batch transactions exceed memory and spill decoded changes to disk (`pg_replslot/`), stalling the replication stream.                                    |
+| **`aurora.enhanced_logical_replication`** |      `0`        |           **`0` (Keep Off)**             | Static (_Reboot required_) | **Aurora ELR Engine.** In empirical testing at 3,000+ writes/s, ELR degraded performance: it bypasses `rds.logical_wal_cache` and reads over network storage, increasing replication lag by +500–1,000 ms and breaking slot failover.   |
+| **`aurora.logical_replication_backup`**   |      `1`        |            **`1` (Keep On)**             | Dynamic / Cluster          | Mirrors replication slots to read replicas for zero-resync failovers in Multi-AZ clusters. Keep enabled (`1`).                                                                                                                           |
+
+> **Empirical Finding on Aurora ELR vs. RAM Cache**: We evaluated AWS Aurora's Enhanced Logical Replication (`aurora.enhanced_logical_replication = 1`) at 3,200 writes/sec. ELR bypasses Aurora's local shared RAM cache (`rds.logical_wal_cache` becomes inactive / 0 MB) and streams WAL across the distributed storage network, causing replication lag to jump from 1.7s to 2.4–3.4s and turning the lag slope positive (+40 seq/s accumulation). Keeping ELR disabled (`0`) while provisioning `rds.logical_wal_cache = 65536` (512 MB) in shared memory delivered the lowest replication lag (441 ms at 3,100 w/s) and preserves Multi-AZ automated slot failover.
+
+#### Session / Database-Level Overrides via SQL
+
+If you cannot immediately modify the AWS Cluster Parameter Group or reboot, you can apply several key decoding parameters directly to the database role:
+
+```sql
+-- Increase logical decoding memory in RAM (prevents disk spills)
+ALTER DATABASE postgres SET logical_decoding_work_mem = '524288kB';
+ALTER ROLE postgres SET logical_decoding_work_mem = '524288kB';
+
+-- Tune the AWS RDS WAL prefetch read-ahead buffer (default is 32 / 256 KB)
+-- 256 = 2 MB (optimal balance; avoid 1024+ which adds lookahead batching delay)
+ALTER DATABASE postgres SET "rds.logical_slot_prefetch_max" = 256; -- 2 MB
+ALTER ROLE postgres SET "rds.logical_slot_prefetch_max" = 256;
+```
+
+After modifying role-level settings, terminate any existing replication backend (`SELECT pg_terminate_backend(pid) FROM pg_stat_replication;`) to allow Zero's replication connection to reconnect and initialize with the new parameters.
+
+### 2. Standard PostgreSQL & Non-Aurora RDS Tuning
+
+When running against vanilla PostgreSQL (e.g. Docker, EC2, or standard RDS PostgreSQL):
+
+| Parameter                       | Default  |      Recommended       |      Context       | Impact                                                                             |
+| :------------------------------ | :------: | :--------------------: | :----------------: | :--------------------------------------------------------------------------------- |
+| **`max_wal_size`**              |  `1 GB`  | **`16 GB`** or `32 GB` | Dynamic (`sighup`) | Prevents aggressive out-of-schedule checkpoints when WAL fills rapidly under load. |
+| **`checkpoint_timeout`**        | `5 min`  |      **`15 min`**      | Dynamic (`sighup`) | Smooths out dirty-buffer disk flush bursts during benchmark runs.                  |
+| **`wal_writer_delay`**          | `200 ms` |      **`10 ms`**       | Dynamic (`sighup`) | Flushes WAL in smaller, frequent increments, reducing stream jitter.               |
+| **`logical_decoding_work_mem`** | `64 MB`  |      **`512 MB`**      |  Dynamic (`user`)  | Keeps batch transaction reordering fully in memory.                                |
+
 ## Benchmarking an Already-Running Zero Stack or Database
 
 By default, the benchmark harness operates in self-contained mode: it spins up a local PostgreSQL Docker container on port `6436`, provisions schemas, and launches local `zero-cache` process trees.
