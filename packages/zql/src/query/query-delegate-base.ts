@@ -322,17 +322,29 @@ export function preloadImpl<
 } {
   const qi = asQueryInternals(query);
   const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
-  const {resolve: resolveComplete, promise: complete} = resolver<void>();
-  const {resolve: resolveCached, promise: cached} = resolver<void>();
+  const completeResolver = resolver<void>();
+  const cachedResolver = resolver<void>();
+  const {promise: complete} = completeResolver;
+  const {promise: cached} = cachedResolver;
+  // A caller may ignore either promise; a query error must not surface as an
+  // unhandled rejection through the one nobody awaits.
+  void complete.catch(() => {});
+  void cached.catch(() => {});
   const {customQueryID, ast} = qi;
-  const gotCallback: GotCallback = got => {
+  const gotCallback: GotCallback = (got, error) => {
+    if (error) {
+      // The query cannot be satisfied; neither waiter should hang.
+      cachedResolver.reject(error);
+      completeResolver.reject(error);
+      return;
+    }
     // Only a server confirmation on this connection resolves `complete`;
     // `cached` is also satisfied by one from a previous connection.
     if (got === true) {
-      resolveCached();
-      resolveComplete();
+      cachedResolver.resolve();
+      completeResolver.resolve();
     } else if (got === 'cached') {
-      resolveCached();
+      cachedResolver.resolve();
     }
   };
   const cleanup = customQueryID

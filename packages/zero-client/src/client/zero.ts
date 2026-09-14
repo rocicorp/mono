@@ -879,10 +879,16 @@ export class Zero<
 
     this.#pokeHandler = new PokeHandler(
       async poke => {
+        const socket = this.#socket;
         await this.#rep.poke(poke);
         // poke() fires the got-queries watch synchronously, so `#gotQueries` is
         // up to date and safe to trust now that the server has caught us up.
-        this.#queryManager.markGotQueriesAuthoritative();
+        // Unless the connection went away while the poke was applied: the
+        // disconnect already re-gated trust, and the next connection's first
+        // poke must be the one to restore it.
+        if (socket !== undefined && this.#socket === socket) {
+          this.#queryManager.markGotQueriesAuthoritative();
+        }
       },
       e => this.#onPokeError(e),
       rep.clientID,

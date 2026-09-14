@@ -1,6 +1,7 @@
 import {describe, expect, test, vi} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {makeSourceChangeAdd} from '../ivm/source.ts';
 import {consume} from '../ivm/stream.ts';
 import type {GotCallback} from './query-delegate.ts';
@@ -180,6 +181,23 @@ describe('cached result type', () => {
     );
     delegate.lastGot(true);
     await Promise.all([cached, complete]);
+    cleanup();
+  });
+
+  test('preload() rejects both waiters on a query error', async () => {
+    const delegate = newDelegate();
+    const {complete, cached, cleanup} = delegate.preload(
+      newQuery(schema, 'issue'),
+    );
+    const error: ErroredQuery = {
+      error: 'app',
+      id: 'q',
+      name: 'issue',
+      message: 'boom',
+    };
+    must(delegate.gotCallbacks.at(-1))(false, error);
+    await expect(cached).rejects.toBe(error);
+    await expect(complete).rejects.toBe(error);
     cleanup();
   });
 
