@@ -186,6 +186,26 @@ describe('ConnectionSource', () => {
     expect(source.current).toStrictEqual({name: 'connected'});
   });
 
+  test('exposes initializing, then notifies when it becomes connecting', () => {
+    manager = {
+      state: {name: ConnectionStatus.Initializing},
+      subscribe: subscribeMock,
+    } as unknown as ConnectionManager;
+    const source = new ConnectionSource(manager);
+    const listener = vi.fn();
+    source.subscribe(listener);
+
+    expect(source.current).toStrictEqual({name: 'initializing'});
+
+    for (const l of managerListeners) {
+      l({name: ConnectionStatus.Connecting, attempt: 0, disconnectAt: 0});
+    }
+
+    expect(source.current).toStrictEqual({name: 'connecting'});
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({name: 'connecting'});
+  });
+
   test('subscribes to manager in constructor', () => {
     new ConnectionSource(manager);
 
