@@ -193,6 +193,7 @@ export default async function runWorker(
               {backupV5: litestream.backupUsingV5},
               purgeLock,
               upstream.pgStreamInboundTimeoutMs,
+              upstream.pgTextReplication,
             )
           : await initializeCustomChangeSource(
               lc,
