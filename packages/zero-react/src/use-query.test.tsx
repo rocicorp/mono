@@ -612,6 +612,148 @@ describe('ViewStore', () => {
       cleanup();
     });
   });
+
+  describe('cached result type', () => {
+    test('plural: empty cached snapshots are shared and stable', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      listeners.forEach(cb => cb([], 'cached'));
+      const snapshot1 = view.getSnapshot();
+      expect(snapshot1).toEqual([[], {type: 'cached'}]);
+
+      listeners.forEach(cb => cb([], 'cached'));
+      const snapshot2 = view.getSnapshot();
+      expect(snapshot1).toBe(snapshot2);
+
+      listeners.forEach(cb => cb([{a: 1}], 'cached'));
+      expect(view.getSnapshot()).toEqual([[{a: 1}], {type: 'cached'}]);
+
+      listeners.forEach(cb => cb([{a: 1}], 'complete'));
+      expect(view.getSnapshot()).toEqual([[{a: 1}], {type: 'complete'}]);
+
+      cleanup();
+    });
+
+    test('singular: empty cached snapshots are shared and stable', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1', true);
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      listeners.forEach(cb => cb(undefined, 'cached'));
+      const snapshot1 = view.getSnapshot();
+      expect(snapshot1).toEqual([undefined, {type: 'cached'}]);
+
+      listeners.forEach(cb => cb(undefined, 'cached'));
+      const snapshot2 = view.getSnapshot();
+      expect(snapshot1).toBe(snapshot2);
+
+      listeners.forEach(cb => cb({a: 1}, 'cached'));
+      expect(view.getSnapshot()).toEqual([{a: 1}, {type: 'cached'}]);
+
+      listeners.forEach(cb => cb({a: 1}, 'complete'));
+      expect(view.getSnapshot()).toEqual([{a: 1}, {type: 'complete'}]);
+
+      cleanup();
+    });
+
+    test('empty cached result satisfies nonEmpty but not complete', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      // A server-confirmed empty result from a previous session is enough
+      // for suspendUntil: 'partial' to render while offline.
+      listeners.forEach(cb => cb([], 'cached'));
+      expect(view.nonEmpty).toBe(true);
+      expect(view.complete).toBe(false);
+
+      cleanup();
+    });
+
+    test('a revoked empty cached result suspends again', async () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      listeners.forEach(cb => cb([], 'cached'));
+      expect(view.nonEmpty).toBe(true);
+
+      // The got key was evicted before this connection confirmed the query.
+      listeners.forEach(cb => cb([], 'unknown'));
+      expect(view.nonEmpty).toBe(false);
+      let resolved = false;
+      void view.waitForNonEmpty().then(() => {
+        resolved = true;
+      });
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      listeners.forEach(cb => cb([{a: 1}], 'unknown'));
+      expect(view.nonEmpty).toBe(true);
+      await Promise.resolve();
+      expect(resolved).toBe(true);
+
+      cleanup();
+    });
+
+    test('cached does not satisfy complete-waiters', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      listeners.forEach(cb => cb([{a: 1}], 'cached'));
+      // 'cached' is last session's server-confirmed answer; only a
+      // confirmation on THIS connection may report complete.
+      expect(view.complete).toBe(false);
+
+      listeners.forEach(cb => cb([{a: 1}], 'complete'));
+      expect(view.complete).toBe(true);
+
+      cleanup();
+    });
+  });
 });
 
 describe('stable query identity', () => {

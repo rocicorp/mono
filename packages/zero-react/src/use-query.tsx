@@ -146,10 +146,11 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
    * Whether to suspend until:
    * - 'partial': the query has partial results (partial array or defined
    *   value for singular results) which may be of result type 'unknown',
-   *   or the query result type is 'complete' (in which case results may be
-   *   empty).  This is useful for suspending until there are partial
-   *   optimistic local results, or the query has completed loading from the
-   *   server.
+   *   or the query result type is 'complete' or 'cached' (in which case
+   *   results may be empty: a server-confirmed empty answer, from this
+   *   connection or a previous one, is something to render). This is useful
+   *   for suspending until there are partial optimistic local results, or
+   *   the query has completed loading from the server.
    * - 'complete': the query result type is 'complete'.
    *
    * Default is 'partial'.
@@ -333,6 +334,7 @@ const emptyArray: unknown[] = [];
 const disabledSubscriber = () => () => {};
 
 const resultTypeUnknown = {type: 'unknown'} as const;
+const resultTypeCached = {type: 'cached'} as const;
 const resultTypeComplete = {type: 'complete'} as const;
 const resultTypeError = {type: 'error'} as const;
 
@@ -340,9 +342,11 @@ const disabledQuerySnapshot = [undefined, resultTypeUnknown] as const;
 const getDisabledSnapshot = () => disabledQuerySnapshot;
 
 const emptySnapshotSingularUnknown = [undefined, resultTypeUnknown] as const;
+const emptySnapshotSingularCached = [undefined, resultTypeCached] as const;
 const emptySnapshotSingularComplete = [undefined, resultTypeComplete] as const;
 const emptySnapshotSingularErrorUnknown = [undefined, resultTypeError] as const;
 const emptySnapshotPluralUnknown = [emptyArray, resultTypeUnknown] as const;
+const emptySnapshotPluralCached = [emptyArray, resultTypeCached] as const;
 const emptySnapshotPluralComplete = [emptyArray, resultTypeComplete] as const;
 const emptySnapshotErrorUnknown = [emptyArray, resultTypeError] as const;
 
@@ -377,6 +381,8 @@ function getSnapshot<TReturn>(
         return emptySnapshotSingularComplete as unknown as QueryResult<TReturn>;
       case 'unknown':
         return emptySnapshotSingularUnknown as unknown as QueryResult<TReturn>;
+      case 'cached':
+        return emptySnapshotSingularCached as unknown as QueryResult<TReturn>;
     }
   }
 
@@ -394,6 +400,8 @@ function getSnapshot<TReturn>(
         return emptySnapshotPluralComplete as unknown as QueryResult<TReturn>;
       case 'unknown':
         return emptySnapshotPluralUnknown as unknown as QueryResult<TReturn>;
+      case 'cached':
+        return emptySnapshotPluralCached as unknown as QueryResult<TReturn>;
     }
   }
 
@@ -415,6 +423,8 @@ function getSnapshot<TReturn>(
       return [data, resultTypeComplete];
     case 'unknown':
       return [data, resultTypeUnknown];
+    case 'cached':
+      return [data, resultTypeCached];
   }
 }
 
@@ -658,6 +668,7 @@ class ViewWrapper<
     // applyChange now returns immutable data structures, so no deep clone needed.
     // Unchanged rows preserve their object identity for React.memo optimization.
     const data = snap as HumanReadable<TReturn>;
+    const wasCached = this.#snapshot[1].type === 'cached';
     this.#snapshot = getSnapshot(
       this.#singular,
       data,
@@ -672,13 +683,21 @@ class ViewWrapper<
       this.#nonEmptyResolver.resolve();
     }
 
-    if (
-      this.#singular
-        ? this.#snapshot[0] !== undefined
-        : (this.#snapshot[0] as unknown[]).length !== 0
-    ) {
+    const hasData = this.#singular
+      ? this.#snapshot[0] !== undefined
+      : (this.#snapshot[0] as unknown[]).length !== 0;
+    // A 'cached' result is the server-confirmed answer from a previous
+    // session, so even an empty one is something to render. It never
+    // satisfies `complete`; only a confirmation on this connection does.
+    if (resultType === 'cached' || hasData) {
       this.#nonEmpty = true;
       this.#nonEmptyResolver.resolve();
+    } else if (wasCached && resultType === 'unknown') {
+      // The cached claim was revoked (the got key was evicted before this
+      // connection confirmed the query) and the view is empty: there is
+      // nothing to render again until rows or a confirmation arrive.
+      this.#nonEmpty = false;
+      this.#nonEmptyResolver = resolver();
     }
 
     for (const internals of this.#reactInternals) {

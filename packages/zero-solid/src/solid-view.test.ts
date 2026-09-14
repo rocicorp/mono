@@ -2450,6 +2450,110 @@ test('queryComplete promise', async () => {
   expect(resultDetails()).toEqual({type: 'complete'});
 });
 
+test('cached result type', async () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  consume(ms.push(makeSourceChangeAdd({a: 1, b: 'a'})));
+
+  const queryCompleteResolver = resolver<true>();
+
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const resultDetails = () => state[1];
+
+  const view = new SolidView(
+    ms.connect([['a', 'asc']]),
+    () => {},
+    {singular: false, relationships: {}},
+    () => {},
+    queryCompleteResolver.promise,
+    () => {},
+    setState,
+    () => {},
+  );
+
+  // The store holds a previous connection's confirmed result.
+  view.markCached();
+  expect(resultDetails()).toEqual({type: 'cached'});
+  expect(state[0]['']).toMatchObject([{a: 1, b: 'a'}]);
+
+  // The got key was evicted before this connection confirmed it, then the
+  // persisted set was reloaded.
+  view.unmarkCached();
+  expect(resultDetails()).toEqual({type: 'unknown'});
+  view.markCached();
+  expect(resultDetails()).toEqual({type: 'cached'});
+
+  // A confirmation on this connection supersedes it and is never downgraded.
+  queryCompleteResolver.resolve(true);
+  await Promise.resolve();
+  expect(resultDetails()).toEqual({type: 'complete'});
+  view.markCached();
+  view.unmarkCached();
+  expect(resultDetails()).toEqual({type: 'complete'});
+});
+
+test('cached result type waits for uncommitted rows', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+
+  let commit: () => void = () => {};
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+
+  const view = new SolidView(
+    ms.connect([['a', 'asc']]),
+    cb => {
+      commit = cb;
+    },
+    {singular: false, relationships: {}},
+    () => {},
+    resolver<true>().promise,
+    () => {},
+    setState,
+    () => {},
+  );
+
+  // Rows pushed but not yet committed, as during a deferred attach.
+  consume(ms.push(makeSourceChangeAdd({a: 1, b: 'a'})));
+  view.markCached();
+  expect(state[1]).toEqual({type: 'unknown'});
+  expect(state[0]['']).toEqual([]);
+
+  // The claim lands together with the rows.
+  commit();
+  expect(state[1]).toEqual({type: 'cached'});
+  expect(state[0]['']).toMatchObject([{a: 1, b: 'a'}]);
+
+  // With nothing pending the transition is immediate.
+  view.unmarkCached();
+  expect(state[1]).toEqual({type: 'unknown'});
+
+  // The last transition requested before a commit wins.
+  consume(ms.push(makeSourceChangeAdd({a: 2, b: 'b'})));
+  view.markCached();
+  view.unmarkCached();
+  view.markCached();
+  expect(state[1]).toEqual({type: 'unknown'});
+  commit();
+  expect(state[1]).toEqual({type: 'cached'});
+  expect(state[0]['']).toMatchObject([{a: 1}, {a: 2}]);
+});
+
 const schema = createSchema({
   tables: [
     table('test')

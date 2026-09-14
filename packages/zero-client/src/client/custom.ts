@@ -201,8 +201,8 @@ export function makeReplicacheMutator<
 function assertValidRunOptions(options: RunOptions | undefined): void {
   // TODO(arv): We should enforce this with the type system too.
   assert(
-    options?.type !== 'complete',
-    'Cannot wait for complete results in custom mutations',
+    options?.type !== 'complete' && options?.type !== 'cached',
+    'Cannot wait for cached or complete results in custom mutations',
   );
 }
 
