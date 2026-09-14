@@ -1,3 +1,4 @@
+import {makeEmptyIteratorWithReturn} from '../../../shared/src/iterables.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import {type Node} from './data.ts';
@@ -35,8 +36,11 @@ export class Filter implements FilterOperator {
     this.#output.endFilter();
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
-    return this.#predicate(node.row) && (yield* this.#output.filter(node));
+  filter(node: Node): Generator<'yield', boolean> {
+    if (this.#predicate(node.row)) {
+      return this.#output.filter(node);
+    }
+    return emptyGeneratorReturnFalse;
   }
 
   setFilterOutput(output: FilterOutput) {
@@ -51,7 +55,9 @@ export class Filter implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  *push(change: Change) {
-    yield* filterPush(change, this.#output, this, this.#predicate);
+  push(change: Change) {
+    return filterPush(change, this.#output, this, this.#predicate);
   }
 }
+
+const emptyGeneratorReturnFalse = makeEmptyIteratorWithReturn(false);

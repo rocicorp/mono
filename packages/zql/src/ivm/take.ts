@@ -453,15 +453,14 @@ export class Take implements Operator {
     );
     const newCmp = compareRows(change[ChangeIndex.NODE].row, takeState.bound);
 
-    const that = this;
-    const replaceBoundAndForwardChange = function* () {
-      that.#setTakeState(
+    const replaceBoundAndForwardChange = () => {
+      this.#setTakeState(
         takeStateKey,
         takeState.size,
         change[ChangeIndex.NODE].row,
         maxBound,
       );
-      yield* that.#output.push(change, that);
+      return this.#output.push(change, this);
     };
 
     // The bounds row was changed.

@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {emptyIterator} from '../../../shared/src/iterables.ts';
 import {emptyArray, identity} from '../../../shared/src/sentinels.ts';
 import type {ChangeType} from './change-type.ts';
 import {type Change} from './change.ts';
@@ -64,8 +65,8 @@ export class FanIn implements FilterOperator {
     this.#output.endFilter();
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
-    return yield* this.#output.filter(node);
+  filter(node: Node): Generator<'yield', boolean> {
+    return this.#output.filter(node);
   }
 
   push(change: Change) {
@@ -73,16 +74,16 @@ export class FanIn implements FilterOperator {
     return emptyArray;
   }
 
-  *fanOutDonePushingToAllBranches(fanOutChangeType: ChangeType) {
+  fanOutDonePushingToAllBranches(fanOutChangeType: ChangeType) {
     if (this.#inputs.length === 0) {
       assert(
         this.#accumulatedPushes.length === 0,
         'If there are no inputs then fan-in should not receive any pushes.',
       );
-      return;
+      return emptyIterator;
     }
 
-    yield* pushAccumulatedChanges(
+    return pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
       this,

@@ -308,7 +308,7 @@ export class FlippedJoin implements Input {
     }
   }
 
-  *#fetchChunked(
+  #fetchChunked(
     req: FetchRequest,
     incomingMultis: readonly MultiConstraint[],
     computedMulti: MultiConstraint,
@@ -326,7 +326,7 @@ export class FlippedJoin implements Input {
         }),
       );
     }
-    yield* mergeSortedStreams(chunkStreams, compare);
+    return mergeSortedStreams(chunkStreams, compare);
   }
 
   *#yieldParentWithOverlay(

@@ -1544,7 +1544,7 @@ function getRowKey(cols: PrimaryKey, row: Row): RowKey {
  * function for reuse by the analyze-query RPC path so that analysis hydrates
  * queries the same way the view-syncer does in production.
  */
-export function* hydrate(
+export function hydrate(
   input: Input,
   hash: string,
   clientSchema: ClientSchema,
@@ -1555,10 +1555,10 @@ export function* hydrate(
     buildPrimaryKeys(clientSchema),
     tableSpecs,
   ).accumulate(hash, input.getSchema(), toAdds(res));
-  yield* streamer.stream();
+  return streamer.stream();
 }
 
-export function* hydrateInternal(
+export function hydrateInternal(
   input: Input,
   hash: string,
   primaryKeys: Map<string, PrimaryKey>,
@@ -1570,7 +1570,7 @@ export function* hydrateInternal(
     input.getSchema(),
     toAdds(res),
   );
-  yield* streamer.stream();
+  return streamer.stream();
 }
 
 function buildPrimaryKeys(

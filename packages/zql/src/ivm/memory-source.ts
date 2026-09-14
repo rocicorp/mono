@@ -491,13 +491,13 @@ export class MemorySource implements Source {
     }
   }
 
-  *genPush(change: SourceChange) {
+  genPush(change: SourceChange) {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
     const exists = (row: Row) => data.has(row);
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
-    yield* genPushAndWriteWithSplitEdit(
+    return genPushAndWriteWithSplitEdit(
       this.#connections,
       change,
       exists,
@@ -763,7 +763,7 @@ export function* generateWithStart(
  * is what #4926 fixed for `generateWithStart`; this parameter is the same
  * distinction for the overlay's own `startAt` pruning.
  */
-export function* generateWithOverlay(
+export function generateWithOverlay(
   startAt: Row | undefined,
   rows: Iterable<Row>,
   constraint: Constraint | undefined,
@@ -772,7 +772,7 @@ export function* generateWithOverlay(
   compare: Comparator,
   startAtCompare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
-  multiConstraints?: readonly MultiConstraint[] | undefined,
+  multiConstraints?: readonly MultiConstraint[],
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
@@ -786,7 +786,7 @@ export function* generateWithOverlay(
     filterPredicate,
     multiConstraints,
   );
-  yield* generateWithOverlayInner(rows, overlays, compare);
+  return generateWithOverlayInner(rows, overlays, compare);
 }
 
 function computeOverlays(
@@ -954,14 +954,14 @@ export function* generateWithOverlayInner(
  * No `startAt` or comparator needed. Injects remove/old-edit rows eagerly
  * at the start, and suppresses add/new-edit rows inline by PK match.
  */
-export function* generateWithOverlayUnordered(
+export function generateWithOverlayUnordered(
   rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
   lastPushedEpoch: number,
   primaryKey: PrimaryKey,
   filterPredicate?: (row: Row) => boolean,
-  multiConstraints?: readonly MultiConstraint[] | undefined,
+  multiConstraints?: readonly MultiConstraint[],
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
@@ -995,7 +995,7 @@ export function* generateWithOverlayUnordered(
   if (filterPredicate) {
     overlays = overlaysForFilterPredicate(overlays, filterPredicate);
   }
-  yield* generateWithOverlayInnerUnordered(rows, overlays, primaryKey);
+  return generateWithOverlayInnerUnordered(rows, overlays, primaryKey);
 }
 
 export function* generateWithOverlayInnerUnordered(
@@ -1086,14 +1086,14 @@ function compareBounds(a: Bound, b: Bound): number {
   return compareValues(a, b);
 }
 
-function* generateRows(
+function generateRows(
   data: BTreeSet<Row>,
   scanStart: RowBound | undefined,
   reverse: boolean | undefined,
 ) {
-  yield* data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
-    scanStart as Row | undefined,
-  );
+  return reverse
+    ? data.valuesFromReversed(scanStart as Row | undefined)
+    : data.valuesFrom(scanStart as Row | undefined);
 }
 
 export function stringify(change: SourceChange) {

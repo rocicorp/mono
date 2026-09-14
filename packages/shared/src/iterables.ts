@@ -125,3 +125,40 @@ export function some<T>(
   }
   return false;
 }
+
+// oxlint-disable-next-line typescript/no-explicit-any
+class EmptyIteratorWithReturn<T> implements Generator<any, T, any> {
+  readonly value: T;
+  readonly done = true;
+
+  constructor(value: T) {
+    this.value = value;
+  }
+
+  [Symbol.iterator]() {
+    return this;
+  }
+
+  next() {
+    return this;
+  }
+
+  throw() {
+    return this;
+  }
+
+  return() {
+    return this;
+  }
+}
+
+// oxlint-disable-next-line typescript/no-explicit-any
+export const emptyIterator: Generator<any, undefined, any> =
+  new EmptyIteratorWithReturn(undefined);
+
+export function makeEmptyIteratorWithReturn<T>(
+  value: T,
+  // oxlint-disable-next-line typescript/no-explicit-any
+): Generator<any, T, any> {
+  return new EmptyIteratorWithReturn(value);
+}

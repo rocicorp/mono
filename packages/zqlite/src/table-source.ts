@@ -417,7 +417,7 @@ export class TableSource implements Source {
     }
   }
 
-  *genPush(change: SourceChange) {
+  genPush(change: SourceChange) {
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -425,7 +425,7 @@ export class TableSource implements Source {
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
 
-    yield* genPushAndWriteWithSplitEdit(
+    return genPushAndWriteWithSplitEdit(
       this.#connections,
       change,
       exists,
