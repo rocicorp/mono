@@ -825,31 +825,34 @@ describe('error handling', () => {
     await z.close();
   });
 
-  test('run waiting for complete results throws in custom mutations', async () => {
-    const z = zeroForTest({
-      schema: legacySchema,
-      mutators: {
-        issue: {
-          create: async (tx: MutatorTx) => {
-            await tx.run(tx.query.issue, {type: 'complete'});
+  test.each(['complete', 'cached'] as const)(
+    'run waiting for %s results throws in custom mutations',
+    async type => {
+      const z = zeroForTest({
+        schema: legacySchema,
+        mutators: {
+          issue: {
+            create: async (tx: MutatorTx) => {
+              await tx.run(tx.query.issue, {type});
+            },
           },
-        },
-      } as const,
-    });
+        } as const,
+      });
 
-    await z.triggerConnected();
-    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+      await z.triggerConnected();
+      await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-    const result = await z.mutate.issue.create().client;
-    assert(result.type === 'error', 'Expected result type to be error');
-    expect(result.error.type).toBe('app');
-    assert(result.error.type === 'app', 'Expected error type to be app');
-    expect(result.error.message).toBe(
-      'Cannot wait for cached or complete results in custom mutations',
-    );
+      const result = await z.mutate.issue.create().client;
+      assert(result.type === 'error', 'Expected result type to be error');
+      expect(result.error.type).toBe('app');
+      assert(result.error.type === 'app', 'Expected error type to be app');
+      expect(result.error.message).toBe(
+        'Cannot wait for cached or complete results in custom mutations',
+      );
 
-    await z.close();
-  });
+      await z.close();
+    },
+  );
 
   test('cannot await the promise directly', async () => {
     const z = zeroForTest({
