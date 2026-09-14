@@ -277,6 +277,8 @@ describe('change-streamer/http', () => {
         initial: true,
         // Non-default so that the roundtrip below pins the parameter.
         logsChangeStream: true,
+        wsBatched: true,
+        cumulativeAck: true,
       } as const;
       await setChangeStreamerAddress(addr());
       const client = autoDiscover
@@ -302,14 +304,17 @@ describe('change-streamer/http', () => {
       downstream.push(begin);
       downstream.push(commit);
 
+      const batchedFrame = `{"id":1,"ackConfig":{"maxAckBytes":65536},"batch":[${begin},${commit}]}`;
+      const batchedSize = Math.round(batchedFrame.length / 2);
+
       expect(await drain(2, sub)).toEqual([
         {
           data: ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
-          size: `{"id":1,"msg":${begin}}`.length,
+          size: batchedSize,
         },
         {
           data: ['commit', {tag: 'commit'}, {watermark: '456'}],
-          size: `{"id":2,"msg":${commit}}`.length,
+          size: batchedSize,
         },
       ]);
 
@@ -350,7 +355,10 @@ describe('change-streamer/http', () => {
     const json = BigIntJSON.stringify(['data', insert]);
     downstream.push(json);
     expect(await drain(1, sub)).toEqual([
-      {data: ['data', insert], size: `{"id":1,"msg":${json}}`.length},
+      {
+        data: ['data', insert],
+        size: `{"id":1,"ackConfig":{"maxAckBytes":65536},"msg":${json}}`.length,
+      },
     ]);
   });
 });
