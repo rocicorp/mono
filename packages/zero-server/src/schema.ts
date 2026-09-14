@@ -6,7 +6,7 @@ import * as PostgresTypeClass from '../../zero-cache/src/db/postgres-type-class-
 import {dataTypeToZqlValueType} from '../../zero-cache/src/types/pg-data-type.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
-import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
+import type {Queryable} from '../../zql/src/mutate/custom.ts';
 
 type PostgresTypeClass = Enum<typeof PostgresTypeClass>;
 
@@ -25,7 +25,7 @@ type ServerSchemaRow = {
 };
 
 export async function getServerSchema<S extends Schema>(
-  dbTransaction: DBTransaction<unknown>,
+  queryable: Queryable,
   schema: S,
 ): Promise<ServerSchema> {
   const schemaTablePairs: [string, string][] = Object.values(schema.tables).map(
@@ -49,7 +49,7 @@ export async function getServerSchema<S extends Schema>(
   }
 
   const {text, values} = serverSchemaQuery(schemaTablePairs);
-  const results: Iterable<ServerSchemaRow> = (await dbTransaction.query(
+  const results: Iterable<ServerSchemaRow> = (await queryable.query(
     text,
     values,
   )) as Iterable<ServerSchemaRow>;

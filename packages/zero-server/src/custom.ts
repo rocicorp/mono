@@ -25,6 +25,7 @@ import {
 import type {
   DBTransaction,
   MutateCRUD,
+  Queryable,
   ServerTransaction,
 } from '../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
@@ -184,7 +185,9 @@ type WithHiddenTxAndSchema = {
 export class CRUDMutatorFactory<S extends Schema> {
   readonly #schema: S;
   readonly #tableCRUDs: Record<string, TableCRUD<TableSchema>>;
-  #serverSchema: ServerSchema | undefined;
+  // The in-flight or resolved fetch is cached (not just the result) so that
+  // concurrent cold callers share a single catalog query.
+  #serverSchema: Promise<ServerSchema> | undefined;
 
   constructor(schema: S) {
     this.#schema = schema;
@@ -198,11 +201,13 @@ export class CRUDMutatorFactory<S extends Schema> {
   /**
    * Gets the cached serverSchema, or fetches and caches it on first call.
    */
-  async #getOrFetchServerSchema(
-    dbTransaction: DBTransaction<unknown>,
-  ): Promise<ServerSchema> {
+  getOrFetchServerSchema(queryable: Queryable): Promise<ServerSchema> {
     if (!this.#serverSchema) {
-      this.#serverSchema = await getServerSchema(dbTransaction, this.#schema);
+      this.#serverSchema = getServerSchema(queryable, this.#schema).catch(e => {
+        // Don't poison the cache with a transient failure.
+        this.#serverSchema = undefined;
+        throw e;
+      });
     }
     return this.#serverSchema;
   }
@@ -239,7 +244,7 @@ export class CRUDMutatorFactory<S extends Schema> {
     clientID: string,
     mutationID: number,
   ): Promise<TransactionImpl<S, TWrappedTransaction>> {
-    const serverSchema = await this.#getOrFetchServerSchema(dbTransaction);
+    const serverSchema = await this.getOrFetchServerSchema(dbTransaction);
     const executor = this.createExecutor(dbTransaction, serverSchema);
     const mutate = makeTransactionMutate(this.#schema, executor);
     return new TransactionImpl(

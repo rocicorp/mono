@@ -58,7 +58,7 @@ type DrizzleTransactionFromSchema<TSchema> = DrizzleTransactionLike & {
 
 export type DrizzleDatabase<
   TTransaction extends DrizzleTransactionLike = DrizzleTransactionLike,
-> = {
+> = DrizzleTransactionLike & {
   transaction<T>(
     transaction: (tx: TTransaction) => Promise<T>,
     config?: never,
@@ -83,6 +83,10 @@ export class DrizzleConnection<
 
   constructor(drizzle: TDrizzle & DrizzleDatabase<TTransaction>) {
     this.#drizzle = drizzle;
+  }
+
+  query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
+    return runDrizzleQuery(this.#drizzle._.session, sql, params);
   }
 
   transaction<T>(
@@ -122,26 +126,33 @@ class DrizzleInternalTransaction<
     );
   }
 
-  async query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
-    const {session} = this.wrappedTransaction._;
-    const query = {sql, params};
-    const prepared =
-      session.prepareQuery.length < 7
-        ? (session.prepareQuery as DrizzlePrepareQueryV1)(
-            query,
-            'objects',
-            undefined,
-            undefined,
-          )
-        : (session.prepareQuery as DrizzlePrepareQueryV0)(
-            query,
-            undefined,
-            undefined,
-            false,
-          );
-    const result = await prepared.execute();
-    return toIterableRows(result);
+  query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
+    return runDrizzleQuery(this.wrappedTransaction._.session, sql, params);
   }
+}
+
+async function runDrizzleQuery(
+  session: DrizzleSession,
+  sql: string,
+  params: unknown[],
+): Promise<Iterable<Row>> {
+  const query = {sql, params};
+  const prepared =
+    session.prepareQuery.length < 7
+      ? (session.prepareQuery as DrizzlePrepareQueryV1)(
+          query,
+          'objects',
+          undefined,
+          undefined,
+        )
+      : (session.prepareQuery as DrizzlePrepareQueryV0)(
+          query,
+          undefined,
+          undefined,
+          false,
+        );
+  const result = await prepared.execute();
+  return toIterableRows(result);
 }
 
 function isIterable(value: unknown): value is Iterable<unknown> {

@@ -17,6 +17,7 @@ export type {
   DBTransaction,
   Location,
   MutateCRUD,
+  Queryable,
   Row,
   ServerTransaction,
   Transaction,

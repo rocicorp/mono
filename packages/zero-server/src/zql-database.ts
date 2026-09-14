@@ -2,13 +2,19 @@ import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
 import type {CleanupResultsArg} from '../../zero-protocol/src/mutation.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
+import type {
+  DBConnection,
+  DBTransaction,
+  Queryable,
+} from '../../zql/src/mutate/custom.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
 import {CRUDMutatorFactory, type TransactionImpl} from './custom.ts';
+import {executePostgresQuery} from './pg-query-executor.ts';
 import type {
   Database,
   TransactionProviderHooks,
@@ -28,10 +34,12 @@ export class ZQLDatabase<
 > implements Database<TransactionImpl<TSchema, TWrappedTransaction>> {
   readonly connection: DBConnection<TWrappedTransaction>;
   readonly #crudFactory: CRUDMutatorFactory<TSchema>;
+  readonly #schema: TSchema;
 
   constructor(connection: DBConnection<TWrappedTransaction>, schema: TSchema) {
     this.connection = connection;
     this.#crudFactory = new CRUDMutatorFactory(schema);
+    this.#schema = schema;
   }
 
   transaction<R>(
@@ -118,10 +126,60 @@ export class ZQLDatabase<
     return this.#crudFactory.createTransaction(dbTx, clientID, mutationID);
   }
 
+  /**
+   * Runs a single read query.
+   *
+   * When the {@linkcode DBConnection} implements `query`, the compiled SQL is
+   * issued as a bare statement with no `BEGIN`/`COMMIT` around it (plus a
+   * one-time server schema lookup the first time this instance touches the
+   * database). Postgres then releases the statement's locks the moment it
+   * finishes instead of waiting for a `COMMIT` round-trip, which matters in
+   * serverless environments where the process can be frozen or reclaimed
+   * between the query resolving and the `COMMIT` being sent, leaving the
+   * transaction and its locks open indefinitely.
+   *
+   * Because no transaction is opened, any per-transaction setup the adapter
+   * performs inside `transaction` does not apply to these reads. If the
+   * connection does not implement `query`, the read is wrapped in a
+   * transaction as before.
+   *
+   * If you need multiple reads to observe a consistent snapshot, use
+   * {@linkcode transaction} and call `tx.run(...)` for each query instead.
+   */
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
     query: Query<TTable, TSchema, TReturn>,
-    options?: RunOptions,
+    _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.transaction(tx => tx.run(query, options));
+    const {connection} = this;
+    if (connection.query) {
+      // TS narrows `connection.query`, not `connection` itself.
+      return this.#runOn(connection as ReadTarget<TWrappedTransaction>, query);
+    }
+    return connection.transaction(dbTx => this.#runOn(dbTx, query));
+  }
+
+  async #runOn<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    target: ReadTarget<TWrappedTransaction>,
+    query: Query<TTable, TSchema, TReturn>,
+  ): Promise<HumanReadable<TReturn>> {
+    const {ast, format} = asQueryInternals(query);
+    const serverSchema = await this.#crudFactory.getOrFetchServerSchema(target);
+    return target.runQuery
+      ? target.runQuery<TReturn>(ast, format, this.#schema, serverSchema)
+      : executePostgresQuery<TReturn>(
+          target,
+          ast,
+          format,
+          this.#schema,
+          serverSchema,
+        );
   }
 }
+
+/**
+ * Something a read can be executed against: a `DBTransaction`, or a
+ * `DBConnection` that implements `query`.
+ */
+type ReadTarget<TWrappedTransaction> = Queryable & {
+  runQuery?: DBTransaction<TWrappedTransaction>['runQuery'] | undefined;
+};

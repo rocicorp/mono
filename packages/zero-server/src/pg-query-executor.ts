@@ -4,14 +4,14 @@ import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Format} from '../../zero-types/src/format.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
-import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
+import type {Queryable} from '../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../zql/src/query/query.ts';
 
 /**
  * Executes a query AST against a PostgreSQL database.
  */
 export async function executePostgresQuery<TReturn>(
-  dbTransaction: DBTransaction<unknown>,
+  queryable: Queryable,
   ast: AST,
   format: Format,
   schema: Schema,
@@ -21,7 +21,7 @@ export async function executePostgresQuery<TReturn>(
     compile(serverSchema, schema, ast, format),
   );
 
-  const pgIterableResult = await dbTransaction.query(
+  const pgIterableResult = await queryable.query(
     sqlQuery.text,
     sqlQuery.values,
   );

@@ -36,6 +36,10 @@ export class KyselyConnection<TDatabase> implements DBConnection<
     this.#client = client;
   }
 
+  query(sql: string, params: unknown[]): Promise<Row[]> {
+    return kyselyQuery(this.#client, sql, params);
+  }
+
   transaction<T>(
     fn: (tx: DBTransaction<WrappedKyselyTransaction<TDatabase>>) => Promise<T>,
   ): Promise<T> {
@@ -69,12 +73,20 @@ class KyselyInternalTransaction<TDatabase> implements DBTransaction<
     );
   }
 
-  async query(sql: string, params: unknown[]): Promise<Row[]> {
-    const result = await this.wrappedTransaction.executeQuery<Row>(
-      CompiledQuery.raw(sql, params),
-    );
-    return result.rows;
+  query(sql: string, params: unknown[]): Promise<Row[]> {
+    return kyselyQuery(this.wrappedTransaction, sql, params);
   }
+}
+
+async function kyselyQuery<TDatabase>(
+  executor: Kysely<TDatabase>,
+  sql: string,
+  params: unknown[],
+): Promise<Row[]> {
+  const result = await executor.executeQuery<Row>(
+    CompiledQuery.raw(sql, params),
+  );
+  return result.rows;
 }
 
 /**
