@@ -3068,11 +3068,44 @@ test('connect timeout during setup retries without an unhandled rejection', asyn
       'reading deleted clients',
     ]);
 
+    // A timed out attempt is retried, so it is not logged as an error.
+    expect(
+      z.testLogSink.messages
+        .filter(([_level, _context, args]) => args[0] === 'Failed to connect')
+        .map(([level]) => level),
+    ).toEqual(['warn']);
+
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     expect(connectAttempts()).toBe(2);
   } finally {
     window.removeEventListener('unhandledrejection', onUnhandled);
   }
+});
+
+test('going offline is logged as info, not error', async () => {
+  const z = zeroForTest({logLevel: 'debug'});
+  await z.triggerConnected();
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+  const offline = new ClientError({
+    kind: ClientErrorKind.Offline,
+    message: 'offline',
+  });
+  z.connectionManager.disconnected(offline);
+  await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+  await vi.waitUntil(() =>
+    z.testLogSink.messages.some(
+      ([_level, _context, args]) => args[0] === 'Failed to connect',
+    ),
+  );
+
+  expect(
+    z.testLogSink.messages
+      .filter(([_level, _context, args]) => args[0] === 'Failed to connect')
+      .map(([level, _context, args]) => [level, args[1]]),
+  ).toEqual([['info', offline]]);
+
+  await z.close();
 });
 
 test('a hung initialization stays initializing and makes no connect attempt', async () => {
