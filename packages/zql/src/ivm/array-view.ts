@@ -96,15 +96,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       this.#error = queryComplete;
     } else {
       void queryComplete
-        .then(() => {
-          this.#resultType = 'complete';
-          this.#fireListeners();
-        })
-        .catch(e => {
-          this.#resultType = 'error';
-          this.#error = e;
-          this.#fireListeners();
-        });
+        .then(() => this.#setResultType('complete'))
+        .catch(e => this.#setResultType('error', e));
     }
     this.#hydrate();
   }
@@ -199,27 +192,25 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
    * keep.
    */
   markCached(): void {
-    if (this.#resultType !== 'unknown') {
-      return;
+    if (this.#resultType === 'unknown') {
+      this.#setResultType('cached');
     }
-    this.#resultType = 'cached';
-    this.#fireListenersUnlessDirty();
   }
 
   /** The got key was deleted (eviction) while still pre-authoritative. */
   unmarkCached(): void {
-    if (this.#resultType !== 'cached') {
-      return;
+    if (this.#resultType === 'cached') {
+      this.#setResultType('unknown');
     }
-    this.#resultType = 'unknown';
-    this.#fireListenersUnlessDirty();
   }
 
-  // A dirty view is mid-transaction: rows were pushed and not yet flushed, and
-  // the objects in #txnDirty are still mutable. Firing now would hand those to
-  // listeners and then fire again at flush() with the same data, so let the
-  // pending flush deliver the new result type instead.
-  #fireListenersUnlessDirty() {
+  #setResultType(resultType: ResultType, error?: ErroredQuery) {
+    this.#resultType = resultType;
+    this.#error = error;
+    // A dirty view is mid-transaction: rows were pushed and not yet flushed,
+    // and the objects in #txnDirty are still mutable. Firing now would hand
+    // those to listeners and then fire again at flush() with the same data, so
+    // let the pending flush deliver the new result type instead.
     if (!this.#dirty) {
       this.#fireListeners();
     }

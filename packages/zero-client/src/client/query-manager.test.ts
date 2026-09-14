@@ -34,6 +34,7 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
+import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
@@ -1239,8 +1240,7 @@ test('handleClosed marks queries as errored exactly once', () => {
 
   const ast: AST = {table: 'issue'};
   const queryHash = hashOfAST(ast);
-  const gotCallback =
-    vi.fn<(got: boolean | 'cached', error?: ErroredQuery) => void>();
+  const gotCallback = vi.fn<GotCallback>();
 
   queryManager.addLegacy(ast, 0, gotCallback);
   queryManager.flushBatch();
@@ -1305,7 +1305,7 @@ test('gotCallback, query already got', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCallback1 = vi.fn<(got: boolean | 'cached') => void>();
+  const gotCallback1 = vi.fn<GotCallback>();
   const ttl = 200;
   queryManager.addLegacy(ast, ttl, gotCallback1);
   queryManager.flushBatch();
@@ -1335,7 +1335,7 @@ test('gotCallback, query already got', () => {
 
   expect(gotCallback1).nthCalledWith(1, true);
 
-  const gotCallback2 = vi.fn<(got: boolean | 'cached') => void>();
+  const gotCallback2 = vi.fn<GotCallback>();
   queryManager.addLegacy(ast, ttl, gotCallback2);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
@@ -1371,7 +1371,7 @@ test('gotCallback, query got after add', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean | 'cached') => void>();
+  const gotCalback1 = vi.fn<GotCallback>();
   const ttl = 'forever';
   queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
@@ -1439,7 +1439,7 @@ test('gotCallback, query got after add then removed', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean | 'cached') => void>();
+  const gotCalback1 = vi.fn<GotCallback>();
   const ttl = 100;
   queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
@@ -1516,7 +1516,7 @@ test('gotCallback, query got after subscription removed', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean | 'cached') => void>();
+  const gotCalback1 = vi.fn<GotCallback>();
   const ttl = 50;
   const remove = queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
@@ -1720,9 +1720,9 @@ describe('query transform errors', () => {
       onFatalErrorMock,
     );
 
-    const gotCallback1 = vi.fn<(got: boolean | 'cached' | Error) => void>();
-    const gotCallback2 = vi.fn<(got: boolean | 'cached' | Error) => void>();
-    const gotCallback1Dupe = vi.fn<(got: boolean | 'cached' | Error) => void>();
+    const gotCallback1 = vi.fn<GotCallback>();
+    const gotCallback2 = vi.fn<GotCallback>();
+    const gotCallback1Dupe = vi.fn<GotCallback>();
 
     queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback1);
     // duplicate addition of same query
@@ -1730,9 +1730,7 @@ describe('query transform errors', () => {
     queryManager.addCustom(stubAst, nameAndArgs2, 0, gotCallback2);
     queryManager.flushBatch();
 
-    function checkInitialGots(
-      cb: Mock<(got: boolean | 'cached' | Error) => void>,
-    ) {
+    function checkInitialGots(cb: Mock<GotCallback>) {
       expect(cb).toBeCalledTimes(1);
       expect(cb).toBeCalledWith(false);
     }
@@ -1752,9 +1750,7 @@ describe('query transform errors', () => {
     // set an error
     queryManager.handleTransformErrors([err]);
 
-    function checkFinalGots(
-      cb: Mock<(got: boolean | 'cached' | Error) => void>,
-    ) {
+    function checkFinalGots(cb: Mock<GotCallback>) {
       expect(cb).toBeCalledTimes(2);
       expect(cb).nthCalledWith(2, false, err);
     }
@@ -1793,8 +1789,8 @@ describe('query transform errors', () => {
       onFatalErrorMock,
     );
 
-    const gotCallback1 = vi.fn<(got: boolean | 'cached' | Error) => void>();
-    const gotCallback2 = vi.fn<(got: boolean | 'cached' | Error) => void>();
+    const gotCallback1 = vi.fn<GotCallback>();
+    const gotCallback2 = vi.fn<GotCallback>();
 
     queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback1);
     queryManager.addCustom(stubAst, nameAndArgs2, 0, gotCallback2);
@@ -1957,7 +1953,7 @@ test('gotCallback, add same got callback twice', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+  const gotCallback = vi.fn<GotCallback>();
   const rem1 = queryManager.addLegacy(ast, -1, gotCallback);
   queryManager.flushBatch();
   expect(gotCallback).toBeCalledTimes(1);
@@ -2461,7 +2457,7 @@ describe('gotCallback, persisted got is not trusted until authoritative', () => 
 
     // In the persisted got set, but not yet authoritative -> reported cached,
     // never got.
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addLegacy(ast, 200, gotCallback);
     expect(gotCallback).toBeCalledTimes(1);
     expect(gotCallback).nthCalledWith(1, 'cached');
@@ -2475,7 +2471,7 @@ describe('gotCallback, persisted got is not trusted until authoritative', () => 
   test('query evicted before authoritative is never reported got (the race)', () => {
     const {queryManager, watchCallback} = setup();
 
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addLegacy(ast, 200, gotCallback);
     expect(gotCallback).nthCalledWith(1, 'cached');
 
@@ -2516,7 +2512,7 @@ describe('gotCallback, persisted got is not trusted until authoritative', () => 
     // next connect reconciles it.
     queryManager.clearGotQueriesAuthoritative();
 
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addLegacy(ast, 200, gotCallback);
     expect(gotCallback).nthCalledWith(1, 'cached');
 
@@ -2561,7 +2557,7 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
 
   test('got set loaded after registration: cached, then complete on first poke', () => {
     const {queryManager, watchCallback} = setup();
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
     expect(gotCallback).nthCalledWith(1, false);
 
@@ -2578,20 +2574,20 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
     const {queryManager, watchCallback} = setup();
     watchCallback([gotAdd]);
 
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
     expect(gotCallback).toBeCalledTimes(1);
     expect(gotCallback).nthCalledWith(1, 'cached');
 
     // A second subscriber to the same query sees the same claim.
-    const gotCallback2 = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback2 = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback2);
     expect(gotCallback2).nthCalledWith(1, 'cached');
   });
 
   test('a got key added by the first poke is confirmed, not cached', () => {
     const {queryManager, watchCallback} = setup();
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
     expect(gotCallback).nthCalledWith(1, false);
 
@@ -2610,19 +2606,48 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
   test('a got key added by another tab is not a cached claim', () => {
     const {queryManager, watchCallback} = setup();
     watchCallback([]);
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
     watchCallback([gotAdd]);
     expect(gotCallback.mock.calls).toEqual([[false]]);
-    // A later registration reads the same state and may make the claim.
-    const gotCallback2 = vi.fn<(got: boolean | 'cached') => void>();
+    // A later registration agrees: the key was not persisted by a previous
+    // session, so it is not a claim for anyone until this connection
+    // confirms it.
+    const gotCallback2 = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback2);
-    expect(gotCallback2).nthCalledWith(1, 'cached');
+    expect(gotCallback2.mock.calls).toEqual([[false]]);
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
+    expect(gotCallback2).nthCalledWith(2, true);
+  });
+
+  test('a throwing got callback does not leave the persisted diff pending', () => {
+    const {queryManager, watchCallback} = setup();
+    const throwing = vi.fn<GotCallback>(got => {
+      if (got === 'cached') {
+        throw new Error('listener failed');
+      }
+    });
+    queryManager.addCustom(ast, nameAndArgs, 200, throwing);
+    const other = {name: 'other', args: []};
+    const otherKey = toGotQueriesKey(
+      hashOfNameAndArgs(other.name, other.args),
+    ) as string & IndexKey;
+    const otherCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, other, 200, otherCallback);
+
+    expect(() => watchCallback([gotAdd])).toThrow('listener failed');
+
+    // The next diff is live, not the persisted set.
+    watchCallback([{op: 'add', key: otherKey, newValue: null}]);
+    expect(otherCallback.mock.calls).toEqual([[false]]);
+    queryManager.markGotQueriesAuthoritative();
+    expect(otherCallback).nthCalledWith(2, true);
   });
 
   test('eviction before the first poke reverts cached to not-got', () => {
     const {queryManager, watchCallback} = setup();
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
     watchCallback([gotAdd]);
     expect(gotCallback).nthCalledWith(2, 'cached');
@@ -2642,7 +2667,7 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
     const {queryManager, watchCallback} = setup();
     watchCallback([]);
     queryManager.markGotQueriesAuthoritative();
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
     watchCallback([gotAdd]);
     expect(gotCallback.mock.calls).toEqual([[false], [true]]);
@@ -2655,7 +2680,7 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
     queryManager.markGotQueriesAuthoritative();
     queryManager.clearGotQueriesAuthoritative();
 
-    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    const gotCallback = vi.fn<GotCallback>();
     queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
     expect(gotCallback).nthCalledWith(1, 'cached');
     queryManager.markGotQueriesAuthoritative();

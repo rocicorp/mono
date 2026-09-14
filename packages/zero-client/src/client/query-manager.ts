@@ -82,6 +82,16 @@ export class QueryManager implements InspectorDelegate {
   // IndexedDB may be stale (a query 'got' in a previous session can be evicted
   // server-side); see `markGotQueriesAuthoritative`.
   #gotQueriesAuthoritative = false;
+  // The got keys whose result the store holds from a previous connection: the
+  // set persisted by a previous session, and on disconnect everything the
+  // connection just torn down had confirmed. Until the got set is
+  // authoritative, a registration reports these as 'cached'. Keys added by a
+  // live diff are not in it; see the watch below.
+  readonly #cachedQueries: Set<string> = new Set();
+  // Whether the got-queries watch has yet to deliver its first diff, the
+  // persisted set. Cleared before that diff is processed, so a throwing
+  // callback cannot leave it set.
+  #awaitingPersistedGotDiff = true;
   readonly #mutationTracker: MutationTracker;
   readonly #pendingQueryChanges: UpQueriesPatchOp[] = [];
   readonly #queryChangeThrottleMs: number;
@@ -136,9 +146,10 @@ export class QueryManager implements InspectorDelegate {
     // `markGotQueriesAuthoritative`), or another tab's state arriving via
     // replicache refresh. A live diff can therefore only revoke a cached
     // claim (a deleted key), never grant one.
-    let persistedDiff = true;
     experimentalWatch(
       diff => {
+        const persisted = this.#awaitingPersistedGotDiff;
+        this.#awaitingPersistedGotDiff = false;
         for (const diffOp of diff) {
           const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
           switch (diffOp.op) {
@@ -146,17 +157,18 @@ export class QueryManager implements InspectorDelegate {
               this.#gotQueries.add(queryHash);
               if (this.#gotQueriesAuthoritative) {
                 this.#fireGotCallbacks(queryHash, true);
-              } else if (persistedDiff) {
+              } else if (persisted) {
+                this.#cachedQueries.add(queryHash);
                 this.#fireGotCallbacks(queryHash, 'cached');
               }
               break;
             case 'del':
               this.#gotQueries.delete(queryHash);
+              this.#cachedQueries.delete(queryHash);
               this.#fireGotCallbacks(queryHash, false);
               break;
           }
         }
-        persistedDiff = false;
       },
       {
         prefix: GOT_QUERIES_KEY_PREFIX,
@@ -181,8 +193,11 @@ export class QueryManager implements InspectorDelegate {
   }
 
   #fireGotCallbacks(queryHash: string, got: boolean | 'cached') {
-    const gotCallbacks = this.#queries.get(queryHash)?.gotCallbacks ?? [];
-    for (const gotCallback of gotCallbacks) {
+    const entry = this.#queries.get(queryHash);
+    if (!entry) {
+      return;
+    }
+    for (const gotCallback of entry.gotCallbacks) {
       gotCallback(got);
     }
   }
@@ -199,6 +214,11 @@ export class QueryManager implements InspectorDelegate {
       return;
     }
     this.#gotQueriesAuthoritative = true;
+    // Whatever the previous connection held, this one has now confirmed or
+    // deleted. Should the watch's first diff have been skipped (a failed
+    // initial run), the next diff is live too.
+    this.#cachedQueries.clear();
+    this.#awaitingPersistedGotDiff = false;
     for (const queryHash of this.#queries.keys()) {
       if (this.#gotQueries.has(queryHash)) {
         this.#fireGotCallbacks(queryHash, true);
@@ -209,6 +229,11 @@ export class QueryManager implements InspectorDelegate {
   /** Called on disconnect. The next connect must re-confirm `#gotQueries`. */
   clearGotQueriesAuthoritative(): void {
     this.#gotQueriesAuthoritative = false;
+    // Everything got at this point was confirmed by the connection just torn
+    // down, which for a new registration is the cached claim.
+    for (const queryHash of this.#gotQueries) {
+      this.#cachedQueries.add(queryHash);
+    }
   }
 
   /**
@@ -398,10 +423,11 @@ export class QueryManager implements InspectorDelegate {
     }
 
     if (gotCallback) {
-      // A got key that is not yet authoritative was persisted by a previous
-      // session: the store holds that session's server-confirmed result.
-      const got = this.#gotQueries.has(queryId);
-      gotCallback(this.#gotQueriesAuthoritative ? got : got && 'cached');
+      gotCallback(
+        this.#gotQueriesAuthoritative
+          ? this.#gotQueries.has(queryId)
+          : this.#cachedQueries.has(queryId) && 'cached',
+      );
     }
 
     let removed = false;

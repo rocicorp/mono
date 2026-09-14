@@ -12,13 +12,10 @@ import type {ResultType} from './typed-view.ts';
 
 /**
  * A delegate that reports a chosen `got` value synchronously at registration,
- * the way QueryManager does when the persisted got set is already loaded, and
- * whose pipelines can optionally be held back until `markReady()`.
+ * the way QueryManager does when the persisted got set is already loaded.
  */
 class CachedDelegate extends QueryDelegateImpl {
   initialGot: boolean | 'cached' = false;
-  #ready = true;
-  readonly #pending = new Set<() => void>();
 
   override addServerQuery(
     ast: AST,
@@ -28,33 +25,6 @@ class CachedDelegate extends QueryDelegateImpl {
     const cleanup = super.addServerQuery(ast, ttl, gotCallback);
     gotCallback?.(this.initialGot);
     return cleanup;
-  }
-
-  override get pipelinesReady(): boolean {
-    return this.#ready;
-  }
-
-  override onPipelinesReady(cb: () => void): () => void {
-    this.#pending.add(cb);
-    return () => {
-      this.#pending.delete(cb);
-    };
-  }
-
-  deferPipelines() {
-    this.#ready = false;
-  }
-
-  markReady() {
-    this.#ready = true;
-    const pending = [...this.#pending];
-    this.#pending.clear();
-    this.batchViewUpdates(() => {
-      for (const attach of pending) {
-        attach();
-      }
-    });
-    this.commit();
   }
 
   /** The got callback of the most recently materialized query. */

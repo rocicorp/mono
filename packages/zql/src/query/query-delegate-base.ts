@@ -376,8 +376,11 @@ export function materializeImpl<
   // both the server's "got" and the pipeline being attached.
   const deferPipeline = !delegate.pipelinesReady;
   let attached = !deferPipeline;
-  let gotQueries = delegate.defaultQueryComplete;
-  let queryComplete: boolean | ErroredQuery = attached && gotQueries;
+  // The last got report: `true` once the server confirmed the query on this
+  // connection, `'cached'` while the store holds a previous connection's
+  // confirmed result, `false` otherwise.
+  let got: boolean | 'cached' = delegate.defaultQueryComplete;
+  let queryComplete: boolean | ErroredQuery = attached && got === true;
   const updateTTL = customQueryID
     ? (newTTL: TTL) => delegate.updateCustomQuery(customQueryID, newTTL)
     : (newTTL: TTL) => delegate.updateServerQuery(ast, newTTL);
@@ -385,7 +388,7 @@ export function materializeImpl<
   // Completion, and the end-to-end metric, require both the server's "got"
   // and the pipeline being attached: until then the view is still empty.
   const maybeResolveComplete = () => {
-    if (attached && gotQueries && queryComplete !== true) {
+    if (attached && got === true && queryComplete !== true) {
       delegate.addMetric(
         'query-materialization-end-to-end',
         performance.now() - t0,
@@ -399,51 +402,51 @@ export function materializeImpl<
 
   // The view, seen as the optional cached-marking surface. Only views that
   // implement `markCached`/`unmarkCached` (e.g. ArrayView) surface 'cached';
-  // for any other factory the optional calls are no-ops.
+  // for any other factory the optional calls are no-ops. The registration
+  // path can report 'cached' synchronously, before the view below exists, so
+  // this stays undefined until then and the mark is applied afterwards.
   let viewForCached: CachedMarkableView | undefined;
-  // The store holds this query's server-confirmed result from a previous
-  // session (the persisted got key exists). The
-  // registration path can report this synchronously, before the view below
-  // exists, so it is remembered here and applied once it can be.
-  let cached = false;
 
   // Like 'complete', 'cached' is a claim about the rows the view holds, so it
   // waits for the view to exist and its pipeline to be attached. Once the
   // server has confirmed the query on this connection, 'complete' supersedes
   // it and the mark is skipped.
   const maybeMarkCached = () => {
-    if (attached && cached && !gotQueries) {
+    if (attached && got === 'cached' && queryComplete !== true) {
       viewForCached?.markCached?.();
     }
   };
 
-  const gotCallback: GotCallback = (got, error) => {
+  let destroyed = false;
+  const gotCallback: GotCallback = (value, error) => {
+    if (destroyed) {
+      // The delegate may keep this callback registered for a while after
+      // destroy (removals are deferred while mutations are pending); a dead
+      // view must not be driven, nor its listeners fired.
+      return;
+    }
     if (error) {
       queryCompleteResolver.reject(error);
       queryComplete = error;
       return;
     }
 
+    got = value;
     if (got === 'cached') {
-      cached = true;
       maybeMarkCached();
-      return;
-    }
-    if (got === false) {
+    } else if (got === false) {
       // The got key was deleted (eviction) before the server confirmed the
       // query on this connection.
-      cached = false;
       viewForCached?.unmarkCached?.();
-      return;
+    } else {
+      maybeResolveComplete();
     }
-
-    gotQueries = true;
-    maybeResolveComplete();
   };
 
   let removeCommitObserver: (() => void) | undefined;
   let removePendingAttach: (() => void) | undefined;
   const onDestroy = () => {
+    destroyed = true;
     removePendingAttach?.();
     removePendingAttach = undefined;
     input.destroy();

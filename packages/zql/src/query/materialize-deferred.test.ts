@@ -12,30 +12,21 @@ import {schema} from './test/test-schemas.ts';
 import type {ResultType} from './typed-view.ts';
 
 /**
- * A delegate whose pipelines are not ready until `markReady()` is called,
- * mirroring what ZeroContext does between construction and the replica being
- * loaded into the IVM sources.
+ * A deferred delegate that also counts source connections and records
+ * metrics, so tests can assert nothing is built before `markReady()`.
  */
 class DeferredDelegate extends QueryDelegateImpl {
-  #ready = false;
-  readonly #pending = new Set<() => void>();
   readonly metrics: string[] = [];
   /** Connections currently open against the sources. */
   liveConnections = 0;
 
-  override get pipelinesReady(): boolean {
-    return this.#ready;
-  }
-
-  override onPipelinesReady(cb: () => void): () => void {
-    this.#pending.add(cb);
-    return () => {
-      this.#pending.delete(cb);
-    };
+  constructor() {
+    super();
+    this.deferPipelines();
   }
 
   get pendingCount(): number {
-    return this.#pending.size;
+    return this.pendingAttachCount;
   }
 
   override getSource(name: string): Source {
@@ -76,22 +67,6 @@ class DeferredDelegate extends QueryDelegateImpl {
 
   /** Tables for which getSource throws, to simulate a pipeline build failure. */
   readonly failingTables = new Set<string>();
-
-  markReady(): void {
-    this.#ready = true;
-    const pending = [...this.#pending];
-    this.#pending.clear();
-    this.batchViewUpdates(() => {
-      for (const attach of pending) {
-        try {
-          attach();
-        } catch {
-          // mirrors ZeroContext.markPipelinesReady: log and continue
-        }
-      }
-    });
-    this.commit();
-  }
 }
 
 function newDelegate() {

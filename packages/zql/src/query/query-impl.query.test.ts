@@ -1109,6 +1109,9 @@ describe('run with options', () => {
         }),
       ),
     );
+    // A view does not report a result type change while it holds unflushed
+    // changes; the pending flush delivers it.
+    queryDelegate.commit();
     queryDelegate.callAllGotCallbacks();
     const singleFilterRowsUnknown = await singleFilterRowsUnknownP;
     const singleFilterRowsComplete = await singleFilterRowsCompleteP;

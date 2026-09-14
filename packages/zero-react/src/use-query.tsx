@@ -667,6 +667,7 @@ class ViewWrapper<
     // applyChange now returns immutable data structures, so no deep clone needed.
     // Unchanged rows preserve their object identity for React.memo optimization.
     const data = snap as HumanReadable<TReturn>;
+    const wasCached = this.#snapshot[1].type === 'cached';
     this.#snapshot = getSnapshot(
       this.#singular,
       data,
@@ -681,17 +682,21 @@ class ViewWrapper<
       this.#nonEmptyResolver.resolve();
     }
 
+    const hasData = this.#singular
+      ? this.#snapshot[0] !== undefined
+      : (this.#snapshot[0] as unknown[]).length !== 0;
     // A 'cached' result is the server-confirmed answer from a previous
     // session, so even an empty one is something to render. It never
     // satisfies `complete`; only a confirmation on this connection does.
-    if (
-      resultType === 'cached' ||
-      (this.#singular
-        ? this.#snapshot[0] !== undefined
-        : (this.#snapshot[0] as unknown[]).length !== 0)
-    ) {
+    if (resultType === 'cached' || hasData) {
       this.#nonEmpty = true;
       this.#nonEmptyResolver.resolve();
+    } else if (wasCached && resultType === 'unknown') {
+      // The cached claim was revoked (the got key was evicted before this
+      // connection confirmed the query) and the view is empty: there is
+      // nothing to render again until rows or a confirmation arrive.
+      this.#nonEmpty = false;
+      this.#nonEmptyResolver = resolver();
     }
 
     for (const internals of this.#reactInternals) {
