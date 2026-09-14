@@ -142,11 +142,23 @@ export class QueryManager implements InspectorDelegate {
         for (const diffOp of diff) {
           const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
           switch (diffOp.op) {
-            case 'change':
+            case 'change': {
               // A fingerprint refresh (see `gotFingerprintRefreshEntries`)
-              // rewrites the value of an existing got key.
+              // rewrote the value of an existing got key, from this tab's own
+              // poke or from another tab's via replicache refresh. Until the
+              // got set is authoritative that can make or break the claim.
               this.#gotQueries.set(queryHash, diffOp.newValue ?? null);
+              if (!this.#gotQueriesAuthoritative) {
+                const entry = this.#queries.get(queryHash);
+                if (entry) {
+                  this.#fireGotCallbacks(
+                    queryHash,
+                    this.#hasCachedClaim(queryHash, entry) ? 'cached' : false,
+                  );
+                }
+              }
               break;
+            }
             case 'add':
               this.#gotQueries.set(queryHash, diffOp.newValue ?? null);
               if (this.#gotQueriesAuthoritative) {

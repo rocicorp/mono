@@ -317,8 +317,6 @@ export function mergePokes(
 ):
   | (PokeInternal & {mutationResults?: MutationPatch[] | undefined})
   | undefined {
-  const deletedGotHashes = new Set<string>();
-  let sawGotClear = false;
   if (pokeBuffer.length === 0) {
     return undefined;
   }
@@ -327,6 +325,21 @@ export function mergePokes(
   const lastPoke = pokeBuffer.at(-1)!;
   const {cookie} = lastPoke.pokeEnd;
   const mergedPatch: PatchOperationInternal[] = [];
+  // Converge stale body fingerprints inside a real poke transaction, so the
+  // value only ever changes with the same atomicity the bit itself has. The
+  // refresh puts go first: the entries were computed from pre-poke state, and
+  // replicache applies a patch last-op-wins per key (a clear drops everything
+  // before it), so any del, clear or put this poke carries for the same key
+  // takes precedence.
+  if (gotRefreshEntries) {
+    for (const entry of gotRefreshEntries()) {
+      mergedPatch.push({
+        op: 'put',
+        key: toGotQueriesKey(entry.hash),
+        value: entry.value,
+      });
+    }
+  }
   const mergedLastMutationIDChanges: Record<string, number> = {};
   const mutationResults: MutationPatch[] = [];
 
@@ -378,11 +391,6 @@ export function mergePokes(
             });
             continue;
           }
-          if (op.op === 'del') {
-            deletedGotHashes.add(op.hash);
-          } else if (op.op === 'clear') {
-            sawGotClear = true;
-          }
           mergedPatch.push(
             queryPatchOpToReplicachePatchOp(op, toGotQueriesKey),
           );
@@ -407,25 +415,6 @@ export function mergePokes(
       }
     }
   }
-  // Converge stale body fingerprints inside a real poke transaction, so the
-  // value only ever changes with the same atomicity the bit itself has. Never
-  // for a hash THIS merged poke deletes or clears — the entries were computed
-  // from pre-poke state, and a refresh put appended after the del would
-  // reinsert the bit while the rows delete, the exact torn state the design
-  // forbids.
-  if (gotRefreshEntries && !sawGotClear) {
-    for (const entry of gotRefreshEntries()) {
-      if (deletedGotHashes.has(entry.hash)) {
-        continue;
-      }
-      mergedPatch.push({
-        op: 'put',
-        key: toGotQueriesKey(entry.hash),
-        value: entry.value,
-      });
-    }
-  }
-
   const ret: PokeInternal & {mutationResults?: MutationPatch[] | undefined} = {
     baseCookie,
     pullResponse: {

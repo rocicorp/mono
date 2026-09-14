@@ -2637,11 +2637,41 @@ describe('gotCallback, persisted got with matching fingerprint is cached', () =>
       },
     ]);
     expect(queryManager.gotFingerprintRefreshEntries()).toEqual([]);
-    // A value change alone is not a new claim; the poke that carried the
-    // refresh is what makes the got set authoritative.
-    expect(gotCallback).toBeCalledTimes(1);
+    // The rewritten value makes the claim hold; the poke that carried the
+    // refresh then makes the got set authoritative.
+    expect(gotCallback).toBeCalledTimes(2);
+    expect(gotCallback).nthCalledWith(2, 'cached');
     queryManager.markGotQueriesAuthoritative();
-    expect(gotCallback).nthCalledWith(2, true);
+    expect(gotCallback).nthCalledWith(3, true);
+  });
+
+  test('a value rewrite from another tab re-evaluates the claim', () => {
+    const {queryManager, watchCallback} = setup();
+    const gotCallback = vi.fn<(got: boolean | 'cached') => void>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    const fingerprint = fingerprintOf(queryManager);
+    watchCallback([{op: 'add', key: gotKey, newValue: fingerprint}]);
+    expect(gotCallback).nthCalledWith(2, 'cached');
+
+    // A tab running a different body rewrote the value: no longer a claim.
+    watchCallback([
+      {op: 'change', key: gotKey, oldValue: fingerprint, newValue: 'other'},
+    ]);
+    expect(gotCallback).nthCalledWith(3, false);
+
+    // And back again.
+    watchCallback([
+      {op: 'change', key: gotKey, oldValue: 'other', newValue: fingerprint},
+    ]);
+    expect(gotCallback).nthCalledWith(4, 'cached');
+
+    // Once authoritative, value rewrites are not got-state changes.
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(5, true);
+    watchCallback([
+      {op: 'change', key: gotKey, oldValue: fingerprint, newValue: 'other'},
+    ]);
+    expect(gotCallback).toBeCalledTimes(5);
   });
 
   test('refresh entries only cover registered queries that are got', () => {

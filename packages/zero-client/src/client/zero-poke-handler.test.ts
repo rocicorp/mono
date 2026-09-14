@@ -1845,7 +1845,7 @@ describe('poke handler', () => {
     });
   });
 
-  test('mergePokes appends fingerprint refresh puts after the poke ops', () => {
+  test('mergePokes puts fingerprint refreshes before the poke ops', () => {
     const result = mergePokes(
       [
         {
@@ -1865,17 +1865,17 @@ describe('poke handler', () => {
     expect(result).toMatchObject({
       pullResponse: {
         patch: [
-          {op: 'put', key: toGotQueriesKey('h1'), value: 'fp1'},
           {op: 'put', key: toGotQueriesKey('stale1'), value: 'fp-stale1'},
           {op: 'put', key: toGotQueriesKey('stale2'), value: 'fp-stale2'},
+          {op: 'put', key: toGotQueriesKey('h1'), value: 'fp1'},
         ],
       },
     });
   });
 
-  test('mergePokes never refreshes a hash the same poke deletes', () => {
-    // A refresh put appended after the del would re-insert the got bit while
-    // the poke deletes the rows it vouches for.
+  test('a del in the same poke wins over a fingerprint refresh', () => {
+    // The refresh put precedes the del, so replicache's last-op-wins patch
+    // application drops the got bit along with the rows it vouched for.
     const result = mergePokes(
       [
         {
@@ -1897,14 +1897,15 @@ describe('poke handler', () => {
     expect(result).toMatchObject({
       pullResponse: {
         patch: [
-          {op: 'del', key: toGotQueriesKey('stale1')},
+          {op: 'put', key: toGotQueriesKey('stale1'), value: 'fp-stale1'},
           {op: 'put', key: toGotQueriesKey('stale2'), value: 'fp-stale2'},
+          {op: 'del', key: toGotQueriesKey('stale1')},
         ],
       },
     });
   });
 
-  test('mergePokes never refreshes when the poke clears the got set', () => {
+  test('a clear in the same poke wins over a fingerprint refresh', () => {
     const result = mergePokes(
       [
         {
@@ -1920,7 +1921,10 @@ describe('poke handler', () => {
     );
     expect(result).toMatchObject({
       pullResponse: {
-        patch: [{op: 'clear'}],
+        patch: [
+          {op: 'put', key: toGotQueriesKey('stale1'), value: 'fp-stale1'},
+          {op: 'clear'},
+        ],
       },
     });
   });
