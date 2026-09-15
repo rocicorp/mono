@@ -28,7 +28,7 @@ import {
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {getPragmaConfig, setupReplica} from '../../workers/replicator.ts';
-import {initializePostgresChangeSource} from '../change-source/pg/change-source.ts';
+import {initializePostgresChangeSource} from '../change-source/pg/change-source-init.ts';
 import {
   initializeStreamer,
   type TuningOptions,

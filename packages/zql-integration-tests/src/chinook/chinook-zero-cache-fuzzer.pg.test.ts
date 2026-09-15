@@ -6,7 +6,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {Queue} from '../../../shared/src/queue.ts';
 import type {NormalizedZeroConfig} from '../../../zero-cache/src/config/normalize.ts';
 import {InspectorDelegate} from '../../../zero-cache/src/server/inspector-delegate.ts';
-import {initializePostgresChangeSource} from '../../../zero-cache/src/services/change-source/pg/change-source.ts';
+import {initializePostgresChangeSource} from '../../../zero-cache/src/services/change-source/pg/change-source-init.ts';
 import {
   initializeStreamer,
   type TuningOptions,

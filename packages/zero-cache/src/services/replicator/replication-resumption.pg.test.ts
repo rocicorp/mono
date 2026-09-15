@@ -15,7 +15,7 @@ import type {
   ChangeSource,
   ChangeStream,
 } from '../change-source/change-source.ts';
-import {initializePostgresChangeSource} from '../change-source/pg/change-source.ts';
+import {initializePostgresChangeSource} from '../change-source/pg/change-source-init.ts';
 import {toBigInt} from '../change-source/pg/lsn.ts';
 import type {
   BackfillRequest,

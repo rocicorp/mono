@@ -19,7 +19,7 @@ import type {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {createChangeProcessor} from '../../replicator/test-utils.ts';
 import type {DataOrSchemaChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
-import {initializePostgresChangeSource} from './change-source.ts';
+import {initializePostgresChangeSource} from './change-source-init.ts';
 import {TAGS} from './schema/ddl.ts';
 
 const APP_ID = 'orez';

@@ -15,7 +15,7 @@ import type {
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
-import {initializePostgresChangeSource} from './change-source.ts';
+import {initializePostgresChangeSource} from './change-source-init.ts';
 
 const APP_ID = '23';
 const SHARD_NUM = 1;

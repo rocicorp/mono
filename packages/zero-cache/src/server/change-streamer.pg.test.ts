@@ -7,7 +7,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {must} from '../../../shared/src/must.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {publishCriticalEvent} from '../observability/events.ts';
-import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
+import {initializePostgresChangeSource} from '../services/change-source/pg/change-source-init.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {ensureReplicationConfig} from '../services/change-streamer/schema/tables.ts';
 import type * as LifeCycle from '../services/life-cycle.ts';

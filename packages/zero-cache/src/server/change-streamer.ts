@@ -12,7 +12,7 @@ import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
-import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
+import {initializePostgresChangeSource} from '../services/change-source/pg/change-source-init.ts';
 import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cleanup-monitor-factory.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';

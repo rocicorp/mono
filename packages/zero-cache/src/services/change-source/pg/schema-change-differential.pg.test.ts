@@ -9,7 +9,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import {createChangeProcessor} from '../../replicator/test-utils.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
-import {initializePostgresChangeSource} from './change-source.ts';
+import {initializePostgresChangeSource} from './change-source-init.ts';
 import {initialSync} from './initial-sync.ts';
 
 const APP_ID = 'schema_change_differential';

@@ -28,7 +28,7 @@ import type {
   ChangeStreamMessage,
   Commit,
 } from '../protocol/current/downstream.ts';
-import {initializePostgresChangeSource} from './change-source.ts';
+import {initializePostgresChangeSource} from './change-source-init.ts';
 import {fromStateVersionString, toBigInt, toStateVersionString} from './lsn.ts';
 import {dropEventTriggerStatements} from './schema/ddl.ts';
 

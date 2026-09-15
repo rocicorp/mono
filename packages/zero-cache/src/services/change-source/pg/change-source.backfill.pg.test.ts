@@ -23,7 +23,7 @@ import type {
   ChangeStreamData,
   ChangeStreamMessage,
 } from '../protocol/current/downstream.ts';
-import {initializePostgresChangeSource} from './change-source.ts';
+import {initializePostgresChangeSource} from './change-source-init.ts';
 import {TAGS} from './schema/ddl.ts';
 
 const APP_ID = 'bf';
