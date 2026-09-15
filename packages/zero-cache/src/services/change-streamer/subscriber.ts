@@ -355,6 +355,11 @@ export class Subscriber {
       case 'update-table-metadata':
         // update-table-row-key is only understood by subscribers >= protocol v5
         return this.#protocolVersion >= 5;
+      case 'backfill-started':
+        // Backfill run announcements are only understood by subscribers
+        // >= protocol v7. An older subscriber never follows a run, and so
+        // completes backfills unconditionally, exactly as it does today.
+        return this.#protocolVersion >= 7;
     }
     return true;
   }
