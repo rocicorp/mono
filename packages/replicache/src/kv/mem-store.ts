@@ -75,4 +75,8 @@ export class MemStore implements Store {
   get closed(): boolean {
     return this.#closed;
   }
+
+  get kind(): string {
+    return 'mem';
+  }
 }

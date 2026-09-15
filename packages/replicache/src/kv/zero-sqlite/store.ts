@@ -28,7 +28,12 @@ export function zeroSQLiteStoreProvider(
 ): StoreProvider {
   return {
     create: name =>
-      new SQLiteStore(name, name => new ZeroSQLiteDatabase(name), opts),
+      new SQLiteStore(
+        name,
+        name => new ZeroSQLiteDatabase(name),
+        opts,
+        'zero-sqlite',
+      ),
     drop: name => dropZeroSQLiteStore(name, opts),
   };
 }

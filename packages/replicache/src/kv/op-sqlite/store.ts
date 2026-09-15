@@ -39,6 +39,7 @@ export function opSQLiteStoreProvider(
         name,
         (name, options) => new OpSQLiteDatabase(name, options),
         opts,
+        'op-sqlite',
       ),
     drop: name => dropOpSQLiteStore(name, opts),
   };
