@@ -70,6 +70,21 @@ async function corruptClientsRefCountForTesting(perdag: Store): Promise<Hash> {
   return clientsHash;
 }
 
+/**
+ * Timers are faked, but BroadcastChannel delivery and the unhandledrejection
+ * event need a real task. MessageChannel is not faked.
+ */
+function yieldToRealTask(): Promise<void> {
+  return new Promise<void>(resolve => {
+    const {port1, port2} = new MessageChannel();
+    port1.onmessage = () => {
+      port1.close();
+      resolve();
+    };
+    port2.postMessage(null);
+  });
+}
+
 async function expectDatabaseDropped(idbName: string): Promise<void> {
   const idbDatabases = new IDBDatabasesStore(name => new IDBStore(name));
   expect(Object.keys(await idbDatabases.getDatabases())).not.toContain(idbName);
@@ -529,6 +544,13 @@ describe('onClientStateNotFound', () => {
     await rep2Notified;
     expect(onClientStateNotFound2).toHaveBeenCalledTimes(1);
     expect(hasMemStore(rep1.idbName)).toBe(false);
+
+    // rep2 announces its drop too, for instances that opened the corrupt
+    // database in between. rep1 is already recovering and ignores it.
+    for (let i = 0; i < 10; i++) {
+      await yieldToRealTask();
+    }
+    expect(onClientStateNotFound1).toHaveBeenCalledTimes(1);
   });
 
   test('Ignores a reset that another instance completed before this instance was created', async () => {
@@ -664,17 +686,6 @@ describe('onClientStateNotFound', () => {
       event.preventDefault();
     };
     window.addEventListener('unhandledrejection', onUnhandled);
-    // Timers are faked, but the unhandledrejection event needs a real task
-    // to be dispatched. MessageChannel is not faked.
-    const yieldToRealTask = () =>
-      new Promise<void>(resolve => {
-        const {port1, port2} = new MessageChannel();
-        port1.onmessage = () => {
-          port1.close();
-          resolve();
-        };
-        port2.postMessage(null);
-      });
     try {
       const rep = new ReplicacheTest(
         {name, mutators: {addData}, pullURL: '', pushURL: '', kvStore},

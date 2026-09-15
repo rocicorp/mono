@@ -1397,7 +1397,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         `Database ${this.idbName} was found corrupt by another instance that could not drop it, clientID: ${this.clientID}. Dropping it from this instance`,
       );
       this.#corruptDatabaseRecovery =
-        this.#dropDatabaseAndFireOnClientStateNotFound(false);
+        this.#dropDatabaseAndFireOnClientStateNotFound();
     }
   }
 
@@ -1430,24 +1430,25 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         e,
       );
       this.#corruptDatabaseRecovery =
-        this.#dropDatabaseAndFireOnClientStateNotFound(true);
+        this.#dropDatabaseAndFireOnClientStateNotFound();
     }
     return this.#corruptDatabaseRecovery;
   }
 
   /**
    * Drops our database, then fires `onClientStateNotFound` whether or not the
-   * drop succeeded so the app can still recover. With `notifyOtherInstances`
-   * the instances sharing the database are told as well, including whether
-   * the drop succeeded, since they lost their connection to it and would
-   * otherwise only see generic storage errors from now on.
+   * drop succeeded so the app can still recover. The instances sharing the
+   * database are told as well, including whether the drop succeeded, since
+   * they lost their connection to it and would otherwise only see generic
+   * storage errors from now on. That holds for a drop retried on behalf of
+   * another instance too: an instance that opened the still corrupt database
+   * in between is only reached by this notification. Instances already in
+   * recovery ignore it.
    *
    * Uses its own handle on the databases registry rather than `#idbDatabases`
    * so it works even when `close()` is already closing this instance.
    */
-  async #dropDatabaseAndFireOnClientStateNotFound(
-    notifyOtherInstances: boolean,
-  ): Promise<void> {
+  async #dropDatabaseAndFireOnClientStateNotFound(): Promise<void> {
     const {idbName, clientID} = this;
     let dropped = false;
     // Created inside the guard: `create` is synchronous and may throw, and that
@@ -1482,9 +1483,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         closeError,
       );
     }
-    if (notifyOtherInstances) {
-      notifyDatabaseReset(idbName, dropped, droppedAt);
-    }
+    notifyDatabaseReset(idbName, dropped, droppedAt);
     this.#fireOnClientStateNotFound();
   }
 
