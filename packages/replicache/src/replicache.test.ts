@@ -1249,6 +1249,23 @@ test('profileID persists with mem store', async () => {
   await rep2.close();
 });
 
+test('kvStore', async () => {
+  const idbRep = await replicacheForTesting('kv-store-idb');
+  expect(idbRep.kvStore.kind).toBe('idb');
+
+  const memRep = await replicacheForTesting('kv-store-mem', {
+    kvStore: 'mem',
+  });
+  expect(memRep.kvStore.kind).toBe('mem');
+
+  const store = new TestMemStore();
+  const customRep = await replicacheForTesting('kv-store-custom', {
+    kvStore: {create: () => store, drop: () => promiseVoid},
+  });
+  expect(customRep.kvStore).toBe(store);
+  expect(customRep.kvStore.kind).toBe(undefined);
+});
+
 test('profileID persists shared between different stores', async () => {
   const rep1 = await replicacheForTesting('profile-1');
   const profileID = await rep1.profileID;

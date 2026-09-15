@@ -32,7 +32,12 @@ export function expoSQLiteStoreProvider(
 ): StoreProvider {
   return {
     create: name =>
-      new SQLiteStore(name, name => new ExpoSQLiteDatabase(name), opts),
+      new SQLiteStore(
+        name,
+        name => new ExpoSQLiteDatabase(name),
+        opts,
+        'expo-sqlite',
+      ),
     drop: name => dropExpoSQLiteStore(name, opts),
   };
 }
