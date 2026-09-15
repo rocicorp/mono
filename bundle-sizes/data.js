@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789484367492,
+  "lastUpdate": 1789488841692,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57829,6 +57829,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 34137,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cf76283c47446f97bc43e07948399f2897bfe14f",
+          "message": "fix(replicache): fall back to MemStore when IndexedDB fails to open  (#6585)\n\nCo-authored-by: Karavil <46430499+Karavil@users.noreply.github.com>",
+          "timestamp": "2026-09-15T16:01:52Z",
+          "tree_id": "115c8b4f6874bfb762aea6effe8c5e40a64abce0",
+          "url": "https://github.com/rocicorp/mono/commit/cf76283c47446f97bc43e07948399f2897bfe14f"
+        },
+        "date": 1789488828538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 326336,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 59113,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 119434,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34103,
             "unit": "bytes"
           }
         ]
