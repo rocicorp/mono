@@ -10,6 +10,7 @@ export type TypeParser = (val: string) => unknown;
 
 import type {TypeParsers} from '../../../../db/pg-type-parser.ts';
 import {BinaryReader} from './binary-reader.ts';
+import type {BinaryDecoders} from './pgoutput-binary-decoders.ts';
 import type {
   Message,
   MessageBegin,
@@ -31,8 +32,13 @@ export class PgoutputParser {
 
   // Replaces "pg-types" library.
   #typeParsers: TypeParsers;
-  constructor(typeParsers: TypeParsers) {
+  #binaryDecoders: BinaryDecoders | undefined;
+  constructor(
+    typeParsers: TypeParsers,
+    binaryDecoders?: BinaryDecoders | undefined,
+  ) {
     this.#typeParsers = typeParsers;
+    this.#binaryDecoders = binaryDecoders;
   }
   #getTypeParser(typeOid: number): TypeParser {
     return this.#typeParsers.getTypeParser(typeOid);
@@ -163,6 +169,7 @@ export class PgoutputParser {
       ...this._typeCache.get(typeOid),
       // parser: types.getTypeParser(typeOid),
       parser: this.#getTypeParser(typeOid),
+      binaryDecoder: this.#binaryDecoders?.getBinaryDecoder(typeOid),
     };
   }
 
@@ -261,16 +268,19 @@ export class PgoutputParser {
     const tuple = Object.create(null);
 
     for (let i = 0; i < nfields; i++) {
-      const {name, parser} = columns[i];
+      const {name, parser, binaryDecoder} = columns[i];
       const kind = reader.readUint8();
 
       switch (kind) {
         case 0x62: // 'b' binary
           const bsize = reader.readInt32();
           const bval = reader.read(bsize);
-          // dont need to .slice() because new buffer
-          // is created for each replication chunk
-          tuple[name] = bval;
+          const bbuf = Buffer.from(
+            bval.buffer,
+            bval.byteOffset,
+            bval.byteLength,
+          );
+          tuple[name] = binaryDecoder ? binaryDecoder(bbuf) : bbuf;
           break;
         case 0x74: // 't' text
           const valsize = reader.readInt32();

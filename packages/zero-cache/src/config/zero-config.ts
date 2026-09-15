@@ -423,6 +423,14 @@ export const zeroOptions = {
         `disables inbound liveness detection entirely.)`,
       ],
     },
+
+    pgTextReplication: {
+      type: v.boolean().default(false),
+      desc: [
+        `Use text format instead of binary format for logical replication.`,
+        `Binary logical replication is enabled by default and significantly improves throughput.`,
+      ],
+    },
   },
 
   /** @deprecated */
