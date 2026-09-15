@@ -8,6 +8,7 @@ import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {BoundedPlanCache} from '../../../zql/src/builder/plan-cache.ts';
 import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
 import type {ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
@@ -50,6 +51,14 @@ import {isPriorityOpRunning, runPriorityOp} from './priority-op.ts';
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
 }
+
+/**
+ * Bounds on the per-worker planner decision cache. Auth literals and arbitrary
+ * query arguments make the key space unbounded, so both a count and a size
+ * limit are enforced.
+ */
+const PLAN_CACHE_MAX_ENTRIES = 1024;
+const PLAN_CACHE_MAX_BYTES = 16 * 1024 * 1024;
 
 function getCustomQueryConfig(
   config: Pick<NormalizedZeroConfig, 'query' | 'getQueries'>,
@@ -178,6 +187,14 @@ export default async function runWorker(
     };
   }
 
+  // One store for every ViewSyncer on this worker: the reuse being captured is
+  // across client groups requesting the same query, which a per-client-group
+  // cache cannot see.
+  const planCache = new BoundedPlanCache(
+    PLAN_CACHE_MAX_ENTRIES,
+    PLAN_CACHE_MAX_BYTES,
+  );
+
   const viewSyncerFactory = (
     id: string,
     sub: Subscription<ReplicaState>,
@@ -235,6 +252,7 @@ export default async function runWorker(
             : normalYieldThresholdMs,
         config.enableQueryPlanner,
         config,
+        planCache,
       ),
       sub,
       drainCoordinator,
@@ -279,6 +297,7 @@ export default async function runWorker(
     pusherFactory,
     parent,
     validateLegacyJWT,
+    planCache,
   );
 
   startAnonymousTelemetry(lc, config);
