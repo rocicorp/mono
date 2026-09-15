@@ -23,6 +23,9 @@ export class IDBStore implements Store {
 
   constructor(name: string) {
     this.#db = openDatabase(name);
+    // read() and write() surface an open failure as an IDBOpenError. Don't
+    // leave an unhandled rejection when neither is called.
+    this.#db.catch(() => undefined);
   }
 
   read(): Promise<Read> {
@@ -49,6 +52,10 @@ export class IDBStore implements Store {
 
   get closed(): boolean {
     return this.#closed;
+  }
+
+  get kind(): string {
+    return 'idb';
   }
 
   async #withReopen<R>(fn: (db: IDBDatabase) => R): Promise<R> {
@@ -221,7 +228,12 @@ function openDatabase(name: string): Promise<IDBDatabase> {
       db.onversionchange = () => db.close();
       resolve(db);
     };
-    req.onerror = () => reject(req.error);
+    req.onerror = () =>
+      reject(
+        new IDBOpenError(`Failed to open IndexedDB ${name}`, {
+          cause: req.error,
+        }),
+      );
   });
 }
 
@@ -232,4 +244,13 @@ function openDatabase(name: string): Promise<IDBDatabase> {
  */
 export class IDBNotFoundError extends Error {
   name = 'IDBNotFoundError';
+}
+
+/**
+ * `read()` and `write()` reject with this error when the initial
+ * `indexedDB.open` failed. The browser's error is the `cause`. A failure after
+ * the database opened, such as a transaction error, is not wrapped.
+ */
+export class IDBOpenError extends Error {
+  name = 'IDBOpenError';
 }
