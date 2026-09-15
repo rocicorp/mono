@@ -60,6 +60,7 @@ export type CreateSQLiteDatabase = (
 export class SQLiteStore implements Store {
   readonly #filename: string;
   readonly #entry: StoreEntry;
+  readonly #kind: string;
 
   #closed = false;
 
@@ -67,9 +68,15 @@ export class SQLiteStore implements Store {
     name: string,
     create: CreateSQLiteDatabase,
     opts?: SQLiteStoreOptions,
+    kind = 'sqlite',
   ) {
     this.#filename = resolveFilename(name, opts);
     this.#entry = getOrCreateEntry(this.#filename, create, opts);
+    this.#kind = kind;
+  }
+
+  get kind(): string {
+    return this.#kind;
   }
 
   async read(): Promise<Read> {

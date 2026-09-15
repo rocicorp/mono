@@ -1,4 +1,5 @@
 import type {MaybePromise} from '../../shared/src/types.ts';
+import type {Store as KVStore} from './kv/store.ts';
 import {makeIDBName} from './make-idb-name.ts';
 import type {PendingMutation} from './pending-mutations.ts';
 import type {Puller} from './puller.ts';
@@ -79,6 +80,17 @@ export class Replicache<MD extends MutatorDefs = {}> {
    */
   get idbName(): string {
     return makeIDBName(this.name, this.schemaVersion);
+  }
+
+  /**
+   * The KV store backing this Replicache instance. Its `kind` is the storage
+   * currently in use: `'idb'`, `'mem'`, `'op-sqlite'`, `'expo-sqlite'`, or
+   * whatever a custom store reports. An IndexedDB store that fails to open
+   * falls back to memory, so `kind` can change from `'idb'` to `'mem'` after
+   * the first read or write.
+   */
+  get kvStore(): KVStore {
+    return this.#impl.kvStore;
   }
 
   /** The schema version of the data understood by this application. */
