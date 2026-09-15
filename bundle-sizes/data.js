@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789461389737,
+  "lastUpdate": 1789484367492,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57785,6 +57785,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33818,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d1d7b74597130f67ea2871cb63bb3799f6d09edc",
+          "message": "fix(replicache): drop the database and fire onClientStateNotFound on an invalid ref count (#6558)\n\n## Problem\n\nOnce a corrupt ref count reaches a persistent dag store (due to some\nunknown bug, e.g. the pre-#6495 reentrancy race), every subsequent write\nthat touches it fails identically:\n\n```\nError during persist Error: Invalid ref count -1. We expect the value to be a Uint16\n```\n\nNo recovery path engaged. The device stopped persisting local writes\nforever, and only a manual IndexedDB wipe fixed it. In the 2026-09-05\nstorm 0 of 64 corrupted devices self-recovered.\n\n(`#6559` landed independently on `main` with a narrower, always-on\nnon-negative check at the same chokepoint — a stopgap that reduces how\noften the corruption can be written in the first place. This PR is the\ndetection-and-reset safety net for when it happens anyway, and is merged\nwith that fix.)\n\n## Fix\n\nWe do not expect to ever hit this case, so the goal is narrow: make sure\na device that does hit it doesn't get stuck. A forced reload or a thrown\nerror along the way is fine.\n\n- `getRefCount` now throws a typed `InvalidRefCountError` carrying the\nchunk hash and the bad value, for negative/NaN/non-numeric/out-of-range\nvalues.\n- A single `onInvalidRefCount` hook, installed on the store, is the one\nplace corruption is detected regardless of which write path found it\n(`persist()`, `refresh()`, heartbeat, `open()`, GC, ...). It drops this\ninstance's own IndexedDB database, then fires `onClientStateNotFound` so\nthe app reloads into a fresh store. If the drop itself fails, that's\nlogged and the callback still fires.\n- A corrupt database belonging to another client/client-group,\ndiscovered while recovering mutations or during the periodic\nidle-database collection sweep, is left alone rather than proactively\ndropped: that database's own instance will find the same corruption on\nits own next write and recover the same way. The one exception is the\nperiodic collection sweep's own write loop, which specifically catches\n`InvalidRefCountError` and skips that database — without this, one\ncorrupt orphaned database would break collection for every other\ndatabase, forever, every 12 hours.\n- Sibling tabs sharing the dropped database are not proactively\nnotified. A background tab that never writes to it again simply never\nnotices; one that does hits a generic storage error today, or the same\ncorrupt key and its own recovery once this instance's drop lands first.\nThat delay is an acceptable, inexpensive cost for something this rare —\nno `BroadcastChannel`, no cross-tab lock, no coordination protocol.\n\n## Why drop the database instead of disabling the client group\n\nDisabling the client group is not enough. The corrupt ref-count key\nstays in the same kv store, and ref counts are decremented whenever a\nhead moves off a chunk. The `clients` head is rewritten on every client\nstart and heartbeat, so a reload would decrement the same corrupt chunk\nand fail again, looping through reloads. Disabling the group would also\nhit the error itself if the corrupt chunk were the client-groups chunk.\n\nTrade-off: pending local mutations in that database are lost. They were\neffectively lost before too, since the device could never persist them.\n\n## Tests\n\n- `dag/gc.test.ts`, `dag/store-impl.test.ts`: assert the error type,\nhash and value for negative/NaN/invalid stored values, and that the\nstore owner is notified once the write transaction has released (even if\nthe kv release itself throws).\n- `replicache-persist.test.ts`: corruption during persist/open/heartbeat\ndrops the database and fires `onClientStateNotFound`; the callback still\nfires (and the failure is logged) when the drop or registry cleanup\nfails.\n- `persist/collect-idb-databases.test.ts`: a corrupt database found\nduring the periodic collection sweep is skipped (left alone, not\ndropped) without breaking collection of the others.\n\nFull replicache suite (74 files, 826 tests), `check-types`, `lint` and\n`format` pass; `zero-client` type-checks and its test suite (131 tests)\npasses.\n\nCo-authored-by: Claude Sonnet 5 <noreply@anthropic.com>",
+          "timestamp": "2026-09-15T14:50:04Z",
+          "tree_id": "6fe5fd4b0ea43f915f004253618b3480b19c67f3",
+          "url": "https://github.com/rocicorp/mono/commit/d1d7b74597130f67ea2871cb63bb3799f6d09edc"
+        },
+        "date": 1789484358060,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 325819,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 59016,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 119461,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34137,
             "unit": "bytes"
           }
         ]
