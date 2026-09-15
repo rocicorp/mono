@@ -596,7 +596,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.debug?.('about to acquire lock for cvr ', rid);
     const lockWaitStart = performance.now();
     return this.#lock.withLock(async () => {
-      this.#lockWaitTime.recordMs(performance.now() - lockWaitStart);
+      const lockWaitMs = performance.now() - lockWaitStart;
+      const lockWorkStart = performance.now();
+      this.#lockWaitTime.recordMs(lockWaitMs);
+      this.#lc.info?.('diagnosis view syncer lock acquired', {
+        zeroEvent: 'diagnosis-view-syncer-lock-acquired',
+        clientGroupID: this.id,
+        lockID: rid,
+        lockWaitMs,
+      });
       this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
       const lc = this.#lc.withContext('lock', rid);
       if (!this.#stateChanges.active) {
@@ -647,6 +655,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#cvr = undefined;
         throw e;
       } finally {
+        this.#lc.info?.('diagnosis view syncer lock released', {
+          zeroEvent: 'diagnosis-view-syncer-lock-released',
+          clientGroupID: this.id,
+          lockID: rid,
+          lockWaitMs,
+          lockWorkMs: performance.now() - lockWorkStart,
+        });
         // Lock-scoped work is where validated connections gain or lose
         // schedulable auth-maintenance deadlines. Recompute the single wakeup
         // after every locked operation; out-of-lock fail/close transitions only
@@ -1440,6 +1455,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     connCtx: ConnectionContext,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
   ): Promise<CVRSnapshot> {
+    const diagnosisStart = performance.now();
     const updater = new CVRConfigDrivenUpdater(
       this.#cvrStore,
       cvr,
@@ -1448,8 +1464,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     updater.ensureClient(clientID);
     const patches = fn(updater);
 
+    const configBookkeepingMs = performance.now() - diagnosisStart;
+    const configFlushStart = performance.now();
     this.#cvr = await this.#flushUpdater(lc, updater);
+    const configFlushMs = performance.now() - configFlushStart;
 
+    const configPokeStart = performance.now();
     if (cmpVersions(cvr.version, this.#cvr.version) < 0) {
       // Send pokes to catch up clients that are up to date.
       // (Clients that are behind the cvr.version need to be caught up in
@@ -1470,7 +1490,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         },
       );
     }
+    const configPokeMs = performance.now() - configPokeStart;
 
+    const querySyncStart = performance.now();
     if (!this.#pipelinesHydrated) {
       await this.#maybeHydratePipelines(lc, this.#cvr, connCtx);
     } else {
@@ -1481,6 +1503,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         connCtx,
       );
     }
+    const querySyncMs = performance.now() - querySyncStart;
+    lc.info?.('diagnosis config update stages', {
+      zeroEvent: 'diagnosis-config-update-stages',
+      clientGroupID: this.id,
+      clientID,
+      configBookkeepingMs,
+      configFlushMs,
+      configPokeMs,
+      querySyncMs,
+      totalMs: performance.now() - diagnosisStart,
+      patchCount: patches.length,
+    });
 
     return this.#cvr;
   }
@@ -2243,6 +2277,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
       const start = performance.now();
+      let customTransformMs = 0;
       span.setAttribute('clientGroupID', this.id);
       assert(
         this.#pipelines.initialized(),
@@ -2379,6 +2414,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           throw e;
         } finally {
           const transformDuration = performance.now() - transformStart;
+          customTransformMs += transformDuration;
           this.#queryTransformationTime.recordMs(transformDuration);
         }
 
@@ -2549,6 +2585,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // had no queries at stake.
         await this.#catchupClients(lc, cvr);
       }
+      lc.info?.('diagnosis query sync stages', {
+        zeroEvent: 'diagnosis-query-sync-stages',
+        clientGroupID: this.id,
+        customTransformMs,
+        totalMs: performance.now() - start,
+        cvrQueryCount: cvrQueryEntires.length,
+        customQueryCount: transformedCustomQueryCount,
+        addQueryCount: addQueries.length,
+        removeQueryCount: removeQueriesQueryIds.size,
+      });
     });
   }
 
@@ -2740,6 +2786,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Must have queries to add or remove',
       );
       const start = performance.now();
+      const prepareStart = performance.now();
 
       const stateVersion = this.#pipelines.currentVersion();
       lc = lc.withContext('stateVersion', stateVersion);
@@ -2823,6 +2870,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // Clean up thrashing detection for removed queries
         this.#queryReplacements.delete(q.id);
       }
+      const prepareMs = performance.now() - prepareStart;
 
       let totalProcessTime = 0;
       const timer = new TimeSliceTimer(lc);
@@ -3011,6 +3059,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         hydrationPassStats.inactiveHydratedQueries,
         budgetEvictedQueryIDs,
       );
+      const hydrateAndBookkeepingMs = performance.now() - start - prepareMs;
       this.#logQueryCoverageShadowSummary(
         lc,
         'add',
@@ -3019,6 +3068,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         firstCoveredQuery,
       );
 
+      const deleteUnreferencedStart = performance.now();
       await startAsyncSpan(
         tracer,
         'vs.#syncQueryPipelineSet.deleteUnreferencedRows',
@@ -3028,9 +3078,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
         },
       );
+      const deleteUnreferencedMs =
+        performance.now() - deleteUnreferencedStart;
 
       // Commit the changes and update the CVR snapshot.
+      const cvrFlushStart = performance.now();
       this.#cvr = await this.#flushUpdater(lc, updater);
+      const cvrFlushMs = performance.now() - cvrFlushStart;
       if (budgetEvictedQueryIDs.length > 0) {
         this.#scheduleExpireEviction(lc, this.#cvr);
       }
@@ -3038,6 +3092,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const finalVersion = this.#cvr.version;
 
       // Before ending the poke, catch up clients that were behind the old CVR.
+      const catchupStart = performance.now();
       await this.#catchupClients(
         lc,
         cvr,
@@ -3045,11 +3100,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         hydratedQueryIDs,
         pokers,
       );
+      const catchupMs = performance.now() - catchupStart;
 
       // Signal clients to commit.
+      const pokeEndStart = performance.now();
       await startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet.pokeEnd', () =>
         pokers.end(finalVersion),
       );
+      const pokeEndMs = performance.now() - pokeEndStart;
       // `stateVersion` is the replica version the queries were hydrated at,
       // which is what the CVR was advanced to. See #markVersionServed.
       this.#markVersionServed(stateVersion);
@@ -3058,6 +3116,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `finished processing queries (process: ${totalProcessTime} ms, wall: ${wallTime} ms)`,
       );
+      lc.info?.('diagnosis query wave stages', {
+        zeroEvent: 'diagnosis-query-wave-stages',
+        clientGroupID: this.id,
+        queryCount: addQueries.length,
+        prepareMs,
+        queryProcessingCpuMs: totalProcessTime,
+        hydrateAndBookkeepingMs,
+        deleteUnreferencedMs,
+        cvrFlushMs,
+        catchupMs,
+        pokeEndMs,
+        totalMs: wallTime,
+      });
     });
   }
 

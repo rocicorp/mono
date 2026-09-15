@@ -1,0 +1,15 @@
+{
+  "clients": 1,
+  "run": 2,
+  "wallSeconds": 1.394643372,
+  "results": [
+    {
+      "index": 1,
+      "exitCode": 0,
+      "clientGroup": "udoblpg58sqo2il1rs",
+      "totalSettleSeconds": 0.998,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    }
+  ]
+}

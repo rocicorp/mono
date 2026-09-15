@@ -1,0 +1,15 @@
+{
+  "clients": 1,
+  "run": 3,
+  "wallSeconds": 1.399195114,
+  "results": [
+    {
+      "index": 1,
+      "exitCode": 0,
+      "clientGroup": "5dgjpeg1s2btjvqhkl",
+      "totalSettleSeconds": 1.019,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    }
+  ]
+}
