@@ -2,6 +2,7 @@ import type {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {initBgIntervalProcess} from '../bg-interval.ts';
+import {InvalidRefCountError} from '../dag/invalid-ref-count-error.ts';
 import {StoreImpl} from '../dag/store-impl.ts';
 import type {Store} from '../dag/store.ts';
 import {
@@ -47,6 +48,7 @@ export function initCollectIDBDatabases(
   onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
+  newDagStore: NewDagStore = defaultNewDagStore,
 ): void {
   let initial = true;
   initBgIntervalProcess(
@@ -59,6 +61,7 @@ export function initCollectIDBDatabases(
         kvStoreProvider,
         enableMutationRecovery,
         onClientsDeleted,
+        newDagStore,
       );
     },
     () => {
@@ -83,7 +86,7 @@ export async function collectIDBDatabases(
   kvStoreProvider: StoreProvider,
   enableMutationRecovery: boolean,
   onClientsDeleted: OnClientsDeleted,
-  newDagStore = defaultNewDagStore,
+  newDagStore: NewDagStore = defaultNewDagStore,
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
 
@@ -128,32 +131,38 @@ export async function collectIDBDatabases(
 
   if (deletedClientsToRemove.length > 0) {
     // Add the deleted clients to all the dbs that survived the collection.
-    let allDeletedClients: DeletedClients = deletedClientsToRemove;
+    let newDeletedClients: DeletedClients = deletedClientsToRemove;
     for (const name of dbNamesToKeep) {
-      await withWrite(
-        newDagStore(name, kvStoreProvider.create),
-        async dagWrite => {
-          const newDeletedClients = await addDeletedClients(
-            dagWrite,
-            deletedClientsToRemove,
-          );
-
-          allDeletedClients = mergeDeletedClients(
-            allDeletedClients,
-            newDeletedClients,
-          );
-        },
+      let dbDeletedClients: DeletedClients;
+      try {
+        dbDeletedClients = await withWrite(
+          newDagStore(name, kvStoreProvider.create),
+          dagWrite => addDeletedClients(dagWrite, deletedClientsToRemove),
+        );
+      } catch (e) {
+        if (!(e instanceof InvalidRefCountError)) {
+          throw e;
+        }
+        // This database is corrupt. Its own instance will find out and
+        // recover the next time it writes to it; here, just skip it and keep
+        // collecting into the others, instead of letting one corrupt
+        // database break every collection run forever.
+        continue;
+      }
+      newDeletedClients = mergeDeletedClients(
+        newDeletedClients,
+        dbDeletedClients,
       );
     }
     // normalize and dedupe
-    const normalizedDeletedClients = normalizeDeletedClients(allDeletedClients);
+    const normalizedDeletedClients = normalizeDeletedClients(newDeletedClients);
 
     // Call the callback with the normalized deleted clients
     await onClientsDeleted(normalizedDeletedClients);
   }
 }
 
-async function dropDatabaseInternal(
+export async function dropDatabaseInternal(
   name: string,
   idbDatabasesStore: IDBDatabasesStore,
   kvDropStore: DropStore,
@@ -189,6 +198,13 @@ async function dropDatabases(
   return {dropped, errors};
 }
 
+/**
+ * Creates the dag store used to inspect and update a database during
+ * collection. Callers can override it to install store hooks, for example so
+ * a corrupt ref count found while writing deleted clients is recovered from.
+ */
+export type NewDagStore = (name: string, kvCreateStore: CreateStore) => Store;
+
 function defaultNewDagStore(name: string, kvCreateStore: CreateStore): Store {
   const perKvStore = kvCreateStore(name);
   return new StoreImpl(perKvStore, newRandomHash, assertHash);
@@ -204,7 +220,7 @@ function gatherDatabaseInfoForCollect(
   maxAge: number,
   enableMutationRecovery: boolean,
   kvCreateStore: CreateStore,
-  newDagStore: typeof defaultNewDagStore,
+  newDagStore: NewDagStore,
 ): MaybePromise<
   [canCollect: false] | [canCollect: true, deletedClients: DeletedClients]
 > {

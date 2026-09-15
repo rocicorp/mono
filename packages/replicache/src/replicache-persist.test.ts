@@ -1,11 +1,15 @@
+import {resolver} from '@rocicorp/resolver';
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
 import {sleep} from '../../shared/src/sleep.ts';
-import {StoreImpl} from './dag/store-impl.ts';
+import {chunkRefCountKey} from './dag/key.ts';
+import {StoreImpl, WriteImpl} from './dag/store-impl.ts';
 import type {Store} from './dag/store.ts';
-import {assertHash, newRandomHash} from './hash.ts';
+import {assertHash, type Hash, newRandomHash} from './hash.ts';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.ts';
+import {dropMemStore, hasMemStore, MemStore} from './kv/mem-store.ts';
+import type {StoreProvider} from './kv/store.ts';
 import {
   type ClientGroup,
   deleteClientGroup,
@@ -14,11 +18,14 @@ import {
 import {deleteClientForTesting} from './persist/clients-test-helpers.ts';
 import {
   assertClientV6,
+  CLIENTS_HEAD_NAME,
   ClientStateNotFoundError,
   getClient,
 } from './persist/clients.ts';
-import type {ReplicacheTest} from './test-util.ts';
+import {HEARTBEAT_INTERVAL} from './persist/heartbeat.ts';
+import {IDBDatabasesStore} from './persist/idb-databases-store.ts';
 import {
+  ReplicacheTest,
   addData,
   disableAllBackgroundProcesses,
   expectLogContext,
@@ -39,6 +46,35 @@ afterEach(async () => {
   await perdag?.close();
   vi.restoreAllMocks();
 });
+
+/**
+ * Overwrites the ref count of the current `clients` chunk with an invalid
+ * value. The next write that replaces the `clients` head (persist, a new
+ * client starting, a heartbeat) decrements this ref count and trips on it.
+ */
+async function corruptClientsRefCountForTesting(perdag: Store): Promise<Hash> {
+  const clientsHash = await withRead(perdag, read =>
+    read.getHead(CLIENTS_HEAD_NAME),
+  );
+  assert(clientsHash, 'Expected clients head to be defined');
+  await withWriteNoImplicitCommit(perdag, async dagWrite => {
+    assert(dagWrite instanceof WriteImpl, 'Expected WriteImpl');
+    await dagWrite.kvWrite.put(chunkRefCountKey(clientsHash), -1);
+    await dagWrite.commit();
+  });
+  return clientsHash;
+}
+
+async function expectDatabaseDropped(idbName: string): Promise<void> {
+  const idbDatabases = new IDBDatabasesStore(name => new IDBStore(name));
+  expect(Object.keys(await idbDatabases.getDatabases())).not.toContain(idbName);
+  await idbDatabases.close();
+  if (indexedDB.databases) {
+    // Firefox does not support indexedDB.databases
+    const names = (await indexedDB.databases()).map(db => db.name);
+    expect(names).not.toContain(idbName);
+  }
+}
 
 async function deleteClientGroupForTesting<MD extends MutatorDefs = {}>(
   rep: ReplicacheTest<MD>,
@@ -163,6 +199,260 @@ describe('onClientStateNotFound', () => {
       rep,
       `Client state not found on client, clientID: ${clientID}`,
     );
+  });
+
+  test('Called in persist if the perdag has an invalid ref count', async () => {
+    const consoleErrorStub = vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+
+    const rep = await replicacheForTesting(
+      'called-in-persist-invalid-ref',
+      {
+        pullURL,
+        mutators: {addData},
+      },
+      disableAllBackgroundProcesses,
+    );
+
+    await rep.mutate.addData({foo: 'bar'});
+    await rep.persist();
+
+    // Pull a newer snapshot so that the next persist writes it to the perdag
+    // and rewrites the clients chunk.
+    fetchMocker.postOnce(
+      pullURL,
+      makePullResponseV1(rep.clientID, 1, [{op: 'put', key: 'a', value: 1}]),
+    );
+    await rep.pull();
+
+    const clientsHash = await corruptClientsRefCountForTesting(rep.perdag);
+
+    const onClientStateNotFound = vi.fn();
+    rep.onClientStateNotFound = onClientStateNotFound;
+    await rep.persist();
+
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    expect(onClientStateNotFound.mock.lastCall).toEqual([]);
+
+    // Disabling the client group would not be enough since the corrupt ref
+    // count stays in the kv store. The whole database is dropped so that the
+    // reload starts from a fresh store.
+    await expectDatabaseDropped(rep.idbName);
+
+    expect(consoleErrorStub.mock.calls.length).toBeGreaterThan(0);
+    const [context, message, error] = consoleErrorStub.mock.calls[0];
+    expect(context).toBe(`name=${rep.name}`);
+    expect(message).toBe(
+      `Client state is corrupt on client, clientID: ${rep.clientID}. Dropping database ${rep.idbName}`,
+    );
+    // The LogContext serializes errors to JSON before logging them.
+    expect(error).toContain('"name":"InvalidRefCountError"');
+    expect(error).toContain(`Invalid ref count -1 for ${clientsHash}`);
+  });
+
+  test('Called in open if the perdag has an invalid ref count', async () => {
+    vi.spyOn(console, 'error');
+
+    const rep = await replicacheForTesting(
+      'called-in-open-invalid-ref',
+      {mutators: {addData}},
+      disableAllBackgroundProcesses,
+    );
+    await rep.mutate.addData({foo: 'bar'});
+    await rep.persist();
+    await corruptClientsRefCountForTesting(rep.perdag);
+    await rep.close();
+
+    // A new instance on the same database registers its client in the
+    // `clients` chunk during open, before `ready` resolves. Without the
+    // store-level hook that write would reject unhandled and the instance
+    // would hang forever.
+    const {promise: calledOnClientStateNotFound, resolve} = resolver();
+    const rep2 = new ReplicacheTest(
+      {name: rep.name, mutators: {addData}, pullURL: '', pushURL: ''},
+      disableAllBackgroundProcesses,
+    );
+    rep2.onClientStateNotFound = resolve;
+    await calledOnClientStateNotFound;
+
+    expect(rep2.idbName).toBe(rep.idbName);
+    await expectDatabaseDropped(rep.idbName);
+
+    // An app with a non-reloading onClientStateNotFound handler must be able
+    // to dispose the failed instance even though it never became ready.
+    await rep2.close();
+    expect(rep2.closed).toBe(true);
+  });
+
+  const memStoreProvider = (drop: StoreProvider['drop']): StoreProvider => ({
+    create: name => new MemStore(name),
+    drop,
+  });
+
+  /**
+   * Gets `rep` into a state where its next persist rewrites the `clients`
+   * chunk and trips on a corrupt ref count.
+   */
+  async function setUpCorruptPersist(
+    rep: ReplicacheTest<{addData: typeof addData}>,
+    pullURL: string,
+  ) {
+    await rep.mutate.addData({foo: 'bar'});
+    await rep.persist();
+    fetchMocker.postOnce(
+      pullURL,
+      makePullResponseV1(rep.clientID, 1, [{op: 'put', key: 'a', value: 1}]),
+    );
+    await rep.pull();
+    await corruptClientsRefCountForTesting(rep.perdag);
+  }
+
+  test('Still called, and the failure logged, when the database cannot be dropped', async () => {
+    const consoleErrorStub = vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+    const onClientStateNotFound = vi.fn();
+    const rep = await replicacheForTesting(
+      'drop-fails-invalid-ref',
+      {
+        pullURL,
+        mutators: {addData},
+        onClientStateNotFound,
+        kvStore: memStoreProvider(() =>
+          Promise.reject(new Error('disk on fire')),
+        ),
+      },
+      disableAllBackgroundProcesses,
+    );
+    await setUpCorruptPersist(rep, pullURL);
+
+    await rep.persist();
+
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    // The corrupt database is still there; the app has to recover some other
+    // way (the default handler reloads).
+    expect(hasMemStore(rep.idbName)).toBe(true);
+    const messages = consoleErrorStub.mock.calls.map(args => String(args[1]));
+    expect(messages).toContainEqual(
+      expect.stringContaining(`Failed to drop database ${rep.idbName}`),
+    );
+
+    // A second failing persist does not fire the callback again, and the
+    // instance can still be disposed.
+    await rep.persist();
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    await rep.close();
+    expect(rep.closed).toBe(true);
+  });
+
+  test('Still called when closing the databases registry handle fails', async () => {
+    const consoleErrorStub = vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+    const onClientStateNotFound = vi.fn();
+
+    // The instance creates its own registry handle first, in the constructor.
+    // Recovery opens a second one to drop the database with; make closing
+    // that one fail, like an IndexedDB registry connection that never opened.
+    let registryHandles = 0;
+    const kvStore: StoreProvider = {
+      create: storeName => {
+        const store = new MemStore(storeName);
+        if (storeName.startsWith('rep:') || registryHandles++ === 0) {
+          return store;
+        }
+        return {
+          read: () => store.read(),
+          write: () => store.write(),
+          close: () => Promise.reject(new Error('close failed')),
+          get closed() {
+            return store.closed;
+          },
+        };
+      },
+      drop: dropMemStore,
+    };
+    const rep = await replicacheForTesting(
+      'registry-close-fails-invalid-ref',
+      {pullURL, mutators: {addData}, onClientStateNotFound, kvStore},
+      disableAllBackgroundProcesses,
+    );
+    await setUpCorruptPersist(rep, pullURL);
+
+    await rep.persist();
+
+    // The drop itself went through; only the registry cleanup failed, which
+    // must not stop the callback.
+    expect(registryHandles).toBe(2);
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    expect(hasMemStore(rep.idbName)).toBe(false);
+    const messages = consoleErrorStub.mock.calls.map(args => String(args[1]));
+    expect(messages).not.toContainEqual(
+      expect.stringContaining('Failed to drop database'),
+    );
+
+    await rep.close();
+    expect(rep.closed).toBe(true);
+  });
+
+  test('Still called, and the failure logged, when the databases registry handle cannot be created', async () => {
+    const consoleErrorStub = vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+    const onClientStateNotFound = vi.fn();
+
+    // `create` is synchronous. The instance's own registry handle is created
+    // first, in the constructor; make creating the recovery's handle throw.
+    let registryHandles = 0;
+    const kvStore: StoreProvider = {
+      create: storeName => {
+        if (!storeName.startsWith('rep:') && registryHandles++ > 0) {
+          throw new Error('cannot open registry');
+        }
+        return new MemStore(storeName);
+      },
+      drop: dropMemStore,
+    };
+    const rep = await replicacheForTesting(
+      'registry-create-fails-invalid-ref',
+      {pullURL, mutators: {addData}, onClientStateNotFound, kvStore},
+      disableAllBackgroundProcesses,
+    );
+    await setUpCorruptPersist(rep, pullURL);
+
+    await rep.persist();
+
+    expect(registryHandles).toBe(2);
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    // Nothing was dropped and that was logged as a failed drop.
+    expect(hasMemStore(rep.idbName)).toBe(true);
+    const messages = consoleErrorStub.mock.calls.map(args => String(args[1]));
+    expect(messages).toContainEqual(
+      expect.stringContaining(`Failed to drop database ${rep.idbName}`),
+    );
+
+    await rep.close();
+    expect(rep.closed).toBe(true);
+  });
+
+  test('Called from heartbeat if the perdag has an invalid ref count', async () => {
+    vi.spyOn(console, 'error');
+
+    const {promise: calledOnClientStateNotFound, resolve} = resolver();
+    const onClientStateNotFound = vi.fn(resolve);
+    const rep = await replicacheForTesting(
+      'called-in-heartbeat-invalid-ref',
+      {mutators: {addData}, onClientStateNotFound},
+      disableAllBackgroundProcesses,
+    );
+    await rep.mutate.addData({foo: 'bar'});
+    await rep.persist();
+    await corruptClientsRefCountForTesting(rep.perdag);
+
+    // The heartbeat rewrites the `clients` chunk, which decrements the corrupt
+    // ref count. It runs as a background process, outside persist/refresh.
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL);
+    await calledOnClientStateNotFound;
+
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    await expectDatabaseDropped(rep.idbName);
   });
 
   test('Called in query if collected', async () => {
