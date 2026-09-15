@@ -1,4 +1,3 @@
-import {assertNumber} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {type Hash, assertHash} from '../hash.ts';
 import type {
@@ -14,22 +13,36 @@ import {
   createChunk,
 } from './chunk.ts';
 import {type RefCountUpdatesDelegate, computeRefCountUpdates} from './gc.ts';
+import {InvalidRefCountError} from './invalid-ref-count-error.ts';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.ts';
 import {type Read, type Store, type Write, mustGetChunk} from './store.ts';
+
+/**
+ * Called when a write found an invalid ref count in the store. This is the
+ * single place where store corruption is detected, so the owner of the store
+ * can start recovery no matter which code path performed the write.
+ *
+ * The callback runs after the write transaction has been released, so it is
+ * safe for it to close or drop the underlying kv store.
+ */
+export type OnInvalidRefCount = (e: InvalidRefCountError) => void;
 
 export class StoreImpl implements Store {
   readonly #kv: KVStore;
   readonly #chunkHasher: ChunkHasher;
   readonly #assertValidHash: (hash: Hash) => void;
+  readonly #onInvalidRefCount: OnInvalidRefCount | undefined;
 
   constructor(
     kv: KVStore,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
+    onInvalidRefCount?: OnInvalidRefCount | undefined,
   ) {
     this.#kv = kv;
     this.#chunkHasher = chunkHasher;
     this.#assertValidHash = assertValidHash;
+    this.#onInvalidRefCount = onInvalidRefCount;
   }
 
   async read(): Promise<Read> {
@@ -41,6 +54,7 @@ export class StoreImpl implements Store {
       await this.#kv.write(),
       this.#chunkHasher,
       this.#assertValidHash,
+      this.#onInvalidRefCount,
     );
   }
 
@@ -117,6 +131,8 @@ export class WriteImpl
 {
   declare protected readonly _tx: KVWrite;
   readonly #chunkHasher: ChunkHasher;
+  readonly #onInvalidRefCount: OnInvalidRefCount | undefined;
+  #invalidRefCountError: InvalidRefCountError | undefined;
 
   readonly #putChunks = new Set<Hash>();
   readonly #changedHeads = new Map<string, HeadChange>();
@@ -125,9 +141,11 @@ export class WriteImpl
     kvw: KVWrite,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
+    onInvalidRefCount?: OnInvalidRefCount | undefined,
   ) {
     super(kvw, assertValidHash);
     this.#chunkHasher = chunkHasher;
+    this.#onInvalidRefCount = onInvalidRefCount;
   }
 
   createChunk = <V>(data: V, refs: Refs): Chunk<V> =>
@@ -187,11 +205,21 @@ export class WriteImpl
   }
 
   async commit(): Promise<void> {
-    const refCountUpdates = await computeRefCountUpdates(
-      this.#changedHeads.values(),
-      this.#putChunks,
-      this,
-    );
+    let refCountUpdates: Map<Hash, number>;
+    try {
+      refCountUpdates = await computeRefCountUpdates(
+        this.#changedHeads.values(),
+        this.#putChunks,
+        this,
+      );
+    } catch (e) {
+      if (e instanceof InvalidRefCountError) {
+        // Reported from release() rather than here: the owner may drop the
+        // store in response and the kv transaction still needs to roll back.
+        this.#invalidRefCountError = e;
+      }
+      throw e;
+    }
     await this.#applyRefCountUpdates(refCountUpdates);
     await this._tx.commit();
   }
@@ -201,11 +229,13 @@ export class WriteImpl
     if (value === undefined) {
       return undefined;
     }
-    assertNumber(value);
-    if (value < 0 || value > 0xffff || value !== (value | 0)) {
-      throw new Error(
-        `Invalid ref count ${value}. We expect the value to be a Uint16`,
-      );
+    if (
+      typeof value !== 'number' ||
+      value < 0 ||
+      value > 0xffff ||
+      value !== (value | 0)
+    ) {
+      throw new InvalidRefCountError(hash, value);
     }
     return value;
   }
@@ -243,6 +273,15 @@ export class WriteImpl
   }
 
   release(): void {
-    this._tx.release();
+    try {
+      this._tx.release();
+    } finally {
+      // Report even if the kv release threw (for example a failed SQLite
+      // ROLLBACK): the store is corrupt either way and the owner must still
+      // recover. The release error keeps propagating to the caller.
+      if (this.#invalidRefCountError) {
+        this.#onInvalidRefCount?.(this.#invalidRefCountError);
+      }
+    }
   }
 }
