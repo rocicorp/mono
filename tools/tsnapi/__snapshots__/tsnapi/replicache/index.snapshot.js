@@ -13,6 +13,7 @@ export class Replicache {
   set auth(_) {}
   get name() {}
   get idbName() {}
+  get kvStore() {}
   get schemaVersion() {}
   get mutate() {}
   get pullInterval() {}
