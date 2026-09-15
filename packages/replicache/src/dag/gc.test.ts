@@ -325,3 +325,60 @@ test('computeRefCountUpdates for heads updating to same hash should have no refc
   );
   expectRefCountUpdates(refCountUpdates, {});
 });
+
+test('computeRefCountUpdates rejects a negative ref count instead of returning it', async () => {
+  // The store says R is a head but reports its ref count as 0. That can only
+  // happen if the stored count was lost or misread (a corrupted store), and
+  // decrementing it would write -1 to the store, wedging it for good.
+  //
+  //   R
+  //   |
+  //   A
+  const {hashes, delegate} = createGraph({
+    graph: {
+      '000': ['a'],
+      'a': [],
+    },
+    heads: [],
+    allZeroRefCounts: true,
+  });
+
+  await expect(
+    computeRefCountUpdates(
+      [{old: hashes['000'], new: undefined}],
+      new Set(),
+      delegate,
+    ),
+  ).rejects.toThrow(
+    `ref count update must be non-negative. ${hashes['000']}:-1`,
+  );
+});
+
+test('computeRefCountUpdates treats a NaN ref count as 0 and rejects it', async () => {
+  // `ensureRefCountLoaded` coerces a falsy count (including NaN) to 0, so this
+  // is rejected as -1 like a missing count. The check itself is written as
+  // `!(update >= 0)` so that a NaN update, should one ever reach it, is
+  // rejected too.
+  const {hashes, delegate} = createGraph({
+    graph: {
+      '000': ['a'],
+      'a': [],
+    },
+    heads: [],
+    allZeroRefCounts: true,
+  });
+  const badDelegate: RefCountUpdatesDelegate = {
+    ...delegate,
+    getRefCount: hash => (hash === hashes['000'] ? NaN : 0),
+  };
+
+  await expect(
+    computeRefCountUpdates(
+      [{old: hashes['000'], new: undefined}],
+      new Set(),
+      badDelegate,
+    ),
+  ).rejects.toThrow(
+    `ref count update must be non-negative. ${hashes['000']}:-1`,
+  );
+});
