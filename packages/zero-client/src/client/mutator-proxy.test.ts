@@ -515,13 +515,13 @@ describe('MutatorProxy', () => {
       });
     });
 
-    test('returns already-wrapped success result from client promise', async () => {
+    test('wraps returned value as data in success result', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
       const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
-      const successResult = {type: 'success' as const};
+      const returnValue = {type: 'success' as const};
       const mutator = vi.fn(() => ({
-        client: Promise.resolve(successResult),
+        client: Promise.resolve(returnValue),
         server: Promise.resolve(),
       }));
       const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
@@ -529,7 +529,7 @@ describe('MutatorProxy', () => {
       const result = wrapped();
       const clientResult = await result.client;
 
-      expect(clientResult).toEqual({type: 'success'});
+      expect(clientResult).toEqual({type: 'success', data: {type: 'success'}});
       expect(mutator).toHaveBeenCalledTimes(1);
     });
 
@@ -562,7 +562,7 @@ describe('MutatorProxy', () => {
       expect(mutator).toHaveBeenCalledTimes(1);
     });
 
-    test('handles non-object result as success', async () => {
+    test('wraps null/undefined return value as data in success result', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
       const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
@@ -576,12 +576,12 @@ describe('MutatorProxy', () => {
       const clientResult = await result.client;
       const serverResult = await result.server;
 
-      expect(clientResult).toEqual({type: 'success'});
-      expect(serverResult).toEqual({type: 'success'});
+      expect(clientResult).toEqual({type: 'success', data: null});
+      expect(serverResult).toEqual({type: 'success', data: undefined});
       expect(mutator).toHaveBeenCalledTimes(1);
     });
 
-    test('handles object without type key as success', async () => {
+    test('wraps object return value as data in success result', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
       const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
@@ -595,8 +595,8 @@ describe('MutatorProxy', () => {
       const clientResult = await result.client;
       const serverResult = await result.server;
 
-      expect(clientResult).toEqual({type: 'success'});
-      expect(serverResult).toEqual({type: 'success'});
+      expect(clientResult).toEqual({type: 'success', data: {foo: 'bar'}});
+      expect(serverResult).toEqual({type: 'success', data: {baz: 123}});
       expect(mutator).toHaveBeenCalledTimes(1);
     });
 

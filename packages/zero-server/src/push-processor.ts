@@ -99,7 +99,7 @@ export class PushProcessor<
     dbTx: ExtractTransactionType<D>,
     key: string,
     args: ReadonlyJSONValue | undefined,
-  ): Promise<void> {
+  ): Promise<ReadonlyJSONValue | void> {
     // Legacy mutators used | as a separator, new mutators use .
     const mutator = getValueAtPath(mutators, key, separatorRe);
     assert(typeof mutator === 'function', `could not find mutator ${key}`);

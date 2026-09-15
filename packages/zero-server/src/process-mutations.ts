@@ -77,7 +77,7 @@ export type TransactFnCallback<D extends Database<ExtractTransactionType<D>>> =
     tx: ExtractTransactionType<D>,
     mutatorName: string,
     mutatorArgs: ReadonlyJSONValue | undefined,
-  ) => Promise<void>;
+  ) => Promise<ReadonlyJSONValue | void>;
 
 export type Parsed<D extends Database<ExtractTransactionType<D>>> = {
   transact: TransactFn<D>;
@@ -623,19 +623,22 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
               // log-leak-ignore -- mutator name and mutation id, not row data
               `Executing mutator '${mutation.name}' (id=${mutation.id})`,
             );
-            await cb(dbTx, mutation.name, mutation.args[0]);
+            const returnData = (await cb(
+              dbTx,
+              mutation.name,
+              mutation.args[0],
+            )) as ReadonlyJSONValue | undefined;
+            const successResult: MutationResponse = {
+              id: {clientID: mutation.clientID, id: mutation.id},
+              result: returnData !== undefined ? {data: returnData} : {},
+            };
+            await transactionHooks.writeMutationResult(successResult);
+            return successResult;
           } else {
             const mutationResult = makeAppErrorResponse(mutation, appError);
             await transactionHooks.writeMutationResult(mutationResult);
+            return mutationResult;
           }
-
-          return {
-            id: {
-              clientID: mutation.clientID,
-              id: mutation.id,
-            },
-            result: {},
-          };
         },
         this.#getTransactionInput(mutation),
       );
