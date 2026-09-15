@@ -514,14 +514,18 @@ export class PipelineDriver {
    * place the advice can be correct.
    */
   #warnIgnoredScalarHints(queryID: string, hints: IgnoredScalarHint[]): void {
-    for (const {table, uniqueKeys} of hints) {
+    for (const {table, uniqueKeys, reason} of hints) {
       const keys = uniqueKeys.map(k => `(${k.join(', ')})`).join(', ');
+      const why =
+        reason === 'compoundCorrelation'
+          ? `its relationship correlates more than one column, and a scalar ` +
+            `rewrite can only compare one`
+          : `it does not constrain every column of any unique key ` +
+            `${keys.length > 0 ? `[${keys}]` : '(none on this table)'} to a ` +
+            `literal with "=", so it is not provably limited to one row`;
       this.#lc.warn?.(
         `Ignoring {scalar: true} on the "${table}" subquery of query ` +
-          `${queryID}: it does not constrain every column of any unique key ` +
-          `${keys.length > 0 ? `[${keys}]` : '(none on this table)'} to a ` +
-          `literal with "=", so it is not provably limited to one row. ` +
-          `The gate runs as a plain EXISTS.`,
+          `${queryID}: ${why}. The gate runs as a plain EXISTS.`,
       );
     }
   }

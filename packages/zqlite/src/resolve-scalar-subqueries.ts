@@ -32,6 +32,13 @@ export type IgnoredScalarHint = {
   table: string;
   /** The unique keys that were available to pin it. */
   uniqueKeys: readonly PrimaryKey[];
+  /**
+   * Why the hint was dropped. `unpinned` means the subquery was not provably
+   * limited to one row; `compoundCorrelation` means it may well have been, but
+   * the correlation compares more than one column and the rewrite can only
+   * stand in for one.
+   */
+  reason: 'unpinned' | 'compoundCorrelation';
 };
 
 export type ResolveResult = {
@@ -152,8 +159,9 @@ function resolveScalarSubquery(
   execute: ScalarExecutor,
   out: Out,
 ): Condition {
-  const parentField = condition.related.correlation.parentField[0];
-  const childField = condition.related.correlation.childField[0];
+  const {correlation} = condition.related;
+  const parentField = correlation.parentField[0];
+  const childField = correlation.childField[0];
 
   // Recursively resolve any scalar subqueries nested in the
   // subquery's own WHERE (and related) before evaluating this one.
@@ -164,13 +172,22 @@ function resolveScalarSubquery(
     out,
   );
 
-  if (!isSimpleSubquery(subquery, tableSpecs)) {
+  // The rewrite below compares one parent column against one value read from
+  // one child column, so it can only stand in for a single-pair correlation.
+  // A compound correlation needs one comparison per pair: honoring the hint
+  // would keep the first pair, drop the rest, and admit parent rows the EXISTS
+  // excludes. Proving the subquery returns one row does not license that.
+  const compoundCorrelation =
+    correlation.parentField.length > 1 || correlation.childField.length > 1;
+
+  if (compoundCorrelation || !isSimpleSubquery(subquery, tableSpecs)) {
     // The author asked for a scalar rewrite and is not getting one. Record it
     // so the caller can say so — silently falling back is the whole reason the
     // hint is easy to get wrong.
     out.ignoredScalarHints.push({
       table: subquery.table,
       uniqueKeys: tableSpecs.get(subquery.table)?.tableSpec.uniqueKeys ?? [],
+      reason: compoundCorrelation ? 'compoundCorrelation' : 'unpinned',
     });
     // Return with the (possibly partially-resolved) subquery.
     if (subquery !== condition.related.subquery) {
