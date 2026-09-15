@@ -1450,8 +1450,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   ): Promise<void> {
     const {idbName, clientID} = this;
     let dropped = false;
-    const idbDatabases = new IDBDatabasesStore(this.#kvStoreProvider.create);
+    // Created inside the guard: `create` is synchronous and may throw, and that
+    // must count as a failed drop rather than skip the callback below.
+    let idbDatabases: IDBDatabasesStore | undefined;
     try {
+      idbDatabases = new IDBDatabasesStore(this.#kvStoreProvider.create);
       await dropDatabaseInternal(
         idbName,
         idbDatabases,
@@ -1470,7 +1473,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     // only costs such an instance a reload.
     const droppedAt = Date.now();
     try {
-      await idbDatabases.close();
+      await idbDatabases?.close();
     } catch (closeError) {
       // Closing the registry handle is best effort. The callback below must
       // fire regardless, and the drop outcome was already logged.

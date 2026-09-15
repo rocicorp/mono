@@ -448,6 +448,45 @@ describe('onClientStateNotFound', () => {
     expect(rep.closed).toBe(true);
   });
 
+  test('Still called, and the failure logged, when the databases registry handle cannot be created', async () => {
+    const consoleErrorStub = vi.spyOn(console, 'error');
+    const pullURL = 'https://diff.com/pull';
+    const onClientStateNotFound = vi.fn();
+
+    // `create` is synchronous. The instance's own registry handle is created
+    // first, in the constructor; make creating the recovery's handle throw.
+    let registryHandles = 0;
+    const kvStore: StoreProvider = {
+      create: storeName => {
+        if (!storeName.startsWith('rep:') && registryHandles++ > 0) {
+          throw new Error('cannot open registry');
+        }
+        return new MemStore(storeName);
+      },
+      drop: dropMemStore,
+    };
+    const rep = await replicacheForTesting(
+      'registry-create-fails-invalid-ref',
+      {pullURL, mutators: {addData}, onClientStateNotFound, kvStore},
+      disableAllBackgroundProcesses,
+    );
+    await setUpCorruptPersist(rep, pullURL);
+
+    await rep.persist();
+
+    expect(registryHandles).toBe(2);
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    // Nothing was dropped and that was logged as a failed drop.
+    expect(hasMemStore(rep.idbName)).toBe(true);
+    const messages = consoleErrorStub.mock.calls.map(args => String(args[1]));
+    expect(messages).toContainEqual(
+      expect.stringContaining(`Failed to drop database ${rep.idbName}`),
+    );
+
+    await rep.close();
+    expect(rep.closed).toBe(true);
+  });
+
   test('Other instances drop the database themselves when the detecting instance could not', async () => {
     vi.spyOn(console, 'error');
     const pullURL = 'https://diff.com/pull';
