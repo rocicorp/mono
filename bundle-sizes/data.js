@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789126815878,
+  "lastUpdate": 1789461389737,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57741,6 +57741,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33765,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "678ae8b4c94dda2bbe5be993a40d9a6fe5dafc8c",
+          "message": "fix(replicache): always reject a negative ref count update, even in production (#6559)\n\n## Problem\n\n`computeRefCountUpdates` already checked that no ref count goes\nnegative, but the check was behind `skipGCAsserts`, which is `true` in\nproduction builds. So in production a corrupted read of a live chunk's\nref count (the expo-sqlite shared-statement race fixed in #6495 produced\nexactly this: `getRefCount` returned `undefined` for a chunk that was a\nhead) computed `0 - 1` and wrote `-1` to the store. From then on every\nwrite that touched that chunk failed with `Invalid ref count -1`, and\nthe device never recovered without a manual wipe.\n\n## Fix\n\nThe non-negative check now always runs. When it fires, the dag write\nthrows before `#applyRefCountUpdates`, nothing reaches the kv store, and\nthe transaction rolls back. A transient bad read costs one failed\npersist instead of a permanently corrupted database.\n\nCost: one pass over the ref count update map per commit. The other GC\nasserts (`refs must be defined`) stay gated as before.\n\n## What this does and does not cover\n\nThis is a guard at one chokepoint. It catches the shape of corruption we\nhave actually seen (a live count read as 0, then decremented). It does\nnot catch a misread that yields a plausible non-negative number, writes\nthat bypass the dag layer, or corruption below the kv API. The\ndetection-and-reset lane in #6558 remains the safety net for those. Both\nshould land.\n\n## Tests\n\n- `gc.test.ts`: a head whose stored count is 0 is removed;\n`computeRefCountUpdates` rejects instead of returning `-1`.\n- `store-impl.test.ts`: a `StoreImpl` commit that would produce `-1`\nthrows and the kv snapshot is unchanged afterwards.\n- Both tests were run with `NODE_ENV=production` to confirm the check is\nno longer gated. This actually caught a bad edit during development:\nwith the gate still in place the tests pass in dev mode and fail in\nproduction mode.\n\nFull replicache suite (76 files, 833 tests), `check-types`, `lint` and\n`format` pass.",
+          "timestamp": "2026-09-15T08:27:07Z",
+          "tree_id": "085b82ed83096ac2e40f57dcd3becb4b32b95fce",
+          "url": "https://github.com/rocicorp/mono/commit/678ae8b4c94dda2bbe5be993a40d9a6fe5dafc8c"
+        },
+        "date": 1789461376524,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 319993,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57639,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 118329,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33818,
             "unit": "bytes"
           }
         ]
