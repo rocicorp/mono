@@ -30,6 +30,10 @@ export {
   type CustomMutatorDefs,
 } from './custom.ts';
 export {executePostgresQuery} from './pg-query-executor.ts';
+export type {
+  IsolationLevel,
+  TransactionOptions,
+} from './transaction-options.ts';
 export {
   getMutation,
   handleMutateRequest,

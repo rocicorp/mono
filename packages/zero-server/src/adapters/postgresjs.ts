@@ -11,6 +11,7 @@ import type {
 } from '../../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
+import type {TransactionOptions} from '../transaction-options.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
@@ -29,8 +30,10 @@ export class PostgresJSConnection<
   T extends Record<string, unknown>,
 > implements DBConnection<PostgresJsTransaction<T>> {
   readonly #pg: postgres.Sql<T>;
-  constructor(pg: postgres.Sql<T>) {
+  readonly #options: TransactionOptions;
+  constructor(pg: postgres.Sql<T>, options: TransactionOptions = {}) {
     this.#pg = pg;
+    this.#options = options;
   }
 
   query(sql: string, params: unknown[]): Promise<Row[]> {
@@ -40,8 +43,13 @@ export class PostgresJSConnection<
   transaction<TRet>(
     fn: (tx: DBTransaction<PostgresJsTransaction<T>>) => Promise<TRet>,
   ): Promise<TRet> {
-    return this.#pg.begin(pgTx =>
-      fn(new PostgresJsTransactionInternal(pgTx)),
+    const run = (pgTx: PostgresJsTransaction<T>) =>
+      fn(new PostgresJsTransactionInternal(pgTx));
+    const {isolationLevel} = this.#options;
+    return (
+      isolationLevel === undefined
+        ? this.#pg.begin(run)
+        : this.#pg.begin(`isolation level ${isolationLevel}`, run)
     ) as Promise<TRet>;
   }
 }
@@ -122,11 +130,11 @@ function postgresJsQuery<T extends Record<string, unknown>>(
 export function zeroPostgresJS<
   S extends Schema,
   T extends Record<string, unknown> = Record<string, unknown>,
->(schema: S, pg: postgres.Sql<T> | string) {
+>(schema: S, pg: postgres.Sql<T> | string, options?: TransactionOptions) {
   if (typeof pg === 'string') {
     pg = postgres(pg, {
       connection: {['application_name']: 'zero-server'},
     }) as postgres.Sql<T>;
   }
-  return new ZQLDatabase(new PostgresJSConnection(pg), schema);
+  return new ZQLDatabase(new PostgresJSConnection(pg, options), schema);
 }

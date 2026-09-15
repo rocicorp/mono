@@ -9,6 +9,10 @@ import type {
 } from '../../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
+import type {
+  IsolationLevel,
+  TransactionOptions,
+} from '../transaction-options.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
@@ -20,7 +24,28 @@ export type PrismaTransactionLike = {
 export type PrismaClientLike<
   TTransaction extends PrismaTransactionLike = PrismaTransactionLike,
 > = PrismaTransactionLike & {
-  $transaction: <T>(fn: (tx: TTransaction) => Promise<T>) => Promise<T>;
+  $transaction: <T>(
+    fn: (tx: TTransaction) => Promise<T>,
+    options?: PrismaTransactionOptions | undefined,
+  ) => Promise<T>;
+};
+
+/**
+ * The subset of Prisma's transaction options this adapter passes through.
+ *
+ * Prisma spells the levels in PascalCase rather than as Postgres does, so
+ * {@link PRISMA_ISOLATION_LEVELS} maps between them.
+ */
+type PrismaTransactionOptions = {
+  isolationLevel?: PrismaIsolationLevel | undefined;
+};
+
+type PrismaIsolationLevel = 'ReadCommitted' | 'RepeatableRead' | 'Serializable';
+
+const PRISMA_ISOLATION_LEVELS: Record<IsolationLevel, PrismaIsolationLevel> = {
+  'read committed': 'ReadCommitted',
+  'repeatable read': 'RepeatableRead',
+  'serializable': 'Serializable',
 };
 
 /**
@@ -39,9 +64,11 @@ export class PrismaConnection<
   TClient extends PrismaClientLike,
 > implements DBConnection<PrismaTransaction<TClient>> {
   readonly #client: TClient;
+  readonly #options: TransactionOptions;
 
-  constructor(client: TClient) {
+  constructor(client: TClient, options: TransactionOptions = {}) {
     this.#client = client;
+    this.#options = options;
   }
 
   query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
@@ -51,12 +78,17 @@ export class PrismaConnection<
   transaction<T>(
     fn: (tx: DBTransaction<PrismaTransaction<TClient>>) => Promise<T>,
   ): Promise<T> {
-    return this.#client.$transaction(prismaTx =>
-      fn(
-        new PrismaInternalTransaction(prismaTx) as DBTransaction<
-          PrismaTransaction<TClient>
-        >,
-      ),
+    const {isolationLevel} = this.#options;
+    return this.#client.$transaction(
+      prismaTx =>
+        fn(
+          new PrismaInternalTransaction(prismaTx) as DBTransaction<
+            PrismaTransaction<TClient>
+          >,
+        ),
+      isolationLevel === undefined
+        ? undefined
+        : {isolationLevel: PRISMA_ISOLATION_LEVELS[isolationLevel]},
     );
   }
 }
@@ -169,6 +201,7 @@ export function zeroPrisma<
 >(
   schema: TSchema,
   client: TClient,
+  options?: TransactionOptions,
 ): ZQLDatabase<TSchema, PrismaTransaction<TClient>> {
-  return new ZQLDatabase(new PrismaConnection(client), schema);
+  return new ZQLDatabase(new PrismaConnection(client, options), schema);
 }
