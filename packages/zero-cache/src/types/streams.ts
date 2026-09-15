@@ -16,7 +16,6 @@ import {
 } from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
-import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Subscription, type Options} from './subscription.ts';
 import {
@@ -58,6 +57,15 @@ export type Source<T> = AsyncIterable<T> & {
    * asynchronously as the receiving end processes the messages.
    */
   pipeline?: AsyncIterable<{value: T; consumed: () => void}> | undefined;
+
+  /**
+   * Pipelined batching support: eagerly drains available queued messages up to `maxBatch`.
+   */
+  pipelineBatched?:
+    | ((
+        maxBatch?: number,
+      ) => AsyncIterable<{values: T[]; consumed: () => void}> | undefined)
+    | undefined;
 };
 
 export type Sink<T> = {
@@ -229,100 +237,213 @@ export type Sized<T> = {
   size: number;
 };
 
+export type StreamOutOptions = {
+  batched?: boolean | undefined;
+  maxBatchSize?: number | undefined;
+};
+
+export type PreSerialized = {
+  readonly payload: Buffer;
+  readonly byteLength: number;
+};
+
+export function isPreSerialized(val: unknown): val is PreSerialized {
+  return (
+    typeof val === 'object' &&
+    val !== null &&
+    'payload' in val &&
+    Buffer.isBuffer((val as PreSerialized).payload)
+  );
+}
+
+function sendTextFrame(sink: WebSocket, data: Buffer | string) {
+  if (typeof data === 'string') {
+    sink.send(data);
+  } else {
+    (sink as unknown as {send: (data: unknown, opts?: unknown) => void}).send(
+      data,
+      {binary: false},
+    );
+  }
+}
+
 export function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, BigIntJSON.stringify);
+  return streamOutInternal(lc, source, sink, BigIntJSON.stringify, options);
 }
 
 /**
- * Streams out a `Source` for which messages are already stringified JSON.
+ * Streams out a `Source` for which messages are already stringified JSON or pre-serialized Buffers.
  */
 export function streamOutStringified(
   lc: LogContext,
-  source: Source<string>,
+  source: Source<string | PreSerialized>,
   sink: WebSocket,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, json => json);
+  return streamOutInternal(
+    lc,
+    source,
+    sink,
+    msg => (typeof msg === 'string' ? msg : msg.payload.toString('utf8')),
+    options,
+  );
 }
 
-async function streamOutInternal<T extends JSONValue>(
+async function streamOutInternal<T extends JSONValue | PreSerialized>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
   stringify: (payload: T) => string,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
 
   const closer = WebSocketCloser.forSource(lc, sink, source);
 
-  const acks = new Queue<Ack>();
+  type InFlight = {
+    id: number;
+    consumed: () => void;
+    reject?: ((err: unknown) => void) | undefined;
+  };
+  const inFlight: InFlight[] = [];
+  let nextID = 0;
+
+  function close(err?: unknown) {
+    while (inFlight.length > 0) {
+      const entry = inFlight.shift()!;
+      entry.reject?.(err ?? new Error('Stream closed'));
+    }
+    closer.close(err);
+  }
+
   sink.addEventListener('message', ({data}) => {
     try {
-      if (typeof data !== 'string') {
-        throw new Error('Expected string message');
+      const text = data.toString();
+      if (nextID === 0) {
+        return;
       }
-      acks.enqueue(v.parse(JSON.parse(data), ackSchema));
+      const {ack} = v.parse(JSON.parse(text), ackSchema);
+      if (ack > nextID || ack < 1) {
+        throw new Error(`Unexpected ack ${ack} (nextID=${nextID})`);
+      }
+      while (inFlight.length > 0 && inFlight[0].id <= ack) {
+        const entry = inFlight.shift()!;
+        entry.consumed();
+      }
     } catch (e) {
       lc.error?.(`error parsing ack`, e);
-      closer.close(e);
+      close(e);
     }
   });
 
   try {
-    let nextID = 0;
     const {pipeline} = source;
+    const batched = options?.batched ?? false;
+    const maxBatchSize = options?.maxBatchSize ?? 64;
+
+    if (batched && source.pipelineBatched) {
+      const batchedIterable = source.pipelineBatched(maxBatchSize);
+      if (batchedIterable) {
+        lc.debug?.(
+          `started batched outbound stream (maxBatchSize=${maxBatchSize})`,
+        );
+        for await (const {values, consumed} of batchedIterable) {
+          if (values.length === 1 && isPreSerialized(values[0])) {
+            const id = ++nextID;
+            inFlight.push({id, consumed});
+            const prefix = Buffer.from(`{"id":${id}`);
+            const data = Buffer.concat([prefix, values[0].payload]);
+            sendTextFrame(sink, data);
+          } else if (values.some(isPreSerialized)) {
+            let remaining = values.length;
+            const onConsumed = () => {
+              if (--remaining === 0) {
+                consumed();
+              }
+            };
+            for (const val of values) {
+              const id = ++nextID;
+              inFlight.push({id, consumed: onConsumed});
+              if (isPreSerialized(val)) {
+                const prefix = Buffer.from(`{"id":${id}`);
+                const data = Buffer.concat([prefix, val.payload]);
+                sendTextFrame(sink, data);
+              } else {
+                const data = `{"id":${id},"msg":${stringify(val)}}`;
+                sink.send(data);
+              }
+            }
+          } else {
+            const id = ++nextID;
+            const data =
+              values.length === 1
+                ? `{"id":${id},"msg":${stringify(values[0])}}`
+                : `{"id":${id},"batch":[${values.map(stringify).join(',')}]}`;
+            inFlight.push({id, consumed});
+            sink.send(data);
+          }
+        }
+        close();
+        return;
+      }
+    }
+
     if (pipeline) {
       lc.debug?.(`started pipelined outbound stream`);
       for await (const {value: msg, consumed} of pipeline) {
         const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
-        // Enable for debugging. Otherwise too verbose.
-        // lc.debug?.(`pipelining`, data);
-        sink.send(data);
-
-        // The ack is awaited off the send loop so that the next message can be
-        // sent without waiting for it. A bad ack is a protocol error like in
-        // the synchronous path below: close the socket (which cancels the
-        // source) rather than leaving the rejection unhandled.
-        void (async () => {
-          const {ack} = await acks.dequeue();
-          // lc.debug?.(`received ack`, ack);
-          if (ack !== id) {
-            throw new Error(`Unexpected ack for ${id}: ${ack}`);
-          }
-          consumed();
-        })().catch(e => closer.close(e));
-      }
-    } else {
-      lc.debug?.(`started synchronous outbound stream`);
-      for await (const msg of source) {
-        const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
-        // Enable for debugging. Otherwise too verbose.
-        // lc.debug?.(`sending`, data);
-        sink.send(data);
-
-        const {ack} = await acks.dequeue();
-        if (ack !== id) {
-          throw new Error(`Unexpected ack for ${id}: ${ack}`);
+        inFlight.push({id, consumed});
+        if (isPreSerialized(msg)) {
+          const prefix = Buffer.from(`{"id":${id}`);
+          const data = Buffer.concat([prefix, msg.payload]);
+          sendTextFrame(sink, data);
+        } else {
+          const data = `{"id":${id},"msg":${stringify(msg)}}`;
+          sink.send(data);
         }
       }
+      close();
+      return;
     }
-    closer.close();
+
+    lc.debug?.(`started synchronous outbound stream`);
+    for await (const msg of source) {
+      const id = ++nextID;
+      const r = resolver();
+      inFlight.push({id, consumed: r.resolve, reject: r.reject});
+      if (isPreSerialized(msg)) {
+        const prefix = Buffer.from(`{"id":${id}`);
+        const data = Buffer.concat([prefix, msg.payload]);
+        sendTextFrame(sink, data);
+      } else {
+        const data = `{"id":${id},"msg":${stringify(msg)}}`;
+        sink.send(data);
+      }
+      await r.promise;
+    }
+    close();
   } catch (e) {
-    closer.close(e);
+    close(e);
   }
 }
+
+export type StreamInOptions = {
+  cumulativeAck?: boolean | undefined;
+  maxAckStride?: number | undefined;
+};
 
 export function streamIn<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
+  options?: StreamInOptions | undefined,
 ): Promise<Source<T>> {
-  return streamInInternal(lc, source, schema, data => data);
+  return streamInInternal(lc, source, schema, data => data, options);
 }
 
 /**
@@ -333,33 +454,109 @@ export function streamInWithSize<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
+  options?: StreamInOptions | undefined,
 ): Promise<Source<Sized<T>>> {
-  return streamInInternal(lc, source, schema, (data, frame) => ({
-    data,
-    size: frame.length,
-  }));
+  return streamInInternal(
+    lc,
+    source,
+    schema,
+    (data, _frame, _id, size) => ({
+      data,
+      size,
+    }),
+    options,
+  );
 }
 
 async function streamInInternal<T extends JSONValue, Out>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
-  transform: (data: T, frame: string, id: number) => Out,
+  transform: (data: T, frame: string, id: number, size: number) => Out,
+  options?: StreamInOptions | undefined,
 ): Promise<Source<Out>> {
   expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
 
   const streamedSchema = v.object({
-    msg: schema,
     id: v.number(),
+    msg: schema.optional(),
+    batch: v.array(schema).optional(),
   });
 
-  const sink: Subscription<Out, {id: number; data: Out}> = new Subscription<
-    Out,
-    {id: number; data: Out}
-  >(
+  type SinkEntry = {
+    consumed: () => void;
+    data: Out;
+  };
+
+  const cumulativeAck = options?.cumulativeAck ?? false;
+  const maxAckStride = options?.maxAckStride ?? 16;
+
+  let lastAckSent = 0;
+  let highestContiguousConsumedId = 0;
+  const completedIds = new Set<number>();
+  let flushImmediateId: NodeJS.Immediate | undefined;
+
+  const flushAck = () => {
+    if (flushImmediateId !== undefined) {
+      clearImmediate(flushImmediateId);
+      flushImmediateId = undefined;
+    }
+    if (
+      highestContiguousConsumedId > lastAckSent &&
+      source.readyState === source.OPEN
+    ) {
+      lastAckSent = highestContiguousConsumedId;
+      try {
+        source.send(
+          JSON.stringify({ack: highestContiguousConsumedId} satisfies Ack),
+        );
+      } catch (e) {
+        closer.close(e);
+      }
+    }
+  };
+
+  const onFrameConsumed = (id: number) => {
+    if (!cumulativeAck) {
+      if (source.readyState === source.OPEN) {
+        try {
+          source.send(JSON.stringify({ack: id} satisfies Ack));
+        } catch (e) {
+          closer.close(e);
+        }
+      }
+      return;
+    }
+
+    completedIds.add(id);
+    while (completedIds.has(highestContiguousConsumedId + 1)) {
+      highestContiguousConsumedId++;
+      completedIds.delete(highestContiguousConsumedId);
+    }
+
+    if (highestContiguousConsumedId <= lastAckSent) {
+      return;
+    }
+
+    if (highestContiguousConsumedId - lastAckSent >= maxAckStride) {
+      flushAck();
+    } else if (flushImmediateId === undefined) {
+      flushImmediateId = setImmediate(flushAck);
+    }
+  };
+
+  const sink: Subscription<Out, SinkEntry> = new Subscription<Out, SinkEntry>(
     {
-      consumed: ({id}) => source.send(JSON.stringify({ack: id} satisfies Ack)),
-      cleanup: () => closer.close(),
+      consumed: ({consumed}) => consumed(),
+      cleanup: () => {
+        if (cumulativeAck) {
+          flushAck();
+        } else if (flushImmediateId !== undefined) {
+          clearImmediate(flushImmediateId);
+          flushImmediateId = undefined;
+        }
+        closer.close();
+      },
     },
     ({data}) => data,
   );
@@ -374,11 +571,40 @@ async function streamInInternal<T extends JSONValue, Out>(
     }
     try {
       const value = BigIntJSON.parse(data);
-      const msg = v.parse(value, streamedSchema, 'passthrough');
-      // Enable for debugging. Otherwise too verbose.
-      // lc.debug?.(`received`, data);
-      sink.push({id: msg.id, data: transform(msg.msg, data, msg.id)});
+      const parsed = v.parse(value, streamedSchema, 'passthrough');
+      const {id, msg, batch} = parsed;
+
+      if (batch !== undefined) {
+        let remaining = batch.length;
+        if (remaining === 0) {
+          onFrameConsumed(id);
+          return;
+        }
+        const onConsumed = () => {
+          if (--remaining === 0) {
+            onFrameConsumed(id);
+          }
+        };
+        const itemSize = Math.max(1, Math.round(data.length / batch.length));
+        for (const item of batch) {
+          sink.push({
+            consumed: onConsumed,
+            data: transform(item, data, id, itemSize),
+          });
+        }
+      } else if (msg !== undefined) {
+        sink.push({
+          consumed: () => onFrameConsumed(id),
+          data: transform(msg, data, id, data.length),
+        });
+      } else {
+        throw new Error(`Message ${id} has neither "msg" nor "batch"`);
+      }
     } catch (e) {
+      if (flushImmediateId !== undefined) {
+        clearImmediate(flushImmediateId);
+        flushImmediateId = undefined;
+      }
       closer.close(e);
     }
   }

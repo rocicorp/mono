@@ -16,6 +16,7 @@ import {LogContext} from '@rocicorp/logger';
 import {afterEach, expect, test, vi} from 'vitest';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
 import {Subscription} from '../../types/subscription.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import {Forwarder} from './forwarder.ts';
 import type {SQLiteChangeLogCatchupReader} from './sqlite-change-log-catchup.ts';
@@ -95,7 +96,7 @@ test('log_warm is recorded per catchup, not per coordinator', async () => {
       ['warm-subscriber', true],
       ['cold-subscriber', false],
     ] as const) {
-      const downstream = Subscription.create<string>();
+      const downstream = Subscription.create<string | PreSerializedBatch>();
       const subscriber = new Subscriber(
         5,
         id,

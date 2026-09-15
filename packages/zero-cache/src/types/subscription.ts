@@ -261,6 +261,100 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       : undefined;
   }
 
+  pipelineBatched = (
+    maxBatch = 64,
+  ): AsyncIterable<{values: T[]; consumed: () => void}> | undefined =>
+    this.#pipelineEnabled
+      ? {[Symbol.asyncIterator]: () => this.#pipelineBatched(maxBatch)}
+      : undefined;
+
+  #pipelineBatched(
+    maxBatch: number,
+  ): AsyncIterator<{values: T[]; consumed: () => void}> {
+    return {
+      next: async () => {
+        const entries: Entry<M>[] = [];
+
+        while (this.#messages.length > 0 && entries.length < maxBatch) {
+          const head = this.#messages[0];
+          if (head === 'terminus') {
+            if (entries.length > 0) {
+              break;
+            }
+            this.#messages.shift();
+            this.cancel();
+            return {value: undefined, done: true};
+          }
+          const entry = this.#messages.shift() as Entry<M>;
+          entries.push(entry);
+        }
+
+        if (entries.length > 0) {
+          for (const e of entries) {
+            this.#consuming.add(e);
+          }
+          return {
+            value: {
+              values: entries.map(e => this.#publish(e.value)),
+              consumed: () => {
+                for (const e of entries) {
+                  this.#consumed(e);
+                }
+              },
+            },
+            done: false,
+          };
+        }
+
+        if (this.#sentinel === 'canceled') {
+          return {value: undefined, done: true};
+        }
+        if (this.#sentinel) {
+          return Promise.reject(this.#sentinel);
+        }
+
+        const consumer = resolver<Entry<M> | null>();
+        this.#consumers.push(consumer);
+
+        const result = await consumer.promise;
+        if (result === null) {
+          return {value: undefined, done: true};
+        }
+
+        entries.push(result);
+
+        while (this.#messages.length > 0 && entries.length < maxBatch) {
+          if (this.#messages[0] === 'terminus') {
+            break;
+          }
+          const entry = this.#messages.shift() as Entry<M>;
+          entries.push(entry);
+        }
+
+        for (const e of entries) {
+          this.#consuming.add(e);
+        }
+
+        return {
+          value: {
+            values: entries.map(e => this.#publish(e.value)),
+            consumed: () => {
+              for (const e of entries) {
+                this.#consumed(e);
+              }
+            },
+          },
+          done: false,
+        };
+      },
+
+      return: value => {
+        this.cancel();
+        return Promise.resolve({value, done: true});
+      },
+    };
+  }
+
   #pipeline(): AsyncIterator<{value: T; consumed: () => void}> {
     return {
       next: async () => {
