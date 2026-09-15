@@ -2,7 +2,7 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.ts';
-import {IDBNotFoundError, IDBStore} from './idb-store.ts';
+import {IDBNotFoundError, IDBOpenError, IDBStore} from './idb-store.ts';
 import {runAll} from './store-test-util.ts';
 
 async function newRandomIDBStore() {
@@ -39,7 +39,7 @@ test('dropStore', async () => {
   });
 });
 
-test('openError records why the initial open rejected', async () => {
+test('rejects with IDBOpenError when the initial open fails', async () => {
   const error = new DOMException(
     'Unable to open database file on disk',
     'UnknownError',
@@ -48,13 +48,12 @@ test('openError records why the initial open rejected', async () => {
   vi.spyOn(indexedDB, 'open').mockImplementation(() => openRequest);
 
   const store = new IDBStore(`open-error-${Math.random()}`);
-  expect(store.openError).toBe(null);
 
   assert(openRequest.onerror, 'Expected openRequest.onerror to be defined');
   openRequest.onerror(new Event('error'));
 
-  await expect(store.read()).rejects.toBe(error);
-  expect(store.openError).toBe(error);
+  await expect(store.read()).rejects.toBeInstanceOf(IDBOpenError);
+  await expect(store.write()).rejects.toHaveProperty('cause', error);
   vi.restoreAllMocks();
 });
 

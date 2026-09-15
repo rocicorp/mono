@@ -40,7 +40,7 @@ import {assertHash, emptyHash, type Hash, newRandomHash} from './hash.ts';
 import type {HTTPRequestInfo} from './http-request-info.ts';
 import {httpStatusUnauthorized} from './http-status-unauthorized.ts';
 import type {IndexDefinitions} from './index-defs.ts';
-import type {StoreProvider} from './kv/store.ts';
+import type {Store as KVStore, StoreProvider} from './kv/store.ts';
 import {createLogContext} from './log-options.ts';
 import {makeIDBName} from './make-idb-name.ts';
 import {MutationRecovery} from './mutation-recovery.ts';
@@ -241,6 +241,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   isClientGroupDisabled = false;
 
   readonly #kvStoreProvider: StoreProvider;
+  readonly #perKVStore: KVStore;
 
   lastMutationID: number = 0;
 
@@ -250,6 +251,15 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    */
   get idbName(): string {
     return makeIDBName(this.name, this.schemaVersion);
+  }
+
+  /**
+   * The KV store backing this instance. Its `kind` reflects the storage
+   * currently in use, e.g. `'mem'` after an IndexedDB store fell back to
+   * memory.
+   */
+  get kvStore(): KVStore {
+    return this.#perKVStore;
   }
 
   set auth(auth: string) {
@@ -490,6 +500,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#kvStoreProvider = kvStoreProvider;
 
     const perKVStore = kvStoreProvider.create(this.idbName);
+    this.#perKVStore = perKVStore;
 
     this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
     this.perdag = new StoreImpl(

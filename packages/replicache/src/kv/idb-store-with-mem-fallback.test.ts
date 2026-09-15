@@ -10,6 +10,7 @@ import {
   IDBStoreWithMemFallback,
   newIDBStoreWithMemFallback,
 } from './idb-store-with-mem-fallback.ts';
+import {IDBOpenError} from './idb-store.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -57,12 +58,13 @@ test('race condition', async () => {
     () => 'abc Firefox def',
   );
   const logFake = vi.fn();
+  const error = firefoxPrivateBrowsingError();
 
   const name = `ff-race-${Math.random()}`;
   const store = storeThatErrorsInOpen(
     new LogContext('debug', {my: 'context'}, {log: logFake}),
     name,
-    firefoxPrivateBrowsingError(),
+    error,
   );
 
   const p1 = withWriteNoImplicitCommit(store, () => undefined);
@@ -70,12 +72,7 @@ test('race condition', async () => {
   await p1;
   await p2;
 
-  expect(logFake).toBeCalledTimes(1);
-  expect(logFake.mock.calls[0]).toEqual([
-    'info',
-    {my: 'context'},
-    'Switching to MemStore because of Firefox private browsing error',
-  ]);
+  expectSwitchLogged(logFake, error);
 });
 
 test.each([
@@ -94,6 +91,7 @@ test.each([
     name,
     error,
   );
+  expect(store.kind).toBe('idb');
 
   await withWrite(store, async tx => {
     await tx.put('foo', 'bar');
@@ -101,14 +99,9 @@ test.each([
   await withRead(store, async tx => {
     expect(await tx.get('foo')).toBe('bar');
   });
+  expect(store.kind).toBe('mem');
 
-  expect(logFake).toBeCalledTimes(1);
-  expect(logFake.mock.calls[0]).toEqual([
-    'info',
-    {my: 'context'},
-    'Switching to MemStore because IndexedDB failed to open',
-    error,
-  ]);
+  expectSwitchLogged(logFake, error);
 });
 
 test('IndexedDB open failure with concurrent first calls', async () => {
@@ -142,13 +135,7 @@ test('IndexedDB open failure with concurrent first calls', async () => {
     expect(await tx.get('b')).toBe(2);
   });
 
-  expect(logFake).toBeCalledTimes(1);
-  expect(logFake.mock.calls[0]).toEqual([
-    'info',
-    {my: 'context'},
-    'Switching to MemStore because IndexedDB failed to open',
-    error,
-  ]);
+  expectSwitchLogged(logFake, error);
 });
 
 test('Transaction error after a successful open is rethrown', async () => {
@@ -183,6 +170,21 @@ test('Transaction error after a successful open is rethrown', async () => {
   expect(logFake).not.toBeCalled();
   await store.close();
 });
+
+function expectSwitchLogged(
+  logFake: ReturnType<typeof vi.fn>,
+  cause: DOMException,
+) {
+  expect(logFake).toBeCalledTimes(1);
+  const [level, context, message, error] = logFake.mock.calls[0];
+  expect([level, context, message]).toEqual([
+    'warn',
+    {my: 'context'},
+    'Switching to MemStore because IndexedDB failed to open',
+  ]);
+  expect(error).toBeInstanceOf(IDBOpenError);
+  expect((error as IDBOpenError).cause).toBe(cause);
+}
 
 function storeThatErrorsInOpen(
   lc: LogContext,
