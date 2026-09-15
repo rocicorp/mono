@@ -2,6 +2,7 @@ import {assert, assertNumber} from '../../../shared/src/asserts.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {skipGCAsserts} from '../config.ts';
 import {type Hash, emptyHash} from '../hash.ts';
+import {InvalidRefCountError} from './invalid-ref-count-error.ts';
 
 export type HeadChange = {
   new: Hash | undefined;
@@ -129,20 +130,14 @@ class RefCountUpdates {
       await this.#changeRefCount(o, -1);
     }
 
-    // This check is deliberately not gated on `skipGCAsserts`. A negative
-    // ref count can only come from a corrupted read of the store (for example
-    // a kv delegate returning the wrong row), and if the caller writes it the
-    // store is corrupted for good: every later write that touches the chunk
-    // fails with an invalid ref count. Throwing here instead makes the caller
-    // roll back the transaction, so a transient bad read costs one failed
-    // write rather than a wedged database. The cost is one pass over the
-    // update map per commit.
+    // A negative count means a chunk that is still referenced had no (or too
+    // low a) ref count in the store, so the store is already corrupt. Always
+    // check this, even in production: writing the negative count would only
+    // spread the corruption, and the typed error lets the store owner recover.
     // Written as `!(update >= 0)` so that NaN is rejected as well.
     for (const [hash, update] of this.#refCountUpdates) {
       if (!(update >= 0)) {
-        throw new Error(
-          `ref count update must be non-negative. ${hash}:${update}`,
-        );
+        throw new InvalidRefCountError(hash, update);
       }
     }
 
