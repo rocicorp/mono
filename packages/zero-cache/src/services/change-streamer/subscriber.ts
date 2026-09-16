@@ -160,6 +160,23 @@ export class Subscriber {
     return promiseVoid;
   }
 
+  sendBatch(changes: readonly WatermarkedChange[]): Promise<void> {
+    const promises: Promise<void>[] = [];
+    for (const change of changes) {
+      const p = this.send(change);
+      if (p !== promiseVoid) {
+        promises.push(p);
+      }
+    }
+    if (promises.length === 0) {
+      return promiseVoid;
+    }
+    if (promises.length === 1) {
+      return promises[0];
+    }
+    return Promise.all(promises).then(() => {});
+  }
+
   #initialized = false;
 
   /**

@@ -143,7 +143,9 @@ export class ChangeStreamerHttpServer extends HttpService {
       }
 
       const downstream = await this.#changeStreamer.subscribe(ctx);
-      void streamOutStringified(this._lc, downstream, ws);
+      void streamOutStringified(this._lc, downstream, ws, {
+        batched: ctx.wsBatched,
+      });
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
@@ -253,7 +255,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   async subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>> {
     const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
-    const params = getParams(ctx);
+    const params = getParams({wsBatched: true, ...ctx});
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
     return streamInWithSize(this.#lc, ws, downstreamSchema);
@@ -279,6 +281,7 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
     // default: the barrier falls back to polling rather than waiting on an
     // ACK that would never be attributed to a writer.
     logsChangeStream: params.getBoolean('logsChangeStream'),
+    wsBatched: params.getBoolean('wsBatched'),
   };
 }
 
@@ -304,14 +307,18 @@ function checkProtocolVersion(pathname: string): number {
 // This is called from the client-side (i.e. the replicator).
 function getParams(ctx: SubscriberContext): URLSearchParams {
   // The protocolVersion is hard-coded into the CHANGES_PATH.
-  const {protocolVersion, ...stringParams} = ctx;
+  const {protocolVersion, wsBatched, ...stringParams} = ctx;
   assert(
     protocolVersion === PROTOCOL_VERSION,
     `replicator should be setting protocolVersion to ${PROTOCOL_VERSION}`,
   );
-  return new URLSearchParams({
+  const params = new URLSearchParams({
     ...stringParams,
     initial: ctx.initial ? 'true' : 'false',
     logsChangeStream: ctx.logsChangeStream ? 'true' : 'false',
   });
+  if (wsBatched) {
+    params.set('wsBatched', 'true');
+  }
+  return params;
 }
