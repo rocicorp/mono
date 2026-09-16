@@ -147,6 +147,13 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     return toBigInt(lsn);
   }
 
+  async function getReplicaCount(): Promise<number> {
+    let [{count}] = await upstream<
+      {count: bigint}[]
+    >`SELECT COUNT(*) FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)}`;
+    return Number(count);
+  }
+
   async function startReplication({
     lagReportIntervalMs,
     backupV5 = true,
@@ -689,6 +696,8 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   ])('bad schema change error: %s', async (errMsg, stmt) => {
     await startReplication();
     const {changes} = await startStream('00');
+    expect(await getReplicaCount()).toBe(1);
+
     try {
       const downstream = drainToQueue(changes);
 
@@ -762,6 +771,9 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
           },
         ],
       ]);
+
+      // replica row should be deleted to invalidate the slot and replica
+      expect(await getReplicaCount()).toBe(0);
     } finally {
       changes.cancel();
     }
@@ -818,6 +830,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       await withoutTriggers();
 
       const {changes} = await startStream('00');
+      expect(await getReplicaCount()).toBe(1);
       try {
         const downstream = drainToQueue(changes);
 
@@ -889,6 +902,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
             },
           ],
         ]);
+        expect(await getReplicaCount()).toBe(0);
       } finally {
         changes.cancel();
       }
