@@ -11,6 +11,13 @@ export type Options = {
 
   // Wait for the readinessGate to resolve before responding to health checks.
   readinessGate?: Promise<void> | undefined;
+
+  /**
+   * Raises Node's request-header limit above its 16KB default. The
+   * change-streamer's subscribe request carries the subscriber's backfill
+   * progress in the query string, a few hundred bytes per in-flight table.
+   */
+  maxRequestHeaderBytes?: number | undefined;
 };
 
 /**
@@ -35,10 +42,19 @@ export class HttpService implements Service {
     opts: Options,
     init: (fastify: FastifyInstance) => void | Promise<void>,
   ) {
-    const {port, keepaliveTimeoutMs, readinessGate = promiseVoid} = opts;
+    const {
+      port,
+      keepaliveTimeoutMs,
+      readinessGate = promiseVoid,
+      maxRequestHeaderBytes,
+    } = opts;
     this.id = id;
     this._lc = lc.withContext('component', this.id);
-    this.#fastify = Fastify();
+    this.#fastify = Fastify(
+      maxRequestHeaderBytes === undefined
+        ? {}
+        : {http: {maxHeaderSize: maxRequestHeaderBytes}},
+    );
     this.#port = port;
     this.#init = init;
     this._state = new RunningState(id);
