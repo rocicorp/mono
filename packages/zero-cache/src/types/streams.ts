@@ -475,7 +475,7 @@ async function streamInInternal<T extends JSONValue, Out>(
 class WebSocketCloser {
   readonly #lc: LogContext;
   readonly #ws: WebSocket;
-  readonly #closeStream: () => void;
+  readonly #closeStream: (err?: unknown) => void;
   readonly #messageHandler: ((e: MessageEvent) => void | undefined) | null;
   readonly #connected = resolver();
 
@@ -486,7 +486,9 @@ class WebSocketCloser {
   static forSource<T>(lc: LogContext, ws: WebSocket, stream: Source<T>) {
     // If the websocket is closed, call cancel() to notify the Source of
     // any unconsumed messages.
-    return new WebSocketCloser(lc, ws, () => stream.cancel());
+    return new WebSocketCloser(lc, ws, (err?: unknown) =>
+      stream.cancel(err instanceof Error ? err : undefined),
+    );
   }
 
   static forSink<T, Input>(
@@ -495,15 +497,27 @@ class WebSocketCloser {
     stream: Subscription<T, Input>,
     messageHandler: (e: MessageEvent) => void | undefined,
   ) {
-    // If the websocket is closed, call end() to allow the downstream Sink
-    // to process any pending messages before closing the stream.
-    return new WebSocketCloser(lc, ws, () => stream.end(), messageHandler);
+    // If the websocket is closed with an error, fail() the downstream Sink
+    // so consumers catch the error. Otherwise, call end() to allow pending
+    // messages to finish.
+    return new WebSocketCloser(
+      lc,
+      ws,
+      (err?: unknown) => {
+        if (err) {
+          stream.fail(err instanceof Error ? err : new Error(String(err)));
+        } else {
+          stream.end();
+        }
+      },
+      messageHandler,
+    );
   }
 
   private constructor(
     lc: LogContext,
     ws: WebSocket,
-    closeStream: () => void,
+    closeStream: (err?: unknown) => void,
     messageHandler?: (e: MessageEvent) => void | undefined,
   ) {
     this.#lc = lc;
@@ -563,7 +577,7 @@ class WebSocketCloser {
     if (err) {
       this.#lc.error?.(`closing stream with error`, err);
     }
-    this.#closeStream();
+    this.#closeStream(err);
     if (!this.closed()) {
       this.#ws.close();
     }
