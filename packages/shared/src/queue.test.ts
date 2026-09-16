@@ -221,28 +221,61 @@ describe('Queue', () => {
   });
 
   test('large queue drains efficiently (O(n) not O(n^2))', () => {
-    const queue = new Queue<number>();
-    const n = 100_000;
-    for (let i = 0; i < n; i++) {
-      queue.enqueue(i);
-    }
-    expect(queue.size()).toBe(n);
+    // Compare drain times for the same total number of items (k queues of n
+    // vs one queue of k*n) rather than asserting an absolute wall-clock
+    // bound, which is flaky on slow CI runners. Linear dequeue gives a ratio
+    // of ~1; quadratic (e.g. Array.shift()) gives ~k.
+    // Prefills `count` queues of `n` items, then times draining them all.
+    // Stops early once `budget` ms is exceeded so an O(n^2) regression fails
+    // fast instead of hitting the test timeout.
+    const drainTime = (count: number, n: number, budget = Infinity) => {
+      const queues = Array.from({length: count}, () => {
+        const queue = new Queue<number>();
+        for (let i = 0; i < n; i++) {
+          queue.enqueue(i);
+        }
+        expect(queue.size()).toBe(n);
+        return queue;
+      });
 
-    // When items are already enqueued, dequeue() returns T synchronously.
-    // This isolates the data structure cost from async/Promise overhead.
-    const start = performance.now();
-    let sum = 0;
-    for (let i = 0; i < n; i++) {
-      sum += queue.dequeue() as number;
-    }
-    const elapsed = performance.now() - start;
+      // When items are already enqueued, dequeue() returns T synchronously.
+      // This isolates the data structure cost from async/Promise overhead.
+      const start = performance.now();
+      for (const queue of queues) {
+        let sum = 0;
+        for (let i = 0; i < n; i++) {
+          sum += queue.dequeue() as number;
+          if ((i & 0x3ff) === 0 && performance.now() - start > budget) {
+            return performance.now() - start;
+          }
+        }
+        // Verify all values were dequeued correctly.
+        expect(sum).toBe((n * (n - 1)) / 2);
+        expect(queue.size()).toBe(0);
+      }
+      return performance.now() - start;
+    };
+    // Average over enough rounds to get past coarse timers (1ms in WebKit)
+    // and smooth out JIT/GC noise.
+    const minTotalMs = 50;
+    const avgTime = (f: () => number) => {
+      let total = 0;
+      let rounds = 0;
+      do {
+        total += f();
+        rounds++;
+      } while (total < minTotalMs);
+      return total / rounds;
+    };
 
-    // Verify all values were dequeued correctly.
-    expect(sum).toBe((n * (n - 1)) / 2);
-    expect(queue.size()).toBe(0);
+    const n = 10_000;
+    const k = 10;
+    const maxRatio = k / 2;
+    const small = avgTime(() => drainTime(k, n));
+    const large = avgTime(() =>
+      drainTime(1, k * n, small * maxRatio + minTotalMs),
+    );
 
-    // With O(n^2) Array.shift(), 100k items takes ~1000ms.
-    // With O(1) cursor-based dequeue, it takes ~2ms.
-    expect(elapsed).toBeLessThan(200);
+    expect(large / small).toBeLessThan(maxRatio);
   });
 });
