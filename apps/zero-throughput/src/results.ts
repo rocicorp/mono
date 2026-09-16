@@ -52,6 +52,7 @@ export type BenchmarkResult = {
     readonly replicationLagMs?: PercentileStats | null | undefined;
     readonly advancementLatencyMs?: PercentileStats | null | undefined;
     readonly e2eServingLagMs?: PercentileStats | null | undefined;
+    readonly viewSyncerLagMs?: PercentileStats | null | undefined;
     readonly pipelineResets?: number | undefined;
     readonly cloudzero?: CloudZeroMetricsSummary | undefined;
     readonly writeImpact: WriteImpactSummary;
@@ -104,14 +105,21 @@ export function buildResult(args: {
   const maxSeqLag = max(args.samples.map(sample => sample.seqLag));
   const measuredSeconds =
     (args.writerStats.finishedAtMs - args.writerStats.startedAtMs) / 1000;
+  const e2eServingLagMs =
+    args.metricsSummary?.e2eServingLagMs ??
+    args.metricsSummary?.cloudzero?.e2eServingLagMs ??
+    args.metricsSummary?.cloudzero?.servingLagMs;
   const failureReasons = failureReasonsFor({
     config: args.config,
     clientStats,
     p99ClientVisibleLagMs: percentile(latencySamples, 99),
     maxSeqLag,
     lagSlopeSeqPerSec: lagSlope(args.samples),
+    highestCommittedSeq: args.writerStats.highestCommittedSeq,
+    minObservedSeq,
     pipelineResets: args.metricsSummary?.pipelineResets,
     workerRestarts: args.metricsSummary?.workerRestarts,
+    e2eServingLagP99Ms: e2eServingLagMs?.p99,
   });
   const writeImpact = summarizeWriteImpact(args.writerStats.writeImpact);
 
@@ -152,9 +160,10 @@ export function buildResult(args: {
         args.metricsSummary?.replicationLagMs ??
         args.metricsSummary?.cloudzero?.replicationLagMs,
       advancementLatencyMs: args.metricsSummary?.advancementLatencyMs,
-      e2eServingLagMs:
-        args.metricsSummary?.e2eServingLagMs ??
-        args.metricsSummary?.cloudzero?.servingLagMs,
+      e2eServingLagMs,
+      viewSyncerLagMs:
+        args.metricsSummary?.viewSyncerLagMs ??
+        args.metricsSummary?.cloudzero?.viewSyncerLagMs,
       pipelineResets: args.metricsSummary?.pipelineResets,
       cloudzero: args.metricsSummary?.cloudzero,
       writeImpact,
@@ -184,8 +193,11 @@ function failureReasonsFor(args: {
   readonly p99ClientVisibleLagMs: number;
   readonly maxSeqLag: number;
   readonly lagSlopeSeqPerSec: number;
+  readonly highestCommittedSeq: number;
+  readonly minObservedSeq: number;
   readonly pipelineResets?: number | undefined;
   readonly workerRestarts?: number | undefined;
+  readonly e2eServingLagP99Ms?: number | undefined;
 }): string[] {
   const reasons: string[] = [];
   const disconnected = args.clientStats.filter(client => !client.connected);
@@ -199,10 +211,30 @@ function failureReasonsFor(args: {
   ) {
     reasons.push('at least one query did not complete initial sync');
   }
-  if (args.p99ClientVisibleLagMs > args.config.sloP99LagMs) {
-    reasons.push(
-      `p99 client-visible lag ${args.p99ClientVisibleLagMs}ms exceeded SLO ${args.config.sloP99LagMs}ms`,
-    );
+  if (args.config.sloMetric === 'e2e-serving') {
+    if (args.e2eServingLagP99Ms === undefined) {
+      reasons.push('e2e serving lag metric was not available to evaluate SLO');
+    } else if (args.e2eServingLagP99Ms > args.config.sloP99LagMs) {
+      reasons.push(
+        `p99 e2e serving lag ${args.e2eServingLagP99Ms.toFixed(1)}ms exceeded SLO ${args.config.sloP99LagMs}ms`,
+      );
+    }
+  } else {
+    if (args.p99ClientVisibleLagMs > args.config.sloP99LagMs) {
+      reasons.push(
+        `p99 client-visible lag ${args.p99ClientVisibleLagMs}ms exceeded SLO ${args.config.sloP99LagMs}ms`,
+      );
+    }
+    if (args.config.model === 'hot') {
+      const allowedSeqLag = Math.ceil(
+        args.config.writeRate * (args.config.sloP99LagMs / 1000),
+      );
+      if (args.maxSeqLag > allowedSeqLag) {
+        reasons.push(
+          `max seq lag ${args.maxSeqLag} exceeded SLO-equivalent ${allowedSeqLag}`,
+        );
+      }
+    }
   }
   if (args.pipelineResets && args.pipelineResets > 0) {
     reasons.push(
@@ -215,19 +247,21 @@ function failureReasonsFor(args: {
     );
   }
   if (args.config.model === 'hot') {
-    const allowedSeqLag = Math.ceil(
-      args.config.writeRate * (args.config.sloP99LagMs / 1000),
-    );
-    if (args.maxSeqLag > allowedSeqLag) {
-      reasons.push(
-        `max seq lag ${args.maxSeqLag} exceeded SLO-equivalent ${allowedSeqLag}`,
-      );
-    }
     if (args.lagSlopeSeqPerSec > args.config.writeRate * 0.05) {
       reasons.push(
         `lag slope ${args.lagSlopeSeqPerSec.toFixed(2)} seq/s was positive`,
       );
     }
+  }
+  if (
+    args.clientStats.length > 0 &&
+    args.highestCommittedSeq > 0 &&
+    args.minObservedSeq < args.highestCommittedSeq
+  ) {
+    const unobserved = args.highestCommittedSeq - args.minObservedSeq;
+    reasons.push(
+      `${unobserved} committed change(s) failed to replicate to all clients by the end of the wait period (observed up to seq ${args.minObservedSeq}, expected seq ${args.highestCommittedSeq})`,
+    );
   }
   return reasons;
 }

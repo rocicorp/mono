@@ -30,16 +30,20 @@ const options = {
   payloadBytes: v.number().default(256),
   durationMs: v.number().default(30_000),
   warmupMs: v.number().default(10_000),
-  settleMs: v.number().default(5_000),
+  settleMs: v.number().optional(),
   sampleIntervalMs: v.number().default(1_000),
   progressIntervalMs: v.number().default(5_000),
   sloP99LagMs: v.number().default(2_000),
+  sloMetric: v
+    .literalUnion('client-visible', 'e2e-serving')
+    .default('client-visible'),
   output: v.string().default('results/latest.json'),
   logsDir: v.string().default('results/logs'),
   profileDir: v.string().default('results/profiles'),
   processLogMode: v.literalUnion('file', 'inherit', 'ignore').default('file'),
   reset: v.boolean().default(true),
   resetMode: v.literalUnion('all', 'data-only', 'none').optional(),
+  cleanup: v.boolean().default(true),
   cacheURL: v.string().optional(),
   cacheURLs: v.string().optional(),
   appServerPort: v.number().default(3_000),
@@ -103,6 +107,7 @@ export type BenchmarkConfig = {
   readonly sampleIntervalMs: number;
   readonly progressIntervalMs: number;
   readonly sloP99LagMs: number;
+  readonly sloMetric: 'client-visible' | 'e2e-serving';
   readonly outputPath: string;
   readonly logsDir: string;
   readonly profileDir: string;
@@ -113,6 +118,7 @@ export type BenchmarkConfig = {
   readonly processLogMode: 'file' | 'inherit' | 'ignore';
   readonly reset: boolean;
   readonly resetMode: BenchmarkResetMode;
+  readonly cleanup: boolean;
   readonly appServerPort: number;
   readonly cacheURL: string;
   readonly cacheURLs: readonly string[];
@@ -162,7 +168,9 @@ export function loadConfig(): BenchmarkConfig {
   assertNonNegativeInteger('payloadBytes', parsed.payloadBytes);
   assertPositiveInteger('durationMs', parsed.durationMs);
   assertNonNegativeInteger('warmupMs', parsed.warmupMs);
-  assertNonNegativeInteger('settleMs', parsed.settleMs);
+  if (parsed.settleMs !== undefined) {
+    assertNonNegativeInteger('settleMs', parsed.settleMs);
+  }
   assertPositiveInteger('sampleIntervalMs', parsed.sampleIntervalMs);
   assertNonNegativeInteger('progressIntervalMs', parsed.progressIntervalMs);
   assertPositiveInteger('sloP99LagMs', parsed.sloP99LagMs);
@@ -235,10 +243,11 @@ export function loadConfig(): BenchmarkConfig {
     payloadBytes: parsed.payloadBytes,
     durationMs: parsed.durationMs,
     warmupMs: parsed.warmupMs,
-    settleMs: parsed.settleMs,
+    settleMs: parsed.settleMs ?? parsed.durationMs,
     sampleIntervalMs: parsed.sampleIntervalMs,
     progressIntervalMs: parsed.progressIntervalMs,
     sloP99LagMs: parsed.sloP99LagMs,
+    sloMetric: parsed.sloMetric,
     outputPath: parsed.output,
     logsDir: parsed.logsDir,
     profileDir: parsed.profileDir,
@@ -252,6 +261,7 @@ export function loadConfig(): BenchmarkConfig {
     processLogMode: parsed.processLogMode,
     reset: resetMode !== 'none',
     resetMode,
+    cleanup: parsed.cleanup && resetMode !== 'none',
     appServerPort: parsed.appServerPort,
     cacheURL: cacheURLs[0],
     cacheURLs,

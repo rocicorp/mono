@@ -301,5 +301,6 @@ pnpm --filter zero-throughput run sweep:write-rates -- \
 | `--pg-url <url>`          | `ZERO_THROUGHPUT_PG_URL`          | `postgresql://...:6436` | Upstream database connection string (disables local Postgres)      |
 | `--app-server-port <num>` | `ZERO_THROUGHPUT_APP_SERVER_PORT` | `3000`                  | Local query-transform app server port                              |
 | `--reset <bool>`          | `ZERO_THROUGHPUT_RESET`           | `true`                  | When `false`, skips dropping/resetting the benchmark table         |
+| `--cleanup <bool>`        | `ZERO_THROUGHPUT_CLEANUP`         | `true`                  | When `false`, skips dropping/cleaning up data after test completes |
 
 Run `pnpm --filter zero-throughput start -- --help` for all options.

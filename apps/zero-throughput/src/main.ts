@@ -35,7 +35,11 @@ import {
   type MetricSample,
 } from './results.ts';
 import {formatDuration, log, warn, sleep} from './util.ts';
-import {FixedRateWriter, type WriterStats} from './writer.ts';
+import {
+  effectiveWriteConcurrency,
+  FixedRateWriter,
+  type WriterStats,
+} from './writer.ts';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -88,11 +92,31 @@ async function main(): Promise<void> {
 
     log('Waiting for PostgreSQL...');
     await waitForPostgres(config.pg.url, config.pg.readyTimeoutMs);
+    const concurrency = effectiveWriteConcurrency(config);
     const sql = connectBenchmarkDB(
       config.pg.url,
-      Math.max(20, config.writeConcurrency * 2),
+      Math.max(20, concurrency * 2),
     );
-    cleanup.push(() => sql.end());
+    cleanup.push(() => sql.end({timeout: 2}));
+
+    if (config.cleanup && config.resetMode !== 'none') {
+      cleanup.push(async () => {
+        log(`Cleaning up benchmark database (${config.resetMode})...`);
+        try {
+          await Promise.race([
+            resetBenchmarkDatabase(sql, config),
+            sleep(15000).then(() => {
+              throw new Error('Database cleanup timed out after 15s');
+            }),
+          ]);
+        } catch (err) {
+          warn(`Database cleanup failed: ${String(err)}`);
+        }
+        if (config.resetMode === 'all') {
+          await removeReplicaFiles(config.zero.replicaFile);
+        }
+      });
+    }
 
     if (config.resetMode !== 'none') {
       log(`Resetting benchmark database (${config.resetMode})...`);
@@ -155,11 +179,13 @@ async function main(): Promise<void> {
     log(`Starting ${config.users} synthetic clients...`);
     clients = await startSyntheticClients(config);
     cleanup.push(async () => {
-      await Promise.all(clients.map(client => client.close()));
+      await Promise.all(
+        clients.map(client => Promise.race([client.close(), sleep(2000)])),
+      );
     });
 
     log(
-      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s (concurrency=${config.writeConcurrency}, batch=${config.batchSize})...`,
+      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s (concurrency=${concurrency}, batch=${config.batchSize})...`,
     );
     metricsCollector.reset();
     cloudzeroPoller?.reset();
@@ -202,16 +228,46 @@ async function main(): Promise<void> {
       log(
         `Draining pipeline (waiting up to ${config.settleMs}ms for clients to observe seq ${writer.highestCommittedSeq})...`,
       );
-      const settleDeadline = Date.now() + config.settleMs;
+      const settleStartMs = Date.now();
+      const settleDeadline = settleStartMs + config.settleMs;
+      let lastDrainLogMs = settleStartMs;
+      let minObserved =
+        clients.length === 0
+          ? 0
+          : Math.min(...clients.map(c => c.minObservedSeq()));
       while (Date.now() < settleDeadline) {
-        const minObserved =
+        minObserved =
           clients.length === 0
             ? 0
             : Math.min(...clients.map(c => c.minObservedSeq()));
         if (minObserved >= writer.highestCommittedSeq) {
           break;
         }
+        if (
+          Date.now() - lastDrainLogMs >=
+          (config.progressIntervalMs || 5000)
+        ) {
+          lastDrainLogMs = Date.now();
+          const remaining = writer.highestCommittedSeq - minObserved;
+          const elapsedSec = ((Date.now() - settleStartMs) / 1000).toFixed(1);
+          log(
+            `Draining (${elapsedSec}s): observed=${minObserved}/${writer.highestCommittedSeq} (${remaining} remaining)...`,
+          );
+        }
         await sleep(100);
+      }
+      if (minObserved >= writer.highestCommittedSeq) {
+        const drainElapsedSec = ((Date.now() - settleStartMs) / 1000).toFixed(
+          1,
+        );
+        log(
+          `Pipeline drained: all clients observed seq ${writer.highestCommittedSeq} in ${drainElapsedSec}s.`,
+        );
+      } else {
+        const remaining = writer.highestCommittedSeq - minObserved;
+        log(
+          `Pipeline drain timed out after ${config.settleMs}ms: ${remaining} sequence(s) unobserved (observed up to ${minObserved}, expected ${writer.highestCommittedSeq}).`,
+        );
       }
       samples.push(
         sampleMetrics(sampleStartedAtMs, writer.highestCommittedSeq, clients),
@@ -244,18 +300,16 @@ async function main(): Promise<void> {
       metricsSummary,
     });
     outputPath = await writeResult(config, result);
+    printSummary(result.summary, outputPath);
   } catch (caught) {
     error = caught;
+    warn(`Benchmark run failed: ${formatError(caught)}`);
   } finally {
     process.off('SIGINT', onSigint);
     await cleanup.run();
   }
 
-  if (result !== undefined && outputPath !== undefined) {
-    printSummary(result.summary, outputPath);
-  }
   if (error !== undefined) {
-    warn(`Benchmark failed before writing results: ${formatError(error)}`);
     throw error;
   }
 }
@@ -330,6 +384,15 @@ function printSummary(
     const p99Str = lag.p99 !== undefined ? `p99=${lag.p99.toFixed(1)}ms, ` : '';
     log(
       `E2E serving lag: ${avgStr}p50=${lag.p50.toFixed(1)}ms, ${p75Str}${p90Str}${p95Str}${p99Str}max=${lag.max.toFixed(1)}ms`,
+    );
+  }
+  if (summary.viewSyncerLagMs) {
+    const lag = summary.viewSyncerLagMs;
+    const avgStr = lag.avg !== undefined ? `avg=${lag.avg.toFixed(1)}ms, ` : '';
+    const p95Str = lag.p95 !== undefined ? `p95=${lag.p95.toFixed(1)}ms, ` : '';
+    const p99Str = lag.p99 !== undefined ? `p99=${lag.p99.toFixed(1)}ms, ` : '';
+    log(
+      `View-Syncer IVM lag: ${avgStr}p50=${lag.p50.toFixed(1)}ms, ${p95Str}${p99Str}max=${lag.max.toFixed(1)}ms`,
     );
   }
   if (summary.pipelineResets !== undefined && summary.pipelineResets > 0) {
@@ -468,4 +531,9 @@ async function unpackProfiles(
   }
 }
 
-await main();
+try {
+  await main();
+  process.exit(0);
+} catch {
+  process.exit(1);
+}

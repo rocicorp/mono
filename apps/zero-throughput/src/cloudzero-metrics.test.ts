@@ -2,6 +2,7 @@ import {describe, expect, test} from 'vitest';
 import {
   buildCloudZeroSnapshot,
   CloudZeroMetricsPoller,
+  computeDeltaHistogram,
   parsePrometheusText,
   type ParsedMetric,
 } from './cloudzero-metrics.ts';
@@ -346,6 +347,37 @@ zero_sync_view_syncer_lag_seconds_count{stack_id="test-stack"} 100
     expect(snapshot.servingLagMs?.p95).toBe(100);
     expect(snapshot.servingLagMs?.p99).toBe(100);
     expect(snapshot.servingLagMs?.max).toBe(100);
+    expect(snapshot.viewSyncerLagMs).toBeDefined();
+    expect(snapshot.viewSyncerLagMs?.p50).toBe(20);
+  });
+
+  test('distinguishes true zero_sync_e2e_serving_lag from zero_sync_view_syncer_lag', () => {
+    const raw = `
+zero_sync_e2e_serving_lag_seconds_bucket{le="1.0",stack_id="test-stack"} 10
+zero_sync_e2e_serving_lag_seconds_bucket{le="5.0",stack_id="test-stack"} 50
+zero_sync_e2e_serving_lag_seconds_bucket{le="10.0",stack_id="test-stack"} 90
+zero_sync_e2e_serving_lag_seconds_bucket{le="+Inf",stack_id="test-stack"} 100
+zero_sync_e2e_serving_lag_seconds_sum{stack_id="test-stack"} 500
+zero_sync_e2e_serving_lag_seconds_count{stack_id="test-stack"} 100
+zero_sync_view_syncer_lag_seconds_bucket{le="0.05",stack_id="test-stack"} 50
+zero_sync_view_syncer_lag_seconds_bucket{le="0.1",stack_id="test-stack"} 100
+zero_sync_view_syncer_lag_seconds_bucket{le="+Inf",stack_id="test-stack"} 100
+zero_sync_view_syncer_lag_seconds_sum{stack_id="test-stack"} 5.0
+zero_sync_view_syncer_lag_seconds_count{stack_id="test-stack"} 100
+`;
+    const parsed = parsePrometheusText(raw, 'test-stack');
+    const snapshot = buildCloudZeroSnapshot(parsed, 'test-stack');
+
+    expect(snapshot.e2eServingLagMs).toBeDefined();
+    expect(snapshot.e2eServingLagMs?.p50).toBe(5000);
+    expect(snapshot.e2eServingLagMs?.sum).toBe(500000);
+
+    expect(snapshot.viewSyncerLagMs).toBeDefined();
+    expect(snapshot.viewSyncerLagMs?.p50).toBe(50);
+    expect(snapshot.viewSyncerLagMs?.sum).toBe(5000);
+
+    // servingLagMs points to true e2e serving lag
+    expect(snapshot.servingLagMs?.p50).toBe(5000);
   });
 
   test('aggregates peak lag across snapshots in toMetricSummary', async () => {
@@ -547,5 +579,301 @@ zero_sync_view_syncer_lag_seconds_count{stack_id="test-stack"} ${count}
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  test('computes delta histogram stats across reset baseline', async () => {
+    const poller = new CloudZeroMetricsPoller({
+      metricsUrl: 'http://example.com/metrics',
+      apiKey: 'test-key',
+      stackId: 'test-stack',
+    });
+
+    let call = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      call++;
+      // Call 1 (baseline before benchmark): 100 events with 30s lag from earlier runs
+      // Call 2 (end of benchmark): 100 new events with 50ms lag (total 200 events)
+      const text =
+        call === 1
+          ? `
+zero_sync_e2e_serving_lag_seconds_bucket{le="0.1",stack_id="test-stack"} 0
+zero_sync_e2e_serving_lag_seconds_bucket{le="1.0",stack_id="test-stack"} 0
+zero_sync_e2e_serving_lag_seconds_bucket{le="30.0",stack_id="test-stack"} 100
+zero_sync_e2e_serving_lag_seconds_bucket{le="+Inf",stack_id="test-stack"} 100
+zero_sync_e2e_serving_lag_seconds_sum{stack_id="test-stack"} 3000
+zero_sync_e2e_serving_lag_seconds_count{stack_id="test-stack"} 100
+`
+          : `
+zero_sync_e2e_serving_lag_seconds_bucket{le="0.1",stack_id="test-stack"} 100
+zero_sync_e2e_serving_lag_seconds_bucket{le="1.0",stack_id="test-stack"} 100
+zero_sync_e2e_serving_lag_seconds_bucket{le="30.0",stack_id="test-stack"} 200
+zero_sync_e2e_serving_lag_seconds_bucket{le="+Inf",stack_id="test-stack"} 200
+zero_sync_e2e_serving_lag_seconds_sum{stack_id="test-stack"} 3005
+zero_sync_e2e_serving_lag_seconds_count{stack_id="test-stack"} 200
+`;
+      return Promise.resolve(new Response(text, {status: 200}));
+    }) as typeof fetch;
+
+    try {
+      // 1. Fetch initial baseline before test begins
+      await poller.fetchSnapshot();
+      expect(poller.latest?.e2eServingLagMs?.p50).toBe(15500);
+
+      // 2. Writes begin: poller is reset
+      poller.reset();
+
+      // 3. Test completes: take final snapshot
+      await poller.fetchSnapshot();
+
+      // 4. toMetricSummary should report the delta for ONLY the 100 new events during the benchmark
+      const summary = poller.toMetricSummary();
+      expect(summary.metricSummary.e2eServingLagMs).toBeDefined();
+      expect(summary.metricSummary.e2eServingLagMs?.count).toBe(100);
+      expect(summary.metricSummary.e2eServingLagMs?.sum).toBe(5000); // 5 seconds * 1000 = 5000 ms
+      expect(summary.metricSummary.e2eServingLagMs?.avg).toBe(50);
+      expect(summary.metricSummary.e2eServingLagMs?.p50).toBe(50);
+      expect(summary.metricSummary.e2eServingLagMs?.p99).toBe(99);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('computeDeltaHistogram', () => {
+  test('subtracts start from end bucket counts and computes percentiles on delta', () => {
+    const start = {
+      buckets: [
+        {le: 100, count: 50},
+        {le: 500, count: 100},
+        {le: Infinity, count: 100},
+      ],
+      sum: 20000,
+      count: 100,
+    };
+
+    const end = {
+      buckets: [
+        {le: 100, count: 150}, // +100
+        {le: 500, count: 200}, // +100
+        {le: Infinity, count: 200}, // +100
+      ],
+      sum: 26000, // +6000
+      count: 200,
+    };
+
+    const delta = computeDeltaHistogram(start, end);
+    expect(delta).toBeDefined();
+    expect(delta?.count).toBe(100);
+    expect(delta?.sum).toBe(6000);
+    expect(delta?.avg).toBe(60);
+    expect(delta?.p50).toBe(50);
+  });
+
+  test('returns null if delta count is 0 or negative', () => {
+    const start = {
+      buckets: [{le: 100, count: 100}],
+      sum: 5000,
+      count: 100,
+    };
+    const end = {
+      buckets: [{le: 100, count: 100}],
+      count: 100,
+    };
+    expect(computeDeltaHistogram(start, end)).toBeNull();
+  });
+
+  test('computes delta per pod even when pods are added, removed, or restarted', () => {
+    const start = {
+      byPod: new Map([
+        [
+          'pod-surviving',
+          {
+            buckets: [
+              {le: 100, count: 50},
+              {le: 500, count: 100},
+            ],
+            sum: 20000,
+            count: 100,
+          },
+        ],
+        [
+          'pod-dead',
+          {
+            buckets: [
+              {le: 100, count: 200},
+              {le: 500, count: 400},
+            ],
+            sum: 100000,
+            count: 400,
+          },
+        ],
+      ]),
+      buckets: [],
+      sum: 120000,
+      count: 500,
+    };
+
+    const end = {
+      byPod: new Map([
+        [
+          'pod-surviving',
+          {
+            buckets: [
+              {le: 100, count: 150}, // +100
+              {le: 500, count: 200}, // +100
+            ],
+            sum: 26000, // +6000
+            count: 200, // +100
+          },
+        ],
+        // pod-dead is gone (e.g. terminated)
+        [
+          'pod-new',
+          {
+            buckets: [
+              {le: 100, count: 50},
+              {le: 500, count: 50},
+            ],
+            sum: 3000,
+            count: 50,
+          },
+        ],
+      ]),
+      buckets: [],
+      sum: 29000, // stack-wide sum went down from 120,000 to 29,000!
+      count: 250,
+    };
+
+    const delta = computeDeltaHistogram(start, end);
+    expect(delta).toBeDefined();
+    // Surviving pod contributed +100 events (+6000 sum). New pod contributed +50 events (+3000 sum).
+    // Total delta count = 150. Total delta sum = 9000.
+    expect(delta?.count).toBe(150);
+    expect(delta?.sum).toBe(9000);
+    expect(delta?.avg).toBe(60);
+  });
+
+  test('handles multiple workers on the same pod without bucket overwrites', () => {
+    const rawStart: ParsedMetric[] = [
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '0', le: '0.1'},
+        value: 100,
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '0', le: '1'},
+        value: 200,
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '0', le: '+Inf'},
+        value: 200,
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_count',
+        labels: {pod: 'vs-0', process_worker_index: '0'},
+        value: 200,
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_sum',
+        labels: {pod: 'vs-0', process_worker_index: '0'},
+        value: 20,
+      },
+      // Worker 1 has higher initial counts
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '1', le: '0.1'},
+        value: 500,
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '1', le: '1'},
+        value: 800,
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '1', le: '+Inf'},
+        value: 800,
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_count',
+        labels: {pod: 'vs-0', process_worker_index: '1'},
+        value: 800,
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_sum',
+        labels: {pod: 'vs-0', process_worker_index: '1'},
+        value: 80,
+      },
+    ];
+
+    const rawEnd: ParsedMetric[] = [
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '0', le: '0.1'},
+        value: 150, // +50
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '0', le: '1'},
+        value: 300, // +100
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '0', le: '+Inf'},
+        value: 300, // +100
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_count',
+        labels: {pod: 'vs-0', process_worker_index: '0'},
+        value: 300, // +100
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_sum',
+        labels: {pod: 'vs-0', process_worker_index: '0'},
+        value: 40, // +20s
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '1', le: '0.1'},
+        value: 600, // +100
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '1', le: '1'},
+        value: 1000, // +200
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_bucket',
+        labels: {pod: 'vs-0', process_worker_index: '1', le: '+Inf'},
+        value: 1000, // +200
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_count',
+        labels: {pod: 'vs-0', process_worker_index: '1'},
+        value: 1000, // +200
+      },
+      {
+        name: 'zero_sync_e2e_serving_lag_seconds_sum',
+        labels: {pod: 'vs-0', process_worker_index: '1'},
+        value: 120, // +40s
+      },
+    ];
+
+    const snapStart = buildCloudZeroSnapshot(rawStart, 'test-stack');
+    const snapEnd = buildCloudZeroSnapshot(rawEnd, 'test-stack');
+
+    expect(snapStart.rawE2eLag?.byPod?.size).toBe(2);
+    expect(snapEnd.rawE2eLag?.byPod?.size).toBe(2);
+
+    const delta = computeDeltaHistogram(snapStart.rawE2eLag, snapEnd.rawE2eLag);
+    expect(delta).toBeDefined();
+    expect(delta?.count).toBe(300); // 100 from worker 0 + 200 from worker 1
+    expect(delta?.sum).toBe(60000); // (20s + 40s) * 1000 ms = 60,000 ms
+    expect(delta?.avg).toBe(200); // 60,000 / 300 = 200 ms
+    // p99 must be <= 1000 ms, not blowing up to infinity/highest bound
+    expect(delta?.p99).toBeLessThanOrEqual(1000);
   });
 });

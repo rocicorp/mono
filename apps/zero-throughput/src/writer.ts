@@ -18,7 +18,24 @@ export type WriterStats = {
   readonly highestCommittedSeq: number;
   readonly transactionLatencyMs: readonly number[];
   readonly writeImpact: WriteImpactTotals;
+  readonly effectiveConcurrency?: number | undefined;
 };
+
+export function effectiveWriteConcurrency(config: BenchmarkConfig): number {
+  if (config.writeRate <= 0) {
+    return 1;
+  }
+  const batchSize = Math.max(1, config.batchSize);
+  const targetTxRate = config.writeRate / batchSize;
+  // According to Little's Law (L = lambda * W), sustaining targetTxRate with
+  // transaction latency W requires at least lambda * W concurrent transactions.
+  // We provision headroom for up to 1000ms latency (1.0s) so normal Aurora PG
+  // latency (~400ms) with jitter does not artificially throttle the dispatch rate.
+  const rateBasedConcurrency = Math.ceil(targetTxRate * 1.0);
+  // Respect user-specified writeConcurrency if higher, but clamp to 256 to
+  // prevent runaway connection count if batchSize is very small.
+  return Math.min(256, Math.max(config.writeConcurrency, rateBasedConcurrency));
+}
 
 export class FixedRateWriter {
   readonly #sql: BenchmarkDB;
@@ -40,12 +57,27 @@ export class FixedRateWriter {
   }
 
   async run(durationMs: number): Promise<WriterStats> {
-    const startedAtMs = nowMs();
-    const deadline = startedAtMs + durationMs;
-    const concurrency = Math.max(1, this.#config.writeConcurrency);
-    const workerTxRate =
-      this.#config.writeRate / this.#config.batchSize / concurrency;
-    const intervalMs = workerTxRate > 0 ? (1 / workerTxRate) * 1000 : 10;
+    const runStartedAtMs = nowMs();
+    if (this.#config.writeRate <= 0 || durationMs <= 0) {
+      if (durationMs > 0) {
+        await sleep(durationMs);
+      }
+      return {
+        startedAtMs: runStartedAtMs,
+        finishedAtMs: nowMs(),
+        committedRows: 0,
+        committedTransactions: 0,
+        highestCommittedSeq: 0,
+        transactionLatencyMs: [],
+        writeImpact: this.#writeImpact,
+        effectiveConcurrency: 1,
+      };
+    }
+
+    const batchSize = Math.max(1, this.#config.batchSize);
+    const targetTxRate = this.#config.writeRate / batchSize;
+    const maxConcurrency = effectiveWriteConcurrency(this.#config);
+    const deadline = runStartedAtMs + durationMs;
 
     let globalSeq = 1;
     const allocateSeqs = (count: number): number[] => {
@@ -54,84 +86,124 @@ export class FixedRateWriter {
       return Array.from({length: count}, (_, i) => start + i);
     };
 
-    const runWorker = async () => {
-      const latencies: number[] = [];
-      let workerCommittedRows = 0;
-      let workerCommittedTx = 0;
-      let localImpact = emptyWriteImpactTotals();
-      let nextStart = startedAtMs;
+    const latencies: number[] = [];
+    let committedRows = 0;
+    let committedTransactions = 0;
+    let firstCommittedAtMs: number | undefined;
 
+    const inFlight = new Set<Promise<void>>();
+
+    const executeBatch = async (seqs: number[]) => {
+      const txStart = nowMs();
+      let impacts: readonly WriteImpact[] = [];
+      let attempts = 0;
+      while (true) {
+        try {
+          await this.#sql.begin(async tx => {
+            impacts = await this.#model.writeBatch(tx, seqs);
+          });
+          break;
+        } catch (err: unknown) {
+          attempts++;
+          const msg = err instanceof Error ? err.message : String(err);
+          const isTransient =
+            msg.includes('ECONNRESET') ||
+            msg.includes('ETIMEDOUT') ||
+            msg.includes('Connection closed');
+          if (attempts < 3 && isTransient) {
+            await sleep(100);
+            continue;
+          }
+          throw err;
+        }
+      }
+      const txEnd = nowMs();
+      latencies.push(txEnd - txStart);
+      committedRows += seqs.length;
+      committedTransactions++;
+      if (firstCommittedAtMs === undefined) {
+        firstCommittedAtMs = txEnd;
+      }
+      for (const impact of impacts) {
+        this.#writeImpact = addWriteImpact(this.#writeImpact, impact);
+      }
+      const maxSeq = seqs.at(-1);
+      if (maxSeq !== undefined && maxSeq > this.#highestCommittedSeq) {
+        this.#highestCommittedSeq = maxSeq;
+      }
+    };
+
+    let txIndex = 0;
+    let firstError: unknown = null;
+
+    try {
       while (nowMs() < deadline) {
-        const delayMs = nextStart - nowMs();
+        if (firstError) {
+          break;
+        }
+
+        const targetTime = runStartedAtMs + (txIndex * 1000) / targetTxRate;
+        if (targetTime >= deadline) {
+          break;
+        }
+
+        const delayMs = targetTime - nowMs();
         if (delayMs > 0) {
           await sleep(delayMs);
         }
-        nextStart = Math.max(nextStart + intervalMs, nowMs() - intervalMs * 2);
 
-        const seqs = allocateSeqs(this.#config.batchSize);
-        const txStart = nowMs();
-        let impacts: readonly WriteImpact[] = [];
-        await this.#sql.begin(async tx => {
-          impacts = await this.#model.writeBatch(tx, seqs);
-        });
-        for (const impact of impacts) {
-          localImpact = addWriteImpact(localImpact, impact);
+        if (firstError) {
+          break;
         }
-        latencies.push(nowMs() - txStart);
-        workerCommittedRows += seqs.length;
-        workerCommittedTx++;
-        const maxSeq = seqs.at(-1);
-        if (maxSeq !== undefined && maxSeq > this.#highestCommittedSeq) {
-          this.#highestCommittedSeq = maxSeq;
+
+        if (inFlight.size >= maxConcurrency) {
+          await Promise.race(inFlight);
         }
+
+        if (firstError) {
+          break;
+        }
+
+        const seqs = allocateSeqs(batchSize);
+        let task: Promise<void>;
+        task = executeBatch(seqs)
+          .catch(err => {
+            if (!firstError) {
+              firstError = err;
+            }
+          })
+          .finally(() => {
+            inFlight.delete(task);
+          });
+        inFlight.add(task);
+        txIndex++;
       }
 
-      return {
-        latencies,
-        committedRows: workerCommittedRows,
-        committedTx: workerCommittedTx,
-        impact: localImpact,
-      };
-    };
-
-    const workerResults = await Promise.all(
-      Array.from({length: concurrency}, () => runWorker()),
-    );
-
-    const transactionLatencyMs: number[] = [];
-    let committedRows = 0;
-    let committedTransactions = 0;
-    for (const wr of workerResults) {
-      transactionLatencyMs.push(...wr.latencies);
-      committedRows += wr.committedRows;
-      committedTransactions += wr.committedTx;
-      this.#writeImpact = {
-        totalLogicalWrites:
-          this.#writeImpact.totalLogicalWrites + wr.impact.totalLogicalWrites,
-        activePartitionWrites:
-          this.#writeImpact.activePartitionWrites +
-          wr.impact.activePartitionWrites,
-        zeroActiveClientGroupWrites:
-          this.#writeImpact.zeroActiveClientGroupWrites +
-          wr.impact.zeroActiveClientGroupWrites,
-        affectedActiveClientGroupWrites:
-          this.#writeImpact.affectedActiveClientGroupWrites +
-          wr.impact.affectedActiveClientGroupWrites,
-        visibleRowWrites:
-          this.#writeImpact.visibleRowWrites + wr.impact.visibleRowWrites,
-        nonVisibleRowWrites:
-          this.#writeImpact.nonVisibleRowWrites + wr.impact.nonVisibleRowWrites,
-      };
+      await Promise.all(inFlight);
+    } catch (err) {
+      await Promise.allSettled(inFlight);
+      throw err;
     }
+
+    if (firstError) {
+      throw firstError;
+    }
+
+    const finishedAtMs = nowMs();
+    const startedAtMs =
+      firstCommittedAtMs !== undefined && firstCommittedAtMs < finishedAtMs
+        ? firstCommittedAtMs
+        : runStartedAtMs;
 
     return {
       startedAtMs,
-      finishedAtMs: nowMs(),
+      finishedAtMs,
       committedRows,
       committedTransactions,
       highestCommittedSeq: this.#highestCommittedSeq,
-      transactionLatencyMs,
+      transactionLatencyMs: latencies,
       writeImpact: this.#writeImpact,
+      effectiveConcurrency: maxConcurrency,
     };
   }
 }

@@ -9,6 +9,19 @@ export type CloudZeroPodResource = {
   readonly pipelines?: number | undefined;
 };
 
+export type PodHistogramData = {
+  readonly buckets: readonly {readonly le: number; readonly count: number}[];
+  readonly sum?: number | undefined;
+  readonly count?: number | undefined;
+};
+
+export type RawHistogramData = {
+  readonly byPod?: ReadonlyMap<string, PodHistogramData> | undefined;
+  readonly buckets: readonly {readonly le: number; readonly count: number}[];
+  readonly sum?: number | undefined;
+  readonly count?: number | undefined;
+};
+
 export type CloudZeroMetricsSummary = {
   readonly stackId: string;
   readonly rmPod?: CloudZeroPodResource | undefined;
@@ -24,6 +37,10 @@ export type CloudZeroMetricsSummary = {
   };
   readonly replicationLagMs: PercentileStats | null;
   readonly servingLagMs: PercentileStats | null;
+  readonly e2eServingLagMs: PercentileStats | null;
+  readonly viewSyncerLagMs: PercentileStats | null;
+  readonly rawE2eLag?: RawHistogramData | undefined;
+  readonly rawVsLag?: RawHistogramData | undefined;
 };
 
 export type ParsedMetric = {
@@ -84,12 +101,31 @@ export function buildCloudZeroSnapshot(
   const replLags: number[] = [];
   const servingLagStatsByStat = new Map<string, number[]>();
   const servingLagScalars: number[] = [];
-  const lagHistogramBuckets: {le: number; count: number}[] = [];
-  let lagHistogramSum: number | undefined;
-  let lagHistogramCount: number | undefined;
+
+  const e2eLagHistogramBuckets: {le: number; count: number}[] = [];
+  let e2eLagHistogramSum: number | undefined;
+  let e2eLagHistogramCount: number | undefined;
+  const e2eBucketsByPod = new Map<string, {le: number; count: number}[]>();
+  const e2eSumByPod = new Map<string, number>();
+  const e2eCountByPod = new Map<string, number>();
+
+  const vsLagHistogramBuckets: {le: number; count: number}[] = [];
+  let vsLagHistogramSum: number | undefined;
+  let vsLagHistogramCount: number | undefined;
+  const vsBucketsByPod = new Map<string, {le: number; count: number}[]>();
+  const vsSumByPod = new Map<string, number>();
+  const vsCountByPod = new Map<string, number>();
 
   for (const m of metrics) {
     const pod = m.labels.pod;
+    const workerIndex =
+      m.labels.process_worker_index ?? m.labels.process_worker;
+    const seriesKey = pod
+      ? workerIndex !== undefined
+        ? `${pod}:${workerIndex}`
+        : pod
+      : undefined;
+
     if (m.name === 'k8s_pod_cpu_usage' && pod) {
       cpuByPod.set(pod, m.value);
     } else if (m.name === 'k8s_pod_memory_working_set_bytes' && pod) {
@@ -109,6 +145,44 @@ export function buildCloudZeroSnapshot(
     } else if (m.name === 'zero_sync_serving_lag_millisecond') {
       servingLagScalars.push(m.value);
     } else if (
+      m.name === 'zero_sync_e2e_serving_lag_seconds_bucket' ||
+      m.name === 'zero_sync_e2e_serving_lag_bucket'
+    ) {
+      if (m.labels.le) {
+        const le = m.labels.le === '+Inf' ? Infinity : Number(m.labels.le);
+        if (!Number.isNaN(le)) {
+          const multiplier = m.name.includes('_seconds_') ? 1000 : 1;
+          const bucket = {le: le * multiplier, count: m.value};
+          e2eLagHistogramBuckets.push(bucket);
+          if (seriesKey) {
+            const list = e2eBucketsByPod.get(seriesKey) ?? [];
+            list.push(bucket);
+            e2eBucketsByPod.set(seriesKey, list);
+          }
+        }
+      }
+    } else if (
+      m.name === 'zero_sync_e2e_serving_lag_seconds_sum' ||
+      m.name === 'zero_sync_e2e_serving_lag_sum'
+    ) {
+      const multiplier = m.name.includes('_seconds_') ? 1000 : 1;
+      const sumVal = m.value * multiplier;
+      e2eLagHistogramSum = (e2eLagHistogramSum ?? 0) + sumVal;
+      if (seriesKey) {
+        e2eSumByPod.set(seriesKey, (e2eSumByPod.get(seriesKey) ?? 0) + sumVal);
+      }
+    } else if (
+      m.name === 'zero_sync_e2e_serving_lag_seconds_count' ||
+      m.name === 'zero_sync_e2e_serving_lag_count'
+    ) {
+      e2eLagHistogramCount = (e2eLagHistogramCount ?? 0) + m.value;
+      if (seriesKey) {
+        e2eCountByPod.set(
+          seriesKey,
+          (e2eCountByPod.get(seriesKey) ?? 0) + m.value,
+        );
+      }
+    } else if (
       m.name === 'zero_sync_view_syncer_lag_seconds_bucket' ||
       m.name === 'zero_sync_view_syncer_lag_bucket'
     ) {
@@ -116,7 +190,13 @@ export function buildCloudZeroSnapshot(
         const le = m.labels.le === '+Inf' ? Infinity : Number(m.labels.le);
         if (!Number.isNaN(le)) {
           const multiplier = m.name.includes('_seconds_') ? 1000 : 1;
-          lagHistogramBuckets.push({le: le * multiplier, count: m.value});
+          const bucket = {le: le * multiplier, count: m.value};
+          vsLagHistogramBuckets.push(bucket);
+          if (seriesKey) {
+            const list = vsBucketsByPod.get(seriesKey) ?? [];
+            list.push(bucket);
+            vsBucketsByPod.set(seriesKey, list);
+          }
         }
       }
     } else if (
@@ -124,12 +204,22 @@ export function buildCloudZeroSnapshot(
       m.name === 'zero_sync_view_syncer_lag_sum'
     ) {
       const multiplier = m.name.includes('_seconds_') ? 1000 : 1;
-      lagHistogramSum = (lagHistogramSum ?? 0) + m.value * multiplier;
+      const sumVal = m.value * multiplier;
+      vsLagHistogramSum = (vsLagHistogramSum ?? 0) + sumVal;
+      if (seriesKey) {
+        vsSumByPod.set(seriesKey, (vsSumByPod.get(seriesKey) ?? 0) + sumVal);
+      }
     } else if (
       m.name === 'zero_sync_view_syncer_lag_seconds_count' ||
       m.name === 'zero_sync_view_syncer_lag_count'
     ) {
-      lagHistogramCount = (lagHistogramCount ?? 0) + m.value;
+      vsLagHistogramCount = (vsLagHistogramCount ?? 0) + m.value;
+      if (seriesKey) {
+        vsCountByPod.set(
+          seriesKey,
+          (vsCountByPod.get(seriesKey) ?? 0) + m.value,
+        );
+      }
     }
   }
 
@@ -180,20 +270,72 @@ export function buildCloudZeroSnapshot(
   const exactMin = mins.length > 0 ? Math.min(...mins) : undefined;
   const exactMax = maxs.length > 0 ? Math.max(...maxs) : undefined;
 
-  const histogramLag =
-    lagHistogramBuckets.length > 0
+  const e2eHistogramLag =
+    e2eLagHistogramBuckets.length > 0
       ? computeHistogramPercentiles(
-          lagHistogramBuckets,
-          lagHistogramSum,
-          lagHistogramCount,
+          e2eLagHistogramBuckets,
+          e2eLagHistogramSum,
+          e2eLagHistogramCount,
+        )
+      : null;
+
+  const vsHistogramLag =
+    vsLagHistogramBuckets.length > 0
+      ? computeHistogramPercentiles(
+          vsLagHistogramBuckets,
+          vsLagHistogramSum,
+          vsLagHistogramCount,
           exactMin,
           exactMax,
         )
       : null;
 
-  const servingLagMs =
-    histogramLag ??
+  const viewSyncerLagMs =
+    vsHistogramLag ??
     computeServingLagStats(servingLagStatsByStat, servingLagScalars);
+
+  // e2eServingLagMs prefers true e2e_serving_lag from upstream commit.
+  // Falls back to viewSyncerLagMs if e2e_serving_lag metric is absent.
+  const e2eServingLagMs = e2eHistogramLag ?? viewSyncerLagMs;
+  const servingLagMs = e2eServingLagMs;
+
+  const e2eByPod = new Map<string, PodHistogramData>();
+  for (const [p, buckets] of e2eBucketsByPod.entries()) {
+    e2eByPod.set(p, {
+      buckets,
+      sum: e2eSumByPod.get(p),
+      count: e2eCountByPod.get(p),
+    });
+  }
+
+  const vsByPod = new Map<string, PodHistogramData>();
+  for (const [p, buckets] of vsBucketsByPod.entries()) {
+    vsByPod.set(p, {
+      buckets,
+      sum: vsSumByPod.get(p),
+      count: vsCountByPod.get(p),
+    });
+  }
+
+  const rawE2eLag: RawHistogramData | undefined =
+    e2eLagHistogramBuckets.length > 0
+      ? {
+          byPod: e2eByPod,
+          buckets: e2eLagHistogramBuckets,
+          sum: e2eLagHistogramSum,
+          count: e2eLagHistogramCount,
+        }
+      : undefined;
+
+  const rawVsLag: RawHistogramData | undefined =
+    vsLagHistogramBuckets.length > 0
+      ? {
+          byPod: vsByPod,
+          buckets: vsLagHistogramBuckets,
+          sum: vsLagHistogramSum,
+          count: vsLagHistogramCount,
+        }
+      : undefined;
 
   return {
     stackId,
@@ -210,7 +352,133 @@ export function buildCloudZeroSnapshot(
     },
     replicationLagMs: computeStatsFromNumbers(replLags),
     servingLagMs,
+    e2eServingLagMs,
+    viewSyncerLagMs,
+    rawE2eLag,
+    rawVsLag,
   };
+}
+
+export function computeDeltaHistogram(
+  startRaw?: RawHistogramData | undefined,
+  endRaw?: RawHistogramData | undefined,
+  exactMin?: number | undefined,
+  exactMax?: number | undefined,
+): PercentileStats | null {
+  if (
+    !endRaw ||
+    (endRaw.buckets.length === 0 && (!endRaw.byPod || endRaw.byPod.size === 0))
+  ) {
+    return null;
+  }
+
+  if (endRaw.byPod && endRaw.byPod.size > 0) {
+    const totalDeltaBuckets = new Map<number, number>();
+    let totalDeltaCount = 0;
+    let totalDeltaSum = 0;
+    let hasSum = false;
+
+    for (const [pod, endPod] of endRaw.byPod.entries()) {
+      const startPod = startRaw?.byPod?.get(pod);
+      const endCount = endPod.count ?? 0;
+      const startCount = startPod?.count ?? 0;
+
+      // If pod restarted during run and counter decreased, treat endCount as fresh from 0
+      const podDeltaCount =
+        endCount >= startCount ? endCount - startCount : endCount;
+      totalDeltaCount += podDeltaCount;
+
+      if (endPod.sum !== undefined) {
+        hasSum = true;
+        const startSum = startPod?.sum ?? 0;
+        const podDeltaSum =
+          endPod.sum >= startSum ? endPod.sum - startSum : endPod.sum;
+        totalDeltaSum += podDeltaSum;
+      }
+
+      const startBuckets = new Map<number, number>();
+      if (startPod && endCount >= startCount) {
+        for (const b of startPod.buckets) {
+          startBuckets.set(b.le, b.count);
+        }
+      }
+
+      for (const b of endPod.buckets) {
+        const startB = startBuckets.get(b.le) ?? 0;
+        const delta = Math.max(0, b.count - startB);
+        totalDeltaBuckets.set(b.le, (totalDeltaBuckets.get(b.le) ?? 0) + delta);
+      }
+    }
+
+    if (totalDeltaCount <= 0) {
+      return null;
+    }
+
+    const deltaBuckets = Array.from(
+      totalDeltaBuckets.entries(),
+      ([le, count]) => ({le, count}),
+    );
+
+    return computeHistogramPercentiles(
+      deltaBuckets,
+      hasSum ? totalDeltaSum : undefined,
+      totalDeltaCount,
+      exactMin,
+      exactMax,
+    );
+  }
+
+  if (!startRaw || !startRaw.count || startRaw.count === 0) {
+    return computeHistogramPercentiles(
+      endRaw.buckets,
+      endRaw.sum,
+      endRaw.count,
+      exactMin,
+      exactMax,
+    );
+  }
+
+  const startBuckets = new Map<number, number>();
+  for (const b of startRaw.buckets) {
+    startBuckets.set(b.le, (startBuckets.get(b.le) ?? 0) + b.count);
+  }
+
+  const endBuckets = new Map<number, number>();
+  for (const b of endRaw.buckets) {
+    endBuckets.set(b.le, (endBuckets.get(b.le) ?? 0) + b.count);
+  }
+
+  const allLes = new Set([...startBuckets.keys(), ...endBuckets.keys()]);
+  const deltaBuckets: {le: number; count: number}[] = [];
+  for (const le of allLes) {
+    const endCount = endBuckets.get(le) ?? 0;
+    const startCount = startBuckets.get(le) ?? 0;
+    deltaBuckets.push({
+      le,
+      count: Math.max(0, endCount - startCount),
+    });
+  }
+
+  const endCount = endRaw.count ?? endBuckets.get(Infinity) ?? 0;
+  const startCount = startRaw.count ?? startBuckets.get(Infinity) ?? 0;
+  const deltaCount = Math.max(0, endCount - startCount);
+
+  if (deltaCount <= 0) {
+    return null;
+  }
+
+  const deltaSum =
+    endRaw.sum !== undefined && startRaw.sum !== undefined
+      ? Math.max(0, endRaw.sum - startRaw.sum)
+      : endRaw.sum;
+
+  return computeHistogramPercentiles(
+    deltaBuckets,
+    deltaSum,
+    deltaCount,
+    exactMin,
+    exactMax,
+  );
 }
 
 function computeHistogramPercentiles(
@@ -232,13 +500,23 @@ function computeHistogramPercentiles(
     count,
   })).sort((a, b) => a.le - b.le);
 
-  const n = totalCount ?? sorted.at(-1)?.count ?? 0;
+  const finiteBuckets = sorted.filter(b => Number.isFinite(b.le));
+  const highestFiniteBound = finiteBuckets.at(-1)?.le ?? 0;
+  const highestFiniteCount = finiteBuckets.at(-1)?.count ?? 0;
+  const infBucket = sorted.find(b => !Number.isFinite(b.le));
+  const infCount = infBucket?.count ?? 0;
+
+  // Derive total observations from the histogram cumulative count (+Inf or highest finite)
+  // to guarantee rank never overshoots the histogram's populated buckets.
+  const n =
+    infCount > 0
+      ? infCount
+      : highestFiniteCount > 0
+        ? highestFiniteCount
+        : (totalCount ?? 0);
   if (n === 0) {
     return null;
   }
-
-  const finiteBuckets = sorted.filter(b => Number.isFinite(b.le));
-  const highestFiniteBound = finiteBuckets.at(-1)?.le ?? 0;
 
   const quantile = (q: number): number => {
     const rank = q * n;
@@ -248,7 +526,9 @@ function computeHistogramPercentiles(
         const prevCount = i === 0 ? 0 : sorted[i - 1].count;
         const bucketCount = sorted[i].count - prevCount;
         if (bucketCount <= 0 || !Number.isFinite(sorted[i].le)) {
-          return Number(prevBound.toFixed(2));
+          return Number(
+            (prevBound > 0 ? prevBound : highestFiniteBound).toFixed(2),
+          );
         }
         const fraction = (rank - prevCount) / bucketCount;
         return Number(
@@ -262,8 +542,15 @@ function computeHistogramPercentiles(
   const firstPositiveIndex = sorted.findIndex(b => b.count > 0);
   const histMin =
     firstPositiveIndex <= 0 ? 0 : (sorted[firstPositiveIndex - 1]?.le ?? 0);
+  const lastActiveIndex = sorted.findLastIndex(
+    (b, i) => b.count > (sorted[i - 1]?.count ?? 0) && Number.isFinite(b.le),
+  );
+  const histMax =
+    lastActiveIndex >= 0
+      ? (sorted[lastActiveIndex]?.le ?? highestFiniteBound)
+      : highestFiniteBound;
   const min = exactMin ?? histMin;
-  const max = exactMax ?? highestFiniteBound;
+  const max = exactMax ?? histMax;
   const s = sum;
   const avg = s !== undefined && n > 0 ? Number((s / n).toFixed(2)) : undefined;
 
@@ -358,6 +645,8 @@ export class CloudZeroMetricsPoller {
   readonly #intervalMs: number;
   #timer: NodeJS.Timeout | null = null;
   #latest: CloudZeroMetricsSummary | null = null;
+  #baseline: CloudZeroMetricsSummary | null = null;
+  #resetRequested = false;
   readonly #snapshots: CloudZeroMetricsSummary[] = [];
   #inFlightFetch: Promise<CloudZeroMetricsSummary | null> | null = null;
 
@@ -401,6 +690,9 @@ export class CloudZeroMetricsPoller {
         const parsed = parsePrometheusText(text, this.#stackId);
         const snapshot = buildCloudZeroSnapshot(parsed, this.#stackId);
         this.#latest = snapshot;
+        if (this.#resetRequested && !this.#baseline) {
+          this.#baseline = snapshot;
+        }
         this.#snapshots.push(snapshot);
         return snapshot;
       } catch {
@@ -424,6 +716,8 @@ export class CloudZeroMetricsPoller {
 
   reset(): void {
     this.#snapshots.length = 0;
+    this.#baseline = this.#latest;
+    this.#resetRequested = true;
     if (this.#latest) {
       this.#snapshots.push(this.#latest);
     }
@@ -484,13 +778,41 @@ export class CloudZeroMetricsPoller {
     const replicationLagMs =
       aggregateLagStats(this.#snapshots, 'replicationLagMs') ??
       latest.replicationLagMs;
-    // A Prometheus cumulative histogram already spans all events across the entire run in latest.
-    // Only gauge-based stats (which drop to 0 after drain) need aggregation across snapshots.
+
     const servingLagMs =
       latest.servingLagMs?.sum !== undefined
         ? latest.servingLagMs
         : (aggregateLagStats(this.#snapshots, 'servingLagMs') ??
           latest.servingLagMs);
+
+    const baseline = this.#baseline;
+
+    const deltaE2eServingLag =
+      baseline && latest && baseline !== latest
+        ? computeDeltaHistogram(baseline.rawE2eLag, latest.rawE2eLag)
+        : null;
+
+    const deltaVsLag =
+      baseline && latest && baseline !== latest
+        ? computeDeltaHistogram(baseline.rawVsLag, latest.rawVsLag)
+        : null;
+
+    const e2eServingLagMs =
+      deltaE2eServingLag ??
+      (latest.e2eServingLagMs?.sum !== undefined
+        ? latest.e2eServingLagMs
+        : (aggregateLagStats(this.#snapshots, 'e2eServingLagMs') ??
+          latest.e2eServingLagMs ??
+          servingLagMs)) ??
+      null;
+
+    const viewSyncerLagMs =
+      deltaVsLag ??
+      (latest.viewSyncerLagMs?.sum !== undefined
+        ? latest.viewSyncerLagMs
+        : (aggregateLagStats(this.#snapshots, 'viewSyncerLagMs') ??
+          latest.viewSyncerLagMs)) ??
+      null;
 
     const podCount = latest.vsSummary.podCount;
     const peakVsAvgCpu =
@@ -516,13 +838,16 @@ export class CloudZeroMetricsPoller {
         totalPipelines: peakVsPipelines,
       },
       replicationLagMs,
-      servingLagMs,
+      servingLagMs: e2eServingLagMs,
+      e2eServingLagMs,
+      viewSyncerLagMs,
     };
 
     return {
       metricSummary: {
         replicationLagMs,
-        e2eServingLagMs: servingLagMs,
+        e2eServingLagMs,
+        viewSyncerLagMs,
       },
       cloudzeroSummary: aggregated,
     };
@@ -531,7 +856,11 @@ export class CloudZeroMetricsPoller {
 
 function aggregateLagStats(
   snapshots: readonly CloudZeroMetricsSummary[],
-  field: 'replicationLagMs' | 'servingLagMs',
+  field:
+    | 'replicationLagMs'
+    | 'servingLagMs'
+    | 'e2eServingLagMs'
+    | 'viewSyncerLagMs',
 ): PercentileStats | null {
   const statsList = snapshots
     .map(s => s[field])
