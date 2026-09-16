@@ -13,6 +13,7 @@ import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../zero-events/src/index.ts';
+import type {ReplicationStatusEvent} from '../../../../zero-events/src/status.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {initEventSinkForTesting} from '../../observability/events.ts';
@@ -642,6 +643,114 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
+  });
+
+  test('publishes index creation progress', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID']});
+
+    initReplicationState(mainDb, ['zero_data'], '09', {}, false);
+    initDB(
+      mainDb,
+      `
+    CREATE TABLE issues(
+      issueID INTEGER PRIMARY KEY,
+      title TEXT,
+      owner TEXT,
+      _0_version TEXT
+    );
+      `,
+    );
+
+    syncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
+
+    const index = (name: string, column: string) =>
+      issues.createIndex({
+        schema: 'public',
+        tableName: 'issues',
+        name,
+        columns: {[column]: 'ASC'},
+        unique: false,
+      });
+
+    for (const change of [
+      ['begin', issues.begin(), {commitWatermark: '110'}],
+      ['data', index('issues_title', 'title')],
+      ['data', index('issues_owner', 'owner')],
+      ['commit', issues.commit(), {watermark: '110'}],
+    ] satisfies Downstream[]) {
+      downstream.push(change);
+      if (change[0] === 'commit') {
+        await Promise.race([versionReady.next(), syncing]);
+      }
+    }
+
+    const statuses = eventSink.map(e => {
+      const {description, state} = e as ReplicationStatusEvent;
+      const status = state?.indexingStatus;
+      return {
+        description,
+        indexingStatus: status && {
+          ...status,
+          elapsedMs: expect.any(Number),
+          completedMs: expect.any(Number),
+        },
+      };
+    });
+    expect(statuses).toEqual([
+      {description: 'Replicating from 09', indexingStatus: undefined},
+      {
+        description: 'Creating index issues_title on issues',
+        indexingStatus: {
+          name: 'issues_title',
+          table: 'issues',
+          columns: ['title'],
+          unique: false,
+          index: 1,
+          totalIndexes: undefined,
+          elapsedMs: expect.any(Number),
+          completedMs: expect.any(Number),
+          done: false,
+        },
+      },
+      {
+        description: 'Created index issues_title on issues',
+        indexingStatus: expect.objectContaining({
+          name: 'issues_title',
+          index: 1,
+          done: true,
+        }),
+      },
+      {
+        description: 'Creating index issues_owner on issues',
+        indexingStatus: expect.objectContaining({
+          name: 'issues_owner',
+          columns: ['owner'],
+          index: 2,
+          done: false,
+        }),
+      },
+      {
+        description: 'Created index issues_owner on issues',
+        indexingStatus: expect.objectContaining({
+          name: 'issues_owner',
+          index: 2,
+          done: true,
+        }),
+      },
+      {description: 'Schema updated', indexingStatus: undefined},
+    ]);
+
+    expect(
+      mainDb
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'issues_%' ORDER BY name`,
+        )
+        .all(),
+    ).toEqual([{name: 'issues_owner'}, {name: 'issues_title'}]);
   });
 
   test('publishes and rejects fatal replication errors', async () => {

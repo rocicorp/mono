@@ -52,7 +52,10 @@ import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
-import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
+import {
+  IndexingProgress,
+  ReplicationStatusPublisher,
+} from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {publicationRowFilter} from './backfill-resume.ts';
@@ -313,7 +316,7 @@ export async function initialSync(
         5000,
       );
       const indexStart = performance.now();
-      createLiteIndices(lc, tx, indexes);
+      await createLiteIndices(lc, tx, indexes, statusPublisher);
       const index = performance.now() - indexStart;
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
@@ -621,15 +624,40 @@ function createLiteTables(
   }
 }
 
-function createLiteIndices(lc: LogContext, tx: Database, indices: IndexSpec[]) {
+// Exported for testing.
+export async function createLiteIndices(
+  lc: LogContext,
+  tx: Database,
+  indices: IndexSpec[],
+  statusPublisher: ReplicationStatusPublisher,
+) {
+  const progress = new IndexingProgress(indices.length);
   for (const [i, index] of indices.entries()) {
-    const stmt = createLiteIndexStatement(mapPostgresToLiteIndex(index));
-    lc.info?.(`Creating index ${i + 1}/${indices.length}: ${stmt}`);
-    const start = performance.now();
+    const liteIndex = mapPostgresToLiteIndex(index);
+    const stmt = createLiteIndexStatement(liteIndex);
+    const n = `${i + 1}/${indices.length}`;
+    lc.info?.(`Creating index ${n}: ${stmt}`);
+    progress.start(liteIndex);
+    // Index creation blocks the event loop, so wait for the status event
+    // to be sent before starting.
+    await statusPublisher.publishAndFlush(
+      lc,
+      'Indexing',
+      `Creating index ${n} on ${liteIndex.tableName}`,
+      5000,
+      progress.state,
+    );
     tx.exec(stmt);
-    lc.info?.(
-      `Created index ${i + 1}/${indices.length} ` +
-        `(${(performance.now() - start).toFixed(3)} ms): ${stmt}`,
+    const elapsed = progress.finish();
+    lc.info?.(`Created index ${n} (${elapsed.toFixed(3)} ms): ${stmt}`);
+  }
+  if (indices.length) {
+    statusPublisher.publish(
+      lc,
+      'Indexing',
+      `Created ${indices.length} indexes`,
+      0,
+      progress.state,
     );
   }
 }

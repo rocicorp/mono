@@ -9,6 +9,7 @@ import {
   TestLogSink,
 } from '../../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../../zero-events/src/index.ts';
+import type {ReplicationStatusEvent} from '../../../../../zero-events/src/status.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../../db/lite-tables.ts';
 import {mapPostgresToLiteIndex} from '../../../db/pg-to-lite.ts';
@@ -2773,12 +2774,47 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             description: /Copying \d+ upstream tables at version \w+/,
           },
         ]);
-        expect(eventSink.at(-1)).toMatchObject({
+        const indexing = eventSink.filter(
+          e => (e as ReplicationStatusEvent).stage === 'Indexing',
+        ) as ReplicationStatusEvent[];
+        expect(indexing[0]).toMatchObject({
           type: 'zero/events/status/replication/v1',
           component: 'replication',
           stage: 'Indexing',
           status: 'OK',
           description: /Creating \d+ indexes/,
+        });
+        const numIndexes = Number(
+          /Created (\d+) indexes/.exec(indexing.at(-1)?.description ?? '')?.[1],
+        );
+        expect(numIndexes).toBeGreaterThan(0);
+        for (let n = 1; n <= numIndexes; n++) {
+          expect(
+            indexing.find(e => e.state?.indexingStatus?.index === n),
+          ).toMatchObject({
+            description: new RegExp(`Creating index ${n}/${numIndexes} on `),
+            state: {
+              indexingStatus: {
+                index: n,
+                totalIndexes: numIndexes,
+                done: false,
+              },
+            },
+          });
+        }
+        expect(eventSink.at(-1)).toMatchObject({
+          type: 'zero/events/status/replication/v1',
+          component: 'replication',
+          stage: 'Indexing',
+          status: 'OK',
+          description: `Created ${numIndexes} indexes`,
+          state: {
+            indexingStatus: {
+              index: numIndexes,
+              totalIndexes: numIndexes,
+              done: true,
+            },
+          },
         });
       }
     });

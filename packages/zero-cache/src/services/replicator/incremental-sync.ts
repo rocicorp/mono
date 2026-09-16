@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
+import {mapPostgresToLiteIndex} from '../../db/pg-to-lite.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
@@ -15,7 +16,10 @@ import type * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {RunningState} from '../running-state.ts';
 import type {CommitResult} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
-import type {ReplicationStatusPublisher} from './replication-status.ts';
+import {
+  IndexingProgress,
+  type ReplicationStatusPublisher,
+} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {ReplicationReportRecorder} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
@@ -122,10 +126,34 @@ export class IncrementalSyncer {
           `Replicating from ${watermark}`,
         );
 
-        let backfillStatus: DownloadStatus | undefined;
+        let backfill:
+          | {status: DownloadStatus; table: string; columns: string[]}
+          | undefined;
         let writeBatch: ChangeStreamData[] = [];
         let writeBatchSize = 0;
         let inTransaction = false;
+        // Indexes created in the current run of consecutive index creations.
+        let indexing: IndexingProgress | undefined;
+
+        const publishBackfillStatus = (table: string) =>
+          this.#statusPublisher?.publish(
+            lc,
+            'Replicating',
+            `Backfilling ${table} table`,
+            3000,
+            () =>
+              backfill
+                ? {
+                    downloadStatus: [
+                      {
+                        ...backfill.status,
+                        table: backfill.table,
+                        columns: backfill.columns,
+                      },
+                    ],
+                  }
+                : {},
+          );
 
         const flushWrites = async () => {
           if (writeBatch.length === 0) {
@@ -138,7 +166,7 @@ export class IncrementalSyncer {
           const result = await this.#worker.processMessages(batch);
           this.#handleResult(lc, result);
           if (result?.completedBackfill) {
-            backfillStatus = undefined;
+            backfill = undefined;
           }
         };
 
@@ -177,34 +205,55 @@ export class IncrementalSyncer {
             default: {
               const msg = message[1];
               if (msg.tag === 'backfill' && msg.status) {
-                const {status} = msg;
-                if (!backfillStatus) {
+                const {status, relation} = msg;
+                const first = !backfill;
+                backfill = {
+                  status, // Update the current status
+                  table: relation.name,
+                  columns: [...relation.rowKey.columns, ...msg.columns],
+                };
+                if (first) {
                   // Start publishing the status every 3 seconds.
-                  backfillStatus = status;
-                  this.#statusPublisher?.publish(
+                  publishBackfillStatus(relation.name);
+                }
+              }
+
+              if (msg.tag === 'create-index' && this.#statusPublisher) {
+                // Creating an index on an existing table can take a long
+                // time. Flush preceding changes so that the index creation
+                // is processed (and timed) on its own.
+                await flushWrites();
+                const index = mapPostgresToLiteIndex(msg.spec);
+                indexing ??= new IndexingProgress();
+                indexing.start(index);
+                this.#statusPublisher.publish(
+                  lc,
+                  'Replicating',
+                  `Creating index ${index.name} on ${index.tableName}`,
+                  3000,
+                  indexing.state,
+                );
+                writeBatch.push(message as ChangeStreamData);
+                writeBatchSize += size;
+                await flushWrites();
+                const elapsed = indexing.finish();
+                lc.info?.(
+                  `Created index ${index.name} (${elapsed.toFixed(3)} ms)`,
+                );
+                if (backfill) {
+                  publishBackfillStatus(backfill.table);
+                } else {
+                  this.#statusPublisher.publish(
                     lc,
                     'Replicating',
-                    `Backfilling ${msg.relation.name} table`,
-                    3000,
-                    () =>
-                      backfillStatus
-                        ? {
-                            downloadStatus: [
-                              {
-                                ...backfillStatus,
-                                table: msg.relation.name,
-                                columns: [
-                                  ...msg.relation.rowKey.columns,
-                                  ...msg.columns,
-                                ],
-                              },
-                            ],
-                          }
-                        : {},
+                    `Created index ${index.name} on ${index.tableName}`,
+                    0,
+                    indexing.state,
                   );
                 }
-                backfillStatus = status; // Update the current status
+                break;
               }
+              indexing = undefined;
 
               const type = message[0];
               const invalidTransactionSequence =
