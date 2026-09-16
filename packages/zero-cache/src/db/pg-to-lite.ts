@@ -84,6 +84,37 @@ const BOOLEAN_LITERAL_REGEX = /^(true|false)$/;
 const QUOTED_STRING_WITH_CAST_REGEX =
   /^('.*')::(?!(?:date|time|timetz|timestamp|timestamptz|interval)$)(\w+)$/;
 
+// Numeric types whose quoted literals may denote non-finite values (e.g.
+// `'NaN'::real`, `'Infinity'::numeric`), which are replicated as numbers
+// rather than as the quoted string. (`double precision` is multi-word and
+// thus never matches QUOTED_STRING_WITH_CAST_REGEX.)
+const NUMERIC_CAST_TYPES = new Set([
+  'real',
+  'float4',
+  'float8',
+  'numeric',
+  'decimal',
+]);
+
+/**
+ * Matches a quoted string with a type cast whose quoted value can be used
+ * as-is for the SQLite default, returning the quoted value.
+ */
+function matchQuotedLiteral(defaultExpression: string): string | undefined {
+  const match = QUOTED_STRING_WITH_CAST_REGEX.exec(defaultExpression);
+  if (!match) {
+    return undefined;
+  }
+  const [, quoted, type] = match;
+  if (
+    NUMERIC_CAST_TYPES.has(type) &&
+    !NUMERIC_LITERAL_REGEX.test(quoted.slice(1, -1))
+  ) {
+    return undefined;
+  }
+  return quoted;
+}
+
 // Empty array constructor syntax: ARRAY[]::text[], ARRAY[]::integer[], etc.
 // Maps to '[]' (JSON empty array) in SQLite.
 const EMPTY_ARRAY_CONSTRUCTOR_REGEX = /^ARRAY\s*\[\s*\]::\w+\[\]$/i;
@@ -130,9 +161,9 @@ export function mapPostgresToLiteDefault(
   }
 
   // Quoted strings with type casts: extract just the quoted part
-  const match = QUOTED_STRING_WITH_CAST_REGEX.exec(defaultExpression);
-  if (match) {
-    return match[1];
+  const quoted = matchQuotedLiteral(defaultExpression);
+  if (quoted !== undefined) {
+    return quoted;
   }
 
   // Empty arrays: ARRAY[]::type[] or '{}'::type[] → '[]'
@@ -190,9 +221,9 @@ export function defaultValueMatches(
   if (BOOLEAN_LITERAL_REGEX.test(dflt)) {
     return missingValue === (dflt === 'true');
   }
-  const match = QUOTED_STRING_WITH_CAST_REGEX.exec(dflt);
-  if (match) {
-    const literal = match[1].slice(1, -1).replaceAll(`''`, `'`);
+  const quoted = matchQuotedLiteral(dflt);
+  if (quoted !== undefined) {
+    const literal = quoted.slice(1, -1).replaceAll(`''`, `'`);
     if (typeof missingValue === 'string') {
       return missingValue === literal;
     }

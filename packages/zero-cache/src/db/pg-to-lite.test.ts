@@ -454,6 +454,12 @@ test.each([
   ["'2024-01-01 12:30:00+00'::timestamptz"],
   ["'2024-01-01 12:30:00'::timestamp without time zone"],
   ["'1 day'::interval"],
+
+  // Non-finite numeric values are replicated as numbers, not strings
+  ["'NaN'::real"],
+  ["'Infinity'::real"],
+  ["'-Infinity'::numeric"],
+  ["'NaN'::double precision"],
 ])('unsupported column default %s', value => {
   expect(() => mapPostgresToLiteDefault('foo', 'bar', value)).toThrow(
     UnsupportedColumnDefaultError,
@@ -482,6 +488,8 @@ test.each([
   ["''::text", "''"], // empty string
   ["'it''s'::text", "'it''s'"], // escaped quote
   ["'x'::date_kind", "'x'"], // e.g. an enum whose name starts with "date"
+  ["'1.5'::numeric", "'1.5'"],
+  ["'NaN'::text", "'NaN'"],
 
   // Empty arrays → JSON empty array
   ['ARRAY[]::text[]', "'[]'"],
@@ -557,6 +565,10 @@ test.each([
   // Temporal types are replicated as epoch milliseconds, not strings
   ["'2024-01-01'::date", '2024-01-01'],
   ["'12:30:00'::time", '12:30:00'],
+
+  // Non-finite numeric values are replicated as numbers, not strings
+  ["'NaN'::real", 'NaN'],
+  ["'Infinity'::numeric", 'Infinity'],
 ])('default value does not match %s = %o', (dflt, missingValue) => {
   expect(defaultValueMatches(dflt, missingValue)).toBe(false);
 });
