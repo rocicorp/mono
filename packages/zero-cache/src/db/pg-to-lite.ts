@@ -76,13 +76,17 @@ const BOOLEAN_LITERAL_REGEX = /^(true|false)$/;
 // Only matches simple type names (word characters) - array types like
 // `::text[]` won't match and will trigger backfill.
 //
-// Temporal types are excluded, as their values are replicated as epoch
-// milliseconds rather than as the quoted string (e.g. `'2024-01-01'::date`).
-// (Most temporal type names are multi-word, e.g. `timestamp with time zone`,
-// and are thus already excluded; the single-word names are listed for
-// completeness.)
+// Types whose values are not replicated as the quoted string are excluded:
+// - Temporal types are replicated as epoch milliseconds
+//   (e.g. `'2024-01-01'::date`). Most temporal type names are multi-word,
+//   e.g. `timestamp with time zone`, and are thus already excluded; the
+//   single-word names are listed for completeness.
+// - `bytea` values are replicated as binary (e.g. `'\\xdead'::bytea`).
 const QUOTED_STRING_WITH_CAST_REGEX =
-  /^('.*')::(?!(?:date|time|timetz|timestamp|timestamptz|interval)$)(\w+)$/;
+  /^('.*')::(?!(?:date|time|timetz|timestamp|timestamptz|interval|bytea)$)(\w+)$/;
+
+// JSON types, whose values are replicated as JSON text.
+const JSON_CAST_TYPES = new Set(['json', 'jsonb']);
 
 // Numeric types whose quoted literals may denote non-finite values (e.g.
 // `'NaN'::real`, `'Infinity'::numeric`), which are replicated as numbers
@@ -98,9 +102,11 @@ const NUMERIC_CAST_TYPES = new Set([
 
 /**
  * Matches a quoted string with a type cast whose quoted value can be used
- * as-is for the SQLite default, returning the quoted value.
+ * as-is for the SQLite default, returning the quoted value and the type.
  */
-function matchQuotedLiteral(defaultExpression: string): string | undefined {
+function matchQuotedLiteral(
+  defaultExpression: string,
+): {quoted: string; type: string} | undefined {
   const match = QUOTED_STRING_WITH_CAST_REGEX.exec(defaultExpression);
   if (!match) {
     return undefined;
@@ -112,7 +118,7 @@ function matchQuotedLiteral(defaultExpression: string): string | undefined {
   ) {
     return undefined;
   }
-  return quoted;
+  return {quoted, type};
 }
 
 // Empty array constructor syntax: ARRAY[]::text[], ARRAY[]::integer[], etc.
@@ -161,9 +167,9 @@ export function mapPostgresToLiteDefault(
   }
 
   // Quoted strings with type casts: extract just the quoted part
-  const quoted = matchQuotedLiteral(defaultExpression);
-  if (quoted !== undefined) {
-    return quoted;
+  const literal = matchQuotedLiteral(defaultExpression);
+  if (literal) {
+    return literal.quoted;
   }
 
   // Empty arrays: ARRAY[]::type[] or '{}'::type[] → '[]'
@@ -221,9 +227,24 @@ export function defaultValueMatches(
   if (BOOLEAN_LITERAL_REGEX.test(dflt)) {
     return missingValue === (dflt === 'true');
   }
-  const quoted = matchQuotedLiteral(dflt);
-  if (quoted !== undefined) {
-    const literal = quoted.slice(1, -1).replaceAll(`''`, `'`);
+  if (
+    EMPTY_ARRAY_CONSTRUCTOR_REGEX.test(dflt) ||
+    EMPTY_ARRAY_LITERAL_REGEX.test(dflt)
+  ) {
+    return Array.isArray(missingValue) && missingValue.length === 0;
+  }
+  const match = matchQuotedLiteral(dflt);
+  if (match) {
+    const literal = match.quoted.slice(1, -1).replaceAll(`''`, `'`);
+    if (typeof missingValue === 'object') {
+      // JSON objects and arrays are replicated as JSON text, which must
+      // then be identical to the literal (e.g. `'{}'::jsonb`). Formatting
+      // differences conservatively compare as unequal.
+      return (
+        JSON_CAST_TYPES.has(match.type) &&
+        JSON.stringify(missingValue) === literal
+      );
+    }
     if (typeof missingValue === 'string') {
       return missingValue === literal;
     }

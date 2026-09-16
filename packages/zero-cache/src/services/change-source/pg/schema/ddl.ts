@@ -3,6 +3,7 @@ import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
+import {jsonValueSchema} from '../../protocol/current/json.ts';
 import {publishedSchema, publishedSchemaQuery} from './published.ts';
 
 // Sent in the 'version' tag of "ddlStart" and "ddlUpdate" event messages.
@@ -67,21 +68,13 @@ export const ddlEventSchema = triggerEvent.extend({
   // in values. This is only reported when proven by the transaction's
   // snapshot (see `xactSnapshotSetting()`).
   //
-  // Columns without an entry (e.g. added with a volatile default, or with
-  // a default assigned in a later command) must be backfilled.
-  //
-  // Only values with scalar JSON encodings (numbers, strings, and
-  // booleans) are reported, as only those can provably match a
-  // replicable default expression; columns with other missing values
-  // (e.g. arrays) are not reported, and are thus backfilled.
+  // Columns without an entry (e.g. added with a volatile default) must be
+  // backfilled.
   //
   // Like `newColumns`, the field is absent in messages from older
   // versions of the upstream functions, and `null` when there are no such
   // columns.
-  missingValues: v
-    .record(v.record(v.union(v.number(), v.string(), v.boolean(), v.null())))
-    .nullable()
-    .optional(),
+  missingValues: v.record(v.record(jsonValueSchema)).nullable().optional(),
 });
 
 /**
@@ -390,11 +383,7 @@ BEGIN
                ) AS vals
           FROM new_cols n
           JOIN pg_attribute a ON a.attrelid = n.rel_oid AND a.attnum = n.attnum
-          WHERE (
-            n.atthasmissing AND
-            json_typeof(array_to_json(a.attmissingval)->0) IN
-              ('number', 'string', 'boolean')
-          ) OR (
+          WHERE n.atthasmissing OR (
             -- Columns added without a (non-null) default hold NULL in all
             -- pre-existing rows, unless they are filled by other means,
             -- i.e. as identity or generated columns, by a domain default, or

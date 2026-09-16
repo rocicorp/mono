@@ -2343,6 +2343,91 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'setup fully published table for ALTER TABLE column additions',
+      /*sql*/ `
+      CREATE TABLE your.additions (id TEXT PRIMARY KEY);
+      INSERT INTO your.additions (id) VALUES ('a');
+      INSERT INTO your.additions (id) VALUES ('b');
+      `,
+      [
+        [
+          {tag: 'create-table'},
+          {tag: 'create-index'},
+          {tag: 'insert'},
+          {tag: 'insert'},
+        ],
+      ],
+      {['your.additions']: [{id: 'a'}, {id: 'b'}]},
+      [],
+      [],
+    ],
+    [
+      'ALTER TABLE column additions with replicable initial values are not backfilled',
+      /*sql*/ `
+      ALTER TABLE your.additions
+        ADD COLUMN plain TEXT,
+        ADD COLUMN arr TEXT[] DEFAULT '{}',
+        ADD COLUMN obj JSONB DEFAULT '{}';
+      `,
+      [
+        [
+          // Note: no `backfill` fields. (Were a backfill initiated, its
+          // messages would fail the next case.)
+          {tag: 'add-column', column: {name: 'arr', spec: expect.anything()}},
+          {tag: 'add-column', column: {name: 'obj', spec: expect.anything()}},
+          {tag: 'add-column', column: {name: 'plain', spec: expect.anything()}},
+        ],
+      ],
+      {
+        ['your.additions']: [
+          {id: 'a', plain: null, arr: '[]', obj: '{}'},
+          {id: 'b', plain: null, arr: '[]', obj: '{}'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'ALTER TABLE column addition that rewrites rows before changing the default is backfilled',
+      /*sql*/ `
+      ALTER TABLE your.additions
+        ADD COLUMN rnd FLOAT8 DEFAULT random(),
+        ALTER COLUMN rnd SET DEFAULT 5;
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            column: {
+              name: 'rnd',
+              spec: {pos: expect.any(Number), dataType: 'float8', dflt: null},
+            },
+            // Existing rows hold random values rather than the (constant)
+            // default reported in the schema.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        ['your.additions']: [
+          {rnd: expect.any(Number)},
+          {rnd: expect.any(Number)},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'drop fully published table for ALTER TABLE column additions',
+      /*sql*/ `DROP TABLE your.additions;`,
+      [[{tag: 'drop-index'}, {tag: 'drop-table'}]],
+      {},
+      [],
+      [],
+    ],
+    [
       'remove table with a column list for newly created columns',
       /*sql*/ `
       ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,

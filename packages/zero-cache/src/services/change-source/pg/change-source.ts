@@ -1245,8 +1245,8 @@ class ChangeMaker {
             must(prevTbl.get(id)),
             must(nextTbl.get(id)),
             tag,
-            event.newColumns ?? null,
-            event.missingValues ?? null,
+            event.newColumns,
+            event.missingValues,
           ),
         );
       }
@@ -1291,8 +1291,8 @@ class ChangeMaker {
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
     ddlTag: string,
-    newColumns: Record<string, number[]> | null,
-    missingValues: Record<string, Record<string, unknown>> | null,
+    newColumns: Record<string, number[]> | null | undefined,
+    missingValues: Record<string, Record<string, unknown>> | null | undefined,
   ): SchemaChange[] {
     const changes: SchemaChange[] = [];
     if (
@@ -1354,8 +1354,6 @@ class ChangeMaker {
 
     // Only columns known to hold a specific value in all pre-existing rows
     // can potentially skip backfill, namely:
-    // * columns introduced by an `ALTER TABLE` statement, which diff as a
-    //   single command and thus hold the default reported in the schema.
     // * columns reported by the event's `newColumns` field to have been
     //   created in the same (upstream) transaction — which covers the
     //   manual update_schemas() hook when invoked in the transaction that
@@ -1366,6 +1364,12 @@ class ChangeMaker {
     //   was added but before the update_schemas() call, in which case the
     //   column must be backfilled. A `null` missing value indicates that
     //   pre-existing rows are NULL, which matches only an absent default.
+    // * for events predating the `newColumns` field, columns introduced by
+    //   an `ALTER TABLE` statement, which diff as a single command and are
+    //   assumed to hold the default reported in the schema. (This does not
+    //   hold if a single command adds a column with a volatile default and
+    //   then sets another default, which is why the `newColumns` metadata,
+    //   when present, takes precedence.)
     // All other scenarios in which columns are introduced, e.g.
     // * ALTER PUBLICATION
     // * COMMENT
@@ -1375,6 +1379,7 @@ class ChangeMaker {
     // published by these commands in the same transaction are reported in
     // `newColumns` if the upstream can prove that no rows were written
     // in between.)
+    const hasColumnMetadata = newColumns !== undefined;
     const newColAttNums = new Set(newColumns?.[String(newTable.oid)] ?? []);
     const tableMissingValues = missingValues?.[String(newTable.oid)];
 
@@ -1389,14 +1394,13 @@ class ChangeMaker {
         tableMetadata: getMetadata(newTable),
       };
       const missingValue = tableMissingValues?.[spec.pos];
+      const holdsKnownValue =
+        newColAttNums.has(spec.pos) &&
+        (missingValue === null
+          ? spec.dflt === null || spec.dflt === undefined
+          : defaultValueMatches(spec.dflt, missingValue));
       const alwaysBackfill =
-        ddlTag !== 'ALTER TABLE' &&
-        !(
-          newColAttNums.has(spec.pos) &&
-          (missingValue === null
-            ? spec.dflt === null || spec.dflt === undefined
-            : defaultValueMatches(spec.dflt, missingValue))
-        );
+        !holdsKnownValue && (hasColumnMetadata || ddlTag !== 'ALTER TABLE');
       if (alwaysBackfill) {
         addColumn.column.spec.dflt = null;
         addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;

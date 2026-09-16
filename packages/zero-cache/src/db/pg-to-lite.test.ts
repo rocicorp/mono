@@ -460,6 +460,9 @@ test.each([
   ["'Infinity'::real"],
   ["'-Infinity'::numeric"],
   ["'NaN'::double precision"],
+
+  // bytea values are replicated as binary
+  ["'\\xdead'::bytea"],
 ])('unsupported column default %s', value => {
   expect(() => mapPostgresToLiteDefault('foo', 'bar', value)).toThrow(
     UnsupportedColumnDefaultError,
@@ -522,6 +525,14 @@ test.each([
 
   // Quoted numeric literals with type casts (e.g. bigint)
   ["'2147483648'::bigint", 2147483648],
+
+  // Empty arrays
+  ["'{}'::text[]", []],
+  ['ARRAY[]::integer[]', []],
+
+  // JSON objects and arrays
+  ["'{}'::jsonb", {}],
+  ["'[]'::json", []],
   ["'-0.5'::numeric", -0.5],
 ])('default value matches %s = %o', (dflt, missingValue) => {
   expect(defaultValueMatches(dflt, missingValue)).toBe(true);
@@ -557,9 +568,16 @@ test.each([
   ['CURRENT_TIMESTAMP', '2026-07-13 00:00:00'],
   ['now()', '2026-07-13 00:00:00'],
   ["nextval('seq'::regclass)", 1],
-  ["'{}'::text[]", []],
-  ['ARRAY[]::text[]', []],
   ["'{1,2}'::integer[]", [1, 2]],
+  ["'{}'::text[]", [1]],
+  ['ARRAY[]::text[]', {}],
+
+  // JSON values must match the replicated JSON text exactly
+  ['\'{"a": 1}\'::jsonb', {a: 1}],
+  ["'{}'::text", {}], // objects only match JSON types
+
+  // bytea values are replicated as binary
+  ["'\\xdead'::bytea", '\\xdead'],
   ["'foo'", 'foo'], // bare quoted string without type cast
 
   // Temporal types are replicated as epoch milliseconds, not strings
