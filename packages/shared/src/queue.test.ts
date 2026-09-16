@@ -221,28 +221,45 @@ describe('Queue', () => {
   });
 
   test('large queue drains efficiently (O(n) not O(n^2))', () => {
-    const queue = new Queue<number>();
-    const n = 100_000;
-    for (let i = 0; i < n; i++) {
-      queue.enqueue(i);
-    }
-    expect(queue.size()).toBe(n);
+    // Compare drain times for the same total number of items (k queues of n
+    // vs one queue of k*n) rather than asserting an absolute wall-clock
+    // bound, which is flaky on slow CI runners. Linear dequeue gives a ratio
+    // of ~1; quadratic (e.g. Array.shift()) gives ~k.
+    const drainTime = (n: number) => {
+      const queue = new Queue<number>();
+      for (let i = 0; i < n; i++) {
+        queue.enqueue(i);
+      }
+      expect(queue.size()).toBe(n);
 
-    // When items are already enqueued, dequeue() returns T synchronously.
-    // This isolates the data structure cost from async/Promise overhead.
-    const start = performance.now();
-    let sum = 0;
-    for (let i = 0; i < n; i++) {
-      sum += queue.dequeue() as number;
-    }
-    const elapsed = performance.now() - start;
+      // When items are already enqueued, dequeue() returns T synchronously.
+      // This isolates the data structure cost from async/Promise overhead.
+      const start = performance.now();
+      let sum = 0;
+      for (let i = 0; i < n; i++) {
+        sum += queue.dequeue() as number;
+      }
+      const elapsed = performance.now() - start;
 
-    // Verify all values were dequeued correctly.
-    expect(sum).toBe((n * (n - 1)) / 2);
-    expect(queue.size()).toBe(0);
+      // Verify all values were dequeued correctly.
+      expect(sum).toBe((n * (n - 1)) / 2);
+      expect(queue.size()).toBe(0);
+      return elapsed;
+    };
+    // Best of several runs to reduce JIT/GC noise.
+    const best = (f: () => number) => Math.min(f(), f(), f());
 
-    // With O(n^2) Array.shift(), 100k items takes ~1000ms.
-    // With O(1) cursor-based dequeue, it takes ~2ms.
-    expect(elapsed).toBeLessThan(200);
+    const n = 50_000;
+    const k = 8;
+    const small = best(() => {
+      let total = 0;
+      for (let i = 0; i < k; i++) {
+        total += drainTime(n);
+      }
+      return total;
+    });
+    const large = best(() => drainTime(k * n));
+
+    expect(large / small).toBeLessThan(k / 2);
   });
 });
