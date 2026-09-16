@@ -12,9 +12,19 @@ import {
 
 const SHARD = {appID: 'zro', shardNum: 0};
 
-async function addReplica(db: PostgresDB, id: string) {
+async function addReplica(
+  db: PostgresDB,
+  id: string,
+  kind: 'logical' | 'unreserved-physical' = 'logical',
+) {
   const slot = `zro_0_${id}`;
-  await db`SELECT pg_create_logical_replication_slot(${slot}, 'pgoutput')`;
+  if (kind === 'logical') {
+    await db`SELECT pg_create_logical_replication_slot(${slot}, 'pgoutput')`;
+  } else {
+    // A physical slot that does not reserve WAL has a NULL restart_lsn
+    // (and a NULL wal_status), isolating the restart_lsn check.
+    await db`SELECT pg_create_physical_replication_slot(${slot})`;
+  }
   await createReplica(db, SHARD, id, slot, '01', {
     backupPath: null,
     backupV5: true,
@@ -54,13 +64,16 @@ test('getActiveReplicas excludes replicas with invalidated slots', async ({
     }
 
     await addReplica(db, 'valid');
+    await addReplica(db, 'unreserved', 'unreserved-physical');
 
     expect(
-      await db`SELECT slot_name AS slot, wal_status AS "walStatus"
+      await db`SELECT slot_name AS slot, wal_status AS "walStatus",
+          restart_lsn IS NULL AS "noRestartLSN"
         FROM pg_replication_slots ORDER BY slot_name`,
     ).toEqual([
-      {slot: 'zro_0_lost', walStatus: 'lost'},
-      {slot: 'zro_0_valid', walStatus: 'reserved'},
+      {slot: 'zro_0_lost', walStatus: 'lost', noRestartLSN: true},
+      {slot: 'zro_0_unreserved', walStatus: null, noRestartLSN: true},
+      {slot: 'zro_0_valid', walStatus: 'reserved', noRestartLSN: false},
     ]);
     expect((await getActiveReplicas(lc, db, SHARD)).map(r => r.id)).toEqual([
       'valid',
