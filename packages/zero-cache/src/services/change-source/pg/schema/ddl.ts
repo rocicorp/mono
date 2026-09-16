@@ -36,10 +36,14 @@ export const ddlEventSchema = triggerEvent.extend({
   // columns that were created in the (upstream) transaction that emitted
   // the event. Such columns are guaranteed to have the column default in
   // all pre-existing rows, and can thus be replicated without backfill if
-  // the default value itself is replicable. Tables whose publication
+  // the default value itself is replicable.
+  //
+  // A newly *published* (as opposed to newly *created*) column may hold
+  // arbitrary values in existing rows. Columns of tables whose publication
   // entries (e.g. column lists) were modified in the same transaction are
-  // excluded, since a newly *published* (as opposed to newly *created*)
-  // column may hold arbitrary values in existing rows.
+  // thus only reported if they provably did not exist when the transaction
+  // started its first DDL command, and no rows of the table were written
+  // since (see `xactSnapshotSetting()`).
   //
   // The field is absent in messages from older versions of the upstream
   // functions (in which case backfill decisions fall back to the command
@@ -56,9 +60,13 @@ export const ddlEventSchema = triggerEvent.extend({
   // default is a replicable expression that evaluates to its missing
   // value (see `defaultValueMatches()`), as replicating the default is
   // then guaranteed to reproduce the contents of pre-existing rows.
-  // Columns without an entry (e.g. added without a default, with a
-  // volatile default, or with a default assigned in a later command) must
-  // be backfilled.
+  // A `null` value indicates that the column was added without a default
+  // (and is not an identity or generated column, or of a domain type,
+  // which could fill pre-existing rows without a column default), i.e.
+  // that all pre-existing rows are NULL.
+  //
+  // Columns without an entry (e.g. added with a volatile default, or with
+  // a default assigned in a later command) must be backfilled.
   //
   // Only values with scalar JSON encodings (numbers, strings, and
   // booleans) are reported, as only those can provably match a
@@ -69,7 +77,7 @@ export const ddlEventSchema = triggerEvent.extend({
   // versions of the upstream functions, and `null` when there are no such
   // columns.
   missingValues: v
-    .record(v.record(v.union(v.number(), v.string(), v.boolean())))
+    .record(v.record(v.union(v.number(), v.string(), v.boolean(), v.null())))
     .nullable()
     .optional(),
 });
@@ -179,6 +187,30 @@ function append(shardNum: number) {
 const DDL_SERIALIZATION_LOCK = 0x3c6b8468f1bac0b0n;
 
 /**
+ * The name of the transaction-local setting in which the first DDL command
+ * of a transaction records, for each published table, its `relnatts` and
+ * the transaction's row write counters (inserted, updated, deleted) as
+ * `{[oid]: [relnatts, inserted, updated, deleted]}`.
+ *
+ * A published column whose `attnum` exceeds the recorded `relnatts` was
+ * created after the snapshot, and if the counters are unchanged, no row of
+ * the table was written since. All pre-existing rows are then guaranteed to
+ * hold the column's initial value, even if the column was published in the
+ * same transaction (e.g. by `ALTER PUBLICATION ... ADD TABLE t (..., col)`),
+ * which would otherwise require a backfill.
+ *
+ * Note that the counters (`pg_stat_get_xact_tuples_*()`) are not strictly
+ * scoped to the current transaction (they include stats not yet flushed
+ * from previous transactions), but they are not flushed while a transaction
+ * is in progress, so an unchanged value implies that no rows were written.
+ */
+export function xactSnapshotSetting({appID, shardNum}: ShardConfig) {
+  // Custom setting names must start with a letter or underscore, whereas
+  // appIDs may start with a digit.
+  return `_${appID}_${shardNum}.xact_snapshot`;
+}
+
+/**
  * Event trigger functions contain the core logic that are invoked by triggers.
  *
  * Note that although many of these functions can theoretically be parameterized and
@@ -201,6 +233,7 @@ export function createEventFunctionStatements(
 ) {
   const {appID, shardNum, publications} = shard;
   const schema = id(upstreamSchema(shard)); // e.g. "{APP_ID}_{SHARD_ID}"
+  const snapshotSetting = lit(xactSnapshotSetting(shard));
   return /*sql*/ `
 CREATE SCHEMA IF NOT EXISTS ${schema};
 
@@ -254,6 +287,7 @@ DECLARE
   schema_specs JSON;
   new_columns JSON;
   missing_values JSON;
+  xact_snapshot JSON;
   message TEXT;
 BEGIN
   SELECT current FROM ${schema}."publishedSchema" INTO prev_schema_specs;
@@ -271,29 +305,48 @@ BEGIN
     -- replicate such a column without backfill iff its current default
     -- evaluates to its missing value.
     --
-    -- Tables whose publication entries were touched in the same transaction
-    -- (e.g. ALTER PUBLICATION ... SET TABLE with a column list) are excluded,
-    -- as a newly *published* column may be a pre-existing column with
-    -- arbitrary values in existing rows, which requires a backfill.
+    -- A newly *published* column may be a pre-existing column with
+    -- arbitrary values in existing rows, which requires a backfill. Columns
+    -- of tables whose publication entries were touched in the same
+    -- transaction (e.g. ALTER PUBLICATION ... SET TABLE with a column list)
+    -- are thus only reported if the transaction's snapshot (recorded by its
+    -- first DDL command) proves that the column did not exist at the time,
+    -- and that no rows of the table have been written since.
+    xact_snapshot := NULLIF(current_setting(${snapshotSetting}, true), '')::json;
+
     WITH new_cols AS (
-      SELECT DISTINCT pc.oid AS rel_oid, attnum, atthasmissing
+      SELECT DISTINCT pc.oid AS rel_oid, attnum, atthasmissing,
+                      attidentity, attgenerated, typtype
         FROM pg_attribute
+        JOIN pg_type pt ON pt.oid = atttypid
         JOIN pg_class pc ON pc.oid = attrelid
         JOIN pg_namespace pns ON pns.oid = pc.relnamespace
         JOIN pg_publication_tables pb ON
           pb.schemaname = pns.nspname AND
           pb.tablename = pc.relname AND
           attname = ANY(pb.attnames)
+        LEFT JOIN LATERAL (
+          SELECT xact_snapshot -> (pc.oid::text) AS snap
+        ) snapshot ON true
         WHERE pb.pubname IN (${lit(publications)})
           AND attnum > 0
           AND NOT attisdropped
           AND pg_attribute.xmin = pg_current_xact_id()::xid
-          AND NOT EXISTS (
-            SELECT 1 FROM pg_publication_rel rel
-              JOIN pg_publication pub ON pub.oid = rel.prpubid
-              WHERE rel.prrelid = pc.oid
-                AND pub.pubname IN (${lit(publications)})
-                AND rel.xmin = pg_current_xact_id()::xid
+          AND (
+            NOT EXISTS (
+              SELECT 1 FROM pg_publication_rel rel
+                JOIN pg_publication pub ON pub.oid = rel.prpubid
+                WHERE rel.prrelid = pc.oid
+                  AND pub.pubname IN (${lit(publications)})
+                  AND rel.xmin = pg_current_xact_id()::xid
+            )
+            OR (
+              pc.relkind = 'r'
+              AND attnum > (snap ->> 0)::int
+              AND pg_stat_get_xact_tuples_inserted(pc.oid) = (snap ->> 1)::int8
+              AND pg_stat_get_xact_tuples_updated(pc.oid) = (snap ->> 2)::int8
+              AND pg_stat_get_xact_tuples_deleted(pc.oid) = (snap ->> 3)::int8
+            )
           )
     )
     SELECT
@@ -303,12 +356,28 @@ BEGIN
       ) attnums_by_table),
       (SELECT json_object_agg(rel_oid::int8, vals) FROM (
         SELECT n.rel_oid,
-               json_object_agg(n.attnum, array_to_json(a.attmissingval)->0) AS vals
+               json_object_agg(
+                 n.attnum,
+                 CASE WHEN n.atthasmissing
+                   THEN array_to_json(a.attmissingval)->0
+                   ELSE NULL
+                 END
+               ) AS vals
           FROM new_cols n
           JOIN pg_attribute a ON a.attrelid = n.rel_oid AND a.attnum = n.attnum
-          WHERE n.atthasmissing
-            AND json_typeof(array_to_json(a.attmissingval)->0) IN
+          WHERE (
+            n.atthasmissing AND
+            json_typeof(array_to_json(a.attmissingval)->0) IN
               ('number', 'string', 'boolean')
+          ) OR (
+            -- Columns added without a (non-null) default hold NULL in all
+            -- pre-existing rows, unless they are filled by other means,
+            -- i.e. as identity or generated columns, or by a domain default.
+            NOT n.atthasmissing AND
+            n.attidentity = '' AND
+            n.attgenerated = '' AND
+            n.typtype != 'd'
+          )
           GROUP BY n.rel_oid
       ) vals_by_table)
       INTO new_columns, missing_values;
@@ -371,6 +440,30 @@ DECLARE
 BEGIN
   -- serialize DDL statements to compute correct schema change diffs
   PERFORM pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
+
+  -- Record the columns and row write counters of published tables at the
+  -- first DDL command of the transaction. This is used to determine whether
+  -- columns published later in the transaction were newly created (and
+  -- thus hold their initial value in all rows). The row write counters are
+  -- only maintained if track_counts is enabled.
+  IF current_setting('track_counts')::bool AND
+     COALESCE(current_setting(${snapshotSetting}, true), '') = '' THEN
+    PERFORM set_config(${snapshotSetting}, COALESCE((
+      SELECT json_object_agg(oid::int8, json_build_array(
+        relnatts,
+        pg_stat_get_xact_tuples_inserted(oid),
+        pg_stat_get_xact_tuples_updated(oid),
+        pg_stat_get_xact_tuples_deleted(oid)
+      ))::text FROM (
+        SELECT DISTINCT pc.oid, pc.relnatts FROM pg_class pc
+          JOIN pg_namespace pns ON pns.oid = pc.relnamespace
+          JOIN pg_publication_tables pb ON
+            pb.schemaname = pns.nspname AND pb.tablename = pc.relname
+          WHERE pb.pubname IN (${lit(publications)}) AND pc.relkind = 'r'
+      ) published
+    ), '{}'), true);
+  END IF;
+
   PERFORM ${schema}.update_schemas('ddlStart', TG_TAG, NULL);
 END
 $$ LANGUAGE plpgsql;

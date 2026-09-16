@@ -1364,13 +1364,17 @@ class ChangeMaker {
     //   pre-existing rows at creation, reported in `missingValues`). The
     //   two can differ, e.g. if the default was changed after the column
     //   was added but before the update_schemas() call, in which case the
-    //   column must be backfilled.
+    //   column must be backfilled. A `null` missing value indicates that
+    //   pre-existing rows are NULL, which matches only an absent default.
     // All other scenarios in which columns are introduced, e.g.
     // * ALTER PUBLICATION
     // * COMMENT
     // * MANUAL / UNKNOWN commands predating the `newColumns` field
     // must be backfilled, as a newly *published* column may contain
-    // arbitrary values in existing rows.
+    // arbitrary values in existing rows. (Newly created columns that are
+    // published by these commands in the same transaction are reported in
+    // `newColumns` if the upstream can prove that no rows were written
+    // in between.)
     const newColAttNums = new Set(newColumns?.[String(newTable.oid)] ?? []);
     const tableMissingValues = missingValues?.[String(newTable.oid)];
 
@@ -1384,11 +1388,14 @@ class ChangeMaker {
         column,
         tableMetadata: getMetadata(newTable),
       };
+      const missingValue = tableMissingValues?.[spec.pos];
       const alwaysBackfill =
         ddlTag !== 'ALTER TABLE' &&
         !(
           newColAttNums.has(spec.pos) &&
-          defaultValueMatches(spec.dflt, tableMissingValues?.[spec.pos])
+          (missingValue === null
+            ? spec.dflt === null || spec.dflt === undefined
+            : defaultValueMatches(spec.dflt, missingValue))
         );
       if (alwaysBackfill) {
         addColumn.column.spec.dflt = null;
