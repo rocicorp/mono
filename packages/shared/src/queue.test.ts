@@ -225,41 +225,57 @@ describe('Queue', () => {
     // vs one queue of k*n) rather than asserting an absolute wall-clock
     // bound, which is flaky on slow CI runners. Linear dequeue gives a ratio
     // of ~1; quadratic (e.g. Array.shift()) gives ~k.
-    const drainTime = (n: number) => {
-      const queue = new Queue<number>();
-      for (let i = 0; i < n; i++) {
-        queue.enqueue(i);
-      }
-      expect(queue.size()).toBe(n);
+    // Prefills `count` queues of `n` items, then times draining them all.
+    // Stops early once `budget` ms is exceeded so an O(n^2) regression fails
+    // fast instead of hitting the test timeout.
+    const drainTime = (count: number, n: number, budget = Infinity) => {
+      const queues = Array.from({length: count}, () => {
+        const queue = new Queue<number>();
+        for (let i = 0; i < n; i++) {
+          queue.enqueue(i);
+        }
+        expect(queue.size()).toBe(n);
+        return queue;
+      });
 
       // When items are already enqueued, dequeue() returns T synchronously.
       // This isolates the data structure cost from async/Promise overhead.
       const start = performance.now();
-      let sum = 0;
-      for (let i = 0; i < n; i++) {
-        sum += queue.dequeue() as number;
+      for (const queue of queues) {
+        let sum = 0;
+        for (let i = 0; i < n; i++) {
+          sum += queue.dequeue() as number;
+          if ((i & 0x3ff) === 0 && performance.now() - start > budget) {
+            return performance.now() - start;
+          }
+        }
+        // Verify all values were dequeued correctly.
+        expect(sum).toBe((n * (n - 1)) / 2);
+        expect(queue.size()).toBe(0);
       }
-      const elapsed = performance.now() - start;
-
-      // Verify all values were dequeued correctly.
-      expect(sum).toBe((n * (n - 1)) / 2);
-      expect(queue.size()).toBe(0);
-      return elapsed;
+      return performance.now() - start;
     };
-    // Best of several runs to reduce JIT/GC noise.
-    const best = (f: () => number) => Math.min(f(), f(), f());
-
-    const n = 50_000;
-    const k = 8;
-    const small = best(() => {
+    // Average over enough rounds to get past coarse timers (1ms in WebKit)
+    // and smooth out JIT/GC noise.
+    const minTotalMs = 50;
+    const avgTime = (f: () => number) => {
       let total = 0;
-      for (let i = 0; i < k; i++) {
-        total += drainTime(n);
-      }
-      return total;
-    });
-    const large = best(() => drainTime(k * n));
+      let rounds = 0;
+      do {
+        total += f();
+        rounds++;
+      } while (total < minTotalMs);
+      return total / rounds;
+    };
 
-    expect(large / small).toBeLessThan(k / 2);
+    const n = 10_000;
+    const k = 10;
+    const maxRatio = k / 2;
+    const small = avgTime(() => drainTime(k, n));
+    const large = avgTime(() =>
+      drainTime(1, k * n, small * maxRatio + minTotalMs),
+    );
+
+    expect(large / small).toBeLessThan(maxRatio);
   });
 });
