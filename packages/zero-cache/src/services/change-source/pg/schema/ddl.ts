@@ -277,6 +277,38 @@ INSERT INTO ${schema}."publishedSchema" (current) VALUES (${schema}.schema_specs
   UPDATE SET current = excluded.current;
 
 
+-- Returns whether a (visible) catalog row with the given xmin may have been
+-- written by the current transaction, including its subtransactions. This
+-- errs on the side of returning true, and must thus only be used to
+-- conservatively disable optimizations.
+--
+-- Visible rows written by in-progress transactions are necessarily written
+-- by the current transaction, whose subtransaction ids are greater than its
+-- top-level id. The xid (which lacks the epoch) is thus mapped to the
+-- first full transaction id at or after the top-level id, and checked for
+-- being in progress. (pg_xact_status() rejects ids that have not yet been
+-- assigned, which cannot belong to the current transaction.)
+CREATE OR REPLACE FUNCTION ${schema}.written_in_current_xact(x xid)
+RETURNS BOOL AS $$
+DECLARE
+  top xid8 := pg_current_xact_id();
+  top_num int8 := top::text::int8;
+  candidate xid8;
+BEGIN
+  IF x = top::xid THEN
+    RETURN true;
+  END IF;
+  candidate := (top_num +
+    ((x::text::int8 - (top_num % 4294967296) + 4294967296) % 4294967296)
+  )::text::xid8;
+  RETURN COALESCE(pg_xact_status(candidate) = 'in progress', true);
+EXCEPTION WHEN invalid_parameter_value THEN
+  -- "transaction ID ... is in the future"
+  RETURN false;
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION ${schema}.update_schemas(event_type text, tag text, target record)
 RETURNS void AS $$
 DECLARE
@@ -316,12 +348,12 @@ BEGIN
     SELECT EXISTS (
       SELECT 1 FROM pg_publication pub
         WHERE pub.pubname IN (${lit(publications)})
-          AND pub.xmin = pg_current_xact_id()::xid
+          AND ${schema}.written_in_current_xact(pub.xmin)
     ) OR EXISTS (
       SELECT 1 FROM pg_publication_namespace ns
         JOIN pg_publication pub ON pub.oid = ns.pnpubid
         WHERE pub.pubname IN (${lit(publications)})
-          AND ns.xmin = pg_current_xact_id()::xid
+          AND ${schema}.written_in_current_xact(ns.xmin)
     ) INTO publications_changed;
 
     WITH new_cols AS (
@@ -355,15 +387,25 @@ BEGIN
         WHERE pb.pubname IN (${lit(publications)})
           AND attnum > 0
           AND NOT attisdropped
-          AND pg_attribute.xmin = pg_current_xact_id()::xid
           AND (
-            NOT publications_changed AND NOT EXISTS (
-              SELECT 1 FROM pg_publication_rel rel
-                JOIN pg_publication pub ON pub.oid = rel.prpubid
-                WHERE rel.prrelid = pc.oid
-                  AND pub.pubname IN (${lit(publications)})
-                  AND rel.xmin = pg_current_xact_id()::xid
+            -- Without a snapshot, columns created in the transaction are
+            -- identified by their pg_attribute xmin. This only matches the
+            -- top-level transaction (i.e. not columns created in
+            -- subtransactions, which are thus backfilled), as other xids
+            -- cannot be positively attributed to the current transaction.
+            (
+              pg_attribute.xmin = pg_current_xact_id()::xid
+              AND NOT publications_changed
+              AND NOT EXISTS (
+                SELECT 1 FROM pg_publication_rel rel
+                  JOIN pg_publication pub ON pub.oid = rel.prpubid
+                  WHERE rel.prrelid = pc.oid
+                    AND pub.pubname IN (${lit(publications)})
+                    AND ${schema}.written_in_current_xact(rel.xmin)
+              )
             )
+            -- With a snapshot, the attnum proves that the column was
+            -- created in the current transaction (including subtransactions).
             OR unchanged_since_snapshot
           )
     )

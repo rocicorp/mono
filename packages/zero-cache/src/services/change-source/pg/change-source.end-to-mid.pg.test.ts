@@ -2343,6 +2343,40 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'column created in a subtransaction and published is not backfilled',
+      /*sql*/ `
+      DO $$ BEGIN
+        ALTER TABLE covers ADD COLUMN sub TEXT;
+      EXCEPTION WHEN others THEN RAISE;
+      END $$;
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt),
+        TABLE covers (id, url, color, width, tint, secret, seq, shade, rnd, sub);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'sub',
+              spec: {pos: expect.any(Number), dataType: 'text', dflt: null},
+            },
+            // Note: no `backfill` field. (Were a backfill initiated, its
+            // messages would fail the next case.)
+          },
+        ],
+      ],
+      {
+        covers: [
+          {id: 'a', sub: null},
+          {id: 'b', sub: null},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
       'setup fully published table for ALTER TABLE column additions',
       /*sql*/ `
       CREATE TABLE your.additions (id TEXT PRIMARY KEY);
