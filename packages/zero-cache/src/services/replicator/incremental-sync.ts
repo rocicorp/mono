@@ -240,16 +240,16 @@ export class IncrementalSyncer {
                 lc.info?.(
                   `Created index ${index.name} (${elapsed.toFixed(3)} ms)`,
                 );
+                this.#statusPublisher.publish(
+                  lc,
+                  'Replicating',
+                  `Created index ${index.name} on ${index.tableName}`,
+                  0,
+                  indexing.state,
+                );
                 if (backfill) {
+                  // Resume reporting the progress of the ongoing backfill.
                   publishBackfillStatus(backfill.table);
-                } else {
-                  this.#statusPublisher.publish(
-                    lc,
-                    'Replicating',
-                    `Created index ${index.name} on ${index.tableName}`,
-                    0,
-                    indexing.state,
-                  );
                 }
                 break;
               }

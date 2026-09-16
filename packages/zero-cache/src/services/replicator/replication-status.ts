@@ -176,6 +176,16 @@ export class IndexingProgress {
   }
 
   /**
+   * Restarts the timer of the current index, e.g. to exclude time spent
+   * reporting its start from its creation time.
+   */
+  restartTimer() {
+    if (this.#current) {
+      this.#current.start = this.#now();
+    }
+  }
+
+  /**
    * Marks the completion of the index passed to the last call to
    * {@link start}, returning the milliseconds it took to create.
    */

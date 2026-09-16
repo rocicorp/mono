@@ -647,19 +647,19 @@ export async function createLiteIndices(
       5000,
       progress.state,
     );
+    // Exclude the time spent waiting for the event from the index's timing.
+    progress.restartTimer();
     tx.exec(stmt);
     const elapsed = progress.finish();
     lc.info?.(`Created index ${n} (${elapsed.toFixed(3)} ms): ${stmt}`);
   }
-  if (indices.length) {
-    statusPublisher.publish(
-      lc,
-      'Indexing',
-      `Created ${indices.length} indexes`,
-      0,
-      progress.state,
-    );
-  }
+  statusPublisher.publish(
+    lc,
+    'Indexing',
+    `Created ${indices.length} indexes`,
+    0,
+    progress.state,
+  );
 }
 
 /**

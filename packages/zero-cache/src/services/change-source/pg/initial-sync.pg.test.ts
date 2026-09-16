@@ -3,7 +3,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
-import {beforeEach, describe, expect} from 'vitest';
+import {beforeEach, describe, expect, vi} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
@@ -27,8 +27,10 @@ import {
 } from '../../../test/lite.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
 import {type PostgresDB} from '../../../types/pg.ts';
+import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
 import {
+  createLiteIndices,
   getInitialDownloadState,
   initialSync,
   INSERT_BATCH_SIZE,
@@ -2819,6 +2821,24 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       }
     });
   }
+
+  test('reports completion when there are no indexes to create', async () => {
+    const lc = createSilentLogContext();
+    const replica = new Database(lc, ':memory:');
+    const publish = vi.fn().mockResolvedValue(undefined);
+    await createLiteIndices(
+      lc,
+      replica,
+      [],
+      ReplicationStatusPublisher.forRunningTransaction(replica, publish),
+    );
+    expect(publish).toHaveBeenCalledOnce();
+    expect(publish.mock.calls[0][1]).toMatchObject({
+      stage: 'Indexing',
+      description: 'Created 0 indexes',
+    });
+    expect(publish.mock.calls[0][1].state).not.toHaveProperty('indexingStatus');
+  });
 
   test('resume initial sync with invalid table', async () => {
     const lc = createSilentLogContext();

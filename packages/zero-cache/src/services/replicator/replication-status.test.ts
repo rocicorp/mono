@@ -368,6 +368,9 @@ describe('replicator/replication-status', () => {
       columns: {a: 'ASC', b: 'DESC'},
       unique: true,
     });
+    now += 900;
+    // Time spent before the index build (e.g. reporting it) is excluded.
+    progress.restartTimer();
     now += 250;
     expect(progress.state()).toEqual({
       indexingStatus: {
