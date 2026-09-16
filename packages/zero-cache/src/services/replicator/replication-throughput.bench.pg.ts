@@ -29,6 +29,7 @@ import type {PostgresDB} from '../../types/pg.ts';
 import type {PreSerialized, Source} from '../../types/streams.ts';
 import {getPragmaConfig, setupReplica} from '../../workers/replicator.ts';
 import {initializePostgresChangeSource} from '../change-source/pg/change-source-init.ts';
+import {isPreSerializedBatch} from '../change-streamer/broadcast.ts';
 import {
   initializeStreamer,
   type TuningOptions,
@@ -120,12 +121,13 @@ function parseStringifiedSource(
       for await (const item of source) {
         if (typeof item === 'string') {
           yield {data: BigIntJSON.parse(item) as Downstream, size: item.length};
-        } else {
-          const json = item.payload.toString('utf-8');
-          yield {
-            data: BigIntJSON.parse(json) as Downstream,
-            size: item.byteLength,
-          };
+        } else if (isPreSerializedBatch(item)) {
+          for (const c of item.changes) {
+            yield {
+              data: BigIntJSON.parse(c[2]) as Downstream,
+              size: c[2].length,
+            };
+          }
         }
       }
     },

@@ -50,6 +50,7 @@ import {
   type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {isPreSerializedBatch} from './broadcast.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import {
   initializeStreamer,
@@ -169,10 +170,10 @@ describe('change-streamer/service', () => {
       for await (const msg of sub) {
         if (typeof msg === 'string') {
           queue.enqueue(BigIntJSON.parse(msg) as Downstream);
-        } else {
-          queue.enqueue(
-            BigIntJSON.parse(msg.payload.toString('utf-8')) as Downstream,
-          );
+        } else if (isPreSerializedBatch(msg)) {
+          for (const c of msg.changes) {
+            queue.enqueue(BigIntJSON.parse(c[2]) as Downstream);
+          }
         }
       }
     })();

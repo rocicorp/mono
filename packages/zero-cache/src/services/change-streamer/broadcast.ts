@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../../shared/src/must.ts';
-import type {PreSerialized} from '../../types/streams.ts';
+import {isPreSerialized, type PreSerialized} from '../../types/streams.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
@@ -10,6 +10,10 @@ export type BroadcastReleaseMode = 'all-subscribers' | 'consensus-timeout';
 export type PreSerializedBatch = PreSerialized & {
   readonly changes: readonly WatermarkedChange[];
 };
+
+export function isPreSerializedBatch(val: unknown): val is PreSerializedBatch {
+  return isPreSerialized(val) && 'changes' in val && Array.isArray(val.changes);
+}
 
 export function preSerializeBatch(
   changes: readonly WatermarkedChange[],

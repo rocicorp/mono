@@ -159,7 +159,7 @@ describe('change-streamer/storer', () => {
           const msg: Downstream = JSON.parse(c[2]);
           msgs.push(msg);
           if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
-            break;
+            return msgs;
           }
         }
       }
