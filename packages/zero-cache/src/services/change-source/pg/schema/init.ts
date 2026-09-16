@@ -248,13 +248,27 @@ function getIncrementalMigrations(
       },
     },
 
+    // v27 (1.11.0):
+    // - make `generation` NOT NULL and stop reading `version`
+    27: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ALTER "generation" SET NOT NULL;
+        `;
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ALTER "version" DROP NOT NULL;
+        `;
+      },
+    },
+
+    // Note: While this is conditional, it always has to be bumped to the last version.
     ...(installPartialIndexTriggers
       ? {
-          // v26: Upgrade the DDL event triggers to include partial indexes in
+          // v28: Upgrade the DDL event triggers to include partial indexes in
           // schema snapshots. Note that setupTriggers() also refreshes the
           // stored "publishedSchema" so that the change in format does not
           // manifest as a spurious schema change.
-          26: {
+          28: {
             migrateSchema: async (lc, sql) => {
               const [{publications}] = await sql<{publications: string[]}[]>`
                 SELECT publications FROM ${sql(shardConfigTable)}`;

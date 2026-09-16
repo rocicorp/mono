@@ -65,7 +65,7 @@ describe('change-streamer/pg/schema/init', () => {
             id: /\d{10,}/,
             rank: expect.any(BigInt),
             slot: `${APP_ID}_${SHARD_NUM}_1234`,
-            version: '2dhf29ef',
+            version: null,
             generation: '2dhf29ef',
             backupPath: '12345',
             backupV5: true,
@@ -99,7 +99,7 @@ describe('change-streamer/pg/schema/init', () => {
             id: /\d{10,}/,
             rank: expect.any(BigInt),
             slot: `${APP_ID}_${SHARD_NUM}_5678`,
-            version: 's8dfh2d',
+            version: null,
             generation: 's8dfh2d',
             backupPath: '12345',
             backupV5: true,
@@ -225,7 +225,7 @@ describe('change-streamer/pg/schema/init', () => {
     expect(v25Current).toEqual(v25Specs);
     await expectTablesToMatch(upstream, {
       [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [
-        {...CURRENT_SCHEMA_VERSIONS, dataVersion: 25, schemaVersion: 25},
+        {...CURRENT_SCHEMA_VERSIONS, dataVersion: 27, schemaVersion: 27},
       ],
     });
 

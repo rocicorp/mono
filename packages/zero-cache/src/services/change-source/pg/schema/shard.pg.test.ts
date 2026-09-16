@@ -90,7 +90,7 @@ describe('change-source/pg', () => {
         {
           id: /\d{10,}/,
           slot: 'zro_0_1234',
-          version: '0wdfj02',
+          version: null,
           generation: '0wdfj02',
           backupPath: '12345',
           backupV5: true,
