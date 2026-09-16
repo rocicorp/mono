@@ -272,7 +272,7 @@ export class PostgresChangeSource implements ChangeSource {
       this.#shard,
       shardConfig,
       this.#db,
-      this.#replica.initialSchema,
+      this.#replica,
     );
 
     /**
@@ -811,9 +811,10 @@ type ReplicationError = {
 const SET_REPLICA_IDENTITY_DELAY_MS = 50;
 
 class ChangeMaker {
+  readonly #shard: ShardID;
   readonly #shardPrefix: string;
   readonly #shardConfig: InternalShardConfig;
-  readonly #initialSchema: PublishedSchema;
+  readonly #replica: Replica;
   readonly #db: PostgresDB;
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
@@ -821,15 +822,16 @@ class ChangeMaker {
   readonly #skippedIndexWarnings = new Set<string>();
 
   constructor(
-    {appID, shardNum}: ShardID,
+    shard: ShardID,
     shardConfig: InternalShardConfig,
     db: PostgresDB,
-    initialSchema: PublishedSchema,
+    replica: Replica,
   ) {
+    this.#shard = shard;
     // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
-    this.#shardPrefix = `${appID}/${shardNum}`;
+    this.#shardPrefix = `${shard.appID}/${shard.shardNum}`;
     this.#shardConfig = shardConfig;
-    this.#initialSchema = initialSchema;
+    this.#replica = replica;
     this.#db = db;
   }
 
@@ -848,6 +850,8 @@ class ChangeMaker {
       this.#error = {lsn, msg, err, lastLogTime: 0};
       this.#logError(lc, this.#error);
 
+      await this.#invalidateReplica(lc, err);
+
       const message = `Unable to continue replication from LSN ${fromBigInt(lsn)}`;
       const errorDetails: JSONObject = {error: message};
       if (err instanceof UnsupportedSchemaChangeError) {
@@ -864,6 +868,31 @@ class ChangeMaker {
         ['control', {tag: 'reset-required', message, errorDetails}],
       ];
     }
+  }
+
+  #replicaInvalidated = false;
+
+  // Deletes this replica's row in the `replicas` table so that it, and its
+  // slot, are removed from candidacy for restore. This is a poison pill to
+  // initiate an auto-reset (i.e. resync) without relying on a separate
+  // global store (e.g. no PG change-log required).
+  //
+  // Note that there is no need to delete the slot, as this will be taken care
+  // of in `dropUnclaimedSlots()` when a new replica is synced, or by the
+  // replication-slot-cleanup-monitor of a healthy replica.
+  async #invalidateReplica(lc: LogContext, err: unknown) {
+    if (this.#replicaInvalidated) {
+      return;
+    }
+    const sql = this.#db;
+    const {id: replicaID} = this.#replica;
+    const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
+
+    lc.warn?.(`deleting invalid replica: ${this.#replica.id}`, err);
+    await sql`
+      DELETE FROM ${sql(replicasTable)} WHERE "id" = ${replicaID}
+    `;
+    this.#replicaInvalidated = true;
   }
 
   #logError(lc: LogContext, error: ReplicationError) {
@@ -1388,7 +1417,10 @@ class ChangeMaker {
       return [];
     }
     const currentSchema = await getPublicationInfo(this.#db, publications);
-    const difference = getSchemaDifference(this.#initialSchema, currentSchema);
+    const difference = getSchemaDifference(
+      this.#replica.initialSchema,
+      currentSchema,
+    );
     if (difference !== null) {
       throw new MissingEventTriggerSupport(difference);
     }
@@ -1396,7 +1428,7 @@ class ChangeMaker {
     // MessageRelation itself must be checked to detect transient
     // schema changes within the transaction (e.g. adding and dropping
     // a table, or renaming a column and then renaming it back).
-    const orel = this.#initialSchema.tables.find(
+    const orel = this.#replica.initialSchema.tables.find(
       t => t.oid === rel.relationOid,
     );
     if (!orel) {
