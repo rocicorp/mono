@@ -1,4 +1,3 @@
-import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {defu} from 'defu';
@@ -722,7 +721,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     // The threshold in (estimated number of) bytes to send() on subscriber
     // websockets before `await`-ing the I/O buffers to be ready for more.
-    const flushBytesThreshold = getDefaultHighWaterMark(false);
+    // Relaxed to 512 KB to avoid accidental flow-control pauses on high-rate batch streams.
+    const flushBytesThreshold = 512 * 1024;
 
     while (this.#state.shouldRun()) {
       let err: unknown;

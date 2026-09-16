@@ -156,6 +156,16 @@ export type SubscriberContext = {
    * subscriber's ACK advances its head or releases its catchup barrier.
    */
   logsChangeStream: boolean;
+
+  /**
+   * Whether the subscriber supports batched WebSocket frames.
+   */
+  wsBatched?: boolean | undefined;
+
+  /**
+   * Whether the subscriber acknowledges frames cumulatively via high-watermark ACKs.
+   */
+  cumulativeAck?: boolean | undefined;
 };
 
 /**

@@ -16,7 +16,6 @@ import {
 } from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
-import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Subscription, type Options} from './subscription.ts';
 import {
@@ -58,6 +57,15 @@ export type Source<T> = AsyncIterable<T> & {
    * asynchronously as the receiving end processes the messages.
    */
   pipeline?: AsyncIterable<{value: T; consumed: () => void}> | undefined;
+
+  /**
+   * Pipelined batching support: eagerly drains available queued messages up to `maxBatch`.
+   */
+  pipelineBatched?:
+    | ((
+        maxBatch?: number,
+      ) => AsyncIterable<{values: T[]; consumed: () => void}> | undefined)
+    | undefined;
 };
 
 export type Sink<T> = {
@@ -229,12 +237,24 @@ export type Sized<T> = {
   size: number;
 };
 
+export type AckConfig = {
+  maxAckBytes?: number | undefined;
+  maxAckStride?: number | undefined;
+};
+
+export type StreamOutOptions = {
+  batched?: boolean | undefined;
+  maxBatchSize?: number | undefined;
+  ackConfig?: AckConfig | undefined;
+};
+
 export function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, BigIntJSON.stringify);
+  return streamOutInternal(lc, source, sink, BigIntJSON.stringify, options);
 }
 
 /**
@@ -244,8 +264,9 @@ export function streamOutStringified(
   lc: LogContext,
   source: Source<string>,
   sink: WebSocket,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, json => json);
+  return streamOutInternal(lc, source, sink, json => json, options);
 }
 
 async function streamOutInternal<T extends JSONValue>(
@@ -253,76 +274,129 @@ async function streamOutInternal<T extends JSONValue>(
   source: Source<T>,
   sink: WebSocket,
   stringify: (payload: T) => string,
+  options?: StreamOutOptions | undefined,
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
 
   const closer = WebSocketCloser.forSource(lc, sink, source);
 
-  const acks = new Queue<Ack>();
+  type InFlight = {
+    id: number;
+    consumed: () => void;
+    reject?: ((err: unknown) => void) | undefined;
+  };
+  const inFlight: InFlight[] = [];
+  let nextID = 0;
+
+  function close(err?: unknown) {
+    while (inFlight.length > 0) {
+      const entry = inFlight.shift()!;
+      entry.reject?.(err ?? new Error('Stream closed'));
+    }
+    closer.close(err);
+  }
+
   sink.addEventListener('message', ({data}) => {
     try {
-      if (typeof data !== 'string') {
-        throw new Error('Expected string message');
+      const text = typeof data === 'string' ? data : data.toString();
+      if (nextID === 0) {
+        return;
       }
-      acks.enqueue(v.parse(JSON.parse(data), ackSchema));
+      const {ack} = v.parse(JSON.parse(text), ackSchema);
+      if (ack > nextID || ack < 1) {
+        throw new Error(`Unexpected ack ${ack} (nextID=${nextID})`);
+      }
+      while (inFlight.length > 0 && inFlight[0].id <= ack) {
+        const entry = inFlight.shift()!;
+        entry.consumed();
+      }
     } catch (e) {
       lc.error?.(`error parsing ack`, e);
-      closer.close(e);
+      close(e);
     }
   });
 
+  const formatFrame = (
+    id: number,
+    payloadField: 'msg' | 'batch',
+    payloadStr: string,
+  ) => {
+    const ackPart =
+      id === 1 && options?.ackConfig
+        ? `,"ackConfig":${JSON.stringify(options.ackConfig)}`
+        : '';
+    return `{"id":${id}${ackPart},"${payloadField}":${payloadStr}}`;
+  };
+
   try {
-    let nextID = 0;
     const {pipeline} = source;
+    const batched = options?.batched ?? false;
+    const maxBatchSize = Math.max(1, Math.floor(options?.maxBatchSize ?? 64));
+
+    if (batched && source.pipelineBatched) {
+      const batchedIterable = source.pipelineBatched(maxBatchSize);
+      if (batchedIterable) {
+        lc.debug?.(
+          `started batched outbound stream (maxBatchSize=${maxBatchSize})`,
+        );
+        for await (const {values, consumed} of batchedIterable) {
+          const id = ++nextID;
+          const data =
+            values.length === 1
+              ? formatFrame(id, 'msg', stringify(values[0]))
+              : formatFrame(
+                  id,
+                  'batch',
+                  `[${values.map(stringify).join(',')}]`,
+                );
+          inFlight.push({id, consumed});
+          sink.send(data);
+        }
+        close();
+        return;
+      }
+    }
+
     if (pipeline) {
       lc.debug?.(`started pipelined outbound stream`);
       for await (const {value: msg, consumed} of pipeline) {
         const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
-        // Enable for debugging. Otherwise too verbose.
-        // lc.debug?.(`pipelining`, data);
+        const data = formatFrame(id, 'msg', stringify(msg));
+        inFlight.push({id, consumed});
         sink.send(data);
-
-        // The ack is awaited off the send loop so that the next message can be
-        // sent without waiting for it. A bad ack is a protocol error like in
-        // the synchronous path below: close the socket (which cancels the
-        // source) rather than leaving the rejection unhandled.
-        void (async () => {
-          const {ack} = await acks.dequeue();
-          // lc.debug?.(`received ack`, ack);
-          if (ack !== id) {
-            throw new Error(`Unexpected ack for ${id}: ${ack}`);
-          }
-          consumed();
-        })().catch(e => closer.close(e));
       }
-    } else {
-      lc.debug?.(`started synchronous outbound stream`);
-      for await (const msg of source) {
-        const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
-        // Enable for debugging. Otherwise too verbose.
-        // lc.debug?.(`sending`, data);
-        sink.send(data);
-
-        const {ack} = await acks.dequeue();
-        if (ack !== id) {
-          throw new Error(`Unexpected ack for ${id}: ${ack}`);
-        }
-      }
+      close();
+      return;
     }
-    closer.close();
+
+    lc.debug?.(`started synchronous outbound stream`);
+    for await (const msg of source) {
+      const id = ++nextID;
+      const data = formatFrame(id, 'msg', stringify(msg));
+      const r = resolver();
+      inFlight.push({id, consumed: r.resolve, reject: r.reject});
+      sink.send(data);
+      await r.promise;
+    }
+    close();
   } catch (e) {
-    closer.close(e);
+    close(e);
   }
 }
+
+export type StreamInOptions = {
+  cumulativeAck?: boolean | undefined;
+  maxAckStride?: number | undefined;
+  maxAckBytes?: number | undefined;
+};
 
 export function streamIn<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
+  options?: StreamInOptions | undefined,
 ): Promise<Source<T>> {
-  return streamInInternal(lc, source, schema, data => data);
+  return streamInInternal(lc, source, schema, data => data, options);
 }
 
 /**
@@ -333,33 +407,124 @@ export function streamInWithSize<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
+  options?: StreamInOptions | undefined,
 ): Promise<Source<Sized<T>>> {
-  return streamInInternal(lc, source, schema, (data, frame) => ({
-    data,
-    size: frame.length,
-  }));
+  return streamInInternal(
+    lc,
+    source,
+    schema,
+    (data, _frame, _id, size) => ({
+      data,
+      size,
+    }),
+    options,
+  );
 }
 
 async function streamInInternal<T extends JSONValue, Out>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
-  transform: (data: T, frame: string, id: number) => Out,
+  transform: (data: T, frame: string, id: number, size: number) => Out,
+  options?: StreamInOptions | undefined,
 ): Promise<Source<Out>> {
   expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
 
-  const streamedSchema = v.object({
-    msg: schema,
-    id: v.number(),
+  const ackConfigSchema = v.object({
+    maxAckBytes: v.number().optional(),
+    maxAckStride: v.number().optional(),
   });
 
-  const sink: Subscription<Out, {id: number; data: Out}> = new Subscription<
-    Out,
-    {id: number; data: Out}
-  >(
+  const streamedSchema = v.object({
+    id: v.number(),
+    msg: schema.optional(),
+    batch: v.array(schema).optional(),
+    ackConfig: ackConfigSchema.optional(),
+  });
+
+  type SinkEntry = {
+    consumed: () => void;
+    data: Out;
+  };
+
+  const cumulativeAck = options?.cumulativeAck ?? false;
+  let maxAckStride = options?.maxAckStride ?? 16;
+  let maxAckBytes = options?.maxAckBytes ?? 64 * 1024;
+
+  let lastAckSent = 0;
+  let highestContiguousConsumedId = 0;
+  let unackedBytes = 0;
+  const completedIds = new Set<number>();
+  let flushImmediateId: NodeJS.Immediate | undefined;
+
+  const flushAck = () => {
+    if (flushImmediateId !== undefined) {
+      clearImmediate(flushImmediateId);
+      flushImmediateId = undefined;
+    }
+    unackedBytes = 0;
+    if (
+      highestContiguousConsumedId > lastAckSent &&
+      source.readyState === source.OPEN
+    ) {
+      lastAckSent = highestContiguousConsumedId;
+      try {
+        source.send(
+          JSON.stringify({ack: highestContiguousConsumedId} satisfies Ack),
+        );
+      } catch (e) {
+        closer.close(e);
+      }
+    }
+  };
+
+  const onFrameConsumed = (id: number, frameSize = 0) => {
+    if (!cumulativeAck) {
+      if (source.readyState === source.OPEN) {
+        try {
+          source.send(JSON.stringify({ack: id} satisfies Ack));
+        } catch (e) {
+          closer.close(e);
+        }
+      }
+      return;
+    }
+
+    completedIds.add(id);
+    while (completedIds.has(highestContiguousConsumedId + 1)) {
+      highestContiguousConsumedId++;
+      completedIds.delete(highestContiguousConsumedId);
+    }
+
+    if (highestContiguousConsumedId <= lastAckSent) {
+      return;
+    }
+
+    unackedBytes += frameSize;
+
+    if (
+      highestContiguousConsumedId - lastAckSent >= maxAckStride ||
+      unackedBytes >= maxAckBytes ||
+      sink.queued === 0
+    ) {
+      flushAck();
+    } else if (flushImmediateId === undefined) {
+      flushImmediateId = setImmediate(flushAck);
+    }
+  };
+
+  const sink: Subscription<Out, SinkEntry> = new Subscription<Out, SinkEntry>(
     {
-      consumed: ({id}) => source.send(JSON.stringify({ack: id} satisfies Ack)),
-      cleanup: () => closer.close(),
+      consumed: ({consumed}) => consumed(),
+      cleanup: () => {
+        if (cumulativeAck) {
+          flushAck();
+        } else if (flushImmediateId !== undefined) {
+          clearImmediate(flushImmediateId);
+          flushImmediateId = undefined;
+        }
+        closer.close();
+      },
     },
     ({data}) => data,
   );
@@ -374,11 +539,54 @@ async function streamInInternal<T extends JSONValue, Out>(
     }
     try {
       const value = BigIntJSON.parse(data);
-      const msg = v.parse(value, streamedSchema, 'passthrough');
-      // Enable for debugging. Otherwise too verbose.
-      // lc.debug?.(`received`, data);
-      sink.push({id: msg.id, data: transform(msg.msg, data, msg.id)});
+      const parsed = v.parse(value, streamedSchema, 'passthrough');
+      const {id, msg, batch, ackConfig} = parsed;
+
+      if (ackConfig) {
+        if (typeof ackConfig.maxAckBytes === 'number') {
+          maxAckBytes = ackConfig.maxAckBytes;
+        }
+        if (typeof ackConfig.maxAckStride === 'number') {
+          maxAckStride = ackConfig.maxAckStride;
+        }
+      }
+
+      if (batch !== undefined && msg !== undefined) {
+        throw new Error(`Message ${id} has both "msg" and "batch"`);
+      }
+      if (batch !== undefined) {
+        let remaining = batch.length;
+        if (remaining === 0) {
+          onFrameConsumed(id, data.length);
+          return;
+        }
+        const onConsumed = () => {
+          if (--remaining === 0) {
+            onFrameConsumed(id, data.length);
+          }
+        };
+        const itemSize = Math.max(1, Math.round(data.length / batch.length));
+        for (const item of batch) {
+          sink.push({
+            consumed: onConsumed,
+            data: transform(item, data, id, itemSize),
+          });
+        }
+      } else if (msg !== undefined) {
+        sink.push({
+          consumed: () => onFrameConsumed(id, data.length),
+          data: transform(msg, data, id, data.length),
+        });
+      } else if (ackConfig !== undefined) {
+        onFrameConsumed(id, data.length);
+      } else {
+        throw new Error(`Message ${id} has neither "msg" nor "batch"`);
+      }
     } catch (e) {
+      if (flushImmediateId !== undefined) {
+        clearImmediate(flushImmediateId);
+        flushImmediateId = undefined;
+      }
       closer.close(e);
     }
   }
@@ -390,7 +598,7 @@ async function streamInInternal<T extends JSONValue, Out>(
 class WebSocketCloser {
   readonly #lc: LogContext;
   readonly #ws: WebSocket;
-  readonly #closeStream: () => void;
+  readonly #closeStream: (err?: unknown) => void;
   readonly #messageHandler: ((e: MessageEvent) => void | undefined) | null;
   readonly #connected = resolver();
 
@@ -401,7 +609,9 @@ class WebSocketCloser {
   static forSource<T>(lc: LogContext, ws: WebSocket, stream: Source<T>) {
     // If the websocket is closed, call cancel() to notify the Source of
     // any unconsumed messages.
-    return new WebSocketCloser(lc, ws, () => stream.cancel());
+    return new WebSocketCloser(lc, ws, (err?: unknown) =>
+      stream.cancel(err instanceof Error ? err : undefined),
+    );
   }
 
   static forSink<T, Input>(
@@ -410,15 +620,27 @@ class WebSocketCloser {
     stream: Subscription<T, Input>,
     messageHandler: (e: MessageEvent) => void | undefined,
   ) {
-    // If the websocket is closed, call end() to allow the downstream Sink
-    // to process any pending messages before closing the stream.
-    return new WebSocketCloser(lc, ws, () => stream.end(), messageHandler);
+    // If the websocket is closed with an error, fail() the downstream Sink
+    // so consumers catch the error. Otherwise, call end() to allow pending
+    // messages to finish.
+    return new WebSocketCloser(
+      lc,
+      ws,
+      (err?: unknown) => {
+        if (err) {
+          stream.fail(err instanceof Error ? err : new Error(String(err)));
+        } else {
+          stream.end();
+        }
+      },
+      messageHandler,
+    );
   }
 
   private constructor(
     lc: LogContext,
     ws: WebSocket,
-    closeStream: () => void,
+    closeStream: (err?: unknown) => void,
     messageHandler?: (e: MessageEvent) => void | undefined,
   ) {
     this.#lc = lc;
@@ -478,7 +700,7 @@ class WebSocketCloser {
     if (err) {
       this.#lc.error?.(`closing stream with error`, err);
     }
-    this.#closeStream();
+    this.#closeStream(err);
     if (!this.closed()) {
       this.#ws.close();
     }
