@@ -2312,6 +2312,37 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'column whose volatile default was dropped before being published is backfilled',
+      /*sql*/ `
+      ALTER TABLE covers ADD COLUMN rnd FLOAT8 DEFAULT random();
+      ALTER TABLE covers ALTER rnd DROP DEFAULT;
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt),
+        TABLE covers (id, url, color, width, tint, secret, seq, shade, rnd);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'rnd',
+              spec: {pos: expect.any(Number), dataType: 'float8', dflt: null},
+            },
+            // The volatile default rewrote the table with random values,
+            // which leaves no trace in the column definition once the
+            // default is dropped.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {covers: [{rnd: expect.any(Number)}, {rnd: expect.any(Number)}]},
+      [],
+      [],
+    ],
+    [
       'remove table with a column list for newly created columns',
       /*sql*/ `
       ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,

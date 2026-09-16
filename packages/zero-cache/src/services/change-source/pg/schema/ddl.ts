@@ -61,10 +61,11 @@ export const ddlEventSchema = triggerEvent.extend({
   // default is a replicable expression that evaluates to its missing
   // value (see `defaultValueMatches()`), as replicating the default is
   // then guaranteed to reproduce the contents of pre-existing rows.
-  // A `null` value indicates that the column was added without a default
-  // (and is not an identity or generated column, or of a domain type,
-  // which could fill pre-existing rows without a column default), i.e.
-  // that all pre-existing rows are NULL.
+  // A `null` value indicates that all pre-existing rows are NULL, i.e.
+  // that the column was added without a default, and that nothing else
+  // (identity or generation, a domain default, or a table rewrite) filled
+  // in values. This is only reported when proven by the transaction's
+  // snapshot (see `xactSnapshotSetting()`).
   //
   // Columns without an entry (e.g. added with a volatile default, or with
   // a default assigned in a later command) must be backfilled.
@@ -189,16 +190,18 @@ const DDL_SERIALIZATION_LOCK = 0x3c6b8468f1bac0b0n;
 
 /**
  * The name of the transaction-local setting in which the first DDL command
- * of a transaction records, for each published table, its `relnatts` and
- * the transaction's row write counters (inserted, updated, deleted) as
- * `{[oid]: [relnatts, inserted, updated, deleted]}`.
+ * of a transaction records, for each published table, its `relnatts`, the
+ * transaction's row write counters (inserted, updated, deleted), and its
+ * relfilenode as `{[oid]: [relnatts, inserted, updated, deleted, filenode]}`.
  *
  * A published column whose `attnum` exceeds the recorded `relnatts` was
- * created after the snapshot, and if the counters are unchanged, no row of
- * the table was written since. All pre-existing rows are then guaranteed to
- * hold the column's initial value, even if the column was published in the
- * same transaction (e.g. by `ALTER PUBLICATION ... ADD TABLE t (..., col)`),
- * which would otherwise require a backfill.
+ * created after the snapshot. If the counters are unchanged, no row of the
+ * table was written since, and if the relfilenode is unchanged, the table
+ * was not rewritten (which is not reflected in the counters). All
+ * pre-existing rows are then guaranteed to hold the column's initial value,
+ * even if the column was published in the same transaction (e.g. by
+ * `ALTER PUBLICATION ... ADD TABLE t (..., col)`), which would otherwise
+ * require a backfill.
  *
  * Note that the counters (`pg_stat_get_xact_tuples_*()`) are not strictly
  * scoped to the current transaction (they include stats not yet flushed
@@ -330,7 +333,8 @@ BEGIN
 
     WITH new_cols AS (
       SELECT DISTINCT pc.oid AS rel_oid, attnum, atthasmissing,
-                      attidentity, attgenerated, typtype
+                      attidentity, attgenerated, typtype,
+                      COALESCE(unchanged_since_snapshot, false) AS proven
         FROM pg_attribute
         JOIN pg_type pt ON pt.oid = atttypid
         JOIN pg_class pc ON pc.oid = attrelid
@@ -342,6 +346,19 @@ BEGIN
         LEFT JOIN LATERAL (
           SELECT xact_snapshot -> (pc.oid::text) AS snap
         ) snapshot ON true
+        LEFT JOIN LATERAL (
+          -- The column was created after the snapshot, and the table has
+          -- neither been written to nor rewritten (e.g. by a volatile
+          -- default, a stored generated column, or ALTER COLUMN ... TYPE)
+          -- since.
+          SELECT pc.relkind = 'r'
+            AND attnum > (snap ->> 0)::int
+            AND pg_stat_get_xact_tuples_inserted(pc.oid) = (snap ->> 1)::int8
+            AND pg_stat_get_xact_tuples_updated(pc.oid) = (snap ->> 2)::int8
+            AND pg_stat_get_xact_tuples_deleted(pc.oid) = (snap ->> 3)::int8
+            AND pg_relation_filenode(pc.oid) = (snap ->> 4)::oid
+            AS unchanged_since_snapshot
+        ) unchanged ON true
         WHERE pb.pubname IN (${lit(publications)})
           AND attnum > 0
           AND NOT attisdropped
@@ -354,13 +371,7 @@ BEGIN
                   AND pub.pubname IN (${lit(publications)})
                   AND rel.xmin = pg_current_xact_id()::xid
             )
-            OR (
-              pc.relkind = 'r'
-              AND attnum > (snap ->> 0)::int
-              AND pg_stat_get_xact_tuples_inserted(pc.oid) = (snap ->> 1)::int8
-              AND pg_stat_get_xact_tuples_updated(pc.oid) = (snap ->> 2)::int8
-              AND pg_stat_get_xact_tuples_deleted(pc.oid) = (snap ->> 3)::int8
-            )
+            OR unchanged_since_snapshot
           )
     )
     SELECT
@@ -386,7 +397,12 @@ BEGIN
           ) OR (
             -- Columns added without a (non-null) default hold NULL in all
             -- pre-existing rows, unless they are filled by other means,
-            -- i.e. as identity or generated columns, or by a domain default.
+            -- i.e. as identity or generated columns, by a domain default, or
+            -- by a table rewrite (e.g. from a volatile default that has
+            -- since been dropped). The latter leaves no trace in the column
+            -- definition, so this requires the snapshot to prove that the
+            -- table was not rewritten.
+            n.proven AND
             NOT n.atthasmissing AND
             n.attidentity = '' AND
             n.attgenerated = '' AND
@@ -467,7 +483,8 @@ BEGIN
         relnatts,
         pg_stat_get_xact_tuples_inserted(oid),
         pg_stat_get_xact_tuples_updated(oid),
-        pg_stat_get_xact_tuples_deleted(oid)
+        pg_stat_get_xact_tuples_deleted(oid),
+        pg_relation_filenode(oid)
       ))::text FROM (
         SELECT DISTINCT pc.oid, pc.relnatts FROM pg_class pc
           JOIN pg_namespace pns ON pns.oid = pc.relnamespace
