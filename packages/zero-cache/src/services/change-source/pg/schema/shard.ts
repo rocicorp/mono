@@ -386,6 +386,11 @@ export async function getActiveReplicas(
       slots."confirmed_flush_lsn" as "confirmedFlushLsn"
     FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name
       WHERE "initialSyncContext" IS NOT NULL
+        -- Exclude replicas whose slot has been invalidated (e.g. for exceeding
+        -- max_slot_wal_keep_size). Such a replica can never be resumed, and
+        -- restoring it just results in an AutoResetSignal on every attempt.
+        AND slots.restart_lsn IS NOT NULL
+        AND slots.wal_status IS DISTINCT FROM 'lost'
       ORDER BY generation DESC, confirmed_flush_lsn DESC;
   `;
   const replicas = v.parse(results, v.array(replicaStateSchema), 'passthrough');
