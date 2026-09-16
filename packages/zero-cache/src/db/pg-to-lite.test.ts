@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {
+  defaultValueMatches,
   mapPostgresToLite,
   mapPostgresToLiteColumn,
   mapPostgresToLiteDefault,
@@ -481,4 +482,68 @@ test.each([
   ["'{}'::integer[]", "'[]'"],
 ])('supported column default %s', (input, output) => {
   expect(mapPostgresToLiteDefault('foo', 'bar', input)).toEqual(output);
+});
+
+test.each([
+  // Numeric literals
+  ['2', 2],
+  ['0', 0],
+  ['-456', -456],
+  ['123.456', 123.456],
+  ['-0.5', -0.5],
+  ['2147483648', 2147483648],
+
+  // Boolean literals
+  ['true', true],
+  ['false', false],
+
+  // Quoted strings with type casts
+  ["'foo'::text", 'foo'],
+  ["'hello world'::varchar", 'hello world'],
+  ["''::text", ''],
+  ["'it''s'::text", "it's"],
+
+  // Quoted numeric literals with type casts (e.g. bigint)
+  ["'2147483648'::bigint", 2147483648],
+  ["'-0.5'::numeric", -0.5],
+])('default value matches %s = %o', (dflt, missingValue) => {
+  expect(defaultValueMatches(dflt, missingValue)).toBe(true);
+});
+
+test.each([
+  // Value mismatches (e.g. default changed after the column was added)
+  ['2', 1],
+  ['true', false],
+  ['false', 0],
+  ["'foo'::text", 'food'],
+  ["'2'::bigint", 2.5],
+
+  // Type mismatches
+  ['2', '2'],
+  ['true', 'true'],
+  ["'foo'::text", 0],
+  ["'true'::text", true],
+
+  // Absent / null values never match
+  [null, 2],
+  [undefined, 2],
+  ['2', undefined],
+  ['2', null],
+  ['', ''],
+
+  // Integers outside of the safe range may lose precision when parsed,
+  // and are never considered equal.
+  ['9007199254740993', 9007199254740993],
+  ["'9007199254740993'::bigint", 9007199254740993],
+
+  // Unsupported (e.g. non-literal) expressions never match
+  ['CURRENT_TIMESTAMP', '2026-07-13 00:00:00'],
+  ['now()', '2026-07-13 00:00:00'],
+  ["nextval('seq'::regclass)", 1],
+  ["'{}'::text[]", []],
+  ['ARRAY[]::text[]', []],
+  ["'{1,2}'::integer[]", [1, 2]],
+  ["'foo'", 'foo'], // bare quoted string without type cast
+])('default value does not match %s = %o', (dflt, missingValue) => {
+  expect(defaultValueMatches(dflt, missingValue)).toBe(false);
 });
