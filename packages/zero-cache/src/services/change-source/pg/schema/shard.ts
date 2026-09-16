@@ -200,8 +200,8 @@ export function shardSetup(
     "id"                 TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
     "rank"               BIGSERIAL,
     "slot"               TEXT NOT NULL,
-    "version"            TEXT NOT NULL,
-    "generation"         TEXT,  -- to replace version, NULL-able in the interim
+    "version"            TEXT,  -- replaced by generation, slated for deletion
+    "generation"         TEXT NOT NULL,
     "backupPath"         TEXT,  -- subpath within the litestream backup URL
     "backupV5"           BOOL DEFAULT false,
     "initialSchema"      JSON,  -- set after initial sync
@@ -236,8 +236,7 @@ const replicaInfoSchema = v.object({
   id: v.string(),
   rank: v.bigint(),
   slot: v.string(),
-  version: v.string(),
-  generation: v.string().nullable(),
+  generation: v.string(),
   backupPath: v.string().nullable(),
   backupV5: v.boolean(),
 });
@@ -248,12 +247,9 @@ const fullReplicaRowSchema = replicaInfoSchema.extend({
   subscriberContext: jsonObjectSchema.nullable(),
 });
 
-const replicaSchema = internalShardConfigSchema
-  .extend(fullReplicaRowSchema.shape)
-  .map(replica => {
-    const {version, generation, ...r} = replica;
-    return {...r, generation: generation ?? version};
-  });
+const replicaSchema = internalShardConfigSchema.extend(
+  fullReplicaRowSchema.shape,
+);
 
 export type Replica = v.Infer<typeof replicaSchema>;
 
@@ -262,12 +258,9 @@ const replicationSlotStateSchema = v.object({
   confirmedFlushLsn: v.string().nullable(),
 });
 
-const replicaStateSchema = replicaInfoSchema
-  .extend(replicationSlotStateSchema.shape)
-  .map(replica => {
-    const {version, generation, ...r} = replica;
-    return {...r, generation: generation ?? version};
-  });
+const replicaStateSchema = replicaInfoSchema.extend(
+  replicationSlotStateSchema.shape,
+);
 
 export type ReplicaState = v.Infer<typeof replicaStateSchema>;
 
@@ -308,7 +301,6 @@ export async function createReplica(
   const values: Partial<v.Infer<typeof fullReplicaRowSchema>> = {
     id,
     slot,
-    version: replicaVersion,
     generation: replicaVersion,
     backupPath,
     backupV5,
@@ -348,7 +340,6 @@ export async function getReplicaAtVersion(
       replicas."id",
       replicas."rank",
       replicas."slot",
-      replicas."version",
       replicas."generation",
       replicas."backupPath",
       replicas."backupV5",
@@ -358,14 +349,14 @@ export async function getReplicaAtVersion(
       "shardConfig"."publications",
       "shardConfig"."ddlDetection"
     FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
-      WHERE version = ${replicaVersion} AND "initialSyncContext" IS NOT NULL
+      WHERE generation = ${replicaVersion} AND "initialSyncContext" IS NOT NULL
       AND id = COALESCE(${id}, id)
       ORDER BY rank DESC LIMIT 1;
   `;
   if (result.length === 0) {
     // log out all the replicas and the joined shardConfig
     const allReplicas = await sql`
-      SELECT id, slot, version, "initialSyncContext", "subscriberContext" 
+      SELECT id, slot, generation, "initialSyncContext", "subscriberContext" 
         FROM ${schema}.replicas`;
     lc.info?.(
       `Replica ${id}@${replicaVersion}` +
@@ -388,7 +379,6 @@ export async function getActiveReplicas(
       replicas."id",
       replicas."rank",
       replicas."slot",
-      replicas."version",
       replicas."generation",
       replicas."backupPath",
       replicas."backupV5",
@@ -414,7 +404,6 @@ export async function getReplicaState(
       replicas."id",
       replicas."rank",
       replicas."slot",
-      replicas."version",
       replicas."generation",
       replicas."backupPath",
       replicas."backupV5",
