@@ -446,6 +446,14 @@ test.each([
   // Bare quoted strings without type cast (need explicit ::type)
   ["'foo'"],
   ["'hello world'"],
+
+  // Temporal types are replicated as epoch milliseconds, not strings
+  ["'2024-01-01'::date"],
+  ["'12:30:00'::time"],
+  ["'2024-01-01 12:30:00'::timestamp"],
+  ["'2024-01-01 12:30:00+00'::timestamptz"],
+  ["'2024-01-01 12:30:00'::timestamp without time zone"],
+  ["'1 day'::interval"],
 ])('unsupported column default %s', value => {
   expect(() => mapPostgresToLiteDefault('foo', 'bar', value)).toThrow(
     UnsupportedColumnDefaultError,
@@ -473,6 +481,7 @@ test.each([
   ["'hello world'::varchar", "'hello world'"],
   ["''::text", "''"], // empty string
   ["'it''s'::text", "'it''s'"], // escaped quote
+  ["'x'::date_kind", "'x'"], // e.g. an enum whose name starts with "date"
 
   // Empty arrays → JSON empty array
   ['ARRAY[]::text[]', "'[]'"],
@@ -544,6 +553,10 @@ test.each([
   ['ARRAY[]::text[]', []],
   ["'{1,2}'::integer[]", [1, 2]],
   ["'foo'", 'foo'], // bare quoted string without type cast
+
+  // Temporal types are replicated as epoch milliseconds, not strings
+  ["'2024-01-01'::date", '2024-01-01'],
+  ["'12:30:00'::time", '12:30:00'],
 ])('default value does not match %s = %o', (dflt, missingValue) => {
   expect(defaultValueMatches(dflt, missingValue)).toBe(false);
 });

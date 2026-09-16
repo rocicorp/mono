@@ -75,7 +75,14 @@ const BOOLEAN_LITERAL_REGEX = /^(true|false)$/;
 // 'string' values, e.g. `'2147483648'::bigint`, `'foo'::text`.
 // Only matches simple type names (word characters) - array types like
 // `::text[]` won't match and will trigger backfill.
-const QUOTED_STRING_WITH_CAST_REGEX = /^('.*')::(\w+)$/;
+//
+// Temporal types are excluded, as their values are replicated as epoch
+// milliseconds rather than as the quoted string (e.g. `'2024-01-01'::date`).
+// (Most temporal type names are multi-word, e.g. `timestamp with time zone`,
+// and are thus already excluded; the single-word names are listed for
+// completeness.)
+const QUOTED_STRING_WITH_CAST_REGEX =
+  /^('.*')::(?!(?:date|time|timetz|timestamp|timestamptz|interval)$)(\w+)$/;
 
 // Empty array constructor syntax: ARRAY[]::text[], ARRAY[]::integer[], etc.
 // Maps to '[]' (JSON empty array) in SQLite.

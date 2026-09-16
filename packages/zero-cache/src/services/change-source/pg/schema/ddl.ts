@@ -34,9 +34,10 @@ export const ddlEventSchema = triggerEvent.extend({
   event: v.object({tag: v.string()}),
   // Maps the OID of each published table to the `attnum`s of published
   // columns that were created in the (upstream) transaction that emitted
-  // the event. Such columns are guaranteed to have the column default in
-  // all pre-existing rows, and can thus be replicated without backfill if
-  // the default value itself is replicable.
+  // the event. Such columns are guaranteed to hold their initial value
+  // (i.e. the default at creation time, or NULL) in all pre-existing rows,
+  // and can thus be replicated without backfill if that value is known and
+  // replicable (see `missingValues`).
   //
   // A newly *published* (as opposed to newly *created*) column may hold
   // arbitrary values in existing rows. Columns of tables whose publication
@@ -288,6 +289,7 @@ DECLARE
   new_columns JSON;
   missing_values JSON;
   xact_snapshot JSON;
+  publications_changed BOOL;
   message TEXT;
 BEGIN
   SELECT current FROM ${schema}."publishedSchema" INTO prev_schema_specs;
@@ -306,13 +308,25 @@ BEGIN
     -- evaluates to its missing value.
     --
     -- A newly *published* column may be a pre-existing column with
-    -- arbitrary values in existing rows, which requires a backfill. Columns
-    -- of tables whose publication entries were touched in the same
-    -- transaction (e.g. ALTER PUBLICATION ... SET TABLE with a column list)
-    -- are thus only reported if the transaction's snapshot (recorded by its
-    -- first DDL command) proves that the column did not exist at the time,
-    -- and that no rows of the table have been written since.
+    -- arbitrary values in existing rows, which requires a backfill. If the
+    -- publications were changed in the same transaction (e.g.
+    -- ALTER PUBLICATION ... SET TABLE with a column list, or
+    -- ADD TABLES IN SCHEMA), columns are thus only reported if the
+    -- transaction's snapshot (recorded by its first DDL command) proves that
+    -- the column did not exist at the time, and that no rows of the table
+    -- have been written since.
     xact_snapshot := NULLIF(current_setting(${snapshotSetting}, true), '')::json;
+
+    SELECT EXISTS (
+      SELECT 1 FROM pg_publication pub
+        WHERE pub.pubname IN (${lit(publications)})
+          AND pub.xmin = pg_current_xact_id()::xid
+    ) OR EXISTS (
+      SELECT 1 FROM pg_publication_namespace ns
+        JOIN pg_publication pub ON pub.oid = ns.pnpubid
+        WHERE pub.pubname IN (${lit(publications)})
+          AND ns.xmin = pg_current_xact_id()::xid
+    ) INTO publications_changed;
 
     WITH new_cols AS (
       SELECT DISTINCT pc.oid AS rel_oid, attnum, atthasmissing,
@@ -333,7 +347,7 @@ BEGIN
           AND NOT attisdropped
           AND pg_attribute.xmin = pg_current_xact_id()::xid
           AND (
-            NOT EXISTS (
+            NOT publications_changed AND NOT EXISTS (
               SELECT 1 FROM pg_publication_rel rel
                 JOIN pg_publication pub ON pub.oid = rel.prpubid
                 WHERE rel.prrelid = pc.oid
