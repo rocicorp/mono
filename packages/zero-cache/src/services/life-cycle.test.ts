@@ -2,6 +2,7 @@ import EventEmitter from 'node:events';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type * as Metrics from '../observability/metrics.ts';
@@ -387,5 +388,26 @@ describe('exitAfter', () => {
     flushDone.resolve();
     await expect(exiting).rejects.toMatchObject({code: -1});
     expect(exit).toHaveBeenCalledWith(-1);
+  });
+
+  test('logs AbortErrors as warnings, not errors', async () => {
+    const log = vi.fn();
+    const lc = new LogContext('debug', undefined, {log});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
+      throw Object.assign(new Error('process.exit'), {code});
+    });
+
+    await expect(
+      exitAfter(lc, () => Promise.reject(new AbortError('Aborted'))),
+    ).rejects.toMatchObject({code: -1});
+
+    expect(exit).toHaveBeenCalledWith(-1);
+    expect(log.mock.calls.map(([level]) => level)).not.toContain('error');
+    expect(log).toHaveBeenCalledWith(
+      'warn',
+      undefined,
+      'exiting after abort: AbortError: Aborted',
+      expect.any(AbortError),
+    );
   });
 });
