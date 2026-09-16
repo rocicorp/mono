@@ -82,6 +82,125 @@ test.each(['backup', 'serving'] as const)(
 );
 
 test.each(['backup', 'serving'] as const)(
+  'repro: replicated insert silently replaces a backfilled row and loses its omitted body (%s)',
+  mode => {
+    const r = replica(mode, [2]);
+    const body = 'unchanged toasted body '.repeat(1000);
+    const rows = () =>
+      r.db
+        .prepare('SELECT id, label, handle, body FROM items ORDER BY id')
+        .all();
+    try {
+      // body is already synced. Only handle will be backfilled in this repro.
+      r.transaction(
+        '03',
+        {...batch([], '03'), rowValues: [[2, body]]},
+        {
+          tag: 'backfill-completed',
+          relation,
+          columns: ['body'],
+          watermark: '03',
+        },
+      );
+      r.transaction(
+        '04',
+        messages.addColumn(
+          'items',
+          'handle',
+          {pos: 4, dataType: 'text'},
+          {
+            tableMetadata: {rowKey: {id: {attNum: 1}}},
+            backfill: {attNum: 4},
+          },
+        ),
+        messages.createIndex({
+          schema: 'public',
+          name: 'unique_handle',
+          tableName: 'items',
+          unique: true,
+          columns: {handle: 'ASC'},
+        }),
+      );
+      expect(rows()).toEqual([{id: 2, label: 'row 2', handle: null, body}]);
+
+      // Snapshot 07 has seen INSERT 5, DELETE 5, UPDATE 2. Its batch arrives
+      // before any of those live changes and gives row 2 the future handle.
+      r.transaction('04.01', {
+        tag: 'backfill',
+        relation,
+        columns: ['handle'],
+        watermark: '07',
+        rowValues: [[2, 'x']],
+      });
+      expect(rows()).toEqual([{id: 2, label: 'row 2', handle: 'x', body}]);
+
+      r.transaction(
+        '05',
+        messages.insert('items', {
+          id: 5,
+          label: 'row 5',
+          handle: 'x',
+          body: 'body 5',
+        }),
+      );
+      // REPLACE silently deletes row 2 through the secondary unique index.
+      expect(rows()).toEqual([
+        {id: 5, label: 'row 5', handle: 'x', body: 'body 5'},
+      ]);
+      expect(
+        r.db
+          .prepare(`
+        SELECT rowKey, op FROM "_zero.changeLog2"
+        WHERE "table" = 'items' AND stateVersion = '05' ORDER BY pos
+      `)
+          .all(),
+      ).toEqual([{rowKey: '{"id":5}', op: 's'}]);
+
+      r.transaction(
+        '06',
+        messages.delete('items', {id: 5}),
+        // Simulate the unchanged-TOAST payload: body is absent, not null.
+        messages.update('items', {id: 2, label: 'row 2', handle: 'x'}),
+      );
+      // UPDATE finds no row, so its fallback insert recreates it without body.
+      expect(rows()).toEqual([
+        {id: 2, label: 'row 2', handle: 'x', body: null},
+      ]);
+      r.transaction('07', {
+        tag: 'backfill-completed',
+        relation,
+        columns: ['handle'],
+        watermark: '07',
+      });
+      expect(readBackfillRequests(r.db)).toEqual([]);
+      expect(rows()).toEqual([
+        {id: 2, label: 'row 2', handle: 'x', body: null},
+      ]);
+
+      // This is silent loss, not a failed processor: subsequent input commits.
+      r.transaction(
+        '08',
+        messages.insert('items', {
+          id: 9,
+          label: 'later',
+          handle: 'y',
+          body: 'body 9',
+        }),
+      );
+      expect(rows()).toEqual([
+        {id: 2, label: 'row 2', handle: 'x', body: null},
+        {id: 9, label: 'later', handle: 'y', body: 'body 9'},
+      ]);
+      expect(getSubscriptionState(new StatementRunner(r.db)).watermark).toBe(
+        '08',
+      );
+    } finally {
+      r.db.close();
+    }
+  },
+);
+
+test.each(['backup', 'serving'] as const)(
   'repro: applying an old snapshot after a key change loses the body (%s)',
   mode => {
     const r = replica(mode, [5]);
