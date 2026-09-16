@@ -169,7 +169,7 @@ const suspend: (p: Promise<unknown>) => void = reactUse
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -189,7 +189,7 @@ export function useQuery<
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -204,7 +204,7 @@ export function useQuery<
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -243,7 +243,7 @@ export function useQuery<
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -263,7 +263,7 @@ export function useSuspenseQuery<
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -278,7 +278,7 @@ export function useSuspenseQuery<
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
