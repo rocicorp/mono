@@ -1,6 +1,10 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {Sized, Source} from '../../types/streams.ts';
+import {
+  DEFAULT_MAX_ACK_BYTES,
+  type Sized,
+  type Source,
+} from '../../types/streams.ts';
 import {
   changeStreamDataSchema,
   type ChangeStreamData,
@@ -104,6 +108,16 @@ export interface ChangeStreamer {
 //     replayed from the Change DB) as "no commit time reported".
 
 export const PROTOCOL_VERSION = 6;
+
+/**
+ * The default flow control threshold in bytes used for both:
+ * 1. The ChangeStreamer's flush threshold when forwarding changes to subscribers before awaiting backpressure drain.
+ * 2. The subscriber's cumulative ACK byte threshold (ackConfig.maxAckBytes).
+ *
+ * Keeping these two values consistent ensures that subscribers acknowledge data at the same rate
+ * the streamer paces backpressure, preventing unacknowledged buffered frames from accumulating.
+ */
+export const DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD = DEFAULT_MAX_ACK_BYTES;
 
 export type SubscriberContext = {
   /**

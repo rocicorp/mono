@@ -22,6 +22,7 @@ import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService, type Options as HttpOptions} from '../http-service.ts';
 import {handleProfzRequest} from '../profz.ts';
 import {
+  DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD,
   downstreamSchema,
   PROTOCOL_VERSION,
   type ChangeStreamer,
@@ -147,7 +148,7 @@ export class ChangeStreamerHttpServer extends HttpService {
         batched: ctx.wsBatched,
         ackConfig: ctx.cumulativeAck
           ? {
-              maxAckBytes: 64 * 1024,
+              maxAckBytes: DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD,
             }
           : undefined,
       });

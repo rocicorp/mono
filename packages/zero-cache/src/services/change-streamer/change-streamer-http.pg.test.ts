@@ -17,8 +17,12 @@ import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
 } from './change-streamer-http.ts';
-import type {Downstream, SubscriberContext} from './change-streamer.ts';
-import {PROTOCOL_VERSION} from './change-streamer.ts';
+import {
+  DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD,
+  PROTOCOL_VERSION,
+  type Downstream,
+  type SubscriberContext,
+} from './change-streamer.ts';
 import {setupCDCTables} from './schema/tables.ts';
 import {type SnapshotMessage} from './snapshot.ts';
 
@@ -304,7 +308,7 @@ describe('change-streamer/http', () => {
       downstream.push(begin);
       downstream.push(commit);
 
-      const batchedFrame = `{"id":1,"ackConfig":{"maxAckBytes":65536},"batch":[${begin},${commit}]}`;
+      const batchedFrame = `{"id":1,"ackConfig":{"maxAckBytes":${DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD}},"batch":[${begin},${commit}]}`;
       const batchedSize = Math.round(batchedFrame.length / 2);
 
       expect(await drain(2, sub)).toEqual([
@@ -357,7 +361,8 @@ describe('change-streamer/http', () => {
     expect(await drain(1, sub)).toEqual([
       {
         data: ['data', insert],
-        size: `{"id":1,"ackConfig":{"maxAckBytes":65536},"msg":${json}}`.length,
+        size: `{"id":1,"ackConfig":{"maxAckBytes":${DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD}},"msg":${json}}`
+          .length,
       },
     ]);
   });

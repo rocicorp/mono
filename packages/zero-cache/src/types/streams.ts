@@ -1,4 +1,5 @@
 import {
+  getDefaultHighWaterMark,
   pipeline,
   Readable,
   Transform,
@@ -237,6 +238,9 @@ export type Sized<T> = {
   size: number;
 };
 
+export const DEFAULT_MAX_ACK_STRIDE = 16;
+export const DEFAULT_MAX_ACK_BYTES = getDefaultHighWaterMark(false);
+
 export type AckConfig = {
   maxAckBytes?: number | undefined;
   maxAckStride?: number | undefined;
@@ -448,8 +452,8 @@ async function streamInInternal<T extends JSONValue, Out>(
   };
 
   const cumulativeAck = options?.cumulativeAck ?? false;
-  let maxAckStride = options?.maxAckStride ?? 16;
-  let maxAckBytes = options?.maxAckBytes ?? 64 * 1024;
+  let maxAckStride = options?.maxAckStride ?? DEFAULT_MAX_ACK_STRIDE;
+  let maxAckBytes = options?.maxAckBytes ?? DEFAULT_MAX_ACK_BYTES;
 
   let lastAckSent = 0;
   let highestContiguousConsumedId = 0;

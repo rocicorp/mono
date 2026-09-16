@@ -43,6 +43,7 @@ import {
   replicaInitializationSource,
 } from './change-log-initializer.ts';
 import {
+  DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD,
   type ChangeStreamerService,
   type Status,
   type SubscriberContext,
@@ -721,8 +722,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     // The threshold in (estimated number of) bytes to send() on subscriber
     // websockets before `await`-ing the I/O buffers to be ready for more.
-    // Relaxed to 512 KB to avoid accidental flow-control pauses on high-rate batch streams.
-    const flushBytesThreshold = 512 * 1024;
+    // Kept consistent with subscriber cumulative ACK threshold (DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD)
+    // to maintain continuous backpressure without unbounded buffer accumulation.
+    const flushBytesThreshold = DEFAULT_FLOW_CONTROL_BYTES_THRESHOLD;
 
     while (this.#state.shouldRun()) {
       let err: unknown;
