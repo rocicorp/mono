@@ -243,6 +243,31 @@ export type StreamOutOptions = {
   maxBatchSize?: number | undefined;
 };
 
+export type PreSerialized = {
+  readonly payload: Buffer;
+  readonly byteLength: number;
+};
+
+export function isPreSerialized(val: unknown): val is PreSerialized {
+  return (
+    typeof val === 'object' &&
+    val !== null &&
+    'payload' in val &&
+    Buffer.isBuffer((val as PreSerialized).payload)
+  );
+}
+
+function sendTextFrame(sink: WebSocket, data: Buffer | string) {
+  if (typeof data === 'string') {
+    sink.send(data);
+  } else {
+    (sink as unknown as {send: (data: unknown, opts?: unknown) => void}).send(
+      data,
+      {binary: false},
+    );
+  }
+}
+
 export function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
@@ -253,18 +278,24 @@ export function streamOut<T extends JSONValue>(
 }
 
 /**
- * Streams out a `Source` for which messages are already stringified JSON.
+ * Streams out a `Source` for which messages are already stringified JSON or pre-serialized Buffers.
  */
 export function streamOutStringified(
   lc: LogContext,
-  source: Source<string>,
+  source: Source<string | PreSerialized>,
   sink: WebSocket,
   options?: StreamOutOptions | undefined,
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, json => json, options);
+  return streamOutInternal(
+    lc,
+    source,
+    sink,
+    msg => (typeof msg === 'string' ? msg : msg.payload.toString('utf8')),
+    options,
+  );
 }
 
-async function streamOutInternal<T extends JSONValue>(
+async function streamOutInternal<T extends JSONValue | PreSerialized>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
@@ -278,10 +309,8 @@ async function streamOutInternal<T extends JSONValue>(
   const acks = new Queue<Ack>();
   sink.addEventListener('message', ({data}) => {
     try {
-      if (typeof data !== 'string') {
-        throw new Error('Expected string message');
-      }
-      acks.enqueue(v.parse(JSON.parse(data), ackSchema));
+      const text = typeof data === 'string' ? data : data.toString();
+      acks.enqueue(v.parse(JSON.parse(text), ackSchema));
     } catch (e) {
       lc.error?.(`error parsing ack`, e);
       closer.close(e);
@@ -301,20 +330,60 @@ async function streamOutInternal<T extends JSONValue>(
           `started batched outbound stream (maxBatchSize=${maxBatchSize})`,
         );
         for await (const {values, consumed} of batchedIterable) {
-          const id = ++nextID;
-          const data =
-            values.length === 1
-              ? `{"id":${id},"msg":${stringify(values[0])}}`
-              : `{"id":${id},"batch":[${values.map(stringify).join(',')}]}`;
-          sink.send(data);
+          if (values.length === 1 && isPreSerialized(values[0])) {
+            const id = ++nextID;
+            const prefix = Buffer.from(`{"id":${id}`);
+            const data = Buffer.concat([prefix, values[0].payload]);
+            sendTextFrame(sink, data);
 
-          void (async () => {
-            const {ack} = await acks.dequeue();
-            if (ack !== id) {
-              throw new Error(`Unexpected ack for ${id}: ${ack}`);
+            void (async () => {
+              const {ack} = await acks.dequeue();
+              if (ack !== id) {
+                throw new Error(`Unexpected ack for ${id}: ${ack}`);
+              }
+              consumed();
+            })().catch(e => closer.close(e));
+          } else if (values.some(isPreSerialized)) {
+            let remaining = values.length;
+            const onConsumed = () => {
+              if (--remaining === 0) {
+                consumed();
+              }
+            };
+            for (const val of values) {
+              const id = ++nextID;
+              if (isPreSerialized(val)) {
+                const prefix = Buffer.from(`{"id":${id}`);
+                const data = Buffer.concat([prefix, val.payload]);
+                sendTextFrame(sink, data);
+              } else {
+                const data = `{"id":${id},"msg":${stringify(val)}}`;
+                sink.send(data);
+              }
+              void (async () => {
+                const {ack} = await acks.dequeue();
+                if (ack !== id) {
+                  throw new Error(`Unexpected ack for ${id}: ${ack}`);
+                }
+                onConsumed();
+              })().catch(e => closer.close(e));
             }
-            consumed();
-          })().catch(e => closer.close(e));
+          } else {
+            const id = ++nextID;
+            const data =
+              values.length === 1
+                ? `{"id":${id},"msg":${stringify(values[0])}}`
+                : `{"id":${id},"batch":[${values.map(stringify).join(',')}]}`;
+            sink.send(data);
+
+            void (async () => {
+              const {ack} = await acks.dequeue();
+              if (ack !== id) {
+                throw new Error(`Unexpected ack for ${id}: ${ack}`);
+              }
+              consumed();
+            })().catch(e => closer.close(e));
+          }
         }
         closer.close();
         return;
@@ -325,10 +394,16 @@ async function streamOutInternal<T extends JSONValue>(
       lc.debug?.(`started pipelined outbound stream`);
       for await (const {value: msg, consumed} of pipeline) {
         const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
-        // Enable for debugging. Otherwise too verbose.
-        // lc.debug?.(`pipelining`, data);
-        sink.send(data);
+        if (isPreSerialized(msg)) {
+          const prefix = Buffer.from(`{"id":${id}`);
+          const data = Buffer.concat([prefix, msg.payload]);
+          sendTextFrame(sink, data);
+        } else {
+          const data = `{"id":${id},"msg":${stringify(msg)}}`;
+          // Enable for debugging. Otherwise too verbose.
+          // lc.debug?.(`pipelining`, data);
+          sink.send(data);
+        }
 
         // The ack is awaited off the send loop so that the next message can be
         // sent without waiting for it. A bad ack is a protocol error like in
@@ -347,10 +422,16 @@ async function streamOutInternal<T extends JSONValue>(
       lc.debug?.(`started synchronous outbound stream`);
       for await (const msg of source) {
         const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
-        // Enable for debugging. Otherwise too verbose.
-        // lc.debug?.(`sending`, data);
-        sink.send(data);
+        if (isPreSerialized(msg)) {
+          const prefix = Buffer.from(`{"id":${id}`);
+          const data = Buffer.concat([prefix, msg.payload]);
+          sendTextFrame(sink, data);
+        } else {
+          const data = `{"id":${id},"msg":${stringify(msg)}}`;
+          // Enable for debugging. Otherwise too verbose.
+          // lc.debug?.(`sending`, data);
+          sink.send(data);
+        }
 
         const {ack} = await acks.dequeue();
         if (ack !== id) {
