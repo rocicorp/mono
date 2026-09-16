@@ -8,6 +8,7 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../../../../shared/src/sleep.ts';
 import type {ZeroEvent} from '../../../../../zero-events/src/index.ts';
 import type {ReplicationStatusEvent} from '../../../../../zero-events/src/status.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
@@ -2826,18 +2827,56 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     const lc = createSilentLogContext();
     const replica = new Database(lc, ':memory:');
     const publish = vi.fn().mockResolvedValue(undefined);
-    await createLiteIndices(
-      lc,
-      replica,
-      [],
-      ReplicationStatusPublisher.forRunningTransaction(replica, publish),
-    );
+    expect(
+      await createLiteIndices(
+        lc,
+        replica,
+        [],
+        ReplicationStatusPublisher.forRunningTransaction(replica, publish),
+      ),
+    ).toBe(0);
     expect(publish).toHaveBeenCalledOnce();
     expect(publish.mock.calls[0][1]).toMatchObject({
       stage: 'Indexing',
       description: 'Created 0 indexes',
     });
     expect(publish.mock.calls[0][1].state).not.toHaveProperty('indexingStatus');
+  });
+
+  test('excludes progress reporting from the reported index time', async () => {
+    const lc = createSilentLogContext();
+    const replica = new Database(lc, ':memory:');
+    replica.exec(`CREATE TABLE foo(a INTEGER, b TEXT)`);
+    const publish = vi.fn(() => sleep(200));
+    const start = performance.now();
+    const indexMs = await createLiteIndices(
+      lc,
+      replica,
+      [
+        {
+          schema: 'public',
+          tableName: 'foo',
+          name: 'foo_a',
+          columns: {a: 'ASC'},
+          unique: false,
+        },
+        {
+          schema: 'public',
+          tableName: 'foo',
+          name: 'foo_b',
+          columns: {b: 'DESC'},
+          unique: true,
+        },
+      ],
+      ReplicationStatusPublisher.forRunningTransaction(replica, publish),
+    );
+    expect(performance.now() - start).toBeGreaterThanOrEqual(400);
+    expect(indexMs).toBeLessThan(200);
+    expect(
+      replica
+        .prepare(`SELECT name FROM sqlite_master WHERE type = 'index'`)
+        .all(),
+    ).toEqual([{name: 'foo_a'}, {name: 'foo_b'}]);
   });
 
   test('resume initial sync with invalid table', async () => {

@@ -233,6 +233,8 @@ export class IncrementalSyncer {
                   3000,
                   indexing.state,
                 );
+                // Exclude the time spent publishing the status.
+                indexing.restartTimer();
                 writeBatch.push(message as ChangeStreamData);
                 writeBatchSize += size;
                 await flushWrites();

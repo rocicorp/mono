@@ -315,9 +315,8 @@ export async function initialSync(
         `Creating ${indexes.length} indexes`,
         5000,
       );
-      const indexStart = performance.now();
-      await createLiteIndices(lc, tx, indexes, statusPublisher);
-      const index = performance.now() - indexStart;
+      // Excludes the time spent reporting progress.
+      const index = await createLiteIndices(lc, tx, indexes, statusPublisher);
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
       if (slotName && replicaID) {
@@ -624,13 +623,21 @@ function createLiteTables(
   }
 }
 
-// Exported for testing.
+/**
+ * Creates the `indices`, publishing progress before each one.
+ *
+ * @returns The milliseconds spent creating the indexes, excluding the time
+ *          spent publishing progress.
+ *
+ * Exported for testing.
+ */
 export async function createLiteIndices(
   lc: LogContext,
   tx: Database,
   indices: IndexSpec[],
   statusPublisher: ReplicationStatusPublisher,
-) {
+): Promise<number> {
+  let totalMs = 0;
   const progress = new IndexingProgress(indices.length);
   for (const [i, index] of indices.entries()) {
     const liteIndex = mapPostgresToLiteIndex(index);
@@ -651,6 +658,7 @@ export async function createLiteIndices(
     progress.restartTimer();
     tx.exec(stmt);
     const elapsed = progress.finish();
+    totalMs += elapsed;
     lc.info?.(`Created index ${n} (${elapsed.toFixed(3)} ms): ${stmt}`);
   }
   statusPublisher.publish(
@@ -660,6 +668,7 @@ export async function createLiteIndices(
     0,
     progress.state,
   );
+  return totalMs;
 }
 
 /**
