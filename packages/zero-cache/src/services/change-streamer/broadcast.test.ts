@@ -1,9 +1,9 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import {Broadcast} from './broadcast.ts';
+import {Broadcast, preSerializeBatch} from './broadcast.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import {createSubscriber} from './test-utils.ts';
 
@@ -508,6 +508,94 @@ describe('change-streamer/broadcast', () => {
       await broadcast.done;
       expect(broadcast.releaseMode).toBe('consensus-timeout');
       expect(s4.getStats().missedLastTimeout).toBe(true);
+    });
+  });
+
+  describe('preSerializeBatch', () => {
+    test('single change produces ,"msg":... payload', () => {
+      const change: WatermarkedChange = [
+        '01',
+        'insert',
+        json(['data', messages.insert('issues', {id: 'issue_1'})]),
+      ];
+      const batch = preSerializeBatch([change]);
+
+      expect(batch.changes).toHaveLength(1);
+      const str = batch.payload.toString('utf8');
+      expect(str.startsWith(',"msg":')).toBe(true);
+      expect(str.endsWith('}')).toBe(true);
+
+      // Prepending frame ID prefix must parse as valid JSON
+      const parsed = JSON.parse(`{"id":123${str}`);
+      expect(parsed.id).toBe(123);
+      expect(parsed.msg).toBeDefined();
+    });
+
+    test('multi-change batch produces ,"batch":[...] payload', () => {
+      const changes: WatermarkedChange[] = [
+        [
+          '01',
+          'begin',
+          json(['begin', messages.begin(), {commitWatermark: '02'}]),
+        ],
+        [
+          '02',
+          'commit',
+          json(['commit', messages.commit(), {watermark: '02'}]),
+        ],
+      ];
+      const batch = preSerializeBatch(changes);
+
+      expect(batch.changes).toHaveLength(2);
+      const str = batch.payload.toString('utf8');
+      expect(str.startsWith(',"batch":[')).toBe(true);
+      expect(str.endsWith(']}')).toBe(true);
+
+      const parsed = JSON.parse(`{"id":456${str}`);
+      expect(parsed.id).toBe(456);
+      expect(parsed.batch).toHaveLength(2);
+    });
+
+    test('Broadcast shares identical pre-serialized buffer instance across all subscribers', () => {
+      const [sub1] = createSubscriber('00', true);
+      const [sub2] = createSubscriber('00', true);
+      const [sub3] = createSubscriber('00', true);
+
+      const spy1 = vi.spyOn(sub1, 'sendBatch');
+      const spy2 = vi.spyOn(sub2, 'sendBatch');
+      const spy3 = vi.spyOn(sub3, 'sendBatch');
+
+      const changes: WatermarkedChange[] = [
+        [
+          '01',
+          'insert',
+          json(['data', messages.insert('issues', {id: 'issue_1'})]),
+        ],
+        [
+          '02',
+          'commit',
+          json(['commit', messages.commit(), {watermark: '02'}]),
+        ],
+      ];
+
+      Broadcast.withoutTracking([sub1, sub2, sub3], changes);
+
+      expect(spy1).toHaveBeenCalledTimes(1);
+      expect(spy2).toHaveBeenCalledTimes(1);
+      expect(spy3).toHaveBeenCalledTimes(1);
+
+      const pre1 = spy1.mock.calls[0][1];
+      const pre2 = spy2.mock.calls[0][1];
+      const pre3 = spy3.mock.calls[0][1];
+
+      // Must be the exact same pre-serialized object reference (zero per-subscriber re-serialization)
+      expect(pre1).toBeDefined();
+      expect(pre1).toBe(pre2);
+      expect(pre2).toBe(pre3);
+
+      sub1.close();
+      sub2.close();
+      sub3.close();
     });
   });
 });

@@ -16,7 +16,7 @@ import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, test, type PgTest} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
-import type {Source} from '../../types/streams.ts';
+import type {PreSerialized, Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import {orTimeout} from '../../types/timeout.ts';
 import type {ChangeSource} from '../change-source/change-source.ts';
@@ -161,11 +161,19 @@ describe('change-streamer/service', () => {
     });
   }
 
-  function drainToQueue(sub: Source<string>): Queue<Downstream> {
+  function drainToQueue(
+    sub: Source<string | PreSerialized>,
+  ): Queue<Downstream> {
     const queue = new Queue<Downstream>();
     void (async () => {
       for await (const msg of sub) {
-        queue.enqueue(BigIntJSON.parse(msg) as Downstream);
+        if (typeof msg === 'string') {
+          queue.enqueue(BigIntJSON.parse(msg) as Downstream);
+        } else {
+          queue.enqueue(
+            BigIntJSON.parse(msg.payload.toString('utf-8')) as Downstream,
+          );
+        }
       }
     })();
     return queue;
@@ -453,7 +461,9 @@ describe('change-streamer/service', () => {
   }
 
   /** A serving subscriber, i.e. one eligible for SQLite catchup. */
-  function subscribeServing(id: string): Promise<Source<string>> {
+  function subscribeServing(
+    id: string,
+  ): Promise<Source<string | PreSerialized>> {
     return streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
       taskID: `${id}-task`,
@@ -3498,8 +3508,10 @@ describe('change-streamer/service', () => {
     expect(setTimeoutFn).toHaveBeenCalledTimes(3);
 
     drainToQueue(sub1);
-    for await (const json of sub2) {
-      const msg: Downstream = BigIntJSON.parse(json) as Downstream;
+    for await (const item of sub2) {
+      const raw =
+        typeof item === 'string' ? item : item.payload.toString('utf-8');
+      const msg: Downstream = BigIntJSON.parse(raw) as Downstream;
       if (msg[0] === 'commit' && msg[2].watermark === '08') {
         // Now that sub2 has consumed past '06',
         // a purge should successfully clear records before '06'

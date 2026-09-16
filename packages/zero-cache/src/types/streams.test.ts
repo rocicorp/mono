@@ -15,11 +15,13 @@ import {randInt} from '../../../shared/src/rand.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {
+  isPreSerialized,
   stream,
   streamIn,
   streamInWithSize,
   streamOut,
   streamOutStringified,
+  type PreSerialized,
   type Sink,
   type Source,
 } from './streams.ts';
@@ -216,7 +218,7 @@ describe('streams with internal acks', () => {
 
   let server: FastifyInstance;
   let producer: Subscription<Message>;
-  let stringifiedProducer: Subscription<string>;
+  let stringifiedProducer: Subscription<string | PreSerialized>;
   let consumed: Queue<Message>;
   let cleanedUp: Promise<Message[]>;
   let cleanup: (m: Message[]) => void;
@@ -677,6 +679,82 @@ describe('streams with internal acks', () => {
           str: 'stringified-' + i,
         });
       }
+    });
+
+    test('batched pre-serialized shared buffer stream', async () => {
+      const total = 20;
+      const batch1: Message[] = [];
+      const batch2: Message[] = [];
+      for (let i = 0; i < 10; i++) {
+        batch1.push({from: i, to: i + 1, str: 'preserialized-' + i});
+      }
+      for (let i = 10; i < total; i++) {
+        batch2.push({from: i, to: i + 1, str: 'preserialized-' + i});
+      }
+
+      const p1 = Buffer.from(
+        `,"batch":[${batch1.map(m => JSON.stringify(m)).join(',')}]}`,
+        'utf8',
+      );
+      const p2 = Buffer.from(
+        `,"batch":[${batch2.map(m => JSON.stringify(m)).join(',')}]}`,
+        'utf8',
+      );
+
+      const r1 = stringifiedProducer.push({payload: p1, byteLength: p1.length});
+      const r2 = stringifiedProducer.push({payload: p2, byteLength: p2.length});
+
+      const {consumer} = await startBatchedReceiver();
+      const received: Message[] = [];
+      for await (const msg of consumer) {
+        received.push(msg);
+        if (received.length === total) {
+          break;
+        }
+      }
+
+      expect(received).toHaveLength(total);
+      for (let i = 0; i < total; i++) {
+        expect(received[i]).toEqual({
+          from: i,
+          to: i + 1,
+          str: 'preserialized-' + i,
+        });
+      }
+
+      // Consuming all messages must resolve the push results via ACKs
+      expect(await r1.result).toBe('consumed');
+      expect(await r2.result).toBe('consumed');
+    });
+
+    test('single pre-serialized buffer stream', async () => {
+      const msg: Message = {from: 42, to: 43, str: 'single-preserialized'};
+      const payload = Buffer.from(`,"msg":${JSON.stringify(msg)}}`, 'utf8');
+
+      const {result} = stringifiedProducer.push({
+        payload,
+        byteLength: payload.length,
+      });
+
+      const {consumer} = await startReceiver();
+      for await (const received of consumer) {
+        expect(received).toEqual(msg);
+        break;
+      }
+
+      expect(await result).toBe('consumed');
+    });
+
+    test('isPreSerialized type guard', () => {
+      expect(
+        isPreSerialized({payload: Buffer.from('test'), byteLength: 4}),
+      ).toBe(true);
+      expect(isPreSerialized(null)).toBe(false);
+      expect(isPreSerialized(undefined)).toBe(false);
+      expect(isPreSerialized('string')).toBe(false);
+      expect(isPreSerialized({payload: 'not a buffer', byteLength: 4})).toBe(
+        false,
+      );
     });
 
     test('batched streaming with streamInWithSize assigns proportionate sizes', async () => {

@@ -15,6 +15,7 @@ import {
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
 import {extractChangeSubstring} from './change-log-codec.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
@@ -141,13 +142,26 @@ describe('change-streamer/storer', () => {
 
   const messages = new ReplicationMessages({issues: 'id'});
 
-  async function drain(sub: Subscription<string>, untilWatermark?: string) {
+  async function drain(
+    sub: Subscription<string | PreSerializedBatch>,
+    untilWatermark?: string,
+  ) {
     const msgs: Downstream[] = [];
-    for await (const json of sub) {
-      const msg: Downstream = JSON.parse(json);
-      msgs.push(msg);
-      if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
-        break;
+    for await (const item of sub) {
+      if (typeof item === 'string') {
+        const msg: Downstream = JSON.parse(item);
+        msgs.push(msg);
+        if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
+          break;
+        }
+      } else {
+        for (const c of item.changes) {
+          const msg: Downstream = JSON.parse(c[2]);
+          msgs.push(msg);
+          if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
+            break;
+          }
+        }
       }
     }
     return msgs;

@@ -9,6 +9,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
 import type {Downstream, WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
@@ -681,7 +682,7 @@ class TestReader implements SQLiteChangeLogCatchupReader {
 }
 
 function createSubscriber(watermark: string, options: SubscriberOptions = {}) {
-  const downstream = Subscription.create<string>();
+  const downstream = Subscription.create<string | PreSerializedBatch>();
   const subscriber = new Subscriber(
     5,
     `subscriber-${watermark}`,
@@ -695,14 +696,20 @@ function createSubscriber(watermark: string, options: SubscriberOptions = {}) {
   return {done, subscriber, output};
 }
 
-function drainToQueue(source: Source<string>): {
+function drainToQueue(source: Source<string | PreSerializedBatch>): {
   done: Promise<void>;
   output: Queue<Downstream>;
 } {
   const queue = new Queue<Downstream>();
   const done = (async () => {
-    for await (const json of source) {
-      queue.enqueue(BigIntJSON.parse(json) as Downstream);
+    for await (const item of source) {
+      if (typeof item === 'string') {
+        queue.enqueue(BigIntJSON.parse(item) as Downstream);
+      } else {
+        for (const c of item.changes) {
+          queue.enqueue(BigIntJSON.parse(c[2]) as Downstream);
+        }
+      }
     }
   })();
   return {done, output: queue};

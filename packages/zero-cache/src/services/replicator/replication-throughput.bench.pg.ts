@@ -26,7 +26,7 @@ import {
   setupBenchmarkFixture,
 } from '../../test/pg-bench.ts';
 import type {PostgresDB} from '../../types/pg.ts';
-import type {Source} from '../../types/streams.ts';
+import type {PreSerialized, Source} from '../../types/streams.ts';
 import {getPragmaConfig, setupReplica} from '../../workers/replicator.ts';
 import {initializePostgresChangeSource} from '../change-source/pg/change-source-init.ts';
 import {
@@ -111,14 +111,22 @@ afterEach(async () => {
 });
 
 function parseStringifiedSource(
-  source: Source<string>,
+  source: Source<string | PreSerialized>,
 ): Source<SizedDownstream> {
   return {
     cancel: err => source.cancel(err),
     signal: source.signal,
     async *[Symbol.asyncIterator]() {
-      for await (const json of source) {
-        yield {data: BigIntJSON.parse(json) as Downstream, size: json.length};
+      for await (const item of source) {
+        if (typeof item === 'string') {
+          yield {data: BigIntJSON.parse(item) as Downstream, size: item.length};
+        } else {
+          const json = item.payload.toString('utf-8');
+          yield {
+            data: BigIntJSON.parse(json) as Downstream,
+            size: item.byteLength,
+          };
+        }
       }
     },
   };

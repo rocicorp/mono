@@ -80,7 +80,10 @@ describe('change-streamer/forwarder', () => {
     expect(sendBatchSpy).toHaveBeenCalledTimes(1);
     const batchedChanges = sendBatchSpy.mock.calls[0][0];
     expect(batchedChanges).toHaveLength(5);
-    expect(receiver.queued).toBe(6);
+    // Pre-serialized batch is pushed downstream as a single item (1 status + 1 batch).
+    expect(receiver.queued).toBe(2);
+    sub.close();
+    expect(_).toHaveLength(6);
   });
 
   test('coalesces forward() across async microtask turns into single batch', async () => {
@@ -106,7 +109,10 @@ describe('change-streamer/forwarder', () => {
     expect(sendBatchSpy).toHaveBeenCalledTimes(1);
     const batchedChanges = sendBatchSpy.mock.calls[0][0];
     expect(batchedChanges).toHaveLength(5);
-    expect(receiver.queued).toBe(6);
+    // Pre-serialized batch is pushed downstream as a single item (1 status + 1 batch).
+    expect(receiver.queued).toBe(2);
+    sub.close();
+    expect(_).toHaveLength(6);
   });
 
   test('flushes immediately when batch reaches FORWARD_BATCH_SIZE (64)', () => {
@@ -126,7 +132,10 @@ describe('change-streamer/forwarder', () => {
 
     expect(sendBatchSpy).toHaveBeenCalledTimes(1);
     expect(sendBatchSpy.mock.calls[0][0]).toHaveLength(64);
-    expect(receiver.queued).toBe(65);
+    // Pre-serialized batch is pushed downstream as a single item (1 status + 1 batch).
+    expect(receiver.queued).toBe(2);
+    sub.close();
+    expect(_).toHaveLength(65);
   });
 
   test('stopProgressMonitor flushes pending changes', () => {

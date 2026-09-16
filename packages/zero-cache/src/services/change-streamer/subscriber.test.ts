@@ -1,5 +1,7 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {preSerializeBatch} from './broadcast.ts';
+import type {WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {createSubscriber} from './test-utils.ts';
 
@@ -517,7 +519,10 @@ describe('change-streamer/subscriber', () => {
 
     let txNum = 0;
     for await (const json of receiver) {
-      const msg = JSON.parse(json);
+      const msg =
+        typeof json === 'string'
+          ? JSON.parse(json)
+          : JSON.parse(json.changes[0][2]);
       expect(sub.numProcessed).toBe(processed++);
       expect(sub.numPending).toBe(pending--);
 
@@ -651,6 +656,115 @@ describe('change-streamer/subscriber', () => {
       sub.trackResponseResult('timed-out');
       expect(sub.reportChangeRate(2000, 'lagging')).toBe(0);
       expect(sub.reportChangeRate(2300, 'lagging')).toBe(300);
+    });
+  });
+
+  describe('sendBatch with pre-serialized shared buffer', () => {
+    test('steady-state subscriber uses single pre-serialized push and advances acked', async () => {
+      const onAck = vi.fn();
+      const [sub, , receiver] = createSubscriber('00', true, {onAck});
+
+      const changes: WatermarkedChange[] = [
+        [
+          '01',
+          'begin',
+          json(['begin', messages.begin(), {commitWatermark: '02'}]),
+        ],
+        [
+          '02',
+          'commit',
+          json(['commit', messages.commit(), {watermark: '02'}]),
+        ],
+      ];
+      const preSerialized = preSerializeBatch(changes);
+
+      const sendPromise = sub.sendBatch(changes, preSerialized);
+
+      // Status was queued on init (1), plus 1 pre-serialized batch item = 2 total in queue.
+      expect(receiver.queued).toBe(2);
+      expect(sub.watermark).toBe('02');
+      expect(sub.acked).toBe('00'); // not acked until downstream consumes
+
+      // Consume downstream messages
+      const pipeline = receiver.pipeline!;
+      const it = pipeline[Symbol.asyncIterator]();
+
+      const statusItem = (await it.next()).value!;
+      statusItem.consumed();
+
+      const batchItem = (await it.next()).value!;
+      expect(batchItem.value).toBe(preSerialized);
+      expect(batchItem.value.changes).toEqual(changes);
+      batchItem.consumed();
+
+      await sendPromise;
+
+      expect(sub.acked).toBe('02');
+      expect(onAck).toHaveBeenCalledWith('02');
+
+      sub.close();
+    });
+
+    test('fallback to individual send when subscriber is backlogged', () => {
+      const [sub, stream, receiver] = createSubscriber('00', false); // catching up
+
+      const changes: WatermarkedChange[] = [
+        [
+          '01',
+          'begin',
+          json(['begin', messages.begin(), {commitWatermark: '02'}]),
+        ],
+        [
+          '02',
+          'commit',
+          json(['commit', messages.commit(), {watermark: '02'}]),
+        ],
+      ];
+      const preSerialized = preSerializeBatch(changes);
+
+      void sub.sendBatch(changes, preSerialized);
+
+      // Backlog buffers the changes individually; nothing pushed downstream yet
+      expect(receiver.queued).toBe(0);
+
+      // Catchup and mark caught up
+      void sub.catchup([
+        '00',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '00'}]),
+      ]);
+      void sub.setCaughtUp();
+
+      sub.close();
+      expect(stream.length).toBeGreaterThan(0);
+    });
+
+    test('fallback to individual send when wsBatched is false', () => {
+      const [sub, stream, receiver] = createSubscriber('00', true, {
+        wsBatched: false,
+      });
+
+      const changes: WatermarkedChange[] = [
+        [
+          '01',
+          'begin',
+          json(['begin', messages.begin(), {commitWatermark: '02'}]),
+        ],
+        [
+          '02',
+          'commit',
+          json(['commit', messages.commit(), {watermark: '02'}]),
+        ],
+      ];
+      const preSerialized = preSerializeBatch(changes);
+
+      void sub.sendBatch(changes, preSerialized);
+
+      // When wsBatched is false, items are pushed individually: 1 status + 2 changes = 3 queued
+      expect(receiver.queued).toBe(3);
+
+      sub.close();
+      expect(stream).toHaveLength(3);
     });
   });
 });
