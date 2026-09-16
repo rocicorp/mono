@@ -292,7 +292,7 @@ async function streamOutInternal<T extends JSONValue>(
     let nextID = 0;
     const {pipeline} = source;
     const batched = options?.batched ?? false;
-    const maxBatchSize = options?.maxBatchSize ?? 64;
+    const maxBatchSize = Math.max(1, Math.floor(options?.maxBatchSize ?? 64));
 
     if (batched && source.pipelineBatched) {
       const batchedIterable = source.pipelineBatched(maxBatchSize);
@@ -432,6 +432,10 @@ async function streamInInternal<T extends JSONValue, Out>(
           source.send(JSON.stringify({ack: id} satisfies Ack));
         }
       };
+
+      if (batch !== undefined && msg !== undefined) {
+        throw new Error(`Message ${id} has both "msg" and "batch"`);
+      }
 
       if (batch !== undefined) {
         let remaining = batch.length;

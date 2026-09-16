@@ -129,6 +129,28 @@ describe('change-streamer/forwarder', () => {
     expect(receiver.queued).toBe(65);
   });
 
+  test('stopProgressMonitor flushes pending changes', () => {
+    const forwarder = new Forwarder(createSilentLogContext());
+    const [sub, _, receiver] = createSubscriber('00', true);
+    forwarder.add(sub);
+
+    const sendBatchSpy = vi.spyOn(sub, 'sendBatch');
+
+    forwarder.forward([
+      '01',
+      'insert',
+      json(['data', messages.insert('issues', {id: '1'})]),
+    ]);
+
+    expect(sendBatchSpy).not.toHaveBeenCalled();
+
+    forwarder.stopProgressMonitor();
+
+    expect(sendBatchSpy).toHaveBeenCalledTimes(1);
+    expect(sendBatchSpy.mock.calls[0][0]).toHaveLength(1);
+    expect(receiver.queued).toBe(2);
+  });
+
   test('in transaction queueing', () => {
     const forwarder = new Forwarder(createSilentLogContext());
 

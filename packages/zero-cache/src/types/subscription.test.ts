@@ -801,5 +801,13 @@ describe('types/subscription', () => {
       }
       expect(cleanup).toHaveBeenCalledWith([0, 1, 2, 3, 4], undefined);
     });
+
+    test('validates maxBatch is a positive integer', () => {
+      const sub = Subscription.create<number>();
+      expect(() => sub.pipelineBatched(0)).toThrow(/positive integer/);
+      expect(() => sub.pipelineBatched(-5)).toThrow(/positive integer/);
+      expect(() => sub.pipelineBatched(1.5)).toThrow(/positive integer/);
+      expect(() => sub.pipelineBatched(NaN)).toThrow(/positive integer/);
+    });
   });
 });

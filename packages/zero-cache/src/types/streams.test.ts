@@ -728,8 +728,8 @@ describe('streams with internal acks', () => {
       const mixedPort = 8000 + Math.floor(randInt(0, 1000));
       await wsServer.listen({port: mixedPort});
 
-      const clientWs = new WebSocket(`http://localhost:${mixedPort}/mixed`);
-      const receiver = await streamIn(lc, clientWs, messageSchema);
+      ws = new WebSocket(`http://localhost:${mixedPort}/mixed`);
+      const receiver = await streamIn(lc, ws, messageSchema);
 
       await vi.waitFor(() => expect(serverWs).toBeDefined());
 
@@ -763,6 +763,46 @@ describe('streams with internal acks', () => {
         {from: 3, to: 4, str: 'batch-2'},
       ]);
 
+      ws.close();
+      await wsServer.close();
+    });
+
+    test('receiver rejects frame containing both msg and batch', async () => {
+      let serverWs: WebSocket | undefined;
+      const wsServer = Fastify();
+      await wsServer.register(websocket);
+      wsServer.get('/invalid', {websocket: true}, client => {
+        serverWs = client;
+      });
+      const invalidPort = 8000 + Math.floor(randInt(0, 1000));
+      await wsServer.listen({port: invalidPort});
+
+      ws = new WebSocket(`http://localhost:${invalidPort}/invalid`);
+      const receiver = await streamIn(lc, ws, messageSchema);
+
+      await vi.waitFor(() => expect(serverWs).toBeDefined());
+
+      // Send malformed frame with both msg and batch
+      serverWs?.send(
+        JSON.stringify({
+          id: 1,
+          msg: {from: 1, to: 2, str: 'single'},
+          batch: [{from: 1, to: 2, str: 'single'}],
+        }),
+      );
+
+      let err: unknown;
+      try {
+        for await (const _ of receiver) {
+          // should not yield
+        }
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toMatch(/both "msg" and "batch"/);
+
+      ws.close();
       await wsServer.close();
     });
   });

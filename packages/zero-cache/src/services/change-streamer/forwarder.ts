@@ -203,10 +203,7 @@ export class Forwarder {
 
   stopProgressMonitor() {
     clearInterval(this.#progressMonitor);
-    if (this.#flushImmediateId !== undefined) {
-      clearImmediate(this.#flushImmediateId);
-      this.#flushImmediateId = undefined;
-    }
+    this.#flushPendingWithoutTracking();
   }
 
   /**

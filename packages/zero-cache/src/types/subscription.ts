@@ -263,10 +263,15 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
   pipelineBatched = (
     maxBatch = 64,
-  ): AsyncIterable<{values: T[]; consumed: () => void}> | undefined =>
-    this.#pipelineEnabled
+  ): AsyncIterable<{values: T[]; consumed: () => void}> | undefined => {
+    assert(
+      Number.isInteger(maxBatch) && maxBatch > 0,
+      () => `maxBatch must be a positive integer, got: ${maxBatch}`,
+    );
+    return this.#pipelineEnabled
       ? {[Symbol.asyncIterator]: () => this.#pipelineBatched(maxBatch)}
       : undefined;
+  };
 
   #pipelineBatched(
     maxBatch: number,
