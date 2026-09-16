@@ -3,6 +3,7 @@ import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {logLastChanceSQLiteCorruptionDiagnostics} from '../db/sqlite-corruption.ts';
 import {
   getOrCreateHistogram,
@@ -391,7 +392,14 @@ export async function exitAfter(
       lc.error?.(`exiting with configuration error: ${String(e)}`, e);
       process.exit(0);
     }
-    lc.error?.(`exiting with error: ${String(e)}`, e);
+    if (e instanceof AbortError) {
+      // AbortErrors signal an intentional shutdown or restart (e.g. SIGTERM
+      // during a rollout, AutoResetSignal) and should not raise alerts. The
+      // non-zero exit code is kept so that restart semantics are unchanged.
+      lc.warn?.(`exiting after abort: ${String(e)}`, e);
+    } else {
+      lc.error?.(`exiting with error: ${String(e)}`, e);
+    }
     try {
       logLastChanceSQLiteCorruptionDiagnostics(lc, e);
     } catch (diagnosticError) {
