@@ -52,7 +52,10 @@ import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
-import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
+import {
+  IndexingProgress,
+  ReplicationStatusPublisher,
+} from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {publicationRowFilter} from './backfill-resume.ts';
@@ -312,9 +315,8 @@ export async function initialSync(
         `Creating ${indexes.length} indexes`,
         5000,
       );
-      const indexStart = performance.now();
-      createLiteIndices(lc, tx, indexes);
-      const index = performance.now() - indexStart;
+      // Excludes the time spent reporting progress.
+      const index = await createLiteIndices(lc, tx, indexes, statusPublisher);
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
       if (slotName && replicaID) {
@@ -621,17 +623,52 @@ function createLiteTables(
   }
 }
 
-function createLiteIndices(lc: LogContext, tx: Database, indices: IndexSpec[]) {
+/**
+ * Creates the `indices`, publishing progress before each one.
+ *
+ * @returns The milliseconds spent creating the indexes, excluding the time
+ *          spent publishing progress.
+ *
+ * Exported for testing.
+ */
+export async function createLiteIndices(
+  lc: LogContext,
+  tx: Database,
+  indices: IndexSpec[],
+  statusPublisher: ReplicationStatusPublisher,
+): Promise<number> {
+  let totalMs = 0;
+  const progress = new IndexingProgress(indices.length);
   for (const [i, index] of indices.entries()) {
-    const stmt = createLiteIndexStatement(mapPostgresToLiteIndex(index));
-    lc.info?.(`Creating index ${i + 1}/${indices.length}: ${stmt}`);
-    const start = performance.now();
-    tx.exec(stmt);
-    lc.info?.(
-      `Created index ${i + 1}/${indices.length} ` +
-        `(${(performance.now() - start).toFixed(3)} ms): ${stmt}`,
+    const liteIndex = mapPostgresToLiteIndex(index);
+    const stmt = createLiteIndexStatement(liteIndex);
+    const n = `${i + 1}/${indices.length}`;
+    lc.info?.(`Creating index ${n}: ${stmt}`);
+    progress.start(liteIndex);
+    // Index creation blocks the event loop, so wait for the status event
+    // to be sent before starting.
+    await statusPublisher.publishAndFlush(
+      lc,
+      'Indexing',
+      `Creating index ${n} on ${liteIndex.tableName}`,
+      5000,
+      progress.state,
     );
+    // Exclude the time spent waiting for the event from the index's timing.
+    progress.restartTimer();
+    tx.exec(stmt);
+    const elapsed = progress.finish();
+    totalMs += elapsed;
+    lc.info?.(`Created index ${n} (${elapsed.toFixed(3)} ms): ${stmt}`);
   }
+  statusPublisher.publish(
+    lc,
+    'Indexing',
+    `Created ${indices.length} indexes`,
+    0,
+    progress.state,
+  );
+  return totalMs;
 }
 
 /**
