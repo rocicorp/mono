@@ -6,14 +6,24 @@ import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import {StatementRunner} from '../../db/statements.ts';
 import {getConnectionURI, test, type PgTest} from '../../test/db.ts';
+import {JSON_PARSED} from '../../types/lite.ts';
 import {pgClient, postgresTypeConfig, type PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import {
+  BackfillManager,
+  type BackfillMessage,
+} from '../change-source/common/backfill-manager.ts';
+import {ChangeStreamMultiplexer} from '../change-source/common/change-stream-multiplexer.ts';
 import {
   type ChangeStreamData,
   type Commit,
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import {batch, replica} from '../replicator/backfill-repro-test-util.ts';
+import {readBackfillRequests} from '../replicator/schema/backfilling.ts';
+import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {extractChangeSubstring} from './change-log-codec.ts';
 import {type Downstream} from './change-streamer.ts';
@@ -247,6 +257,135 @@ describe('change-streamer/storer', () => {
       );
       await storer.assumeOwnership();
       done = storer.run();
+    });
+
+    test('repro: restart reuses minor watermarks and a serving subscriber loses different rows', async () => {
+      // Isolate the async PG-store path. A synchronous SQLite change-log
+      // commit before forwarding is not part of this reproduction.
+      const rm = replica('backup', [1, 2, 3, 4, 5, 6, 7, 8]);
+      const vs = replica('serving', [1, 2, 3, 4, 5, 6, 7, 8]);
+
+      // Generate the minor versions with the real manager, using one row per
+      // transaction. The data source stands in for two different PG snapshots.
+      async function run(start: string, ids: number[]) {
+        const mux = new ChangeStreamMultiplexer(lc, start);
+        async function* snapshot(): AsyncGenerator<BackfillMessage> {
+          for (const id of ids) {
+            yield {message: batch([id], '0b'), byteSize: 1};
+          }
+        }
+        const manager = new BackfillManager(
+          lc,
+          mux,
+          snapshot,
+          JSON_PARSED,
+          10,
+          50,
+          1,
+        );
+        mux.addProducers(manager).addListeners(manager);
+        const source = mux.asSource();
+        const transactions: ChangeStreamData[][] = [];
+        let tx: ChangeStreamData[] = [];
+        manager.run(start, readBackfillRequests(rm.db));
+        try {
+          for await (const msg of source) {
+            if (msg[0] === 'status' || msg[0] === 'control') {
+              continue;
+            }
+            tx.push(msg);
+            if (msg[0] === 'commit') {
+              transactions.push(tx);
+              tx = [];
+              if (transactions.length === ids.length) {
+                break;
+              }
+            }
+          }
+        } finally {
+          source.cancel();
+        }
+        return transactions;
+      }
+
+      function store(tx: ChangeStreamData[]) {
+        const begin = tx[0];
+        if (begin[0] !== 'begin') {
+          throw new Error('expected begin');
+        }
+        for (const msg of tx) {
+          storer.store(begin[2].commitWatermark, msg);
+        }
+      }
+      try {
+        const first = await run('0a', [1, 2, 3, 4, 5]);
+        // The store has committed only through M.3 when the process dies;
+        // forwarding already delivered M.4 and M.5 to the serving replica.
+        for (const tx of first.slice(0, 3)) {
+          store(tx);
+          for (const msg of tx) {
+            rm.processor.processMessage(lc, msg);
+          }
+        }
+        for (const tx of first) {
+          for (const msg of tx) {
+            vs.processor.processMessage(lc, msg);
+          }
+        }
+        await storer.allProcessed();
+        const {lastWatermark} =
+          await storer.getStartStreamInitializationParameters();
+        expect(lastWatermark).toBe('0a.03');
+        const restarted = await run(lastWatermark, [6, 7, 8]);
+        expect(first[4][0]).toEqual(restarted[1][0]); // Same M.5.
+        expect(first[4][1]).not.toEqual(restarted[1][1]); // Different rows.
+
+        const [sub, , stream] = createSubscriber('0a.05');
+        const draining = drain(stream, '0a.06');
+        // Real catchup against the durable M.3 head, before replacement M.5
+        // exists. send() then deduplicates the replacement M.4 and M.5.
+        storer.catchup(sub, 'serving');
+        for (const tx of restarted) {
+          store(tx);
+          const begin = tx[0];
+          if (begin[0] !== 'begin') {
+            throw new Error('expected begin');
+          }
+          for (const msg of tx) {
+            rm.processor.processMessage(lc, msg);
+            await sub.send([begin[2].commitWatermark, msg[1].tag, json(msg)]);
+          }
+        }
+        const delivered = await draining;
+        for (const msg of delivered) {
+          if (msg[0] === 'begin' || msg[0] === 'data' || msg[0] === 'commit') {
+            vs.processor.processMessage(lc, msg);
+          }
+        }
+        await storer.allProcessed();
+        expect(delivered.filter(msg => msg[0] === 'data')).toEqual([
+          ['data', batch([8], '0b')],
+        ]);
+        for (const r of [rm, vs]) {
+          expect(
+            getSubscriptionState(new StatementRunner(r.db)).watermark,
+          ).toBe('0a.06');
+        }
+        expect(
+          rm.db
+            .prepare('SELECT id FROM items WHERE body IS NOT NULL ORDER BY id')
+            .all(),
+        ).toEqual([1, 2, 3, 6, 7, 8].map(id => ({id})));
+        expect(
+          vs.db
+            .prepare('SELECT id FROM items WHERE body IS NOT NULL ORDER BY id')
+            .all(),
+        ).toEqual([1, 2, 3, 4, 5, 8].map(id => ({id})));
+        expect(fatalErrors.size()).toBe(0);
+      } finally {
+        rm.db.close();
+        vs.db.close();
+      }
     });
 
     test('ownerAddress is set correctly', async () => {
