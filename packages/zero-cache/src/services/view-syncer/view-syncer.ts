@@ -332,7 +332,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *   updates are processed via `#syncQueryPipelineSet`.
    *
    * Resets to `false` if `#advancePipelines` returns a `ResetPipelinesSignal`
-   * and pipelines must be reset and rehydrated.
+   * and pipelines must be reset and rehydrated, or if a reloaded CVR is ahead
+   * of the pipelines (see `#resetPipelinesIfBehindCVR`).
    */
   #pipelinesHydrated = false;
   #servedVersion: LexiVersion | null = null;
@@ -624,6 +625,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
         return;
       }
+      let reloaded = false;
       if (!this.#cvr) {
         this.#lc.debug?.('loading cvr');
         this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
@@ -631,6 +633,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
         this.#ttlClock = this.#cvr.ttlClock;
         this.#ttlClockBase = Date.now();
+        reloaded = true;
       } else {
         // Make sure the CVR ttlClock is up to date.
         const now = Date.now();
@@ -641,6 +644,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       try {
+        if (reloaded && this.#resetPipelinesIfBehindCVR(lc, this.#cvr)) {
+          // Not every locked operation rehydrates (e.g. auth maintenance), and
+          // if the replica has already caught up to the CVR there may be no
+          // further version-ready signal to do it, so rehydrate here.
+          const connCtx =
+            this.connContextManager.getBackgroundConnectionContext();
+          if (connCtx) {
+            await this.#maybeHydratePipelines(lc, this.#cvr, connCtx);
+          }
+        }
         await fn(lc, this.#cvr);
       } catch (e) {
         // Clear cached state if an error is encountered.
@@ -654,6 +667,44 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#scheduleAuthMaintenance(lc);
       }
     });
+  }
+
+  /**
+   * The CVR is reloaded after an error clears the cached copy. By then another
+   * view-syncer may have taken over the client group and flushed the CVR at a
+   * version ahead of this instance's hydrated pipelines (e.g. its replica was
+   * further ahead). The pipelines can no longer be diffed against the CVR, so
+   * reset them and let `#maybeHydratePipelines` rehydrate once the replica has
+   * caught up to the CVR.
+   *
+   * A CVR behind the pipelines is expected (advancements that do not change
+   * the CVR are not flushed) and is handled by the normal update path.
+   *
+   * Returns whether the pipelines were reset.
+   *
+   * Must be called from within the #lock.
+   */
+  #resetPipelinesIfBehindCVR(lc: LogContext, cvr: CVRSnapshot): boolean {
+    if (!this.#pipelinesHydrated) {
+      return false;
+    }
+    const pipelineVersion = this.#pipelines.currentVersion();
+    if (pipelineVersion >= cvr.version.stateVersion) {
+      return false;
+    }
+    lc.info?.(
+      `resetting pipelines: pipelines@${pipelineVersion} are behind ` +
+        `reloaded cvr@${versionString(cvr.version)}`,
+    );
+    this.#pipelineResets.add(1, {reason: 'behind-cvr'});
+    // Clear the hydrated state first: reset() can throw (e.g. on an
+    // incompatible schema) after it has already destroyed the pipelines.
+    this.#pipelinesHydrated = false;
+    this.connContextManager.setSharedRetransformReady(false);
+    this.#pipelines.reset(
+      must(cvr.clientSchema, 'cvr.clientSchema missing after initialization'),
+    );
+    return true;
   }
 
   readyState(): Promise<'initialized' | 'draining'> {
