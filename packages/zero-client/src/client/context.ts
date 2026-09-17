@@ -34,7 +34,7 @@ export type FlushQueryChanges = QueryManager['flushBatch'];
 const HYDRATE_SLICE_MS = 12;
 
 function defaultYield(): Promise<void> {
-  // Not in React Native, nor in Safari or Firefox at the time of writing.
+  // Not in React Native or Safari.
   const scheduler = getBrowserGlobal('scheduler');
   if (typeof scheduler?.yield === 'function') {
     return scheduler.yield();
