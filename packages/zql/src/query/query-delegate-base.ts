@@ -420,12 +420,12 @@ export function materializeImpl<
     }
   };
 
-  // The view, seen as the optional cached-marking surface. Only views that
-  // implement `markCached`/`unmarkCached` (e.g. ArrayView) surface 'cached';
-  // for any other factory the optional calls are no-ops. The registration
-  // path can report 'cached' synchronously, before the view below exists, so
-  // this stays undefined until then and the mark is applied afterwards.
-  let viewForCached: CachedMarkableView | undefined;
+  // The view, seen as its optional hooks. Only views that implement
+  // `markCached`/`unmarkCached` (e.g. ArrayView) surface 'cached'; for any
+  // other factory the optional calls are no-ops. The registration path can
+  // report 'cached' synchronously, before the view below exists, so this
+  // stays undefined until then and the mark is applied afterwards.
+  let viewHooks: OptionalViewHooks | undefined;
 
   // Like 'complete', 'cached' is a claim about the rows the view holds, so it
   // waits for the view to exist and its pipeline to be attached. Once the
@@ -436,7 +436,7 @@ export function materializeImpl<
     // mark, and an error that arrived before attach must not be preceded by
     // a 'cached' notification.
     if (attached && got === 'cached' && queryComplete === false) {
-      viewForCached?.markCached?.();
+      viewHooks?.markCached?.();
     }
   };
 
@@ -460,7 +460,7 @@ export function materializeImpl<
     } else if (got === false) {
       // The got key was deleted (eviction) before the server confirmed the
       // query on this connection.
-      viewForCached?.unmarkCached?.();
+      viewHooks?.unmarkCached?.();
     } else {
       maybeResolveComplete();
     }
@@ -522,7 +522,7 @@ export function materializeImpl<
       }
       const t1 = performance.now();
       try {
-        viewForCached?.holdData?.();
+        viewHooks?.holdData?.();
         deferred.attach();
       } catch (e) {
         // Surface the failure on this view and let the delegate decide how
@@ -552,7 +552,7 @@ export function materializeImpl<
     });
   }
 
-  viewForCached = view as CachedMarkableView;
+  viewHooks = view as OptionalViewHooks;
   maybeMarkCached();
 
   return view as T;
@@ -586,14 +586,15 @@ function newDeferredInput(
 }
 
 /**
- * The optional surface a view exposes to be marked 'cached'. Views that do
- * not implement it (custom factories) simply never surface the state.
+ * Optional methods `materialize` calls on a view when it has them (ArrayView
+ * does). See {@link ViewFactory} for what a custom view needs to know.
  */
-type CachedMarkableView = {
+type OptionalViewHooks = {
+  // Surface the 'cached' result type. Views without these never show it.
   markCached?: (() => void) | undefined;
   unmarkCached?: (() => void) | undefined;
-  // Keeps the view showing its current snapshot until its next flush, so a
-  // deferred view does not show rows ahead of its release.
+  // Keep showing the current snapshot until the next flush, so a deferred
+  // view does not show rows ahead of its release.
   holdData?: (() => void) | undefined;
 };
 

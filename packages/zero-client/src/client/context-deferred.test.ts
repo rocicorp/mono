@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test, vi} from 'vitest';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
@@ -161,19 +162,31 @@ describe('hydratePendingPipelines', () => {
   // Hydrates one pipeline per slice and parks at every yield until `step()`.
   function sliced(context: ZeroContext) {
     let resume: (() => void) | undefined;
-    const done = context.hydratePendingPipelines(
-      0,
-      () => new Promise<void>(resolve => (resume = resolve)),
-    );
+    let finished = false;
+    let settled = resolver<void>();
+    const done = context
+      .hydratePendingPipelines(
+        0,
+        () =>
+          new Promise<void>(resolve => {
+            resume = resolve;
+            settled.resolve();
+          }),
+      )
+      .finally(() => {
+        finished = true;
+        settled.resolve();
+      });
+    // Resumes the loop and waits until it parks again or finishes, however
+    // many microtasks that takes.
     const step = async () => {
       const r = resume;
       resume = undefined;
+      settled = resolver<void>();
       r?.();
-      // Let the awaiting loop run its next slice.
-      await Promise.resolve();
-      await Promise.resolve();
+      await settled.promise;
     };
-    return {done, step, parked: () => resume !== undefined};
+    return {done, step, parked: () => resume !== undefined && !finished};
   }
 
   function loaded() {
@@ -274,13 +287,13 @@ describe('hydratePendingPipelines', () => {
     calls.length = 0;
 
     const {done, step} = sliced(context);
-    await Promise.resolve();
+    // Completion is delivered through a promise; give an early one every
+    // chance to show up.
+    await new Promise(resolve => setTimeout(resolve, 0));
     expect(calls).toEqual([]);
     await step();
     await done;
-    // Completion is delivered through a promise.
-    await Promise.resolve();
-    expect(calls).toEqual(['a:complete', 'b:complete']);
+    await vi.waitFor(() => expect(calls).toEqual(['a:complete', 'b:complete']));
   });
 
   test('a view destroyed while hydrating is skipped', async () => {

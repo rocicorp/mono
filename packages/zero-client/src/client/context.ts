@@ -27,11 +27,6 @@ export type UpdateCustomQuery = QueryManager['updateCustom'];
 export type FlushQueryChanges = QueryManager['flushBatch'];
 
 /**
- * ZeroContext glues together zql and Replicache. It listens to changes in
- * Replicache data and pushes them into IVM and on tells the server about new
- * queries.
- */
-/**
  * How long pipelines are hydrated for before yielding to the event loop. Short
  * enough to keep a frame or two, long enough that the yields themselves (a
  * `setTimeout(0)` is clamped to 4ms in browsers) stay in the noise.
@@ -47,6 +42,11 @@ function defaultYield(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0));
 }
 
+/**
+ * ZeroContext glues together zql and Replicache. It listens to changes in
+ * Replicache data and pushes them into IVM and on tells the server about new
+ * queries.
+ */
 export class ZeroContext extends QueryDelegateBase {
   readonly #lc: LogContext;
 

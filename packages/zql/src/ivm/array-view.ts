@@ -66,8 +66,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   onDestroy: (() => void) | undefined;
 
   #dirty = false;
-  // Set by holdData(): the root `data` and newly added listeners keep seeing
-  // until the next flush, while pushes build up #root behind it.
+  // Set by holdData(): the root that `data` and newly added listeners keep
+  // seeing until the next flush, while pushes build up #root behind it.
   #committedRoot: Entry | undefined;
   #resultType: ResultType = 'unknown';
   #error: ErroredQuery | undefined;
