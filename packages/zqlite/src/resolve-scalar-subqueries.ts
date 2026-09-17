@@ -6,11 +6,13 @@ import type {
   SimpleCondition,
 } from '../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
 
 type TableSpecWithUniqueKeys = {
   tableSpec: {
     uniqueKeys: PrimaryKey[];
   };
+  zqlSpec: Record<string, SchemaValue>;
 };
 
 export type CompanionSubquery = {
@@ -61,11 +63,23 @@ export type ScalarExecutor = (
 ) => LiteralValue | null | undefined;
 
 /**
+ * The enclosing query a correlated subquery is being resolved in: its table,
+ * and the `column = literal` equalities its WHERE imposes on *every* row it
+ * returns (top-level AND conjuncts only — see
+ * {@link extractLiteralEqualityConstraints}).
+ */
+type ParentScope = {
+  table: string;
+  literals: ReadonlyMap<string, LiteralValue>;
+};
+
+/**
  * Resolves "simple" scalar subqueries by calling the provided executor
  * and replacing them with literal conditions. A scalar subquery is simple
  * when all columns of at least one unique index on the subquery table are
  * equality-constrained by literal values in the subquery's WHERE clause
- * (using only AND conjunctions).
+ * (using only AND conjunctions), counting a literal the enclosing query
+ * pushes through the correlation (see {@link pinWithParentLiteral}).
  *
  * Non-simple scalar subqueries are left untouched for the existing
  * EXISTS rewrite in buildPipelineInternal.
@@ -90,7 +104,18 @@ function resolveASTRecursive(
   out: Out,
 ): AST {
   const where = ast.where
-    ? resolveCondition(ast.where, tableSpecs, execute, out)
+    ? resolveCondition(
+        ast.where,
+        // Derived from the *unresolved* WHERE, so which literals are usable
+        // does not depend on the order gates happen to be resolved in.
+        {
+          table: ast.table,
+          literals: extractLiteralEqualityConstraints(ast.where),
+        },
+        tableSpecs,
+        execute,
+        out,
+      )
     : undefined;
 
   const related = ast.related?.map(r => ({
@@ -106,6 +131,7 @@ function resolveASTRecursive(
 
 function resolveCondition(
   condition: Condition,
+  parent: ParentScope,
   tableSpecs: Map<string, TableSpecWithUniqueKeys>,
   execute: ScalarExecutor,
   out: Out,
@@ -113,7 +139,13 @@ function resolveCondition(
   switch (condition.type) {
     case 'correlatedSubquery':
       if (condition.scalar) {
-        return resolveScalarSubquery(condition, tableSpecs, execute, out);
+        return resolveScalarSubquery(
+          condition,
+          parent,
+          tableSpecs,
+          execute,
+          out,
+        );
       }
       // Non-scalar correlated subquery: recurse into its subquery
       {
@@ -134,7 +166,7 @@ function resolveCondition(
     case 'and':
     case 'or': {
       const resolved = condition.conditions.map(c =>
-        resolveCondition(c, tableSpecs, execute, out),
+        resolveCondition(c, parent, tableSpecs, execute, out),
       );
       if (resolved.every((c, i) => c === condition.conditions[i])) {
         return condition;
@@ -146,8 +178,100 @@ function resolveCondition(
   }
 }
 
+/**
+ * Pushes a parent-side literal through the join correlation, when doing so is
+ * what pins the subquery to at most one row.
+ *
+ * The rewrite is sound because the literal and the gate are conjoined:
+ *
+ * ```
+ *   parent.pf = L AND EXISTS(child WHERE child.cf = parent.pf AND P)
+ * ≡ parent.pf = L AND EXISTS(child WHERE child.cf = parent.pf AND child.cf = L AND P)
+ * ```
+ *
+ * Every parent row that survives the conjunction has `pf = L`, so every child
+ * row satisfying the correlation for such a parent has `cf = pf = L` and the
+ * added conjunct discards nothing. Parent rows with a different `pf` — and
+ * parent rows with `pf` NULL, which `=` never matches — are dropped by the
+ * literal conjunct itself, so the gate's value for them is never observed.
+ * That also covers `NOT EXISTS`: the two gates agree pointwise wherever the
+ * conjunction can be true, so their negations do too.
+ *
+ * The literal must therefore come from a conjunct that applies to every row
+ * the enclosing query returns. `extractLiteralEqualityConstraints` follows
+ * only `and` nodes down from the WHERE root, so a literal under an `or`, one
+ * inside a nested correlated subquery (including a `NOT EXISTS`), or one in
+ * any position other than `column = literal` never reaches here.
+ *
+ * Returns the subquery with `cf = L` spliced in, or `undefined` when the
+ * rewrite does not apply or does not pin the subquery to one row.
+ */
+function pinWithParentLiteral(
+  condition: CorrelatedSubqueryCondition,
+  parent: ParentScope,
+  tableSpecs: Map<string, TableSpecWithUniqueKeys>,
+): AST | undefined {
+  const {correlation, subquery} = condition.related;
+  // The resolved gate names a single parent column, so a compound correlation
+  // cannot be answered by one scalar value.
+  if (
+    correlation.parentField.length !== 1 ||
+    correlation.childField.length !== 1
+  ) {
+    return undefined;
+  }
+  const parentField = correlation.parentField[0];
+  const childField = correlation.childField[0];
+
+  const value = parent.literals.get(parentField);
+  if (value === undefined) {
+    return undefined;
+  }
+  // Nothing to push through: the subquery already pins itself.
+  if (isSimpleSubquery(subquery, tableSpecs)) {
+    return undefined;
+  }
+
+  // The correlation binds the parent's value using the *child* column's
+  // declared type (`constraintsToSQL` → `toSQLiteType(value, columns[cf].type)`),
+  // while a literal `=` binds using the *literal's own* JS type
+  // (`valuePositionToSQL` → `toSQLiteType(value, getJsType(value))`), and the
+  // in-memory overlay and filter paths compare the decoded row value with
+  // `===`. Those three agree only when the parent column, the child column and
+  // the literal all carry the same primitive type. Requiring `typeof value` to
+  // equal the declared type is what excludes `json` columns — encoded with
+  // `JSON.stringify` on one path but not the other — along with array literals
+  // and `null` literals, since `typeof` yields neither 'json' nor 'null'.
+  const parentType = tableSpecs.get(parent.table)?.zqlSpec[parentField]?.type;
+  const childType = tableSpecs.get(subquery.table)?.zqlSpec[childField]?.type;
+  if (
+    parentType === undefined ||
+    parentType !== childType ||
+    parentType !== typeof value
+  ) {
+    return undefined;
+  }
+
+  const pin: SimpleCondition = {
+    type: 'simple',
+    op: '=',
+    left: {type: 'column', name: childField},
+    right: {type: 'literal', value},
+  };
+  const pinned: AST = {
+    ...subquery,
+    where: subquery.where
+      ? {type: 'and', conditions: [pin, subquery.where]}
+      : pin,
+  };
+  // The same at-most-one-row test the in-subquery literal path uses; the
+  // pushed literal only widens the set of constraints it gets to see.
+  return isSimpleSubquery(pinned, tableSpecs) ? pinned : undefined;
+}
+
 function resolveScalarSubquery(
   condition: CorrelatedSubqueryCondition,
+  parent: ParentScope,
   tableSpecs: Map<string, TableSpecWithUniqueKeys>,
   execute: ScalarExecutor,
   out: Out,
@@ -158,7 +282,8 @@ function resolveScalarSubquery(
   // Recursively resolve any scalar subqueries nested in the
   // subquery's own WHERE (and related) before evaluating this one.
   const subquery = resolveASTRecursive(
-    condition.related.subquery,
+    pinWithParentLiteral(condition, parent, tableSpecs) ??
+      condition.related.subquery,
     tableSpecs,
     execute,
     out,
