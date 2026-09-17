@@ -1196,3 +1196,52 @@ describe('mergeSortedStreams', () => {
     expect(bReturned).toBe(true);
   });
 });
+
+describe('pushAdds', () => {
+  const columns = {a: {type: 'number'}, b: {type: 'string'}} as const;
+  const newSource = () => new MemorySource('t', columns, ['a']);
+  const rows: Row[] = [
+    {a: 3, b: 'x'},
+    {a: 1, b: 'z'},
+    {a: 2, b: 'y'},
+  ];
+
+  test('into an empty source matches pushing each row, sorted or not', () => {
+    for (const input of [rows, rows.toSorted((x, y) => +x.a! - +y.a!)]) {
+      const pushed = newSource();
+      for (const row of input) {
+        consume(pushed.push(makeSourceChangeAdd(row)));
+      }
+      const bulk = newSource();
+      bulk.pushAdds([...input]);
+      expect([...bulk.data]).toEqual([...pushed.data]);
+
+      // Secondary indexes and later pushes work as usual.
+      const conn = bulk.connect([
+        ['b', 'asc'],
+        ['a', 'asc'],
+      ]);
+      // Fetch first so the [b, a] index exists before the push below.
+      expect(Array.from(conn.fetch({}), n => (n as Node).row.a)).toEqual([
+        3, 2, 1,
+      ]);
+      consume(bulk.push(makeSourceChangeAdd({a: 0, b: 'zz'})));
+      expect(Array.from(conn.fetch({}), n => (n as Node).row.a)).toEqual([
+        3, 2, 1, 0,
+      ]);
+      expect(() => bulk.pushAdds([{a: 1, b: 'dup'}])).toThrow(
+        'Row already exists',
+      );
+    }
+  });
+
+  test('into a connected source notifies outputs', () => {
+    const source = newSource();
+    const out = new Catch(source.connect([['a', 'asc']]));
+    source.pushAdds([...rows]);
+    expect(out.pushes).toEqual(
+      rows.map(row => ({type: 'add', node: {row, relationships: {}}})),
+    );
+    expect(Array.from(source.data, r => r.a)).toEqual([1, 2, 3]);
+  });
+});
