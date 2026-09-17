@@ -15,14 +15,17 @@ export type {Format};
 /**
  * Creates the view `materialize` returns.
  *
- * A view must not make pushed rows observable until the callback it
- * registered with `onTransactionCommit` is called. The pushes of one
- * transaction are not always delivered in a single task: views materialized
- * before the client's data is loaded are hydrated in time slices and committed
- * together, so a view that shows rows as they are pushed shows them ahead of
- * the views it is committed with. A view that does apply pushes directly can
- * implement `holdData()`, which is called right before such a hydration and
- * should keep the current snapshot visible until the commit.
+ * A view notifies its observers from the callback it registers with
+ * `onTransactionCommit`, not from `push`. Usually the pushes of a transaction
+ * and its commit happen in one synchronous task, so nothing can look at the
+ * view in between. The exception is views materialized before the client's
+ * data is loaded: they are hydrated in time slices, over several tasks, and
+ * committed together. A view whose state is readable outside of those
+ * notifications (as `ArrayView.data` is) would show its rows ahead of the
+ * views it is committed with. Such a view can implement the optional
+ * `holdData()`, called right before that hydration, to keep showing its
+ * current snapshot, and `releaseData()`, called on every view of the batch
+ * right before they are all committed, to stop.
  */
 export type ViewFactory<
   TTable extends keyof TSchema['tables'] & string,

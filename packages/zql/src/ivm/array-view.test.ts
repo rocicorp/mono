@@ -2300,8 +2300,11 @@ test('holdData hides pushes until the next flush', () => {
   });
   expect(seen).toEqual([1]);
 
-  view.flush();
+  // releaseData shows the rows without notifying; flush notifies.
+  view.releaseData();
   expect(view.data).toHaveLength(3);
+  expect(seen).toEqual([1]);
+  view.flush();
   expect(seen).toEqual([1, 3]);
   // The snapshot handed out earlier was not mutated.
   expect(held).toHaveLength(1);
@@ -2330,6 +2333,11 @@ test('holdData holds back result type changes of a clean view', () => {
   expect(types).toEqual(['unknown']);
 
   view.holdData();
+  view.markCached();
+  expect(types).toEqual(['unknown']);
+  // Releasing the data does not end the hold on notifications.
+  view.releaseData();
+  view.unmarkCached();
   view.markCached();
   expect(types).toEqual(['unknown']);
   view.flush();

@@ -549,6 +549,7 @@ export function materializeImpl<
           return;
         }
         attached = true;
+        viewHooks?.releaseData?.();
         delegate.addMetric('query-materialization-client', hydrateMs, queryID);
         maybeResolveComplete();
         maybeMarkCached();
@@ -600,6 +601,9 @@ type OptionalViewHooks = {
   // Keep showing the current snapshot until the next flush, so a deferred
   // view does not show rows ahead of its release.
   holdData?: (() => void) | undefined;
+  // Called at the release: show the hydrated rows through `data` again, but
+  // leave notifying listeners to the flush that follows all the releases.
+  releaseData?: (() => void) | undefined;
 };
 
 function arrayViewFactory<

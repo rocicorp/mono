@@ -204,7 +204,13 @@ describe('hydratePendingPipelines', () => {
       context.materialize(newQuery(schema, 't1')),
     );
     const calls: string[] = [];
-    views.forEach((v, i) => v.addListener(d => calls.push(`${i}:${d.length}`)));
+    // Each listener also reads the last view: once any view is notified all
+    // of them show their rows, including ones not notified yet.
+    views.forEach((v, i) =>
+      v.addListener(d =>
+        calls.push(`${i}:${d.length}/${views[2].data.length}`),
+      ),
+    );
     calls.length = 0;
 
     const {done, step, parked} = sliced(context);
@@ -227,7 +233,7 @@ describe('hydratePendingPipelines', () => {
     await step();
     await done;
     expect(context.pipelinesReady).toBe(true);
-    expect(calls).toEqual(['0:2', '1:2', '2:2']);
+    expect(calls).toEqual(['0:2/2', '1:2/2', '2:2/2']);
     expect(late).toHaveBeenCalledTimes(2);
     // The last slice and the release.
     expect(batchCalls()).toBe(batchesBefore + 2);

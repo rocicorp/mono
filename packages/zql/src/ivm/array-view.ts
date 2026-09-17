@@ -69,6 +69,9 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   // Set by holdData(): the root that `data` and newly added listeners keep
   // seeing until the next flush, while pushes build up #root behind it.
   #committedRoot: Entry | undefined;
+  // From holdData() until the next flush. Outlasts #committedRoot, which
+  // releaseData() drops first.
+  #held = false;
   // The result type changed while held and clean: nothing else would make
   // the flush that ends the hold notify the listeners.
   #notifyOnFlush = false;
@@ -187,10 +190,22 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
    */
   holdData(): void {
     this.#committedRoot = this.#root;
+    this.#held = true;
+  }
+
+  /**
+   * Make `data` current again without notifying anyone yet; listeners are
+   * still only called by the next {@link flush}. Views released together get
+   * this called on all of them before any is flushed, so a listener of one
+   * that reads another sees its rows too.
+   */
+  releaseData(): void {
+    this.#committedRoot = undefined;
   }
 
   flush() {
     this.#committedRoot = undefined;
+    this.#held = false;
     if (!this.#dirty && !this.#notifyOnFlush) {
       return;
     }
@@ -236,7 +251,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     // let the pending flush deliver the new result type instead.
     // A held view is waiting to be exposed together with others at the next
     // flush; that goes for its result type as much as for its rows.
-    if (this.#committedRoot !== undefined) {
+    if (this.#held) {
       this.#notifyOnFlush = true;
     } else if (!this.#dirty) {
       this.#fireListeners();
