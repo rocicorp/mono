@@ -34,8 +34,17 @@ export class Debug implements DebugDelegate {
   #rowsBySource: RowsBySource;
   #nvisitBySource: RowCountsBySource;
   #plans: SQLitePlans;
+  readonly #collectRows: boolean;
+  readonly #maxRowsPerQuery: number;
 
-  constructor() {
+  /**
+   * @param collectRows Whether to keep the vended rows.
+   * @param maxRowsPerQuery Maximum number of rows kept per table/query. Rows
+   *   past this are still counted but not kept.
+   */
+  constructor(collectRows: boolean, maxRowsPerQuery = Infinity) {
+    this.#collectRows = collectRows;
+    this.#maxRowsPerQuery = maxRowsPerQuery;
     this.#rowCountsBySource = {};
     this.#rowsBySource = {};
     this.#nvisitBySource = {};
@@ -79,8 +88,11 @@ export class Debug implements DebugDelegate {
     if (counts) {
       counts[query] = (counts[query] ?? 0) + 1;
     }
-    if (rows) {
-      (rows[query] ??= []).push(row);
+    if (this.#collectRows) {
+      const queryRows = (rows[query] ??= []);
+      if (queryRows.length < this.#maxRowsPerQuery) {
+        queryRows.push(row);
+      }
     }
   }
 

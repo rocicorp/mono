@@ -17,7 +17,7 @@ import type {JWTAuth} from '../auth/auth.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
-import {runAst} from './run-ast.ts';
+import {MAX_ANALYZE_ROWS, runAst} from './run-ast.ts';
 import {TimeSliceTimer} from './view-syncer/view-syncer.ts';
 
 const TIME_SLICE_LAP_THRESHOLD_MS = 200;
@@ -71,8 +71,9 @@ export async function analyzeQuery(
       permissions,
       costModel,
       planDebugger,
+      maxSyncedRowsPerTable: MAX_ANALYZE_ROWS,
       host: {
-        debug: new Debug(),
+        debug: new Debug(vendedRows, MAX_ANALYZE_ROWS),
         enableNotExists: true,
         getSource(tableName: string) {
           let source = tables.get(tableName);
