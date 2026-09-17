@@ -20,6 +20,7 @@ import './ivm-memory.bench.ts';
 import './array-view-relationships.bench.ts';
 import './array-view-transaction.bench.ts';
 import './cold-boot-hydration.bench.ts';
+import './cold-boot-breakdown.bench.ts';
 import './memory-ivm-deopt.bench.ts';
 import './debug-row-vended.bench.ts';
 import './query-hash.bench.ts';

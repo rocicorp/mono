@@ -23,10 +23,21 @@ await runRnBench({
   // never drift from what the device actually runs. The bundle is plain ESM
   // with no React Native imports, so Node can load it directly.
   listBenchmarks: async () => {
+    // The bundle is loaded under Node here, where the cold boot breakdown only registers
+    // with this set; on the device it always does.
+    process.env.COLD_BOOT_BREAKDOWN = '1';
     const bundle = (await import(path.join(rootDir, 'out', 'rn.js'))) as {
       benchmarks: {name: string; group: string}[];
     };
-    return bundle.benchmarks.map(({name, group}) => ({name, group}));
+    // The cold boot breakdown is opt-in: each sample loads 180k rows, which is
+    // too heavy for a default run and degrades the emulator for whatever runs
+    // after it. Name it with --run to get it.
+    const optIn = process.argv.some(
+      a => a === '--run' || a.startsWith('--run='),
+    );
+    return bundle.benchmarks
+      .filter(({name}) => optIn || !name.startsWith('cold boot breakdown'))
+      .map(({name, group}) => ({name, group}));
   },
 
   configureExpr: () => '__zqlPerf.configure()',
