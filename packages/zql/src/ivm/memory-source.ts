@@ -54,7 +54,7 @@ import type {
   SourceInput,
 } from './source.ts';
 import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
-import type {Stream} from './stream.ts';
+import {consume, type Stream} from './stream.ts';
 
 export type Overlay = {
   epoch: number;
@@ -470,6 +470,39 @@ export class MemorySource implements Source {
       }
       if (matchesAll) yield node;
     }
+  }
+
+  /**
+   * Pushes an add for each of `rows`.
+   *
+   * When the source holds no rows and nothing is connected to it (loading the
+   * replica at startup) there is no output to notify and no secondary index to
+   * keep in step, so the primary index is built bottom-up in O(N) (plus a sort
+   * when `rows` are not already in primary key order) rather than doing one
+   * tree insert, and one trip through the push machinery, per row.
+   *
+   * `rows` may be sorted in place. Rows must have distinct primary keys.
+   */
+  pushAdds(rows: Row[]): void {
+    const index = this.#getPrimaryIndex();
+    const canBulkLoad =
+      this.#connections.length === 0 &&
+      this.#indexes.size === 1 &&
+      index.data.size === 0;
+    if (!canBulkLoad) {
+      for (const row of rows) {
+        consume(this.push(makeSourceChangeAdd(row)));
+      }
+      return;
+    }
+    const {comparator} = index;
+    // The check is not redundant with the sort. V8's TimSort is O(N) on sorted
+    // input but Hermes' sort is not adaptive: always sorting doubled the load
+    // time of an already ordered 180k row replica on Android (343ms -> 672ms).
+    if (!isAscending(rows, comparator)) {
+      rows.sort(comparator);
+    }
+    index.data = BTreeSet.fromSorted(comparator, rows);
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -1017,6 +1050,15 @@ const minValue = Symbol('min-value');
 type MinValue = typeof minValue;
 const maxValue = Symbol('max-value');
 type MaxValue = typeof maxValue;
+
+function isAscending(rows: Row[], comparator: Comparator): boolean {
+  for (let i = 1; i < rows.length; i++) {
+    if (comparator(rows[i - 1], rows[i]) > 0) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function makeBoundComparator(sort: Ordering): Comparator {
   // Pre-extract the first two keys/directions to avoid per-call array access.
