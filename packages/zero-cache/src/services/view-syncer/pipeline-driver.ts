@@ -97,13 +97,15 @@ type Pipeline = {
   readonly pipelineRunID: string;
   readonly pipelineReadyAtMs: number;
   readonly transformedAst: AST;
+  readonly originalAst: AST;
   readonly transformationHash: string;
   readonly queryName?: string | undefined;
   readonly companions: readonly CompanionPipeline[];
 };
 
-type QueryInfo = {
+export type QueryInfo = {
   readonly transformedAst: AST;
+  readonly originalAst?: AST | undefined;
   readonly transformationHash: string;
   readonly queryName?: string | undefined;
 };
@@ -823,6 +825,7 @@ export class PipelineDriver {
         pipelineRunID,
         pipelineReadyAtMs,
         transformedAst: resolvedQuery,
+        originalAst: query,
         transformationHash,
         ...(queryName !== undefined && {queryName}),
         companions: liveCompanions,

@@ -7,6 +7,7 @@ import {
 } from '../../../../shared/src/logging-test-utils.ts';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import {type AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {TransformResponseBody} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -50,6 +51,7 @@ import type {DrainCoordinator} from './drain-coordinator.ts';
 import {type RowChange, PipelineDriver} from './pipeline-driver.ts';
 import {formatSignature, rowIDSignatureUnit} from './row-set-signature.ts';
 import type {RowID} from './schema/types.ts';
+import {ResetPipelinesSignal} from './snapshotter.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   app2Messages,
@@ -2586,6 +2588,357 @@ describe('view-syncer/service', () => {
           ],
         ]
       `);
+    });
+
+    test('does not re-transform custom queries across pipeline resets (e.g. advancement-timeout)', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+            {
+              id: 'custom-2',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-2',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      // First client connection transformed custom queries once for auth validation
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate an advancement-timeout pipeline reset on the next replica advance
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal(
+            'Advancement exceeded timeout',
+            'advancement-timeout',
+          );
+        });
+
+      // Mutate a row and trigger advance -> throws ResetPipelinesSignal -> resets pipelines -> rehydrates
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      // Advance again with another mutation so the rehydrated pipelines advance normally and poke the client
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      // Verify advance was called and threw the signal on the first attempt
+      expect(advanceSpy).toHaveBeenCalled();
+
+      // Verify that transform was NOT called again during pipeline reset rehydration!
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('re-transforms custom queries when reset is caused by permissions-change', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate a permissions-change pipeline reset
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal(
+            'Permissions changed',
+            'permissions-change',
+          );
+        });
+
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+
+      // Verify that transform WAS called again because permissions changed!
+      expect(transformSpy).toHaveBeenCalledTimes(2);
+    });
+
+    test('does not re-transform custom queries across scalar-subquery resets and preserves reactive monitoring', async () => {
+      const scalarQuery: AST = {
+        table: 'issues',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['issueID'],
+            },
+            subquery: {
+              table: 'comments',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'id'},
+                right: {type: 'literal', value: '1'},
+              },
+            },
+          },
+        },
+      };
+
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: scalarQuery,
+              transformationHash: 'hash-scalar-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Mutate comment '1' issueID from '1' to '2':
+      // The companion pipeline detects the scalar value change and throws ResetPipelinesSignal with 'scalar-subquery'.
+      replicator.processTransaction(
+        '101',
+        messages.update('comments', {id: '1', issueID: '2', text: 'comment 1'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      // Advance again with another transaction so rehydrated pipelines advance normally and poke the client
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      // Verify that transform was NOT called again during scalar-subquery pipeline reset rehydration!
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Verify companion monitor is still active and reactive:
+      // Mutating comment '1' issueID again from '2' to '3' triggers scalar monitoring again!
+      replicator.processTransaction(
+        '103',
+        messages.update('comments', {id: '1', issueID: '3', text: 'comment 1'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      // Another transaction so rehydrated pipelines advance
+      replicator.processTransaction(
+        '104',
+        messages.delete('issues', {id: '4'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      // Still no external transform call!
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not re-transform custom queries across truncation resets', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate a truncation reset
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal('Table was truncated', 'truncation');
+        });
+
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not re-transform custom queries across schema-change resets', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate a schema-change reset
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal(
+            'schema for table issues has changed',
+            'schema-change',
+          );
+        });
+
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('re-transforms custom queries on reset when deprecated client queries exist', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'client-1', ast: COMMENTS_QUERY},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate an advancement-timeout reset
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal(
+            'Advancement exceeded timeout',
+            'advancement-timeout',
+          );
+        });
+
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+      // Because a deprecated client query was present, full wipe reset occurs and transform is called again
+      expect(transformSpy).toHaveBeenCalledTimes(2);
     });
 
     test('retransforms custom queries when opaque auth refreshes', async () => {
