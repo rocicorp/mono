@@ -2595,6 +2595,45 @@ test('holdData makes a result type transition wait for the commit without rows',
   expect(state[1]).toEqual({type: 'unknown'});
 });
 
+test('holdData makes an error wait for the commit', async () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+
+  let commit: () => void = () => {};
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const queryComplete = resolver<true>();
+
+  const view = new SolidView(
+    ms.connect([['a', 'asc']]),
+    cb => {
+      commit = cb;
+    },
+    {singular: false, relationships: {}},
+    () => {},
+    queryComplete.promise,
+    () => {},
+    setState,
+    () => {},
+  );
+
+  // A deferred attach that fails in an early slice rejects while the rest of
+  // the batch is still being hydrated.
+  view.holdData();
+  queryComplete.reject({error: 'app', id: 'q', name: 'q', message: 'boom'});
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(state[1]).toEqual({type: 'unknown'});
+  commit();
+  expect(state[1]).toMatchObject({type: 'error', error: {message: 'boom'}});
+});
+
 const schema = createSchema({
   tables: [
     table('test')

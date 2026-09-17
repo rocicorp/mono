@@ -152,7 +152,9 @@ export class SolidView implements Output {
           this.#setState(prev => [prev[0], COMPLETE]);
         })
         .catch((error: ErroredQuery) => {
-          this.#setState(prev => [prev[0], this.#makeError(error)]);
+          // Through the pending path: a deferred attach that fails is
+          // published with the commit of its batch, not during it.
+          this.#transitionResultType(prev => [prev[0], this.#makeError(error)]);
         });
     }
   }
