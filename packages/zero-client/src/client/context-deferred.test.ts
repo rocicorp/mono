@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect, test, vi} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -155,4 +155,166 @@ test('a deferred pipeline that fails at attach is logged and does not strand the
   await vi.waitFor(() => expect(type).toBe('error'));
 
   view.destroy();
+});
+
+describe('hydratePendingPipelines', () => {
+  // Hydrates one pipeline per slice and parks at every yield until `step()`.
+  function sliced(context: ZeroContext) {
+    let resume: (() => void) | undefined;
+    const done = context.hydratePendingPipelines(
+      0,
+      () => new Promise<void>(resolve => (resume = resolve)),
+    );
+    const step = async () => {
+      const r = resume;
+      resume = undefined;
+      r?.();
+      // Let the awaiting loop run its next slice.
+      await Promise.resolve();
+      await Promise.resolve();
+    };
+    return {done, step, parked: () => resume !== undefined};
+  }
+
+  function loaded() {
+    const c = newContext();
+    c.context.processChanges(undefined, 'h1' as Hash, [
+      add('e1', 'one'),
+      add('e2', 'two'),
+    ]);
+    return c;
+  }
+
+  test('yields between pipelines and releases every view in one batch', async () => {
+    const {context, batchCalls} = loaded();
+    const views = [1, 2, 3].map(() =>
+      context.materialize(newQuery(schema, 't1')),
+    );
+    const calls: string[] = [];
+    views.forEach((v, i) => v.addListener(d => calls.push(`${i}:${d.length}`)));
+    calls.length = 0;
+
+    const {done, step, parked} = sliced(context);
+    // First slice ran synchronously: one pipeline hydrated, nothing exposed.
+    expect(parked()).toBe(true);
+    expect(context.pipelinesReady).toBe(false);
+    expect(views.map(v => v.data.length)).toEqual([0, 0, 0]);
+
+    // A listener added now sees the committed (empty) snapshot, not the rows
+    // already pushed into the first view.
+    const late = vi.fn();
+    views[0].addListener(late);
+    expect(late).toHaveBeenLastCalledWith([], 'unknown', undefined);
+
+    await step();
+    expect(parked()).toBe(true);
+    expect(calls).toEqual([]);
+
+    const batchesBefore = batchCalls();
+    await step();
+    await done;
+    expect(context.pipelinesReady).toBe(true);
+    expect(calls).toEqual(['0:2', '1:2', '2:2']);
+    expect(late).toHaveBeenCalledTimes(2);
+    // The last slice and the release.
+    expect(batchCalls()).toBe(batchesBefore + 2);
+    for (const v of views) {
+      v.destroy();
+    }
+  });
+
+  test('a query materialized while hydrating joins the same release', async () => {
+    const {context} = loaded();
+    const first = context.materialize(newQuery(schema, 't1'));
+    const second = context.materialize(newQuery(schema, 't1').limit(1));
+    const calls: string[] = [];
+    first.addListener(d => calls.push(`first:${d.length}`));
+    second.addListener(d => calls.push(`second:${d.length}`));
+
+    const {done, step} = sliced(context);
+    const joined = context.materialize(newQuery(schema, 't1').limit(2));
+    joined.addListener(d => calls.push(`joined:${d.length}`));
+    expect(joined.data).toEqual([]);
+    calls.length = 0;
+
+    await step();
+    await step();
+    await done;
+    expect(calls).toEqual(['first:2', 'second:1', 'joined:2']);
+
+    // After the release materialize is immediate again.
+    expect(context.materialize(newQuery(schema, 't1')).data).toHaveLength(2);
+  });
+
+  test('complete is not reported before the release', async () => {
+    const gots: ((got: boolean) => void)[] = [];
+    const context = new ZeroContext(
+      new LogContext('info'),
+      new IVMSourceBranch(schema.tables),
+      ((_ast: unknown, _ttl: unknown, got: (got: boolean) => void) => {
+        gots.push(got);
+        return () => {};
+      }) as unknown as AddQuery,
+      (() => () => {}) as unknown as AddCustomQuery,
+      (() => {}) as unknown as UpdateQuery,
+      (() => {}) as unknown as UpdateCustomQuery,
+      (() => {}) as unknown as FlushQueryChanges,
+      applyViewUpdates => applyViewUpdates(),
+      () => {},
+      () => {},
+    );
+    // No rows: hydration leaves the views clean, so only the deferred
+    // release keeps 'complete' from firing as soon as the first one attaches.
+    const a = context.materialize(newQuery(schema, 't1'));
+    const b = context.materialize(newQuery(schema, 't1').limit(1));
+    const calls: string[] = [];
+    a.addListener((_, type) => calls.push(`a:${type}`));
+    b.addListener((_, type) => calls.push(`b:${type}`));
+    gots.forEach(got => got(true));
+    calls.length = 0;
+
+    const {done, step} = sliced(context);
+    await Promise.resolve();
+    expect(calls).toEqual([]);
+    await step();
+    await done;
+    // Completion is delivered through a promise.
+    await Promise.resolve();
+    expect(calls).toEqual(['a:complete', 'b:complete']);
+  });
+
+  test('a view destroyed while hydrating is skipped', async () => {
+    const {context} = loaded();
+    const hydrated = context.materialize(newQuery(schema, 't1'));
+    const pending = context.materialize(newQuery(schema, 't1').limit(1));
+    const hydratedListener = vi.fn();
+    hydrated.addListener(hydratedListener);
+
+    const {done, step} = sliced(context);
+    hydrated.destroy();
+    pending.destroy();
+    await step();
+    await done;
+    expect(context.pipelinesReady).toBe(true);
+    expect(hydratedListener).toHaveBeenCalledTimes(1);
+  });
+
+  test('processChanges while hydrating is rejected', async () => {
+    const {context} = loaded();
+    context.materialize(newQuery(schema, 't1'));
+    context.materialize(newQuery(schema, 't1').limit(1));
+    const {done, step} = sliced(context);
+    expect(() =>
+      context.processChanges('h1' as Hash, 'h2' as Hash, [add('e3', 'three')]),
+    ).toThrow('while pipelines are being hydrated');
+    await step();
+    await done;
+  });
+
+  test('nothing pending resolves without a batch', async () => {
+    const {context, batchCalls} = newContext();
+    await context.hydratePendingPipelines();
+    expect(context.pipelinesReady).toBe(true);
+    expect(batchCalls()).toBe(0);
+  });
 });

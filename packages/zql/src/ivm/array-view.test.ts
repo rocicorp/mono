@@ -2268,3 +2268,45 @@ test('unique relationship aliases work correctly', () => {
   const userAfter = data[0] as {all_applications: unknown[]};
   expect(userAfter.all_applications).toHaveLength(0);
 });
+
+test('holdData hides pushes until the next flush', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  consume(ms.push(makeSourceChangeAdd({a: 1, b: 'a'})));
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+  const held = view.data;
+  expect(held).toHaveLength(1);
+
+  view.holdData();
+  consume(ms.push(makeSourceChangeAdd({a: 2, b: 'b'})));
+  consume(ms.push(makeSourceChangeAdd({a: 3, b: 'c'})));
+
+  // Neither `data` nor a listener added now sees the pushes.
+  expect(view.data).toBe(held);
+  const seen: number[] = [];
+  view.addListener(entries => {
+    assertArray(entries);
+    seen.push(entries.length);
+  });
+  expect(seen).toEqual([1]);
+
+  view.flush();
+  expect(view.data).toHaveLength(3);
+  expect(seen).toEqual([1, 3]);
+  // The snapshot handed out earlier was not mutated.
+  expect(held).toHaveLength(1);
+
+  // Without a hold, unflushed pushes are visible through `data` as before.
+  consume(ms.push(makeSourceChangeAdd({a: 4, b: 'd'})));
+  expect(view.data).toHaveLength(4);
+});

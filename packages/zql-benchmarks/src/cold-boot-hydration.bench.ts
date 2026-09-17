@@ -13,19 +13,20 @@
  */
 
 import {bench, describe} from '../../shared/src/bench.ts';
+import type {AttachPipeline} from '../../zql/src/query/query-delegate.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
 import {load, makeSources, QUERIES} from './cold-boot-data.ts';
 
 class DeferredDelegate extends QueryDelegateImpl {
   #ready = false;
-  readonly #pending = new Set<() => void>();
+  readonly #pending = new Set<AttachPipeline>();
 
   override get pipelinesReady(): boolean {
     return this.#ready;
   }
 
-  override onPipelinesReady(cb: () => void): () => void {
+  override onPipelinesReady(cb: AttachPipeline): () => void {
     this.#pending.add(cb);
     return () => {
       this.#pending.delete(cb);
@@ -37,8 +38,8 @@ class DeferredDelegate extends QueryDelegateImpl {
     const pending = [...this.#pending];
     this.#pending.clear();
     this.batchViewUpdates(() => {
-      for (const attach of pending) {
-        attach();
+      for (const release of pending.map(attach => attach())) {
+        release();
       }
     });
     this.commit();

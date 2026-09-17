@@ -17,6 +17,7 @@ import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricMap} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
 import type {
+  AttachPipeline,
   CommitListener,
   GotCallback,
   QueryDelegate,
@@ -254,7 +255,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     return true;
   }
 
-  onPipelinesReady(_cb: () => void): () => void {
+  onPipelinesReady(_attach: AttachPipeline): () => void {
     throw new Error(
       'onPipelinesReady called on a delegate whose pipelines are always ready',
     );
@@ -517,10 +518,11 @@ export function materializeImpl<
     removePendingAttach = delegate.onPipelinesReady(() => {
       removePendingAttach = undefined;
       if (deferred.destroyed) {
-        return;
+        return () => {};
       }
       const t1 = performance.now();
       try {
+        viewForCached?.holdData?.();
         deferred.attach();
       } catch (e) {
         // Surface the failure on this view and let the delegate decide how
@@ -535,14 +537,18 @@ export function materializeImpl<
         queryCompleteResolver.reject(error);
         throw e;
       }
-      attached = true;
-      delegate.addMetric(
-        'query-materialization-client',
-        performance.now() - t1,
-        queryID,
-      );
-      maybeResolveComplete();
-      maybeMarkCached();
+      const hydrateMs = performance.now() - t1;
+      // The view holds its rows now but must not say so yet: the delegate
+      // releases every view hydrated in the same batch together.
+      return () => {
+        if (destroyed) {
+          return;
+        }
+        attached = true;
+        delegate.addMetric('query-materialization-client', hydrateMs, queryID);
+        maybeResolveComplete();
+        maybeMarkCached();
+      };
     });
   }
 
@@ -586,6 +592,9 @@ function newDeferredInput(
 type CachedMarkableView = {
   markCached?: (() => void) | undefined;
   unmarkCached?: (() => void) | undefined;
+  // Keeps the view showing its current snapshot until its next flush, so a
+  // deferred view does not show rows ahead of its release.
+  holdData?: (() => void) | undefined;
 };
 
 function arrayViewFactory<

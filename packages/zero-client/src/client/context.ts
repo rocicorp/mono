@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {DebugDelegate} from '../../../zql/src/builder/debug-delegate.ts';
@@ -10,7 +11,10 @@ import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import {MeasurePushOperator} from '../../../zql/src/query/measure-push-operator.ts';
 import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
-import type {CommitListener} from '../../../zql/src/query/query-delegate.ts';
+import type {
+  AttachPipeline,
+  CommitListener,
+} from '../../../zql/src/query/query-delegate.ts';
 import type {RunOptions} from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
@@ -27,6 +31,22 @@ export type FlushQueryChanges = QueryManager['flushBatch'];
  * Replicache data and pushes them into IVM and on tells the server about new
  * queries.
  */
+/**
+ * How long pipelines are hydrated for before yielding to the event loop. Short
+ * enough to keep a frame or two, long enough that the yields themselves (a
+ * `setTimeout(0)` is clamped to 4ms in browsers) stay in the noise.
+ */
+const HYDRATE_SLICE_MS = 12;
+
+function defaultYield(): Promise<void> {
+  // Not in React Native, nor in Safari or Firefox at the time of writing.
+  const scheduler = getBrowserGlobal('scheduler');
+  if (typeof scheduler?.yield === 'function') {
+    return scheduler.yield();
+  }
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 export class ZeroContext extends QueryDelegateBase {
   readonly #lc: LogContext;
 
@@ -51,7 +71,8 @@ export class ZeroContext extends QueryDelegateBase {
   // populated at construction (custom mutator transactions, tests) call it
   // right away.
   #pipelinesReady = false;
-  readonly #pendingPipelines: Set<() => void> = new Set();
+  readonly #pendingPipelines: Set<AttachPipeline> = new Set();
+  #hydratingPipelines = false;
 
   readonly assertValidRunOptions: (options?: RunOptions) => void;
 
@@ -100,7 +121,7 @@ export class ZeroContext extends QueryDelegateBase {
     return this.#pipelinesReady;
   }
 
-  override onPipelinesReady(cb: () => void): () => void {
+  override onPipelinesReady(cb: AttachPipeline): () => void {
     assert(
       !this.#pipelinesReady,
       'onPipelinesReady called while pipelines are ready',
@@ -124,32 +145,92 @@ export class ZeroContext extends QueryDelegateBase {
     if (this.#pipelinesReady) {
       return this;
     }
-    this.#pipelinesReady = true;
+    assert(!this.#hydratingPipelines, 'Pipelines are already being hydrated');
     if (this.#pendingPipelines.size === 0) {
+      this.#pipelinesReady = true;
       return this;
     }
-    const pending = [...this.#pendingPipelines];
-    this.#pendingPipelines.clear();
     this.batchViewUpdates(() => {
-      try {
-        for (const attach of pending) {
-          try {
-            attach();
-          } catch (e) {
-            // The failing view has already been marked as errored; keep
-            // building the others rather than aborting startup.
-            this.#lc.error?.(
-              ErrorKind.Internal,
-              'Failed to build a deferred query pipeline',
-              e,
-            );
-          }
-        }
-      } finally {
-        this.#endTransaction();
-      }
+      const releases: (() => void)[] = [];
+      this.#attachPending(releases, () => false);
+      this.#release(releases);
     });
     return this;
+  }
+
+  /**
+   * Like {@link markPipelinesReady} but hydrates in time slices, yielding to
+   * the event loop in between so a burst of queries registered at startup does
+   * not monopolize the thread. It only ever yields *between* pipelines.
+   *
+   * No view is exposed until all of them are hydrated: they are released, and
+   * the commit listeners notified, in one synchronous batch at the end.
+   * Queries materialized in the meantime are still deferred and join that
+   * batch. The caller must not call {@link processChanges} until the returned
+   * promise resolves.
+   */
+  async hydratePendingPipelines(
+    sliceMs = HYDRATE_SLICE_MS,
+    yieldToEventLoop: () => Promise<void> = defaultYield,
+  ): Promise<void> {
+    if (this.#pipelinesReady) {
+      return;
+    }
+    assert(!this.#hydratingPipelines, 'Pipelines are already being hydrated');
+    if (this.#pendingPipelines.size === 0) {
+      this.#pipelinesReady = true;
+      return;
+    }
+    this.#hydratingPipelines = true;
+    const releases: (() => void)[] = [];
+    for (;;) {
+      const sliceEnd = performance.now() + sliceMs;
+      this.batchViewUpdates(() => {
+        this.#attachPending(releases, () => performance.now() >= sliceEnd);
+      });
+      if (this.#pendingPipelines.size === 0) {
+        break;
+      }
+      await yieldToEventLoop();
+    }
+    this.#hydratingPipelines = false;
+    this.batchViewUpdates(() => this.#release(releases));
+  }
+
+  /**
+   * Attaches pending pipelines, always at least one, until none are left or
+   * `shouldStop` says the slice is over.
+   */
+  #attachPending(releases: (() => void)[], shouldStop: () => boolean) {
+    for (const attach of this.#pendingPipelines) {
+      this.#pendingPipelines.delete(attach);
+      try {
+        releases.push(attach());
+      } catch (e) {
+        // The failing view has already been marked as errored; keep
+        // building the others rather than aborting startup.
+        this.#lc.error?.(
+          ErrorKind.Internal,
+          'Failed to build a deferred query pipeline',
+          e,
+        );
+      }
+      if (shouldStop()) {
+        return;
+      }
+    }
+  }
+
+  /** Must be called inside `batchViewUpdates`. */
+  #release(releases: (() => void)[]) {
+    this.#pipelinesReady = true;
+    try {
+      for (const release of releases) {
+        release();
+      }
+    } finally {
+      this.#endTransaction();
+    }
   }
 
   mapAst(ast: AST): AST {
@@ -186,6 +267,11 @@ export class ZeroContext extends QueryDelegateBase {
     newHead: Hash,
     changes: NoIndexDiff,
   ) {
+    // Views hydrated so far would flush ahead of the rest of their batch.
+    assert(
+      !this.#hydratingPipelines,
+      'processChanges called while pipelines are being hydrated',
+    );
     this.batchViewUpdates(() => {
       try {
         this.#mainSources.advance(expectedHead, newHead, changes);

@@ -66,6 +66,9 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   onDestroy: (() => void) | undefined;
 
   #dirty = false;
+  // Set by holdData(): the root `data` and newly added listeners keep seeing
+  // until the next flush, while pushes build up #root behind it.
+  #committedRoot: Entry | undefined;
   #resultType: ResultType = 'unknown';
   #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
@@ -103,7 +106,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   get data() {
-    return this.#root[''] as V;
+    return (this.#committedRoot ?? this.#root)[''] as V;
   }
 
   #getSchema(): SourceSchema {
@@ -168,7 +171,22 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     return emptyArray;
   }
 
+  /**
+   * Keep exposing the current snapshot until the next {@link flush}, whatever
+   * is pushed in the meantime.
+   *
+   * A transaction is normally one synchronous task, so nobody can look at a
+   * view between its pushes and its flush. Deferred pipelines are different:
+   * they are hydrated over several tasks and flushed together (see
+   * `QueryDelegate.onPipelinesReady`), and a view that already has its rows
+   * must not show them early.
+   */
+  holdData(): void {
+    this.#committedRoot = this.#root;
+  }
+
   flush() {
+    this.#committedRoot = undefined;
     if (!this.#dirty) {
       return;
     }
