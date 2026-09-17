@@ -45,7 +45,11 @@ import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {ClientHandler} from './client-handler.ts';
 import type {ConnectionValidation} from './connection-context-manager.ts';
 import {CVRStore} from './cvr-store.ts';
-import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
+import {
+  CVRConfigDrivenUpdater,
+  CVRQueryDrivenUpdater,
+  CVRUpdater,
+} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
 import {type RowChange, PipelineDriver} from './pipeline-driver.ts';
 import {formatSignature, rowIDSignatureUnit} from './row-set-signature.ts';
@@ -5987,6 +5991,110 @@ describe('view-syncer/service', () => {
       message: 'CVR is at version 07',
       origin: ErrorOrigin.ZeroCache,
     } satisfies ErrorBody);
+  });
+
+  test('resets pipelines when a reloaded CVR was advanced by another task', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // Hydrated at replica version '01'.
+
+    // Another task takes over the client group, adds a query, and hydrates
+    // it at a version this task's replica has not reached yet.
+    const otherStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD,
+      'some-other-task-id',
+      serviceID,
+      ON_FAILURE,
+    );
+    const otherConnectTime = Date.now();
+    const otherTTLClock = ttlClockFromNumber(otherConnectTime);
+    const configUpdater = new CVRConfigDrivenUpdater(
+      otherStore,
+      await otherStore.load(lc, otherConnectTime),
+      SHARD,
+    );
+    configUpdater.putDesiredQueries(SYNC_CONTEXT.clientID, [
+      {hash: 'query-hash2', ast: USERS_QUERY},
+    ]);
+    const {cvr: otherCVR} = await configUpdater.flush(
+      lc,
+      otherConnectTime,
+      otherConnectTime,
+      otherTTLClock,
+    );
+    const queryUpdater = new CVRQueryDrivenUpdater(
+      otherStore,
+      otherCVR,
+      '07',
+      REPLICA_VERSION,
+    );
+    queryUpdater.trackQueries(
+      lc,
+      [{id: 'query-hash2', transformationHash: 'other-hash'}],
+      [],
+    );
+    await queryUpdater.deleteUnreferencedRows(lc);
+    await queryUpdater.flush(
+      lc,
+      otherConnectTime,
+      otherConnectTime,
+      otherTTLClock,
+    );
+    // Wait for the fire-and-forget takeover to happen.
+    await vi.waitFor(async () =>
+      expect(await getCVROwner()).toBe('some-other-task-id'),
+    );
+    await sleep(5); // The next connection must be newer than the takeover.
+
+    // A client that synced with the other task connects here. It is ahead of
+    // this task's cached CVR, which fails the connection and drops the cache.
+    const client2 = connect(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2', baseCookie: '07'},
+      [],
+    );
+    await expect(client2.dequeue()).rejects.toMatchObject({
+      errorBody: {kind: ErrorKind.InvalidConnectionRequestBaseCookie},
+    });
+
+    // The next command reloads the CVR at '07' while the pipelines are
+    // still at '01'. This must not fail the connection.
+    await vs.deleteClients(SYNC_CONTEXT, [
+      'deleteClients',
+      {clientIDs: ['no-such-client']},
+    ]);
+    expect(await client.dequeue()).toEqual([
+      'deleteClients',
+      {clientIDs: ['no-such-client']},
+    ]);
+    await expectNoPokes(client);
+    expect(
+      logSink.messages.some(
+        ([level, , args]) =>
+          level === 'info' &&
+          String(args[0]).startsWith(
+            'resetting pipelines: pipelines@01 are behind reloaded cvr@07',
+          ),
+      ),
+    ).toBe(true);
+
+    // Once the replica catches up, the pipelines are rehydrated from the CVR.
+    const db = new StatementRunner(replica);
+    updateReplicationWatermark(db, '07');
+    stateChanges.push({state: 'version-ready'});
+    await vi.waitFor(() =>
+      expect(
+        logSink.messages.some(
+          ([level, , args]) =>
+            level === 'info' && String(args[0]).startsWith('init pipelines@07'),
+        ),
+      ).toBe(true),
+    );
+    expect(logSink.messages.filter(([level]) => level === 'error')).toEqual([]);
   });
 
   test('clean up operator storage on close', async () => {
