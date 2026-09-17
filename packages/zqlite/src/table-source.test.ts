@@ -1178,7 +1178,7 @@ test('debug.recordExplain captures the plan SQLite picked for the real bindings'
     ['id'],
   );
 
-  const debug = new Debug();
+  const debug = new Debug(false);
   const input = source.connect([['id', 'asc']], undefined, undefined, debug);
 
   // Drain the iterator with a constraint that uses the email index.
@@ -1234,7 +1234,7 @@ test('captured plan diverges from substituted-literal plan when bindings affect 
     right: {type: 'literal', value: 'name_5%'},
   } as const;
 
-  const debug = new Debug();
+  const debug = new Debug(false);
   const input = source.connect([['id', 'asc']], likeFilter, undefined, debug);
 
   [...input.fetch({})];
