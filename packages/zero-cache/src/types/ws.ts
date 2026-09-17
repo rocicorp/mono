@@ -68,20 +68,43 @@ export function expectPingsForLiveness(
   intervalMs: number,
   timeoutBufferMs = 3_000,
 ) {
+  const timeoutMs = intervalMs + timeoutBufferMs;
   let gotLivenessSignal = false;
 
-  const livenessTimer = setInterval(() => {
-    if (!gotLivenessSignal) {
+  let livenessTimer: NodeJS.Timeout | undefined;
+  function startLivenessChecks() {
+    livenessTimer = setInterval(() => {
+      if (!gotLivenessSignal) {
+        lc.warn?.(
+          `socket@${ws.url} did not send heartbeat or messages. Terminating...`,
+        );
+        ws.terminate();
+        return;
+      }
+      // Reset gotLivenessSignal and expect another ping or message to arrive
+      // before the next interval elapses.
+      gotLivenessSignal = false;
+    }, timeoutMs);
+  }
+
+  if (ws.readyState === ws.CONNECTING) {
+    // Heartbeats only start once the connection is open, so time out the
+    // handshake separately. Otherwise a slow handshake eats into the first
+    // heartbeat interval, and a stuck one is reported as a missed heartbeat.
+    const connectTimer = setTimeout(() => {
       lc.warn?.(
-        `socket@${ws.url} did not send heartbeat or messages. Terminating...`,
+        `socket@${ws.url} did not connect within ${timeoutMs} ms. Terminating...`,
       );
       ws.terminate();
-      return;
-    }
-    // Reset gotLivenessSignal and expect another ping or message to arrive
-    // before the next interval elapses.
-    gotLivenessSignal = false;
-  }, intervalMs + timeoutBufferMs);
+    }, timeoutMs);
+    ws.once('open', () => {
+      clearTimeout(connectTimer);
+      startLivenessChecks();
+    });
+    ws.once('close', () => clearTimeout(connectTimer));
+  } else if (ws.readyState === ws.OPEN) {
+    startLivenessChecks();
+  }
 
   // Both pings and messages are accepted as signs of liveness.
   // Checking for pings only risks false positives as pings may be backed
@@ -89,5 +112,5 @@ export function expectPingsForLiveness(
   const signalAlive = () => (gotLivenessSignal = true);
   ws.on('ping', signalAlive);
   ws.on('message', signalAlive);
-  ws.once('close', () => clearTimeout(livenessTimer));
+  ws.once('close', () => clearInterval(livenessTimer));
 }
