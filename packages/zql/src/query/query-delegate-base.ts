@@ -303,6 +303,10 @@ export async function runImpl<
 
   options?.type satisfies 'unknown' | undefined;
 
+  // A snapshot of what the view holds right now. While the delegate's
+  // pipelines are not ready the view is deferred and this is empty; 'unknown'
+  // has never waited for the local data, so it does not wait for that either.
+
   const ret = v.data;
   v.destroy();
   return ret;
