@@ -20,6 +20,7 @@ import {runAst} from './run-ast.ts';
 
 // Mock the runAst function
 vi.mock('./run-ast.ts', () => ({
+  MAX_ANALYZE_ROWS: 1000,
   runAst: vi.fn(),
 }));
 

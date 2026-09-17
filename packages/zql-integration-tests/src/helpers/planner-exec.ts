@@ -554,7 +554,7 @@ export async function createPlannerInfrastructure(config: {
 
       // Enable row count tracking
       runtimeDebugFlags.trackRowCountsVended = true;
-      const debug = new Debug();
+      const debug = new Debug(false);
       selectedDelegate.debug = debug;
 
       try {

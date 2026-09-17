@@ -654,7 +654,7 @@ export class PipelineDriver {
       hydrationReason,
     });
     const debugDelegate = runtimeDebugFlags.trackRowsVended
-      ? new Debug()
+      ? new Debug(true)
       : undefined;
 
     const costModel = this.#ensureCostModelExistsIfEnabled(
