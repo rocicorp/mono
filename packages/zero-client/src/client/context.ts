@@ -3,6 +3,7 @@ import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
+import type {DocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {DebugDelegate} from '../../../zql/src/builder/debug-delegate.ts';
@@ -32,21 +33,6 @@ export type FlushQueryChanges = QueryManager['flushBatch'];
  * `setTimeout(0)` is clamped to 4ms in browsers) stay in the noise.
  */
 const HYDRATE_SLICE_MS = 12;
-
-function defaultYield(): Promise<void> {
-  // Not in React Native or Safari.
-  const scheduler = getBrowserGlobal('scheduler');
-  if (typeof scheduler?.yield === 'function') {
-    return scheduler.yield();
-  }
-  // Timers are throttled to a second or more in a background tab, which would
-  // stretch startup to minutes, and a hidden page has nothing to keep
-  // responsive anyway.
-  if (getBrowserGlobal('document')?.visibilityState === 'hidden') {
-    return Promise.resolve();
-  }
-  return new Promise(resolve => setTimeout(resolve, 0));
-}
 
 /**
  * ZeroContext glues together zql and Replicache. It listens to changes in
@@ -79,6 +65,7 @@ export class ZeroContext extends QueryDelegateBase {
   #pipelinesReady = false;
   readonly #pendingPipelines: Set<AttachPipeline> = new Set();
   #hydratingPipelines = false;
+  readonly #visibilityWatcher: DocumentVisibilityWatcher | undefined;
 
   readonly assertValidRunOptions: (options?: RunOptions) => void;
 
@@ -101,6 +88,7 @@ export class ZeroContext extends QueryDelegateBase {
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     addMetric: MetricsDelegate['addMetric'],
     assertValidRunOptions: (options?: RunOptions) => void,
+    visibilityWatcher?: DocumentVisibilityWatcher | undefined,
   ) {
     super();
     this.#lc = lc;
@@ -113,6 +101,7 @@ export class ZeroContext extends QueryDelegateBase {
     this.addCustomQuery = addCustomQuery;
     this.flushQueryChanges = flushQueryChanges;
     this.addMetric = addMetric;
+    this.#visibilityWatcher = visibilityWatcher;
   }
 
   applyFiltersAnyway?: boolean | undefined;
@@ -177,7 +166,7 @@ export class ZeroContext extends QueryDelegateBase {
    */
   async hydratePendingPipelines(
     sliceMs = HYDRATE_SLICE_MS,
-    yieldToEventLoop: () => Promise<void> = defaultYield,
+    yieldToEventLoop: () => Promise<void> = this.#yieldToEventLoop,
   ): Promise<void> {
     if (this.#pipelinesReady) {
       return;
@@ -202,6 +191,21 @@ export class ZeroContext extends QueryDelegateBase {
     this.#hydratingPipelines = false;
     this.batchViewUpdates(() => this.#release(releases));
   }
+
+  #yieldToEventLoop = (): Promise<void> => {
+    // Not in React Native or Safari.
+    const scheduler = getBrowserGlobal('scheduler');
+    if (typeof scheduler?.yield === 'function') {
+      return scheduler.yield();
+    }
+    // Timers are throttled to a second or more in a background tab, which would
+    // stretch startup to minutes, and a hidden page has nothing to keep
+    // responsive anyway.
+    if (this.#visibilityWatcher?.visibilityState === 'hidden') {
+      return Promise.resolve();
+    }
+    return new Promise(resolve => setTimeout(resolve, 0));
+  };
 
   /**
    * Attaches pending pipelines, always at least one, until none are left or

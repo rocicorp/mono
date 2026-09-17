@@ -2,6 +2,11 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test, vi} from 'vitest';
 import type {Hash} from '../../../replicache/src/hash.ts';
+import {
+  clearBrowserOverrides,
+  overrideBrowserGlobal,
+} from '../../../shared/src/browser-env.ts';
+import type {DocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
@@ -29,7 +34,7 @@ const schema = createSchema({
 
 type Got = (got: boolean | 'cached') => void;
 
-function newContext() {
+function newContext(visibilityWatcher?: DocumentVisibilityWatcher) {
   let batchCalls = 0;
   // The got callbacks of the queries added so far.
   const gots: Got[] = [];
@@ -50,6 +55,7 @@ function newContext() {
     },
     () => {},
     () => {},
+    visibilityWatcher,
   );
   return {context, batchCalls: () => batchCalls, gots};
 }
@@ -354,5 +360,44 @@ describe('hydratePendingPipelines', () => {
     await context.hydratePendingPipelines();
     expect(context.pipelinesReady).toBe(true);
     expect(batchCalls()).toBe(0);
+  });
+});
+
+describe('default yield', () => {
+  const watcher = (
+    visibilityState: DocumentVisibilityState,
+  ): DocumentVisibilityWatcher => ({
+    visibilityState,
+    waitForVisible: () => Promise.resolve(),
+    waitForHidden: () => Promise.resolve(),
+  });
+
+  async function hydrateTwo(visibilityState: DocumentVisibilityState) {
+    // As in Safari and React Native.
+    overrideBrowserGlobal('scheduler', undefined as never);
+    const timeouts = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      const {context} = newContext(watcher(visibilityState));
+      const views = [
+        context.materialize(newQuery(schema, 't1')),
+        context.materialize(newQuery(schema, 't1').limit(1)),
+      ];
+      // One pipeline per slice, so there is a yield between the two.
+      await context.hydratePendingPipelines(0);
+      expect(context.pipelinesReady).toBe(true);
+      views.forEach(v => v.destroy());
+      return timeouts.mock.calls.filter(([, ms]) => ms === 0).length;
+    } finally {
+      timeouts.mockRestore();
+      clearBrowserOverrides();
+    }
+  }
+
+  test('uses a timer while the page is visible', async () => {
+    expect(await hydrateTwo('visible')).toBe(1);
+  });
+
+  test('does not wait on throttled timers while the page is hidden', async () => {
+    expect(await hydrateTwo('hidden')).toBe(0);
   });
 });
