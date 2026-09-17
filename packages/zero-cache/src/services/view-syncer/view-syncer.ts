@@ -625,6 +625,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
         return;
       }
+      let pipelinesReset = false;
       if (!this.#cvr) {
         this.#lc.debug?.('loading cvr');
         this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
@@ -632,7 +633,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
         this.#ttlClock = this.#cvr.ttlClock;
         this.#ttlClockBase = Date.now();
-        this.#resetPipelinesIfBehindCVR(lc, this.#cvr);
+        pipelinesReset = this.#resetPipelinesIfBehindCVR(lc, this.#cvr);
       } else {
         // Make sure the CVR ttlClock is up to date.
         const now = Date.now();
@@ -643,6 +644,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       try {
+        if (pipelinesReset) {
+          // Not every locked operation rehydrates (e.g. auth maintenance), and
+          // if the replica has already caught up to the CVR there may be no
+          // further version-ready signal to do it, so rehydrate here.
+          const connCtx =
+            this.connContextManager.getBackgroundConnectionContext();
+          if (connCtx) {
+            await this.#maybeHydratePipelines(lc, this.#cvr, connCtx);
+          }
+        }
         await fn(lc, this.#cvr);
       } catch (e) {
         // Clear cached state if an error is encountered.
@@ -669,15 +680,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * A CVR behind the pipelines is expected (advancements that do not change
    * the CVR are not flushed) and is handled by the normal update path.
    *
+   * Returns whether the pipelines were reset.
+   *
    * Must be called from within the #lock.
    */
-  #resetPipelinesIfBehindCVR(lc: LogContext, cvr: CVRSnapshot): void {
+  #resetPipelinesIfBehindCVR(lc: LogContext, cvr: CVRSnapshot): boolean {
     if (!this.#pipelinesHydrated) {
-      return;
+      return false;
     }
     const pipelineVersion = this.#pipelines.currentVersion();
     if (pipelineVersion >= cvr.version.stateVersion) {
-      return;
+      return false;
     }
     lc.info?.(
       `resetting pipelines: pipelines@${pipelineVersion} are behind ` +
@@ -689,6 +702,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     this.#pipelinesHydrated = false;
     this.connContextManager.setSharedRetransformReady(false);
+    return true;
   }
 
   readyState(): Promise<'initialized' | 'draining'> {
