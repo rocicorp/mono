@@ -1,19 +1,34 @@
 import {bench, describe} from '../../shared/src/bench.ts';
+import {h64} from '../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
-import {mapAST} from '../../zero-protocol/src/ast.ts';
+import {mapAST, type AST} from '../../zero-protocol/src/ast.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../zero-types/src/schema.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
-import {planQuery} from '../../zql/src/planner/planner-builder.ts';
+import {
+  BoundedPlanCache,
+  canonicalizePlannerInput,
+  planWithCache,
+} from '../../zql/src/builder/plan-cache.ts';
+import {
+  applyFlipBlueprint,
+  planQuery,
+  planQueryBlueprint,
+} from '../../zql/src/planner/planner-builder.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
+import {ROSTER_AST, TRACKERS_AST} from './assignment-wave-asts.ts';
+import {
+  createAssignmentWaveReplica,
+  primaryKeys,
+} from './assignment-wave-replica.ts';
 
 const pgContent = await getChinook();
 
@@ -225,5 +240,59 @@ describe('planner cost', () => {
         ),
       ),
     ),
+  );
+});
+
+// The assignment-wave ASTs from the zero-cache planning diagnosis, run against
+// a replica of the same shape. These are the queries the plan cache exists for:
+// eight concurrent client groups planned each of them independently.
+const assignmentWave = createAssignmentWaveReplica();
+const assignmentWaveCostModel = createSQLiteCostModel(
+  assignmentWave.db,
+  assignmentWave.tableSpecs,
+);
+
+function benchmarkAssignmentWaveQuery(name: string, ast: AST) {
+  const plannerInput = completeOrdering(ast, tableName =>
+    must(primaryKeys.get(tableName), `Table ${tableName} not found`),
+  );
+  const canonical = canonicalizePlannerInput(plannerInput);
+  const blueprint = planQueryBlueprint(plannerInput, assignmentWaveCostModel);
+
+  describe(name, () => {
+    bench(`cold miss: ${name}`, () => {
+      planWithCache(
+        {store: new BoundedPlanCache(1024, 16 * 1024 * 1024), epoch: 'e'},
+        plannerInput,
+        assignmentWaveCostModel,
+      );
+    });
+
+    const warm = new BoundedPlanCache(1024, 16 * 1024 * 1024);
+    const warmCache = {store: warm, epoch: 'e'};
+    planWithCache(warmCache, plannerInput, assignmentWaveCostModel);
+    bench(`warm hit: ${name}`, () => {
+      planWithCache(warmCache, plannerInput, assignmentWaveCostModel);
+    });
+
+    bench(`key only: ${name}`, () => {
+      canonicalizePlannerInput(plannerInput);
+    });
+
+    bench(`blueprint apply only: ${name}`, () => {
+      applyFlipBlueprint(plannerInput, blueprint);
+    });
+
+    bench(`hash only: ${name}`, () => {
+      h64(canonical);
+    });
+  });
+}
+
+describe('assignment wave planning', () => {
+  benchmarkAssignmentWaveQuery('assignment.roster', ROSTER_AST);
+  benchmarkAssignmentWaveQuery(
+    'problem_trackers.for_assignment',
+    TRACKERS_AST,
   );
 });

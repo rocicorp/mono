@@ -17,7 +17,6 @@ export const SUBQ_PREFIX = 'zsubq_';
 
 export const selectorSchema = v.string();
 export const toStaticParam = Symbol();
-export const planIdSymbol = Symbol('planId');
 
 const orderingElementSchema = v.readonly(
   v.tuple([selectorSchema, v.literalUnion('asc', 'desc')]),
@@ -326,7 +325,6 @@ export type CorrelatedSubqueryCondition = {
   op: CorrelatedSubqueryConditionOperator;
   flip?: boolean | undefined;
   scalar?: boolean | undefined;
-  [planIdSymbol]?: number | undefined;
 };
 
 export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
