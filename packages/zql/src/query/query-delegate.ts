@@ -108,17 +108,22 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
   readonly pipelinesReady: boolean;
 
   /**
-   * Register a callback to build a deferred pipeline once
-   * {@link pipelinesReady} becomes `true`. Callbacks are invoked in
-   * registration order inside `batchViewUpdates`.
+   * Register a callback to build a deferred pipeline when the delegate is
+   * able to build pipelines. Callbacks are invoked in registration order
+   * inside `batchViewUpdates`.
    *
    * `attach` builds and hydrates the pipeline and returns a `release`
    * function. The delegate may spread the `attach` calls over several tasks
    * so the event loop is not starved, but it calls every `release` and then
    * notifies its commit listeners in one synchronous batch once all of them
-   * have attached. Nothing about a view (rows, `complete`, `cached`) may
-   * become observable before its `release` is called, so views hydrated
-   * together are exposed together.
+   * have attached. {@link pipelinesReady} stays `false` until that batch, so
+   * a query materialized in the meantime is deferred as well and joins it.
+   *
+   * Nothing about a successfully attached view (rows, `complete`, `cached`)
+   * may become observable before its `release` is called, so views hydrated
+   * together are exposed together. An `attach` that throws has no `release`:
+   * the view reports the error, and any rows it was pushed before failing are
+   * flushed by the same commit.
    *
    * Returns a function that unregisters the callback (used when the view is
    * destroyed before the pipeline is built).
