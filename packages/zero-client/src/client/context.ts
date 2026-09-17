@@ -226,7 +226,16 @@ export class ZeroContext extends QueryDelegateBase {
     this.#pipelinesReady = true;
     try {
       for (const release of releases) {
-        release();
+        try {
+          release();
+        } catch (e) {
+          // One view must not keep the rest from being released.
+          this.#lc.error?.(
+            ErrorKind.Internal,
+            'Failed to release a deferred query pipeline',
+            e,
+          );
+        }
       }
     } finally {
       this.#endTransaction();

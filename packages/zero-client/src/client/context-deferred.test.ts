@@ -296,6 +296,52 @@ describe('hydratePendingPipelines', () => {
     await vi.waitFor(() => expect(calls).toEqual(['a:complete', 'b:complete']));
   });
 
+  test('cached is reported only once every view is released, empty views included', async () => {
+    const gots: ((got: boolean | 'cached') => void)[] = [];
+    const context = new ZeroContext(
+      new LogContext('error'),
+      new IVMSourceBranch(schema.tables),
+      ((
+        _ast: unknown,
+        _ttl: unknown,
+        got: (got: boolean | 'cached') => void,
+      ) => {
+        gots.push(got);
+        return () => {};
+      }) as unknown as AddQuery,
+      (() => () => {}) as unknown as AddCustomQuery,
+      (() => {}) as unknown as UpdateQuery,
+      (() => {}) as unknown as UpdateCustomQuery,
+      (() => {}) as unknown as FlushQueryChanges,
+      applyViewUpdates => applyViewUpdates(),
+      () => {},
+      () => {},
+    );
+    // No rows, so hydration leaves both views clean.
+    const a = context.materialize(newQuery(schema, 't1'));
+    const b = context.materialize(newQuery(schema, 't1').limit(1));
+    gots.forEach(got => got('cached'));
+
+    const calls: string[] = [];
+    a.addListener((_, type) => {
+      if (type !== 'cached') {
+        return;
+      }
+      // What b says at the moment a reports cached.
+      b.addListener((_, bType) => calls.push(`b seen from a:${bType}`))();
+      calls.push('a:cached');
+      throw new Error('a listener that throws');
+    });
+    b.addListener((_, type) => calls.push(`b:${type}`));
+    calls.length = 0;
+
+    const {done, step} = sliced(context);
+    expect(calls).toEqual([]);
+    await step();
+    await done;
+    expect(calls).toEqual(['b seen from a:cached', 'a:cached', 'b:cached']);
+  });
+
   test('a view destroyed while hydrating is skipped', async () => {
     const {context} = loaded();
     const hydrated = context.materialize(newQuery(schema, 't1'));

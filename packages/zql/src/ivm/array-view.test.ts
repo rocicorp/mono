@@ -2310,3 +2310,34 @@ test('holdData hides pushes until the next flush', () => {
   consume(ms.push(makeSourceChangeAdd({a: 4, b: 'd'})));
   expect(view.data).toHaveLength(4);
 });
+
+test('holdData holds back result type changes of a clean view', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    new Promise<true>(() => {}),
+    () => {},
+  );
+  const types: ResultType[] = [];
+  view.addListener((_, type) => types.push(type));
+  expect(types).toEqual(['unknown']);
+
+  view.holdData();
+  view.markCached();
+  expect(types).toEqual(['unknown']);
+  view.flush();
+  expect(types).toEqual(['unknown', 'cached']);
+
+  // Not held: notified right away, and a flush adds nothing.
+  view.unmarkCached();
+  expect(types).toEqual(['unknown', 'cached', 'unknown']);
+  view.flush();
+  expect(types).toEqual(['unknown', 'cached', 'unknown']);
+});
