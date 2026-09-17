@@ -1,0 +1,11 @@
+{
+  // Covers this package's TypeScript, which is its vitest config. The plugin
+  // and its tests are JavaScript, and oxlint does not export the Rule or
+  // Plugin types a checked `.js` file would need, so they are covered by
+  // running them rather than by checking them.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["*.ts"]
+}
