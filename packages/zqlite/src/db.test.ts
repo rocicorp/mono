@@ -125,6 +125,60 @@ test('slow queries are logged', () => {
   ]);
 });
 
+test('an iterator logs its slow-query epilogue exactly once', () => {
+  const sink = new TestLogSink();
+  const lc = new LogContext('debug', undefined, sink);
+
+  // threshold is 0 so every query is logged
+  const db = new Database(lc, ':memory:', undefined, 0);
+  db.exec('CREATE TABLE foo (id INTEGER PRIMARY KEY)');
+  db.exec('INSERT INTO foo (id) VALUES (1), (2), (3)');
+  const stmt = db.prepare('SELECT * FROM foo');
+
+  function iterateLogsFor(use: (it: IterableIterator<unknown>) => void) {
+    sink.messages.length = 0;
+    use(stmt.iterate());
+    return sink.messages
+      .filter(([, context]) => context?.method === 'iterate')
+      .map(([, context]) => context?.type);
+  }
+
+  // Exhausted and then closed by the caller, which is what `TableSource`
+  // does: the iterator sees `done` and the `finally` closes it anyway.
+  expect(
+    iterateLogsFor(it => {
+      for (const _ of it) {
+        // drain
+      }
+      it.return?.();
+    }),
+  ).toEqual(['total', 'sqlite']);
+
+  // Closed early, before the native iterator reported `done`.
+  expect(
+    iterateLogsFor(it => {
+      it.next();
+      it.return?.();
+    }),
+  ).toEqual(['total', 'sqlite']);
+
+  // Aborted, then closed.
+  expect(
+    iterateLogsFor(it => {
+      it.next();
+      try {
+        it.throw?.(new Error('boom'));
+      } catch {
+        // the native iterator rethrows
+      }
+      it.return?.();
+    }),
+  ).toEqual(['total', 'sqlite']);
+
+  // The statement is still usable, so every iterator was closed.
+  expect(stmt.all()).toHaveLength(3);
+});
+
 test('sql errors are annotated with sql', () => {
   const sink = new TestLogSink();
   const lc = new LogContext('debug', undefined, sink);
