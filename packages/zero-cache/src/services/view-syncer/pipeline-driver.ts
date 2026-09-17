@@ -102,7 +102,7 @@ type Pipeline = {
   readonly companions: readonly CompanionPipeline[];
 };
 
-type QueryInfo = {
+export type QueryInfo = {
   readonly transformedAst: AST;
   readonly transformationHash: string;
   readonly queryName?: string | undefined;
