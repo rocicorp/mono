@@ -332,7 +332,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *   updates are processed via `#syncQueryPipelineSet`.
    *
    * Resets to `false` if `#advancePipelines` returns a `ResetPipelinesSignal`
-   * and pipelines must be reset and rehydrated.
+   * and pipelines must be reset and rehydrated, or if a reloaded CVR is ahead
+   * of the pipelines (see `#resetPipelinesIfBehindCVR`).
    */
   #pipelinesHydrated = false;
   #servedVersion: LexiVersion | null = null;
@@ -631,6 +632,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
         this.#ttlClock = this.#cvr.ttlClock;
         this.#ttlClockBase = Date.now();
+        this.#resetPipelinesIfBehindCVR(lc, this.#cvr);
       } else {
         // Make sure the CVR ttlClock is up to date.
         const now = Date.now();
@@ -654,6 +656,39 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#scheduleAuthMaintenance(lc);
       }
     });
+  }
+
+  /**
+   * The CVR is reloaded after an error clears the cached copy. By then another
+   * view-syncer may have taken over the client group and flushed the CVR at a
+   * version ahead of this instance's hydrated pipelines (e.g. its replica was
+   * further ahead). The pipelines can no longer be diffed against the CVR, so
+   * reset them and let `#maybeHydratePipelines` rehydrate once the replica has
+   * caught up to the CVR.
+   *
+   * A CVR behind the pipelines is expected (advancements that do not change
+   * the CVR are not flushed) and is handled by the normal update path.
+   *
+   * Must be called from within the #lock.
+   */
+  #resetPipelinesIfBehindCVR(lc: LogContext, cvr: CVRSnapshot): void {
+    if (!this.#pipelinesHydrated) {
+      return;
+    }
+    const pipelineVersion = this.#pipelines.currentVersion();
+    if (pipelineVersion >= cvr.version.stateVersion) {
+      return;
+    }
+    lc.info?.(
+      `resetting pipelines: pipelines@${pipelineVersion} are behind ` +
+        `reloaded cvr@${versionString(cvr.version)}`,
+    );
+    this.#pipelineResets.add(1, {reason: 'behind-cvr'});
+    this.#pipelines.reset(
+      must(cvr.clientSchema, 'cvr.clientSchema missing after initialization'),
+    );
+    this.#pipelinesHydrated = false;
+    this.connContextManager.setSharedRetransformReady(false);
   }
 
   readyState(): Promise<'initialized' | 'draining'> {
