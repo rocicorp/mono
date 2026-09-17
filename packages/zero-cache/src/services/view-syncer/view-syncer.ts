@@ -786,11 +786,31 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
             lc.info?.(`resetting pipelines: ${result.message}`);
             this.#pipelineResets.add(1, {reason: result.reason});
-            if (
-              result.reason !== 'permissions-change' &&
-              result.reason !== 'schema-change'
-            ) {
-              previousQueries = new Map(this.#pipelines.queries());
+            switch (result.reason) {
+              case 'advancement-timeout':
+              case 'scalar-subquery':
+              case 'truncation':
+              case 'schema-change': {
+                // Non-custom client queries (ZQL) are deprecated and derive ASTs from
+                // local permissions; if any exist, do a full wipe reset. Otherwise,
+                // custom queries are safe to reuse since their ASTs from ZERO_QUERY_URL
+                // are independent of replica state and type-checked against tableSpecs at HEAD.
+                const hasClientQueries = Object.values(cvr.queries).some(
+                  q => q.type === 'client',
+                );
+                if (!hasClientQueries) {
+                  previousQueries = new Map(this.#pipelines.queries());
+                }
+                break;
+              }
+              case 'permissions-change':
+                // Full wipe reset: updated permissions must be applied to recalculate
+                // the ASTs for non-custom queries. While custom queries could theoretically
+                // be reused here, non-custom queries are deprecated so we avoid
+                // complicating the reset logic.
+                break;
+              default:
+                unreachable(result.reason);
             }
             this.#pipelines.reset(clientSchema);
             this.#pipelinesHydrated = false;
@@ -1870,7 +1890,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           transformedQueries.push({
             id: query.id,
             transformationHash: previous.transformationHash,
-            transformedAst: previous.transformedAst,
+            transformedAst: previous.originalAst ?? previous.transformedAst,
           });
         } else {
           customQueries.set(query.id, query);
@@ -1936,15 +1956,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     for (const q of otherQueries) {
-      const previous = previousQueries?.get(q.id);
-      if (previous && previous.transformationHash === q.transformationHash) {
-        transformedQueries.push({
-          id: q.id,
-          transformationHash: previous.transformationHash,
-          transformedAst: previous.transformedAst,
-        });
-        continue;
-      }
       const transformed = transformAndHashQuery(
         lc,
         q.id,
@@ -2398,23 +2409,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (origQuery.type === 'custom') {
             continue;
           }
-          const previous = previousQueries?.get(origQuery.id);
-          if (
-            customQueryTransformMode === 'missing' &&
-            previous &&
-            previous.transformationHash === origQuery.transformationHash
-          ) {
-            transformedQueries.push({
-              id: origQuery.id,
-              origQuery,
-              transformed: {
-                id: origQuery.id,
-                transformationHash: previous.transformationHash,
-                transformedAst: previous.transformedAst,
-              },
-            });
-            continue;
-          }
           const transformed = transformAndHashQuery(
             lc,
             origQuery.id,
@@ -2583,7 +2577,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 transformed: {
                   id: query.id,
                   transformationHash: previous.transformationHash,
-                  transformedAst: previous.transformedAst,
+                  transformedAst:
+                    previous.originalAst ?? previous.transformedAst,
                 },
               });
             }
