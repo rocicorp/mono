@@ -625,7 +625,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
         return;
       }
-      let pipelinesReset = false;
+      let reloaded = false;
       if (!this.#cvr) {
         this.#lc.debug?.('loading cvr');
         this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
@@ -633,7 +633,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
         this.#ttlClock = this.#cvr.ttlClock;
         this.#ttlClockBase = Date.now();
-        pipelinesReset = this.#resetPipelinesIfBehindCVR(lc, this.#cvr);
+        reloaded = true;
       } else {
         // Make sure the CVR ttlClock is up to date.
         const now = Date.now();
@@ -644,7 +644,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       try {
-        if (pipelinesReset) {
+        if (reloaded && this.#resetPipelinesIfBehindCVR(lc, this.#cvr)) {
           // Not every locked operation rehydrates (e.g. auth maintenance), and
           // if the replica has already caught up to the CVR there may be no
           // further version-ready signal to do it, so rehydrate here.
@@ -697,11 +697,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         `reloaded cvr@${versionString(cvr.version)}`,
     );
     this.#pipelineResets.add(1, {reason: 'behind-cvr'});
+    // Clear the hydrated state first: reset() can throw (e.g. on an
+    // incompatible schema) after it has already destroyed the pipelines.
+    this.#pipelinesHydrated = false;
+    this.connContextManager.setSharedRetransformReady(false);
     this.#pipelines.reset(
       must(cvr.clientSchema, 'cvr.clientSchema missing after initialization'),
     );
-    this.#pipelinesHydrated = false;
-    this.connContextManager.setSharedRetransformReady(false);
     return true;
   }
 
