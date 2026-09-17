@@ -199,7 +199,7 @@ const clientSchema = clientSchemaFrom(schema).clientSchema;
 
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
-const debug = new Debug();
+const debug = new Debug(config.outputVendedRows);
 const tableSpecs = computeZqlSpecs(lc, db, {includeBackfillingColumns: false});
 
 class AnalyzeQueryDelegate extends QueryDelegateBase {

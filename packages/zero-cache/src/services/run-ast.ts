@@ -31,6 +31,14 @@ import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {hydrate} from './view-syncer/pipeline-driver.ts';
 
+/**
+ * Maximum number of synced rows returned per table, and read rows returned
+ * per table/query, when analyzing a query in zero-cache. Rows past this are
+ * still counted. Keeping every row can exhaust the heap when analyzing queries
+ * over large tables.
+ */
+export const MAX_ANALYZE_ROWS = 1000;
+
 export type RunAstOptions = {
   applyPermissions?: boolean | undefined;
   auth?: JWTAuth | undefined;
@@ -38,6 +46,11 @@ export type RunAstOptions = {
   costModel?: ConnectionCostModel | undefined;
   db: Database;
   host: BuilderDelegate;
+  /**
+   * Maximum number of synced rows returned per table. Rows past this are still
+   * counted. Defaults to no limit.
+   */
+  maxSyncedRowsPerTable?: number | undefined;
   permissions?: PermissionsConfig | undefined;
   planDebugger?: PlanDebugger | undefined;
   syncedRows?: boolean | undefined;
@@ -53,7 +66,13 @@ export async function runAst(
   options: RunAstOptions,
   yieldProcess: () => Promise<void>,
 ): Promise<AnalyzeQueryResult> {
-  const {clientToServerMapper, permissions, host, db} = options;
+  const {
+    clientToServerMapper,
+    permissions,
+    host,
+    db,
+    maxSyncedRowsPerTable = Infinity,
+  } = options;
   const result: AnalyzeQueryResult = {
     warnings: [],
     syncedRows: undefined,
@@ -137,7 +156,9 @@ export async function runAst(
 
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
-  const seenByTable: Set<string> = new Set();
+  // Dedupe on the row key rather than the whole row to bound memory.
+  const seen: Set<string> = new Set();
+  const truncatedTables: Set<string> = new Set();
   for (const rowChange of hydrate(
     pipeline,
     hashOfAST(resolvedAst),
@@ -161,25 +182,30 @@ export async function runAst(
       await sleep(1);
     }
 
-    let rows: Row[] = rowsByTable[rowChange.table];
-    const s = rowChange.table + '.' + JSON.stringify(rowChange.row);
-    if (seenByTable.has(s)) {
+    const key = JSON.stringify([rowChange.table, rowChange.rowKey]);
+    if (seen.has(key)) {
       continue; // skip duplicates
     }
     syncedRowCount++;
-    seenByTable.add(s);
+    seen.add(key);
     if (options.syncedRows) {
-      if (!rows) {
-        rows = [];
-        rowsByTable[rowChange.table] = rows;
+      const rows = (rowsByTable[rowChange.table] ??= []);
+      if (rows.length < maxSyncedRowsPerTable) {
+        rows.push(rowChange.row);
+      } else {
+        truncatedTables.add(rowChange.table);
       }
-      rows.push(rowChange.row);
     }
   }
 
   const end = performance.now();
   if (options.syncedRows) {
     result.syncedRows = rowsByTable;
+    for (const table of truncatedTables) {
+      result.warnings.push(
+        `Only the first ${maxSyncedRowsPerTable} synced rows of "${table}" are included.`,
+      );
+    }
   }
   result.start = start;
   result.end = end;
@@ -199,7 +225,17 @@ export async function runAst(
   result.sqlitePlans = host.debug?.getSQLitePlans() ?? {};
 
   if (options.vendedRows) {
-    result.readRows = host.debug?.getVendedRows();
+    const readRows = host.debug?.getVendedRows();
+    result.readRows = readRows;
+    for (const [table, byQuery] of Object.entries(readRows ?? {})) {
+      for (const [query, rows] of Object.entries(byQuery)) {
+        if ((result.readRowCountsByQuery[table]?.[query] ?? 0) > rows.length) {
+          result.warnings.push(
+            `Only the first ${rows.length} read rows of "${table}" are included for: ${query}`,
+          );
+        }
+      }
+    }
   }
   return result;
 }
