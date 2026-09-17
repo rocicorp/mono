@@ -37,13 +37,14 @@ test('protocol versions', () => {
   // Then update the version number of the `CHANGE_SOURCE_PATH`
   // in current and export it appropriately as the new version
   // in `mod.ts`.
-  // The hash last changed for the optional `commit.commitTimeMs` field, which
-  // is additive: the stream is parsed in 'passthrough' mode, so an older peer
-  // ignores the field and a newer peer treats its absence as "no commit time
-  // reported". No new version directory was needed.
-  t(current, '1vrxj3cwxp2mq', '/changes/v0/stream');
+  // The hash last changed for the optional `update-column.tableMetadata` and
+  // `update-column.backfill` fields, which are additive: the stream is parsed
+  // in 'passthrough' mode, so an older peer ignores the fields (and does not
+  // backfill the column) and a newer peer treats their absence as "no
+  // backfill needed". No new version directory was needed.
+  t(current, 'rockapgko1d1', '/changes/v0/stream');
   // During initial development, we use v0 as a non-stable
   // version (i.e. breaking change are allowed). Once the
   // protocol graduates to v1, versions must be stable.
-  t(v0, '1vrxj3cwxp2mq', '/changes/v0/stream');
+  t(v0, 'rockapgko1d1', '/changes/v0/stream');
 });

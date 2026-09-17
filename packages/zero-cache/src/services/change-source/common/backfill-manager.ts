@@ -533,6 +533,23 @@ export class BackfillManager implements Cancelable, Listener {
             }
           }
         }
+        if (change.backfill) {
+          // The column's values were rewritten upstream (e.g. by a type
+          // change). A running backfill of the column may have read the old
+          // values, so it is restarted.
+          const metadata = change.tableMetadata ?? null;
+          const backfillRequest = this.#requiredBackfills.get(table);
+          this.#setRequiredBackfill(tag, {
+            table: {...table, metadata},
+            columns: {
+              ...backfillRequest?.columns,
+              [newName]: change.backfill,
+            },
+          });
+          if (this.#backfillRunningFor(table)) {
+            this.#stopRunningBackfill(`column rewritten`);
+          }
+        }
         break;
       }
       case 'drop-column': {

@@ -344,7 +344,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'change column data type',
       'ALTER TABLE my.bar ALTER handle TYPE TEXT;',
-      [[{tag: 'update-column'}]],
+      [
+        [{tag: 'update-column', backfill: {attNum: expect.any(Number)}}],
+        [{tag: 'backfill-completed'}],
+      ],
       {['my.bar']: []},
       [
         {
@@ -588,7 +591,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'retype unique column with associated index',
       'ALTER TABLE my.bar ALTER login TYPE VARCHAR(180);',
-      [[{tag: 'update-column'}]],
+      [
+        [{tag: 'update-column', backfill: {attNum: expect.any(Number)}}],
+        [{tag: 'backfill-completed'}],
+      ],
       {['my.bar']: []},
       [
         {
@@ -1966,6 +1972,207 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           unique: true,
         },
       ],
+    ],
+    [
+      'table with rows for column rewrites',
+      `
+      CREATE TABLE your.rewrite (id INT8 PRIMARY KEY, n INT4, s TEXT);
+      INSERT INTO your.rewrite (id, n, s) VALUES (1, 10, 'a'), (2, 20, 'b');
+      `,
+      [
+        [
+          {tag: 'create-table'},
+          {tag: 'create-index'},
+          {tag: 'insert'},
+          {tag: 'insert'},
+        ],
+      ],
+      {
+        ['your.rewrite']: [
+          {id: 1n, n: 10n, s: 'a'},
+          {id: 2n, n: 20n, s: 'b'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'change column type with a USING expression that changes values',
+      'ALTER TABLE your.rewrite ALTER n TYPE INT8 USING n + 1',
+      [
+        [
+          {
+            tag: 'update-column',
+            table: {schema: 'your', name: 'rewrite'},
+            old: {name: 'n', spec: expect.objectContaining({dataType: 'int4'})},
+            new: {name: 'n', spec: expect.objectContaining({dataType: 'int8'})},
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
+            backfill: {attNum: 2},
+          },
+        ],
+        [
+          {
+            tag: 'backfill',
+            columns: ['n'],
+            rowValues: [
+              [1n, 11n],
+              [2n, 21n],
+            ],
+          },
+        ],
+        [{tag: 'backfill-completed', columns: ['n']}],
+      ],
+      {
+        ['your.rewrite']: [
+          {id: 1n, n: 11n, s: 'a'},
+          {id: 2n, n: 21n, s: 'b'},
+        ],
+      },
+      [
+        {
+          name: 'your.rewrite',
+          columns: {
+            n: {
+              characterMaximumLength: null,
+              dataType: 'int8',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+          },
+          backfilling: [],
+        } as Partial<LiteTableSpec> as LiteTableSpec,
+      ],
+      [],
+    ],
+    [
+      'rename and change column type with a USING expression',
+      `ALTER TABLE your.rewrite RENAME s TO t;
+       ALTER TABLE your.rewrite ALTER t TYPE VARCHAR USING upper(t)`,
+      [
+        [
+          {
+            tag: 'update-column',
+            old: expect.objectContaining({name: 's'}),
+            new: expect.objectContaining({name: 't'}),
+          },
+          {
+            tag: 'update-column',
+            old: {name: 't', spec: expect.objectContaining({dataType: 'text'})},
+            new: {
+              name: 't',
+              spec: expect.objectContaining({dataType: 'varchar'}),
+            },
+            backfill: {attNum: 3},
+          },
+        ],
+        [
+          {
+            tag: 'backfill',
+            columns: ['t'],
+            rowValues: [
+              [1n, 'A'],
+              [2n, 'B'],
+            ],
+          },
+        ],
+        [{tag: 'backfill-completed', columns: ['t']}],
+      ],
+      {
+        ['your.rewrite']: [
+          {id: 1n, n: 11n, t: 'A'},
+          {id: 2n, n: 21n, t: 'B'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'add and rewrite a column in the same transaction',
+      // Multiple statements are executed in a single (implicit) transaction.
+      `ALTER TABLE your.rewrite ADD c INT4 DEFAULT 1;
+       ALTER TABLE your.rewrite ALTER c TYPE INT8 USING c + 1;`,
+      [
+        [
+          {tag: 'add-column', column: expect.objectContaining({name: 'c'})},
+          {tag: 'update-column', backfill: {attNum: 4}},
+        ],
+        [
+          {
+            tag: 'backfill',
+            columns: ['c'],
+            rowValues: [
+              [1n, 2n],
+              [2n, 2n],
+            ],
+          },
+        ],
+        [{tag: 'backfill-completed', columns: ['c']}],
+      ],
+      {
+        ['your.rewrite']: [
+          {id: 1n, n: 11n, t: 'A', c: 2n},
+          {id: 2n, n: 21n, t: 'B', c: 2n},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'change type of a column without a USING expression',
+      'ALTER TABLE your.rewrite ALTER c TYPE INT4',
+      [
+        [{tag: 'update-column', backfill: {attNum: 4}}],
+        [
+          {
+            tag: 'backfill',
+            columns: ['c'],
+            rowValues: [
+              [1n, 2],
+              [2n, 2],
+            ],
+          },
+        ],
+        [{tag: 'backfill-completed', columns: ['c']}],
+      ],
+      {
+        ['your.rewrite']: [
+          {id: 1n, n: 11n, t: 'A', c: 2n},
+          {id: 2n, n: 21n, t: 'B', c: 2n},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'change column nullability does not backfill',
+      'ALTER TABLE your.rewrite ALTER c SET NOT NULL',
+      [
+        [
+          {
+            tag: 'update-column',
+            old: expect.objectContaining({
+              spec: expect.objectContaining({notNull: false}),
+            }),
+            new: expect.objectContaining({
+              spec: expect.objectContaining({notNull: true}),
+            }),
+          },
+        ],
+      ],
+      {
+        ['your.rewrite']: [
+          {id: 1n, n: 11n, t: 'A', c: 2n},
+          {id: 2n, n: 21n, t: 'B', c: 2n},
+        ],
+      },
+      [],
+      [],
     ],
     [
       'concurrent schema changes',
