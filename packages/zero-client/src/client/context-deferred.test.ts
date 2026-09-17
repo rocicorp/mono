@@ -27,12 +27,19 @@ const schema = createSchema({
   ],
 });
 
+type Got = (got: boolean | 'cached') => void;
+
 function newContext() {
   let batchCalls = 0;
+  // The got callbacks of the queries added so far.
+  const gots: Got[] = [];
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    (() => () => {}) as unknown as AddQuery,
+    ((_ast: unknown, _ttl: unknown, got: Got) => {
+      gots.push(got);
+      return () => {};
+    }) as unknown as AddQuery,
     (() => () => {}) as unknown as AddCustomQuery,
     (() => {}) as unknown as UpdateQuery,
     (() => {}) as unknown as UpdateCustomQuery,
@@ -44,7 +51,7 @@ function newContext() {
     () => {},
     () => {},
   );
-  return {context, batchCalls: () => batchCalls};
+  return {context, batchCalls: () => batchCalls, gots};
 }
 
 const add = (id: string, name: string) => ({
@@ -266,22 +273,7 @@ describe('hydratePendingPipelines', () => {
   });
 
   test('complete is not reported before the release', async () => {
-    const gots: ((got: boolean) => void)[] = [];
-    const context = new ZeroContext(
-      new LogContext('info'),
-      new IVMSourceBranch(schema.tables),
-      ((_ast: unknown, _ttl: unknown, got: (got: boolean) => void) => {
-        gots.push(got);
-        return () => {};
-      }) as unknown as AddQuery,
-      (() => () => {}) as unknown as AddCustomQuery,
-      (() => {}) as unknown as UpdateQuery,
-      (() => {}) as unknown as UpdateCustomQuery,
-      (() => {}) as unknown as FlushQueryChanges,
-      applyViewUpdates => applyViewUpdates(),
-      () => {},
-      () => {},
-    );
+    const {context, gots} = newContext();
     // No rows: hydration leaves the views clean, so only the deferred
     // release keeps 'complete' from firing as soon as the first one attaches.
     const a = context.materialize(newQuery(schema, 't1'));
@@ -303,26 +295,7 @@ describe('hydratePendingPipelines', () => {
   });
 
   test('cached is reported only once every view is released, empty views included', async () => {
-    const gots: ((got: boolean | 'cached') => void)[] = [];
-    const context = new ZeroContext(
-      new LogContext('error'),
-      new IVMSourceBranch(schema.tables),
-      ((
-        _ast: unknown,
-        _ttl: unknown,
-        got: (got: boolean | 'cached') => void,
-      ) => {
-        gots.push(got);
-        return () => {};
-      }) as unknown as AddQuery,
-      (() => () => {}) as unknown as AddCustomQuery,
-      (() => {}) as unknown as UpdateQuery,
-      (() => {}) as unknown as UpdateCustomQuery,
-      (() => {}) as unknown as FlushQueryChanges,
-      applyViewUpdates => applyViewUpdates(),
-      () => {},
-      () => {},
-    );
+    const {context, gots} = newContext();
     // No rows, so hydration leaves both views clean.
     const a = context.materialize(newQuery(schema, 't1'));
     const b = context.materialize(newQuery(schema, 't1').limit(1));

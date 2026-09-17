@@ -95,6 +95,7 @@ export class SolidView implements Output {
   // next commit. It is applied with them, so a cached claim never reaches the
   // store before the rows it is about.
   #pendingResultType: ((prev: State) => State) | undefined;
+  #held = false;
   readonly #updateTTL: (ttl: TTL) => void;
 
   constructor(
@@ -193,8 +194,18 @@ export class SolidView implements Output {
     );
   }
 
+  /**
+   * Called before a deferred pipeline hydrates this view over several tasks
+   * (see `ViewFactory`). Rows already only reach the store at commit; this
+   * makes result type transitions wait for that commit too, including when
+   * the hydration produced no rows.
+   */
+  holdData(): void {
+    this.#held = true;
+  }
+
   #transitionResultType(transition: (prev: State) => State): void {
-    if (this.#hasUncommittedChanges()) {
+    if (this.#held || this.#hasUncommittedChanges()) {
       // The last requested transition wins; each is a no-op unless the state
       // it expects is current, so the net effect at commit is correct.
       this.#pendingResultType = transition;
@@ -211,6 +222,7 @@ export class SolidView implements Output {
   }
 
   #onTransactionCommit = () => {
+    this.#held = false;
     const builderRoot = this.#builderRoot;
     if (builderRoot) {
       if (!isEmptyRoot(builderRoot)) {

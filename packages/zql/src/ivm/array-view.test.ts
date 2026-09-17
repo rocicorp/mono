@@ -2335,6 +2335,11 @@ test('holdData holds back result type changes of a clean view', () => {
   view.holdData();
   view.markCached();
   expect(types).toEqual(['unknown']);
+  // A listener added while held is called with the held type, not a newer
+  // one paired with the held rows.
+  const lateTypes: ResultType[] = [];
+  view.addListener((_, type) => lateTypes.push(type));
+  expect(lateTypes).toEqual(['unknown']);
   // Releasing the data does not end the hold on notifications.
   view.releaseData();
   view.unmarkCached();
@@ -2342,6 +2347,7 @@ test('holdData holds back result type changes of a clean view', () => {
   expect(types).toEqual(['unknown']);
   view.flush();
   expect(types).toEqual(['unknown', 'cached']);
+  expect(lateTypes).toEqual(['unknown', 'cached']);
 
   // Not held: notified right away, and a flush adds nothing.
   view.unmarkCached();

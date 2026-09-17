@@ -306,7 +306,6 @@ export async function runImpl<
   // A snapshot of what the view holds right now. While the delegate's
   // pipelines are not ready the view is deferred and this is empty; 'unknown'
   // has never waited for the local data, so it does not wait for that either.
-
   const ret = v.data;
   v.destroy();
   return ret;
@@ -598,8 +597,9 @@ type OptionalViewHooks = {
   // Surface the 'cached' result type. Views without these never show it.
   markCached?: (() => void) | undefined;
   unmarkCached?: (() => void) | undefined;
-  // Keep showing the current snapshot until the next flush, so a deferred
-  // view does not show rows ahead of its release.
+  // Keep showing the current snapshot until `releaseData()` (or the next
+  // flush), and notify nobody until that flush, so a deferred view does not
+  // show rows ahead of its release.
   holdData?: (() => void) | undefined;
   // Called at the release: show the hydrated rows through `data` again, but
   // leave notifying listeners to the flush that follows all the releases.

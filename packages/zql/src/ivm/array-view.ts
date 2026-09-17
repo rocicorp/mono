@@ -67,14 +67,16 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #dirty = false;
   // Set by holdData(): the root that `data` and newly added listeners keep
-  // seeing until the next flush, while pushes build up #root behind it.
+  // seeing until releaseData() or the next flush, while pushes build up #root
+  // behind it.
   #committedRoot: Entry | undefined;
   // From holdData() until the next flush. Outlasts #committedRoot, which
   // releaseData() drops first.
   #held = false;
-  // The result type changed while held and clean: nothing else would make
-  // the flush that ends the hold notify the listeners.
-  #notifyOnFlush = false;
+  // The result type and error as of holdData(): what a listener added while
+  // held is called with, so it never sees old rows paired with a new type.
+  #heldResultType: ResultType = 'unknown';
+  #heldError: ErroredQuery | undefined;
   #resultType: ResultType = 'unknown';
   #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
@@ -137,6 +139,15 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   #fireListener(listener: Listener<V>) {
+    if (this.#committedRoot !== undefined) {
+      // Held rows go with the held type; after releaseData() both are current.
+      listener(
+        this.data as Immutable<V>,
+        this.#heldResultType,
+        this.#heldError,
+      );
+      return;
+    }
     listener(this.data as Immutable<V>, this.#resultType, this.#error);
   }
 
@@ -178,9 +189,9 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   /**
-   * Keep exposing the current snapshot until the next {@link flush}, whatever
-   * is pushed in the meantime, and hold back result type notifications until
-   * then too.
+   * Keep exposing the current snapshot, whatever is pushed in the meantime,
+   * until {@link releaseData} or the next {@link flush}. Result type
+   * notifications are held back until that flush.
    *
    * A transaction is normally one synchronous task, so nobody can look at a
    * view between its pushes and its flush. Deferred pipelines are different:
@@ -191,6 +202,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   holdData(): void {
     this.#committedRoot = this.#root;
     this.#held = true;
+    this.#heldResultType = this.#resultType;
+    this.#heldError = this.#error;
   }
 
   /**
@@ -206,11 +219,10 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   flush() {
     this.#committedRoot = undefined;
     this.#held = false;
-    if (!this.#dirty && !this.#notifyOnFlush) {
+    if (!this.#dirty) {
       return;
     }
     this.#dirty = false;
-    this.#notifyOnFlush = false;
     this.#fireListeners();
     // The snapshot just handed to listeners is now observed; the next
     // transaction must copy-on-write rather than mutate these objects. A fresh
@@ -252,7 +264,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     // A held view is waiting to be exposed together with others at the next
     // flush; that goes for its result type as much as for its rows.
     if (this.#held) {
-      this.#notifyOnFlush = true;
+      // Dirty so that the flush notifies even when no rows were pushed.
+      this.#dirty = true;
     } else if (!this.#dirty) {
       this.#fireListeners();
     }

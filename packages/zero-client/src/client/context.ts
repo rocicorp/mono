@@ -39,6 +39,12 @@ function defaultYield(): Promise<void> {
   if (typeof scheduler?.yield === 'function') {
     return scheduler.yield();
   }
+  // Timers are throttled to a second or more in a background tab, which would
+  // stretch startup to minutes, and a hidden page has nothing to keep
+  // responsive anyway.
+  if (getBrowserGlobal('document')?.visibilityState === 'hidden') {
+    return Promise.resolve();
+  }
   return new Promise(resolve => setTimeout(resolve, 0));
 }
 
