@@ -415,6 +415,12 @@ describe('advance', () => {
           newValue: {id: 'u1', name: 'Alice'},
         },
         {
+          op: 'change',
+          key: `${ENTITIES_KEY_PREFIX}users/u1`,
+          oldValue: {id: 'u1', name: 'Alice'},
+          newValue: {id: 'u1', name: 'Alicia'},
+        },
+        {
           op: 'add',
           key: `${ENTITIES_KEY_PREFIX}users/u1`,
           newValue: {id: 'u1', name: 'Alice'},
@@ -452,6 +458,67 @@ describe('advance', () => {
       originalError,
     );
   });
+});
+
+test('advance bulk loads empty sources and matches per-row pushes', () => {
+  const tables = {
+    users: {
+      name: 'users',
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      primaryKey: ['id'],
+    },
+    // Compound keys are hashed in the replicache key so the scan order is
+    // not primary key order.
+    likes: {
+      name: 'likes',
+      columns: {a: {type: 'number'}, b: {type: 'number'}},
+      primaryKey: ['a', 'b'],
+    },
+  } as const;
+  const e = ENTITIES_KEY_PREFIX;
+  const diffs = [
+    {op: 'add', key: `${e}likes/h1`, newValue: {a: 2, b: 1}},
+    {op: 'add', key: `${e}likes/h2`, newValue: {a: 1, b: 2}},
+    {op: 'add', key: `${e}likes/h3`, newValue: {a: 1, b: 1}},
+    {op: 'add', key: `${e}users/u1`, newValue: {id: 'u1', name: 'A'}},
+    {op: 'add', key: `${e}users/u2`, newValue: {id: 'u2', name: 'B'}},
+    {
+      op: 'change',
+      key: `${e}users/u3`,
+      oldValue: {id: 'u3', name: 'C'},
+      newValue: {id: 'u3', name: 'C2'},
+    },
+  ] as const;
+
+  const bulk = new IVMSourceBranch(tables);
+  // u3 does not exist: the edit must still go through push and fail, showing
+  // the bulk run stopped at the first non-add.
+  expect(() => bulk.advance(undefined, 'h' as Hash, diffs.slice())).toThrow(
+    'Row not found',
+  );
+
+  const bulk2 = new IVMSourceBranch(tables);
+  bulk2.advance(undefined, 'h' as Hash, diffs.slice(0, 5));
+
+  const pushed = new IVMSourceBranch(tables);
+  // Connecting first forces the per-row push path.
+  pushed.getSource('users')!.connect([['id', 'asc']]);
+  pushed.getSource('likes')!.connect([
+    ['a', 'asc'],
+    ['b', 'asc'],
+  ]);
+  pushed.advance(undefined, 'h' as Hash, diffs.slice(0, 5));
+
+  for (const name of ['users', 'likes']) {
+    expect([...bulk2.getSource(name)!.data]).toEqual([
+      ...pushed.getSource(name)!.data,
+    ]);
+  }
+  expect([...bulk2.getSource('likes')!.data]).toEqual([
+    {a: 1, b: 1},
+    {a: 1, b: 2},
+    {a: 2, b: 1},
+  ]);
 });
 
 describe('forkToHead', () => {
