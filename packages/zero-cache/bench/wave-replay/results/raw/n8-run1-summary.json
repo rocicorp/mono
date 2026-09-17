@@ -1,0 +1,71 @@
+{
+  "clients": 8,
+  "run": 1,
+  "wallSeconds": 5.963329653,
+  "results": [
+    {
+      "index": 1,
+      "exitCode": 0,
+      "clientGroup": "be3iute2jhdq3eug01",
+      "totalSettleSeconds": 5.492,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 2,
+      "exitCode": 0,
+      "clientGroup": "sbq9g8cdu6ng6jrjs0",
+      "totalSettleSeconds": 5.322,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 3,
+      "exitCode": 0,
+      "clientGroup": "j0itmqlppacurghe64",
+      "totalSettleSeconds": 5.349,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 4,
+      "exitCode": 0,
+      "clientGroup": "g5houh1f0m9ds5pei0",
+      "totalSettleSeconds": 5.143,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 5,
+      "exitCode": 0,
+      "clientGroup": "s0f038lri46efm2bm8",
+      "totalSettleSeconds": 5.366,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 6,
+      "exitCode": 0,
+      "clientGroup": "5ftjimcpr6cquenpbb",
+      "totalSettleSeconds": 5.388,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 7,
+      "exitCode": 0,
+      "clientGroup": "v5av1oj0fofgga3rp9",
+      "totalSettleSeconds": 5.328,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    },
+    {
+      "index": 8,
+      "exitCode": 0,
+      "clientGroup": "dl4j0oc95s8d5rs0q7",
+      "totalSettleSeconds": 5.273,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    }
+  ]
+}
