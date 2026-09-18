@@ -702,4 +702,65 @@ describe('view-syncer/snapshotter', () => {
 
     getSpy.mockRestore();
   });
+
+  test('unobserved tables are skipped without row lookups', () => {
+    const {version} = s.current();
+    expect(version).toBe('01');
+
+    replicator.processTransaction(
+      '07',
+      messages.insert('users', {id: 'u1', handle: 'alice'}),
+      messages.insert('issues', {id: 1, desc: 'bug', owner: 1}),
+    );
+
+    // Only observe 'issues', users should be skipped
+    const observed = new Set(['issues']);
+    const diff = s.advance(tableSpecs, allTableNames, observed);
+    expect(diff.changes).toBe(2);
+
+    const prevSpy = vi.spyOn(diff.prev.db.statementCache, 'get');
+    const currSpy = vi.spyOn(diff.curr.db.statementCache, 'get');
+
+    const changes = [...diff];
+    expect(changes).toHaveLength(1);
+    expect(changes[0]?.table).toBe('issues');
+
+    // Assert that no statement queries were executed for 'users'
+    const prevUsersCalls = prevSpy.mock.calls.filter(
+      call => typeof call[0] === 'string' && call[0].includes('"users"'),
+    );
+    const currUsersCalls = currSpy.mock.calls.filter(
+      call => typeof call[0] === 'string' && call[0].includes('"users"'),
+    );
+    expect(prevUsersCalls).toHaveLength(0);
+    expect(currUsersCalls).toHaveLength(0);
+
+    // Assert that queries WERE executed for the observed 'issues' table
+    const currIssuesCalls = currSpy.mock.calls.filter(
+      call => typeof call[0] === 'string' && call[0].includes('"issues"'),
+    );
+    expect(currIssuesCalls.length).toBeGreaterThan(0);
+
+    prevSpy.mockRestore();
+    currSpy.mockRestore();
+  });
+
+  test('permissions change is observed even when not in observedTables', () => {
+    const {version} = s.current();
+    expect(version).toBe('01');
+
+    replicator.processTransaction(
+      '07',
+      messages.update('my_app.permissions', {
+        lock: 1,
+        permissions: '{"tables":{}}',
+        hash: '12345',
+      }),
+      messages.insert('issues', {id: 1, desc: 'bug', owner: 1}),
+    );
+
+    const observed = new Set(['issues']);
+    const diff = s.advance(tableSpecs, allTableNames, observed);
+    expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
+  });
 });

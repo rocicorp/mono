@@ -222,6 +222,10 @@ export class TableSource implements Source {
     };
   }
 
+  hasConnections(): boolean {
+    return this.#connections.length > 0;
+  }
+
   connect(
     sort: Ordering | undefined,
     filters?: Condition,

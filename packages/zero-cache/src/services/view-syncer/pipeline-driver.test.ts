@@ -2298,6 +2298,61 @@ describe('view-syncer/pipeline-driver', () => {
     expect(pipelines.currentVersion()).toBe('134');
   });
 
+  test('prunes unused tables when queries are removed', () => {
+    pipelines.init(clientSchema);
+
+    // Query 1 uses issues and comments
+    [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    ];
+
+    // Query 2 uses only issues
+    const ONLY_ISSUES: AST = {
+      table: 'issues',
+      orderBy: [['id', 'desc']],
+    };
+    [...pipelines.addQuery('hash2', 'queryID2', ONLY_ISSUES, startTimer())];
+
+    const advanceSpy = vi.spyOn(Snapshotter.prototype, 'advance');
+
+    // Advance 1: Both queries active -> issues and comments are both observed
+    changes();
+    const observed1 = advanceSpy.mock.calls.at(-1)?.[2];
+    expect(observed1?.has('issues')).toBe(true);
+    expect(observed1?.has('comments')).toBe(true);
+    expect(observed1?.has('labels')).toBe(false);
+
+    // Remove query 1: comments has no more connections, so it should be pruned.
+    // issues is still used by query 2.
+    pipelines.removeQuery('queryID1');
+
+    changes();
+    const observed2 = advanceSpy.mock.calls.at(-1)?.[2];
+    expect(observed2?.has('issues')).toBe(true);
+    expect(observed2?.has('comments')).toBe(false);
+
+    // Remove query 2: issues should now be pruned as well.
+    pipelines.removeQuery('queryID2');
+
+    changes();
+    const observed3 = advanceSpy.mock.calls.at(-1)?.[2];
+    expect(observed3?.has('issues')).toBe(false);
+    expect(observed3?.has('comments')).toBe(false);
+
+    // Re-adding a query on issues recreates the table source and works
+    [...pipelines.addQuery('hash2', 'queryID2', ONLY_ISSUES, startTimer())];
+    changes();
+    const observed4 = advanceSpy.mock.calls.at(-1)?.[2];
+    expect(observed4?.has('issues')).toBe(true);
+
+    advanceSpy.mockRestore();
+  });
+
   test('push fails on out of bounds numbers', () => {
     pipelines.init(clientSchema);
     [
