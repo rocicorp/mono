@@ -148,7 +148,10 @@ describe('change-streamer/service', () => {
     };
   });
 
-  async function run(streamer: ChangeStreamerService) {
+  async function run(
+    streamer: ChangeStreamerService,
+    expectOwnershipTakeover = true,
+  ) {
     // Clear ownership
     await sql`UPDATE "zoro_3/cdc"."replicationState" SET owner = NULL;`;
 
@@ -158,7 +161,7 @@ describe('change-streamer/service', () => {
     await vi.waitFor(async () => {
       expect(
         await sql`SELECT owner FROM "zoro_3/cdc"."replicationState"`,
-      ).toEqual([{owner: 'task-id'}]);
+      ).toEqual([{owner: expectOwnershipTakeover ? 'task-id' : null}]);
     });
   }
 
@@ -446,7 +449,7 @@ describe('change-streamer/service', () => {
       },
       setTimeoutFn as unknown as typeof setTimeout,
     );
-    await run(streamer);
+    await run(streamer, pgChangeLogEnabled);
     return startStream;
   }
 
