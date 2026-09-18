@@ -166,7 +166,11 @@ function makeFactories(
   } as const;
 }
 
-function setupSyncer(lc: LogContext, config: ZeroConfig) {
+function setupSyncer(
+  lc: LogContext,
+  config: ZeroConfig,
+  parent: any = TEST_PARENT,
+) {
   const mutagens: MutagenService[] = [];
   const pushers: PusherService[] = [];
   const contextManagers = new Map<string, ConnectionContextManagerImpl>();
@@ -197,7 +201,7 @@ function setupSyncer(lc: LogContext, config: ZeroConfig) {
     viewSyncerFactory,
     mutagenFactory,
     pusherFactory,
-    TEST_PARENT,
+    parent,
     validateLegacyJWT,
   );
   return {syncer, mutagens, pushers, contextManagers};
@@ -569,6 +573,32 @@ describe('cleanup', () => {
     for (let i = 0; i < 10; i++) {
       await newConnection(1);
       check(i);
+    }
+  });
+
+  test('notifies parent of client group active status via clientGroupStatus message', async () => {
+    const sentMessages: any[] = [];
+    const mockParent = {
+      send: (msg: any) => {
+        sentMessages.push(msg);
+        return true;
+      },
+      onMessageType: () => {},
+    };
+    const env = setupSyncer(
+      lc,
+      {auth: {secret: 'test-secret'}} as ZeroConfig,
+      mockParent,
+    );
+    try {
+      const ws = await newConnection(1);
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: '1', active: true},
+      ]);
+      ws.close();
+    } finally {
+      await env.syncer.stop();
     }
   });
 });

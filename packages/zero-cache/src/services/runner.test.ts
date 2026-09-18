@@ -129,4 +129,51 @@ describe('services/runner', () => {
     expect(runCompleted).toBe(true);
     expect(zombieRunner.size).toBe(0);
   });
+
+  test('onStart and onStop callbacks', async () => {
+    const started: string[] = [];
+    const stopped: string[] = [];
+
+    const callbackRunner = new ServiceRunner<TestService>(
+      createSilentLogContext(),
+      (id: string) => new TestService(id),
+      (s: TestService) => s.valid,
+      id => started.push(id),
+      id => stopped.push(id),
+    );
+
+    const s1 = callbackRunner.getService('foo');
+    expect(started).toEqual(['foo']);
+    expect(stopped).toEqual([]);
+
+    // Cached access does not re-trigger onStart
+    const s1Again = callbackRunner.getService('foo');
+    expect(s1Again).toBe(s1);
+    expect(started).toEqual(['foo']);
+
+    // Stopping service triggers onStop
+    s1.resolver.resolve();
+    await sleep(1);
+    expect(stopped).toEqual(['foo']);
+
+    // Re-creating after stop triggers onStart again
+    const s2 = callbackRunner.getService('foo');
+    expect(s2).not.toBe(s1);
+    expect(started).toEqual(['foo', 'foo']);
+
+    // Replace before stop: s2 becomes invalid and s3 is created
+    s2.valid = false;
+    const s3 = callbackRunner.getService('foo');
+    expect(started).toEqual(['foo', 'foo', 'foo']);
+
+    // Old s2 stops; because it was replaced, onStop should NOT fire for s2
+    s2.resolver.resolve();
+    await sleep(1);
+    expect(stopped).toEqual(['foo']);
+
+    // When s3 stops, onStop fires
+    s3.resolver.resolve();
+    await sleep(1);
+    expect(stopped).toEqual(['foo', 'foo']);
+  });
 });

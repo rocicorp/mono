@@ -36,7 +36,7 @@ import type {
 import type {ConnectionContextManager} from '../services/view-syncer/connection-context-manager.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
-import type {Worker} from '../types/processes.ts';
+import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import type {Subscription} from '../types/subscription.ts';
 import {installWebSocketReceiver} from '../types/websocket-handoff.ts';
 import type {ConnectParams} from './connect-params.ts';
@@ -435,10 +435,21 @@ export class Syncer implements SingletonService {
     subscribeTo(lc, parent);
 
     this.#lc = lc;
+    this.#parent = parent;
     this.#viewSyncers = new ServiceRunner(
       lc,
       id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
+      id =>
+        this.#parent.send<ClientGroupStatusMessage>([
+          'clientGroupStatus',
+          {clientGroupID: id, active: true},
+        ]),
+      id =>
+        this.#parent.send<ClientGroupStatusMessage>([
+          'clientGroupStatus',
+          {clientGroupID: id, active: false},
+        ]),
     );
     if (mutagenFactory) {
       this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
@@ -454,7 +465,6 @@ export class Syncer implements SingletonService {
         p => p.hasRefs(),
       );
     }
-    this.#parent = parent;
     this.#wss = new WebSocketServer(getWebSocketServerOptions(config));
 
     installWebSocketReceiver(

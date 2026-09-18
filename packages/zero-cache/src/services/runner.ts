@@ -10,15 +10,21 @@ export class ServiceRunner<S extends Service> {
   readonly #instances = new Map<string, S>();
   readonly #create: (id: string) => S;
   readonly #isValid: (existing: S) => boolean;
+  readonly #onStart?: ((id: string) => void) | undefined;
+  readonly #onStop?: ((id: string) => void) | undefined;
 
   constructor(
     lc: LogContext,
     factory: (id: string) => S,
     isValid: (existing: S) => boolean = () => true,
+    onStart?: ((id: string) => void) | undefined,
+    onStop?: ((id: string) => void) | undefined,
   ) {
     this.#lc = lc;
     this.#create = factory;
     this.#isValid = isValid;
+    this.#onStart = onStart;
+    this.#onStop = onStop;
   }
 
   /**
@@ -32,6 +38,7 @@ export class ServiceRunner<S extends Service> {
     }
     const service = this.#create(id);
     this.#instances.set(id, service);
+    this.#onStart?.(id);
     void service
       .run()
       .catch(e =>
@@ -49,6 +56,7 @@ export class ServiceRunner<S extends Service> {
         // stopped by this runner.
         if (this.#instances.get(id) === service) {
           this.#instances.delete(id);
+          this.#onStop?.(id);
         }
       });
     return service;

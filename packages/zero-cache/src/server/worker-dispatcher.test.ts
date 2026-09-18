@@ -1,5 +1,13 @@
-import {expect, test} from 'vitest';
-import {parsePath} from './worker-dispatcher.ts';
+import type {SendHandle} from 'node:child_process';
+import EventEmitter from 'node:events';
+import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
+import {
+  type ClientGroupStatusMessage,
+  inProcChannel,
+} from '../types/processes.ts';
+import {parsePath, WorkerDispatcher} from './worker-dispatcher.ts';
 
 test.each([
   ['/sync/v1/connect', {version: '1', worker: 'sync', action: 'connect'}],
@@ -87,4 +95,174 @@ test.each([
   ['', undefined],
 ])('parseSyncPath %s', (path, result) => {
   expect(parsePath(new URL(path, 'http://foo/'))).toEqual(result);
+});
+
+describe('WorkerDispatcher client group routing', () => {
+  test('routes connections to least-loaded syncers and updates on clientGroupStatus', () => {
+    const [parentInDispatcher, parentOut] = inProcChannel();
+    const [syncer0InDispatcher, syncer0Out] = inProcChannel();
+    const [syncer1InDispatcher, syncer1Out] = inProcChannel();
+
+    const syncer0Messages: unknown[] = [];
+    const syncer1Messages: unknown[] = [];
+    syncer0Out.on('message', data => syncer0Messages.push(data));
+    syncer1Out.on('message', data => syncer1Messages.push(data));
+
+    const dispatcher = new WorkerDispatcher(
+      createSilentLogContext(),
+      'task-test',
+      parentInDispatcher,
+      [syncer0InDispatcher, syncer1InDispatcher],
+      undefined,
+      undefined,
+    );
+
+    const secProtocol = encodeSecProtocols(undefined, undefined);
+
+    const sendSyncHandoff = (cg: string) => {
+      const socket = new EventEmitter();
+      parentOut.send(
+        [
+          'handoff',
+          {
+            message: {
+              url: `/sync/v1/connect?clientID=c1&clientGroupID=${cg}&ts=100&lmid=1`,
+              headers: {
+                'sec-websocket-protocol': secProtocol,
+              },
+            },
+            head: new ArrayBuffer(0),
+          },
+        ],
+        socket as unknown as SendHandle,
+      );
+    };
+
+    // First connection goes to one syncer
+    sendSyncHandoff('cg-1');
+    const assignedSyncer1 = syncer0Messages.length === 1 ? 0 : 1;
+    expect(syncer0Messages.length + syncer1Messages.length).toBe(1);
+
+    // Second connection for a DIFFERENT client group goes to the other syncer (least-loaded)
+    sendSyncHandoff('cg-2');
+    expect(syncer0Messages.length).toBe(1);
+    expect(syncer1Messages.length).toBe(1);
+
+    // Reconnecting cg-1 is sticky
+    const s0Count = syncer0Messages.length;
+    const s1Count = syncer1Messages.length;
+    sendSyncHandoff('cg-1');
+    if (assignedSyncer1 === 0) {
+      expect(syncer0Messages.length).toBe(s0Count + 1);
+      expect(syncer1Messages.length).toBe(s1Count);
+    } else {
+      expect(syncer0Messages.length).toBe(s0Count);
+      expect(syncer1Messages.length).toBe(s1Count + 1);
+    }
+
+    // Confirm cg-1 and cg-2
+    if (assignedSyncer1 === 0) {
+      syncer0Out.send<ClientGroupStatusMessage>([
+        'clientGroupStatus',
+        {clientGroupID: 'cg-1', active: true},
+      ]);
+      syncer1Out.send<ClientGroupStatusMessage>([
+        'clientGroupStatus',
+        {clientGroupID: 'cg-2', active: true},
+      ]);
+    } else {
+      syncer1Out.send<ClientGroupStatusMessage>([
+        'clientGroupStatus',
+        {clientGroupID: 'cg-1', active: true},
+      ]);
+      syncer0Out.send<ClientGroupStatusMessage>([
+        'clientGroupStatus',
+        {clientGroupID: 'cg-2', active: true},
+      ]);
+    }
+
+    // Release cg-1; now assignedSyncer1 has load 0 and the other has load 1
+    if (assignedSyncer1 === 0) {
+      syncer0Out.send<ClientGroupStatusMessage>([
+        'clientGroupStatus',
+        {clientGroupID: 'cg-1', active: false},
+      ]);
+    } else {
+      syncer1Out.send<ClientGroupStatusMessage>([
+        'clientGroupStatus',
+        {clientGroupID: 'cg-1', active: false},
+      ]);
+    }
+
+    // Next new group must route to assignedSyncer1 (which has load 0)
+    const s0Before = syncer0Messages.length;
+    const s1Before = syncer1Messages.length;
+    sendSyncHandoff('cg-3');
+    if (assignedSyncer1 === 0) {
+      expect(syncer0Messages.length).toBe(s0Before + 1);
+      expect(syncer1Messages.length).toBe(s1Before);
+    } else {
+      expect(syncer0Messages.length).toBe(s0Before);
+      expect(syncer1Messages.length).toBe(s1Before + 1);
+    }
+
+    void dispatcher.stop();
+  });
+
+  test('clears worker assignments on worker close', () => {
+    const [parentInDispatcher, parentOut] = inProcChannel();
+    const [syncer0InDispatcher, syncer0Out] = inProcChannel();
+    const [syncer1InDispatcher, syncer1Out] = inProcChannel();
+
+    const syncer0Messages: unknown[] = [];
+    const syncer1Messages: unknown[] = [];
+    syncer0Out.on('message', data => syncer0Messages.push(data));
+    syncer1Out.on('message', data => syncer1Messages.push(data));
+
+    const dispatcher = new WorkerDispatcher(
+      createSilentLogContext(),
+      'task-test',
+      parentInDispatcher,
+      [syncer0InDispatcher, syncer1InDispatcher],
+      undefined,
+      undefined,
+    );
+
+    const secProtocol = encodeSecProtocols(undefined, undefined);
+
+    const sendSyncHandoff = (cg: string) => {
+      const socket = new EventEmitter();
+      parentOut.send(
+        [
+          'handoff',
+          {
+            message: {
+              url: `/sync/v1/connect?clientID=c1&clientGroupID=${cg}&ts=100&lmid=1`,
+              headers: {
+                'sec-websocket-protocol': secProtocol,
+              },
+            },
+            head: new ArrayBuffer(0),
+          },
+        ],
+        socket as unknown as SendHandle,
+      );
+    };
+
+    sendSyncHandoff('cg-1');
+    const firstSyncer = syncer0Messages.length === 1 ? 0 : 1;
+
+    // Simulate worker close
+    if (firstSyncer === 0) {
+      syncer0InDispatcher.emit('close');
+    } else {
+      syncer1InDispatcher.emit('close');
+    }
+
+    // Now cg-1 is no longer sticky to that crashed worker; sending cg-1 can route again
+    sendSyncHandoff('cg-1');
+    expect(syncer0Messages.length + syncer1Messages.length).toBe(2);
+
+    void dispatcher.stop();
+  });
 });
