@@ -31,6 +31,7 @@ import type {
 import {initializePostgresChangeSource} from './change-source-init.ts';
 import {fromStateVersionString, toBigInt, toStateVersionString} from './lsn.ts';
 import {dropEventTriggerStatements} from './schema/ddl.ts';
+import {InitialSync, Replicate} from './schema/replica-stage-enum.ts';
 
 const APP_ID = '23';
 const SHARD_NUM = 1;
@@ -156,10 +157,16 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
   async function startReplication({
     lagReportIntervalMs,
+    epoch = 0,
+    slotPerReplica = false,
     backupV5 = true,
+    inactiveReplicaGracePeriodMs = 20000,
   }: {
     lagReportIntervalMs?: number;
+    epoch?: number;
+    slotPerReplica?: boolean;
     backupV5?: boolean;
+    inactiveReplicaGracePeriodMs?: number;
   } = {}) {
     ({changeSource: source} = await initializePostgresChangeSource(
       lc,
@@ -174,12 +181,14 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {test: 'context'},
       lagReportIntervalMs,
       {},
-      {backupV5},
+      {epoch, slotPerReplica, backupV5, inactiveReplicaGracePeriodMs},
     ));
 
-    const [{slot, initialSyncContext, subscriberContext}] = await upstream`
+    const [{slot, stage, initialSyncContext, subscriberContext}] =
+      await upstream`
       SELECT * FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
     `;
+    expect(stage).toBe(InitialSync);
     expect(initialSyncContext).toEqual({test: 'context'});
     expect(subscriberContext).toBeNull();
     replicationSlot = slot;
@@ -249,9 +258,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     const {changes, acks} = await startStream('00');
     const downstream = drainToQueue(changes);
 
-    const [{subscriberContext}] = await upstream`
+    const [{stage, subscriberContext}] = await upstream`
       SELECT * FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
     `;
+    expect(stage).toBe(Replicate);
     expect(subscriberContext).toEqual({test: 'context'});
 
     await upstream.begin(async tx => {
@@ -1146,6 +1156,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {watermark: expect.stringMatching(WATERMARK_REGEX)},
     ]);
 
+    // Start a subscription on the new slot should to transition
+    // the replica from stage=InitialSync to stage=Replicate.
+    const {changes: changes2} = await startStream('00', source2);
+
     // Start a *third* initial sync with an empty replica.
     const replicaFile3 = new DbFile('change_source_pg_test_replica2');
     const {changeSource: source3} = await initializePostgresChangeSource(
@@ -1173,11 +1187,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     `);
     expect(replicas3).toHaveLength(3);
 
-    // Starting a subscription on the new slot should kill the old
-    // subscription and drop the first replication slot.
-    const {changes: changes2} = await startStream('00', source2);
-
-    // The new stream should get the same changes since it was synced
+    // The second stream should get the same changes since it was synced
     // before they occurred.
     const downstream2 = drainToQueue(changes2);
     expect(await downstream2.dequeue()).toMatchObject([

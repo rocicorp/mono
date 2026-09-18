@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect} from 'vitest';
+import {afterEach, beforeEach, describe, expect} from 'vitest';
 import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.ts';
 import {Index} from '../../../../db/postgres-replica-identity-enum.ts';
 import {
@@ -10,13 +10,24 @@ import {
   test,
 } from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
+import {
+  createReplicaAndSlot,
+  type ReplicationSlotResult,
+} from '../replication-slots.ts';
 import {getPublicationInfo} from './published.ts';
+import * as ReplicaStage from './replica-stage-enum.ts';
 import {
   createReplica,
-  initReplica,
+  ensureGlobalTables,
+  getReplicaState,
+  getRestoreCandidates,
+  initInitialSyncReplica,
+  initRestoreReplica,
+  metadataPublicationName,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
   setupTablesAndReplication,
   setupTriggers,
+  shardSetup,
   validatePublicationName,
   validatePublications,
 } from './shard.ts';
@@ -58,10 +69,12 @@ describe('change-source/pg', () => {
         {appID: APP_ID, shardNum: 0},
         '12345',
         'zro_0_1234',
+        0,
         '0wdfj02',
         {backupPath: '12345', backupV5: true},
+        ReplicaStage.InitialSync,
       );
-      await initReplica(
+      await initInitialSyncReplica(
         tx,
         {appID: APP_ID, shardNum: 0},
         '12345',
@@ -91,7 +104,9 @@ describe('change-source/pg', () => {
           id: /\d{10,}/,
           slot: 'zro_0_1234',
           version: null,
+          epoch: 0,
           generation: '0wdfj02',
+          stage: ReplicaStage.InitialSync,
           backupPath: '12345',
           backupV5: true,
           initialSchema: {tables: [], indexes: []},
@@ -623,5 +638,302 @@ describe('validatePublicationName', () => {
 
   test('name too long', () => {
     expect(() => validatePublicationName('a'.repeat(64))).toThrow(/exceeds/);
+  });
+});
+
+describe('getRestoreCandidates / initRestoreReplica', () => {
+  const APP_ID = 'zro';
+  const SHARD_NUM = 0;
+  const shard = {appID: APP_ID, shardNum: SHARD_NUM};
+  const schema = `${APP_ID}_${SHARD_NUM}`;
+
+  let lc: LogContext;
+  let db: PostgresDB;
+
+  beforeEach<PgTest>(async ({testDBs}) => {
+    lc = new LogContext('warn', {}, new TestLogSink());
+    db = await testDBs.create('restore_candidates_test');
+    const metadataPub = metadataPublicationName(APP_ID, SHARD_NUM);
+    await ensureGlobalTables(db, shard);
+    await db.unsafe(
+      shardSetup({...shard, publications: [metadataPub]}, metadataPub),
+    );
+
+    return async () => {
+      await testDBs.drop(db);
+    };
+  });
+
+  // Creates an inactive logical slot. Slots created via the SQL function
+  // (as opposed to a walsender session) are `active = false`, which is all
+  // that's needed to exercise the JOIN / filtering / ordering logic.
+  async function createSlot(name: string) {
+    await db`SELECT pg_create_logical_replication_slot(${name}, 'pgoutput')`;
+  }
+
+  async function addReplica(
+    id: string,
+    slot: string | null,
+    {
+      epoch = 0,
+      generation,
+      stage,
+      backupV5 = true,
+      backupPath = id,
+    }: {
+      epoch?: number;
+      generation: string;
+      stage:
+        | ReplicaStage.InitialSync
+        | ReplicaStage.Replicate
+        | ReplicaStage.Restore;
+      backupV5?: boolean;
+      backupPath?: string | null;
+    },
+  ) {
+    if (slot) {
+      await createSlot(slot);
+    }
+    await createReplica(
+      db,
+      shard,
+      id,
+      slot ?? `${id}_missing_slot`,
+      epoch,
+      generation,
+      {backupPath, backupV5},
+      stage,
+    );
+  }
+
+  // Sessions that hold their slots `active`; released on teardown so the
+  // slots can be dropped.
+  const sessions: ReplicationSlotResult<unknown>[] = [];
+  // eslint-disable-next-line require-await
+  afterEach(async () => {
+    for (const {initialSession} of sessions.splice(0)) {
+      initialSession.destroy();
+    }
+  });
+
+  // Creates a replica whose slot is `active` (held by a walsender session),
+  // then overrides its row to the generation / stage under test. The slot is
+  // created in the Restore stage so it doesn't trip the initial-sync guard.
+  async function addActiveReplica(
+    id: string,
+    {
+      epoch = 0,
+      generation,
+      stage,
+      backupV5 = true,
+      backupPath = id,
+    }: {
+      epoch?: number;
+      generation: string;
+      stage:
+        | ReplicaStage.InitialSync
+        | ReplicaStage.Replicate
+        | ReplicaStage.Restore;
+      backupV5?: boolean;
+      backupPath?: string | null;
+    },
+  ) {
+    const result = await createReplicaAndSlot(
+      lc,
+      db,
+      `session-${id}`,
+      shard,
+      epoch,
+      id,
+      false,
+      {backupPath, backupV5},
+      snapshot => Promise.resolve(snapshot),
+      ReplicaStage.Restore,
+    );
+    sessions.push(result);
+    await db`
+      UPDATE ${db(schema)}.replicas
+        SET generation = ${generation}, stage = ${stage}, epoch = ${epoch},
+            "backupV5" = ${backupV5}, "backupPath" = ${backupPath}
+        WHERE id = ${id}`;
+  }
+
+  test('coalesces on the newest generation within the epoch', async () => {
+    // Older generation in the same epoch: excluded by the MAX() coalescing.
+    await addReplica('old', 'zro_0_a', {
+      generation: 'aaa',
+      stage: ReplicaStage.Replicate,
+    });
+    // Two siblings sharing the winning generation.
+    await addReplica('live', 'zro_0_b', {
+      generation: 'ccc',
+      stage: ReplicaStage.Replicate,
+    });
+    await addReplica('sib', 'zro_0_c', {
+      generation: 'ccc',
+      stage: ReplicaStage.Restore,
+    });
+    // A freshly-created Restore row not yet initialized (empty generation)
+    // must never win MAX() and must be excluded.
+    await addReplica('forking', 'zro_0_d', {
+      generation: '',
+      stage: ReplicaStage.Restore,
+    });
+    // A higher generation but backupV5 = false must NOT raise the coalesced
+    // generation (the MAX() subquery filters on backupV5 = true).
+    await addReplica('v3', 'zro_0_e', {
+      generation: 'zzz',
+      stage: ReplicaStage.Replicate,
+      backupV5: false,
+    });
+    // A row at the winning generation but with no live slot is excluded by
+    // the JOIN against pg_replication_slots.
+    await addReplica('noslot', null, {
+      generation: 'ccc',
+      stage: ReplicaStage.Replicate,
+    });
+    // A different epoch must not influence the coalesced generation.
+    await addReplica('otherEpoch', 'zro_0_f', {
+      epoch: 1,
+      generation: 'ddd',
+      stage: ReplicaStage.Replicate,
+    });
+
+    const candidates = await getRestoreCandidates(lc, db, shard, 0);
+    expect(candidates.map(c => c.id)).toEqual(['live', 'sib']);
+    expect(candidates.map(c => c.generation)).toEqual(['ccc', 'ccc']);
+    // stage ASC: Replicate (1) before Restore (2).
+    expect(candidates.map(c => c.stage)).toEqual([
+      ReplicaStage.Replicate,
+      ReplicaStage.Restore,
+    ]);
+    expect(candidates.every(c => c.active === false)).toBe(true);
+  });
+
+  test('returns empty when no backupV5 replica exists in the epoch', async () => {
+    await addReplica('legacy', 'zro_0_a', {
+      generation: 'aaa',
+      stage: ReplicaStage.Replicate,
+      backupV5: false,
+    });
+    expect(await getRestoreCandidates(lc, db, shard, 0)).toEqual([]);
+  });
+
+  test('initRestoreReplica carries generation and context from the source', async () => {
+    await addReplica('source', 'zro_0_a', {
+      generation: 'srcgen',
+      stage: ReplicaStage.Replicate,
+      backupPath: 'source-backup',
+    });
+    await initInitialSyncReplica(
+      db,
+      shard,
+      'source',
+      {tables: [], indexes: []},
+      {
+        foo: 'bar',
+      },
+    );
+    await addReplica('dest', 'zro_0_b', {
+      generation: '', // as created by createReplicaAndSlot for a Restore replica
+      stage: ReplicaStage.Restore,
+      backupPath: 'dest-backup',
+    });
+
+    const returned = await initRestoreReplica(db, shard, {
+      sourceID: 'source',
+      destID: 'dest',
+    });
+    expect(returned).toMatchObject({
+      id: 'dest',
+      slot: 'zro_0_b',
+      stage: ReplicaStage.Restore,
+      generation: 'srcgen',
+      backupPath: 'dest-backup', // unchanged
+      active: false,
+    });
+
+    // The generation, schema, and sync context are copied; the slot and
+    // backupPath are left intact.
+    const [dest] = await db`
+      SELECT generation, "initialSchema", "initialSyncContext", "backupPath", slot, stage
+        FROM ${db(schema)}.replicas WHERE id = 'dest'`;
+    expect(dest).toMatchObject({
+      generation: 'srcgen',
+      initialSchema: {tables: [], indexes: []},
+      initialSyncContext: {foo: 'bar'},
+      backupPath: 'dest-backup',
+      slot: 'zro_0_b',
+      stage: ReplicaStage.Restore,
+    });
+
+    // Source is untouched.
+    const source = await getReplicaState(db, shard, 'source');
+    expect(source).toMatchObject({id: 'source', generation: 'srcgen'});
+  });
+
+  test('skips an orphaned (inactive) initial-sync at a higher generation', async () => {
+    // An initial-sync that crashed: highest generation, but inactive.
+    await addReplica('deadSync', 'zro_0_a', {
+      generation: 'zzz',
+      stage: ReplicaStage.InitialSync,
+    });
+    // A completed generation below it.
+    await addReplica('done', 'zro_0_b', {
+      generation: 'ccc',
+      stage: ReplicaStage.Replicate,
+    });
+
+    // The dead initial-sync's generation is ignored; coalesce on 'ccc'.
+    const candidates = await getRestoreCandidates(lc, db, shard, 0);
+    expect(candidates.map(c => c.id)).toEqual(['done']);
+  });
+
+  test('returns empty for a solo orphaned initial-sync', async () => {
+    // The only replica is a crashed initial-sync (inactive). With nothing
+    // restorable, the caller must fall back to a fresh initial sync.
+    await addReplica('deadSync', 'zro_0_a', {
+      generation: 'zzz',
+      stage: ReplicaStage.InitialSync,
+    });
+    expect(await getRestoreCandidates(lc, db, shard, 0)).toEqual([]);
+  });
+
+  test('an active replica is not masked by a higher, inactive initial-sync', async () => {
+    // Regression: the MAX() subquery must evaluate `active` against the
+    // subquery's own slot (via its JOIN), not correlate to the outer row.
+    // Otherwise the active 'serving' row computes MAX() = 'zzz' for itself
+    // and excludes itself, wrongly returning [].
+    await addReplica('deadSync', 'zro_0_x1', {
+      generation: 'zzz',
+      stage: ReplicaStage.InitialSync,
+    });
+    await addActiveReplica('serving', {
+      generation: 'ccc',
+      stage: ReplicaStage.Replicate,
+    });
+
+    const candidates = await getRestoreCandidates(lc, db, shard, 0);
+    expect(candidates.map(c => c.id)).toEqual(['serving']);
+    expect(candidates[0].active).toBe(true);
+  });
+
+  test('waits on an active initial-sync, coalescing on its generation', async () => {
+    // A completed generation exists, but a newer initial-sync is actively
+    // running: coalesce on the active initial-sync (wait for it), not the
+    // older completed generation.
+    await addReplica('done', 'zro_0_x1', {
+      generation: 'ccc',
+      stage: ReplicaStage.Replicate,
+    });
+    await addActiveReplica('syncing', {
+      generation: 'zzz',
+      stage: ReplicaStage.InitialSync,
+    });
+
+    const candidates = await getRestoreCandidates(lc, db, shard, 0);
+    expect(candidates.map(c => c.id)).toEqual(['syncing']);
+    expect(candidates[0].stage).toBe(ReplicaStage.InitialSync);
+    expect(candidates[0].active).toBe(true);
   });
 });

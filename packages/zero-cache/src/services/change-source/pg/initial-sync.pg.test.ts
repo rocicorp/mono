@@ -41,6 +41,7 @@ import {
 import {fromStateVersionString} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
+import {Replicate} from './schema/replica-stage-enum.ts';
 import {
   getInternalShardConfig,
   replicationSlotExpression,
@@ -49,6 +50,7 @@ import {UnsupportedTableSchemaError} from './schema/validation.ts';
 
 const APP_ID = '1';
 const SHARD_NUM = 18;
+const EPOCH = 3;
 
 const TEST_CONTEXT = {foo: 'bar'};
 
@@ -2667,6 +2669,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           getConnectionURI(upstream),
           {tableCopyWorkers: 3, replicationSlotFailover: true},
           TEST_CONTEXT,
+          {epoch: EPOCH, backupV5: true},
         );
 
         const config = await upstream.unsafe(
@@ -2681,8 +2684,18 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         );
         expect(replicas).toHaveLength(i + 1);
         for (const replica of replicas) {
-          expect(replica).toMatchObject({initialSyncContext: TEST_CONTEXT});
+          expect(replica).toMatchObject({
+            initialSyncContext: TEST_CONTEXT,
+            epoch: EPOCH,
+            backupV5: true,
+          });
         }
+        // Transition the replica to the Replicate stage so that the
+        // second run (i.e. the initial-sync takover) can proceed, as the
+        // system guards against concurrent initial-syncs in the same epoch.
+        await upstream.unsafe(
+          `UPDATE "${APP_ID}_${SHARD_NUM}"."replicas" SET stage = ${Replicate}`,
+        );
         const tableSpecs = Object.entries(c.published)
           .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
           .map(([_, spec]) => spec);

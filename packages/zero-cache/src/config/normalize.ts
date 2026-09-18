@@ -52,6 +52,7 @@ export function assertNormalized(
   assert(config.taskID, 'missing --task-id');
   assert(config.changeStreamer.port, 'missing --change-streamer-port');
   assert(config.changeStreamer.address, 'missing --change-streamer-address');
+  const {pgReplicationSlotPerReplica} = config.upstream;
   const {
     pgChangeLogEnabled,
     sqliteChangeLogMode,
@@ -98,6 +99,12 @@ export function assertNormalized(
     sqliteChangeLogReadPercent > 0 || sqliteChangeLogColdReadPercent === 0,
     '--change-streamer-sqlite-change-log-cold-read-percent must be 0 when --change-streamer-sqlite-change-log-read-percent is 0',
   );
+  if (pgReplicationSlotPerReplica) {
+    assert(
+      !pgChangeLogEnabled,
+      `--upstream-pg-replication-slot-per-replica=true requires --change-streamer-pg-change-log-enabled=false`,
+    );
+  }
   if (!pgChangeLogEnabled) {
     assert(
       sqliteChangeLogMode === 'serve',
@@ -216,6 +223,27 @@ export function normalizeZeroConfig(
   if (!config.keepaliveTimeoutMs && isRunningInECS()) {
     config.keepaliveTimeoutMs = DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS;
     env['ZERO_KEEPALIVE_TIMEOUT_MS'] = String(DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS);
+  }
+
+  if (config.upstream.pgHighAvailabilityReplication) {
+    config.upstream.pgReplicationSlotFailover = true;
+    env['ZERO_UPSTREAM_PG_REPLICATION_SLOT_FAILOVER'] = 'true';
+
+    config.litestream.restoreUsingV5 = true;
+    config.litestream.backupUsingV5 = true;
+    env['ZERO_LITESTREAM_RESTORE_USING_V5'] = 'true';
+    env['ZERO_LITESTREAM_BACKUP_USING_V5'] = 'true';
+
+    config.changeStreamer.sqliteChangeLogMode = 'serve';
+    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE'] = 'serve';
+
+    config.changeStreamer.sqliteChangeLogReadPercent = 100;
+    config.changeStreamer.sqliteChangeLogColdReadPercent = 100;
+    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_READ_PERCENT'] = '100';
+    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_COLD_READ_PERCENT'] = '100';
+
+    config.changeStreamer.pgChangeLogEnabled = false;
+    env['ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED'] = 'false';
   }
 
   lc.info?.(`runtime env: taskID=${config.taskID}, hostIP=${hostIP}`);

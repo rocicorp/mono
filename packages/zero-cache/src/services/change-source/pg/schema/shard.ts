@@ -24,6 +24,11 @@ import {
   type PublicationInfo,
   type PublishedSchema,
 } from './published.ts';
+import {
+  InitialSync,
+  replicaStageSchema,
+  type ReplicaStage,
+} from './replica-stage-enum.ts';
 import {validate} from './validation.ts';
 
 /**
@@ -201,7 +206,9 @@ export function shardSetup(
     "rank"               BIGSERIAL,
     "slot"               TEXT NOT NULL,
     "version"            TEXT,  -- replaced by generation, slated for deletion
+    "epoch"              INT4 DEFAULT 0,
     "generation"         TEXT NOT NULL,
+    "stage"              INT4 DEFAULT ${InitialSync},
     "backupPath"         TEXT,  -- subpath within the litestream backup URL
     "backupV5"           BOOL DEFAULT false,
     "initialSchema"      JSON,  -- set after initial sync
@@ -236,7 +243,9 @@ const replicaInfoSchema = v.object({
   id: v.string(),
   rank: v.bigint(),
   slot: v.string(),
+  epoch: v.number(),
   generation: v.string(),
+  stage: replicaStageSchema,
   backupPath: v.string().nullable(),
   backupV5: v.boolean(),
 });
@@ -255,7 +264,7 @@ export type Replica = v.Infer<typeof replicaSchema>;
 
 const replicationSlotStateSchema = v.object({
   active: v.boolean(),
-  confirmedFlushLsn: v.string().nullable(),
+  confirmedFlushLsn: v.string(),
 });
 
 const replicaStateSchema = replicaInfoSchema.extend(
@@ -286,7 +295,7 @@ export type BackupOptions = {
  * to ensure that the slot does not get dropped by concurrent cleanup
  * logic.
  *
- * Once initial sync is complete, {@link initReplica} should be called to
+ * Once initial sync is complete, {@link initInitialSyncReplica} should be called to
  * make the replica usable for incremental sync.
  */
 export async function createReplica(
@@ -294,22 +303,26 @@ export async function createReplica(
   shard: ShardID,
   id: string,
   slot: string,
+  epoch: number,
   replicaVersion: string,
   {backupPath, backupV5}: BackupOptions,
+  stage: ReplicaStage,
 ) {
   const schema = upstreamSchema(shard);
   const values: Partial<v.Infer<typeof fullReplicaRowSchema>> = {
     id,
     slot,
+    epoch,
     generation: replicaVersion,
     backupPath,
     backupV5,
+    stage,
   };
   await sql`INSERT INTO ${sql(schema)}.replicas ${sql(values)}`;
 }
 
 // Called in initial-sync to store the exact schema that was initially synced.
-export async function initReplica(
+export async function initInitialSyncReplica(
   sql: PostgresDB,
   shard: ShardID,
   id: string,
@@ -320,6 +333,25 @@ export async function initReplica(
   const synced: PublishedSchema = {tables, indexes};
   const values = {initialSchema: synced, initialSyncContext};
   await sql`UPDATE ${sql(schema)}.replicas SET ${sql(values)} WHERE id = ${id}`;
+}
+
+// Called to initialize a Restore replica (`destID`) with the generation
+// and initial sync context of the `sourceID` replica.
+export async function initRestoreReplica(
+  sql: PostgresDB,
+  shard: ShardID,
+  {sourceID, destID}: {sourceID: string; destID: string},
+): Promise<ReplicaState | null> {
+  const schema = upstreamSchema(shard);
+  await sql`
+    UPDATE ${sql(schema)}.replicas dest 
+      SET "generation"         = source."generation",
+          "initialSchema"      = source."initialSchema",
+          "initialSyncContext" = source."initialSyncContext"
+      FROM ${sql(schema)}.replicas source
+      WHERE source.id = ${sourceID} AND dest.id = ${destID};
+  `;
+  return getReplicaState(sql, shard, destID);
 }
 
 /**
@@ -340,7 +372,9 @@ export async function getReplicaAtVersion(
       replicas."id",
       replicas."rank",
       replicas."slot",
+      replicas."epoch",
       replicas."generation",
+      replicas."stage",
       replicas."backupPath",
       replicas."backupV5",
       replicas."initialSchema",
@@ -379,7 +413,9 @@ export async function getActiveReplicas(
       replicas."id",
       replicas."rank",
       replicas."slot",
+      replicas."epoch",
       replicas."generation",
+      replicas."stage",
       replicas."backupPath",
       replicas."backupV5",
       slots."active",
@@ -398,6 +434,63 @@ export async function getActiveReplicas(
   return replicas;
 }
 
+/**
+ * Returns candidates for restoring a new replica from. These include
+ * all replicas in the newest `generation` of the given `epoch`, in order
+ * of earliest available backup:
+ * - An active InitialSync replica, which will be the only replica in
+ *   its generation by definition. Orphaned/inactive initial syncs are skipped.
+ * - Replicas in the Replicate stage, active first.
+ * - Replicas in the Restore stage, potentially available for resumption
+ *   as a last resort.
+ */
+export async function getRestoreCandidates(
+  lc: LogContext,
+  sql: PostgresDB,
+  shard: ShardID,
+  epoch: number,
+): Promise<ReplicaState[]> {
+  const schema = sql(upstreamSchema(shard));
+  const results = await sql`
+    SELECT
+      replicas."id",
+      replicas."rank",
+      replicas."slot",
+      replicas."epoch",
+      replicas."generation",
+      replicas."stage",
+      replicas."backupPath",
+      replicas."backupV5",
+      slots."active",
+      slots."confirmed_flush_lsn" as "confirmedFlushLsn"
+    FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name
+
+      -- coalesce on the newest generation in the epoch
+      WHERE generation = (
+        SELECT MAX(r.generation)
+          FROM ${schema}.replicas r
+          JOIN pg_replication_slots s ON r.slot = s.slot_name
+         WHERE r."epoch" = ${epoch} AND r."backupV5"
+           -- ignore orphaned InitialSyncs, which cannot be restored from
+           AND (s."active" OR r."stage" != ${InitialSync})
+           AND s.restart_lsn IS NOT NULL
+           AND s.wal_status IS DISTINCT FROM 'lost'
+      )
+           AND "epoch" = ${epoch} AND "backupV5"
+           AND (slots.active OR "stage" != ${InitialSync})
+           AND slots.restart_lsn IS NOT NULL
+           AND slots.wal_status IS DISTINCT FROM 'lost'
+
+      ORDER BY 
+        stage ASC,                 -- ordered by backup availalibility
+        active DESC,               -- prefer active slots (fork over resume)
+        confirmed_flush_lsn DESC;  -- prefer replicas further ahead
+  `;
+  const replicas = v.parse(results, v.array(replicaStateSchema), 'passthrough');
+  lc.info?.(`current replicas at epoch ${epoch}`, {replicas});
+  return replicas;
+}
+
 export async function getReplicaState(
   sql: PostgresDB,
   shard: ShardID,
@@ -409,7 +502,9 @@ export async function getReplicaState(
       replicas."id",
       replicas."rank",
       replicas."slot",
+      replicas."epoch",
       replicas."generation",
+      replicas."stage",
       replicas."backupPath",
       replicas."backupV5",
       slots."active",
