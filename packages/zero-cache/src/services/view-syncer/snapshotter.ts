@@ -175,9 +175,17 @@ export class Snapshotter {
   advance(
     syncableTables: Map<string, LiteAndZqlSpec>,
     allTableNames: Set<string>,
+    observedTables?: TableFilter | undefined,
   ): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
-    return new Diff(this.#appID, syncableTables, allTableNames, prev, curr);
+    return new Diff(
+      this.#appID,
+      syncableTables,
+      allTableNames,
+      prev,
+      curr,
+      observedTables,
+    );
   }
 
   advanceWithoutDiff() {
@@ -218,6 +226,10 @@ export type Change = {
   readonly nextValue: Readonly<Row> | null;
   readonly rowKey: RowKey;
 };
+
+export interface TableFilter {
+  has(table: string): boolean;
+}
 
 /**
  * Represents the difference between two database Snapshots.
@@ -400,6 +412,7 @@ class Diff implements SnapshotDiff {
   readonly #permissionsTable: string;
   readonly #syncableTables: Map<string, LiteAndZqlSpec>;
   readonly #allTableNames: Set<string>;
+  readonly #observedTables: TableFilter | undefined;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
@@ -410,10 +423,12 @@ class Diff implements SnapshotDiff {
     allTableNames: Set<string>,
     prev: Snapshot,
     curr: Snapshot,
+    observedTables?: TableFilter | undefined,
   ) {
     this.#permissionsTable = `${appID}.permissions`;
     this.#syncableTables = syncableTables;
     this.#allTableNames = allTableNames;
+    this.#observedTables = observedTables;
     this.prev = prev;
     this.curr = curr;
     this.changes = curr.numChangesSince(prev.version);
@@ -455,6 +470,16 @@ class Diff implements SnapshotDiff {
                 `table ${table} has been truncated`,
                 'truncation',
               );
+            }
+            if (
+              this.#observedTables &&
+              !this.#observedTables.has(table) &&
+              table !== this.#permissionsTable
+            ) {
+              if (this.#allTableNames.has(table)) {
+                continue; // skip change log entries for unobserved tables.
+              }
+              throw new Error(`change for unknown table ${table}`);
             }
             const specs = this.#syncableTables.get(table);
             if (!specs) {
