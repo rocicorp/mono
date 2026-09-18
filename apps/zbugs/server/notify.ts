@@ -1,7 +1,7 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
-import {builder, type schema} from '../shared/schema.ts';
+import {builder, type schema, ZERO_PROJECT_NAME} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
 import type {PostCommitTask} from './server-mutators.ts';
@@ -57,13 +57,20 @@ export async function notify(
 
   const {issueID, kind} = args;
 
-  const issue = await tx.run(builder.issue.where('id', issueID).one());
+  const issue = await tx.run(
+    builder.issue.where('id', issueID).related('project').one(),
+  );
   if (!issue) {
     throw new MutationError(
       `Issue not found`,
       MutationErrorCode.NOTIFICATION_FAILED,
       issueID,
     );
+  }
+
+  // Only the Zero project sends notifications (email + Discord).
+  if (issue.project?.lowerCaseName !== ZERO_PROJECT_NAME.toLocaleLowerCase()) {
+    return;
   }
 
   const modifierUserID = authData.sub;
