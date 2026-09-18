@@ -32,6 +32,7 @@ export function configForVersion(version: number, url: string) {
         'src/**/*.pg.test.?(c|m)[jt]s?(x)',
         'server/**/*.pg.test.?(c|m)[jt]s?(x)',
         'shared/**/*.pg.test.?(c|m)[jt]s?(x)',
+        'db/**/*.pg.test.?(c|m)[jt]s?(x)',
       ],
       exclude: [],
       globalSetup: ['../../packages/zero-cache/test/pg-16.ts'],
