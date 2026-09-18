@@ -394,6 +394,72 @@ export const zeroOptions = {
       ],
     },
 
+    pgReplicationSlotPerReplica: {
+      type: v.boolean().default(false),
+      desc: [
+        `Allocates a dedicated replication slot per replication-manager, allowing multiple tasks`,
+        `to run in tandem for high-availability.`,
+      ],
+      hidden: true, // Implementation flag, covered by --upstream-pg-high-availability-replication
+    },
+
+    pgHighAvailabilityReplication: {
+      type: v.boolean().optional(),
+      desc: [
+        `Runs replication-managers in high-availability mode, allowing multiple tasks to`,
+        `run concurrently, each using their own replication slot and maintaining a local`,
+        `change-log in sqlite.`,
+        ``,
+        `In this configuration, the PG change-streamer db is not used or maintained. Consequently`,
+        `after running servers in high-availability mode, rolling back to a legacy singleton-mode task`,
+        `will trigger a resync in order to re-intialize the PG change-streamer db.`,
+        // Note: This is a feature flag that automatically enables the necessary
+        //       implementation flags:
+        //   ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA = true
+        //   ZERO_LITESTREAM_BACKUP_USING_V5 = true,
+        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE = serve
+        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT = 100
+        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COLD_READ_PERCENT = 100
+        //   ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED = false
+      ],
+      hidden: true, // TODO: Expose / roll out.
+    },
+
+    pgResumeOrphanedSlotGracePeriodMs: {
+      type: v.number().default(20_000),
+      desc: [
+        `The grace period to wait before taking over an inactive replication slot, "resuming"`,
+        `the replica. With high availability replication, a new replica is generally "forked"`,
+        `from a running, active replica. Resumption happens as a last resort when no there are no`,
+        `active replicas, as it carries the risk of stealing the slot from a task that is attempting`,
+        `to reconnect to its slot.`,
+        ``,
+        `In local development, where it is often expected for slots to be inactive, it is reasonable to set`,
+        `this to value to 0.`,
+      ],
+      hidden: true,
+    },
+
+    pgReplicationEpoch: {
+      type: v.number().default(0),
+      desc: [
+        `Replication managers sharing the same epoch attempt to converge on a single`,
+        `generation (i.e. the result of an initial-sync); if multiple tasks are started`,
+        `simultaneously, they coordinate with each other such that one performs the`,
+        `initial-sync while the others wait for it.`,
+        ``,
+        `Incrementing the epoch is the way to reliably force a resync; a replication manager`,
+        `on a new epoch will ignore any replicas on other epochs.`,
+        ``,
+        `Note that changing the {bold ZERO_LITESTREAM_BACKUP_URL} generally achieves a resync`,
+        `as well, but with high available replication managers, changing only the backup url can`,
+        `lead to confusion if an old replication manager is performing initial sync, causing the`,
+        `new replication manager to wait for it. Incrementing the replication epoch is recommended`,
+        `instead.`,
+      ],
+      hidden: true,
+    },
+
     // Temporary rollout gate. This defaults off for the compatibility
     // deployment; enable it after all replication managers can consume
     // partial-index schema snapshots.

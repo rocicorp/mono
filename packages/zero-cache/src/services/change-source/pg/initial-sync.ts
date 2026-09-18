@@ -41,7 +41,7 @@ import {
   type LiteValueType,
 } from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
-import {PG_15, PG_17} from '../../../types/pg-versions.ts';
+import {PG_15} from '../../../types/pg-versions.ts';
 import {
   connectPgClient,
   type PostgresDB,
@@ -63,11 +63,12 @@ import {toStateVersionString} from './lsn.ts';
 import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo, warnForSkippedIndexes} from './schema/published.ts';
+import {InitialSync} from './schema/replica-stage-enum.ts';
 import {
   dropShard,
   getInternalShardConfig,
   getReplicaState,
-  initReplica,
+  initInitialSyncReplica,
   validatePublications,
   type ReplicaState,
 } from './schema/shard.ts';
@@ -99,6 +100,7 @@ export type InitialSyncOptions = {
 };
 
 export type ReplicaOptions = {
+  epoch: number;
   backupV5: boolean;
 };
 
@@ -116,7 +118,7 @@ export async function initialSync(
   upstreamURI: string,
   syncOptions: InitialSyncOptions,
   context: ServerContext,
-  {backupV5}: ReplicaOptions = {backupV5: true},
+  {epoch, backupV5}: ReplicaOptions = {epoch: 0, backupV5: true},
 ): Promise<ReplicaState | undefined> {
   if (!ALLOWED_APP_ID_CHARACTERS.test(shard.appID)) {
     throw new Error(
@@ -145,7 +147,7 @@ export async function initialSync(
   try {
     const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
     sql = await connectPgClient(lc, upstreamURI, 'initial-sync');
-    const pgVersion = await checkUpstreamConfig(sql);
+    await checkUpstreamConfig(sql);
 
     // In shadow mode we assume the shard is already initialized and just
     // read back the existing publications. `ensurePublishedTables` would
@@ -243,8 +245,9 @@ export async function initialSync(
         sql,
         'initial-sync-replication-session',
         shard,
+        epoch,
         replicaID,
-        replicationSlotFailover && pgVersion >= PG_17,
+        replicationSlotFailover,
         {
           // When backing up with litestream v5, a unique backup path is
           // required since the LTX format does not tolerate multiple writers
@@ -253,6 +256,7 @@ export async function initialSync(
           backupV5,
         },
         captureSnapshot,
+        InitialSync,
       );
       lsn = replication.slot.consistent_point;
       slotName = replication.slot.slot_name;
@@ -320,7 +324,7 @@ export async function initialSync(
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
       if (slotName && replicaID) {
-        await initReplica(sql, shard, replicaID, published, context);
+        await initInitialSyncReplica(sql, shard, replicaID, published, context);
       } else {
         assert(shadow, 'expected to be in shadow sync if there is no slotName');
         const rowsByTable = new Map<string, number>();
@@ -482,7 +486,6 @@ async function checkUpstreamConfig(sql: PostgresDB) {
       `Must be running Postgres 15 or higher (currently: "${version}")`,
     );
   }
-  return version;
 }
 
 async function ensurePublishedTables(

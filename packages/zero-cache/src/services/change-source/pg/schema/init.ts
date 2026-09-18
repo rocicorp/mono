@@ -11,6 +11,7 @@ import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {publishedSchema} from './published.ts';
+import * as ReplicaStage from './replica-stage-enum.ts';
 import {
   getMutationsTableDefinition,
   legacyReplicationSlot,
@@ -261,6 +262,33 @@ function getIncrementalMigrations(
       },
     },
 
+    28: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ADD "epoch" INT4 DEFAULT 0;
+        `;
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ADD "stage" INT4 DEFAULT 0;  -- ReplicaStage.InitialSync
+        `;
+
+        const metapub = metadataPublicationName(shard.appID, shard.shardNum);
+        await sql`
+          ALTER PUBLICATION ${sql(metapub)} ADD TABLE ${sql(upstreamSchema(shard))}.replicas (id);
+        `;
+        // Make sure supabase gets the ALTER PUBLICATION change
+        await sql`
+          SELECT ${sql(upstreamSchema(shard))}.update_schemas();
+        `;
+      },
+
+      migrateData: async (_, sql) => {
+        await sql`
+          UPDATE ${sql(upstreamSchema(shard))}.replicas SET "stage" = ${ReplicaStage.Replicate}
+            WHERE "subscriberContext" IS NOT NULL;
+        `;
+      },
+    },
+
     // Note: While this is conditional, it always has to be bumped to the last version.
     ...(installPartialIndexTriggers
       ? {
@@ -268,7 +296,7 @@ function getIncrementalMigrations(
           // schema snapshots. Note that setupTriggers() also refreshes the
           // stored "publishedSchema" so that the change in format does not
           // manifest as a spurious schema change.
-          28: {
+          29: {
             migrateSchema: async (lc, sql) => {
               const [{publications}] = await sql<{publications: string[]}[]>`
                 SELECT publications FROM ${sql(shardConfigTable)}`;
