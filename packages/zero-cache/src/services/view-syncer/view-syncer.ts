@@ -919,8 +919,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return; // Wait for the next advancement.
     }
 
-    const hydrationStartedAt = performance.now();
-    this.#pipelines.beginHydration();
+    const hydrationPass = this.#pipelines.beginHydration();
     try {
       lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
 
@@ -961,13 +960,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         previousQueries,
       );
 
-      this.#pipelines.recordHydrationWallTime(
-        performance.now() - hydrationStartedAt,
-      );
+      hydrationPass.observe(this.#totalHydrationTimeMs());
       this.#pipelinesHydrated = true;
       this.connContextManager.setSharedRetransformReady(true);
     } finally {
-      this.#pipelines.endHydration();
+      hydrationPass.end();
     }
   }
 

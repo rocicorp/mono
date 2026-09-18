@@ -64,7 +64,10 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
-import {HydrationCostModel} from './hydration-cost-model.ts';
+import {
+  HydrationCostModel,
+  type HydrationPass,
+} from './hydration-cost-model.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
@@ -150,7 +153,7 @@ type QueryPipelineLifecycleLog = {
 
 type AdvanceContext = {
   readonly timer: Timer;
-  readonly hydrationResetCostMs: number;
+  readonly hydrationProcessTimeMs: number;
   readonly numChanges: number;
   currentChangeStartMs: number | undefined;
   pos: number;
@@ -505,21 +508,13 @@ export class PipelineDriver {
     return total;
   }
 
-  recordHydrationWallTime(wallTimeMs: number): void {
-    const processTimeMs = this.totalHydrationTimeMs();
-    this.#hydrationCostModel.observe(wallTimeMs, processTimeMs);
-  }
-
-  beginHydration(): void {
-    this.#hydrationCostModel.beginHydration();
-  }
-
-  endHydration(): void {
-    this.#hydrationCostModel.endHydration();
-  }
-
-  #hydrationResetCostMs(): number {
-    return this.#hydrationCostModel.estimate(this.totalHydrationTimeMs());
+  /**
+   * Marks the start of a full hydration pass (i.e. hydrating all of the
+   * client group's queries), which raises the estimated cost of a pipeline
+   * reset for every client group in the process until the pass is ended.
+   */
+  beginHydration(): HydrationPass {
+    return this.#hydrationCostModel.beginHydration();
   }
 
   #logQueryPipelineLifecycle({
@@ -1086,10 +1081,10 @@ export class PipelineDriver {
       this.#hydrateContext === null,
       'Cannot advance while hydration is in progress',
     );
-    const hydrationResetCostMs = this.#hydrationResetCostMs();
+    const hydrationProcessTimeMs = this.totalHydrationTimeMs();
     this.#advanceContext = {
       timer,
-      hydrationResetCostMs,
+      hydrationProcessTimeMs,
       numChanges,
       currentChangeStartMs: undefined,
       pos: 0,
@@ -1097,7 +1092,7 @@ export class PipelineDriver {
     this.#lc.debug?.(
       `starting pipeline advancement of ${numChanges} changes with an ` +
         `advancement time limited based on estimated hydration reset cost ` +
-        `of ${hydrationResetCostMs} ms.`,
+        `of ${this.#hydrationCostModel.estimate(hydrationProcessTimeMs)} ms.`,
     );
     try {
       for (const {table, prevValues, nextValue} of diff) {
@@ -1226,8 +1221,14 @@ export class PipelineDriver {
       pos,
       numChanges,
       timer: advanceTimer,
-      hydrationResetCostMs,
+      hydrationProcessTimeMs,
     } = must(this.#advanceContext);
+    // Estimated on every check rather than once per advancement: hydrations
+    // that other client groups start while this one is advancing (e.g. a
+    // wave of resets from the same transaction) make a reset more expensive.
+    const hydrationResetCostMs = this.#hydrationCostModel.estimate(
+      hydrationProcessTimeMs,
+    );
     const elapsed = advanceTimer.totalElapsed();
     const currentChangeElapsedMs =
       currentChangeStartMs === undefined

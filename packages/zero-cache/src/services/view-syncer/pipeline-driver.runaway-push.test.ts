@@ -22,6 +22,10 @@ import {
   ReplicationMessages,
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
+import {
+  HydrationCostModel,
+  type HydrationPass,
+} from './hydration-cost-model.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {Snapshotter} from './snapshotter.ts';
 
@@ -31,11 +35,16 @@ describe('view-syncer/pipeline-driver', () => {
   let lc: LogContext;
   let pipelines: PipelineDriver;
   let replicator: FakeReplicator;
+  let hydrationCostModel: HydrationCostModel;
+  let now: number;
 
   beforeEach(() => {
     lc = createSilentLogContext();
     dbFile = new DbFile('pipelines_test');
     dbFile.connect(lc).pragma('journal_mode = wal2');
+
+    now = 0;
+    hydrationCostModel = new HydrationCostModel(() => now);
 
     const storage = new Database(lc, ':memory:');
     storage.prepare(CREATE_STORAGE_TABLE).run();
@@ -49,6 +58,9 @@ describe('view-syncer/pipeline-driver', () => {
       'pipeline-driver.test.ts',
       new InspectorDelegate(undefined),
       () => 200 /** yield threshold */,
+      undefined,
+      undefined,
+      hydrationCostModel,
     );
 
     db = dbFile.connect(lc);
@@ -272,7 +284,10 @@ describe('view-syncer/pipeline-driver', () => {
         elapsedLap: () => 100,
       }),
     ];
-    pipelines.recordHydrationWallTime(2000);
+    const hydrationPass = pipelines.beginHydration();
+    now += 1000;
+    hydrationPass.observe(pipelines.totalHydrationTimeMs());
+    hydrationPass.end();
 
     replicator.processTransaction(
       '134',
@@ -291,6 +306,56 @@ describe('view-syncer/pipeline-driver', () => {
       }
     }).not.toThrow();
     expect(changeCount).toEqual(10);
+  });
+
+  describe('hydrations that start during the advancement', () => {
+    // At 3 ms per change, the advancement exceeds the budget for a 100 ms
+    // reset before it is a quarter done.
+    function advance(onChange: (changeCount: number) => void) {
+      pipelines.init(clientSchema);
+      [
+        ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+          totalElapsed: () => 100,
+          elapsedLap: () => 100,
+        }),
+      ];
+
+      replicator.processTransaction(
+        '134',
+        ...Array.from({length: 100}, (_, i) =>
+          messages.insert('issue', {id: `i${1001 + i}`}),
+        ),
+      );
+
+      let changeCount = 0;
+      for (const _ of pipelines.advance({
+        elapsedLap: () => 0,
+        totalElapsed: () => changeCount * 3,
+      }).changes) {
+        onChange(++changeCount);
+      }
+      return changeCount;
+    }
+
+    test('resets without them', () => {
+      expect(() => advance(() => {})).toThrowErrorMatchingInlineSnapshot(
+        `[ResetPipelinesSignal: Advancement exceeded timeout at 17 of 100 changes after 51 ms. Advancement time limited based on estimated hydration reset cost of 100 ms.]`,
+      );
+    });
+
+    test('are priced in immediately', () => {
+      // Another client group in the process starts hydrating, which doubles
+      // the cost of a reset.
+      let hydrationPass: HydrationPass | undefined;
+      expect(
+        advance(changeCount => {
+          if (changeCount === 10) {
+            hydrationPass = hydrationCostModel.beginHydration();
+          }
+        }),
+      ).toEqual(100);
+      hydrationPass?.end();
+    });
   });
 
   test('projected timeout waits for a meaningful fraction of the advancement', () => {
