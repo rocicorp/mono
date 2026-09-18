@@ -153,9 +153,11 @@ export class ChangeStreamerHttpServer extends HttpService {
 
   #changeStreamerStarted = false;
 
-  #ensureChangeStreamerStarted(reason: string) {
+  #ensureChangeStreamerStarted(reason?: string) {
     if (!this.#changeStreamerStarted && this._state.shouldRun()) {
-      this.#lc.info?.(`starting ChangeStreamerService: ${reason}`);
+      this.#lc.info?.(
+        `starting ChangeStreamerService ${reason ? `(${reason})` : ''}`,
+      );
       void this.#changeStreamer
         .run()
         .catch(e =>
@@ -169,15 +171,19 @@ export class ChangeStreamerHttpServer extends HttpService {
 
   protected override _onStart(): void {
     const {startupDelayMs, readinessGate = promiseVoid} = this.#opts;
-    void readinessGate.then(() => {
-      if (startupDelayMs > 0) {
-        // In RMv1, starting the change-streamer forcibly shuts down the
-        // previous change-streamer, causing view-syncers to reconnect.
-        // If this replication-manager has just started, the routing layer may
-        // not have registered it with DNS, as that only happens after it
-        // confirms health checks. To minimize downtime, the takeover is
-        // delayed for the configured startupDelayMs _after_ beginning to
-        // advertise readiness.
+    if (startupDelayMs === 0) {
+      // In RMv2, there is no need to delay starting the change streamer
+      // because RM startup is non-disruptive.
+      this.#ensureChangeStreamerStarted();
+    } else {
+      // In RMv1, starting the change-streamer forcibly shuts down the
+      // previous change-streamer, causing view-syncers to reconnect.
+      // If this replication-manager has just started, the routing layer may
+      // not have registered it with DNS, as that only happens after it
+      // confirms health checks. To minimize downtime, the takeover is
+      // delayed for the configured startupDelayMs _after_ beginning to
+      // advertise readiness.
+      void readinessGate.then(() => {
         this.#lc.info?.(
           `waiting ${startupDelayMs}ms before taking over the change log`,
         );
@@ -188,12 +194,8 @@ export class ChangeStreamerHttpServer extends HttpService {
             ),
           startupDelayMs,
         );
-      } else {
-        // In RMv2, this is not necessary because a new RM does not kill the
-        // old one; it is started as soon as possible.
-        this.#ensureChangeStreamerStarted('no startup delay configured');
-      }
-    });
+      });
+    }
   }
 
   protected override async _onStop(): Promise<void> {
