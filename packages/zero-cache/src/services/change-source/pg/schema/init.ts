@@ -270,6 +270,15 @@ function getIncrementalMigrations(
         await sql`
           ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ADD "stage" INT4 DEFAULT 0;  -- ReplicaStage.InitialSync
         `;
+
+        const metapub = metadataPublicationName(shard.appID, shard.shardNum);
+        await sql`
+          ALTER PUBLICATION ${sql(metapub)} ADD TABLE ${sql(upstreamSchema(shard))}.replicas (id);
+        `;
+        // Make sure supabase gets the ALTER PUBLICATION change
+        await sql`
+          SELECT ${sql(upstreamSchema(shard))}.update_schemas();
+        `;
       },
 
       migrateData: async (_, sql) => {

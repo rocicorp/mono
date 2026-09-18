@@ -108,10 +108,45 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   ): Queue<ChangeStreamMessage> {
     const queue = new Queue<ChangeStreamMessage>();
     void (async () => {
+      // Buffers a transaction (begin ... commit) so that transactions
+      // consisting solely of writes to the shard's own "replicas"
+      // bookkeeping table (part of the metadata publication so that such
+      // writes advance the slot's LSN) can be dropped rather than confused
+      // for the transaction under test.
+      let txn: ChangeStreamMessage[] | undefined;
       try {
         for await (const msg of sub) {
           if (msg[0] === 'status' && !msg[1].ack && !msg[1].lagReport) {
             continue; // filter out keepalives
+          }
+          if (msg[0] === 'begin') {
+            txn = [msg];
+            continue;
+          }
+          if (txn) {
+            switch (msg[0]) {
+              case 'data':
+                if (
+                  'relation' in msg[1] &&
+                  msg[1].relation.schema === `${APP_ID}_${SHARD_NUM}` &&
+                  msg[1].relation.name === 'replicas'
+                ) {
+                  continue; // so far metadata only, continue skipping
+                }
+                txn.forEach(m => queue.enqueue(m));
+                txn = undefined;
+                break;
+              case 'commit':
+                txn = undefined; // skipped the metadata-only transaction
+                continue;
+              case 'rollback':
+                // Rolled-back transactions are always surfaced (regardless of
+                // which tables they touch), since tests assert on their
+                // begin/data/rollback sequence.
+                txn.forEach(m => queue.enqueue(m));
+                txn = undefined;
+                break;
+            }
           }
           queue.enqueue(msg);
         }
@@ -120,6 +155,21 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       }
     })();
     return queue;
+  }
+
+  // The shard's own "replicas" bookkeeping table is part of the metadata
+  // publication (so that writes to it advance the slot's LSN), but changes
+  // to it are internal and should not be mistaken for the change(s) under
+  // test.
+  function isReplicasBookkeeping(msg: ChangeStreamMessage): boolean {
+    return (
+      msg[0] === 'begin' ||
+      msg[0] === 'commit' ||
+      (msg[0] === 'data' &&
+        'relation' in msg[1] &&
+        msg[1].relation.schema === `${APP_ID}_${SHARD_NUM}` &&
+        msg[1].relation.name === 'replicas')
+    );
   }
 
   const WATERMARK_REGEX = /[0-9a-z]{3,}/;
@@ -1018,7 +1068,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     let err;
     try {
       for await (const msg of changes) {
-        if (msg[0] === 'status') {
+        if (msg[0] === 'status' || isReplicasBookkeeping(msg)) {
           continue;
         }
         throw new Error('DatabaseError was not thrown');
@@ -1094,7 +1144,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     let err;
     try {
-      for await (const _ of changes) {
+      for await (const msg of changes) {
+        if (msg[0] === 'status' || isReplicasBookkeeping(msg)) {
+          continue;
+        }
         throw new Error('DatabaseError was not thrown');
       }
     } catch (e) {

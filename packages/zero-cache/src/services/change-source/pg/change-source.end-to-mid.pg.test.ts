@@ -140,6 +140,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         case 'begin':
           break;
         case 'data':
+          // The shard's own "replicas" bookkeeping table is part of the
+          // metadata publication (so that writes to it advance the slot's
+          // LSN), but changes to it are internal and should not be mistaken
+          // for the transaction under test.
+          if (
+            'relation' in change[1] &&
+            change[1].relation.schema === `${APP_ID}_0` &&
+            change[1].relation.name === 'replicas'
+          ) {
+            break;
+          }
           data.push(change[1]);
           break;
         case 'commit':

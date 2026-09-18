@@ -179,10 +179,6 @@ export function shardSetup(
   ${getClientsTableDefinition(shard)}
   ${getMutationsTableDefinition(shard)}
 
-  DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
-  CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE ${app}."permissions", TABLE ${shard}."clients", ${shard}."mutations";
-
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,
     "ddlDetection"  BOOL NOT NULL,
@@ -215,6 +211,13 @@ export function shardSetup(
     "initialSyncContext" JSON,
     "subscriberContext"  JSON
   );
+
+  DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
+  CREATE PUBLICATION ${id(metadataPublication)}
+    FOR TABLE ${app}."permissions", 
+        TABLE ${shard}."clients", 
+              ${shard}."mutations", 
+              ${shard}."replicas" (id);  -- advance the LSN/version with new replicas
   `;
 }
 
