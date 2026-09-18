@@ -198,7 +198,7 @@ describe('view-syncer/pipeline-driver', () => {
       ...pipelines.advance({elapsedLap: () => 0, totalElapsed: () => elapsed++})
         .changes,
     ]).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 501 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 501 ms. Advancement time limited based on estimated hydration reset cost of 1000 ms.]`,
     );
   });
 
@@ -228,7 +228,7 @@ describe('view-syncer/pipeline-driver', () => {
       ...pipelines.advance({elapsedLap: () => 0, totalElapsed: () => elapsed++})
         .changes,
     ]).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 501 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 501 ms. Advancement time limited based on estimated hydration reset cost of 1000 ms.]`,
     );
   });
 
@@ -259,9 +259,38 @@ describe('view-syncer/pipeline-driver', () => {
         changeCount++;
       }
     }).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement exceeded timeout at 5 of 10 changes after 600 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 5 of 10 changes after 600 ms. Advancement time limited based on estimated hydration reset cost of 1000 ms.]`,
     );
     expect(changeCount).toEqual(5);
+  });
+
+  test('scales the reset budget by full hydration wall time', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 100,
+        elapsedLap: () => 100,
+      }),
+    ];
+    pipelines.recordHydrationWallTime(1000);
+
+    replicator.processTransaction(
+      '134',
+      ...Array.from({length: 10}, (_, i) =>
+        messages.insert('issue', {id: `i${1001 + i}`}),
+      ),
+    );
+
+    let changeCount = 0;
+    expect(() => {
+      for (const _ of pipelines.advance({
+        elapsedLap: () => 0,
+        totalElapsed: () => (changeCount + 1) * 60,
+      }).changes) {
+        changeCount++;
+      }
+    }).not.toThrow();
+    expect(changeCount).toEqual(10);
   });
 
   test('projected timeout waits for a meaningful fraction of the advancement', () => {
@@ -289,7 +318,7 @@ describe('view-syncer/pipeline-driver', () => {
         changeCount++;
       }
     }).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement projected to exceed hydration time at 25 of 100 changes after 40 ms. Projected remaining advancement time is 120 ms. Advancement time limited based on total hydration time of 25 ms.]`,
+      `[ResetPipelinesSignal: Advancement projected to exceed hydration time at 25 of 100 changes after 40 ms. Projected remaining advancement time is 120 ms. Advancement time limited based on estimated hydration reset cost of 25 ms.]`,
     );
     expect(changeCount).toEqual(25);
   });
@@ -383,7 +412,7 @@ describe('view-syncer/pipeline-driver', () => {
         changeCount++;
       }
     }).toThrowError(
-      /Advancement exceeded timeout processing current change at 80 of 81 changes .* hydration time of 100 ms\./,
+      /Advancement exceeded timeout processing current change at 80 of 81 changes .* hydration reset cost of 100 ms\./,
     );
     expect(changeCount).toEqual(80);
   });

@@ -1346,7 +1346,7 @@ describe('view-syncer/pipeline-driver', () => {
       ...pipelines.advance({totalElapsed: () => 60, elapsedLap: () => 60})
         .changes,
     ]).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 60 ms. Advancement time limited based on total hydration time of 100 ms.]`,
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 60 ms. Advancement time limited based on estimated hydration reset cost of 100 ms.]`,
     );
 
     // Test that after reset hydration and advancement work.

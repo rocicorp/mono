@@ -919,6 +919,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return; // Wait for the next advancement.
     }
 
+    const hydrationStartedAt = performance.now();
     lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
 
     const hydrationBudget = new HydrationBudget(
@@ -958,6 +959,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       previousQueries,
     );
 
+    this.#pipelines.recordHydrationWallTime(
+      performance.now() - hydrationStartedAt,
+    );
     this.#pipelinesHydrated = true;
     this.connContextManager.setSharedRetransformReady(true);
   }

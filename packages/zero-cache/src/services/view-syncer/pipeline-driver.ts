@@ -149,7 +149,7 @@ type QueryPipelineLifecycleLog = {
 
 type AdvanceContext = {
   readonly timer: Timer;
-  readonly totalHydrationTimeMs: number;
+  readonly hydrationResetCostMs: number;
   readonly numChanges: number;
   currentChangeStartMs: number | undefined;
   pos: number;
@@ -176,6 +176,7 @@ const MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS = 5;
 const MIN_PROJECTED_ADVANCEMENT_CHANGES = 16;
 const PROJECTED_ADVANCEMENT_RESET_MULTIPLIER = 1.5;
 const LATE_ADVANCEMENT_FINISH_PROGRESS = 0.8;
+const MAX_HYDRATION_WALL_MULTIPLIER = 20;
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -293,6 +294,7 @@ export class PipelineDriver {
   #replicaVersion: string | null = null;
   #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
+  #hydrationWallMultiplier = 1;
 
   readonly #advanceTime = getOrCreateLatencyHistogram(
     'sync',
@@ -499,6 +501,21 @@ export class PipelineDriver {
       total += pipeline.hydrationTimeMs;
     }
     return total;
+  }
+
+  recordHydrationWallTime(wallTimeMs: number): void {
+    const processTimeMs = this.totalHydrationTimeMs();
+    if (processTimeMs <= 0 || !Number.isFinite(wallTimeMs)) {
+      return;
+    }
+    this.#hydrationWallMultiplier = Math.max(
+      1,
+      Math.min(MAX_HYDRATION_WALL_MULTIPLIER, wallTimeMs / processTimeMs),
+    );
+  }
+
+  #hydrationResetCostMs(): number {
+    return this.totalHydrationTimeMs() * this.#hydrationWallMultiplier;
   }
 
   #logQueryPipelineLifecycle({
@@ -1065,18 +1082,18 @@ export class PipelineDriver {
       this.#hydrateContext === null,
       'Cannot advance while hydration is in progress',
     );
-    const totalHydrationTimeMs = this.totalHydrationTimeMs();
+    const hydrationResetCostMs = this.#hydrationResetCostMs();
     this.#advanceContext = {
       timer,
-      totalHydrationTimeMs,
+      hydrationResetCostMs,
       numChanges,
       currentChangeStartMs: undefined,
       pos: 0,
     };
     this.#lc.debug?.(
       `starting pipeline advancement of ${numChanges} changes with an ` +
-        `advancement time limited based on total hydration time of ` +
-        `${totalHydrationTimeMs} ms.`,
+        `advancement time limited based on estimated hydration reset cost ` +
+        `of ${hydrationResetCostMs} ms.`,
     );
     try {
       for (const {table, prevValues, nextValue} of diff) {
@@ -1205,7 +1222,7 @@ export class PipelineDriver {
       pos,
       numChanges,
       timer: advanceTimer,
-      totalHydrationTimeMs,
+      hydrationResetCostMs,
     } = must(this.#advanceContext);
     const elapsed = advanceTimer.totalElapsed();
     const currentChangeElapsedMs =
@@ -1214,14 +1231,14 @@ export class PipelineDriver {
         : elapsed - currentChangeStartMs;
     if (
       currentChangeElapsedMs !== undefined &&
-      shouldResetSlowCurrentChange(currentChangeElapsedMs, totalHydrationTimeMs)
+      shouldResetSlowCurrentChange(currentChangeElapsedMs, hydrationResetCostMs)
     ) {
       this.#throwSlowCurrentChangeReset(
         pos,
         numChanges,
         elapsed,
         currentChangeElapsedMs,
-        totalHydrationTimeMs,
+        hydrationResetCostMs,
       );
     }
     const projectedRemainingTimeMs = projectedRemainingAdvancementTimeMs(
@@ -1242,7 +1259,7 @@ export class PipelineDriver {
         projectedRemainingTimeMs,
         pos,
         numChanges,
-        totalHydrationTimeMs,
+        hydrationResetCostMs,
       )
     ) {
       this.#throwProjectedAdvancementReset(
@@ -1250,20 +1267,20 @@ export class PipelineDriver {
         numChanges,
         elapsed,
         projectedRemainingTimeMs,
-        totalHydrationTimeMs,
+        hydrationResetCostMs,
       );
     }
     if (
       !shouldFinish &&
       !hasProjectionSample &&
       elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
-      (elapsed > totalHydrationTimeMs ||
-        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
+      (elapsed > hydrationResetCostMs ||
+        (elapsed > hydrationResetCostMs / 2 && pos <= numChanges / 2))
     ) {
       throw new ResetPipelinesSignal(
         `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
-          `after ${elapsed} ms. Advancement time limited based on total ` +
-          `hydration time of ${totalHydrationTimeMs} ms.`,
+          `after ${elapsed} ms. Advancement time limited based on estimated ` +
+          `hydration reset cost of ${hydrationResetCostMs} ms.`,
         'advancement-timeout',
       );
     }
@@ -1275,13 +1292,13 @@ export class PipelineDriver {
     numChanges: number,
     elapsed: number,
     currentChangeElapsedMs: number,
-    totalHydrationTimeMs: number,
+    hydrationResetCostMs: number,
   ): never {
     throw new ResetPipelinesSignal(
       `Advancement exceeded timeout processing current change at ${pos} of ` +
         `${numChanges} changes after ${currentChangeElapsedMs} ms ` +
-        `(${elapsed} ms total). Advancement time limited based on total ` +
-        `hydration time of ${totalHydrationTimeMs} ms.`,
+        `(${elapsed} ms total). Advancement time limited based on estimated ` +
+        `hydration reset cost of ${hydrationResetCostMs} ms.`,
       'advancement-timeout',
     );
   }
@@ -1291,7 +1308,7 @@ export class PipelineDriver {
     numChanges: number,
     elapsed: number,
     projectedRemainingTimeMs: number | undefined,
-    totalHydrationTimeMs: number,
+    hydrationResetCostMs: number,
   ): never {
     const projection =
       projectedRemainingTimeMs === undefined
@@ -1301,8 +1318,8 @@ export class PipelineDriver {
       `Advancement projected to exceed hydration time at ${pos} of ` +
         `${numChanges} changes after ${elapsed} ms.` +
         projection +
-        ` Advancement time limited based on total hydration time of ` +
-        `${totalHydrationTimeMs} ms.`,
+        ` Advancement time limited based on estimated hydration reset cost ` +
+        `of ${hydrationResetCostMs} ms.`,
       'advancement-timeout',
     );
   }
