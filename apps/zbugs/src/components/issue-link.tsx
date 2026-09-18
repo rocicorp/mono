@@ -8,6 +8,7 @@ export function IssueLink({
   children,
   className,
   listContext,
+  tabIndex,
 }: {
   issue: {projectName: string; id: string; shortID?: number | null};
   listContext: ListContext;
@@ -17,6 +18,7 @@ export function IssueLink({
       href={links.issue(issue)}
       title={title}
       className={className}
+      tabIndex={tabIndex}
       state={{
         zbugsListContext: listContext,
       }}
