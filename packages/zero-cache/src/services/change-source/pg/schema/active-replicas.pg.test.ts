@@ -3,10 +3,12 @@ import {expect} from 'vitest';
 import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.ts';
 import {pgContainerTest as test} from '../../../../test/db.ts';
 import {pgClient, type PostgresDB} from '../../../../types/pg.ts';
+import {Replicate} from './replica-stage-enum.ts';
 import {
   createReplica,
   getActiveReplicas,
-  initReplica,
+  getRestoreCandidates,
+  initInitialSyncReplica,
   setupTablesAndReplication,
 } from './shard.ts';
 
@@ -25,16 +27,25 @@ async function addReplica(
     // (and a NULL wal_status), isolating the restart_lsn check.
     await db`SELECT pg_create_physical_replication_slot(${slot})`;
   }
-  await createReplica(db, SHARD, id, slot, '01', {
-    backupPath: null,
-    backupV5: true,
-  });
-  await initReplica(db, SHARD, id, {tables: [], indexes: []}, {});
+  await createReplica(
+    db,
+    SHARD,
+    id,
+    slot,
+    0,
+    '01',
+    {
+      backupPath: null,
+      backupV5: true,
+    },
+    Replicate,
+  );
+  await initInitialSyncReplica(db, SHARD, id, {tables: [], indexes: []}, {});
 }
 
 // Uses a dedicated (per-worker) container because invalidating a slot
 // requires changing the server-wide max_slot_wal_keep_size.
-test('getActiveReplicas excludes replicas with invalidated slots', async ({
+test('getActiveReplicas and getRestoreCandidates exclude replicas with invalidated slots', async ({
   pgConnectionString,
 }) => {
   const lc = new LogContext('warn', {}, new TestLogSink());
@@ -78,6 +89,9 @@ test('getActiveReplicas excludes replicas with invalidated slots', async ({
     expect((await getActiveReplicas(lc, db, SHARD)).map(r => r.id)).toEqual([
       'valid',
     ]);
+    expect(
+      (await getRestoreCandidates(lc, db, SHARD, 0)).map(r => r.id),
+    ).toEqual(['valid']);
   } finally {
     await db.end();
   }

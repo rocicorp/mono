@@ -170,6 +170,11 @@ export default async function runWorker(
     try {
       // Note: This performs initial sync of the replica if necessary.
       const {
+        pgReplicationEpoch: epoch,
+        pgReplicationSlotPerReplica: slotPerReplica,
+        pgResumeOrphanedSlotGracePeriodMs: inactiveReplicaGracePeriodMs,
+      } = upstream;
+      const {
         changeSource,
         subscriptionState,
         destinationBackupURL,
@@ -190,7 +195,12 @@ export default async function runWorker(
               context,
               replicationLag.reportIntervalMs,
               restoreOptions,
-              {backupV5: litestream.backupUsingV5},
+              {
+                epoch,
+                slotPerReplica,
+                inactiveReplicaGracePeriodMs,
+                backupV5: litestream.backupUsingV5,
+              },
               purgeLock,
               upstream.pgStreamInboundTimeoutMs,
             )
@@ -397,7 +407,8 @@ export default async function runWorker(
     {
       port,
       keepaliveTimeoutMs,
-      startupDelayMs,
+      // The startup delay is only relevant for RMv1, and is disabled for RMv2.
+      startupDelayMs: upstream.pgReplicationSlotPerReplica ? 0 : startupDelayMs,
       readinessGate,
       config,
       getProfileWorker,

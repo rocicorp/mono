@@ -93,16 +93,19 @@ async function applyNextTransaction(
   processor: ReturnType<typeof createChangeProcessor>,
   changes: Source<ChangeStreamMessage>,
 ) {
-  let sawData = false;
+  let sawSchemaChange = false;
   for await (const change of changes) {
     const [type] = change;
     if (type === 'control' || type === 'status') {
       continue;
     }
     processor.processMessage(lc, change);
-    if (type === 'data') {
-      sawData = true;
-    } else if (type === 'commit' && sawData) {
+    if (type === 'data' && change[1].tag === 'update-column') {
+      // Other transactions (e.g. the replica's own bookkeeping rows in the
+      // now-published "replicas" table) may stream before the schema
+      // change we are waiting for.
+      sawSchemaChange = true;
+    } else if (type === 'commit' && sawSchemaChange) {
       return;
     }
   }

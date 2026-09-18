@@ -1,11 +1,12 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import postgres from 'postgres';
-import {beforeEach, describe, expect, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {getConnectionURI, test, type PgTest} from '../../../test/db.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import type {ShardID} from '../../../types/shards.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
   createReplicaAndSlot,
   createReplicationSlot,
@@ -13,6 +14,7 @@ import {
   slotPoolSuffix,
   type ReplicationSlotResult,
 } from './replication-slots.ts';
+import {InitialSync, Replicate, Restore} from './schema/replica-stage-enum.ts';
 import {
   ensureGlobalTables,
   metadataPublicationName,
@@ -191,6 +193,7 @@ describe('createReplicationSlot', () => {
         upstream,
         'initial-sync',
         shard,
+        6, // epoch
         id,
         false,
         {
@@ -198,6 +201,7 @@ describe('createReplicationSlot', () => {
           backupV5: true,
         },
         snapshot => Promise.resolve(`captured(${snapshot})`),
+        Replicate,
       );
       expect(result.capturedSnapshot).toBe(
         `captured(${result.slot.snapshot_name})`,
@@ -234,27 +238,31 @@ describe('createReplicationSlot', () => {
     ).toEqual([['zero_18_a'], ['zero_18_b'], ['zero_18_c']]);
 
     expect(
-      await upstream`SELECT id, slot, version FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas`,
+      await upstream`SELECT id, slot, epoch, generation FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas`,
     ).toMatchObject([
       {
         id: 'rep_1',
         slot: 'zero_18_a',
-        version: /[a-z0-9]{5,}/,
+        epoch: 6,
+        generation: /[a-z0-9]{5,}/,
       },
       {
         id: 'rep_2',
         slot: 'zero_18_b',
-        version: /[a-z0-9]{5,}/,
+        epoch: 6,
+        generation: /[a-z0-9]{5,}/,
       },
       {
         id: 'rep_3',
         slot: 'zero_18_c',
-        version: /[a-z0-9]{5,}/,
+        epoch: 6,
+        generation: /[a-z0-9]{5,}/,
       },
       {
         id: 'rep_4',
         slot: 'zero_18_b',
-        version: /[a-z0-9]{5,}/,
+        epoch: 6,
+        generation: /[a-z0-9]{5,}/,
       },
     ]);
 
@@ -275,6 +283,7 @@ describe('createReplicationSlot', () => {
           upstream,
           'initial-sync',
           shard,
+          0,
           `rep_${i}`,
           false,
           {
@@ -282,6 +291,7 @@ describe('createReplicationSlot', () => {
             backupV5: true,
           },
           snapshot => Promise.resolve(`captured(${snapshot})`),
+          Replicate,
         ),
       ),
     );
@@ -310,6 +320,7 @@ describe('createReplicationSlot', () => {
         upstream,
         'initial-sync',
         shard,
+        0,
         `foo`,
         false,
         {
@@ -317,6 +328,7 @@ describe('createReplicationSlot', () => {
           backupV5: true,
         },
         () => Promise.reject(failure),
+        Replicate,
       ),
     ).rejects.toThrow(failure);
 
@@ -334,10 +346,12 @@ describe('createReplicationSlot', () => {
         upstream,
         'initial-sync',
         shard,
+        0,
         id,
         false,
         {backupPath: id, backupV5: true},
         snapshot => Promise.resolve(`captured(${snapshot})`),
+        Replicate,
       );
       results.push(result);
     };
@@ -387,5 +401,85 @@ describe('createReplicationSlot', () => {
       {id: 'rep_a', slot: 'zero_18_a'},
       {id: 'rep_d', slot: 'zero_18_d'},
     ]);
+  });
+
+  describe('serializes initial sync', () => {
+    const lc = createSilentLogContext();
+    const sessions: ReplicationSlotResult<unknown>[] = [];
+
+    const create = (
+      id: string,
+      stage: typeof InitialSync | typeof Restore,
+      epoch = 0,
+    ) =>
+      createReplicaAndSlot(
+        lc,
+        upstream,
+        'session',
+        shard,
+        epoch,
+        id,
+        false,
+        {backupPath: id, backupV5: true},
+        snapshot => Promise.resolve(snapshot),
+        stage,
+      ).then(result => {
+        sessions.push(result);
+        return result;
+      });
+
+    // Release the walsender sessions so the slots can be dropped on teardown.
+    // eslint-disable-next-line require-await
+    afterEach(async () => {
+      for (const {initialSession} of sessions.splice(0)) {
+        initialSession.destroy();
+      }
+    });
+
+    test('rejects a second concurrent initial sync in the same epoch', async () => {
+      await create('first', InitialSync);
+
+      // The first replica's slot is active (its session is kept alive), so a
+      // second initial sync in the same epoch is rejected with an AutoReset.
+      await expect(create('second', InitialSync)).rejects.toThrow(
+        AutoResetSignal,
+      );
+
+      // The rejected attempt left no replica row behind.
+      expect(
+        await upstream`SELECT id FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas`.values(),
+      ).toEqual([['first']]);
+    });
+
+    test('a Restore replica is not blocked by an active initial sync', async () => {
+      await create('first', InitialSync);
+      // A fork (Restore stage) does not contend for the initial-sync slot.
+      const restore = await create('forked', Restore);
+      expect(restore.replica.stage).toBe(Restore);
+      // Restore replicas are created with an empty generation.
+      expect(restore.replica.generation).toBe('');
+    });
+
+    test('a new initial sync proceeds once the prior one is inactive', async () => {
+      const first = await create('first', InitialSync);
+      first.initialSession.destroy();
+
+      await vi.waitFor(async () => {
+        const [{active}] = await upstream<{active: boolean}[]>`
+          SELECT active FROM pg_replication_slots
+            WHERE slot_name = ${first.slot.slot_name}`;
+        expect(active).toBe(false);
+      });
+
+      // With the prior initial sync no longer active, a new one may proceed.
+      const second = await create('second', InitialSync);
+      expect(second.replica.stage).toBe(InitialSync);
+    });
+
+    test('an initial sync in a different epoch is not blocked', async () => {
+      await create('first', InitialSync, 0);
+      const other = await create('other', InitialSync, 1);
+      expect(other.replica.stage).toBe(InitialSync);
+    });
   });
 });

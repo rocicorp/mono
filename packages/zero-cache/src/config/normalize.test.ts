@@ -1,5 +1,10 @@
 import {describe, expect, test} from 'vitest';
-import {assertNormalized, runsChangeStreamer} from './normalize.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {
+  assertNormalized,
+  normalizeZeroConfig,
+  runsChangeStreamer,
+} from './normalize.ts';
 import type {ZeroConfig} from './zero-config.ts';
 
 function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
@@ -31,8 +36,79 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
       vfsPollIntervalMs: 15_000,
       ...litestream,
     },
+    upstream: {
+      pgReplicationSlotPerReplica: false,
+    },
   } as unknown as ZeroConfig;
 }
+
+test('pg-high-availability feature flag', () => {
+  const env = {};
+
+  const normalized = normalizeZeroConfig(
+    createSilentLogContext(),
+    {
+      adminPassword: 'admin',
+      upstream: {
+        db: 'postgres:///upstream',
+        pgHighAvailabilityReplication: true,
+      },
+      changeStreamer: {
+        port: 4849,
+        address: 'localhost',
+        pgChangeLogEnabled: true,
+        sqliteChangeLogMode: 'off',
+        sqliteChangeLogReadPercent: 0,
+        sqliteChangeLogColdReadPercent: 0,
+        sqliteChangeLogComparePercent: 1,
+        sqliteChangeLogRetentionMs: 60_000,
+        sqliteChangeLogReadBatchRows: 1000,
+        sqliteChangeLogPurgeBatchRows: 1000,
+        sqliteChangeLogBarrierTimeoutMs: 300_000,
+      },
+      change: {db: 'postgres:///change'},
+      cvr: {db: 'postgres:///cvr'},
+      litestream: {
+        port: 9090,
+        executableV5: '/usr/bin/litestream',
+        vfsQueryExecutable: '/usr/bin/vfs-query',
+        backupURL: 's3://foo/bar',
+      },
+    } as unknown as ZeroConfig,
+    env,
+    'my-task-id',
+  );
+  expect(normalized).toMatchObject({
+    changeStreamer: {
+      pgChangeLogEnabled: false,
+      sqliteChangeLogColdReadPercent: 100,
+      sqliteChangeLogMode: 'serve',
+      sqliteChangeLogReadPercent: 100,
+    },
+    litestream: {
+      backupURL: 's3://foo/bar',
+      backupUsingV5: true,
+      restoreUsingV5: true,
+      executableV5: '/usr/bin/litestream',
+      vfsQueryExecutable: '/usr/bin/vfs-query',
+    },
+    upstream: {
+      pgHighAvailabilityReplication: true,
+      pgReplicationSlotPerReplica: true,
+    },
+  });
+  assertNormalized(normalized);
+
+  expect(env).toMatchObject({
+    ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED: 'false',
+    ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COLD_READ_PERCENT: '100',
+    ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE: 'serve',
+    ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT: '100',
+    ZERO_LITESTREAM_BACKUP_USING_V5: 'true',
+    ZERO_LITESTREAM_RESTORE_USING_V5: 'true',
+    ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA: 'true',
+  });
+});
 
 describe('config/normalize litestream v5 gating', () => {
   test('backupUsingV5 requires restoreUsingV5', () => {
@@ -138,6 +214,48 @@ describe('config/normalize SQLite change log', () => {
 
   test('disabling the PG change log requires authoritative SQLite and v5 backup settings', () => {
     const config = configWith({});
+    config.changeStreamer.pgChangeLogEnabled = false;
+
+    expect(() => assertNormalized(config)).toThrow(
+      'requires --change-streamer-sqlite-change-log-mode=serve',
+    );
+
+    config.changeStreamer.sqliteChangeLogMode = 'serve';
+    expect(() => assertNormalized(config)).toThrow(
+      'requires --change-streamer-sqlite-change-log-read-percent=100',
+    );
+
+    config.changeStreamer.sqliteChangeLogReadPercent = 100;
+    expect(() => assertNormalized(config)).toThrow(
+      'requires --change-streamer-sqlite-change-log-cold-read-percent=100',
+    );
+
+    config.changeStreamer.sqliteChangeLogColdReadPercent = 100;
+    expect(() => assertNormalized(config)).toThrow(
+      'requires a litestream v5 backup',
+    );
+
+    Object.assign(config.litestream, {
+      backupURL: 's3://bucket/replica',
+      backupUsingV5: true,
+      restoreUsingV5: true,
+      executableV5: '/bin/litestream-v5',
+      vfsQueryExecutable: '/bin/vfs-query',
+    });
+    expect(() => assertNormalized(config)).not.toThrow();
+  });
+
+  test('per-replica-slots requires disabling pg change log', () => {
+    const config = configWith({});
+    config.upstream.pgReplicationSlotPerReplica = true;
+    expect(() => assertNormalized(config)).toThrow(
+      'requires --change-streamer-pg-change-log-enabled=false',
+    );
+  });
+
+  test('per-replica-slots requires authoritative SQLite and v5 backup settings', () => {
+    const config = configWith({});
+    config.upstream.pgReplicationSlotPerReplica = true;
     config.changeStreamer.pgChangeLogEnabled = false;
 
     expect(() => assertNormalized(config)).toThrow(

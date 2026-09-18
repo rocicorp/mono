@@ -2,6 +2,7 @@ import type postgres from 'postgres';
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
+import {PG_17} from '../../../types/pg-versions.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {
   getInitialDownloadState,
@@ -234,6 +235,9 @@ describe('createReplicationSlot', () => {
       if (stmt.startsWith('SET lock_timeout')) {
         return Promise.resolve([]);
       }
+      if (stmt.includes('SELECT current_setting')) {
+        return Promise.resolve([{pgVersion: PG_17}]);
+      }
       // CREATE_REPLICATION_SLOT
       return Promise.resolve([slot]);
     });
@@ -267,7 +271,8 @@ describe('createReplicationSlot', () => {
       slotName: 's',
     });
     expect(calls[0]).toMatch(/^SET lock_timeout = \d+$/);
-    expect(calls[1]).toMatch(/CREATE_REPLICATION_SLOT/);
+    expect(calls[1]).toMatch(/^\s*SELECT current_setting/);
+    expect(calls[2]).toMatch(/CREATE_REPLICATION_SLOT/);
   });
 
   test('propagates server-side errors (e.g. lock_not_available)', async () => {
@@ -294,6 +299,9 @@ describe('createReplicationSlot', () => {
       const session = mockSession(stmt => {
         if (stmt.startsWith('SET lock_timeout')) {
           return Promise.resolve([]);
+        }
+        if (stmt.includes('SELECT current_setting')) {
+          return Promise.resolve([{pgVersion: PG_17}]);
         }
         // Simulate a hang: never resolve (e.g. network partition where
         // the server aborted but the client never receives the error).

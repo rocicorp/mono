@@ -1,4 +1,5 @@
 /* oxlint-disable no-console */
+import {LogContext} from '@rocicorp/logger';
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
 import {
@@ -8,6 +9,7 @@ import {
   inject,
   type ProvidedContext,
 } from 'vitest';
+import {consoleSink} from '../../../shared/src/logging.ts';
 import {must} from '../../../shared/src/must.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import {
@@ -201,6 +203,7 @@ export async function dropReplicationSlots(db: postgres.Sql): Promise<void> {
 }
 
 async function dropReplicationSlotsFor(db: postgres.Sql, database: string) {
+  const lc = new LogContext('warn', {}, consoleSink);
   for (let i = 0; i < 100; i++) {
     const results = await db<
       {slotName: string; active: boolean; pid: number | null}[]
@@ -212,18 +215,22 @@ async function dropReplicationSlotsFor(db: postgres.Sql, database: string) {
       break;
     }
     for (const {slotName, active /*, pid */} of results) {
-      if (active) {
-        // A replication slot can't be dropped when it is still marked "active" on the upstream
-        // database. The slot becomes inactive when the replication stream  is closed,
-        // but because this is a non-transactional process that happens in the internals of Postgres,
-        // sometimes it isn't immediate. Send a pg_terminate_backend() to move it along.
-        // console.warn(`terminating backend ${pid} to release replication slot`);
-        await db<{slotName: string; active: boolean}[]>`
+      try {
+        if (active) {
+          // A replication slot can't be dropped when it is still marked "active" on the upstream
+          // database. The slot becomes inactive when the replication stream  is closed,
+          // but because this is a non-transactional process that happens in the internals of Postgres,
+          // sometimes it isn't immediate. Send a pg_terminate_backend() to move it along.
+          // console.warn(`terminating backend ${pid} to release replication slot`);
+          await db<{slotName: string; active: boolean}[]>`
           SELECT pg_terminate_backend(active_pid)
             FROM pg_replication_slots WHERE database = ${database} and active = true`;
-        await sleep(50);
-      } else {
-        await db`SELECT pg_drop_replication_slot(${slotName})`;
+          await sleep(50);
+        } else {
+          await db`SELECT pg_drop_replication_slot(${slotName})`;
+        }
+      } catch (e) {
+        lc.warn?.(`error dropping replication slot ${slotName}`, e);
       }
     }
   }

@@ -13,6 +13,7 @@ import {
   createReplicaAndSlot,
   type ReplicationSlotResult,
 } from './replication-slots.ts';
+import {Replicate} from './schema/replica-stage-enum.ts';
 import {
   ensureGlobalTables,
   metadataPublicationName,
@@ -59,10 +60,12 @@ describe('ReplicationSlotCleanupMonitor', () => {
       upstream,
       'initial-sync',
       shard,
+      0,
       id,
       false,
       {backupPath: id, backupV5: true},
       snapshot => Promise.resolve(`captured(${snapshot})`),
+      Replicate,
     );
     results.push(result);
     return result;
