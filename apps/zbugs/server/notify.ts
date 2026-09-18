@@ -47,6 +47,10 @@ type NotificationArgs = {issueID: string} & (
   | EditCommentNotification
 );
 
+// Only issues in this project (matched by `lowerCaseName`) send
+// notifications (email + Discord).
+const NOTIFYING_PROJECT_NAME = 'zero';
+
 export async function notify(
   tx: ServerTransaction,
   authData: AuthData | undefined,
@@ -57,13 +61,20 @@ export async function notify(
 
   const {issueID, kind} = args;
 
-  const issue = await tx.run(builder.issue.where('id', issueID).one());
+  const issue = await tx.run(
+    builder.issue.where('id', issueID).related('project').one(),
+  );
   if (!issue) {
     throw new MutationError(
       `Issue not found`,
       MutationErrorCode.NOTIFICATION_FAILED,
       issueID,
     );
+  }
+
+  // Only the Zero project sends notifications.
+  if (issue.project?.lowerCaseName !== NOTIFYING_PROJECT_NAME) {
+    return;
   }
 
   const modifierUserID = authData.sub;
