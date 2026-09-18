@@ -452,6 +452,7 @@ export class PipelineDriver {
       this.#pipelines.delete(queryID);
       this.#destroyPipeline(queryID, pipeline, 'destroy');
     }
+    this.#tables.clear();
     this.#rowSetSignatures.clear();
     this.#storage.destroy();
     this.#snapshotter.destroy();
@@ -877,6 +878,7 @@ export class PipelineDriver {
         for (const input of builtInputs) {
           input.destroy();
         }
+        this.#pruneUnusedTables();
         // Rows may already have been yielded through #trackRowSetSignatures,
         // and rowSetSignature() must not report a signature for a query
         // without an active pipeline.
@@ -898,8 +900,17 @@ export class PipelineDriver {
     if (pipeline) {
       this.#pipelines.delete(queryID);
       this.#destroyPipeline(queryID, pipeline, stopReason);
+      this.#pruneUnusedTables();
     }
     this.#rowSetSignatures.delete(queryID);
+  }
+
+  #pruneUnusedTables() {
+    for (const [table, source] of this.#tables.entries()) {
+      if (!source.hasConnections()) {
+        this.#tables.delete(table);
+      }
+    }
   }
 
   #destroyPipeline(
@@ -991,6 +1002,7 @@ export class PipelineDriver {
     const diff = this.#snapshotter.advance(
       this.#tableSpecs,
       this.#allTableNames,
+      this.#tables,
     );
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
