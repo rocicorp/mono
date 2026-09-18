@@ -547,7 +547,11 @@ export class BackfillManager implements Cancelable, Listener {
               [newName]: change.backfill,
             },
           });
-          if (this.#backfillRunningFor(table)) {
+          // A backfill running for other columns read the row key and those
+          // columns only, so it is unaffected by the rewrite and left alone;
+          // the rewritten column is backfilled when it completes.
+          const backfill = this.#backfillRunningFor(table);
+          if (backfill && newName in backfill.request.columns) {
             this.#stopRunningBackfill(`column rewritten`);
           }
         }
