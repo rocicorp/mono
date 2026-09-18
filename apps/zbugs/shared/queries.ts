@@ -404,7 +404,11 @@ export function buildListQuery(args: ListQueryArgs) {
     .related('viewState', q =>
       (args.userID ? q.where('userID', args.userID) : alwaysFalse(q)).one(),
     )
-    .related('labels');
+    .related('labels')
+    // The issue page cannot render until the creator is present. Loading it
+    // here lets a click from the list render locally instead of waiting for
+    // the server, which may be busy hydrating the preload.
+    .related('creator');
 
   if (!listContext) {
     return alwaysFalse(q);
