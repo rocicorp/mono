@@ -85,7 +85,7 @@ type MakeFromMutatorDefinitions<
   readonly [K in keyof MD]: MD[K] extends (
     tx: Transaction<S>,
     ...args: infer Args
-  ) => Promise<void>
+  ) => Promise<unknown>
     ? (...args: Args) => MutatorResult
     : MD[K] extends CustomMutatorDefs
       ? MakeFromMutatorDefinitions<S, MD[K], C>

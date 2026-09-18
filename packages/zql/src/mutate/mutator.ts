@@ -196,7 +196,7 @@ export type MutatorDefinitionFunction<
   args: TOutput;
   ctx: TContext;
   tx: TTransaction;
-}) => Promise<void>;
+}) => Promise<ReadonlyJSONValue | void>;
 
 export type MutatorExecutionFunction<
   TOutput extends ReadonlyJSONValue | undefined,
@@ -204,7 +204,7 @@ export type MutatorExecutionFunction<
   TTransaction,
 > = (
   options: MutatorExecutionOptions<TOutput, TContext, TTransaction>,
-) => Promise<void>;
+) => Promise<ReadonlyJSONValue | void>;
 
 type MutatorExecutionOptions<
   TOutput extends ReadonlyJSONValue | undefined,
