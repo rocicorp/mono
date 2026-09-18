@@ -7,6 +7,7 @@ import {Queue} from '../../../shared/src/queue.ts';
 import type {NormalizedZeroConfig} from '../../../zero-cache/src/config/normalize.ts';
 import {InspectorDelegate} from '../../../zero-cache/src/server/inspector-delegate.ts';
 import {initializePostgresChangeSource} from '../../../zero-cache/src/services/change-source/pg/change-source-init.ts';
+import {toStateVersionString} from '../../../zero-cache/src/services/change-source/pg/lsn.ts';
 import {isPreSerializedBatch} from '../../../zero-cache/src/services/change-streamer/broadcast.ts';
 import {
   initializeStreamer,
@@ -503,15 +504,34 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
       pg,
       sqlite,
       startProtocolClient,
-      async waitForReplicaVersion(description: string): Promise<ReplicaState> {
-        const {done, value} = await withTimeout(
-          versions.next(),
-          `replica version after ${description}`,
-        );
-        if (done) {
-          throw new Error(`replica notifications ended after ${description}`);
+      async watermark(): Promise<string> {
+        // A lower bound for "not yet caused by a write that hasn't
+        // happened yet": the upstream LSN as of *before* issuing a write.
+        // Any commit for that write is guaranteed to land at a later LSN,
+        // so waiting for a notification >= this value can't be satisfied
+        // by anything that already happened (e.g. shard bookkeeping, like
+        // the replicas-table update that advances the slot's LSN on every
+        // startStream()).
+        const [{lsn}] = await upstream<{lsn: string}[]>`
+          SELECT pg_current_wal_lsn() as lsn`;
+        return toStateVersionString(lsn);
+      },
+      async waitForReplicaVersion(
+        description: string,
+        atOrBeyond = '',
+      ): Promise<ReplicaState> {
+        for (;;) {
+          const {done, value} = await withTimeout(
+            versions.next(),
+            `replica version after ${description}`,
+          );
+          if (done) {
+            throw new Error(`replica notifications ended after ${description}`);
+          }
+          if ((value.watermark ?? '') >= atOrBeyond) {
+            return value;
+          }
         }
-        return value;
       },
       async cleanup() {
         for (const fn of cleanup.reverse()) {
@@ -1019,9 +1039,10 @@ async function checkWriteFuzzCases(
     for (let i = 0; i < c.mutations.length; i++) {
       const mutation = c.mutations[i];
       const description = `${c.label}#${i}:${mutationDescription(mutation)}`;
+      const baseline = await harness.watermark();
       await applyWriteFuzzMutation(harness.upstream, mutation);
       writeCount += 1;
-      await harness.waitForReplicaVersion(description);
+      await harness.waitForReplicaVersion(description, baseline);
       try {
         await expectReplicaMatchesPG({...harness, query: c.query});
       } catch (e) {
@@ -1071,8 +1092,9 @@ async function waitForProtocolAfterReplica(
   harness: Awaited<ReturnType<typeof startZeroCacheReplica>>,
   client: ProtocolFuzzerClient,
   description: string,
+  baseline?: string,
 ) {
-  const state = await harness.waitForReplicaVersion(description);
+  const state = await harness.waitForReplicaVersion(description, baseline);
   if (state.watermark === undefined) {
     throw new Error(`missing replica watermark after ${description}`);
   }
@@ -1094,9 +1116,10 @@ async function checkProtocolWriteFuzzCases(
     for (let i = 0; i < c.mutations.length; i++) {
       const mutation = c.mutations[i];
       const description = `${c.label}#${i}:${mutationDescription(mutation)}`;
+      const baseline = await harness.watermark();
       await applyWriteFuzzMutation(harness.upstream, mutation);
       writeCount += 1;
-      const state = await harness.waitForReplicaVersion(description);
+      const state = await harness.waitForReplicaVersion(description, baseline);
       if (state.watermark === undefined) {
         throw new Error(`missing replica watermark after ${description}`);
       }
@@ -1220,16 +1243,19 @@ test(
 
       await expectReplicaMatchesPG({...harness, query});
 
+      let baseline = await harness.watermark();
       await insertTrack(harness.upstream);
-      await harness.waitForReplicaVersion('track insert');
+      await harness.waitForReplicaVersion('track insert', baseline);
       await expectReplicaMatchesPG({...harness, query});
 
+      baseline = await harness.watermark();
       await moveTrackOutOfQuery(harness.upstream);
-      await harness.waitForReplicaVersion('track update');
+      await harness.waitForReplicaVersion('track update', baseline);
       await expectReplicaMatchesPG({...harness, query});
 
+      baseline = await harness.watermark();
       await deleteTrack(harness.upstream);
-      await harness.waitForReplicaVersion('track delete');
+      await harness.waitForReplicaVersion('track delete', baseline);
       await expectReplicaMatchesPG({...harness, query});
     } finally {
       await harness.cleanup();
@@ -1272,24 +1298,27 @@ test(
       });
       await expectProtocolMatchesPG({...harness, client, query});
 
+      let baseline = await harness.watermark();
       await insertTrack(harness.upstream);
-      let state = await harness.waitForReplicaVersion('track insert');
+      let state = await harness.waitForReplicaVersion('track insert', baseline);
       if (state.watermark === undefined) {
         throw new Error('missing replica watermark after track insert');
       }
       await client.waitForCookieAtOrBeyond(state.watermark, 'track insert');
       await expectProtocolMatchesPG({...harness, client, query});
 
+      baseline = await harness.watermark();
       await moveTrackOutOfQuery(harness.upstream);
-      state = await harness.waitForReplicaVersion('track update');
+      state = await harness.waitForReplicaVersion('track update', baseline);
       if (state.watermark === undefined) {
         throw new Error('missing replica watermark after track update');
       }
       await client.waitForCookieAtOrBeyond(state.watermark, 'track update');
       await expectProtocolMatchesPG({...harness, client, query});
 
+      baseline = await harness.watermark();
       await deleteTrack(harness.upstream);
-      state = await harness.waitForReplicaVersion('track delete');
+      state = await harness.waitForReplicaVersion('track delete', baseline);
       if (state.watermark === undefined) {
         throw new Error('missing replica watermark after track delete');
       }
@@ -1326,14 +1355,21 @@ test(
       );
       await expectProtocolCasesMatchPG({harness, client, cases: active});
 
+      let watermarkBaseline = await harness.watermark();
       await insertTrack(harness.upstream);
       await moveTrackOutOfQuery(harness.upstream);
       await waitForProtocolAfterReplica(
         harness,
         client,
         'batched track insert',
+        watermarkBaseline,
       );
-      await waitForProtocolAfterReplica(harness, client, 'batched track move');
+      await waitForProtocolAfterReplica(
+        harness,
+        client,
+        'batched track move',
+        watermarkBaseline,
+      );
       await expectProtocolCasesMatchPG({harness, client, cases: active});
 
       await client.changeQueries({
@@ -1344,17 +1380,20 @@ test(
       active = [album10, track108, track105, playlist1];
       await expectProtocolCasesMatchPG({harness, client, cases: active});
 
+      watermarkBaseline = await harness.watermark();
       await deleteInsertedTrack(harness.upstream);
       await deleteTrack(harness.upstream);
       await waitForProtocolAfterReplica(
         harness,
         client,
         'batched inserted track delete',
+        watermarkBaseline,
       );
       await waitForProtocolAfterReplica(
         harness,
         client,
         'batched existing track delete',
+        watermarkBaseline,
       );
       await expectProtocolCasesMatchPG({harness, client, cases: active});
     } finally {
