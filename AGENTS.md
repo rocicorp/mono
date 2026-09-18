@@ -240,6 +240,18 @@ type(scope): description
 - `fix(zero-cache): resolve memory leak in connection pool`
 - `chore(deps): update vitest to 3.2.4`
 
+### Signing commits on a branch
+
+Every commit must be SSH-signed by a key in rocicorp/.github's `signing/allowed_signers`; the "Verify signed commit authors" job in `.github/workflows/dev-release.yml` rejects branches that are not. To take over commits pushed by an agent (or anyone whose key is not an allowed signer) as your own, signed with your key:
+
+```bash
+scripts/sign-branch.sh                     # pick from the 10 most recently pushed branches
+scripts/sign-branch.sh <branch>            # asks before force-pushing
+scripts/sign-branch.sh <branch> --no-push  # rebuild only, inspect first
+```
+
+The original author is kept as a `Co-authored-by:` trailer, trees are reused verbatim, and nothing is checked out.
+
 ### Cherry-picking
 
 Always use the `-x` flag when cherry-picking to record the source commit hash:
