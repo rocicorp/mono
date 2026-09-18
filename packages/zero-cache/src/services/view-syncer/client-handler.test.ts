@@ -172,7 +172,7 @@ describe('view-syncer/client-handler', () => {
       ),
     ];
 
-    let pokers = startPoke(handlers, poke1Version);
+    let pokers = startPoke(lc, handlers, poke1Version);
     await pokers.addPatch({
       toVersion: {stateVersion: '11z', configVersion: 1},
       patch: {
@@ -277,7 +277,7 @@ describe('view-syncer/client-handler', () => {
     await pokers.end(poke1Version);
 
     // Now send another (empty) poke with everyone at the same baseCookie.
-    pokers = startPoke(handlers, poke2Version);
+    pokers = startPoke(lc, handlers, poke2Version);
     await pokers.end(poke2Version);
 
     const results = await Promise.all(subscriptions.map(sub => sub.close()));
@@ -398,9 +398,9 @@ describe('view-syncer/client-handler', () => {
     );
 
     // First poke: caught up, but forced because it is the client's first poke.
-    await startPoke([handler], version).end(version);
+    await startPoke(lc, [handler], version).end(version);
     // Second poke at the same version: now a true no-op, nothing is sent.
-    await startPoke([handler], version).end(version);
+    await startPoke(lc, [handler], version).end(version);
 
     const {received} = await close();
     expect(received).toEqual([
@@ -410,6 +410,43 @@ describe('view-syncer/client-handler', () => {
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
+  });
+
+  test('poke that cannot be ended fails the connection', async () => {
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+
+    const pokers = startPoke(lc, [handler], {stateVersion: '123'});
+    await pokers.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'foo'}},
+        contents: {id: 'foo'},
+      },
+    });
+    // Patches were sent, but the CVR flush was a no-op so the final version
+    // does not advance past the client's baseCookie.
+    await pokers.end({stateVersion: '121'});
+
+    const {received, err} = await close();
+
+    // The connection is failed rather than being left mid-poke, which would
+    // make the *next* pokeStart fail the DownstreamSender's in-progress check.
+    expect(String(err)).toMatch(/Patches were sent but finalVersion/);
+    expect(received[0]).toEqual([
+      'pokeStart',
+      {pokeID: '123', baseCookie: '121'},
+    ] satisfies PokeStartMessage);
   });
 
   test('flushes poke parts at the patch-count threshold', async () => {
