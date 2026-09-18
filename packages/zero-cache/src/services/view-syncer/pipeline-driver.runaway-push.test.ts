@@ -289,9 +289,37 @@ describe('view-syncer/pipeline-driver', () => {
         changeCount++;
       }
     }).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement projected to exceed hydration time at 25 of 100 changes after 40 ms. Projected total advancement time is 160 ms. Advancement time limited based on total hydration time of 25 ms.]`,
+      `[ResetPipelinesSignal: Advancement projected to exceed hydration time at 25 of 100 changes after 40 ms. Projected remaining advancement time is 120 ms. Advancement time limited based on total hydration time of 25 ms.]`,
     );
     expect(changeCount).toEqual(25);
+  });
+
+  test('finishes when remaining advancement is cheaper than hydration', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 100,
+        elapsedLap: () => 100,
+      }),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      ...Array.from({length: 100}, (_, i) =>
+        messages.insert('issue', {id: `i${1001 + i}`}),
+      ),
+    );
+
+    let changeCount = 0;
+    expect(() => {
+      for (const _ of pipelines.advance({
+        elapsedLap: () => 0,
+        totalElapsed: () => changeCount * 1.8,
+      }).changes) {
+        changeCount++;
+      }
+    }).not.toThrow();
+    expect(changeCount).toEqual(100);
   });
 
   test('does not timeout once advancement is mostly complete', () => {

@@ -181,7 +181,7 @@ function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
 }
 
-function projectedAdvancementTimeMs(
+function projectedRemainingAdvancementTimeMs(
   elapsedMs: number,
   processedChanges: number,
   numChanges: number,
@@ -189,7 +189,8 @@ function projectedAdvancementTimeMs(
   if (processedChanges <= 0 || numChanges <= 0) {
     return undefined;
   }
-  return (elapsedMs / processedChanges) * numChanges;
+  const remainingChanges = Math.max(numChanges - processedChanges, 0);
+  return (elapsedMs / processedChanges) * remainingChanges;
 }
 
 function advancementResetTimeLimitMs(totalHydrationTimeMs: number): number {
@@ -206,24 +207,34 @@ function minProjectedAdvancementSampleChanges(numChanges: number): number {
   );
 }
 
+function hasProjectedAdvancementSample(
+  elapsedMs: number,
+  processedChanges: number,
+  numChanges: number,
+): boolean {
+  return (
+    numChanges >= MIN_PROJECTED_ADVANCEMENT_CHANGES &&
+    processedChanges >= minProjectedAdvancementSampleChanges(numChanges) &&
+    elapsedMs >= MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS
+  );
+}
+
 function shouldResetProjectedAdvancement(
   elapsedMs: number,
-  projectedTotalTimeMs: number | undefined,
+  projectedRemainingTimeMs: number | undefined,
   processedChanges: number,
   numChanges: number,
   totalHydrationTimeMs: number,
 ): boolean {
   if (
-    projectedTotalTimeMs === undefined ||
-    numChanges < MIN_PROJECTED_ADVANCEMENT_CHANGES ||
-    processedChanges < minProjectedAdvancementSampleChanges(numChanges) ||
-    elapsedMs < MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS
+    projectedRemainingTimeMs === undefined ||
+    !hasProjectedAdvancementSample(elapsedMs, processedChanges, numChanges)
   ) {
     return false;
   }
 
   return (
-    projectedTotalTimeMs >
+    projectedRemainingTimeMs >
     advancementResetTimeLimitMs(totalHydrationTimeMs) *
       PROJECTED_ADVANCEMENT_RESET_MULTIPLIER
   );
@@ -1183,10 +1194,10 @@ export class PipelineDriver {
   }
 
   /**
-   * Cancel advancement processing when either the whole batch projects to be
-   * more expensive than hydration, or the current source change alone exceeds
-   * the hydration budget. The late-finish exception only applies to batch-level
-   * checks; a single pathological push always resets.
+   * Cancel advancement processing when either the remaining batch projects to
+   * be more expensive than hydration, or the current source change alone
+   * exceeds the hydration budget. The late-finish exception only applies to
+   * batch-level checks; a single pathological push always resets.
    */
   #shouldAdvanceYieldMaybeAbortAdvance(checkYield = true): boolean {
     const {
@@ -1213,17 +1224,22 @@ export class PipelineDriver {
         totalHydrationTimeMs,
       );
     }
-    const projectedTotalTimeMs = projectedAdvancementTimeMs(
+    const projectedRemainingTimeMs = projectedRemainingAdvancementTimeMs(
       elapsed,
       pos,
       numChanges,
     );
     const shouldFinish = shouldFinishLateAdvancement(pos, numChanges);
+    const hasProjectionSample = hasProjectedAdvancementSample(
+      elapsed,
+      pos,
+      numChanges,
+    );
     if (
       !shouldFinish &&
       shouldResetProjectedAdvancement(
         elapsed,
-        projectedTotalTimeMs,
+        projectedRemainingTimeMs,
         pos,
         numChanges,
         totalHydrationTimeMs,
@@ -1233,12 +1249,13 @@ export class PipelineDriver {
         pos,
         numChanges,
         elapsed,
-        projectedTotalTimeMs,
+        projectedRemainingTimeMs,
         totalHydrationTimeMs,
       );
     }
     if (
       !shouldFinish &&
+      !hasProjectionSample &&
       elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
       (elapsed > totalHydrationTimeMs ||
         (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
@@ -1273,13 +1290,13 @@ export class PipelineDriver {
     pos: number,
     numChanges: number,
     elapsed: number,
-    projectedTotalTimeMs: number | undefined,
+    projectedRemainingTimeMs: number | undefined,
     totalHydrationTimeMs: number,
   ): never {
     const projection =
-      projectedTotalTimeMs === undefined
+      projectedRemainingTimeMs === undefined
         ? ''
-        : ` Projected total advancement time is ${projectedTotalTimeMs} ms.`;
+        : ` Projected remaining advancement time is ${projectedRemainingTimeMs} ms.`;
     throw new ResetPipelinesSignal(
       `Advancement projected to exceed hydration time at ${pos} of ` +
         `${numChanges} changes after ${elapsed} ms.` +
