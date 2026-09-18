@@ -718,7 +718,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     // Once this change-streamer acquires "ownership" of the change DB,
     // it is safe to start the storer.
-    await this.#storer.assumeOwnership(this.#purgeLock);
+    if (this.#pgChangeLogEnabled) {
+      await this.#storer.assumeOwnership(this.#purgeLock);
+    }
     this.#purgeLock = null;
 
     // The threshold in (estimated number of) bytes to send() on subscriber
