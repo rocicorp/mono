@@ -118,7 +118,6 @@ export class IncrementalSyncer {
           // SQLite catchup.
           logsChangeStream: false,
         });
-        this.#state.resetBackoff();
         unregister = this.#state.cancelOnStop(downstream);
         this.#statusPublisher?.publish(
           lc,
@@ -171,6 +170,9 @@ export class IncrementalSyncer {
         };
 
         for await (const {data: message, size} of downstream) {
+          // Only reset backoff after receiving an actual message.
+          this.#state.resetBackoff();
+
           this.#replicationEvents.add(1);
           switch (message[0]) {
             case 'status': {
