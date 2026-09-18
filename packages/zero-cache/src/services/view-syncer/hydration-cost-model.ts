@@ -1,5 +1,12 @@
 const HYDRATION_OBSERVATION_DECAY = 0.75;
 const MAX_HYDRATION_WALL_MULTIPLIER = 20;
+/**
+ * The number of in-flight hydration passes beyond which a reset does not get
+ * any more expensive. Without a limit, a process full of hydrating client
+ * groups would price resets so high that advancement is never abandoned, no
+ * matter how pathological.
+ */
+const MAX_PRICED_ACTIVE_HYDRATIONS = 4;
 
 /**
  * A full hydration pass that has been counted as in flight by a
@@ -20,17 +27,25 @@ export type HydrationPass = {
  * Estimates full pipeline-reset cost from hydration observations shared by all
  * client groups in a syncer process.
  *
- * The estimate is `processTime * wallMultiplier * (1 + activeHydrations)`:
+ * The estimate is
+ * `processTime * wallMultiplier * (1 + min(activeHydrations, 4))`:
  *
  * - `wallMultiplier` is the wall time a pass takes per unit of hydration
  *   process time when it has the process to itself (query transform round
  *   trips, CVR flushes, pokes, etc.). Passes are weighted by their process
  *   time, so the fixed overheads that dominate small passes do not set the
  *   price for large ones.
- * - `1 + activeHydrations` is the slowdown from sharing the thread with the
- *   passes that are in flight right now. Each observation is divided by the
+ * - `1 + activeHydrations` counts the full hydration passes (one per client
+ *   group) that are in flight right now. Each observation is divided by the
  *   concurrency it ran under so that this contention is not also learned by
  *   `wallMultiplier`.
+ *
+ * The active-hydrations term is deliberate backpressure rather than a cost
+ * estimate: sharing the thread slows advancement down just as much as it slows
+ * hydration, but only the reset side of the comparison is scaled (advancement
+ * is measured in process time). This biases client groups towards finishing
+ * their advancement while others are hydrating, which keeps a wave of resets
+ * from feeding itself. It is capped so that the bias stays bounded.
  */
 export class HydrationCostModel {
   readonly #now: () => number;
@@ -107,6 +122,10 @@ export class HydrationCostModel {
   estimate(processTimeMs: number): number {
     const wallMultiplier =
       this.#processMs > 0 ? this.#wallMs / this.#processMs : 1;
-    return processTimeMs * wallMultiplier * (1 + this.#activeHydrations);
+    return (
+      processTimeMs *
+      wallMultiplier *
+      (1 + Math.min(this.#activeHydrations, MAX_PRICED_ACTIVE_HYDRATIONS))
+    );
   }
 }

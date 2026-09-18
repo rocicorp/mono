@@ -75,6 +75,21 @@ describe('HydrationCostModel', () => {
     expect(() => pass2.end()).toThrow('Hydration pass already ended');
   });
 
+  test('caps the price of active hydrations', () => {
+    const passes = Array.from({length: 200}, () => model.beginHydration());
+    expect(model.estimate(100)).toBe(500);
+
+    // The cap applies to the estimate, not to the count.
+    for (const pass of passes.splice(0, 197)) {
+      pass.end();
+    }
+    expect(model.estimate(100)).toBe(400);
+    for (const pass of passes) {
+      pass.end();
+    }
+    expect(model.estimate(100)).toBe(100);
+  });
+
   test('does not learn contention from concurrent passes', () => {
     // Two passes share the thread for their entire duration, so each takes
     // twice as long as it would have alone.
