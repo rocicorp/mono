@@ -729,9 +729,31 @@ describe('view-syncer/snapshotter', () => {
     const diff = s.advance(tableSpecs, allTableNames, observed);
     expect(diff.changes).toBe(2);
 
+    const prevSpy = vi.spyOn(diff.prev.db.statementCache, 'get');
+    const currSpy = vi.spyOn(diff.curr.db.statementCache, 'get');
+
     const changes = [...diff];
     expect(changes).toHaveLength(1);
     expect(changes[0]?.table).toBe('issues');
+
+    // Assert that no statement queries were executed for 'users'
+    const prevUsersCalls = prevSpy.mock.calls.filter(
+      call => typeof call[0] === 'string' && call[0].includes('"users"'),
+    );
+    const currUsersCalls = currSpy.mock.calls.filter(
+      call => typeof call[0] === 'string' && call[0].includes('"users"'),
+    );
+    expect(prevUsersCalls).toHaveLength(0);
+    expect(currUsersCalls).toHaveLength(0);
+
+    // Assert that queries WERE executed for the observed 'issues' table
+    const currIssuesCalls = currSpy.mock.calls.filter(
+      call => typeof call[0] === 'string' && call[0].includes('"issues"'),
+    );
+    expect(currIssuesCalls.length).toBeGreaterThan(0);
+
+    prevSpy.mockRestore();
+    currSpy.mockRestore();
   });
 
   test('permissions change is observed even when not in observedTables', () => {
