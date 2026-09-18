@@ -713,4 +713,43 @@ describe('view-syncer/snapshotter', () => {
 
     getSpy.mockRestore();
   });
+
+  test('unobserved tables are skipped without row lookups', () => {
+    const {version} = s.current();
+    expect(version).toBe('01');
+
+    replicator.processTransaction(
+      '07',
+      messages.insert('users', {id: 'u1', handle: 'alice'}),
+      messages.insert('issues', {id: 1, desc: 'bug', owner: 1}),
+    );
+
+    // Only observe 'issues', users should be skipped
+    const observed = new Set(['issues']);
+    const diff = s.advance(tableSpecs, allTableNames, observed);
+    expect(diff.changes).toBe(2);
+
+    const changes = [...diff];
+    expect(changes).toHaveLength(1);
+    expect(changes[0]?.table).toBe('issues');
+  });
+
+  test('permissions change is observed even when not in observedTables', () => {
+    const {version} = s.current();
+    expect(version).toBe('01');
+
+    replicator.processTransaction(
+      '07',
+      messages.update('my_app.permissions', {
+        lock: 1,
+        permissions: '{"tables":{}}',
+        hash: '12345',
+      }),
+      messages.insert('issues', {id: 1, desc: 'bug', owner: 1}),
+    );
+
+    const observed = new Set(['issues']);
+    const diff = s.advance(tableSpecs, allTableNames, observed);
+    expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
+  });
 });
