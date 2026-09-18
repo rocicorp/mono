@@ -272,7 +272,7 @@ describe('view-syncer/pipeline-driver', () => {
         elapsedLap: () => 100,
       }),
     ];
-    pipelines.recordHydrationWallTime(1000);
+    pipelines.recordHydrationWallTime(2000);
 
     replicator.processTransaction(
       '134',
@@ -285,7 +285,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(() => {
       for (const _ of pipelines.advance({
         elapsedLap: () => 0,
-        totalElapsed: () => (changeCount + 1) * 60,
+        totalElapsed: () => (changeCount + 1) * 40,
       }).changes) {
         changeCount++;
       }

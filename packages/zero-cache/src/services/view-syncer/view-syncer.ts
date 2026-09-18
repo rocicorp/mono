@@ -920,50 +920,55 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     const hydrationStartedAt = performance.now();
-    lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
+    this.#pipelines.beginHydration();
+    try {
+      lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
 
-    const hydrationBudget = new HydrationBudget(
-      this.#config.viewSyncerHydrationBudgetMs ?? 0,
-      this.#now,
-    );
-    const hydrationPassStats: HydrationPassStats = {
-      activeHydratedQueries: 0,
-      inactiveHydratedQueries: 0,
-    };
-    // Note: the budget is constructed before this call, so the hydration
-    // performed here counts against it -- deliberately, since a pass that has
-    // already spent its budget on active queries should not go on to hydrate
-    // inactive ones. The transform round trip it makes is discounted via
-    // excluding(). Only required queries are hydrated here, so none of them
-    // are evictable; the budget takes effect in the #syncQueryPipelineSet
-    // call below.
-    const driftedQueryIDs = await this.#hydrateUnchangedQueries(
-      lc,
-      cvr,
-      connCtx,
-      hydrationPassStats,
-      hydrationBudget,
-      previousQueries,
-    );
-    // hydrateUnchangedQueries just transformed all the custom queries;
-    // this #syncQueryPipelineSet call should retransform those that are
-    // missing from #pipelines (errored, changed transform hash, or drifted).
-    await this.#syncQueryPipelineSet(
-      lc,
-      cvr,
-      'missing',
-      connCtx,
-      driftedQueryIDs,
-      hydrationBudget,
-      hydrationPassStats,
-      previousQueries,
-    );
+      const hydrationBudget = new HydrationBudget(
+        this.#config.viewSyncerHydrationBudgetMs ?? 0,
+        this.#now,
+      );
+      const hydrationPassStats: HydrationPassStats = {
+        activeHydratedQueries: 0,
+        inactiveHydratedQueries: 0,
+      };
+      // Note: the budget is constructed before this call, so the hydration
+      // performed here counts against it -- deliberately, since a pass that has
+      // already spent its budget on active queries should not go on to hydrate
+      // inactive ones. The transform round trip it makes is discounted via
+      // excluding(). Only required queries are hydrated here, so none of them
+      // are evictable; the budget takes effect in the #syncQueryPipelineSet
+      // call below.
+      const driftedQueryIDs = await this.#hydrateUnchangedQueries(
+        lc,
+        cvr,
+        connCtx,
+        hydrationPassStats,
+        hydrationBudget,
+        previousQueries,
+      );
+      // hydrateUnchangedQueries just transformed all the custom queries;
+      // this #syncQueryPipelineSet call should retransform those that are
+      // missing from #pipelines (errored, changed transform hash, or drifted).
+      await this.#syncQueryPipelineSet(
+        lc,
+        cvr,
+        'missing',
+        connCtx,
+        driftedQueryIDs,
+        hydrationBudget,
+        hydrationPassStats,
+        previousQueries,
+      );
 
-    this.#pipelines.recordHydrationWallTime(
-      performance.now() - hydrationStartedAt,
-    );
-    this.#pipelinesHydrated = true;
-    this.connContextManager.setSharedRetransformReady(true);
+      this.#pipelines.recordHydrationWallTime(
+        performance.now() - hydrationStartedAt,
+      );
+      this.#pipelinesHydrated = true;
+      this.connContextManager.setSharedRetransformReady(true);
+    } finally {
+      this.#pipelines.endHydration();
+    }
   }
 
   // must be called from within #lock

@@ -64,6 +64,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
+import {HydrationCostModel} from './hydration-cost-model.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
@@ -176,7 +177,6 @@ const MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS = 5;
 const MIN_PROJECTED_ADVANCEMENT_CHANGES = 16;
 const PROJECTED_ADVANCEMENT_RESET_MULTIPLIER = 1.5;
 const LATE_ADVANCEMENT_FINISH_PROGRESS = 0.8;
-const MAX_HYDRATION_WALL_MULTIPLIER = 20;
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -294,7 +294,7 @@ export class PipelineDriver {
   #replicaVersion: string | null = null;
   #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
-  #hydrationWallMultiplier = 1;
+  readonly #hydrationCostModel: HydrationCostModel;
 
   readonly #advanceTime = getOrCreateLatencyHistogram(
     'sync',
@@ -321,6 +321,7 @@ export class PipelineDriver {
     yieldThresholdMs: () => number,
     enablePlanner?: boolean,
     config?: ZeroConfig,
+    hydrationCostModel = new HydrationCostModel(),
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
@@ -331,6 +332,7 @@ export class PipelineDriver {
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
+    this.#hydrationCostModel = hydrationCostModel;
   }
 
   /**
@@ -505,17 +507,19 @@ export class PipelineDriver {
 
   recordHydrationWallTime(wallTimeMs: number): void {
     const processTimeMs = this.totalHydrationTimeMs();
-    if (processTimeMs <= 0 || !Number.isFinite(wallTimeMs)) {
-      return;
-    }
-    this.#hydrationWallMultiplier = Math.max(
-      1,
-      Math.min(MAX_HYDRATION_WALL_MULTIPLIER, wallTimeMs / processTimeMs),
-    );
+    this.#hydrationCostModel.observe(wallTimeMs, processTimeMs);
+  }
+
+  beginHydration(): void {
+    this.#hydrationCostModel.beginHydration();
+  }
+
+  endHydration(): void {
+    this.#hydrationCostModel.endHydration();
   }
 
   #hydrationResetCostMs(): number {
-    return this.totalHydrationTimeMs() * this.#hydrationWallMultiplier;
+    return this.#hydrationCostModel.estimate(this.totalHydrationTimeMs());
   }
 
   #logQueryPipelineLifecycle({

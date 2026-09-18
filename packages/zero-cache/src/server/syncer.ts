@@ -26,6 +26,7 @@ import {
   ConnectionContextManagerImpl,
 } from '../services/view-syncer/connection-context-manager.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
+import {HydrationCostModel} from '../services/view-syncer/hydration-cost-model.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {SnapshotRowCache} from '../services/view-syncer/snapshot-row-cache.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
@@ -187,6 +188,7 @@ export default async function runWorker(
       ? new SnapshotRowCache(config.snapshotRowCacheSize)
       : undefined;
 
+  const hydrationCostModel = new HydrationCostModel();
   const viewSyncerFactory = (
     id: string,
     sub: Subscription<ReplicaState>,
@@ -250,6 +252,7 @@ export default async function runWorker(
             : normalYieldThresholdMs,
         config.enableQueryPlanner,
         config,
+        hydrationCostModel,
       ),
       sub,
       drainCoordinator,
