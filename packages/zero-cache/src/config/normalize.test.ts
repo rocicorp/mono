@@ -94,7 +94,7 @@ test('pg-high-availability feature flag', () => {
     },
     upstream: {
       pgHighAvailabilityReplication: true,
-      pgReplicationSlotFailover: true,
+      pgReplicationSlotPerReplica: true,
     },
   });
   assertNormalized(normalized);
@@ -106,7 +106,7 @@ test('pg-high-availability feature flag', () => {
     ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT: '100',
     ZERO_LITESTREAM_BACKUP_USING_V5: 'true',
     ZERO_LITESTREAM_RESTORE_USING_V5: 'true',
-    ZERO_UPSTREAM_PG_REPLICATION_SLOT_FAILOVER: 'true',
+    ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA: 'true',
   });
 });
 

@@ -226,8 +226,8 @@ export function normalizeZeroConfig(
   }
 
   if (config.upstream.pgHighAvailabilityReplication) {
-    config.upstream.pgReplicationSlotFailover = true;
-    env['ZERO_UPSTREAM_PG_REPLICATION_SLOT_FAILOVER'] = 'true';
+    config.upstream.pgReplicationSlotPerReplica = true;
+    env['ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA'] = 'true';
 
     config.litestream.restoreUsingV5 = true;
     config.litestream.backupUsingV5 = true;
