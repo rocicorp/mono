@@ -10,7 +10,11 @@ import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
 import type {CustomQueryID} from '../named.ts';
 import {QueryDelegateBase} from '../query-delegate-base.ts';
-import type {CommitListener, GotCallback} from '../query-delegate.ts';
+import type {
+  AttachPipeline,
+  CommitListener,
+  GotCallback,
+} from '../query-delegate.ts';
 import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
@@ -41,13 +45,13 @@ export class QueryDelegateImpl<TContext = undefined> extends QueryDelegateBase {
   readonly enableNotExists = true; // Allow NOT EXISTS in tests
 
   #pipelinesReady = true;
-  readonly #pendingAttach = new Set<() => void>();
+  readonly #pendingAttach = new Set<AttachPipeline>();
 
   override get pipelinesReady(): boolean {
     return this.#pipelinesReady;
   }
 
-  override onPipelinesReady(cb: () => void): () => void {
+  override onPipelinesReady(cb: AttachPipeline): () => void {
     this.#pendingAttach.add(cb);
     return () => {
       this.#pendingAttach.delete(cb);
@@ -72,12 +76,16 @@ export class QueryDelegateImpl<TContext = undefined> extends QueryDelegateBase {
     const pending = [...this.#pendingAttach];
     this.#pendingAttach.clear();
     this.batchViewUpdates(() => {
+      const releases: (() => void)[] = [];
       for (const attach of pending) {
         try {
-          attach();
+          releases.push(attach());
         } catch {
           // mirrors ZeroContext.markPipelinesReady: log and continue
         }
+      }
+      for (const release of releases) {
+        release();
       }
     });
     this.commit();
