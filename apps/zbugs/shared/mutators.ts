@@ -176,6 +176,24 @@ export const mutators = defineMutators({
       await tx.mutate.issue.delete({id});
     }),
 
+    /**
+     * Deletes several issues in one mutation. The user must be the creator of
+     * every issue (or an admin); if any check fails the whole mutation is
+     * rejected and nothing is deleted.
+     */
+    deleteMany: defineMutator(
+      z.array(z.string()),
+      async ({tx, args: ids, ctx: authData}) => {
+        assertIsLoggedIn(authData);
+        for (const id of ids) {
+          await assertIsCreatorOrAdmin(tx, authData, builder.issue, id);
+        }
+        for (const id of ids) {
+          await tx.mutate.issue.delete({id});
+        }
+      },
+    ),
+
     addLabel: defineMutator(
       z.object({
         issueID: z.string(),
