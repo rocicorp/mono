@@ -514,7 +514,10 @@ export type HumanReadableRecursive<T> = undefined extends T
  * The kind of results we want to wait for when using {@linkcode run} on {@linkcode Query}.
  *
  * `unknown` means we don't want to wait for the server to return results. The result is a
- * snapshot of the data at the time the query was run.
+ * snapshot of the data at the time the query was run. It never waits: while the client is
+ * still starting up (its local data is being loaded and the queries registered so far are
+ * being hydrated) that snapshot is empty, even when data from a previous session is stored
+ * locally. Use `cached` or `complete` when the call has to wait for data.
  *
  * `cached` means we want a result the server has confirmed, but one confirmed by a previous
  * connection is fine: it resolves as soon as the result is `cached` or `complete`. Use it
