@@ -537,8 +537,9 @@ export class BackfillManager implements Cancelable, Listener {
           // The column's values were rewritten upstream (e.g. by a type
           // change). A running backfill of the column may have read the old
           // values, so it is restarted.
-          const metadata = change.tableMetadata ?? null;
           const backfillRequest = this.#requiredBackfills.get(table);
+          const metadata =
+            change.tableMetadata ?? backfillRequest?.table.metadata ?? null;
           this.#setRequiredBackfill(tag, {
             table: {...table, metadata},
             columns: {
