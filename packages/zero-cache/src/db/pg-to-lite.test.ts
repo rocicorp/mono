@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {
+  defaultValueMatches,
   mapPostgresToLite,
   mapPostgresToLiteColumn,
   mapPostgresToLiteDefault,
@@ -445,6 +446,23 @@ test.each([
   // Bare quoted strings without type cast (need explicit ::type)
   ["'foo'"],
   ["'hello world'"],
+
+  // Temporal types are replicated as epoch milliseconds, not strings
+  ["'2024-01-01'::date"],
+  ["'12:30:00'::time"],
+  ["'2024-01-01 12:30:00'::timestamp"],
+  ["'2024-01-01 12:30:00+00'::timestamptz"],
+  ["'2024-01-01 12:30:00'::timestamp without time zone"],
+  ["'1 day'::interval"],
+
+  // Non-finite numeric values are replicated as numbers, not strings
+  ["'NaN'::real"],
+  ["'Infinity'::real"],
+  ["'-Infinity'::numeric"],
+  ["'NaN'::double precision"],
+
+  // bytea values are replicated as binary
+  ["'\\xdead'::bytea"],
 ])('unsupported column default %s', value => {
   expect(() => mapPostgresToLiteDefault('foo', 'bar', value)).toThrow(
     UnsupportedColumnDefaultError,
@@ -472,6 +490,9 @@ test.each([
   ["'hello world'::varchar", "'hello world'"],
   ["''::text", "''"], // empty string
   ["'it''s'::text", "'it''s'"], // escaped quote
+  ["'x'::date_kind", "'x'"], // e.g. an enum whose name starts with "date"
+  ["'1.5'::numeric", "'1.5'"],
+  ["'NaN'::text", "'NaN'"],
 
   // Empty arrays → JSON empty array
   ['ARRAY[]::text[]', "'[]'"],
@@ -481,4 +502,96 @@ test.each([
   ["'{}'::integer[]", "'[]'"],
 ])('supported column default %s', (input, output) => {
   expect(mapPostgresToLiteDefault('foo', 'bar', input)).toEqual(output);
+});
+
+test.each([
+  // Numeric literals
+  ['2', 2],
+  ['0', 0],
+  ['-456', -456],
+  ['123.456', 123.456],
+  ['-0.5', -0.5],
+  ['2147483648', 2147483648],
+
+  // Boolean literals
+  ['true', true],
+  ['false', false],
+
+  // Quoted strings with type casts
+  ["'foo'::text", 'foo'],
+  ["'hello world'::varchar", 'hello world'],
+  ["''::text", ''],
+  ["'it''s'::text", "it's"],
+
+  // Quoted numeric literals with type casts (e.g. bigint)
+  ["'2147483648'::bigint", 2147483648],
+
+  // Empty arrays
+  ["'{}'::text[]", []],
+  ['ARRAY[]::integer[]', []],
+
+  // JSON values
+  ["'{}'::jsonb", {}],
+  ["'[]'::json", []],
+  ["'true'::jsonb", true],
+  ['\'"x"\'::jsonb', 'x'],
+  ["'5'::json", 5],
+  ["'-0.5'::numeric", -0.5],
+])('default value matches %s = %o', (dflt, missingValue) => {
+  expect(defaultValueMatches(dflt, missingValue)).toBe(true);
+});
+
+test.each([
+  // Value mismatches (e.g. default changed after the column was added)
+  ['2', 1],
+  ['true', false],
+  ['false', 0],
+  ["'foo'::text", 'food'],
+  ["'2'::bigint", 2.5],
+
+  // Type mismatches
+  ['2', '2'],
+  ['true', 'true'],
+  ["'foo'::text", 0],
+  ["'true'::text", true],
+
+  // Absent / null values never match
+  [null, 2],
+  [undefined, 2],
+  ['2', undefined],
+  ['2', null],
+  ['', ''],
+
+  // Integers outside of the safe range may lose precision when parsed,
+  // and are never considered equal.
+  ['9007199254740993', 9007199254740993],
+  ["'9007199254740993'::bigint", 9007199254740993],
+
+  // Unsupported (e.g. non-literal) expressions never match
+  ['CURRENT_TIMESTAMP', '2026-07-13 00:00:00'],
+  ['now()', '2026-07-13 00:00:00'],
+  ["nextval('seq'::regclass)", 1],
+  ["'{1,2}'::integer[]", [1, 2]],
+  ["'{}'::text[]", [1]],
+  ['ARRAY[]::text[]', {}],
+
+  // JSON values must match the replicated JSON text exactly
+  ['\'{"a": 1}\'::jsonb', {a: 1}],
+  ["'{}'::text", {}], // objects only match JSON types
+  ["'x'::jsonb", 'x'], // JSON text of the string is '"x"'
+  ["'1.0'::jsonb", 1], // formatting differences
+
+  // bytea values are replicated as binary
+  ["'\\xdead'::bytea", '\\xdead'],
+  ["'foo'", 'foo'], // bare quoted string without type cast
+
+  // Temporal types are replicated as epoch milliseconds, not strings
+  ["'2024-01-01'::date", '2024-01-01'],
+  ["'12:30:00'::time", '12:30:00'],
+
+  // Non-finite numeric values are replicated as numbers, not strings
+  ["'NaN'::real", 'NaN'],
+  ["'Infinity'::numeric", 'Infinity'],
+])('default value does not match %s = %o', (dflt, missingValue) => {
+  expect(defaultValueMatches(dflt, missingValue)).toBe(false);
 });

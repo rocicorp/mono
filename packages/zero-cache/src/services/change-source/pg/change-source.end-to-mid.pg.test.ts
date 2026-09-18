@@ -2097,6 +2097,384 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'setup table with a column list for newly created columns',
+      /*sql*/ `
+      CREATE TABLE covers (id TEXT PRIMARY KEY, url TEXT, secret TEXT);
+      INSERT INTO covers (id, url, secret) VALUES ('a', 'u1', 's1');
+      INSERT INTO covers (id, url, secret) VALUES ('b', 'u2', 's2');
+      ALTER PUBLICATION zero_some_public ADD TABLE covers (id, url);
+      `,
+      [
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        covers: [
+          {id: 'a', url: 'u1'},
+          {id: 'b', url: 'u2'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'column created and published in the same transaction is not backfilled',
+      /*sql*/ `
+      ALTER TABLE covers ADD COLUMN color TEXT;
+      ALTER TABLE covers ADD CONSTRAINT color_check CHECK (color ~ '^#');
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt), TABLE covers (id, url, color);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'color',
+              spec: {pos: expect.any(Number), dataType: 'text', dflt: null},
+            },
+            // Note: no `backfill` field. The column was created in the same
+            // transaction (after its first DDL command) and no rows were
+            // written in between, so all rows are known to be NULL. (Were a
+            // backfill initiated, its messages would fail the next case.)
+          },
+        ],
+      ],
+      {
+        covers: [
+          {id: 'a', url: 'u1', color: null},
+          {id: 'b', url: 'u2', color: null},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'column with a constant default created and published in the same transaction is not backfilled',
+      /*sql*/ `
+      ALTER TABLE covers ADD COLUMN width INT4 DEFAULT 5;
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt), TABLE covers (id, url, color, width);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'width',
+              spec: {pos: expect.any(Number), dataType: 'int4', dflt: '5'},
+            },
+          },
+        ],
+      ],
+      {
+        covers: [
+          {id: 'a', url: 'u1', color: null, width: 5n},
+          {id: 'b', url: 'u2', color: null, width: 5n},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'column written before being published in the same transaction is backfilled',
+      /*sql*/ `
+      ALTER TABLE covers ADD COLUMN tint TEXT;
+      UPDATE covers SET tint = 'x' WHERE id = 'a';
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt), TABLE covers (id, url, color, width, tint);
+      `,
+      [
+        [
+          {tag: 'update'},
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'tint',
+              spec: {pos: expect.any(Number), dataType: 'text', dflt: null},
+            },
+            // The UPDATE was replicated without the (then unpublished)
+            // column, so its value must be backfilled.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        covers: [
+          {id: 'a', url: 'u1', tint: 'x'},
+          {id: 'b', url: 'u2', tint: null},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'pre-existing column published in a transaction that modifies it is backfilled',
+      /*sql*/ `
+      ALTER TABLE covers ALTER secret SET DEFAULT 'z';
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt),
+        TABLE covers (id, url, color, width, tint, secret);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'secret',
+              spec: {pos: expect.any(Number), dataType: 'text', dflt: null},
+            },
+            // Although the column's pg_attribute row was modified in the
+            // same transaction, the column existed before the transaction's
+            // first DDL command, and thus holds arbitrary values.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        covers: [
+          {id: 'a', url: 'u1', secret: 's1'},
+          {id: 'b', url: 'u2', secret: 's2'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'identity column created and published in the same transaction is backfilled',
+      /*sql*/ `
+      ALTER TABLE covers ADD COLUMN seq INT4 GENERATED ALWAYS AS IDENTITY;
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt),
+        TABLE covers (id, url, color, width, tint, secret, seq);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'seq',
+              spec: {pos: expect.any(Number), dataType: 'int4', dflt: null},
+            },
+            // Identity values are filled in without a column default.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {covers: [{seq: expect.any(BigInt)}, {seq: expect.any(BigInt)}]},
+      [],
+      [],
+    ],
+    [
+      'column of a domain type created and published in the same transaction is backfilled',
+      /*sql*/ `
+      CREATE DOMAIN hex AS TEXT DEFAULT '#000';
+      ALTER TABLE covers ADD COLUMN shade hex;
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt),
+        TABLE covers (id, url, color, width, tint, secret, seq, shade);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'shade',
+              spec: {pos: expect.any(Number), dataType: 'hex', dflt: null},
+            },
+            // Domain defaults are filled in without a column default.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        covers: [
+          {id: 'a', shade: '#000'},
+          {id: 'b', shade: '#000'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'column whose volatile default was dropped before being published is backfilled',
+      /*sql*/ `
+      ALTER TABLE covers ADD COLUMN rnd FLOAT8 DEFAULT random();
+      ALTER TABLE covers ALTER rnd DROP DEFAULT;
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt),
+        TABLE covers (id, url, color, width, tint, secret, seq, shade, rnd);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'rnd',
+              spec: {pos: expect.any(Number), dataType: 'float8', dflt: null},
+            },
+            // The volatile default rewrote the table with random values,
+            // which leaves no trace in the column definition once the
+            // default is dropped.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {covers: [{rnd: expect.any(Number)}, {rnd: expect.any(Number)}]},
+      [],
+      [],
+    ],
+    [
+      'column created in a subtransaction and published is not backfilled',
+      /*sql*/ `
+      DO $$ BEGIN
+        ALTER TABLE covers ADD COLUMN sub TEXT;
+      EXCEPTION WHEN others THEN RAISE;
+      END $$;
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt),
+        TABLE covers (id, url, color, width, tint, secret, seq, shade, rnd, sub);
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'covers'},
+            column: {
+              name: 'sub',
+              spec: {pos: expect.any(Number), dataType: 'text', dflt: null},
+            },
+            // Note: no `backfill` field. (Were a backfill initiated, its
+            // messages would fail the next case.)
+          },
+        ],
+      ],
+      {
+        covers: [
+          {id: 'a', sub: null},
+          {id: 'b', sub: null},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'setup fully published table for ALTER TABLE column additions',
+      /*sql*/ `
+      CREATE TABLE your.additions (id TEXT PRIMARY KEY);
+      INSERT INTO your.additions (id) VALUES ('a');
+      INSERT INTO your.additions (id) VALUES ('b');
+      `,
+      [
+        [
+          {tag: 'create-table'},
+          {tag: 'create-index'},
+          {tag: 'insert'},
+          {tag: 'insert'},
+        ],
+      ],
+      {['your.additions']: [{id: 'a'}, {id: 'b'}]},
+      [],
+      [],
+    ],
+    [
+      'ALTER TABLE column additions with replicable initial values are not backfilled',
+      /*sql*/ `
+      ALTER TABLE your.additions
+        ADD COLUMN plain TEXT,
+        ADD COLUMN arr TEXT[] DEFAULT '{}',
+        ADD COLUMN obj JSONB DEFAULT '{}',
+        ADD COLUMN str JSONB DEFAULT '"x"';
+      `,
+      [
+        [
+          // Note: no `backfill` fields. (Were a backfill initiated, its
+          // messages would fail the next case.)
+          {tag: 'add-column', column: {name: 'arr', spec: expect.anything()}},
+          {tag: 'add-column', column: {name: 'obj', spec: expect.anything()}},
+          {tag: 'add-column', column: {name: 'plain', spec: expect.anything()}},
+          {tag: 'add-column', column: {name: 'str', spec: expect.anything()}},
+        ],
+      ],
+      {
+        ['your.additions']: [
+          {id: 'a', plain: null, arr: '[]', obj: '{}', str: '"x"'},
+          {id: 'b', plain: null, arr: '[]', obj: '{}', str: '"x"'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'ALTER TABLE column addition that rewrites rows before changing the default is backfilled',
+      /*sql*/ `
+      ALTER TABLE your.additions
+        ADD COLUMN rnd FLOAT8 DEFAULT random(),
+        ALTER COLUMN rnd SET DEFAULT 5;
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            column: {
+              name: 'rnd',
+              spec: {pos: expect.any(Number), dataType: 'float8', dflt: null},
+            },
+            // Existing rows hold random values rather than the (constant)
+            // default reported in the schema.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        ['your.additions']: [
+          {rnd: expect.any(Number)},
+          {rnd: expect.any(Number)},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'drop fully published table for ALTER TABLE column additions',
+      /*sql*/ `DROP TABLE your.additions;`,
+      [[{tag: 'drop-index'}, {tag: 'drop-table'}]],
+      {},
+      [],
+      [],
+    ],
+    [
+      'remove table with a column list for newly created columns',
+      /*sql*/ `
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt);
+      `,
+      [[{tag: 'drop-index'}, {tag: 'drop-table'}]],
+      {},
+      [],
+      [],
+    ],
+    [
       'disable ALTER PUBLICATION trigger',
       /*sql*/ `
       DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
@@ -2191,6 +2569,113 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'setup table with a column list for newly created columns (COMMENT)',
+      /*sql*/ `
+      CREATE TABLE swatches (id TEXT PRIMARY KEY, url TEXT);
+      INSERT INTO swatches (id, url) VALUES ('a', 'u1');
+      INSERT INTO swatches (id, url) VALUES ('b', 'u2');
+      ALTER PUBLICATION zero_some_public ADD TABLE swatches (id, url);
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      `,
+      [
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        swatches: [
+          {id: 'a', url: 'u1'},
+          {id: 'b', url: 'u2'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'column created and published in the same transaction is not backfilled (COMMENT)',
+      // Mirrors the migration in INC-1681.
+      /*sql*/ `
+      SET LOCAL lock_timeout = '5s';
+      ALTER TABLE swatches ADD COLUMN color_hex TEXT;
+      ALTER TABLE swatches ADD CONSTRAINT hex_format_check
+        CHECK (color_hex ~ '^#[0-9a-f]{6}$');
+      ALTER PUBLICATION zero_some_public DROP TABLE swatches;
+      ALTER PUBLICATION zero_some_public ADD TABLE swatches
+        (id, url, color_hex);
+      COMMENT ON PUBLICATION zero_some_public IS 'publish color_hex';
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'swatches'},
+            column: {
+              name: 'color_hex',
+              spec: {pos: expect.any(Number), dataType: 'text', dflt: null},
+            },
+            // Note: no `backfill` field. (Were a backfill initiated, its
+            // messages would fail the next case.)
+          },
+        ],
+      ],
+      {
+        swatches: [
+          {id: 'a', url: 'u1', color_hex: null},
+          {id: 'b', url: 'u2', color_hex: null},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'column written before being published in the same transaction is backfilled (COMMENT)',
+      /*sql*/ `
+      ALTER TABLE swatches ADD COLUMN tint TEXT;
+      INSERT INTO swatches (id, url, tint) VALUES ('c', 'u3', 'x');
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, int, flt),
+        TABLE swatches (id, url, color_hex, tint);
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      `,
+      [
+        [
+          {tag: 'insert'},
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'swatches'},
+            column: {
+              name: 'tint',
+              spec: {pos: expect.any(Number), dataType: 'text', dflt: null},
+            },
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        swatches: [
+          {id: 'a', tint: null},
+          {id: 'b', tint: null},
+          {id: 'c', tint: 'x'},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'remove table with a column list for newly created columns (COMMENT)',
+      /*sql*/ `
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, int, flt);
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      `,
+      [[{tag: 'drop-index'}, {tag: 'drop-table'}]],
+      {},
+      [],
+      [],
+    ],
+    [
       'disable all event triggers',
       /*sql*/ `
       DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
@@ -2213,6 +2698,217 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         [{tag: 'backfill-completed'}],
       ],
       {['your.new_table']: []},
+      [],
+      [],
+    ],
+    [
+      'insert into table created via update_schemas()',
+      /*sql*/ `
+      INSERT INTO your.new_table (id) VALUES (99);
+      `,
+      [[{tag: 'insert'}]],
+      {['your.new_table']: [{id: 99n}]},
+      [],
+      [],
+    ],
+    [
+      'column with replicable default covered by update_schemas() call',
+      /*sql*/ `
+      ALTER TABLE your.new_table ADD "enabled" BOOL DEFAULT true;
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'enabled',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'bool',
+                dflt: 'true',
+              },
+            },
+            // Note: no `backfill` field. The column was created in the same
+            // transaction as the update_schemas() call, so the default value
+            // is replicated directly, without a backfill.
+          },
+        ],
+      ],
+      // The pre-existing row picks up the replicated default value
+      // immediately (i.e. within the schema change transaction). This would
+      // not (yet) be the case if the column were being backfilled, as
+      // backfilling columns start out hidden with a `null` value.
+      {['your.new_table']: [{id: 99n, enabled: 1n}]},
+      [
+        {
+          name: 'your.new_table',
+          columns: {
+            enabled: {
+              characterMaximumLength: null,
+              dataType: 'bool',
+              elemPgTypeClass: null,
+              dflt: '1',
+              notNull: false,
+              pos: 3,
+            },
+          },
+        },
+      ],
+      [],
+    ],
+    [
+      'column added without an update_schemas() call is not replicated',
+      /*sql*/ `
+      ALTER TABLE your.new_table ADD "num" INT4 DEFAULT 30;
+      `,
+      [],
+      {['your.new_table']: [{id: 99n, enabled: 1n}]},
+      [],
+      [],
+    ],
+    [
+      'column added in an earlier transaction than update_schemas() is backfilled',
+      /*sql*/ `
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'num',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'int4',
+                dflt: null,
+              },
+            },
+            // Rows may have been modified between the transaction that
+            // added the column and the update_schemas() call, so the
+            // column values must be backfilled.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {['your.new_table']: [{id: 99n, enabled: 1n, num: 30n}]},
+      [],
+      [],
+    ],
+    [
+      'newly published column not covered by update_schemas() optimization',
+      /*sql*/ `
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, int, flt, bool);
+      ALTER TABLE foo ALTER "bool" SET DEFAULT false;
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            column: {
+              name: 'bool',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'bool',
+                dflt: null,
+              },
+            },
+            // Even though the column has a replicable default and its
+            // pg_attribute row was touched in the same transaction as the
+            // update_schemas() call (by the SET DEFAULT), the column itself
+            // is not new; it is a pre-existing column added to the
+            // publication's column list, and thus must be backfilled to
+            // pick up the existing values.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill-completed'}],
+      ],
+      {},
+      [],
+      [],
+    ],
+    [
+      'column whose default changed before update_schemas() is backfilled',
+      /*sql*/ `
+      ALTER TABLE your.new_table ADD "changed_default" INT4 DEFAULT 1;
+      ALTER TABLE your.new_table
+        ALTER "changed_default" SET DEFAULT 2;
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'changed_default',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'int4',
+                dflt: null,
+              },
+            },
+            // The existing row contains the default from ADD COLUMN (1), not
+            // the current default (2), so replicating the current default
+            // directly would produce the wrong value.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        ['your.new_table']: [
+          {id: 99n, enabled: 1n, num: 30n, changed_default: 1n},
+        ],
+      },
+      [],
+      [],
+    ],
+    [
+      'column with unchanged text default covered by update_schemas()',
+      /*sql*/ `
+      ALTER TABLE your.new_table ADD "label" TEXT DEFAULT 'unlabeled';
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'label',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'text',
+                dflt: `'unlabeled'::text`,
+              },
+            },
+            // No `backfill` field: the current default matches the value
+            // stamped into pre-existing rows when the column was created
+            // (i.e. attmissingval), so the default is replicated directly.
+          },
+        ],
+      ],
+      {
+        ['your.new_table']: [
+          {
+            id: 99n,
+            enabled: 1n,
+            num: 30n,
+            changed_default: 1n,
+            label: 'unlabeled',
+          },
+        ],
+      },
       [],
       [],
     ],

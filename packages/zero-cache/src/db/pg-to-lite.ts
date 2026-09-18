@@ -75,7 +75,51 @@ const BOOLEAN_LITERAL_REGEX = /^(true|false)$/;
 // 'string' values, e.g. `'2147483648'::bigint`, `'foo'::text`.
 // Only matches simple type names (word characters) - array types like
 // `::text[]` won't match and will trigger backfill.
-const QUOTED_STRING_WITH_CAST_REGEX = /^('.*')::(\w+)$/;
+//
+// Types whose values are not replicated as the quoted string are excluded:
+// - Temporal types are replicated as epoch milliseconds
+//   (e.g. `'2024-01-01'::date`). Most temporal type names are multi-word,
+//   e.g. `timestamp with time zone`, and are thus already excluded; the
+//   single-word names are listed for completeness.
+// - `bytea` values are replicated as binary (e.g. `'\\xdead'::bytea`).
+const QUOTED_STRING_WITH_CAST_REGEX =
+  /^('.*')::(?!(?:date|time|timetz|timestamp|timestamptz|interval|bytea)$)(\w+)$/;
+
+// JSON types, whose values are replicated as JSON text.
+const JSON_CAST_TYPES = new Set(['json', 'jsonb']);
+
+// Numeric types whose quoted literals may denote non-finite values (e.g.
+// `'NaN'::real`, `'Infinity'::numeric`), which are replicated as numbers
+// rather than as the quoted string. (`double precision` is multi-word and
+// thus never matches QUOTED_STRING_WITH_CAST_REGEX.)
+const NUMERIC_CAST_TYPES = new Set([
+  'real',
+  'float4',
+  'float8',
+  'numeric',
+  'decimal',
+]);
+
+/**
+ * Matches a quoted string with a type cast whose quoted value can be used
+ * as-is for the SQLite default, returning the quoted value and the type.
+ */
+function matchQuotedLiteral(
+  defaultExpression: string,
+): {quoted: string; type: string} | undefined {
+  const match = QUOTED_STRING_WITH_CAST_REGEX.exec(defaultExpression);
+  if (!match) {
+    return undefined;
+  }
+  const [, quoted, type] = match;
+  if (
+    NUMERIC_CAST_TYPES.has(type) &&
+    !NUMERIC_LITERAL_REGEX.test(quoted.slice(1, -1))
+  ) {
+    return undefined;
+  }
+  return {quoted, type};
+}
 
 // Empty array constructor syntax: ARRAY[]::text[], ARRAY[]::integer[], etc.
 // Maps to '[]' (JSON empty array) in SQLite.
@@ -123,9 +167,9 @@ export function mapPostgresToLiteDefault(
   }
 
   // Quoted strings with type casts: extract just the quoted part
-  const match = QUOTED_STRING_WITH_CAST_REGEX.exec(defaultExpression);
-  if (match) {
-    return match[1];
+  const literal = matchQuotedLiteral(defaultExpression);
+  if (literal) {
+    return literal.quoted;
   }
 
   // Empty arrays: ARRAY[]::type[] or '{}'::type[] → '[]'
@@ -139,6 +183,88 @@ export function mapPostgresToLiteDefault(
   // Everything else triggers backfill
   throw new UnsupportedColumnDefaultError(
     `Unsupported default value for ${table}.${column}: ${defaultExpression}`,
+  );
+}
+
+/**
+ * Returns whether a column's default expression (as reported by
+ * `pg_get_expr(adbin, adrelid)` in the published schema) is a simple
+ * literal that evaluates to exactly `missingValue` — the JSON encoding of
+ * the column's `pg_attribute.attmissingval`, i.e. the value that all
+ * pre-existing rows contain for a column that was added with Postgres'
+ * fast "default for all rows" optimization.
+ *
+ * This is the condition under which an added column can be replicated by
+ * applying its default directly (i.e. without backfill): the default is
+ * both replicable and guaranteed to reproduce the contents of
+ * pre-existing rows. Note that the current default may differ from the
+ * missing value, e.g. if the default was changed (in the same transaction
+ * or a later one) after the column was added.
+ *
+ * The comparison is conservative: any expression or value that is not
+ * confidently understood compares as `false`, for which callers fall back
+ * to a backfill. In particular, integers outside of the safe range are
+ * never considered equal, since both sides may silently lose precision
+ * when parsed into a `number`.
+ */
+export function defaultValueMatches(
+  dflt: string | null | undefined,
+  missingValue: unknown,
+): boolean {
+  if (
+    dflt === null ||
+    dflt === undefined ||
+    missingValue === undefined ||
+    missingValue === null
+  ) {
+    return false;
+  }
+  if (NUMERIC_LITERAL_REGEX.test(dflt)) {
+    return (
+      typeof missingValue === 'number' && numberMatches(missingValue, dflt)
+    );
+  }
+  if (BOOLEAN_LITERAL_REGEX.test(dflt)) {
+    return missingValue === (dflt === 'true');
+  }
+  if (
+    EMPTY_ARRAY_CONSTRUCTOR_REGEX.test(dflt) ||
+    EMPTY_ARRAY_LITERAL_REGEX.test(dflt)
+  ) {
+    return Array.isArray(missingValue) && missingValue.length === 0;
+  }
+  const match = matchQuotedLiteral(dflt);
+  if (match) {
+    const literal = match.quoted.slice(1, -1).replaceAll(`''`, `'`);
+    if (JSON_CAST_TYPES.has(match.type)) {
+      // JSON values are replicated as JSON text, which must then be
+      // identical to the literal (e.g. `'{}'::jsonb`, `'"x"'::jsonb`).
+      // Formatting differences conservatively compare as unequal.
+      return JSON.stringify(missingValue) === literal;
+    }
+    if (typeof missingValue === 'object') {
+      return false;
+    }
+    if (typeof missingValue === 'string') {
+      return missingValue === literal;
+    }
+    // Values of non-text types may be expressed as quoted literals with a
+    // cast (e.g. `'2147483648'::bigint`), while their missing values are
+    // JSON-encoded as numbers.
+    if (typeof missingValue === 'number') {
+      return numberMatches(missingValue, literal);
+    }
+    return false;
+  }
+  return false;
+}
+
+function numberMatches(missingValue: number, literal: string): boolean {
+  return (
+    (Number.isSafeInteger(missingValue) ||
+      (!Number.isInteger(missingValue) &&
+        Math.abs(missingValue) < Number.MAX_SAFE_INTEGER)) &&
+    String(missingValue) === literal
   );
 }
 

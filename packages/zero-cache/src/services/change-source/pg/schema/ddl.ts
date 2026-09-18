@@ -3,6 +3,7 @@ import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
+import {jsonValueSchema} from '../../protocol/current/json.ts';
 import {publishedSchema, publishedSchemaQuery} from './published.ts';
 
 // Sent in the 'version' tag of "ddlStart" and "ddlUpdate" event messages.
@@ -34,17 +35,46 @@ export const ddlEventSchema = triggerEvent.extend({
   event: v.object({tag: v.string()}),
   // Maps the OID of each published table to the `attnum`s of published
   // columns that were created in the (upstream) transaction that emitted
-  // the event. Such columns are guaranteed to have the column default in
-  // all pre-existing rows, and can thus be replicated without backfill if
-  // the default value itself is replicable. Tables whose publication
+  // the event. Such columns are guaranteed to hold their initial value
+  // (i.e. the default at creation time, or NULL) in all pre-existing rows,
+  // and can thus be replicated without backfill if that value is known and
+  // replicable (see `missingValues`).
+  //
+  // A newly *published* (as opposed to newly *created*) column may hold
+  // arbitrary values in existing rows. Columns of tables whose publication
   // entries (e.g. column lists) were modified in the same transaction are
-  // excluded, since a newly *published* (as opposed to newly *created*)
-  // column may hold arbitrary values in existing rows.
+  // thus only reported if they provably did not exist when the transaction
+  // started its first DDL command, and no rows of the table were written
+  // since (see `xactSnapshotSetting()`).
   //
   // The field is absent in messages from older versions of the upstream
   // functions (in which case backfill decisions fall back to the command
   // tag heuristic), and `null` when there are no such columns.
   newColumns: v.record(v.array(v.number())).nullable().optional(),
+  // Maps the OID of each published table to the "missing value"
+  // (i.e. `pg_attribute.attmissingval`) of each column (keyed by `attnum`)
+  // in `newColumns` that has one. This is the value that all pre-existing
+  // rows contain for a column that was added with Postgres' fast "default
+  // for all rows" optimization, and it is unaffected by later changes to
+  // the column default (which only apply to subsequently created rows).
+  //
+  // A column can thus be replicated without backfill iff its current
+  // default is a replicable expression that evaluates to its missing
+  // value (see `defaultValueMatches()`), as replicating the default is
+  // then guaranteed to reproduce the contents of pre-existing rows.
+  // A `null` value indicates that all pre-existing rows are NULL, i.e.
+  // that the column was added without a default, and that nothing else
+  // (identity or generation, a domain default, or a table rewrite) filled
+  // in values. This is only reported when proven by the transaction's
+  // snapshot (see `xactSnapshotSetting()`).
+  //
+  // Columns without an entry (e.g. added with a volatile default) must be
+  // backfilled.
+  //
+  // Like `newColumns`, the field is absent in messages from older
+  // versions of the upstream functions, and `null` when there are no such
+  // columns.
+  missingValues: v.record(v.record(jsonValueSchema)).nullable().optional(),
 });
 
 /**
@@ -152,6 +182,32 @@ function append(shardNum: number) {
 const DDL_SERIALIZATION_LOCK = 0x3c6b8468f1bac0b0n;
 
 /**
+ * The name of the transaction-local setting in which the first DDL command
+ * of a transaction records, for each published table, its `relnatts`, the
+ * transaction's row write counters (inserted, updated, deleted), and its
+ * relfilenode as `{[oid]: [relnatts, inserted, updated, deleted, filenode]}`.
+ *
+ * A published column whose `attnum` exceeds the recorded `relnatts` was
+ * created after the snapshot. If the counters are unchanged, no row of the
+ * table was written since, and if the relfilenode is unchanged, the table
+ * was not rewritten (which is not reflected in the counters). All
+ * pre-existing rows are then guaranteed to hold the column's initial value,
+ * even if the column was published in the same transaction (e.g. by
+ * `ALTER PUBLICATION ... ADD TABLE t (..., col)`), which would otherwise
+ * require a backfill.
+ *
+ * Note that the counters (`pg_stat_get_xact_tuples_*()`) are not strictly
+ * scoped to the current transaction (they include stats not yet flushed
+ * from previous transactions), but they are not flushed while a transaction
+ * is in progress, so an unchanged value implies that no rows were written.
+ */
+export function xactSnapshotSetting({appID, shardNum}: ShardConfig) {
+  // Custom setting names must start with a letter or underscore, whereas
+  // appIDs may start with a digit.
+  return `_${appID}_${shardNum}.xact_snapshot`;
+}
+
+/**
  * Event trigger functions contain the core logic that are invoked by triggers.
  *
  * Note that although many of these functions can theoretically be parameterized and
@@ -174,6 +230,7 @@ export function createEventFunctionStatements(
 ) {
   const {appID, shardNum, publications} = shard;
   const schema = id(upstreamSchema(shard)); // e.g. "{APP_ID}_{SHARD_ID}"
+  const snapshotSetting = lit(xactSnapshotSetting(shard));
   return /*sql*/ `
 CREATE SCHEMA IF NOT EXISTS ${schema};
 
@@ -220,18 +277,171 @@ INSERT INTO ${schema}."publishedSchema" (current) VALUES (${schema}.schema_specs
   UPDATE SET current = excluded.current;
 
 
+-- Returns whether a (visible) catalog row with the given xmin may have been
+-- written by the current transaction, including its subtransactions. This
+-- errs on the side of returning true, and must thus only be used to
+-- conservatively disable optimizations.
+--
+-- Visible rows written by in-progress transactions are necessarily written
+-- by the current transaction, whose subtransaction ids are greater than its
+-- top-level id. The xid (which lacks the epoch) is thus mapped to the
+-- first full transaction id at or after the top-level id, and checked for
+-- being in progress. (pg_xact_status() rejects ids that have not yet been
+-- assigned, which cannot belong to the current transaction.)
+CREATE OR REPLACE FUNCTION ${schema}.written_in_current_xact(x xid)
+RETURNS BOOL AS $$
+DECLARE
+  top xid8 := pg_current_xact_id();
+  top_num int8 := top::text::int8;
+  candidate xid8;
+BEGIN
+  IF x = top::xid THEN
+    RETURN true;
+  END IF;
+  candidate := (top_num +
+    ((x::text::int8 - (top_num % 4294967296) + 4294967296) % 4294967296)
+  )::text::xid8;
+  RETURN COALESCE(pg_xact_status(candidate) = 'in progress', true);
+EXCEPTION WHEN invalid_parameter_value THEN
+  -- "transaction ID ... is in the future"
+  RETURN false;
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION ${schema}.update_schemas(event_type text, tag text, target record)
 RETURNS void AS $$
 DECLARE
   prev_schema_specs JSON;
   schema_specs JSON;
+  new_columns JSON;
+  missing_values JSON;
+  xact_snapshot JSON;
+  publications_changed BOOL;
   message TEXT;
 BEGIN
   SELECT current FROM ${schema}."publishedSchema" INTO prev_schema_specs;
   SELECT ${schema}.schema_specs() INTO schema_specs;
-  
+
   IF prev_schema_specs::text != schema_specs::text THEN
     UPDATE ${schema}."publishedSchema" SET current = schema_specs;
+
+    -- Report the published columns that were created in the current
+    -- transaction (i.e. pg_attribute rows inserted by this transaction),
+    -- along with the "missing value" (attmissingval) of each column that
+    -- has one. The missing value is what all pre-existing rows contain
+    -- for a column added with a non-volatile default, and is unaffected
+    -- by later changes to the column default; the zero-cache can thus
+    -- replicate such a column without backfill iff its current default
+    -- evaluates to its missing value.
+    --
+    -- A newly *published* column may be a pre-existing column with
+    -- arbitrary values in existing rows, which requires a backfill. If the
+    -- publications were changed in the same transaction (e.g.
+    -- ALTER PUBLICATION ... SET TABLE with a column list, or
+    -- ADD TABLES IN SCHEMA), columns are thus only reported if the
+    -- transaction's snapshot (recorded by its first DDL command) proves that
+    -- the column did not exist at the time, and that no rows of the table
+    -- have been written since.
+    xact_snapshot := NULLIF(current_setting(${snapshotSetting}, true), '')::json;
+
+    SELECT EXISTS (
+      SELECT 1 FROM pg_publication pub
+        WHERE pub.pubname IN (${lit(publications)})
+          AND ${schema}.written_in_current_xact(pub.xmin)
+    ) OR EXISTS (
+      SELECT 1 FROM pg_publication_namespace ns
+        JOIN pg_publication pub ON pub.oid = ns.pnpubid
+        WHERE pub.pubname IN (${lit(publications)})
+          AND ${schema}.written_in_current_xact(ns.xmin)
+    ) INTO publications_changed;
+
+    WITH new_cols AS (
+      SELECT DISTINCT pc.oid AS rel_oid, attnum, atthasmissing,
+                      attidentity, attgenerated, typtype,
+                      COALESCE(unchanged_since_snapshot, false) AS proven
+        FROM pg_attribute
+        JOIN pg_type pt ON pt.oid = atttypid
+        JOIN pg_class pc ON pc.oid = attrelid
+        JOIN pg_namespace pns ON pns.oid = pc.relnamespace
+        JOIN pg_publication_tables pb ON
+          pb.schemaname = pns.nspname AND
+          pb.tablename = pc.relname AND
+          attname = ANY(pb.attnames)
+        LEFT JOIN LATERAL (
+          SELECT xact_snapshot -> (pc.oid::text) AS snap
+        ) snapshot ON true
+        LEFT JOIN LATERAL (
+          -- The column was created after the snapshot, and the table has
+          -- neither been written to nor rewritten (e.g. by a volatile
+          -- default, a stored generated column, or ALTER COLUMN ... TYPE)
+          -- since.
+          SELECT pc.relkind = 'r'
+            AND attnum > (snap ->> 0)::int
+            AND pg_stat_get_xact_tuples_inserted(pc.oid) = (snap ->> 1)::int8
+            AND pg_stat_get_xact_tuples_updated(pc.oid) = (snap ->> 2)::int8
+            AND pg_stat_get_xact_tuples_deleted(pc.oid) = (snap ->> 3)::int8
+            AND pg_relation_filenode(pc.oid) = (snap ->> 4)::oid
+            AS unchanged_since_snapshot
+        ) unchanged ON true
+        WHERE pb.pubname IN (${lit(publications)})
+          AND attnum > 0
+          AND NOT attisdropped
+          AND (
+            -- Without a snapshot, columns created in the transaction are
+            -- identified by their pg_attribute xmin. This only matches the
+            -- top-level transaction (i.e. not columns created in
+            -- subtransactions, which are thus backfilled), as other xids
+            -- cannot be positively attributed to the current transaction.
+            (
+              pg_attribute.xmin = pg_current_xact_id()::xid
+              AND NOT publications_changed
+              AND NOT EXISTS (
+                SELECT 1 FROM pg_publication_rel rel
+                  JOIN pg_publication pub ON pub.oid = rel.prpubid
+                  WHERE rel.prrelid = pc.oid
+                    AND pub.pubname IN (${lit(publications)})
+                    AND ${schema}.written_in_current_xact(rel.xmin)
+              )
+            )
+            -- With a snapshot, the attnum proves that the column was
+            -- created in the current transaction (including subtransactions).
+            OR unchanged_since_snapshot
+          )
+    )
+    SELECT
+      (SELECT json_object_agg(rel_oid::int8, attnums) FROM (
+        SELECT rel_oid, json_agg(attnum) AS attnums
+          FROM new_cols GROUP BY rel_oid
+      ) attnums_by_table),
+      (SELECT json_object_agg(rel_oid::int8, vals) FROM (
+        SELECT n.rel_oid,
+               json_object_agg(
+                 n.attnum,
+                 CASE WHEN n.atthasmissing
+                   THEN array_to_json(a.attmissingval)->0
+                   ELSE NULL
+                 END
+               ) AS vals
+          FROM new_cols n
+          JOIN pg_attribute a ON a.attrelid = n.rel_oid AND a.attnum = n.attnum
+          WHERE n.atthasmissing OR (
+            -- Columns added without a (non-null) default hold NULL in all
+            -- pre-existing rows, unless they are filled by other means,
+            -- i.e. as identity or generated columns, by a domain default, or
+            -- by a table rewrite (e.g. from a volatile default that has
+            -- since been dropped). The latter leaves no trace in the column
+            -- definition, so this requires the snapshot to prove that the
+            -- table was not rewritten.
+            n.proven AND
+            NOT n.atthasmissing AND
+            n.attidentity = '' AND
+            n.attgenerated = '' AND
+            n.typtype != 'd'
+          )
+          GROUP BY n.rel_oid
+      ) vals_by_table)
+      INTO new_columns, missing_values;
   ELSIF event_type = 'ddlStart' THEN
     -- ddlStart events are always be emitted to allow the zero-cache
     -- to track the context of the current command tag in the face of
@@ -250,6 +460,8 @@ BEGIN
     'version', ${PROTOCOL_VERSION},
     'previousSchema', prev_schema_specs,
     'schema', schema_specs,
+    'newColumns', new_columns,
+    'missingValues', missing_values,
     'event', json_build_object('tag', tag),
     'context', ${schema}.get_trigger_context()
   ) INTO message;
@@ -262,8 +474,17 @@ END
 $$ LANGUAGE plpgsql;
 
 
--- Hook/workaround to manually trigger replication of schema changes on DBs 
--- that do not support/allow event triggers.
+-- Hook/workaround to manually trigger replication of schema changes on DBs
+-- that do not support/allow event triggers. This should be invoked in the
+-- same transaction as the schema change statement(s); among other things,
+-- this allows columns added with replicable defaults (e.g. constants) to
+-- be replicated without a backfill.
+--
+-- Note that it must be invoked *before* any subsequent DML on the altered
+-- tables: since this hook emits the schema change at the point of the
+-- call (rather than at each DDL statement, as event triggers do), row
+-- changes between a column's creation and the call reference a column
+-- that the replica does not yet know about, and fail replication.
 CREATE OR REPLACE FUNCTION ${schema}.update_schemas()
 RETURNS void AS $$
 BEGIN
@@ -280,6 +501,31 @@ DECLARE
 BEGIN
   -- serialize DDL statements to compute correct schema change diffs
   PERFORM pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
+
+  -- Record the columns and row write counters of published tables at the
+  -- first DDL command of the transaction. This is used to determine whether
+  -- columns published later in the transaction were newly created (and
+  -- thus hold their initial value in all rows). The row write counters are
+  -- only maintained if track_counts is enabled.
+  IF current_setting('track_counts')::bool AND
+     COALESCE(current_setting(${snapshotSetting}, true), '') = '' THEN
+    PERFORM set_config(${snapshotSetting}, COALESCE((
+      SELECT json_object_agg(oid::int8, json_build_array(
+        relnatts,
+        pg_stat_get_xact_tuples_inserted(oid),
+        pg_stat_get_xact_tuples_updated(oid),
+        pg_stat_get_xact_tuples_deleted(oid),
+        pg_relation_filenode(oid)
+      ))::text FROM (
+        SELECT DISTINCT pc.oid, pc.relnatts FROM pg_class pc
+          JOIN pg_namespace pns ON pns.oid = pc.relnamespace
+          JOIN pg_publication_tables pb ON
+            pb.schemaname = pns.nspname AND pb.tablename = pc.relname
+          WHERE pb.pubname IN (${lit(publications)}) AND pc.relkind = 'r'
+      ) published
+    ), '{}'), true);
+  END IF;
+
   PERFORM ${schema}.update_schemas('ddlStart', TG_TAG, NULL);
 END
 $$ LANGUAGE plpgsql;

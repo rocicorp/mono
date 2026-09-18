@@ -268,7 +268,13 @@ function getIncrementalMigrations(
           // schema snapshots. Note that setupTriggers() also refreshes the
           // stored "publishedSchema" so that the change in format does not
           // manifest as a spurious schema change.
-          28: {
+          //
+          // v29 (1.11.0): Upgrade the DDL event triggers to report columns
+          // created in the same transaction (`newColumns` and
+          // `missingValues`), allowing such columns to skip backfill.
+          //
+          // Both upgrades are subsumed by the same setupTriggers() call.
+          29: {
             migrateSchema: async (lc, sql) => {
               const [{publications}] = await sql<{publications: string[]}[]>`
                 SELECT publications FROM ${sql(shardConfigTable)}`;

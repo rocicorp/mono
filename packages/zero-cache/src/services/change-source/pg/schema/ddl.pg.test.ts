@@ -1764,6 +1764,94 @@ describe('change-source/tables/ddl', () => {
 
   // Events from future versions of the upstream functions may report the
   // columns created in the transaction that emitted the event.
+  test('pre-existing columns published via TABLES IN SCHEMA are not reported as new', async () => {
+    async function drainTransaction(): Promise<Message[]> {
+      const drained: Message[] = [];
+      for (;;) {
+        const msg = await messages.dequeue();
+        drained.push(msg);
+        if (msg.tag === 'commit') {
+          return drained;
+        }
+      }
+    }
+
+    await upstream.unsafe(
+      `ALTER PUBLICATION zero_sum ADD TABLE private.foo (id, name)`,
+    );
+    await drainTransaction();
+
+    await upstream.begin(async tx => {
+      // Modifies the pg_attribute row of the pre-existing (unpublished)
+      // column, without changing its values or default.
+      await tx.unsafe(
+        `ALTER TABLE private.foo ALTER description SET STATISTICS 100`,
+      );
+      // Publishes the column without touching pg_publication_rel.
+      await tx.unsafe(
+        `ALTER PUBLICATION zero_all ADD TABLES IN SCHEMA private`,
+      );
+    });
+
+    const updates = (await drainTransaction())
+      .filter((msg): msg is MessageMessage => msg.tag === 'message')
+      .map(msg => JSON.parse(new TextDecoder().decode(msg.content)))
+      .filter(event => event.type === 'ddlUpdate')
+      .map(event => v.parse(event, ddlUpdateEventSchema, 'passthrough'));
+    expect(updates).toHaveLength(1);
+    const [update] = updates;
+    expect(update.event.tag).toBe('ALTER PUBLICATION');
+    expect(
+      update.schema.tables.find(t => t.schema === 'private' && t.name === 'foo')
+        ?.columns,
+    ).toHaveProperty('description');
+    expect(update.newColumns ?? null).toBeNull();
+    expect(update.missingValues ?? null).toBeNull();
+  });
+
+  test('publication changes in subtransactions are detected', async () => {
+    async function drainTransaction(): Promise<Message[]> {
+      const drained: Message[] = [];
+      for (;;) {
+        const msg = await messages.dequeue();
+        drained.push(msg);
+        if (msg.tag === 'commit') {
+          return drained;
+        }
+      }
+    }
+
+    await upstream.unsafe(
+      `ALTER PUBLICATION zero_sum ADD TABLE private.foo (id, name)`,
+    );
+    await drainTransaction();
+
+    await upstream.begin(async tx => {
+      // Modifies the pg_attribute row of the pre-existing (unpublished)
+      // column in the top-level transaction.
+      await tx.unsafe(
+        `ALTER TABLE private.foo ALTER description SET STATISTICS 100`,
+      );
+      // Publishes the column in a subtransaction.
+      await tx.savepoint(sub =>
+        sub.unsafe(`ALTER PUBLICATION zero_all ADD TABLES IN SCHEMA private`),
+      );
+    });
+
+    const updates = (await drainTransaction())
+      .filter((msg): msg is MessageMessage => msg.tag === 'message')
+      .map(msg => JSON.parse(new TextDecoder().decode(msg.content)))
+      .filter(event => event.type === 'ddlUpdate')
+      .map(event => v.parse(event, ddlUpdateEventSchema, 'passthrough'));
+    expect(updates).toHaveLength(1);
+    const [update] = updates;
+    expect(
+      update.schema.tables.find(t => t.schema === 'private' && t.name === 'foo')
+        ?.columns,
+    ).toHaveProperty('description');
+    expect(update.newColumns ?? null).toBeNull();
+  });
+
   test('parse ddlUpdateEvent with newColumns', () => {
     const ddlUpdateEvent: DdlUpdateEvent = {
       type: 'ddlUpdate',
