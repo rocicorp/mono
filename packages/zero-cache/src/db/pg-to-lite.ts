@@ -236,14 +236,14 @@ export function defaultValueMatches(
   const match = matchQuotedLiteral(dflt);
   if (match) {
     const literal = match.quoted.slice(1, -1).replaceAll(`''`, `'`);
+    if (JSON_CAST_TYPES.has(match.type)) {
+      // JSON values are replicated as JSON text, which must then be
+      // identical to the literal (e.g. `'{}'::jsonb`, `'"x"'::jsonb`).
+      // Formatting differences conservatively compare as unequal.
+      return JSON.stringify(missingValue) === literal;
+    }
     if (typeof missingValue === 'object') {
-      // JSON objects and arrays are replicated as JSON text, which must
-      // then be identical to the literal (e.g. `'{}'::jsonb`). Formatting
-      // differences conservatively compare as unequal.
-      return (
-        JSON_CAST_TYPES.has(match.type) &&
-        JSON.stringify(missingValue) === literal
-      );
+      return false;
     }
     if (typeof missingValue === 'string') {
       return missingValue === literal;

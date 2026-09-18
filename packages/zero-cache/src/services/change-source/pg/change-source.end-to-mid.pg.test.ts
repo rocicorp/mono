@@ -2401,7 +2401,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ALTER TABLE your.additions
         ADD COLUMN plain TEXT,
         ADD COLUMN arr TEXT[] DEFAULT '{}',
-        ADD COLUMN obj JSONB DEFAULT '{}';
+        ADD COLUMN obj JSONB DEFAULT '{}',
+        ADD COLUMN str JSONB DEFAULT '"x"';
       `,
       [
         [
@@ -2410,12 +2411,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           {tag: 'add-column', column: {name: 'arr', spec: expect.anything()}},
           {tag: 'add-column', column: {name: 'obj', spec: expect.anything()}},
           {tag: 'add-column', column: {name: 'plain', spec: expect.anything()}},
+          {tag: 'add-column', column: {name: 'str', spec: expect.anything()}},
         ],
       ],
       {
         ['your.additions']: [
-          {id: 'a', plain: null, arr: '[]', obj: '{}'},
-          {id: 'b', plain: null, arr: '[]', obj: '{}'},
+          {id: 'a', plain: null, arr: '[]', obj: '{}', str: '"x"'},
+          {id: 'b', plain: null, arr: '[]', obj: '{}', str: '"x"'},
         ],
       },
       [],

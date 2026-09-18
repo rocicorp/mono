@@ -530,9 +530,12 @@ test.each([
   ["'{}'::text[]", []],
   ['ARRAY[]::integer[]', []],
 
-  // JSON objects and arrays
+  // JSON values
   ["'{}'::jsonb", {}],
   ["'[]'::json", []],
+  ["'true'::jsonb", true],
+  ['\'"x"\'::jsonb', 'x'],
+  ["'5'::json", 5],
   ["'-0.5'::numeric", -0.5],
 ])('default value matches %s = %o', (dflt, missingValue) => {
   expect(defaultValueMatches(dflt, missingValue)).toBe(true);
@@ -575,6 +578,8 @@ test.each([
   // JSON values must match the replicated JSON text exactly
   ['\'{"a": 1}\'::jsonb', {a: 1}],
   ["'{}'::text", {}], // objects only match JSON types
+  ["'x'::jsonb", 'x'], // JSON text of the string is '"x"'
+  ["'1.0'::jsonb", 1], // formatting differences
 
   // bytea values are replicated as binary
   ["'\\xdead'::bytea", '\\xdead'],
