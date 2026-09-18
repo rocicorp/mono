@@ -404,6 +404,11 @@ export declare const schemaChangeSchema: v.UnionType<[v.ObjectType<{
             dflt: v.Optional<string | null>;
         }, undefined>;
     }, undefined>;
+    tableMetadata: v.Optional<{
+        [x: string]: import("../../../../../../shared/src/bigint-json.ts").JSONValue;
+        rowKey: Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>;
+    }>;
+    backfill: v.Optional<Record<string, import("./json.ts").JSONValue | undefined>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"drop-column">;
     table: v.ObjectType<{
@@ -498,6 +503,11 @@ export declare const updateColumnSchema: v.ObjectType<{
             dflt: v.Optional<string | null>;
         }, undefined>;
     }, undefined>;
+    tableMetadata: v.Optional<{
+        [x: string]: import("../../../../../../shared/src/bigint-json.ts").JSONValue;
+        rowKey: Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>;
+    }>;
+    backfill: v.Optional<Record<string, import("./json.ts").JSONValue | undefined>>;
 }, undefined>;
 export declare const updateSchema: v.ObjectType<{
     tag: v.Type<"update">;
