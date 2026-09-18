@@ -17,9 +17,12 @@ type Options = {
   keepClone: boolean;
   json: boolean;
   workload: Workload;
+  hotWorks: number;
+  viewerPin: boolean;
+  user: string | undefined;
 };
 
-type Workload = 'background' | 'cover';
+type Workload = 'background' | 'cover' | 'homeview';
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -101,6 +104,29 @@ const SOCIAL_CONNECTIONS_IMPORT = /^@workspace\/social-connections$/;
 const ZERO_SCHEMA_IMPORT = /^@workspace\/(.+-zero-schema)$/;
 const ALL_PATHS = /.*/;
 const CATALOG_SCHEMA_PATH = /catalog\/zero-schema\/src\/schema\.ts$/;
+const HOME_QUERIES_PATH = /home\/zero-schema\/src\/queries\.ts$/;
+
+const HOME_VIEW_PASSES = 2;
+const HOME_VIEW_SLOWEST = 5;
+const PROGRESS_SLOW_COVER_MS = 1000;
+
+const COVER_COLUMNS = `c.cover_id, c.work_id, c.url, c.is_primary,
+  c.width_px, c.height_px`;
+
+const VIEWER_PINS: readonly [RegExp, string][] = [
+  [
+    /(\.related\("ownReadthroughs", \(readthrough\) =>\s*readthrough)/,
+    '$1.where("user_id", "=", userId)',
+  ],
+  [
+    /(\.related\("ownLastFinishedReadthrough", \(readthrough\) =>\s*readthrough)/,
+    '$1.where("user_id", "=", userId)',
+  ],
+  [
+    /(\.related\("ownWantToRead", \(wantToRead\) =>\s*wantToRead)/,
+    '$1.where("user_id", "=", userId)',
+  ],
+];
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
 const packageDir = path.dirname(toolDir);
@@ -135,12 +161,17 @@ try {
 
   await buildRuntime(options, bundle);
   const runtime = (await import(pathToFileURL(bundle).href)) as Runtime;
-  const results = runWorkload(runtime, clone, options);
+  const results =
+    options.workload === 'homeview'
+      ? runHomeViewWorkload(runtime, clone, options)
+      : runWorkload(runtime, clone, options);
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
+  } else if (options.workload === 'homeview') {
+    printHomeViewResults(results as HomeViewResult[]);
   } else {
-    printResults(results);
+    printResults(results as Result[]);
   }
 } finally {
   await rm(bundleDir, {recursive: true, force: true});
@@ -289,7 +320,258 @@ function measureQuery(
   }
 }
 
+type HomeViewResult = {
+  scenario: string;
+  pass: number;
+  userID: string;
+  viewerPin: boolean;
+  covers: number;
+  primaryCovers: number;
+  hydrateMs: number;
+  pushMs: number;
+  flushMs: number;
+  slowest: {coverID: string; workID: string; ms: number}[];
+  error?: string | undefined;
+};
+
+type HomeViewScenario = {
+  name: string;
+  covers: readonly Row[];
+};
+
+// Reproduces runaway push in Margins' `homeView`. A `work_covers` edit reaches
+// the query through `readthroughs.work`, `readthroughs.preferredCover`,
+// `relatedItems.relatedWork` and `wantToReadSeries.works.work`. Each join
+// fetches its parents by the join key alone, so the push scans every user's
+// readthroughs of the edited work, even though only the viewer's reach the
+// output. The `backfill` scenario is the first batch of the real backfill
+// (covers in `cover_id` order). The `hot` scenario is the primary covers of the
+// most-read works, which that backfill eventually reaches.
+function runHomeViewWorkload(
+  runtime: Runtime,
+  replica: string,
+  opts: Options,
+): HomeViewResult[] {
+  const lc = runtime.createSilentLogContext();
+  const setupDB = new runtime.Database(lc, replica);
+  addMissingReplicaColumns(setupDB);
+  const userID = opts.user ?? sampleHomeViewUser(setupDB);
+  const scenarios: HomeViewScenario[] = [
+    {name: 'backfill', covers: sampleBackfillCovers(setupDB, opts.batchSize)},
+    {name: 'hot', covers: sampleHotCovers(setupDB, opts.hotWorks)},
+  ];
+  setupDB.close();
+
+  process.stderr.write(
+    `homeView viewer ${userID}; ${opts.viewerPin ? 'with' : 'without'} viewer pin\n`,
+  );
+
+  const results: HomeViewResult[] = [];
+  for (let pass = 1; pass <= HOME_VIEW_PASSES; pass++) {
+    for (const scenario of scenarios) {
+      const result = measureHomeView(runtime, replica, userID, scenario, opts);
+      result.pass = pass;
+      results.push(result);
+      process.stderr.write(
+        `pass ${pass} ${scenario.name}: push ${formatMs(result.pushMs)}` +
+          ` (hydrate ${formatMs(result.hydrateMs)})\n`,
+      );
+    }
+  }
+  return results;
+}
+
+function measureHomeView(
+  runtime: Runtime,
+  replica: string,
+  userID: string,
+  scenario: HomeViewScenario,
+  opts: Options,
+): HomeViewResult {
+  const db = new runtime.Database(runtime.createSilentLogContext(), replica);
+  const result: HomeViewResult = {
+    scenario: scenario.name,
+    pass: 0,
+    userID,
+    viewerPin: opts.viewerPin,
+    covers: scenario.covers.length,
+    primaryCovers: scenario.covers.filter(c => c.is_primary).length,
+    hydrateMs: 0,
+    pushMs: 0,
+    flushMs: 0,
+    slowest: [],
+  };
+  let view: View | undefined;
+  let inTransaction = false;
+  try {
+    const definition = runtime.queries['homeView'];
+    if (!definition) {
+      throw new Error('Server query is not registered: homeView');
+    }
+    const query = definition.fn({
+      args: userID,
+      ctx: {subject: {authenticatedUserId: userID}},
+    });
+    const delegate = runtime.newQueryDelegate(
+      runtime.createSilentLogContext(),
+      runtime.testLogConfig,
+      db,
+      runtime.schema,
+    );
+
+    const hydrateStarted = performance.now();
+    view = delegate.materialize(query);
+    result.hydrateMs = performance.now() - hydrateStarted;
+    process.stderr.write(
+      `  ${scenario.name}: hydrated in ${formatMs(result.hydrateMs)}\n`,
+    );
+    const source = delegate.getSource('catalog.work_covers');
+
+    db.exec('BEGIN');
+    inTransaction = true;
+    const timings: {coverID: string; workID: string; ms: number}[] = [];
+    for (let i = 0; i < scenario.covers.length; i++) {
+      const oldRow = scenario.covers[i];
+      const newRow = {
+        ...oldRow,
+        background_color_hex: `#${i.toString(16).padStart(6, '0').slice(-6)}`,
+      };
+      const started = performance.now();
+      for (const _ of source.push(
+        runtime.makeSourceChangeEdit(newRow, oldRow),
+      )) {
+        // Exhaust the cooperative stream to advance the pipeline.
+      }
+      const ms = performance.now() - started;
+      if (ms > PROGRESS_SLOW_COVER_MS) {
+        process.stderr.write(
+          `  ${scenario.name}: cover ${i + 1}/${scenario.covers.length}` +
+            ` (work ${String(oldRow.work_id).slice(0, 8)}) took ${formatMs(ms)}\n`,
+        );
+      }
+      result.pushMs += ms;
+      timings.push({
+        coverID: String(oldRow.cover_id),
+        workID: String(oldRow.work_id),
+        ms,
+      });
+    }
+    const flushStarted = performance.now();
+    view.flush();
+    result.flushMs = performance.now() - flushStarted;
+    result.slowest = timings
+      .toSorted((a, b) => b.ms - a.ms)
+      .slice(0, HOME_VIEW_SLOWEST);
+  } catch (error) {
+    result.error =
+      error instanceof Error ? (error.stack ?? error.message) : String(error);
+  } finally {
+    view?.destroy();
+    // Roll back so every scenario and pass starts from the same replica.
+    if (inTransaction) {
+      db.exec('ROLLBACK');
+    }
+    db.close();
+  }
+  return result;
+}
+
+// A viewer whose rows reach every branch the cover edits push through:
+// in-progress readthroughs, a finished readthrough with a real end date (so
+// the partitioned limit(1) has a bound) and want-to-read rows.
+function sampleHomeViewUser(db: Database): string {
+  const [row] = db
+    .prepare(
+      `SELECT p.user_id FROM 'userspace.profiles' AS p
+       WHERE EXISTS (SELECT 1 FROM 'userspace.readthroughs' AS r
+                     WHERE r.user_id = p.user_id AND r.status = 'in_progress')
+         AND EXISTS (SELECT 1 FROM 'userspace.readthroughs' AS r
+                     WHERE r.user_id = p.user_id AND r.status = 'finished'
+                       AND r.end_date <= '9999-12-31')
+         AND EXISTS (SELECT 1 FROM 'userspace.want_to_read' AS w
+                     WHERE w.user_id = p.user_id)
+       LIMIT 1`,
+    )
+    .all();
+  if (!row) {
+    throw new Error('Replica has no viewer that reaches every homeView branch');
+  }
+  return String(row.user_id);
+}
+
+function sampleBackfillCovers(db: Database, count: number): Row[] {
+  return db
+    .prepare(
+      `SELECT ${COVER_COLUMNS} FROM 'catalog.work_covers' AS c
+       ORDER BY c.cover_id LIMIT ?`,
+    )
+    .all(count)
+    .map(toZeroCoverRow);
+}
+
+function sampleHotCovers(db: Database, works: number): Row[] {
+  return db
+    .prepare(
+      `WITH hot AS (
+         SELECT work_id, count(*) AS readthroughs
+         FROM 'userspace.readthroughs'
+           INDEXED BY 'userspace.idx_readthroughs_work_id'
+         GROUP BY work_id ORDER BY readthroughs DESC LIMIT ?)
+       SELECT ${COVER_COLUMNS} FROM hot
+       JOIN 'catalog.work_covers' AS c ON c.work_id = hot.work_id
+       WHERE c.is_primary
+       ORDER BY hot.readthroughs DESC`,
+    )
+    .all(works)
+    .map(toZeroCoverRow);
+}
+
+// SQLite stores booleans as 0/1. Pushed rows must use Zero's types, or the
+// `is_primary = true` filters drop every edit before it reaches a join.
+function toZeroCoverRow(row: Row): Row {
+  return {...row, is_primary: row.is_primary === 1};
+}
+
+// The user-level workaround: repeat the root's `user_id = userId` on each
+// user-owned subquery so push fetches use the (user_id, …) indexes.
+function pinHomeViewToViewer(source: string): string {
+  let pinned = source;
+  for (const [pattern, replacement] of VIEWER_PINS) {
+    if (!pattern.test(pinned)) {
+      throw new Error(`Could not find homeView subquery ${pattern}`);
+    }
+    pinned = pinned.replace(pattern, replacement);
+  }
+  return pinned;
+}
+
+function printHomeViewResults(results: readonly HomeViewResult[]): void {
+  const rows = results.map(result => ({
+    pass: result.pass,
+    scenario: result.scenario,
+    covers: result.covers,
+    primary: result.primaryCovers,
+    hydrate_ms: result.hydrateMs.toFixed(1),
+    push_ms: result.pushMs.toFixed(1),
+    flush_ms: result.flushMs.toFixed(1),
+    push_per_hydrate: `${(result.pushMs / Math.max(result.hydrateMs, 0.001)).toFixed(0)}x`,
+    slowest_cover_ms: result.slowest[0]?.ms.toFixed(1) ?? '',
+    slowest_work: result.slowest[0]?.workID.slice(0, 8) ?? '',
+    error: result.error?.split('\n')[0] ?? '',
+  }));
+  const columns = Object.keys(rows[0] ?? {});
+  process.stdout.write(
+    [
+      columns.join('\t'),
+      ...rows.map(row =>
+        columns.map(column => row[column as keyof typeof row]).join('\t'),
+      ),
+    ].join('\n') + '\n',
+  );
+}
+
 function addMissingReplicaColumns(db: Database): void {
+  addColumnIfMissing(db, 'catalog.work_covers', 'background_color_hex', 'TEXT');
   addColumnIfMissing(db, 'catalog.work_covers', 'width_px', 'REAL');
   addColumnIfMissing(db, 'catalog.work_covers', 'height_px', 'REAL');
   addColumnIfMissing(db, 'catalog.contributors', 'num_works', 'REAL DEFAULT 0');
@@ -469,6 +751,13 @@ function bundleImportsPlugin(opts: Options): Plugin {
         contents: shim(args.path),
         loader: 'ts',
       }));
+      build.onLoad({filter: HOME_QUERIES_PATH}, async args => {
+        const source = await readFile(args.path, 'utf8');
+        return {
+          contents: opts.viewerPin ? pinHomeViewToViewer(source) : source,
+          loader: 'ts',
+        };
+      });
       build.onLoad({filter: CATALOG_SCHEMA_PATH}, async args => {
         let source = await readFile(args.path, 'utf8');
         const legacy = `sourceField: ["cover_id"],\n      destField: ["cover_id"],\n      destSchema: workCoversTable`;
@@ -761,7 +1050,7 @@ function parseArgs(args: readonly string[]): Options {
   }
   if (flags.has('help')) {
     process.stdout.write(
-      `Usage: pnpm --filter zql-benchmarks advance:perf -- --replica PATH --queries-dir PATH [options]\n\nOptions:\n  --replica PATH           SQLite replica file (required)\n  --queries-dir PATH       Exported query bundle (required)\n  --workload NAME          background (default) or cover\n  --users N                Users or parameter samples to test (default: 3)\n  --batch-size N           Referenced work covers per write (default: 500)\n  --query REGEXP           Only matching query names\n  --legacy-cover-join      Keep the cover_id-only relationship for comparison\n  --keep-clone             Keep the disposable replica clone\n  --json                   Emit JSON results\n`,
+      `Usage: pnpm --filter zql-benchmarks advance:perf -- --replica PATH --queries-dir PATH [options]\n\nOptions:\n  --replica PATH           SQLite replica file (required)\n  --queries-dir PATH       Exported query bundle (required)\n  --workload NAME          background (default), cover or homeview\n  --users N                Users or parameter samples to test (default: 3)\n  --batch-size N           Referenced work covers per write (default: 500)\n  --query REGEXP           Only matching query names\n  --legacy-cover-join      Keep the cover_id-only relationship for comparison\n  --keep-clone             Keep the disposable replica clone\n  --hot-works N            homeview: most-read works whose primary covers form the hot batch (default: 5)\n  --viewer-pin             homeview: add the redundant user_id filters to homeView's user-owned subqueries\n  --user ID                homeview: viewer to hydrate (default: first with in-progress, finished and want-to-read rows)\n  --json                   Emit JSON results\n`,
     );
     process.exit(0);
   }
@@ -771,8 +1060,12 @@ function parseArgs(args: readonly string[]): Options {
     '--batch-size',
   );
   const workload = values.get('workload') ?? 'background';
-  if (workload !== 'background' && workload !== 'cover') {
-    throw new Error('--workload must be background or cover');
+  if (
+    workload !== 'background' &&
+    workload !== 'cover' &&
+    workload !== 'homeview'
+  ) {
+    throw new Error('--workload must be background, cover or homeview');
   }
   return {
     replica: path.resolve(requiredValue(values, 'replica')),
@@ -786,6 +1079,9 @@ function parseArgs(args: readonly string[]): Options {
     keepClone: flags.has('keep-clone'),
     json: flags.has('json'),
     workload,
+    hotWorks: positiveInteger(values.get('hot-works') ?? '5', '--hot-works'),
+    viewerPin: flags.has('viewer-pin'),
+    user: values.get('user'),
   };
 }
 
