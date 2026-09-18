@@ -26,20 +26,21 @@ npx transform-query --hash=hash --schema=path_to_schema.ts
 
 ## Measuring pipeline advance against an exported replica
 
-For the Margins investigation, `zql-benchmarks` has a standalone runner that
-loads the exported server query definitions, samples high-row-count users and
-referenced work covers from the replica, and times each long-lived background
-query while a 500-row `catalog.work_covers` transaction advances its pipeline.
+`zql-benchmarks` has a standalone runner for investigating slow pipeline
+advancement. It loads exported server query definitions, samples high-row-count
+users and referenced work covers from the replica, and times each long-lived
+background query while a 500-row `catalog.work_covers` transaction advances its
+pipeline.
 
 ```bash
-pnpm --filter zql-benchmarks margins:perf
+pnpm --filter zql-benchmarks advance:perf -- \
+  --replica path/to/replica.db --queries-dir path/to/exported-queries
 ```
 
-The defaults point at `../investigate/margins-zero-queries` and
-`../investigate/margins-base.db` relative to this repository. Use `--help` for
-path, sample-count, query-filter, JSON-output, and legacy-relationship options.
-The source replica is never opened for writes: the runner requires a filesystem
-copy-on-write clone and removes that clone after the run.
+Both paths are required. Use `--help` for sample-count, query-filter,
+JSON-output, and legacy-relationship options. The source replica is never opened
+for writes: the runner requires a filesystem copy-on-write clone and removes
+that clone after the run.
 
 Use `--workload cover` to exercise the catalog queries whose graphs reach
 `work_covers`, including the ISBN-to-edition-cover relationship. Its work IDs,
