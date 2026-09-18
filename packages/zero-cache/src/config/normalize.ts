@@ -239,8 +239,8 @@ export function normalizeZeroConfig(
 
     config.changeStreamer.sqliteChangeLogReadPercent = 100;
     config.changeStreamer.sqliteChangeLogColdReadPercent = 100;
-    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_READ_PERCENT'] = '100';
-    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_COLD_READ_PERCENT'] = '100';
+    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT'] = '100';
+    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COLD_READ_PERCENT'] = '100';
 
     config.changeStreamer.pgChangeLogEnabled = false;
     env['ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED'] = 'false';
