@@ -667,6 +667,12 @@ export class Zero<
       kvStore,
     };
 
+    this.#visibilityWatcher = getDocumentVisibilityWatcher(
+      getBrowserGlobal('document'),
+      hiddenTabDisconnectDelay,
+      this.#closeAbortController.signal,
+    );
+
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
@@ -690,6 +696,7 @@ export class Zero<
       batchViewUpdates,
       this.#addMetric,
       assertValidRunOptions,
+      this.#visibilityWatcher,
     );
 
     this.query = createRunnableBuilder(this.#zeroContext, schema);
@@ -895,12 +902,6 @@ export class Zero<
       schema,
       this.#lc,
       this.#mutationTracker,
-    );
-
-    this.#visibilityWatcher = getDocumentVisibilityWatcher(
-      getBrowserGlobal('document'),
-      hiddenTabDisconnectDelay,
-      this.#closeAbortController.signal,
     );
 
     void this.#runLoop();
