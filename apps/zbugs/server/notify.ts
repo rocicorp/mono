@@ -1,7 +1,7 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
-import {builder, type schema} from '../shared/schema.ts';
+import {builder, type schema, ZERO_PROJECT_NAME} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
 import type {PostCommitTask} from './server-mutators.ts';
@@ -47,10 +47,6 @@ type NotificationArgs = {issueID: string} & (
   | EditCommentNotification
 );
 
-// Only issues in this project (matched by `lowerCaseName`) send
-// notifications (email + Discord).
-const NOTIFYING_PROJECT_NAME = 'zero';
-
 export async function notify(
   tx: ServerTransaction,
   authData: AuthData | undefined,
@@ -72,8 +68,8 @@ export async function notify(
     );
   }
 
-  // Only the Zero project sends notifications.
-  if (issue.project?.lowerCaseName !== NOTIFYING_PROJECT_NAME) {
+  // Only the Zero project sends notifications (email + Discord).
+  if (issue.project?.lowerCaseName !== ZERO_PROJECT_NAME.toLocaleLowerCase()) {
     return;
   }
 
