@@ -29,6 +29,7 @@ import {
   getMutation,
   handleMutateRequest,
   type Database,
+  type TransactFn,
   type TransactionProviderHooks,
 } from './process-mutations.ts';
 
@@ -1421,3 +1422,169 @@ describe.each(mutatorInvokers)(
     });
   },
 );
+
+describe('shouldRetryMutator', () => {
+  const rejectingHandler = (
+    runs: {count: number},
+    reject: (run: number) => Promise<void>,
+  ) =>
+    ((transact: TransactFn<Database<unknown>>) =>
+      transact((_tx, _name, _args) => {
+        runs.count++;
+        return reject(runs.count);
+      })) as never;
+
+  // The default: a mutator rejection retries the TRANSACTION with the mutator
+  // SKIPPED, and the error becomes the mutation's result. Pinned as the control
+  // for the cases below, and because it is what every caller passing no
+  // predicate must keep getting.
+  test('is not consulted, and the mutator is skipped, when absent', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('serialization failure')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+    });
+
+    expect(runs.count).toBe(1);
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {error: 'app', message: 'serialization failure'},
+          },
+        ],
+        null,
+      ),
+    );
+  });
+
+  test('re-runs the mutator once when it returns true, and the re-run can succeed', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      // The shape the option exists for: the first attempt lost a race, the
+      // second runs against the winner's committed state and converges.
+      handler: rejectingHandler(runs, run =>
+        run === 1
+          ? Promise.reject(new Error('serialization failure'))
+          : promiseUndefined,
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      shouldRetryMutator: () => true,
+    });
+
+    expect(runs.count).toBe(2);
+    expect(response).toEqual(
+      makeSuccessResponse([{id: {clientID: 'cid', id: 1}, result: {}}], null),
+    );
+  });
+
+  // The bound is the point: without it a persistently contended row becomes a
+  // stuck push rather than a reported failure.
+  test('re-runs at most once, then falls back to the default retry', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('always fails')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      shouldRetryMutator: () => true,
+    });
+
+    expect(runs.count).toBe(2);
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {error: 'app', message: 'always fails'},
+          },
+        ],
+        null,
+      ),
+    );
+  });
+
+  // The converse, and it is the half that keeps the option safe. An
+  // application's DELIBERATE rejection reaches the predicate wrapped exactly as
+  // a driver error is, so a predicate answering false must leave the default
+  // path untouched — otherwise every typed rejection in an app gets re-run.
+  test('leaves the default path alone when it returns false', async () => {
+    const runs = {count: 0};
+    const seen: unknown[] = [];
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('that name is taken')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      shouldRetryMutator: error => {
+        seen.push(error);
+        return false;
+      },
+    });
+
+    expect(runs.count).toBe(1);
+    expect(seen).toHaveLength(1);
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {error: 'app', message: 'that name is taken'},
+          },
+        ],
+        null,
+      ),
+    );
+  });
+
+  // A predicate is application code on a recovery path: if it throws, failing
+  // to classify must not become a second failure.
+  test('treats a throwing predicate as not retriable', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('original failure')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      shouldRetryMutator: () => {
+        throw new Error('predicate blew up');
+      },
+    });
+
+    expect(runs.count).toBe(1);
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {error: 'app', message: 'original failure'},
+          },
+        ],
+        null,
+      ),
+    );
+  });
+});
