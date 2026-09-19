@@ -141,4 +141,45 @@ describe('TakeGate', () => {
 
     expect(pushSpy).toHaveBeenCalledWith(addChange, gate);
   });
+
+  test('open() bypasses bounds during fetch, close() restores bounds', () => {
+    const input = setupSource();
+    const gate = new TakeGate(input);
+    const provider: TakeBoundProvider = {
+      getBound: vi.fn(() => ({id: 'i2', created: 200})),
+    };
+    gate.setBoundProvider(provider);
+    const sink = new Catch(gate);
+
+    // Normally bounded to i1, i2
+    expect(
+      sink.fetch().map(n => (n === 'yield' ? 'yield' : (n as {row: Row}).row)),
+    ).toEqual([
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+    ]);
+
+    // When opened, yields all rows
+    gate.open();
+    expect(gate.isOpen()).toBe(true);
+    expect(
+      sink.fetch().map(n => (n === 'yield' ? 'yield' : (n as {row: Row}).row)),
+    ).toEqual([
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+      {id: 'i3', created: 300},
+      {id: 'i4', created: 400},
+      {id: 'i5', created: 500},
+    ]);
+
+    // When closed, bounds are restored
+    gate.close();
+    expect(gate.isOpen()).toBe(false);
+    expect(
+      sink.fetch().map(n => (n === 'yield' ? 'yield' : (n as {row: Row}).row)),
+    ).toEqual([
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+    ]);
+  });
 });

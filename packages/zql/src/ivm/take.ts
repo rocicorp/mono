@@ -23,7 +23,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
-import type {TakeBoundProvider} from './take-gate.ts';
+import type {TakeBoundProvider, TakeGate} from './take-gate.ts';
 
 type TakeState = {
   size: number;
@@ -58,7 +58,13 @@ export class Take implements Operator, TakeBoundProvider {
   // Fetch overlay needed for some split push cases.
   #rowHiddenFromFetch: Row | undefined;
 
+  #takeGate: TakeGate | undefined;
+
   #output: Output = throwOutput;
+
+  setTakeGate(gate: TakeGate): void {
+    this.#takeGate = gate;
+  }
 
   constructor(
     input: Input,
@@ -356,25 +362,30 @@ export class Take implements Operator, TakeBoundProvider {
         };
       }
       if (!newBound?.push) {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
+        this.#takeGate?.open();
+        try {
+          for (const node of this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+          })) {
+            if (node === 'yield') {
+              yield node;
+              continue;
+            }
+            const push = compareRows(node.row, takeState.bound) > 0;
+            newBound = {
+              node,
+              push,
+            };
+            if (push) {
+              break;
+            }
           }
-          const push = compareRows(node.row, takeState.bound) > 0;
-          newBound = {
-            node,
-            push,
-          };
-          if (push) {
-            break;
-          }
+        } finally {
+          this.#takeGate?.close();
         }
       }
 
@@ -480,19 +491,24 @@ export class Take implements Operator, TakeBoundProvider {
       assert(newCmp > 0, 'New comparison must be greater than 0');
       // Find the first item at the old bounds. This will be the new bounds.
       let newBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'at',
-        },
-        constraint,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      this.#takeGate?.open();
+      try {
+        for (const node of this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'at',
+          },
+          constraint,
+        })) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
+          newBoundNode = node;
+          break;
         }
-        newBoundNode = node;
-        break;
+      } finally {
+        this.#takeGate?.close();
       }
       assert(
         newBoundNode !== undefined,
@@ -585,19 +601,24 @@ export class Take implements Operator, TakeBoundProvider {
       // at this point we need to find the row after the bound and use that or
       // the newRow as the new bound.
       let afterBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'after',
-        },
-        constraint,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      this.#takeGate?.open();
+      try {
+        for (const node of this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'after',
+          },
+          constraint,
+        })) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
+          afterBoundNode = node;
+          break;
         }
-        afterBoundNode = node;
-        break;
+      } finally {
+        this.#takeGate?.close();
       }
       assert(
         afterBoundNode !== undefined,

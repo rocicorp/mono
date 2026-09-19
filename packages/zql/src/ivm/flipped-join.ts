@@ -29,6 +29,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
+import type {TakeBoundProvider} from './take-gate.ts';
 
 /**
  * Maximum number of entries sent in a single batched `parent.fetch`
@@ -81,6 +82,7 @@ type Args = {
   hidden: boolean;
   system: System;
   parentPartitionKey?: CompoundKey | undefined;
+  boundProvider?: TakeBoundProvider | undefined;
 };
 
 /**
@@ -100,6 +102,7 @@ export class FlippedJoin implements Input {
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
   readonly #partitionMap: Map<string, Set<string>> | undefined;
+  readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
 
@@ -115,6 +118,7 @@ export class FlippedJoin implements Input {
     hidden,
     system,
     parentPartitionKey,
+    boundProvider,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -128,6 +132,7 @@ export class FlippedJoin implements Input {
     this.#relationshipName = relationshipName;
     this.#parentPartitionKey = parentPartitionKey;
     this.#partitionMap = parentPartitionKey ? new Map() : undefined;
+    this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -198,18 +203,7 @@ export class FlippedJoin implements Input {
     // related parents with position greater than change.position
     // (which should not yet have the node removed), would not even
     // be fetched here, and would be absent from the output all together.
-    const isBackfillFetch =
-      !req.reverse &&
-      req.start &&
-      this.#inprogressChildChangePosition &&
-      this.#parent
-        .getSchema()
-        .compareRows(req.start.row, this.#inprogressChildChangePosition) >= 0;
-
-    if (
-      this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE &&
-      !isBackfillFetch
-    ) {
+    if (this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE) {
       const removedNode = this.#inprogressChildChange[ChangeIndex.NODE];
       const compare = this.#child.getSchema().compareRows;
       const insertPos = binarySearch(childNodes.length, i =>
@@ -321,7 +315,7 @@ export class FlippedJoin implements Input {
       // Children retain their original input order within the group
       // because we appended to `idxs` in iteration order.
       const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
-      yield* this.#yieldParentWithOverlay(node, relatedChildNodes, req);
+      yield* this.#yieldParentWithOverlay(node, relatedChildNodes);
     }
   }
 
@@ -349,16 +343,27 @@ export class FlippedJoin implements Input {
   *#yieldParentWithOverlay(
     minParentNode: Node,
     relatedChildNodes: Node[],
-    req?: FetchRequest,
   ): Stream<Node> {
     let overlaidRelatedChildNodes = relatedChildNodes;
-    const isBackfillFetch =
-      !req?.reverse &&
-      req?.start &&
-      this.#inprogressChildChangePosition &&
+
+    let bound: Row | undefined;
+    if (this.#boundProvider) {
+      const partitionConstraint = this.#parentPartitionKey
+        ? Object.fromEntries(
+            this.#parentPartitionKey.map(k => [k, minParentNode.row[k]]),
+          )
+        : undefined;
+      bound = this.#boundProvider.getBound(partitionConstraint);
+    }
+
+    const isParentInPushQueue =
+      this.#inprogressChildChangePosition !== undefined &&
       this.#parent
         .getSchema()
-        .compareRows(req.start.row, this.#inprogressChildChangePosition) >= 0;
+        .compareRows(minParentNode.row, this.#inprogressChildChangePosition) >
+        0 &&
+      (!bound ||
+        this.#parent.getSchema().compareRows(minParentNode.row, bound) <= 0);
 
     if (
       this.#inprogressChildChange &&
@@ -370,25 +375,15 @@ export class FlippedJoin implements Input {
         this.#parentKey,
       )
     ) {
-      const hasInprogressChildChangeBeenPushedForMinParentNode =
-        this.#parent
-          .getSchema()
-          .compareRows(
-            minParentNode.row,
-            this.#inprogressChildChangePosition,
-          ) <= 0;
       if (this.#inprogressChildChange[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-        if (hasInprogressChildChangeBeenPushedForMinParentNode) {
+        if (!isParentInPushQueue) {
           // Remove from relatedChildNodes since the removed child
           // was inserted into childNodes above.
           overlaidRelatedChildNodes = relatedChildNodes.filter(
             n => n !== this.#inprogressChildChange?.[ChangeIndex.NODE],
           );
         }
-      } else if (
-        !hasInprogressChildChangeBeenPushedForMinParentNode &&
-        !isBackfillFetch
-      ) {
+      } else if (isParentInPushQueue) {
         overlaidRelatedChildNodes = [
           ...generateWithOverlayNoYield(
             relatedChildNodes,

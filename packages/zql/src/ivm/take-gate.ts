@@ -27,11 +27,12 @@ export interface TakeBoundProvider {
  * even if downstream Take only needs a few. TakeGate intercepts this fetch and
  * stops the upstream stream once rows exceed Take's bound.
  */
-export class TakeGate implements Operator {
+export class TakeGate implements Operator, TakeBoundProvider {
   readonly #input: Input;
   readonly #comparator: Comparator;
   #boundProvider: TakeBoundProvider | undefined;
   #output: Output = throwOutput;
+  #openDepth = 0;
 
   constructor(input: Input) {
     const {sort, compareRows} = input.getSchema();
@@ -41,12 +42,29 @@ export class TakeGate implements Operator {
     input.setOutput(this);
   }
 
+  open(): void {
+    this.#openDepth++;
+  }
+
+  close(): void {
+    assert(this.#openDepth > 0, 'TakeGate.close called without matching open');
+    this.#openDepth--;
+  }
+
+  isOpen(): boolean {
+    return this.#openDepth > 0;
+  }
+
   setBoundProvider(provider: TakeBoundProvider): void {
     this.#boundProvider = provider;
   }
 
   getBoundProvider(): TakeBoundProvider | undefined {
     return this.#boundProvider;
+  }
+
+  getBound(constraint?: Constraint): Row | undefined {
+    return this.#boundProvider?.getBound(constraint);
   }
 
   getSchema(): SourceSchema {
@@ -66,18 +84,13 @@ export class TakeGate implements Operator {
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    if (req.reverse) {
+    if (this.#openDepth > 0 || req.reverse) {
       yield* this.#input.fetch(req);
       return;
     }
 
     const bound = this.#boundProvider?.getBound(req.constraint);
     if (!bound) {
-      yield* this.#input.fetch(req);
-      return;
-    }
-
-    if (req.start && this.#comparator(req.start.row, bound) >= 0) {
       yield* this.#input.fetch(req);
       return;
     }
