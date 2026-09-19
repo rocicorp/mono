@@ -94,12 +94,38 @@ describe('SyncerAssigner', () => {
     expect(oneWorker.getWorkerLoad(0)).toBe(1);
   });
 
-  test('destroy clears all assignments', () => {
+  test('activate restores assignment and load if dropped by stale release', () => {
     const assigner = new SyncerAssigner('task-1', 4);
-    assigner.assign('cg-1');
-    assigner.assign('cg-2');
+    const worker = assigner.assign('cg-1');
+    expect(assigner.getWorkerLoad(worker)).toBe(1);
+
+    // Simulate stale active: false from a racing previous connection
+    assigner.release('cg-1', worker);
+    expect(assigner.getAssignment('cg-1')).toBeUndefined();
+    expect(assigner.getWorkerLoad(worker)).toBe(0);
+
+    // Active notification from new ViewSyncer arrives and restores assignment
+    assigner.activate('cg-1', worker);
+    expect(assigner.getAssignment('cg-1')).toBe(worker);
+    expect(assigner.getWorkerLoad(worker)).toBe(1);
+
+    // Subsequent activate for already-active worker is idempotent
+    assigner.activate('cg-1', worker);
+    expect(assigner.getWorkerLoad(worker)).toBe(1);
+  });
+
+  test('destroy clears all assignments and resets worker loads to zero', () => {
+    const assigner = new SyncerAssigner('task-1', 4);
+    const w1 = assigner.assign('cg-1');
+    const w2 = assigner.assign('cg-2');
     expect(assigner.getAssignment('cg-1')).toBeDefined();
+    expect(assigner.getWorkerLoad(w1)).toBeGreaterThan(0);
+    expect(assigner.getWorkerLoad(w2)).toBeGreaterThan(0);
+
     assigner.destroy();
     expect(assigner.getAssignment('cg-1')).toBeUndefined();
+    for (let i = 0; i < 4; i++) {
+      expect(assigner.getWorkerLoad(i)).toBe(0);
+    }
   });
 });

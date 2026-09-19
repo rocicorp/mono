@@ -46,6 +46,18 @@ export class SyncerAssigner {
     return chosen;
   }
 
+  activate(clientGroupID: string, workerIndex: number): void {
+    const existing = this.#assignments.get(clientGroupID);
+    if (existing === workerIndex) {
+      return;
+    }
+    if (existing !== undefined) {
+      this.#decrementLoad(existing);
+    }
+    this.#workerLoads[workerIndex]++;
+    this.#assignments.set(clientGroupID, workerIndex);
+  }
+
   release(clientGroupID: string, workerIndex: number): void {
     const existing = this.#assignments.get(clientGroupID);
     if (existing === workerIndex) {
@@ -70,5 +82,6 @@ export class SyncerAssigner {
 
   destroy(): void {
     this.#assignments.clear();
+    this.#workerLoads.fill(0);
   }
 }
