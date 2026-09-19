@@ -1,10 +1,16 @@
 import {h32} from '../../../shared/src/hash.ts';
 
+export type Assignment = {
+  readonly worker: number;
+  readonly generation: number;
+};
+
 export class SyncerAssigner {
   readonly #taskID: string;
   readonly #numWorkers: number;
-  readonly #assignments = new Map<string, number>();
+  readonly #assignments = new Map<string, Assignment>();
   readonly #workerLoads: number[];
+  #nextGeneration = 0;
 
   constructor(taskID: string, numWorkers: number) {
     this.#taskID = taskID;
@@ -12,14 +18,17 @@ export class SyncerAssigner {
     this.#workerLoads = new Array<number>(numWorkers).fill(0);
   }
 
-  assign(clientGroupID: string): number {
+  assign(clientGroupID: string): Assignment {
     if (this.#numWorkers <= 0) {
-      return 0;
+      return {worker: 0, generation: 0};
     }
 
+    const generation = ++this.#nextGeneration;
     const existing = this.#assignments.get(clientGroupID);
     if (existing !== undefined) {
-      return existing;
+      const updated: Assignment = {worker: existing.worker, generation};
+      this.#assignments.set(clientGroupID, updated);
+      return updated;
     }
 
     // Find worker(s) with minimum active load
@@ -42,28 +51,55 @@ export class SyncerAssigner {
         : tied[h32(this.#taskID + '/' + clientGroupID) % tied.length];
 
     this.#workerLoads[chosen]++;
-    this.#assignments.set(clientGroupID, chosen);
-    return chosen;
+    const assignment: Assignment = {worker: chosen, generation};
+    this.#assignments.set(clientGroupID, assignment);
+    return assignment;
   }
 
-  activate(clientGroupID: string, workerIndex: number): void {
+  activate(
+    clientGroupID: string,
+    workerIndex: number,
+    generation?: number,
+  ): void {
     const existing = this.#assignments.get(clientGroupID);
-    if (existing === workerIndex) {
+    if (existing !== undefined) {
+      if (existing.worker === workerIndex) {
+        if (generation !== undefined && generation > existing.generation) {
+          this.#assignments.set(clientGroupID, {
+            worker: workerIndex,
+            generation,
+          });
+        }
+        return;
+      }
+      if (generation !== undefined && existing.generation > generation) {
+        return;
+      }
+      this.#decrementLoad(existing.worker);
+    }
+    const gen =
+      generation ?? (existing ? existing.generation : ++this.#nextGeneration);
+    this.#workerLoads[workerIndex]++;
+    this.#assignments.set(clientGroupID, {
+      worker: workerIndex,
+      generation: gen,
+    });
+  }
+
+  release(
+    clientGroupID: string,
+    workerIndex: number,
+    generation?: number,
+  ): void {
+    const existing = this.#assignments.get(clientGroupID);
+    if (existing === undefined || existing.worker !== workerIndex) {
       return;
     }
-    if (existing !== undefined) {
-      this.#decrementLoad(existing);
+    if (generation !== undefined && existing.generation !== generation) {
+      return;
     }
-    this.#workerLoads[workerIndex]++;
-    this.#assignments.set(clientGroupID, workerIndex);
-  }
-
-  release(clientGroupID: string, workerIndex: number): void {
-    const existing = this.#assignments.get(clientGroupID);
-    if (existing === workerIndex) {
-      this.#decrementLoad(workerIndex);
-      this.#assignments.delete(clientGroupID);
-    }
+    this.#decrementLoad(workerIndex);
+    this.#assignments.delete(clientGroupID);
   }
 
   getWorkerLoad(workerIndex: number): number {
@@ -71,6 +107,10 @@ export class SyncerAssigner {
   }
 
   getAssignment(clientGroupID: string): number | undefined {
+    return this.#assignments.get(clientGroupID)?.worker;
+  }
+
+  getAssignmentDetails(clientGroupID: string): Assignment | undefined {
     return this.#assignments.get(clientGroupID);
   }
 

@@ -365,6 +365,7 @@ export class Syncer implements SingletonService {
   readonly #pushers: ServiceRunner<Pusher & Service> | undefined;
   readonly #connections = new Map<string, Connection>();
   readonly #pendingConnections = new Map<string, number>();
+  readonly #clientGroupGenerations = new Map<string, number>();
   readonly #drainCoordinator = new DrainCoordinator();
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
@@ -441,16 +442,31 @@ export class Syncer implements SingletonService {
       lc,
       id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
-      id =>
+      id => {
+        const generation = this.#clientGroupGenerations.get(id);
         this.#parent.send<ClientGroupStatusMessage>([
           'clientGroupStatus',
-          {clientGroupID: id, active: true},
-        ]),
-      id =>
-        this.#parent.send<ClientGroupStatusMessage>([
-          'clientGroupStatus',
-          {clientGroupID: id, active: false},
-        ]),
+          {
+            clientGroupID: id,
+            active: true,
+            ...(generation !== undefined ? {generation} : {}),
+          },
+        ]);
+      },
+      id => {
+        if ((this.#pendingConnections.get(id) ?? 0) === 0) {
+          const generation = this.#clientGroupGenerations.get(id);
+          this.#parent.send<ClientGroupStatusMessage>([
+            'clientGroupStatus',
+            {
+              clientGroupID: id,
+              active: false,
+              ...(generation !== undefined ? {generation} : {}),
+            },
+          ]);
+          this.#clientGroupGenerations.delete(id);
+        }
+      },
     );
     if (mutagenFactory) {
       this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
@@ -474,14 +490,23 @@ export class Syncer implements SingletonService {
       this.#createConnection,
       this.#parent,
       params => {
-        if (
-          (this.#pendingConnections.get(params.clientGroupID) ?? 0) === 0 &&
-          !this.#viewSyncers.hasService(params.clientGroupID)
-        ) {
-          this.#parent.send<ClientGroupStatusMessage>([
-            'clientGroupStatus',
-            {clientGroupID: params.clientGroupID, active: false},
-          ]);
+        this.#releasePending(params.clientGroupID, params.generation, false);
+      },
+      params => {
+        this.#pendingConnections.set(
+          params.clientGroupID,
+          (this.#pendingConnections.get(params.clientGroupID) ?? 0) + 1,
+        );
+        if (params.generation !== undefined) {
+          const current = this.#clientGroupGenerations.get(
+            params.clientGroupID,
+          );
+          if (current === undefined || params.generation > current) {
+            this.#clientGroupGenerations.set(
+              params.clientGroupID,
+              params.generation,
+            );
+          }
         }
       },
     );
@@ -706,10 +731,6 @@ export class Syncer implements SingletonService {
     );
     recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
-    this.#pendingConnections.set(
-      clientGroupID,
-      (this.#pendingConnections.get(clientGroupID) ?? 0) + 1,
-    );
     let viewSyncerAcquired = false;
 
     try {
@@ -896,23 +917,39 @@ export class Syncer implements SingletonService {
         );
       }
     } finally {
-      const remaining = (this.#pendingConnections.get(clientGroupID) ?? 1) - 1;
-      if (remaining <= 0) {
-        this.#pendingConnections.delete(clientGroupID);
-        if (
-          !viewSyncerAcquired &&
-          !this.#viewSyncers.hasService(clientGroupID)
-        ) {
-          this.#parent.send<ClientGroupStatusMessage>([
-            'clientGroupStatus',
-            {clientGroupID, active: false},
-          ]);
-        }
-      } else {
-        this.#pendingConnections.set(clientGroupID, remaining);
-      }
+      this.#releasePending(
+        clientGroupID,
+        params.generation,
+        viewSyncerAcquired,
+      );
     }
   };
+
+  #releasePending(
+    clientGroupID: string,
+    generation: number | undefined,
+    viewSyncerAcquired: boolean,
+  ): void {
+    const remaining = (this.#pendingConnections.get(clientGroupID) ?? 1) - 1;
+    if (remaining <= 0) {
+      this.#pendingConnections.delete(clientGroupID);
+      if (!viewSyncerAcquired && !this.#viewSyncers.hasService(clientGroupID)) {
+        const gen =
+          this.#clientGroupGenerations.get(clientGroupID) ?? generation;
+        this.#parent.send<ClientGroupStatusMessage>([
+          'clientGroupStatus',
+          {
+            clientGroupID,
+            active: false,
+            ...(gen !== undefined ? {generation: gen} : {}),
+          },
+        ]);
+        this.#clientGroupGenerations.delete(clientGroupID);
+      }
+    } else {
+      this.#pendingConnections.set(clientGroupID, remaining);
+    }
+  }
 
   run() {
     return this.#stopped.promise;

@@ -51,11 +51,11 @@ export class WorkerDispatcher implements Service {
     syncers.forEach((syncer, index) => {
       syncer.onMessageType<ClientGroupStatusMessage>(
         'clientGroupStatus',
-        ({clientGroupID, active}) => {
+        ({clientGroupID, active, generation}) => {
           if (active) {
-            assigner.activate(clientGroupID, index);
+            assigner.activate(clientGroupID, index, generation);
           } else {
-            assigner.release(clientGroupID, index);
+            assigner.release(clientGroupID, index, generation);
           }
         },
       );
@@ -104,11 +104,11 @@ export class WorkerDispatcher implements Service {
       const {clientGroupID, protocolVersion} = params;
       maxProtocolVersion = Math.max(maxProtocolVersion, protocolVersion);
 
-      const syncer = assigner.assign(clientGroupID);
+      const {worker: syncer, generation} = assigner.assign(clientGroupID);
       workerDispatchesCounter.add(1, {worker: String(syncer)});
 
       lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
-      return {payload: params, sender: syncers[syncer]};
+      return {payload: {...params, generation}, sender: syncers[syncer]};
     };
 
     const handleChangeStream = (req: IncomingMessageSubset) => {

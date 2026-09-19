@@ -11,12 +11,21 @@ import {
 } from 'vitest';
 
 let receiver: WebSocketReceiver<any>;
+let abortHandoff: ((payload: any) => void) | undefined;
+let receivedHandoff: ((payload: any) => void) | undefined;
 vi.mock('../types/websocket-handoff.ts', () => ({
   installWebSocketReceiver: vi
     .fn()
-    .mockImplementation((_lc, _server, receive, _sender) => {
-      receiver = receive;
-    }),
+    .mockImplementation(
+      (_lc, _server, receive, _sender, onAbort, onReceived) => {
+        abortHandoff = onAbort;
+        receivedHandoff = onReceived;
+        receiver = (ws, payload, msg) => {
+          onReceived?.(payload);
+          return receive(ws, payload, msg);
+        };
+      },
+    ),
 }));
 
 // Mock the anonymous telemetry functions
@@ -36,6 +45,7 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
@@ -91,6 +101,7 @@ function makeFactories(
   mutagensOut: MutagenService[],
   pushersOut: PusherService[],
   contextManagersOut: Map<string, ConnectionContextManagerImpl>,
+  viewSyncersOut: (ViewSyncer & ActivityBasedService)[] = [],
 ) {
   const storageDb = new Database(lc, ':memory:');
   storageDb.prepare(CREATE_STORAGE_TABLE).run();
@@ -107,7 +118,7 @@ function makeFactories(
         const stopped = resolver<void>();
         const connContextManager = new ConnectionContextManagerImpl(lc);
         contextManagersOut.set(id, connContextManager);
-        return {
+        const vs = {
           id,
           connContextManager,
           initConnection: vi.fn(),
@@ -131,6 +142,8 @@ function makeFactories(
             return stopped.promise;
           },
         } as ViewSyncer & ActivityBasedService;
+        viewSyncersOut.push(vs);
+        return vs;
       })(),
     mutagenFactory: (id: string) => {
       const ret = new MutagenService(
@@ -173,12 +186,14 @@ function setupSyncer(
 ) {
   const mutagens: MutagenService[] = [];
   const pushers: PusherService[] = [];
+  const viewSyncers: (ViewSyncer & ActivityBasedService)[] = [];
   const contextManagers = new Map<string, ConnectionContextManagerImpl>();
   const {viewSyncerFactory, mutagenFactory, pusherFactory} = makeFactories(
     lc,
     mutagens,
     pushers,
     contextManagers,
+    viewSyncers,
   );
   const validateLegacyJWT: ValidateLegacyJWT | undefined =
     jwt.tokenConfigOptions(config.auth ?? {}).length === 1
@@ -204,7 +219,7 @@ function setupSyncer(
     parent,
     validateLegacyJWT,
   );
-  return {syncer, mutagens, pushers, contextManagers};
+  return {syncer, mutagens, pushers, contextManagers, viewSyncers};
 }
 
 const baseParams = {
@@ -626,6 +641,83 @@ describe('cleanup', () => {
       expect(sentMessages).toContainEqual([
         'clientGroupStatus',
         {clientGroupID: 'failed-cg', active: false},
+      ]);
+    } finally {
+      await env.syncer.stop();
+    }
+  });
+
+  test('onStop does not emit active: false if a new connection is pending', async () => {
+    const sentMessages: any[] = [];
+    const mockParent = {
+      send: (msg: any) => {
+        sentMessages.push(msg);
+        return true;
+      },
+      onMessageType: () => {},
+    };
+    const env = setupSyncer(
+      lc,
+      {auth: {secret: 'test-secret'}} as ZeroConfig,
+      mockParent,
+    );
+    try {
+      const ws = await newConnection(1);
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: '1', active: true},
+      ]);
+      sentMessages.length = 0;
+
+      // Simulate a pending connection received via handoff
+      const pendingParams = makeParams(2, {clientGroupID: '1'});
+      receivedHandoff?.(pendingParams);
+
+      // Close the active connection and stop ViewSyncer
+      ws.close();
+      const vs = env.viewSyncers[0];
+      await vs.stop();
+      await sleep(10);
+
+      // Because pending connection exists, active: false should NOT be sent
+      expect(sentMessages).toEqual([]);
+
+      // When the pending connection aborts/finishes, active: false is sent
+      abortHandoff?.(pendingParams);
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: '1', active: false},
+      ]);
+    } finally {
+      await env.syncer.stop();
+    }
+  });
+
+  test('notifies parent with active: false and generation when handoff aborts', async () => {
+    const sentMessages: any[] = [];
+    const mockParent = {
+      send: (msg: any) => {
+        sentMessages.push(msg);
+        return true;
+      },
+      onMessageType: () => {},
+    };
+    const env = setupSyncer(
+      lc,
+      {auth: {secret: 'test-secret'}} as ZeroConfig,
+      mockParent,
+    );
+    try {
+      const params = makeParams(1, {
+        clientGroupID: 'aborted-cg',
+        generation: 42,
+      });
+      receivedHandoff?.(params);
+      abortHandoff?.(params);
+
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: 'aborted-cg', active: false, generation: 42},
       ]);
     } finally {
       await env.syncer.stop();

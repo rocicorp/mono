@@ -32,6 +32,7 @@ export const MESSAGE_TYPES = {
 export type ClientGroupStatus = {
   readonly clientGroupID: string;
   readonly active: boolean;
+  readonly generation?: number | undefined;
 };
 
 export type ClientGroupStatusMessage = ['clientGroupStatus', ClientGroupStatus];

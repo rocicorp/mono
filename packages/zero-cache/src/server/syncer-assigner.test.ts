@@ -4,11 +4,15 @@ import {SyncerAssigner} from './syncer-assigner.ts';
 describe('SyncerAssigner', () => {
   test('sticky routing for the same client group', () => {
     const assigner = new SyncerAssigner('task-1', 4);
-    const worker1 = assigner.assign('cg-1');
+    const {worker: worker1, generation: gen1} = assigner.assign('cg-1');
 
-    // Repeated calls return the same worker
+    expect(gen1).toBe(1);
+
+    // Repeated calls return the same worker with incremented generation
     for (let i = 0; i < 10; i++) {
-      expect(assigner.assign('cg-1')).toBe(worker1);
+      const next = assigner.assign('cg-1');
+      expect(next.worker).toBe(worker1);
+      expect(next.generation).toBe(i + 2);
     }
     // Load count is only incremented once per unique client group
     expect(assigner.getWorkerLoad(worker1)).toBe(1);
@@ -36,7 +40,7 @@ describe('SyncerAssigner', () => {
     // Assign 40 groups (10 per worker)
     for (let i = 0; i < 40; i++) {
       const id = `cg-${i}`;
-      const worker = assigner.assign(id);
+      const {worker} = assigner.assign(id);
       assignments.set(id, worker);
     }
 
@@ -58,7 +62,7 @@ describe('SyncerAssigner', () => {
     // The next 10 new client groups should all be assigned to worker 0
     for (let i = 0; i < 10; i++) {
       const id = `new-cg-${i}`;
-      const worker = assigner.assign(id);
+      const {worker} = assigner.assign(id);
       expect(worker).toBe(0);
     }
 
@@ -69,7 +73,7 @@ describe('SyncerAssigner', () => {
 
   test('release only applies if worker index matches', () => {
     const assigner = new SyncerAssigner('task-1', 4);
-    const worker = assigner.assign('cg-1');
+    const {worker} = assigner.assign('cg-1');
     const wrongWorker = (worker + 1) % 4;
 
     assigner.release('cg-1', wrongWorker);
@@ -83,20 +87,40 @@ describe('SyncerAssigner', () => {
 
   test('handles 0 or 1 worker gracefully', () => {
     const zeroWorkers = new SyncerAssigner('task-1', 0);
-    expect(zeroWorkers.assign('cg-1')).toBe(0);
+    expect(zeroWorkers.assign('cg-1')).toEqual({worker: 0, generation: 0});
     expect(zeroWorkers.getWorkerLoad(0)).toBe(0);
 
     const oneWorker = new SyncerAssigner('task-1', 1);
-    expect(oneWorker.assign('cg-1')).toBe(0);
-    expect(oneWorker.assign('cg-2')).toBe(0);
+    expect(oneWorker.assign('cg-1').worker).toBe(0);
+    expect(oneWorker.assign('cg-2').worker).toBe(0);
     expect(oneWorker.getWorkerLoad(0)).toBe(2);
     oneWorker.release('cg-1', 0);
     expect(oneWorker.getWorkerLoad(0)).toBe(1);
   });
 
+  test('generation fencing ignores stale releases', () => {
+    const assigner = new SyncerAssigner('task-1', 4);
+    const a1 = assigner.assign('cg-1');
+
+    // Simulate second connection arriving for cg-1 (bumps generation)
+    const a2 = assigner.assign('cg-1');
+    expect(a2.worker).toBe(a1.worker);
+    expect(a2.generation).toBeGreaterThan(a1.generation);
+
+    // Stale release from first connection (generation a1) is ignored
+    assigner.release('cg-1', a1.worker, a1.generation);
+    expect(assigner.getAssignment('cg-1')).toBe(a1.worker);
+    expect(assigner.getWorkerLoad(a1.worker)).toBe(1);
+
+    // Current release from second connection (generation a2) releases
+    assigner.release('cg-1', a2.worker, a2.generation);
+    expect(assigner.getAssignment('cg-1')).toBeUndefined();
+    expect(assigner.getWorkerLoad(a1.worker)).toBe(0);
+  });
+
   test('activate restores assignment and load if dropped by stale release', () => {
     const assigner = new SyncerAssigner('task-1', 4);
-    const worker = assigner.assign('cg-1');
+    const {worker} = assigner.assign('cg-1');
     expect(assigner.getWorkerLoad(worker)).toBe(1);
 
     // Simulate stale active: false from a racing previous connection
@@ -116,8 +140,8 @@ describe('SyncerAssigner', () => {
 
   test('destroy clears all assignments and resets worker loads to zero', () => {
     const assigner = new SyncerAssigner('task-1', 4);
-    const w1 = assigner.assign('cg-1');
-    const w2 = assigner.assign('cg-2');
+    const {worker: w1} = assigner.assign('cg-1');
+    const {worker: w2} = assigner.assign('cg-2');
     expect(assigner.getAssignment('cg-1')).toBeDefined();
     expect(assigner.getWorkerLoad(w1)).toBeGreaterThan(0);
     expect(assigner.getWorkerLoad(w2)).toBeGreaterThan(0);

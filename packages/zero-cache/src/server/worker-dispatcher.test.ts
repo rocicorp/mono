@@ -1,12 +1,14 @@
 import type {SendHandle} from 'node:child_process';
 import EventEmitter from 'node:events';
-import {describe, expect, test} from 'vitest';
+import {assert, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import {
   type ClientGroupStatusMessage,
   inProcChannel,
 } from '../types/processes.ts';
+import type {Handoff} from '../types/websocket-handoff.ts';
+import type {ConnectParams} from '../workers/connect-params.ts';
 import {parsePath, WorkerDispatcher} from './worker-dispatcher.ts';
 
 test.each([
@@ -205,6 +207,84 @@ describe('WorkerDispatcher client group routing', () => {
       expect(syncer0Messages.length).toBe(s0Before);
       expect(syncer1Messages.length).toBe(s1Before + 1);
     }
+
+    void dispatcher.stop();
+  });
+
+  test('passes generation in handoff and ignores stale clientGroupStatus release', () => {
+    const [parentInDispatcher, parentOut] = inProcChannel();
+    const [syncer0InDispatcher, syncer0Out] = inProcChannel();
+
+    const syncer0Messages: Handoff<ConnectParams>[] = [];
+    syncer0Out.on('message', data =>
+      syncer0Messages.push(data as Handoff<ConnectParams>),
+    );
+
+    const dispatcher = new WorkerDispatcher(
+      createSilentLogContext(),
+      'task-test',
+      parentInDispatcher,
+      [syncer0InDispatcher],
+      undefined,
+      undefined,
+    );
+
+    const secProtocol = encodeSecProtocols(undefined, undefined);
+    const sendSyncHandoff = (cg: string) => {
+      const socket = new EventEmitter();
+      parentOut.send(
+        [
+          'handoff',
+          {
+            message: {
+              url: `/sync/v1/connect?clientID=c1&clientGroupID=${cg}&ts=100&lmid=1`,
+              headers: {
+                'sec-websocket-protocol': secProtocol,
+              },
+            },
+            head: new ArrayBuffer(0),
+          },
+        ],
+        socket as unknown as SendHandle,
+      );
+    };
+
+    // First handoff
+    sendSyncHandoff('cg-1');
+    expect(syncer0Messages.length).toBe(1);
+    const msg1 = syncer0Messages[0];
+    const gen1 = msg1[1].payload.generation;
+    assert(gen1 !== undefined);
+    expect(gen1).toBe(1);
+
+    // Second handoff for same client group gets bumped generation
+    sendSyncHandoff('cg-1');
+    expect(syncer0Messages.length).toBe(2);
+    const msg2 = syncer0Messages[1];
+    const gen2 = msg2[1].payload.generation;
+    assert(gen2 !== undefined);
+    expect(gen2).toBeGreaterThan(gen1);
+
+    // Stale release carrying gen1 arrives from syncer
+    syncer0Out.send<ClientGroupStatusMessage>([
+      'clientGroupStatus',
+      {clientGroupID: 'cg-1', active: false, generation: gen1},
+    ]);
+
+    // Third handoff for cg-1 must still route to syncer0 (sticky, not released)
+    sendSyncHandoff('cg-1');
+    expect(syncer0Messages.length).toBe(3);
+
+    // Current release carrying latest generation arrives
+    const msg3 = syncer0Messages[2];
+    syncer0Out.send<ClientGroupStatusMessage>([
+      'clientGroupStatus',
+      {
+        clientGroupID: 'cg-1',
+        active: false,
+        generation: msg3[1].payload.generation,
+      },
+    ]);
 
     void dispatcher.stop();
   });
