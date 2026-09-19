@@ -80,6 +80,7 @@ type Args = {
   relationshipName: string;
   hidden: boolean;
   system: System;
+  parentPartitionKey?: CompoundKey | undefined;
 };
 
 /**
@@ -97,6 +98,8 @@ export class FlippedJoin implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
+  readonly #parentPartitionKey: CompoundKey | undefined;
+  readonly #partitionMap: Map<string, Set<string>> | undefined;
 
   #output: Output = throwOutput;
 
@@ -111,6 +114,7 @@ export class FlippedJoin implements Input {
     relationshipName,
     hidden,
     system,
+    parentPartitionKey,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -122,6 +126,8 @@ export class FlippedJoin implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
+    this.#parentPartitionKey = parentPartitionKey;
+    this.#partitionMap = parentPartitionKey ? new Map() : undefined;
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -192,7 +198,16 @@ export class FlippedJoin implements Input {
     // related parents with position greater than change.position
     // (which should not yet have the node removed), would not even
     // be fetched here, and would be absent from the output all together.
-    if (this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE) {
+    if (
+      this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE &&
+      !(
+        req.start &&
+        this.#inprogressChildChangePosition &&
+        this.#parent
+          .getSchema()
+          .compareRows(req.start.row, this.#inprogressChildChangePosition) >= 0
+      )
+    ) {
       const removedNode = this.#inprogressChildChange[ChangeIndex.NODE];
       const compare = this.#child.getSchema().compareRows;
       const insertPos = binarySearch(childNodes.length, i =>
@@ -370,6 +385,8 @@ export class FlippedJoin implements Input {
       }
     }
 
+    this.#indexParentRow(minParentNode.row);
+
     // yield node if after the overlay it still has relationship nodes
     if (overlaidRelatedChildNodes.length > 0) {
       yield {
@@ -415,9 +432,49 @@ export class FlippedJoin implements Input {
         this.#childKey,
         this.#parentKey,
       );
-      const parentNodeStream = constraint
-        ? this.#parent.fetch({constraint})
-        : [];
+      let parentNodeStream: Stream<Node | 'yield'>;
+      if (this.#partitionMap && this.#parentPartitionKey) {
+        const junctionKey = canonicalKey(
+          change[ChangeIndex.NODE].row,
+          this.#childKey,
+        );
+        const partitionKeyStrings = this.#partitionMap.get(junctionKey);
+        if (partitionKeyStrings && partitionKeyStrings.size > 0) {
+          const parentPartitionKey = this.#parentPartitionKey;
+          if (partitionKeyStrings.size === 1) {
+            const [partitionKeyString] = partitionKeyStrings;
+            const partitionValues = JSON.parse(partitionKeyString) as Value[];
+            const partitionConstraint = Object.fromEntries(
+              parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
+            );
+            parentNodeStream = this.#parent.fetch({
+              constraint: {...constraint, ...partitionConstraint},
+            });
+          } else {
+            const streams = Array.from(
+              partitionKeyStrings,
+              partitionKeyString => {
+                const partitionValues = JSON.parse(
+                  partitionKeyString,
+                ) as Value[];
+                const partitionConstraint = Object.fromEntries(
+                  parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
+                );
+                return this.#parent.fetch({
+                  constraint: {...constraint, ...partitionConstraint},
+                });
+              },
+            );
+            const compare = (a: Node, b: Node) =>
+              this.#parent.getSchema().compareRows(a.row, b.row);
+            parentNodeStream = mergeSortedStreams(streams, compare);
+          }
+        } else {
+          parentNodeStream = constraint ? this.#parent.fetch({constraint}) : [];
+        }
+      } else {
+        parentNodeStream = constraint ? this.#parent.fetch({constraint}) : [];
+      }
       for (const parentNode of parentNodeStream) {
         if (parentNode === 'yield') {
           yield 'yield';
@@ -505,6 +562,19 @@ export class FlippedJoin implements Input {
       },
     });
 
+    switch (change[ChangeIndex.TYPE]) {
+      case ChangeType.ADD:
+        this.#indexParentRow(change[ChangeIndex.NODE].row);
+        break;
+      case ChangeType.REMOVE:
+        this.#unindexParentRow(change[ChangeIndex.NODE].row);
+        break;
+      case ChangeType.EDIT:
+        this.#unindexParentRow(change[ChangeIndex.OLD_NODE].row);
+        this.#indexParentRow(change[ChangeIndex.NODE].row);
+        break;
+    }
+
     // If no related child don't push as this is an inner join.
     let hasRelatedChild = false;
     for (const node of childNodeStream(change[ChangeIndex.NODE])()) {
@@ -550,7 +620,7 @@ export class FlippedJoin implements Input {
             change[ChangeIndex.NODE].row,
             this.#parentKey,
           ),
-          `Parent edit must not change relationship.`,
+          'Parent edit must not change relationship.',
         );
         yield* this.#output.push(
           makeEditChange(
@@ -563,6 +633,39 @@ export class FlippedJoin implements Input {
       }
       default:
         unreachable(change);
+    }
+  }
+
+  #indexParentRow(row: Row): void {
+    if (!this.#partitionMap || !this.#parentPartitionKey) {
+      return;
+    }
+    const junctionKey = canonicalKey(row, this.#parentKey);
+    const partitionKey = JSON.stringify(
+      this.#parentPartitionKey.map(k => row[k]),
+    );
+    let set = this.#partitionMap.get(junctionKey);
+    if (!set) {
+      set = new Set();
+      this.#partitionMap.set(junctionKey, set);
+    }
+    set.add(partitionKey);
+  }
+
+  #unindexParentRow(row: Row): void {
+    if (!this.#partitionMap || !this.#parentPartitionKey) {
+      return;
+    }
+    const junctionKey = canonicalKey(row, this.#parentKey);
+    const partitionKey = JSON.stringify(
+      this.#parentPartitionKey.map(k => row[k]),
+    );
+    const set = this.#partitionMap.get(junctionKey);
+    if (set) {
+      set.delete(partitionKey);
+      if (set.size === 0) {
+        this.#partitionMap.delete(junctionKey);
+      }
     }
   }
 }

@@ -118,10 +118,6 @@ suite('take with no partition', () => {
           },
           "size": 3,
         },
-        "maxBound": {
-          "created": 300,
-          "id": "i3",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -189,10 +185,6 @@ suite('take with no partition', () => {
             "id": "i5",
           },
           "size": 5,
-        },
-        "maxBound": {
-          "created": 500,
-          "id": "i5",
         },
       }
     `);
@@ -277,10 +269,6 @@ suite('take with no partition', () => {
           },
           "size": 5,
         },
-        "maxBound": {
-          "created": 500,
-          "id": "i5",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -360,10 +348,6 @@ suite('take with no partition', () => {
             "id": "i1",
           },
           "size": 1,
-        },
-        "maxBound": {
-          "created": 100,
-          "id": "i1",
         },
       }
     `);
@@ -624,11 +608,6 @@ suite('take with partition', () => {
           },
           "size": 3,
         },
-        "maxBound": {
-          "created": 300,
-          "id": "c3",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[1].hydrate).toMatchInlineSnapshot(`
@@ -708,11 +687,6 @@ suite('take with partition', () => {
           },
           "size": 2,
         },
-        "maxBound": {
-          "created": 500,
-          "id": "c5",
-          "issueID": "i2",
-        },
       }
     `);
     expect(partitions[2].hydrate).toMatchInlineSnapshot(`
@@ -788,11 +762,6 @@ suite('take with partition', () => {
           },
           "size": 3,
         },
-        "maxBound": {
-          "created": 300,
-          "id": "c3",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -867,11 +836,6 @@ suite('take with partition', () => {
             "issueID": "i2",
           },
           "size": 3,
-        },
-        "maxBound": {
-          "created": 600,
-          "id": "c6",
-          "issueID": "i2",
         },
       }
     `);
@@ -958,11 +922,6 @@ suite('take with partition', () => {
           },
           "size": 3,
         },
-        "maxBound": {
-          "created": 300,
-          "id": "c3",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -1037,11 +996,6 @@ suite('take with partition', () => {
             "issueID": "i2",
           },
           "size": 3,
-        },
-        "maxBound": {
-          "created": 600,
-          "id": "c6",
-          "issueID": "i2",
         },
       }
     `);
@@ -1136,11 +1090,6 @@ suite('take with partition', () => {
           },
           "size": 2,
         },
-        "maxBound": {
-          "created": 100,
-          "id": "c2",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -1210,11 +1159,6 @@ suite('take with partition', () => {
           },
           "size": 1,
         },
-        "maxBound": {
-          "created": 200,
-          "id": "c4",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[1].hydrate).toMatchInlineSnapshot(`
@@ -1283,11 +1227,6 @@ suite('take with partition', () => {
             "issueID": "i2",
           },
           "size": 2,
-        },
-        "maxBound": {
-          "created": 200,
-          "id": "c4",
-          "issueID": "i1",
         },
       }
     `);
@@ -1373,11 +1312,6 @@ suite('take with partition', () => {
             "issueID": "i2",
           },
           "size": 2,
-        },
-        "maxBound": {
-          "created": 200,
-          "id": "c8",
-          "issueID": "i2",
         },
       }
     `);

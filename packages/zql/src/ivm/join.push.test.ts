@@ -2922,6 +2922,7 @@ suite('push one:many:many', () => {
           {
             "constraint": {
               "id": "c1",
+              "issueID": "i1",
             },
           },
         ],
@@ -3493,6 +3494,7 @@ suite('push one:many:one', () => {
           "fetch",
           {
             "constraint": {
+              "issueID": "i1",
               "labelID": "l1",
             },
           },
@@ -3765,6 +3767,17 @@ suite('push one:many:one', () => {
           "fetch",
           {
             "constraint": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+          },
+        ],
+        [
+          ".issueLabels:source(issueLabel)",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i2",
               "labelID": "l1",
             },
           },
@@ -3961,6 +3974,273 @@ suite('push one:many:one', () => {
             "id": "i2",
           },
           "type": "child",
+        },
+      ]
+    `);
+  });
+
+  test('3-table nested join with limit on junction: partitionMap constrains fetch to active partition in Take', () => {
+    const astWithLimit: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'issueLabel',
+            alias: 'issueLabels',
+            orderBy: [
+              ['issueID', 'asc'],
+              ['labelID', 'asc'],
+            ],
+            limit: 1,
+            related: [
+              {
+                system: 'client',
+                correlation: {
+                  parentField: ['labelID'],
+                  childField: ['id'],
+                },
+                subquery: {
+                  table: 'label',
+                  alias: 'labels',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const {log, data} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}, {id: 'i2'}],
+        issueLabel: [
+          {issueID: 'i1', labelID: 'l1'},
+          {issueID: 'i2', labelID: 'l1'},
+        ],
+        label: [],
+      },
+      ast: astWithLimit,
+      format,
+      pushes: [['label', makeSourceChangeAdd({id: 'l1'})]],
+    });
+
+    const issueLabelFetches = log.filter(
+      msg => msg[0] === '.issueLabels:source(issueLabel)' && msg[1] === 'fetch',
+    );
+    expect(issueLabelFetches).toEqual([
+      [
+        '.issueLabels:source(issueLabel)',
+        'fetch',
+        {constraint: {issueID: 'i1', labelID: 'l1'}},
+      ],
+      [
+        '.issueLabels:source(issueLabel)',
+        'fetch',
+        {constraint: {issueID: 'i2', labelID: 'l1'}},
+      ],
+    ]);
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "issueLabels": [
+            {
+              "issueID": "i1",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+                Symbol(rc): 1,
+              },
+              Symbol(rc): 1,
+            },
+          ],
+          Symbol(rc): 1,
+        },
+        {
+          "id": "i2",
+          "issueLabels": [
+            {
+              "issueID": "i2",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+                Symbol(rc): 1,
+              },
+              Symbol(rc): 1,
+            },
+          ],
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+
+  test('4-table nested join: workspace -> issue -> issueLabel -> label propagation', () => {
+    const sources4: Sources = {
+      workspace: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+      issue: {
+        columns: {id: {type: 'string'}, workspaceID: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+      issueLabel: {
+        columns: {issueID: {type: 'string'}, labelID: {type: 'string'}},
+        primaryKeys: ['issueID', 'labelID'],
+      },
+      label: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+    };
+
+    const ast4: AST = {
+      table: 'workspace',
+      orderBy: [['id', 'asc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['workspaceID']},
+          subquery: {
+            table: 'issue',
+            alias: 'issues',
+            orderBy: [['id', 'asc']],
+            related: [
+              {
+                system: 'client',
+                correlation: {parentField: ['id'], childField: ['issueID']},
+                subquery: {
+                  table: 'issueLabel',
+                  alias: 'issueLabels',
+                  orderBy: [
+                    ['issueID', 'asc'],
+                    ['labelID', 'asc'],
+                  ],
+                  related: [
+                    {
+                      system: 'client',
+                      correlation: {
+                        parentField: ['labelID'],
+                        childField: ['id'],
+                      },
+                      subquery: {
+                        table: 'label',
+                        alias: 'labels',
+                        orderBy: [['id', 'asc']],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const format4: Format = {
+      singular: false,
+      relationships: {
+        issues: {
+          singular: false,
+          relationships: {
+            issueLabels: {
+              singular: false,
+              relationships: {
+                labels: {
+                  singular: true,
+                  relationships: {},
+                },
+              },
+            },
+          },
+        },
+      },
+    } as const;
+
+    const {log, data} = runPushTest({
+      sources: sources4,
+      sourceContents: {
+        workspace: [{id: 'w1'}],
+        issue: [
+          {id: 'i1', workspaceID: 'w1'},
+          {id: 'i2', workspaceID: 'w1'},
+        ],
+        issueLabel: [
+          {issueID: 'i1', labelID: 'l1'},
+          {issueID: 'i2', labelID: 'l1'},
+        ],
+        label: [],
+      },
+      ast: ast4,
+      format: format4,
+      pushes: [['label', makeSourceChangeAdd({id: 'l1'})]],
+    });
+
+    const issueLabelFetches = log.filter(
+      msg =>
+        msg[0] === '.issues.issueLabels:source(issueLabel)' &&
+        msg[1] === 'fetch',
+    );
+    expect(issueLabelFetches).toEqual([
+      [
+        '.issues.issueLabels:source(issueLabel)',
+        'fetch',
+        {constraint: {issueID: 'i1', labelID: 'l1'}},
+      ],
+      [
+        '.issues.issueLabels:source(issueLabel)',
+        'fetch',
+        {constraint: {issueID: 'i2', labelID: 'l1'}},
+      ],
+    ]);
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "w1",
+          "issues": [
+            {
+              "id": "i1",
+              "issueLabels": [
+                {
+                  "issueID": "i1",
+                  "labelID": "l1",
+                  "labels": {
+                    "id": "l1",
+                    Symbol(rc): 1,
+                  },
+                  Symbol(rc): 1,
+                },
+              ],
+              "workspaceID": "w1",
+              Symbol(rc): 1,
+            },
+            {
+              "id": "i2",
+              "issueLabels": [
+                {
+                  "issueID": "i2",
+                  "labelID": "l1",
+                  "labels": {
+                    "id": "l1",
+                    Symbol(rc): 1,
+                  },
+                  Symbol(rc): 1,
+                },
+              ],
+              "workspaceID": "w1",
+              Symbol(rc): 1,
+            },
+          ],
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -6730,6 +7010,17 @@ suite('test overlay on many:one pushes', () => {
           "fetch",
           {
             "constraint": {
+              "id": "u0",
+              "stateID": "s0",
+            },
+          },
+        ],
+        [
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
               "stateID": "s0",
             },
           },
@@ -8864,6 +9155,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           "fetch",
           {
             "constraint": {
+              "name": "Aaron",
               "stateID": "s0",
             },
           },

@@ -170,19 +170,15 @@ test('child change, parent is within bound', () => {
   `);
 
   expect(actualStorage[':take']).toMatchInlineSnapshot(`
-        {
-          "["take"]": {
-            "bound": {
-              "id": "i2",
-              "text": "second issue",
-            },
-            "size": 2,
-          },
-          "maxBound": {
-            "id": "i2",
-            "text": "second issue",
-          },
-        }
+    {
+      "["take"]": {
+        "bound": {
+          "id": "i2",
+          "text": "second issue",
+        },
+        "size": 2,
+      },
+    }
   `);
 });
 
@@ -247,18 +243,14 @@ test('child change, parent is after bound', () => {
   expect(pushes).toHaveLength(0);
 
   expect(actualStorage[':take']).toMatchInlineSnapshot(`
-        {
-          "["take"]": {
-            "bound": {
-              "id": "i2",
-              "text": "second issue",
-            },
-            "size": 2,
-          },
-          "maxBound": {
-            "id": "i2",
-            "text": "second issue",
-          },
-        }
+    {
+      "["take"]": {
+        "bound": {
+          "id": "i2",
+          "text": "second issue",
+        },
+        "size": 2,
+      },
+    }
   `);
 });

@@ -417,10 +417,6 @@ suite('EXISTS 1 to many', () => {
           },
           "size": 1,
         },
-        "maxBound": {
-          "id": "c4",
-          "issueID": "i2",
-        },
       }
     `);
   });
