@@ -4247,75 +4247,75 @@ suite('push one:many:one', () => {
     `);
   });
 
-  test('3-table nested join: partitionMap preserves multiplicity when removing one of multiple parents sharing junction key', () => {
-    const sourcesMultiplicity: Sources = {
-      workspace: {
-        columns: {id: {type: 'string'}},
-        primaryKeys: ['id'],
+  const sourcesMultiplicity: Sources = {
+    workspace: {
+      columns: {id: {type: 'string'}},
+      primaryKeys: ['id'],
+    },
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        workspaceID: {type: 'string'},
+        authorID: {type: 'string'},
       },
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          workspaceID: {type: 'string'},
-          authorID: {type: 'string'},
-        },
-        primaryKeys: ['id'],
-      },
-      user: {
-        columns: {id: {type: 'string'}, name: {type: 'string'}},
-        primaryKeys: ['id'],
-      },
-    };
+      primaryKeys: ['id'],
+    },
+    user: {
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      primaryKeys: ['id'],
+    },
+  };
 
-    const astMultiplicity: AST = {
-      table: 'workspace',
-      orderBy: [['id', 'asc']],
-      related: [
-        {
-          system: 'client',
-          correlation: {parentField: ['id'], childField: ['workspaceID']},
-          subquery: {
-            table: 'issue',
-            alias: 'issues',
-            orderBy: [
-              ['workspaceID', 'asc'],
-              ['id', 'asc'],
-            ],
-            limit: 5,
-            related: [
-              {
-                system: 'client',
-                correlation: {
-                  parentField: ['authorID'],
-                  childField: ['id'],
-                },
-                subquery: {
-                  table: 'user',
-                  alias: 'author',
-                  orderBy: [['id', 'asc']],
-                },
+  const astMultiplicity: AST = {
+    table: 'workspace',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['workspaceID']},
+        subquery: {
+          table: 'issue',
+          alias: 'issues',
+          orderBy: [
+            ['workspaceID', 'asc'],
+            ['id', 'asc'],
+          ],
+          limit: 5,
+          related: [
+            {
+              system: 'client',
+              correlation: {
+                parentField: ['authorID'],
+                childField: ['id'],
               },
-            ],
-          },
-        },
-      ],
-    };
-
-    const formatMultiplicity: Format = {
-      singular: false,
-      relationships: {
-        issues: {
-          singular: false,
-          relationships: {
-            author: {
-              singular: true,
-              relationships: {},
+              subquery: {
+                table: 'user',
+                alias: 'author',
+                orderBy: [['id', 'asc']],
+              },
             },
+          ],
+        },
+      },
+    ],
+  };
+
+  const formatMultiplicity: Format = {
+    singular: false,
+    relationships: {
+      issues: {
+        singular: false,
+        relationships: {
+          author: {
+            singular: true,
+            relationships: {},
           },
         },
       },
-    } as const;
+    },
+  } as const;
 
+  test('3-table nested join: partitionMap preserves multiplicity when removing one of multiple parents sharing junction key', () => {
     // i1 and i2 are two issues in the SAME workspace ('w1') with the SAME author ('u1').
     // In issues:join(author), parentPartitionKey is ['workspaceID'] and parentKey is ['authorID'].
     // When i1 is removed, the partition entry for author 'u1' and workspace 'w1' must NOT be deleted,
@@ -4455,6 +4455,55 @@ suite('push one:many:one', () => {
     assert(data, 'data should be defined');
     const issues = (data[0] as {issues: unknown[]}).issues;
     expect(issues).toEqual([]);
+  });
+
+  test('3-table nested join: partitionMap is idempotent across repeated parent fetches', () => {
+    // i1 has authorID 'u1' and workspaceID 'w1'.
+    // During hydration and pushes with fetchOnPush, i1 is fetched multiple times.
+    // When i1 is removed, because parent registration is idempotent (tracking unique parent PKs),
+    // the single remove clears the partition for (u1, w1).
+    // Subsequent edit on user 'u1' will find an empty partition map and will NOT push to issues.
+    const {data, log} = runPushTest({
+      sources: sourcesMultiplicity,
+      sourceContents: {
+        workspace: [{id: 'w1'}],
+        issue: [{id: 'i1', workspaceID: 'w1', authorID: 'u1'}],
+        user: [{id: 'u1', name: 'Alice'}],
+      },
+      ast: astMultiplicity,
+      format: formatMultiplicity,
+      fetchOnPush: true,
+      pushes: [
+        [
+          'issue',
+          makeSourceChangeRemove({
+            id: 'i1',
+            workspaceID: 'w1',
+            authorID: 'u1',
+          }),
+        ],
+        [
+          'user',
+          makeSourceChangeEdit(
+            {id: 'u1', name: 'Alice Updated'},
+            {id: 'u1', name: 'Alice'},
+          ),
+        ],
+      ],
+    });
+
+    assert(data, 'data should be defined');
+    const issues = (data[0] as {issues: unknown[]}).issues;
+    expect(issues).toEqual([]);
+
+    const authorPushes = log.filter(
+      ([operator, action]) =>
+        operator === '.issues:join(author)' && action === 'push',
+    );
+    // Only the issue remove propagates through join(author); the subsequent user edit does NOT
+    // propagate because partitionMap was cleanly unindexed when i1 was removed despite multiple fetches.
+    expect(authorPushes).toHaveLength(1);
+    expect((authorPushes[0][2] as {type: string}).type).toBe('remove');
   });
 });
 

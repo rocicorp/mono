@@ -95,7 +95,7 @@ export class Take implements Operator, TakeBoundProvider {
 
   getBound(constraint?: Constraint): Row | undefined {
     if (this.#partitionKey && constraint) {
-      if (!constraintMatchesPartitionKey(constraint, this.#partitionKey)) {
+      if (!constraintContainsPartitionKey(constraint, this.#partitionKey)) {
         return undefined;
       }
     } else if (this.#partitionKey && !constraint) {
@@ -113,12 +113,14 @@ export class Take implements Operator, TakeBoundProvider {
     if (
       !this.#partitionKey ||
       (req.constraint &&
-        constraintMatchesPartitionKey(req.constraint, this.#partitionKey))
+        constraintContainsPartitionKey(req.constraint, this.#partitionKey))
     ) {
       const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
       const takeState = this.#storage.get(takeStateKey);
       if (!takeState) {
-        yield* this.#initialFetch(req);
+        if (constraintMatchesPartitionKey(req.constraint, this.#partitionKey)) {
+          yield* this.#initialFetch(req);
+        }
         return;
       }
       if (takeState.bound === undefined) {
@@ -147,7 +149,20 @@ export class Take implements Operator, TakeBoundProvider {
     }
     // There is a partition key, but the fetch is not constrained or constrained
     // on a different key.
-    yield* this.#input.fetch(req);
+    for (const inputNode of this.#input.fetch(req)) {
+      if (inputNode === 'yield') {
+        yield inputNode;
+        continue;
+      }
+      const takeStateKey = getTakeStateKey(this.#partitionKey, inputNode.row);
+      const takeState = this.#storage.get(takeStateKey);
+      if (
+        takeState?.bound !== undefined &&
+        this.getSchema().compareRows(takeState.bound, inputNode.row) >= 0
+      ) {
+        yield inputNode;
+      }
+    }
   }
 
   *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
@@ -395,7 +410,13 @@ export class Take implements Operator, TakeBoundProvider {
         yield* this.#output.push(makeAddChange(newBound.node), this);
         return;
       }
-      this.#setTakeState(takeStateKey, takeState.size - 1, newBound?.node.row);
+      const finalBound =
+        takeState.size - 1 === 0
+          ? undefined
+          : compToBound < 0
+            ? takeState.bound
+            : beforeBoundNode?.row;
+      this.#setTakeState(takeStateKey, takeState.size - 1, finalBound);
       yield* this.#output.push(change, this);
     } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
       // A 'child' change should be pushed to output if its row
@@ -687,6 +708,24 @@ export function constraintMatchesPartitionKey(
 ): boolean {
   if (constraint === undefined || partitionKey === undefined) {
     return constraint === partitionKey;
+  }
+  if (partitionKey.length !== Object.keys(constraint).length) {
+    return false;
+  }
+  for (const key of partitionKey) {
+    if (!hasOwn(constraint, key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function constraintContainsPartitionKey(
+  constraint: Constraint | undefined,
+  partitionKey: PartitionKey | undefined,
+): boolean {
+  if (constraint === undefined || partitionKey === undefined) {
+    return false;
   }
   for (const key of partitionKey) {
     if (!hasOwn(constraint, key)) {

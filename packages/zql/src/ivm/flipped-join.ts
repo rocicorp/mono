@@ -101,7 +101,7 @@ export class FlippedJoin implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #partitionMap: Map<string, Map<string, number>> | undefined;
+  readonly #partitionMap: Map<string, Map<string, Set<string>>> | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
@@ -346,24 +346,30 @@ export class FlippedJoin implements Input {
   ): Stream<Node> {
     let overlaidRelatedChildNodes = relatedChildNodes;
 
-    let bound: Row | undefined;
+    let isParentInPushQueue: boolean;
     if (this.#boundProvider) {
       const partitionConstraint = this.#parentPartitionKey
         ? Object.fromEntries(
             this.#parentPartitionKey.map(k => [k, minParentNode.row[k]]),
           )
         : undefined;
-      bound = this.#boundProvider.getBound(partitionConstraint);
+      const bound = this.#boundProvider.getBound(partitionConstraint);
+      isParentInPushQueue =
+        bound !== undefined &&
+        this.#inprogressChildChangePosition !== undefined &&
+        this.#parent
+          .getSchema()
+          .compareRows(minParentNode.row, this.#inprogressChildChangePosition) >
+          0 &&
+        this.#parent.getSchema().compareRows(minParentNode.row, bound) <= 0;
+    } else {
+      isParentInPushQueue =
+        this.#inprogressChildChangePosition !== undefined &&
+        this.#parent
+          .getSchema()
+          .compareRows(minParentNode.row, this.#inprogressChildChangePosition) >
+          0;
     }
-
-    const isParentInPushQueue =
-      this.#inprogressChildChangePosition !== undefined &&
-      this.#parent
-        .getSchema()
-        .compareRows(minParentNode.row, this.#inprogressChildChangePosition) >
-        0 &&
-      (!bound ||
-        this.#parent.getSchema().compareRows(minParentNode.row, bound) <= 0);
 
     if (
       this.#inprogressChildChange &&
@@ -661,12 +667,18 @@ export class FlippedJoin implements Input {
     const partitionKey = JSON.stringify(
       this.#parentPartitionKey.map(k => row[k]),
     );
+    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
     let map = this.#partitionMap.get(junctionKey);
     if (!map) {
       map = new Map();
       this.#partitionMap.set(junctionKey, map);
     }
-    map.set(partitionKey, (map.get(partitionKey) ?? 0) + 1);
+    let pks = map.get(partitionKey);
+    if (!pks) {
+      pks = new Set();
+      map.set(partitionKey, pks);
+    }
+    pks.add(parentPk);
   }
 
   #unindexParentRow(row: Row): void {
@@ -681,17 +693,17 @@ export class FlippedJoin implements Input {
     const partitionKey = JSON.stringify(
       this.#parentPartitionKey.map(k => row[k]),
     );
+    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
     const map = this.#partitionMap.get(junctionKey);
     if (map) {
-      const count = map.get(partitionKey);
-      if (count !== undefined) {
-        if (count <= 1) {
+      const pks = map.get(partitionKey);
+      if (pks) {
+        pks.delete(parentPk);
+        if (pks.size === 0) {
           map.delete(partitionKey);
           if (map.size === 0) {
             this.#partitionMap.delete(junctionKey);
           }
-        } else {
-          map.set(partitionKey, count - 1);
         }
       }
     }

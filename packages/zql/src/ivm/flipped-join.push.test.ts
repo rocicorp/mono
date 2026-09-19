@@ -10566,4 +10566,59 @@ suite('partitioned flipped join: partitionMap and null join keys', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0].id).toBe('i2');
   });
+
+  test('partitionMap is idempotent across repeated parent fetches', () => {
+    // i1 has workspaceID 'w1' and projectID 'p1'.
+    // During hydration and pushes with fetchOnPush: true, i1 is fetched.
+    // When i1 is removed, because parent registration is idempotent (tracking unique parent PKs),
+    // the single remove clears the partition for (p1, w1).
+    // Subsequent edit on project 'p1' will find an empty partition map and will NOT fetch issues.
+    const {data, log} = runPushTest({
+      sources,
+      sourceContents: {
+        workspace: [{id: 'w1'}],
+        issue: [{id: 'i1', workspaceID: 'w1', projectID: 'p1'}],
+        project: [{id: 'p1', name: 'Alpha'}],
+      },
+      ast,
+      format,
+      fetchOnPush: true,
+      pushes: [
+        [
+          'issue',
+          makeSourceChangeRemove({
+            id: 'i1',
+            workspaceID: 'w1',
+            projectID: 'p1',
+          }),
+        ],
+        [
+          'project',
+          makeSourceChangeEdit(
+            {id: 'p1', name: 'Alpha Updated'},
+            {id: 'p1', name: 'Alpha'},
+          ),
+        ],
+      ],
+    });
+
+    assert(data, 'data should be defined');
+    const issues = (data[0] as {issues: {id: string}[]}).issues;
+    expect(issues).toEqual([]);
+
+    // After the issue remove, project edit should NOT trigger any push through flipped-join
+    // because partitionMap was cleanly unindexed.
+    const projectPushes = log.filter(
+      ([operator, action]) =>
+        operator === '.issues.project:source(project)' && action === 'push',
+    );
+    expect(projectPushes).toHaveLength(1);
+    const flippedJoinPushes = log.filter(
+      ([operator, action]) =>
+        operator === '.issues:flipped-join(project)' && action === 'push',
+    );
+    // Only the initial issue remove passes through flipped-join; the project edit does not
+    expect(flippedJoinPushes).toHaveLength(1);
+    expect((flippedJoinPushes[0][2] as {type: string}).type).toBe('remove');
+  });
 });

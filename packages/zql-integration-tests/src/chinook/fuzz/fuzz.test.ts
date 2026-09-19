@@ -11,7 +11,11 @@ import {must} from '../../../../shared/src/must.ts';
 import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
-import {makeSourceChangeAdd} from '../../../../zql/src/ivm/source.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../../../zql/src/ivm/source.ts';
 import {consume} from '../../../../zql/src/ivm/stream.ts';
 import {RandomYieldSource} from '../../../../zql/src/ivm/test/random-yield-source.ts';
 import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
@@ -32,6 +36,8 @@ import {
 } from './axes.ts';
 import {CostModel} from './cost.ts';
 import {
+  applyLimit,
+  applyOrder,
   decorate,
   decorateChild,
   decoratableRoots,
@@ -891,4 +897,64 @@ test('schema graph exposes junction + self-join relationships', () => {
   expect(
     relsOf('employee').find(r => r.name === 'reportsToEmployee')?.child,
   ).toBe('employee');
+});
+
+function localDecoratedPushCases(
+  d: Data,
+  skels: readonly Skeleton[],
+  n: number,
+) {
+  const cases = [];
+  for (const s of skels) {
+    const mutations = pushForSkeleton(d, s, n);
+    if (mutations.length === 0) {
+      continue;
+    }
+    cases.push({
+      label: `decpush|${label(s)}`,
+      query: applyLimit(applyOrder(lower(s), s.table, 'asc1'), 'small'),
+      mutations,
+    });
+  }
+  return cases;
+}
+
+describe('decorated push memory parity', () => {
+  test('all decpush cases', async () => {
+    const skels = enumerate({depth: 1, related: 2, exists: 2});
+    const cases = localDecoratedPushCases(data, skels, 1);
+    const failures: Array<{label: string; error: string}> = [];
+    for (const c of cases) {
+      const delegate = memoryDelegate();
+      const memView = delegate.materialize(c.query);
+      try {
+        let expected = await delegate.run(c.query);
+        expect(memView.data).toEqual(expected);
+        for (let i = 0; i < c.mutations.length; i++) {
+          const m = c.mutations[i];
+          const src = must(delegate.getSource(m.table));
+          if (m.kind === 'remove') {
+            consume(src.push(makeSourceChangeRemove(m.row)));
+          } else if (m.kind === 'add') {
+            consume(src.push(makeSourceChangeAdd(m.row)));
+          } else if (m.kind === 'edit') {
+            consume(src.push(makeSourceChangeEdit(m.row, m.old)));
+          }
+          expected = await delegate.run(c.query);
+          try {
+            expect(memView.data).toEqual(expected);
+          } catch (e: unknown) {
+            failures.push({
+              label: c.label,
+              error: `Step ${i} (${m.kind} on ${m.table}): ${e instanceof Error ? e.message : String(e)}`,
+            });
+            break;
+          }
+        }
+      } finally {
+        memView.destroy();
+      }
+    }
+    expect(failures).toEqual([]);
+  });
 });

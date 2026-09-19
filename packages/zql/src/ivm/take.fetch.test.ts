@@ -14,7 +14,12 @@ import type {FetchRequest} from './operator.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import type {Stream} from './stream.ts';
 import {consume} from './stream.ts';
-import {Take, type PartitionKey} from './take.ts';
+import {
+  Take,
+  constraintContainsPartitionKey,
+  constraintMatchesPartitionKey,
+  type PartitionKey,
+} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 
 import {makeSourceChangeAdd} from './source.ts';
@@ -1381,6 +1386,153 @@ suite('take with partition', () => {
     `);
   });
 });
+
+suite(
+  'constraintMatchesPartitionKey and constraintContainsPartitionKey',
+  () => {
+    test('constraintMatchesPartitionKey requires exact key count', () => {
+      expect(constraintMatchesPartitionKey(undefined, undefined)).toBe(true);
+      expect(constraintMatchesPartitionKey({a: 1}, undefined)).toBe(false);
+      expect(constraintMatchesPartitionKey(undefined, ['a'])).toBe(false);
+      expect(constraintMatchesPartitionKey({a: 1}, ['a'])).toBe(true);
+      // Superset constraint has extra keys: must return false for exact match
+      expect(constraintMatchesPartitionKey({a: 1, b: 2}, ['a'])).toBe(false);
+      // Missing key
+      expect(constraintMatchesPartitionKey({b: 2}, ['a'])).toBe(false);
+    });
+
+    test('constraintContainsPartitionKey allows supersets', () => {
+      expect(constraintContainsPartitionKey(undefined, undefined)).toBe(false);
+      expect(constraintContainsPartitionKey({a: 1}, undefined)).toBe(false);
+      expect(constraintContainsPartitionKey(undefined, ['a'])).toBe(false);
+      expect(constraintContainsPartitionKey({a: 1}, ['a'])).toBe(true);
+      // Superset constraint: must return true
+      expect(constraintContainsPartitionKey({a: 1, b: 2}, ['a'])).toBe(true);
+      expect(constraintContainsPartitionKey({b: 2}, ['a'])).toBe(false);
+    });
+
+    test('partitioned take bounds fetch with superset constraint', () => {
+      const storage = new MemoryStorage();
+      const source = createSource(
+        lc,
+        testLogConfig,
+        'comment',
+        {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          created: {type: 'number'},
+        },
+        ['id'],
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c1', issueID: 'i1', created: 100}),
+        ),
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c2', issueID: 'i1', created: 200}),
+        ),
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c3', issueID: 'i1', created: 300}),
+        ),
+      );
+
+      const conn = source.connect([
+        ['created', 'asc'],
+        ['id', 'asc'],
+      ]);
+      const take = new Take(conn, storage, 2, ['issueID']);
+
+      // Initial fetch for partition {issueID: 'i1'}
+      const initialRows = [...take.fetch({constraint: {issueID: 'i1'}})];
+      expect(initialRows).toHaveLength(2);
+      expect(initialRows.map(n => (n as Node).row.id)).toEqual(['c1', 'c2']);
+
+      // Downstream join fetches with superset constraint {issueID: 'i1', id: 'c3'}
+      // c3 is beyond the bound (limit 2: c1, c2), so fetch with superset constraint should return empty
+      const supersetBeyondBound = [
+        ...take.fetch({constraint: {issueID: 'i1', id: 'c3'}}),
+      ];
+      expect(supersetBeyondBound).toHaveLength(0);
+
+      // Fetch with superset constraint for a row within the bound
+      const supersetWithinBound = [
+        ...take.fetch({constraint: {issueID: 'i1', id: 'c1'}}),
+      ];
+      expect(supersetWithinBound).toHaveLength(1);
+      expect((supersetWithinBound[0] as Node).row.id).toBe('c1');
+    });
+
+    test('partitioned take unconstrained fetch filters every partition by its bound', () => {
+      const storage = new MemoryStorage();
+      const source = createSource(
+        lc,
+        testLogConfig,
+        'comment',
+        {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          created: {type: 'number'},
+        },
+        ['id'],
+      );
+      // Partition i1: 3 rows (limit 2)
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c1', issueID: 'i1', created: 100}),
+        ),
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c2', issueID: 'i1', created: 200}),
+        ),
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c3', issueID: 'i1', created: 300}),
+        ),
+      );
+      // Partition i2: 3 rows (limit 2)
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c4', issueID: 'i2', created: 100}),
+        ),
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c5', issueID: 'i2', created: 200}),
+        ),
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c6', issueID: 'i2', created: 300}),
+        ),
+      );
+
+      const conn = source.connect([
+        ['created', 'asc'],
+        ['id', 'asc'],
+      ]);
+      const take = new Take(conn, storage, 2, ['issueID']);
+
+      // Hydrate both partitions
+      consume(take.fetch({constraint: {issueID: 'i1'}}));
+      consume(take.fetch({constraint: {issueID: 'i2'}}));
+
+      // Unconstrained fetch: must return only rows within each partition's bound (c1, c2, c4, c5), not c3 or c6
+      const unconstrainedRows = [...take.fetch({})];
+      expect(unconstrainedRows.map(n => (n as Node).row.id)).toEqual([
+        'c1',
+        'c4',
+        'c2',
+        'c5',
+      ]);
+    });
+  },
+);
 
 function takeTest(t: TakeTest): TakeTestResults {
   const log: SnitchMessage[] = [];
