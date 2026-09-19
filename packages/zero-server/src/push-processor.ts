@@ -10,6 +10,7 @@ import {
   type Database,
   type ExtractTransactionType,
   handleMutateRequest,
+  type MutateRequestHandler,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
@@ -20,6 +21,28 @@ import type {CustomMutatorDefs} from './custom.ts';
 
 export const separatorRe = /[.|]/;
 
+/** Options for {@linkcode PushProcessor}. */
+export type PushProcessorOptions = {
+  /** Log level for request parsing and execution. Defaults to `'info'`. */
+  logLevel?: LogLevel | undefined;
+  /**
+   * Whether a rejection from a mutator should be answered by running that
+   * mutator AGAIN, once, in a fresh transaction — rather than by the default
+   * retry, which re-runs the transaction with the mutator skipped and returns
+   * the error to the client.
+   *
+   * Return `true` only for errors the application knows are TRANSIENT, which in
+   * practice means serialization failures and deadlocks reported by the
+   * database. Zero cannot decide this itself: it does not parse driver errors,
+   * and by the time a rejection reaches the `Transactor` an application's own
+   * deliberate rejection and a driver rejection are wrapped identically in
+   * `DatabaseTransactionError`.
+   *
+   * Left undefined, behaviour is exactly as before.
+   */
+  shouldRetryMutator?: ((error: unknown) => boolean) | undefined;
+};
+
 export class PushProcessor<
   _S extends Schema,
   D extends Database<ExtractTransactionType<D>>,
@@ -29,11 +52,25 @@ export class PushProcessor<
   readonly #dbProvider: D;
   readonly #logLevel: LogLevel;
   readonly #context: C;
+  readonly #shouldRetryMutator: ((error: unknown) => boolean) | undefined;
 
-  constructor(dbProvider: D, context?: C, logLevel: LogLevel = 'info') {
+  /**
+   * @param logLevelOrOptions a `LogLevel`, or an options object. The bare
+   * `LogLevel` form is kept so every existing call site compiles unchanged.
+   */
+  constructor(
+    dbProvider: D,
+    context?: C,
+    logLevelOrOptions: LogLevel | PushProcessorOptions = 'info',
+  ) {
     this.#dbProvider = dbProvider;
     this.#context = context as C;
-    this.#logLevel = logLevel;
+    const options: PushProcessorOptions =
+      typeof logLevelOrOptions === 'string'
+        ? {logLevel: logLevelOrOptions}
+        : logLevelOrOptions;
+    this.#logLevel = options.logLevel ?? 'info';
+    this.#shouldRetryMutator = options.shouldRetryMutator;
   }
 
   /**
@@ -65,23 +102,53 @@ export class PushProcessor<
     queryOrQueryString: Request | URLSearchParams | Record<string, string>,
     body?: ReadonlyJSONValue,
   ): Promise<MutateResponse> {
-    if (queryOrQueryString instanceof Request) {
+    const handler: MutateRequestHandler<D> = (transact, mutation) =>
+      this.#processMutation(mutators, transact, mutation);
+
+    // ⚠ THE POSITIONAL FORM IS KEPT WHEN THERE IS NOTHING EXTRA TO PASS, and
+    // that is not stylistic. It normalizes `userID` to `undefined`, which
+    // `handleMutateRequest` uses to OMIT `userID` from the response; the object
+    // form coerces `undefined` to `null`, which would start emitting it. Until
+    // `PushProcessor` has a `userID` of its own to pass, switching
+    // unconditionally would be a response-shape change unrelated to this
+    // feature.
+    if (this.#shouldRetryMutator === undefined) {
+      if (queryOrQueryString instanceof Request) {
+        return handleMutateRequest(
+          this.#dbProvider,
+          handler,
+          queryOrQueryString,
+          this.#logLevel,
+        );
+      }
       return handleMutateRequest(
         this.#dbProvider,
-        (transact, mutation) =>
-          this.#processMutation(mutators, transact, mutation),
+        handler,
         queryOrQueryString,
+        must(body, 'body is required when using query params directly'),
         this.#logLevel,
       );
     }
-    return handleMutateRequest(
-      this.#dbProvider,
-      (transact, mutation) =>
-        this.#processMutation(mutators, transact, mutation),
-      queryOrQueryString,
-      must(body, 'body is required when using query params directly'),
-      this.#logLevel,
-    );
+
+    if (queryOrQueryString instanceof Request) {
+      return handleMutateRequest({
+        dbProvider: this.#dbProvider,
+        handler,
+        request: queryOrQueryString,
+        userID: undefined,
+        logLevel: this.#logLevel,
+        shouldRetryMutator: this.#shouldRetryMutator,
+      });
+    }
+    return handleMutateRequest({
+      dbProvider: this.#dbProvider,
+      handler,
+      query: queryOrQueryString,
+      body: must(body, 'body is required when using query params directly'),
+      userID: undefined,
+      logLevel: this.#logLevel,
+      shouldRetryMutator: this.#shouldRetryMutator,
+    });
   }
 
   #processMutation(
