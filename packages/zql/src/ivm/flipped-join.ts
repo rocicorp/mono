@@ -15,9 +15,12 @@ import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
+  canonicalKey,
+  canonicalKeyForTest,
   generateWithOverlayNoYield,
   isJoinMatch,
   rowEqualsForCompoundKey,
+  type PartitionEntry,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
 import {
@@ -29,6 +32,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
+import type {TakeBoundProvider} from './take-gate.ts';
 
 /**
  * Maximum number of entries sent in a single batched `parent.fetch`
@@ -80,6 +84,8 @@ type Args = {
   relationshipName: string;
   hidden: boolean;
   system: System;
+  parentPartitionKey?: CompoundKey | undefined;
+  boundProvider?: TakeBoundProvider | undefined;
 };
 
 /**
@@ -97,6 +103,9 @@ export class FlippedJoin implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
+  readonly #parentPartitionKey: CompoundKey | undefined;
+  readonly #partitionMap: Map<string, Map<string, PartitionEntry>> | undefined;
+  readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
 
@@ -111,6 +120,8 @@ export class FlippedJoin implements Input {
     relationshipName,
     hidden,
     system,
+    parentPartitionKey,
+    boundProvider,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -122,6 +133,9 @@ export class FlippedJoin implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
+    this.#parentPartitionKey = parentPartitionKey;
+    this.#partitionMap = parentPartitionKey ? new Map() : undefined;
+    this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -334,6 +348,32 @@ export class FlippedJoin implements Input {
     relatedChildNodes: Node[],
   ): Stream<Node> {
     let overlaidRelatedChildNodes = relatedChildNodes;
+
+    let isParentInPushQueue: boolean;
+    if (this.#boundProvider) {
+      const partitionConstraint = this.#parentPartitionKey
+        ? Object.fromEntries(
+            this.#parentPartitionKey.map(k => [k, minParentNode.row[k]]),
+          )
+        : undefined;
+      const bound = this.#boundProvider.getBound(partitionConstraint);
+      isParentInPushQueue =
+        bound !== undefined &&
+        this.#inprogressChildChangePosition !== undefined &&
+        this.#parent
+          .getSchema()
+          .compareRows(minParentNode.row, this.#inprogressChildChangePosition) >
+          0 &&
+        this.#parent.getSchema().compareRows(minParentNode.row, bound) <= 0;
+    } else {
+      isParentInPushQueue =
+        this.#inprogressChildChangePosition !== undefined &&
+        this.#parent
+          .getSchema()
+          .compareRows(minParentNode.row, this.#inprogressChildChangePosition) >
+          0;
+    }
+
     if (
       this.#inprogressChildChange &&
       this.#inprogressChildChangePosition &&
@@ -344,22 +384,15 @@ export class FlippedJoin implements Input {
         this.#parentKey,
       )
     ) {
-      const hasInprogressChildChangeBeenPushedForMinParentNode =
-        this.#parent
-          .getSchema()
-          .compareRows(
-            minParentNode.row,
-            this.#inprogressChildChangePosition,
-          ) <= 0;
       if (this.#inprogressChildChange[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-        if (hasInprogressChildChangeBeenPushedForMinParentNode) {
+        if (!isParentInPushQueue) {
           // Remove from relatedChildNodes since the removed child
           // was inserted into childNodes above.
           overlaidRelatedChildNodes = relatedChildNodes.filter(
             n => n !== this.#inprogressChildChange?.[ChangeIndex.NODE],
           );
         }
-      } else if (!hasInprogressChildChangeBeenPushedForMinParentNode) {
+      } else if (isParentInPushQueue) {
         overlaidRelatedChildNodes = [
           ...generateWithOverlayNoYield(
             relatedChildNodes,
@@ -369,6 +402,8 @@ export class FlippedJoin implements Input {
         ];
       }
     }
+
+    this.#indexParentRow(minParentNode.row);
 
     // yield node if after the overlay it still has relationship nodes
     if (overlaidRelatedChildNodes.length > 0) {
@@ -415,9 +450,38 @@ export class FlippedJoin implements Input {
         this.#childKey,
         this.#parentKey,
       );
-      const parentNodeStream = constraint
-        ? this.#parent.fetch({constraint})
-        : [];
+      if (!constraint) {
+        return;
+      }
+      let parentNodeStream: Stream<Node | 'yield'>;
+      if (this.#partitionMap && this.#parentPartitionKey) {
+        const junctionKey = canonicalKey(
+          change[ChangeIndex.NODE].row,
+          this.#childKey,
+        );
+        const partitionEntries = this.#partitionMap.get(junctionKey);
+        if (partitionEntries && partitionEntries.size > 0) {
+          if (partitionEntries.size === 1) {
+            const [entry] = partitionEntries.values();
+            parentNodeStream = this.#parent.fetch({
+              constraint: {...constraint, ...entry.constraint},
+            });
+          } else {
+            const streams = Array.from(partitionEntries.values(), entry =>
+              this.#parent.fetch({
+                constraint: {...constraint, ...entry.constraint},
+              }),
+            );
+            const compare = (a: Node, b: Node) =>
+              this.#parent.getSchema().compareRows(a.row, b.row);
+            parentNodeStream = mergeSortedStreams(streams, compare);
+          }
+        } else {
+          parentNodeStream = this.#parent.fetch({constraint});
+        }
+      } else {
+        parentNodeStream = this.#parent.fetch({constraint});
+      }
       for (const parentNode of parentNodeStream) {
         if (parentNode === 'yield') {
           yield 'yield';
@@ -484,6 +548,7 @@ export class FlippedJoin implements Input {
       }
     } finally {
       this.#inprogressChildChange = undefined;
+      this.#inprogressChildChangePosition = undefined;
     }
   }
 
@@ -504,6 +569,19 @@ export class FlippedJoin implements Input {
         [this.#relationshipName]: childNodeStream(node),
       },
     });
+
+    switch (change[ChangeIndex.TYPE]) {
+      case ChangeType.ADD:
+        this.#indexParentRow(change[ChangeIndex.NODE].row);
+        break;
+      case ChangeType.REMOVE:
+        this.#unindexParentRow(change[ChangeIndex.NODE].row);
+        break;
+      case ChangeType.EDIT:
+        this.#unindexParentRow(change[ChangeIndex.OLD_NODE].row);
+        this.#indexParentRow(change[ChangeIndex.NODE].row);
+        break;
+    }
 
     // If no related child don't push as this is an inner join.
     let hasRelatedChild = false;
@@ -550,7 +628,7 @@ export class FlippedJoin implements Input {
             change[ChangeIndex.NODE].row,
             this.#parentKey,
           ),
-          `Parent edit must not change relationship.`,
+          'Parent edit must not change relationship.',
         );
         yield* this.#output.push(
           makeEditChange(
@@ -565,47 +643,61 @@ export class FlippedJoin implements Input {
         unreachable(change);
     }
   }
-}
 
-// Test seam with a widened record type — canonicalValue handles bigint
-// at runtime (zqlite's safeIntegers) but `Value` doesn't list it.
-export function canonicalKeyForTest(
-  record: Record<string, Value | bigint | undefined>,
-  keys: CompoundKey,
-): string {
-  return canonicalKey(record as Record<string, Value | undefined>, keys);
-}
-
-/**
- * Canonical string key over `keys` of `record`, used by `#fetchBatched`
- * both to dedupe `multiConstraint` entries (record = Constraint) and to
- * map each returned parent row back to the children that referenced its
- * parent-key tuple (record = Row).
- */
-function canonicalKey(
-  record: Record<string, Value | undefined>,
-  keys: CompoundKey,
-): string {
-  if (keys.length === 1) {
-    return canonicalValue(record[keys[0]]);
+  #indexParentRow(row: Row): void {
+    if (
+      !this.#partitionMap ||
+      !this.#parentPartitionKey ||
+      this.#parentKey.some(k => row[k] === null)
+    ) {
+      return;
+    }
+    const junctionKey = canonicalKey(row, this.#parentKey);
+    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
+    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
+    let map = this.#partitionMap.get(junctionKey);
+    if (!map) {
+      map = new Map();
+      this.#partitionMap.set(junctionKey, map);
+    }
+    let entry = map.get(partitionKey);
+    if (!entry) {
+      entry = {
+        constraint: Object.fromEntries(
+          this.#parentPartitionKey.map(k => [k, row[k]]),
+        ),
+        pks: new Set(),
+      };
+      map.set(partitionKey, entry);
+    }
+    entry.pks.add(parentPk);
   }
-  let s = '';
-  for (let i = 0; i < keys.length; i++) {
-    if (i > 0) s += '\x00';
-    s += canonicalValue(record[keys[i]]);
+
+  #unindexParentRow(row: Row): void {
+    if (
+      !this.#partitionMap ||
+      !this.#parentPartitionKey ||
+      this.#parentKey.some(k => row[k] === null)
+    ) {
+      return;
+    }
+    const junctionKey = canonicalKey(row, this.#parentKey);
+    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
+    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
+    const map = this.#partitionMap.get(junctionKey);
+    if (map) {
+      const entry = map.get(partitionKey);
+      if (entry) {
+        entry.pks.delete(parentPk);
+        if (entry.pks.size === 0) {
+          map.delete(partitionKey);
+          if (map.size === 0) {
+            this.#partitionMap.delete(junctionKey);
+          }
+        }
+      }
+    }
   }
-  return s;
 }
 
-function canonicalValue(v: Value | bigint | undefined): string {
-  // Tag by type so we don't conflate e.g. `1` (number) with `"1"` (string).
-  // Bigint shows up at runtime when zqlite's safeIntegers is on, even
-  // though the static `Value` type doesn't list it.
-  if (v === null || v === undefined) return 'n';
-  const t = typeof v;
-  if (t === 'string') return 's' + (v as string);
-  if (t === 'number') return 'd' + (v as number);
-  if (t === 'bigint') return 'b' + (v as bigint).toString();
-  if (t === 'boolean') return v ? 't' : 'f';
-  return 'j' + JSON.stringify(v);
-}
+export {canonicalKeyForTest};

@@ -1,4 +1,5 @@
 import {afterEach, describe, expect, suite, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {setMultiConstraintChunkSizeForTest} from './flipped-join.ts';
 import {
@@ -7068,6 +7069,17 @@ suite('test overlay on many:one pushes', () => {
           "fetch",
           {
             "constraint": {
+              "id": "u0",
+              "stateID": "s0",
+            },
+          },
+        ],
+        [
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
               "stateID": "s0",
             },
           },
@@ -9230,6 +9242,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           "fetch",
           {
             "constraint": {
+              "name": "Aaron",
               "stateID": "s0",
             },
           },
@@ -10425,5 +10438,187 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
+  });
+});
+
+suite('partitioned flipped join: partitionMap and null join keys', () => {
+  const sources: Sources = {
+    workspace: {
+      columns: {id: {type: 'string'}},
+      primaryKeys: ['id'],
+    },
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        workspaceID: {type: 'string'},
+        projectID: {type: 'string', optional: true},
+      },
+      primaryKeys: ['id'],
+    },
+    project: {
+      columns: {
+        id: {type: 'string', optional: true},
+        name: {type: 'string'},
+      },
+      primaryKeys: ['name'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'workspace',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['workspaceID']},
+        subquery: {
+          table: 'issue',
+          alias: 'issues',
+          orderBy: [
+            ['workspaceID', 'asc'],
+            ['id', 'asc'],
+          ],
+          limit: 5,
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
+              system: 'client',
+              correlation: {parentField: ['projectID'], childField: ['id']},
+              subquery: {
+                table: 'project',
+                alias: 'project',
+                orderBy: [['name', 'asc']],
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      issues: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  } as const;
+
+  test('child change with null join key does not synthesize join or push matching parents', () => {
+    // i1 has projectID: null.
+    // Adding a project with id: null must NOT match or push i1 into the exists subquery.
+    const {data} = runPushTest({
+      sources,
+      sourceContents: {
+        workspace: [{id: 'w1'}],
+        issue: [{id: 'i1', workspaceID: 'w1', projectID: null}],
+        project: [],
+      },
+      ast,
+      format,
+      pushes: [
+        ['project', makeSourceChangeAdd({id: null, name: 'NullProject'})],
+      ],
+    });
+
+    assert(data, 'data should be defined');
+    const issues = (data[0] as {issues: unknown[]}).issues;
+    expect(issues).toEqual([]);
+  });
+
+  test('partitionMap preserves multiplicity when removing one of multiple parents sharing junction key', () => {
+    // i1 and i2 share the same projectID 'p1' and same workspaceID 'w1'.
+    // In issues:flipped-join(project), parentPartitionKey is ['workspaceID'] and parentKey is ['projectID'].
+    // When i1 is removed, the partition entry for projectID 'p1' and workspace 'w1' must NOT be deleted,
+    // because i2 still exists and belongs to workspace 'w1'.
+    const {data} = runPushTest({
+      sources,
+      sourceContents: {
+        workspace: [{id: 'w1'}],
+        issue: [
+          {id: 'i1', workspaceID: 'w1', projectID: 'p1'},
+          {id: 'i2', workspaceID: 'w1', projectID: 'p1'},
+        ],
+        project: [],
+      },
+      ast,
+      format,
+      pushes: [
+        [
+          'issue',
+          makeSourceChangeRemove({
+            id: 'i1',
+            workspaceID: 'w1',
+            projectID: 'p1',
+          }),
+        ],
+        ['project', makeSourceChangeAdd({id: 'p1', name: 'Alpha'})],
+      ],
+    });
+
+    // i2 must be added to the result when its project 'p1' is added.
+    assert(data, 'data should be defined');
+    const issues = (data[0] as {issues: {id: string}[]}).issues;
+    expect(issues).toHaveLength(1);
+    expect(issues[0].id).toBe('i2');
+  });
+
+  test('partitionMap is idempotent across repeated parent fetches', () => {
+    // i1 has workspaceID 'w1' and projectID 'p1'.
+    // During hydration and pushes with fetchOnPush: true, i1 is fetched.
+    // When i1 is removed, because parent registration is idempotent (tracking unique parent PKs),
+    // the single remove clears the partition for (p1, w1).
+    // Subsequent edit on project 'p1' will find an empty partition map and will NOT fetch issues.
+    const {data, log} = runPushTest({
+      sources,
+      sourceContents: {
+        workspace: [{id: 'w1'}],
+        issue: [{id: 'i1', workspaceID: 'w1', projectID: 'p1'}],
+        project: [{id: 'p1', name: 'Alpha'}],
+      },
+      ast,
+      format,
+      fetchOnPush: true,
+      pushes: [
+        [
+          'issue',
+          makeSourceChangeRemove({
+            id: 'i1',
+            workspaceID: 'w1',
+            projectID: 'p1',
+          }),
+        ],
+        [
+          'project',
+          makeSourceChangeEdit(
+            {id: 'p1', name: 'Alpha Updated'},
+            {id: 'p1', name: 'Alpha'},
+          ),
+        ],
+      ],
+    });
+
+    assert(data, 'data should be defined');
+    const issues = (data[0] as {issues: {id: string}[]}).issues;
+    expect(issues).toEqual([]);
+
+    // After the issue remove, project edit should NOT trigger any push through flipped-join
+    // because partitionMap was cleanly unindexed.
+    const projectPushes = log.filter(
+      ([operator, action]) =>
+        operator === '.issues.project:source(project)' && action === 'push',
+    );
+    expect(projectPushes).toHaveLength(1);
+    const flippedJoinPushes = log.filter(
+      ([operator, action]) =>
+        operator === '.issues:flipped-join(project)' && action === 'push',
+    );
+    // Only the initial issue remove passes through flipped-join; the project edit does not
+    expect(flippedJoinPushes).toHaveLength(1);
+    expect((flippedJoinPushes[0][2] as {type: string}).type).toBe('remove');
   });
 });

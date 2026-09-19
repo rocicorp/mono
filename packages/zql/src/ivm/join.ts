@@ -13,11 +13,14 @@ import {
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
+  canonicalKey,
   generateWithOverlay,
   generateWithOverlayUnordered,
   isJoinMatch,
   rowEqualsForCompoundKey,
+  type PartitionEntry,
 } from './join-utils.ts';
+import {mergeSortedStreams} from './memory-source.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -26,6 +29,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
+import type {TakeBoundProvider} from './take-gate.ts';
 
 type Args = {
   parent: Input;
@@ -36,6 +40,8 @@ type Args = {
   relationshipName: string;
   hidden: boolean;
   system: System;
+  parentPartitionKey?: CompoundKey | undefined;
+  boundProvider?: TakeBoundProvider | undefined;
 };
 
 /**
@@ -55,6 +61,9 @@ export class Join implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
+  readonly #parentPartitionKey: CompoundKey | undefined;
+  readonly #partitionMap: Map<string, Map<string, PartitionEntry>> | undefined;
+  readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
 
@@ -69,6 +78,8 @@ export class Join implements Input {
     relationshipName,
     hidden,
     system,
+    parentPartitionKey,
+    boundProvider,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -80,6 +91,9 @@ export class Join implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
+    this.#parentPartitionKey = parentPartitionKey;
+    this.#partitionMap = parentPartitionKey ? new Map() : undefined;
+    this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -122,6 +136,7 @@ export class Join implements Input {
         yield parentNode;
         continue;
       }
+      this.#indexParentRow(parentNode.row);
       yield this.#processParentNode(parentNode.row, parentNode.relationships);
     }
   }
@@ -129,6 +144,7 @@ export class Join implements Input {
   *#pushParent(change: Change): Stream<'yield'> {
     switch (change[ChangeIndex.TYPE]) {
       case ChangeType.ADD:
+        this.#indexParentRow(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeAddChange(
             this.#processParentNode(
@@ -140,6 +156,7 @@ export class Join implements Input {
         );
         break;
       case ChangeType.REMOVE:
+        this.#unindexParentRow(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeRemoveChange(
             this.#processParentNode(
@@ -172,6 +189,8 @@ export class Join implements Input {
           ),
           `Parent edit must not change relationship.`,
         );
+        this.#unindexParentRow(change[ChangeIndex.OLD_NODE].row);
+        this.#indexParentRow(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeEditChange(
             this.#processParentNode(
@@ -228,7 +247,33 @@ export class Join implements Input {
         this.#parentKey,
       );
       if (constraint) {
-        for (const parentNode of this.#parent.fetch({constraint})) {
+        let parentNodeStream: Stream<Node | 'yield'>;
+        if (this.#partitionMap && this.#parentPartitionKey) {
+          const junctionKey = canonicalKey(childRow, this.#childKey);
+          const partitionEntries = this.#partitionMap.get(junctionKey);
+          if (!partitionEntries || partitionEntries.size === 0) {
+            return;
+          }
+          if (partitionEntries.size === 1) {
+            const [entry] = partitionEntries.values();
+            parentNodeStream = this.#parent.fetch({
+              constraint: {...constraint, ...entry.constraint},
+            });
+          } else {
+            const streams = Array.from(partitionEntries.values(), entry =>
+              this.#parent.fetch({
+                constraint: {...constraint, ...entry.constraint},
+              }),
+            );
+            const compare = (a: Node, b: Node) =>
+              this.#schema.compareRows(a.row, b.row);
+            parentNodeStream = mergeSortedStreams(streams, compare);
+          }
+        } else {
+          parentNodeStream = this.#parent.fetch({constraint});
+        }
+
+        for (const parentNode of parentNodeStream) {
           if (parentNode === 'yield') {
             yield parentNode;
             continue;
@@ -246,6 +291,62 @@ export class Join implements Input {
       }
     } finally {
       this.#inprogressChildChange = undefined;
+      this.#inprogressChildChangePosition = undefined;
+    }
+  }
+
+  #indexParentRow(row: Row): void {
+    if (
+      !this.#partitionMap ||
+      !this.#parentPartitionKey ||
+      this.#parentKey.some(k => row[k] === null)
+    ) {
+      return;
+    }
+    const junctionKey = canonicalKey(row, this.#parentKey);
+    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
+    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
+    let map = this.#partitionMap.get(junctionKey);
+    if (!map) {
+      map = new Map();
+      this.#partitionMap.set(junctionKey, map);
+    }
+    let entry = map.get(partitionKey);
+    if (!entry) {
+      entry = {
+        constraint: Object.fromEntries(
+          this.#parentPartitionKey.map(k => [k, row[k]]),
+        ),
+        pks: new Set(),
+      };
+      map.set(partitionKey, entry);
+    }
+    entry.pks.add(parentPk);
+  }
+
+  #unindexParentRow(row: Row): void {
+    if (
+      !this.#partitionMap ||
+      !this.#parentPartitionKey ||
+      this.#parentKey.some(k => row[k] === null)
+    ) {
+      return;
+    }
+    const junctionKey = canonicalKey(row, this.#parentKey);
+    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
+    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
+    const map = this.#partitionMap.get(junctionKey);
+    if (map) {
+      const entry = map.get(partitionKey);
+      if (entry) {
+        entry.pks.delete(parentPk);
+        if (entry.pks.size === 0) {
+          map.delete(partitionKey);
+          if (map.size === 0) {
+            this.#partitionMap.delete(junctionKey);
+          }
+        }
+      }
     }
   }
 
@@ -261,6 +362,31 @@ export class Join implements Input {
       );
       const stream = constraint ? this.#child.fetch({constraint}) : [];
 
+      let inPushQueue: boolean;
+      if (this.#boundProvider) {
+        const partitionConstraint = this.#parentPartitionKey
+          ? Object.fromEntries(
+              this.#parentPartitionKey.map(k => [k, parentNodeRow[k]]),
+            )
+          : undefined;
+        const bound = this.#boundProvider.getBound(partitionConstraint);
+        inPushQueue =
+          bound !== undefined &&
+          this.#inprogressChildChangePosition !== undefined &&
+          this.#schema.compareRows(
+            parentNodeRow,
+            this.#inprogressChildChangePosition,
+          ) > 0 &&
+          this.#schema.compareRows(parentNodeRow, bound) <= 0;
+      } else {
+        inPushQueue =
+          this.#inprogressChildChangePosition !== undefined &&
+          this.#schema.compareRows(
+            parentNodeRow,
+            this.#inprogressChildChangePosition,
+          ) > 0;
+      }
+
       if (
         this.#inprogressChildChange &&
         isJoinMatch(
@@ -269,11 +395,7 @@ export class Join implements Input {
           this.#inprogressChildChange[ChangeIndex.NODE].row,
           this.#childKey,
         ) &&
-        this.#inprogressChildChangePosition &&
-        this.#schema.compareRows(
-          parentNodeRow,
-          this.#inprogressChildChangePosition,
-        ) > 0
+        inPushQueue
       ) {
         const childSchema = this.#child.getSchema();
         if (childSchema.sort === undefined) {
