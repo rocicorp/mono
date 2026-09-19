@@ -198,15 +198,17 @@ export class FlippedJoin implements Input {
     // related parents with position greater than change.position
     // (which should not yet have the node removed), would not even
     // be fetched here, and would be absent from the output all together.
+    const isBackfillFetch =
+      !req.reverse &&
+      req.start &&
+      this.#inprogressChildChangePosition &&
+      this.#parent
+        .getSchema()
+        .compareRows(req.start.row, this.#inprogressChildChangePosition) >= 0;
+
     if (
       this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE &&
-      !(
-        req.start &&
-        this.#inprogressChildChangePosition &&
-        this.#parent
-          .getSchema()
-          .compareRows(req.start.row, this.#inprogressChildChangePosition) >= 0
-      )
+      !isBackfillFetch
     ) {
       const removedNode = this.#inprogressChildChange[ChangeIndex.NODE];
       const compare = this.#child.getSchema().compareRows;
@@ -319,7 +321,7 @@ export class FlippedJoin implements Input {
       // Children retain their original input order within the group
       // because we appended to `idxs` in iteration order.
       const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
-      yield* this.#yieldParentWithOverlay(node, relatedChildNodes);
+      yield* this.#yieldParentWithOverlay(node, relatedChildNodes, req);
     }
   }
 
@@ -347,8 +349,17 @@ export class FlippedJoin implements Input {
   *#yieldParentWithOverlay(
     minParentNode: Node,
     relatedChildNodes: Node[],
+    req?: FetchRequest,
   ): Stream<Node> {
     let overlaidRelatedChildNodes = relatedChildNodes;
+    const isBackfillFetch =
+      !req?.reverse &&
+      req?.start &&
+      this.#inprogressChildChangePosition &&
+      this.#parent
+        .getSchema()
+        .compareRows(req.start.row, this.#inprogressChildChangePosition) >= 0;
+
     if (
       this.#inprogressChildChange &&
       this.#inprogressChildChangePosition &&
@@ -374,7 +385,10 @@ export class FlippedJoin implements Input {
             n => n !== this.#inprogressChildChange?.[ChangeIndex.NODE],
           );
         }
-      } else if (!hasInprogressChildChangeBeenPushedForMinParentNode) {
+      } else if (
+        !hasInprogressChildChangeBeenPushedForMinParentNode &&
+        !isBackfillFetch
+      ) {
         overlaidRelatedChildNodes = [
           ...generateWithOverlayNoYield(
             relatedChildNodes,
