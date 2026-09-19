@@ -1,6 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {
@@ -18,6 +18,7 @@ import {
   isJoinMatch,
   rowEqualsForCompoundKey,
 } from './join-utils.ts';
+import {mergeSortedStreams} from './memory-source.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -36,6 +37,7 @@ type Args = {
   relationshipName: string;
   hidden: boolean;
   system: System;
+  parentPartitionKey?: CompoundKey | undefined;
 };
 
 /**
@@ -55,6 +57,8 @@ export class Join implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
+  readonly #parentPartitionKey: CompoundKey | undefined;
+  readonly #partitionMap: Map<string, Set<string>> | undefined;
 
   #output: Output = throwOutput;
 
@@ -69,6 +73,7 @@ export class Join implements Input {
     relationshipName,
     hidden,
     system,
+    parentPartitionKey,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -80,6 +85,8 @@ export class Join implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
+    this.#parentPartitionKey = parentPartitionKey;
+    this.#partitionMap = parentPartitionKey ? new Map() : undefined;
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -122,6 +129,7 @@ export class Join implements Input {
         yield parentNode;
         continue;
       }
+      this.#indexParentRow(parentNode.row);
       yield this.#processParentNode(parentNode.row, parentNode.relationships);
     }
   }
@@ -129,6 +137,7 @@ export class Join implements Input {
   *#pushParent(change: Change): Stream<'yield'> {
     switch (change[ChangeIndex.TYPE]) {
       case ChangeType.ADD:
+        this.#indexParentRow(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeAddChange(
             this.#processParentNode(
@@ -140,6 +149,7 @@ export class Join implements Input {
         );
         break;
       case ChangeType.REMOVE:
+        this.#unindexParentRow(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeRemoveChange(
             this.#processParentNode(
@@ -172,6 +182,8 @@ export class Join implements Input {
           ),
           `Parent edit must not change relationship.`,
         );
+        this.#unindexParentRow(change[ChangeIndex.OLD_NODE].row);
+        this.#indexParentRow(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeEditChange(
             this.#processParentNode(
@@ -228,7 +240,47 @@ export class Join implements Input {
         this.#parentKey,
       );
       if (constraint) {
-        for (const parentNode of this.#parent.fetch({constraint})) {
+        let parentNodeStream: Stream<Node | 'yield'>;
+        if (this.#partitionMap && this.#parentPartitionKey) {
+          const junctionKey = compoundKeyToString(childRow, this.#childKey);
+          const partitionKeyStrings = this.#partitionMap.get(junctionKey);
+          if (!partitionKeyStrings || partitionKeyStrings.size === 0) {
+            return;
+          }
+          const parentPartitionKey = this.#parentPartitionKey;
+          if (partitionKeyStrings.size === 1) {
+            const [partitionKeyString] = partitionKeyStrings;
+            const partitionValues = JSON.parse(partitionKeyString) as Value[];
+            const partitionConstraint = Object.fromEntries(
+              parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
+            );
+            parentNodeStream = this.#parent.fetch({
+              constraint: {...constraint, ...partitionConstraint},
+            });
+          } else {
+            const streams = Array.from(
+              partitionKeyStrings,
+              partitionKeyString => {
+                const partitionValues = JSON.parse(
+                  partitionKeyString,
+                ) as Value[];
+                const partitionConstraint = Object.fromEntries(
+                  parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
+                );
+                return this.#parent.fetch({
+                  constraint: {...constraint, ...partitionConstraint},
+                });
+              },
+            );
+            const compare = (a: Node, b: Node) =>
+              this.#parent.getSchema().compareRows(a.row, b.row);
+            parentNodeStream = mergeSortedStreams(streams, compare);
+          }
+        } else {
+          parentNodeStream = this.#parent.fetch({constraint});
+        }
+
+        for (const parentNode of parentNodeStream) {
           if (parentNode === 'yield') {
             yield parentNode;
             continue;
@@ -246,6 +298,35 @@ export class Join implements Input {
       }
     } finally {
       this.#inprogressChildChange = undefined;
+    }
+  }
+
+  #indexParentRow(row: Row): void {
+    if (!this.#partitionMap || !this.#parentPartitionKey) {
+      return;
+    }
+    const junctionKey = compoundKeyToString(row, this.#parentKey);
+    const partitionKey = compoundKeyToString(row, this.#parentPartitionKey);
+    let set = this.#partitionMap.get(junctionKey);
+    if (!set) {
+      set = new Set();
+      this.#partitionMap.set(junctionKey, set);
+    }
+    set.add(partitionKey);
+  }
+
+  #unindexParentRow(row: Row): void {
+    if (!this.#partitionMap || !this.#parentPartitionKey) {
+      return;
+    }
+    const junctionKey = compoundKeyToString(row, this.#parentKey);
+    const partitionKey = compoundKeyToString(row, this.#parentPartitionKey);
+    const set = this.#partitionMap.get(junctionKey);
+    if (set) {
+      set.delete(partitionKey);
+      if (set.size === 0) {
+        this.#partitionMap.delete(junctionKey);
+      }
     }
   }
 
@@ -300,4 +381,8 @@ export class Join implements Input {
       },
     };
   }
+}
+
+function compoundKeyToString(row: Row, key: CompoundKey): string {
+  return JSON.stringify(key.map(k => row[k]));
 }
