@@ -36,7 +36,7 @@ import type {
 import type {ConnectionContextManager} from '../services/view-syncer/connection-context-manager.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
-import type {Worker} from '../types/processes.ts';
+import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import type {Subscription} from '../types/subscription.ts';
 import {installWebSocketReceiver} from '../types/websocket-handoff.ts';
 import type {ConnectParams} from './connect-params.ts';
@@ -364,6 +364,8 @@ export class Syncer implements SingletonService {
   readonly #mutagens: ServiceRunner<Mutagen & Service> | undefined;
   readonly #pushers: ServiceRunner<Pusher & Service> | undefined;
   readonly #connections = new Map<string, Connection>();
+  readonly #pendingConnections = new Map<string, number>();
+  readonly #clientGroupGenerations = new Map<string, number>();
   readonly #drainCoordinator = new DrainCoordinator();
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
@@ -435,10 +437,25 @@ export class Syncer implements SingletonService {
     subscribeTo(lc, parent);
 
     this.#lc = lc;
+    this.#parent = parent;
     this.#viewSyncers = new ServiceRunner(
       lc,
       id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
+      id => {
+        if ((this.#pendingConnections.get(id) ?? 0) === 0) {
+          const generation = this.#clientGroupGenerations.get(id);
+          this.#parent.send<ClientGroupStatusMessage>([
+            'clientGroupStatus',
+            {
+              clientGroupID: id,
+              active: false,
+              ...(generation !== undefined ? {generation} : {}),
+            },
+          ]);
+          this.#clientGroupGenerations.delete(id);
+        }
+      },
     );
     if (mutagenFactory) {
       this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
@@ -454,14 +471,33 @@ export class Syncer implements SingletonService {
         p => p.hasRefs(),
       );
     }
-    this.#parent = parent;
     this.#wss = new WebSocketServer(getWebSocketServerOptions(config));
 
     installWebSocketReceiver(
       lc,
       this.#wss,
-      this.#createConnection,
+      this.#receiveConnection,
       this.#parent,
+      params => {
+        this.#releasePending(params.clientGroupID, params.generation);
+      },
+      params => {
+        this.#pendingConnections.set(
+          params.clientGroupID,
+          (this.#pendingConnections.get(params.clientGroupID) ?? 0) + 1,
+        );
+        if (params.generation !== undefined) {
+          const current = this.#clientGroupGenerations.get(
+            params.clientGroupID,
+          );
+          if (current === undefined || params.generation > current) {
+            this.#clientGroupGenerations.set(
+              params.clientGroupID,
+              params.generation,
+            );
+          }
+        }
+      },
     );
 
     setActiveClientGroupsGetter(() => this.#viewSyncers.size);
@@ -866,6 +902,39 @@ export class Syncer implements SingletonService {
       );
     }
   };
+
+  readonly #receiveConnection = async (
+    ws: WebSocket,
+    params: ConnectParams,
+  ) => {
+    try {
+      await this.#createConnection(ws, params);
+    } finally {
+      this.#releasePending(params.clientGroupID, params.generation);
+    }
+  };
+
+  #releasePending(clientGroupID: string, generation: number | undefined): void {
+    const remaining = (this.#pendingConnections.get(clientGroupID) ?? 1) - 1;
+    if (remaining <= 0) {
+      this.#pendingConnections.delete(clientGroupID);
+      if (!this.#viewSyncers.hasService(clientGroupID)) {
+        const gen =
+          this.#clientGroupGenerations.get(clientGroupID) ?? generation;
+        this.#parent.send<ClientGroupStatusMessage>([
+          'clientGroupStatus',
+          {
+            clientGroupID,
+            active: false,
+            ...(gen !== undefined ? {generation: gen} : {}),
+          },
+        ]);
+        this.#clientGroupGenerations.delete(clientGroupID);
+      }
+    } else {
+      this.#pendingConnections.set(clientGroupID, remaining);
+    }
+  }
 
   run() {
     return this.#stopped.promise;

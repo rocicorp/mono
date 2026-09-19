@@ -129,4 +129,41 @@ describe('services/runner', () => {
     expect(runCompleted).toBe(true);
     expect(zombieRunner.size).toBe(0);
   });
+
+  test('onStop callback', async () => {
+    const stopped: string[] = [];
+
+    const callbackRunner = new ServiceRunner<TestService>(
+      createSilentLogContext(),
+      (id: string) => new TestService(id),
+      (s: TestService) => s.valid,
+      id => stopped.push(id),
+    );
+
+    expect(callbackRunner.hasService('foo')).toBe(false);
+    const s1 = callbackRunner.getService('foo');
+    expect(callbackRunner.hasService('foo')).toBe(true);
+    expect(stopped).toEqual([]);
+
+    // Stopping service triggers onStop
+    s1.resolver.resolve();
+    await sleep(1);
+    expect(callbackRunner.hasService('foo')).toBe(false);
+    expect(stopped).toEqual(['foo']);
+
+    // Replace before stop: s2 becomes invalid and s3 is created
+    const s2 = callbackRunner.getService('foo');
+    s2.valid = false;
+    const s3 = callbackRunner.getService('foo');
+
+    // Old s2 stops; because it was replaced, onStop should NOT fire for s2
+    s2.resolver.resolve();
+    await sleep(1);
+    expect(stopped).toEqual(['foo']);
+
+    // When s3 stops, onStop fires
+    s3.resolver.resolve();
+    await sleep(1);
+    expect(stopped).toEqual(['foo', 'foo']);
+  });
 });
