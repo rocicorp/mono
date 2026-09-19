@@ -331,6 +331,14 @@ function buildPipelineInternal(
     end = delegate.decorateInput(skip, `${name}:skip)`);
   }
 
+  let takeGate: TakeGate | undefined;
+  if (ast.limit !== undefined && !useCap) {
+    const takeGateName = `${name}:take-gate`;
+    takeGate = new TakeGate(end);
+    delegate.addEdge(end, takeGate);
+    end = delegate.decorateInput(takeGate, takeGateName);
+  }
+
   for (const csqCondition of csqConditions) {
     // flipped EXISTS are handled in applyWhere
     if (!csqCondition.flip) {
@@ -352,14 +360,6 @@ function buildPipelineInternal(
         true,
       );
     }
-  }
-
-  let takeGate: TakeGate | undefined;
-  if (ast.limit !== undefined && !useCap) {
-    const takeGateName = `${name}:take-gate`;
-    takeGate = new TakeGate(end);
-    delegate.addEdge(end, takeGate);
-    end = delegate.decorateInput(takeGate, takeGateName);
   }
 
   if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
