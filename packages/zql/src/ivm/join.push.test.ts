@@ -1,4 +1,5 @@
 import {describe, expect, suite, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {
   runPushTest,
@@ -4244,6 +4245,216 @@ suite('push one:many:one', () => {
         },
       ]
     `);
+  });
+
+  test('3-table nested join: partitionMap preserves multiplicity when removing one of multiple parents sharing junction key', () => {
+    const sourcesMultiplicity: Sources = {
+      workspace: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+      issue: {
+        columns: {
+          id: {type: 'string'},
+          workspaceID: {type: 'string'},
+          authorID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      user: {
+        columns: {id: {type: 'string'}, name: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+    };
+
+    const astMultiplicity: AST = {
+      table: 'workspace',
+      orderBy: [['id', 'asc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['workspaceID']},
+          subquery: {
+            table: 'issue',
+            alias: 'issues',
+            orderBy: [
+              ['workspaceID', 'asc'],
+              ['id', 'asc'],
+            ],
+            limit: 5,
+            related: [
+              {
+                system: 'client',
+                correlation: {
+                  parentField: ['authorID'],
+                  childField: ['id'],
+                },
+                subquery: {
+                  table: 'user',
+                  alias: 'author',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const formatMultiplicity: Format = {
+      singular: false,
+      relationships: {
+        issues: {
+          singular: false,
+          relationships: {
+            author: {
+              singular: true,
+              relationships: {},
+            },
+          },
+        },
+      },
+    } as const;
+
+    // i1 and i2 are two issues in the SAME workspace ('w1') with the SAME author ('u1').
+    // In issues:join(author), parentPartitionKey is ['workspaceID'] and parentKey is ['authorID'].
+    // When i1 is removed, the partition entry for author 'u1' and workspace 'w1' must NOT be deleted,
+    // because i2 still exists and belongs to workspace 'w1'.
+    const {data} = runPushTest({
+      sources: sourcesMultiplicity,
+      sourceContents: {
+        workspace: [{id: 'w1'}],
+        issue: [
+          {id: 'i1', workspaceID: 'w1', authorID: 'u1'},
+          {id: 'i2', workspaceID: 'w1', authorID: 'u1'},
+        ],
+        user: [{id: 'u1', name: 'Alice'}],
+      },
+      ast: astMultiplicity,
+      format: formatMultiplicity,
+      pushes: [
+        [
+          'issue',
+          makeSourceChangeRemove({
+            id: 'i1',
+            workspaceID: 'w1',
+            authorID: 'u1',
+          }),
+        ],
+        [
+          'user',
+          makeSourceChangeEdit(
+            {id: 'u1', name: 'Alice Updated'},
+            {id: 'u1', name: 'Alice'},
+          ),
+        ],
+      ],
+    });
+
+    // i2 must receive the author edit and reflect 'Alice Updated'.
+    assert(data, 'data should be defined');
+    const issues = (data[0] as {issues: {id: string; author: {name: string}}[]})
+      .issues;
+    expect(issues).toHaveLength(1);
+    expect(issues[0].id).toBe('i2');
+    expect(issues[0].author.name).toBe('Alice Updated');
+  });
+
+  test('3-table nested join: partitionMap ignores parent rows with null join key', () => {
+    const sourcesNull: Sources = {
+      workspace: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+      issue: {
+        columns: {
+          id: {type: 'string'},
+          workspaceID: {type: 'string'},
+          authorID: {type: 'string', optional: true},
+        },
+        primaryKeys: ['id'],
+      },
+      user: {
+        columns: {id: {type: 'string'}, name: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+    };
+
+    const astNull: AST = {
+      table: 'workspace',
+      orderBy: [['id', 'asc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['workspaceID']},
+          subquery: {
+            table: 'issue',
+            alias: 'issues',
+            orderBy: [
+              ['workspaceID', 'asc'],
+              ['id', 'asc'],
+            ],
+            limit: 5,
+            related: [
+              {
+                system: 'client',
+                correlation: {
+                  parentField: ['authorID'],
+                  childField: ['id'],
+                },
+                subquery: {
+                  table: 'user',
+                  alias: 'author',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const formatNull: Format = {
+      singular: false,
+      relationships: {
+        issues: {
+          singular: false,
+          relationships: {
+            author: {
+              singular: true,
+              relationships: {},
+            },
+          },
+        },
+      },
+    } as const;
+
+    // Issue with authorID: null should not be indexed in partitionMap.
+    const {data} = runPushTest({
+      sources: sourcesNull,
+      sourceContents: {
+        workspace: [{id: 'w1'}],
+        issue: [{id: 'i1', workspaceID: 'w1', authorID: null}],
+        user: [],
+      },
+      ast: astNull,
+      format: formatNull,
+      pushes: [
+        ['user', makeSourceChangeAdd({id: 'u1', name: 'Alice'})],
+        [
+          'issue',
+          makeSourceChangeRemove({
+            id: 'i1',
+            workspaceID: 'w1',
+            authorID: null,
+          }),
+        ],
+      ],
+    });
+
+    assert(data, 'data should be defined');
+    const issues = (data[0] as {issues: unknown[]}).issues;
+    expect(issues).toEqual([]);
   });
 });
 

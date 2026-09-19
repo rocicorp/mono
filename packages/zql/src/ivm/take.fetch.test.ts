@@ -528,6 +528,50 @@ suite('take with partition', () => {
     expect(partitions[1].hydrate).toMatchInlineSnapshot(`[]`);
   });
 
+  test('superset constraint bounds fetch and getBound', () => {
+    const storage = new MemoryStorage();
+    const source = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        labelID: {type: 'string'},
+        created: {type: 'number'},
+      },
+      ['id'],
+    );
+    const input = source.connect([
+      ['created', 'asc'],
+      ['id', 'asc'],
+    ]);
+    const take = new Take(input, storage, 2, ['issueID']);
+    const sink = new Catch(take);
+
+    // Add 3 rows for partition i1
+    const r1 = {id: 'c1', issueID: 'i1', labelID: 'l1', created: 100};
+    const r2 = {id: 'c2', issueID: 'i1', labelID: 'l1', created: 200};
+    const r3 = {id: 'c3', issueID: 'i1', labelID: 'l1', created: 300};
+    consume(source.push(makeSourceChangeAdd(r1)));
+    consume(source.push(makeSourceChangeAdd(r2)));
+    consume(source.push(makeSourceChangeAdd(r3)));
+
+    // Hydrate partition i1
+    consume(sink.fetch({constraint: {issueID: 'i1'}}));
+
+    // Superset constraint {issueID: 'i1', labelID: 'l1'}
+    const supersetConstraint = {issueID: 'i1', labelID: 'l1'};
+    expect(take.getBound(supersetConstraint)).toEqual(r2);
+
+    // Fetch with superset constraint should be bounded at r2, excluding r3
+    const fetched = Array.from(
+      sink.fetch({constraint: supersetConstraint}),
+      n => (n === 'yield' ? 'yield' : (n as {row: Row}).row),
+    );
+    expect(fetched).toEqual([r1, r2]);
+  });
+
   test('less data than limit', () => {
     const {partitions} = takeTest({
       ...base,
