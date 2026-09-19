@@ -236,6 +236,17 @@ export const updateColumnSchema = v.object({
   table: identifierSchema,
   old: columnSchema,
   new: columnSchema,
+
+  // Set (along with `backfill`) when the values of the column must be
+  // re-read from upstream, e.g. when a data type change rewrote them.
+  tableMetadata: tableMetadataSchema.optional(),
+
+  // Indicates that the (existing) values of the column may have changed and
+  // must be backfilled. See documentation for the `backfill` field of the
+  // `create-table` change.
+  //
+  // Readers that predate this field ignore it (and keep the stale values).
+  backfill: backfillIDSchema.optional(),
 });
 
 export const dropColumnSchema = v.object({

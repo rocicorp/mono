@@ -5,6 +5,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {
+  computeZqlSpecs,
   listIndexes,
   type ReplicaIndexSpec,
   listTables,
@@ -12,6 +13,7 @@ import {
 } from '../../db/lite-tables.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
+import type {DataOrSchemaChange} from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
 import {DEL_OP, RESET_OP, SET_OP} from './schema/change-log.ts';
@@ -4304,6 +4306,111 @@ describe('replicator/column-metadata-integration', () => {
       characterMaxLength: null,
       isBackfilling: false,
     });
+  });
+
+  test('update column with backfill hides the column until backfilled', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+    const tx = (watermark: string, ...data: DataOrSchemaChange[]) => {
+      processor.processMessage(lc, [
+        'begin',
+        messages.begin(),
+        {commitWatermark: watermark},
+      ]);
+      for (const change of data) {
+        processor.processMessage(lc, ['data', change]);
+      }
+      processor.processMessage(lc, ['commit', messages.commit(), {watermark}]);
+    };
+    const visibleColumns = () =>
+      Object.keys(
+        must(
+          computeZqlSpecs(lc, replica, {
+            includeBackfillingColumns: false,
+          }).get('foo'),
+        ).zqlSpec,
+      ).sort();
+
+    tx(
+      '0d',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8', notNull: true},
+          value: {pos: 1, dataType: 'int4'},
+        },
+        primaryKey: ['id'],
+      }),
+      messages.createIndex({
+        schema: 'public',
+        tableName: 'foo',
+        name: 'foo_pkey',
+        columns: {id: 'ASC'},
+        unique: true,
+      }),
+      messages.insert('foo', {id: 1, value: 10}),
+      messages.insert('foo', {id: 2, value: 20}),
+    );
+    expect(visibleColumns()).toEqual(['_0_version', 'id', 'value']);
+
+    tx('0e', {
+      ...messages.updateColumn(
+        'foo',
+        {name: 'value', spec: {pos: 1, dataType: 'int4'}},
+        {name: 'value', spec: {pos: 1, dataType: 'int8'}},
+      ),
+      tableMetadata: {rowKey: {id: {attNum: 1}}},
+      backfill: {attNum: 2},
+    });
+
+    const store = must(ColumnMetadataStore.getInstance(replica));
+    expect(store.getColumn('foo', 'value')).toMatchObject({
+      upstreamType: 'int8',
+      isBackfilling: true,
+    });
+    expect(visibleColumns()).toEqual(['_0_version', 'id']);
+
+    // A row updated after the backfill snapshot keeps its newer value.
+    tx('0f', messages.update('foo', {id: 2, value: 99}));
+
+    const relation = {
+      schema: 'public',
+      name: 'foo',
+      rowKey: {columns: ['id']},
+    };
+    tx(
+      '10',
+      {
+        tag: 'backfill',
+        relation,
+        columns: ['value'],
+        watermark: '0e',
+        rowValues: [
+          [1, 11],
+          [2, 21],
+        ],
+      },
+      {
+        tag: 'backfill-completed',
+        relation,
+        columns: ['value'],
+        watermark: '0e',
+      },
+    );
+
+    expect(store.getColumn('foo', 'value')).toMatchObject({
+      isBackfilling: false,
+    });
+    expect(visibleColumns()).toEqual(['_0_version', 'id', 'value']);
+    expect(
+      replica.prepare('SELECT id, value FROM foo ORDER BY id').all(),
+    ).toEqual([
+      {id: 1, value: 11},
+      {id: 2, value: 99},
+    ]);
+    expect(replica.prepare('SELECT * FROM "_zero.backfilling"').all()).toEqual(
+      [],
+    );
   });
 
   test.each([

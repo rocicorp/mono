@@ -70,7 +70,7 @@ export class ColumnMetadataStore {
 
   readonly #insertStmt: Statement;
   readonly #updateStmt: Statement;
-  readonly #clearBackfillStmt: Statement;
+  readonly #setBackfillStmt: Statement;
   readonly #deleteColumnStmt: Statement;
   readonly #deleteTableStmt: Statement;
   readonly #renameTableStmt: Statement;
@@ -96,9 +96,9 @@ export class ColumnMetadataStore {
       WHERE table_name = ? AND column_name = ?
     `);
 
-    this.#clearBackfillStmt = db.prepare(/*sql*/ `
+    this.#setBackfillStmt = db.prepare(/*sql*/ `
       UPDATE "_zero.column_metadata"
-      SET backfill = NULL
+      SET backfill = ?
       WHERE table_name = ? AND column_name = ?
     `);
 
@@ -208,8 +208,16 @@ export class ColumnMetadataStore {
     );
   }
 
+  setBackfilling(
+    tableName: string,
+    columnName: string,
+    backfill: BackfillID,
+  ): void {
+    this.#setBackfillStmt.run(JSON.stringify(backfill), tableName, columnName);
+  }
+
   clearBackfilling(tableName: string, columnName: string): void {
-    this.#clearBackfillStmt.run(tableName, columnName);
+    this.#setBackfillStmt.run(null, tableName, columnName);
   }
 
   deleteColumn(tableName: string, columnName: string): void {

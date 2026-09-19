@@ -187,6 +187,11 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
             dflt: v.Optional<string | null>;
         }, undefined>;
     }, undefined>;
+    tableMetadata: v.Optional<{
+        [x: string]: import("../../../../../../shared/src/bigint-json.ts").JSONValue;
+        rowKey: Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>;
+    }>;
+    backfill: v.Optional<Record<string, import("./json.ts").JSONValue | undefined>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"drop-column">;
     table: v.ObjectType<{
@@ -415,6 +420,11 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
             dflt: v.Optional<string | null>;
         }, undefined>;
     }, undefined>;
+    tableMetadata: v.Optional<{
+        [x: string]: import("../../../../../../shared/src/bigint-json.ts").JSONValue;
+        rowKey: Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>;
+    }>;
+    backfill: v.Optional<Record<string, import("./json.ts").JSONValue | undefined>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"drop-column">;
     table: v.ObjectType<{
