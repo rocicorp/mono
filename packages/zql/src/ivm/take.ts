@@ -110,58 +110,42 @@ export class Take implements Operator, TakeBoundProvider {
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    if (
+    assert(
       !this.#partitionKey ||
-      (req.constraint &&
-        constraintContainsPartitionKey(req.constraint, this.#partitionKey))
-    ) {
-      const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-      const takeState = this.#storage.get(takeStateKey);
-      if (!takeState) {
-        if (constraintMatchesPartitionKey(req.constraint, this.#partitionKey)) {
-          yield* this.#initialFetch(req);
-        }
-        return;
-      }
-      if (takeState.bound === undefined) {
-        return;
-      }
-      for (const inputNode of this.#input.fetch(req)) {
-        if (inputNode === 'yield') {
-          yield inputNode;
-          continue;
-        }
-        if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
-          return;
-        }
-        if (
-          this.#rowHiddenFromFetch &&
-          this.getSchema().compareRows(
-            this.#rowHiddenFromFetch,
-            inputNode.row,
-          ) === 0
-        ) {
-          continue;
-        }
-        yield inputNode;
+        (req.constraint !== undefined &&
+          constraintContainsPartitionKey(req.constraint, this.#partitionKey)),
+      'Partitioned take does not allow unpartitioned fetches',
+    );
+
+    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
+    const takeState = this.#storage.get(takeStateKey);
+    if (!takeState) {
+      if (constraintMatchesPartitionKey(req.constraint, this.#partitionKey)) {
+        yield* this.#initialFetch(req);
       }
       return;
     }
-    // There is a partition key, but the fetch is not constrained or constrained
-    // on a different key.
+    if (takeState.bound === undefined) {
+      return;
+    }
     for (const inputNode of this.#input.fetch(req)) {
       if (inputNode === 'yield') {
         yield inputNode;
         continue;
       }
-      const takeStateKey = getTakeStateKey(this.#partitionKey, inputNode.row);
-      const takeState = this.#storage.get(takeStateKey);
-      if (
-        takeState?.bound !== undefined &&
-        this.getSchema().compareRows(takeState.bound, inputNode.row) >= 0
-      ) {
-        yield inputNode;
+      if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
+        return;
       }
+      if (
+        this.#rowHiddenFromFetch &&
+        this.getSchema().compareRows(
+          this.#rowHiddenFromFetch,
+          inputNode.row,
+        ) === 0
+      ) {
+        continue;
+      }
+      yield inputNode;
     }
   }
 
