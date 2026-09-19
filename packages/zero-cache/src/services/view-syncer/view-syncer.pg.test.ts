@@ -23,6 +23,15 @@ import type {
 } from '../../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import {
+  clientSchemaFrom,
+  createSchema,
+} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  number,
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
@@ -2840,6 +2849,81 @@ describe('view-syncer/service', () => {
       await nextPoke(client);
 
       expect(advanceSpy).toHaveBeenCalled();
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('resets pipelines when a schema change lands before hydration', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      // A client schema without `issues.json`, so that dropping the column
+      // upstream is not a client-visible schema error.
+      const {clientSchema} = clientSchemaFrom(
+        createSchema({
+          tables: [
+            table('issues')
+              .columns({
+                id: string(),
+                title: string(),
+                owner: string(),
+                parent: string(),
+                big: number(),
+              })
+              .primaryKey('id'),
+          ],
+        }),
+      );
+      const client = connect(
+        SYNC_CONTEXT,
+        [{op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']}],
+        clientSchema,
+      );
+      await nextPoke(client);
+
+      // Land a schema change between init() and the first hydration, which
+      // is where advanceWithoutDiff() moves the snapshot to head. The table
+      // specs computed at init() still list the dropped column.
+      const advanceWithoutDiff = PipelineDriver.prototype.advanceWithoutDiff;
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advanceWithoutDiff')
+        .mockImplementationOnce(function (this: PipelineDriver) {
+          replicator.processTransaction(
+            '101',
+            messages.dropColumn('issues', 'json'),
+          );
+          return advanceWithoutDiff.call(this);
+        });
+      using resetSpy = vi.spyOn(PipelineDriver.prototype, 'reset');
+
+      stateChanges.push({state: 'version-ready'});
+      const poke = await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+      expect(resetSpy).toHaveBeenCalledTimes(1);
+      // Hydration completed against the new schema.
+      expect(poke.map(([type]) => type)).toEqual([
+        'pokeStart',
+        'pokePart',
+        'pokeEnd',
+      ]);
+      expect(poke[1]).toMatchObject([
+        'pokePart',
+        {
+          gotQueriesPatch: [{hash: 'custom-1', op: 'put'}],
+          rowsPatch: expect.arrayContaining([
+            expect.objectContaining({tableName: 'issues', op: 'put'}),
+          ]),
+        },
+      ]);
       expect(transformSpy).toHaveBeenCalledTimes(1);
     });
 
