@@ -303,6 +303,7 @@ export class Join implements Input {
       }
     } finally {
       this.#inprogressChildChange = undefined;
+      this.#inprogressChildChangePosition = undefined;
     }
   }
 
