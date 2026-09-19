@@ -2081,6 +2081,42 @@ describe('take with no partition', () => {
       `);
     });
 
+    test('at limit remove row at start no row after, then remove bound row', () => {
+      const {data, storage, pushes} = takeNoPartitionTest({
+        sourceRows: [
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+        ],
+        limit: 3,
+        fetchOnPush: true,
+        pushes: [
+          makeSourceChangeRemove({id: 'i1', created: 100}),
+          makeSourceChangeRemove({id: 'i3', created: 300}),
+        ],
+      });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+            Symbol(rc): 1,
+          },
+        ]
+      `);
+      expect(storage).toEqual({
+        '["take"]': {
+          bound: {created: 200, id: 'i2', text: null},
+          size: 1,
+        },
+      });
+      expect(pushes.map(p => (p as {node: {row: Row}}).node.row.id)).toEqual([
+        'i1',
+        'i3',
+      ]);
+    });
+
     test('at limit remove row at end with row after', () => {
       const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
