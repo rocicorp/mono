@@ -130,7 +130,11 @@ export class Join implements Input {
         continue;
       }
       this.#indexParentRow(parentNode.row);
-      yield this.#processParentNode(parentNode.row, parentNode.relationships);
+      yield this.#processParentNode(
+        parentNode.row,
+        parentNode.relationships,
+        req,
+      );
     }
   }
 
@@ -333,6 +337,7 @@ export class Join implements Input {
   #processParentNode(
     parentNodeRow: Row,
     parentNodeRelations: Record<string, () => Stream<Node | 'yield'>>,
+    req?: FetchRequest,
   ): Node {
     const childStream = () => {
       const constraint = buildJoinConstraint(
@@ -354,7 +359,15 @@ export class Join implements Input {
         this.#schema.compareRows(
           parentNodeRow,
           this.#inprogressChildChangePosition,
-        ) > 0
+        ) > 0 &&
+        !(
+          this.#inprogressChildChange[ChangeIndex.TYPE] === ChangeType.REMOVE &&
+          req?.start &&
+          this.#schema.compareRows(
+            req.start.row,
+            this.#inprogressChildChangePosition,
+          ) >= 0
+        )
       ) {
         const childSchema = this.#child.getSchema();
         if (childSchema.sort === undefined) {
