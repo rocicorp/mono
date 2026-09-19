@@ -1344,6 +1344,53 @@ describe('view-syncer/pipeline-driver', () => {
     ]).not.toThrow();
   });
 
+  test('advanceWithoutDiff picks up a schema change before hydration', () => {
+    // The client schema only covers `issues`, so dropping a `comments`
+    // column is not a client-visible schema error, but it does invalidate
+    // the table specs computed at init().
+    pipelines.init(subsetClientSchema);
+
+    // A schema change lands after init() but before the first hydration
+    // (e.g. while the view-syncer waits for the replica to catch up to
+    // the CVR). advanceWithoutDiff() does not iterate the change log diff,
+    // so it must check for the RESET op explicitly.
+    replicator.processTransaction(
+      '134',
+      messages.dropColumn('comments', 'upvotes'),
+    );
+
+    expect(() =>
+      pipelines.advanceWithoutDiff(),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ResetPipelinesSignal: schema changed between 123 and 134]`,
+    );
+
+    // After a reset at the new head, hydration uses the current specs.
+    pipelines.reset(subsetClientSchema);
+
+    expect(
+      [
+        ...pipelines.addQuery(
+          'hash1',
+          'queryID1',
+          ISSUES_AND_COMMENTS,
+          startTimer(),
+        ),
+      ]
+        .filter(
+          (change): change is RowChange =>
+            change !== 'yield' && change.table === 'comments',
+        )
+        .map(change => change.row),
+    ).toEqual([
+      // Rows of a reset table are reported at the bumped minRowVersion.
+      {_0_version: '134', id: '22', issueID: '2'},
+      {_0_version: '134', id: '21', issueID: '2'},
+      {_0_version: '134', id: '20', issueID: '2'},
+      {_0_version: '134', id: '10', issueID: '1'},
+    ]);
+  });
+
   test('reset', () => {
     pipelines.init(clientSchema);
     [
@@ -1371,7 +1418,7 @@ describe('view-syncer/pipeline-driver', () => {
     // Update one of the rows after the schema change.
     replicator.processTransaction('135', messages.update('issues', {id: '2'}));
 
-    pipelines.advanceWithoutDiff();
+    expect(() => pipelines.advanceWithoutDiff()).toThrow(ResetPipelinesSignal);
     pipelines.reset(clientSchema);
 
     expect(pipelines.queries()).toEqual(new Map());
