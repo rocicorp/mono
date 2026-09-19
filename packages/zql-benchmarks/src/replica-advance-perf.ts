@@ -22,7 +22,7 @@ type Options = {
   user: string | undefined;
 };
 
-type Workload = 'background' | 'cover' | 'homeview';
+type Workload = 'background' | 'cover' | 'homeview' | 'fanout';
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -109,6 +109,8 @@ const HOME_QUERIES_PATH = /home\/zero-schema\/src\/queries\.ts$/;
 const HOME_VIEW_PASSES = 2;
 const HOME_VIEW_SLOWEST = 5;
 const PROGRESS_SLOW_COVER_MS = 1000;
+const FANOUT_VIEWER = 'viewer-user-id';
+const NUMERIC_ARG = /limit|size|count|offset/i;
 
 const COVER_COLUMNS = `c.cover_id, c.work_id, c.url, c.is_primary,
   c.width_px, c.height_px`;
@@ -161,18 +163,7 @@ try {
 
   await buildRuntime(options, bundle);
   const runtime = (await import(pathToFileURL(bundle).href)) as Runtime;
-  const results =
-    options.workload === 'homeview'
-      ? runHomeViewWorkload(runtime, clone, options)
-      : runWorkload(runtime, clone, options);
-
-  if (options.json) {
-    process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
-  } else if (options.workload === 'homeview') {
-    printHomeViewResults(results as HomeViewResult[]);
-  } else {
-    printResults(results as Result[]);
-  }
+  process.stdout.write(runSelectedWorkload(runtime, clone, options));
 } finally {
   await rm(bundleDir, {recursive: true, force: true});
   if (options.keepClone) {
@@ -181,6 +172,32 @@ try {
     await rm(workDir, {recursive: true, force: true});
   }
   cleanupOnExit = false;
+}
+
+function runSelectedWorkload(
+  runtime: Runtime,
+  replica: string,
+  opts: Options,
+): string {
+  switch (opts.workload) {
+    case 'fanout': {
+      const findings = runFanoutWorkload(runtime, replica);
+      return opts.json ? toJSON(findings) : formatFanoutFindings(findings);
+    }
+    case 'homeview': {
+      const results = runHomeViewWorkload(runtime, replica, opts);
+      return opts.json ? toJSON(results) : formatHomeViewResults(results);
+    }
+    case 'background':
+    case 'cover': {
+      const results = runWorkload(runtime, replica, opts);
+      return opts.json ? toJSON(results) : formatResults(results);
+    }
+  }
+}
+
+function toJSON(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
 }
 
 function runWorkload(
@@ -545,7 +562,7 @@ function pinHomeViewToViewer(source: string): string {
   return pinned;
 }
 
-function printHomeViewResults(results: readonly HomeViewResult[]): void {
+function formatHomeViewResults(results: readonly HomeViewResult[]): string {
   const rows = results.map(result => ({
     pass: result.pass,
     scenario: result.scenario,
@@ -559,14 +576,470 @@ function printHomeViewResults(results: readonly HomeViewResult[]): void {
     slowest_work: result.slowest[0]?.workID.slice(0, 8) ?? '',
     error: result.error?.split('\n')[0] ?? '',
   }));
+  return formatTable(rows);
+}
+
+// ── fanout: find subqueries a literal pin could bound but doesn't ────────────
+//
+// On a child change, a join fetches its parents by the join key alone, so a
+// subquery row is fetched for every value of that key in the whole table,
+// even though only rows correlated with the (pinned) root reach the output.
+// When an ancestor is pinned by `col = literal` and the correlations carry
+// that column down, the subquery could repeat the pin and bound the fetch.
+// This reports every subquery that could inherit a pin, doesn't state it, and
+// has subqueries of its own (the edges a push arrives through), sized with
+// the replica's sqlite_stat1.
+
+type LiteralValue = string | number | boolean;
+
+type AstCondition =
+  | {
+      type: 'simple';
+      op: string;
+      left: {type: string; name?: string};
+      right: {type: string; value?: unknown};
+    }
+  | {type: 'and' | 'or'; conditions: readonly AstCondition[]}
+  | {type: 'correlatedSubquery'; op: string; related: AstSubquery};
+
+type AstSubquery = {
+  correlation: {parentField: readonly string[]; childField: readonly string[]};
+  subquery: Ast;
+  hidden?: boolean | undefined;
+};
+
+type Ast = {
+  table: string;
+  alias?: string | undefined;
+  where?: AstCondition | undefined;
+  related?: readonly AstSubquery[] | undefined;
+  limit?: number | undefined;
+};
+
+type SchemaTables = Record<
+  string,
+  {serverName?: string; columns: Record<string, {serverName?: string}>}
+>;
+
+type FanoutEdge = {
+  alias: string;
+  via: string;
+  keyColumns: string[];
+  rowsPerPushBefore: number;
+  maxRowsPerPushBefore: number;
+  rowsPerPushAfter: number;
+  afterIndex: string;
+};
+
+type FanoutFinding = {
+  query: string;
+  path: string;
+  table: string;
+  limited: boolean;
+  missingPins: {column: string; value: LiteralValue}[];
+  edges: FanoutEdge[];
+};
+
+// A push fetch with no index at all: SQLite scans the table, pinned or not.
+type FanoutScan = {
+  query: string;
+  path: string;
+  table: string;
+  via: string;
+  keyColumns: string[];
+  tableRows: number;
+};
+
+type FanoutReport = {
+  findings: FanoutFinding[];
+  scans: FanoutScan[];
+  analyzed: string[];
+  failed: {query: string; error: string}[];
+};
+
+function runFanoutWorkload(runtime: Runtime, replica: string): FanoutReport {
+  const db = new runtime.Database(runtime.createSilentLogContext(), replica);
+  const tables = (runtime.schema as {tables: SchemaTables}).tables;
+  const stats = createIndexStats(db);
+  const backgroundArgs = new Map(
+    runtime
+      .backgroundQueriesRequests(FANOUT_VIEWER, Date.now())
+      .map(r => [r.query.queryName, r.args] as const),
+  );
+  const report: FanoutReport = {
+    findings: [],
+    scans: [],
+    analyzed: [],
+    failed: [],
+  };
+  try {
+    for (const [name, definition] of Object.entries(runtime.queries)) {
+      if (typeof definition.fn !== 'function') {
+        // Registry metadata (the `~` key), not a query.
+        continue;
+      }
+      const candidates = backgroundArgs.has(name)
+        ? [backgroundArgs.get(name)]
+        : placeholderArgs();
+      let ast: Ast | undefined;
+      let lastError: unknown;
+      for (const args of candidates) {
+        try {
+          const query = definition.fn({
+            args,
+            ctx: {subject: {authenticatedUserId: FANOUT_VIEWER}},
+          });
+          const candidate = runtime.asQueryInternals(query).ast as Ast;
+          // A record-shaped body given the string placeholder doesn't throw;
+          // it builds a null comparison. Try the next shape.
+          if (hasNullEquality(candidate)) {
+            lastError = new Error('placeholder args produced `= null`');
+            continue;
+          }
+          ast = candidate;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (!ast) {
+        report.failed.push({query: name, error: String(lastError)});
+        continue;
+      }
+      report.analyzed.push(name);
+      walkFanout(name, ast, new Map(), [ast.table], tables, stats, report);
+    }
+  } finally {
+    db.close();
+  }
+  report.findings.sort(
+    (a, b) =>
+      Math.max(...b.edges.map(e => e.maxRowsPerPushBefore)) -
+      Math.max(...a.edges.map(e => e.maxRowsPerPushBefore)),
+  );
+  return report;
+}
+
+// `args.userId` on the string placeholder is undefined, which the builder
+// turns into `user_id = null`: a comparison that matches nothing and that no
+// real body intends.
+function hasNullEquality(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasNullEquality);
+  }
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  const right = record.right as {type?: string; value?: unknown} | undefined;
+  if (
+    record.type === 'simple' &&
+    (record.op === '=' || record.op === '!=') &&
+    right?.type === 'literal' &&
+    (right.value === null || right.value === undefined)
+  ) {
+    return true;
+  }
+  return Object.values(record).some(hasNullEquality);
+}
+
+// Most bodies take the viewer id, a record of ids, or a list of ids.
+function placeholderArgs(): unknown[] {
+  const record = new Proxy(
+    {},
+    {
+      get: (_, prop) =>
+        typeof prop !== 'string'
+          ? undefined
+          : NUMERIC_ARG.test(prop)
+            ? 10
+            : `arg:${prop}`,
+    },
+  );
+  return ['arg', record, ['arg']];
+}
+
+function walkFanout(
+  query: string,
+  ast: Ast,
+  inherited: ReadonlyMap<string, LiteralValue>,
+  path: readonly string[],
+  tables: SchemaTables,
+  stats: IndexStats,
+  report: FanoutReport,
+): void {
+  const table = tables[ast.table];
+  const serverTable = table?.serverName ?? ast.table;
+  const serverColumn = (column: string) =>
+    table?.columns[column]?.serverName ?? column;
+
+  const own = new Map<string, LiteralValue>();
+  collectPins(ast.where, own);
+  const pinned = new Map([...inherited, ...own]);
+  const subqueries = [
+    ...(ast.related ?? []),
+    ...collectExists(ast.where).map(sq => ({...sq, exists: true})),
+  ];
+
+  const missing = [...inherited].filter(([column]) => !own.has(column));
+  const edges: FanoutEdge[] = [];
+  for (const sq of subqueries) {
+    const keys = sq.correlation.parentField;
+    const pinnedFetch = stats.rowsPerLookup(serverTable, [
+      ...Array.from(pinned.keys(), serverColumn),
+      ...keys.map(serverColumn),
+    ]);
+    if (pinnedFetch.index === 'SCAN' && stats.hasTable(serverTable)) {
+      report.scans.push({
+        query,
+        path: [...path, sq.subquery.alias ?? sq.subquery.table].join('.'),
+        table: serverTable,
+        via: 'exists' in sq ? 'exists' : 'related',
+        keyColumns: keys.map(serverColumn),
+        tableRows: pinnedFetch.rows,
+      });
+    }
+    if (keys.every(key => pinned.has(key))) {
+      // The push fetch is already by a pinned value.
+      continue;
+    }
+    const keyColumns = keys.map(serverColumn);
+    const before = stats.rowsPerLookup(serverTable, keyColumns);
+    const after = stats.rowsPerLookup(serverTable, [
+      ...missing.map(([column]) => serverColumn(column)),
+      ...keyColumns,
+    ]);
+    edges.push({
+      alias: sq.subquery.alias ?? sq.subquery.table,
+      via: 'exists' in sq ? 'exists' : 'related',
+      keyColumns,
+      rowsPerPushBefore: before.rows,
+      maxRowsPerPushBefore: stats.maxRowsPerKey(serverTable, keyColumns),
+      rowsPerPushAfter: after.rows,
+      afterIndex: after.index,
+    });
+  }
+  if (missing.length > 0 && edges.length > 0) {
+    report.findings.push({
+      query,
+      path: path.join('.'),
+      table: serverTable,
+      limited: ast.limit !== undefined,
+      missingPins: missing.map(([column, value]) => ({
+        column: serverColumn(column),
+        value,
+      })),
+      edges,
+    });
+  }
+
+  for (const sq of subqueries) {
+    const childPins = new Map<string, LiteralValue>();
+    sq.correlation.parentField.forEach((parentField, i) => {
+      const value = pinned.get(parentField);
+      if (value !== undefined) {
+        childPins.set(sq.correlation.childField[i], value);
+      }
+    });
+    walkFanout(
+      query,
+      sq.subquery,
+      childPins,
+      [...path, sq.subquery.alias ?? sq.subquery.table],
+      tables,
+      stats,
+      report,
+    );
+  }
+}
+
+// Top-level AND conjuncts of the form `column = literal` (or IS literal).
+function collectPins(
+  condition: AstCondition | undefined,
+  pins: Map<string, LiteralValue>,
+): void {
+  if (!condition) {
+    return;
+  }
+  if (condition.type === 'and') {
+    for (const c of condition.conditions) {
+      collectPins(c, pins);
+    }
+    return;
+  }
+  if (
+    condition.type === 'simple' &&
+    (condition.op === '=' || condition.op === 'IS') &&
+    condition.left.type === 'column' &&
+    condition.left.name !== undefined &&
+    condition.right.type === 'literal' &&
+    condition.right.value !== null &&
+    typeof condition.right.value !== 'object'
+  ) {
+    pins.set(condition.left.name, condition.right.value as LiteralValue);
+  }
+}
+
+function collectExists(condition: AstCondition | undefined): AstSubquery[] {
+  if (!condition) {
+    return [];
+  }
+  switch (condition.type) {
+    case 'and':
+    case 'or':
+      return condition.conditions.flatMap(collectExists);
+    case 'correlatedSubquery':
+      return [condition.related];
+    default:
+      return [];
+  }
+}
+
+type IndexStats = {
+  hasTable(table: string): boolean;
+  maxRowsPerKey(table: string, columns: readonly string[]): number;
+  rowsPerLookup(
+    table: string,
+    columns: readonly string[],
+  ): {rows: number; index: string};
+};
+
+// Average rows SQLite visits to look up `columns` by equality, from the best
+// index whose leading columns are all among them (sqlite_stat1).
+function createIndexStats(db: Database): IndexStats {
+  const cache = new Map<
+    string,
+    {name: string; columns: string[]; stat: number[]}[]
+  >();
+  const tableIndexes = (table: string) => {
+    let indexes = cache.get(table);
+    if (!indexes) {
+      const stats = new Map(
+        db
+          .prepare(`SELECT idx, stat FROM sqlite_stat1 WHERE tbl = ?`)
+          .all(table)
+          .map(row => [
+            String(row.idx),
+            String(row.stat).split(' ').map(Number),
+          ]),
+      );
+      indexes = db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?`,
+        )
+        .all(table)
+        .map(row => {
+          const name = String(row.name);
+          const columns = db
+            .prepare(`SELECT name FROM pragma_index_info(?) ORDER BY seqno`)
+            .all(name)
+            .map(c => String(c.name));
+          return {name, columns, stat: stats.get(name) ?? []};
+        });
+      cache.set(table, indexes);
+    }
+    return indexes;
+  };
+  const maxes = new Map<string, number>();
+  return {
+    hasTable(table) {
+      return (
+        db
+          .prepare(
+            `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
+          )
+          .all(table).length > 0
+      );
+    },
+    // The hottest key: sqlite_stat1 only has averages, and a skewed key (a
+    // popular work) is what makes a single push run away. NULL keys never
+    // push (the join builds no constraint for them).
+    maxRowsPerKey(table, columns) {
+      const key = `${table}(${columns.join(',')})`;
+      let max = maxes.get(key);
+      if (max === undefined && tableIndexes(table).length === 0) {
+        // Not in this replica (it predates the table), or never analyzed.
+        max = -1;
+        maxes.set(key, max);
+      }
+      if (max === undefined) {
+        const cols = columns.map(c => `"${c}"`).join(', ');
+        const notNull = columns.map(c => `"${c}" IS NOT NULL`).join(' AND ');
+        process.stderr.write(`  measuring hottest key of ${key}\n`);
+        const [row] = db
+          .prepare(
+            `SELECT max(n) AS n FROM (SELECT count(*) AS n FROM "${table}"
+             WHERE ${notNull} GROUP BY ${cols})`,
+          )
+          .all();
+        max = Number(row?.n ?? 0);
+        maxes.set(key, max);
+      }
+      return max;
+    },
+    rowsPerLookup(table, columns) {
+      const wanted = new Set(columns);
+      const indexes = tableIndexes(table);
+      let best = {
+        rows: Math.max(0, ...indexes.map(i => i.stat[0] ?? 0)),
+        index: 'SCAN',
+      };
+      for (const index of indexes) {
+        let prefix = 0;
+        while (
+          prefix < index.columns.length &&
+          wanted.has(index.columns[prefix])
+        ) {
+          prefix++;
+        }
+        if (prefix === 0) {
+          continue;
+        }
+        // An empty table has no sqlite_stat1 row: the index still serves the
+        // lookup, there is just nothing to count.
+        const rows = index.stat[prefix] ?? 0;
+        if (best.index === 'SCAN' || rows < best.rows) {
+          best = {rows, index: index.name};
+        }
+      }
+      return best;
+    },
+  };
+}
+
+function formatFanoutFindings(report: FanoutReport): string {
+  const rows = report.findings.flatMap(finding =>
+    finding.edges.map(edge => ({
+      query: finding.query,
+      node: finding.path,
+      limited: finding.limited ? 'limit' : '',
+      add_pin: finding.missingPins
+        .map(p => `${p.column}=${String(p.value)}`)
+        .join(','),
+      push_via: `${edge.via} ${edge.alias} (${edge.keyColumns.join(',')})`,
+      rows_before: Math.round(edge.rowsPerPushBefore),
+      max_before: edge.maxRowsPerPushBefore,
+      rows_after: Math.round(edge.rowsPerPushAfter),
+      after_index: edge.afterIndex,
+    })),
+  );
+  const failed = report.failed
+    .map(f => `  ${f.query}: ${f.error.split('\n')[0]}`)
+    .join('\n');
+  return (
+    formatTable(rows) +
+    `\nanalyzed ${report.analyzed.length} queries` +
+    (failed ? `; failed:\n${failed}\n` : '\n')
+  );
+}
+
+function formatTable(rows: readonly Record<string, unknown>[]): string {
   const columns = Object.keys(rows[0] ?? {});
-  process.stdout.write(
+  return (
     [
       columns.join('\t'),
-      ...rows.map(row =>
-        columns.map(column => row[column as keyof typeof row]).join('\t'),
-      ),
-    ].join('\n') + '\n',
+      ...rows.map(row => columns.map(column => String(row[column])).join('\t')),
+    ].join('\n') + '\n'
   );
 }
 
@@ -1009,7 +1482,7 @@ function runtimeEntry(root: string): string {
   `;
 }
 
-function printResults(results: readonly Result[]): void {
+function formatResults(results: readonly Result[]): string {
   const sorted = results.toSorted((a, b) => b.totalMs - a.totalMs);
   const rows = sorted.map(result => ({
     user: result.userID.slice(0, 8),
@@ -1021,14 +1494,7 @@ function printResults(results: readonly Result[]): void {
     total_ms: result.totalMs.toFixed(1),
     error: result.error?.split('\n')[0] ?? '',
   }));
-  const columns = Object.keys(rows[0] ?? {});
-  const output = [
-    columns.join('\t'),
-    ...rows.map(row =>
-      columns.map(column => row[column as keyof typeof row]).join('\t'),
-    ),
-  ].join('\n');
-  process.stdout.write(`${output}\n`);
+  return formatTable(rows);
 }
 
 function parseArgs(args: readonly string[]): Options {
@@ -1050,7 +1516,7 @@ function parseArgs(args: readonly string[]): Options {
   }
   if (flags.has('help')) {
     process.stdout.write(
-      `Usage: pnpm --filter zql-benchmarks advance:perf -- --replica PATH --queries-dir PATH [options]\n\nOptions:\n  --replica PATH           SQLite replica file (required)\n  --queries-dir PATH       Exported query bundle (required)\n  --workload NAME          background (default), cover or homeview\n  --users N                Users or parameter samples to test (default: 3)\n  --batch-size N           Referenced work covers per write (default: 500)\n  --query REGEXP           Only matching query names\n  --legacy-cover-join      Keep the cover_id-only relationship for comparison\n  --keep-clone             Keep the disposable replica clone\n  --hot-works N            homeview: most-read works whose primary covers form the hot batch (default: 5)\n  --viewer-pin             homeview: add the redundant user_id filters to homeView's user-owned subqueries\n  --user ID                homeview: viewer to hydrate (default: first with in-progress, finished and want-to-read rows)\n  --json                   Emit JSON results\n`,
+      `Usage: pnpm --filter zql-benchmarks advance:perf -- --replica PATH --queries-dir PATH [options]\n\nOptions:\n  --replica PATH           SQLite replica file (required)\n  --queries-dir PATH       Exported query bundle (required)\n  --workload NAME          background (default), cover, homeview or fanout\n  --users N                Users or parameter samples to test (default: 3)\n  --batch-size N           Referenced work covers per write (default: 500)\n  --query REGEXP           Only matching query names\n  --legacy-cover-join      Keep the cover_id-only relationship for comparison\n  --keep-clone             Keep the disposable replica clone\n  --hot-works N            homeview: most-read works whose primary covers form the hot batch (default: 5)\n  --viewer-pin             homeview: add the redundant user_id filters to homeView's user-owned subqueries\n  --user ID                homeview: viewer to hydrate (default: first with in-progress, finished and want-to-read rows)\n  --json                   Emit JSON results\n`,
     );
     process.exit(0);
   }
@@ -1063,9 +1529,10 @@ function parseArgs(args: readonly string[]): Options {
   if (
     workload !== 'background' &&
     workload !== 'cover' &&
-    workload !== 'homeview'
+    workload !== 'homeview' &&
+    workload !== 'fanout'
   ) {
-    throw new Error('--workload must be background, cover or homeview');
+    throw new Error('--workload must be background, cover, homeview or fanout');
   }
   return {
     replica: path.resolve(requiredValue(values, 'replica')),
