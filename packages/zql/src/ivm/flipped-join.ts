@@ -15,9 +15,12 @@ import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
+  canonicalKey,
+  canonicalKeyForTest,
   generateWithOverlayNoYield,
   isJoinMatch,
   rowEqualsForCompoundKey,
+  type PartitionEntry,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
 import {
@@ -101,7 +104,7 @@ export class FlippedJoin implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #partitionMap: Map<string, Map<string, Set<string>>> | undefined;
+  readonly #partitionMap: Map<string, Map<string, PartitionEntry>> | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
@@ -456,32 +459,18 @@ export class FlippedJoin implements Input {
           change[ChangeIndex.NODE].row,
           this.#childKey,
         );
-        const partitionKeyStrings = this.#partitionMap.get(junctionKey);
-        if (partitionKeyStrings && partitionKeyStrings.size > 0) {
-          const parentPartitionKey = this.#parentPartitionKey;
-          if (partitionKeyStrings.size === 1) {
-            const [partitionKeyString] = partitionKeyStrings.keys();
-            const partitionValues = JSON.parse(partitionKeyString) as Value[];
-            const partitionConstraint = Object.fromEntries(
-              parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
-            );
+        const partitionEntries = this.#partitionMap.get(junctionKey);
+        if (partitionEntries && partitionEntries.size > 0) {
+          if (partitionEntries.size === 1) {
+            const [entry] = partitionEntries.values();
             parentNodeStream = this.#parent.fetch({
-              constraint: {...constraint, ...partitionConstraint},
+              constraint: {...constraint, ...entry.constraint},
             });
           } else {
-            const streams = Array.from(
-              partitionKeyStrings.keys(),
-              partitionKeyString => {
-                const partitionValues = JSON.parse(
-                  partitionKeyString,
-                ) as Value[];
-                const partitionConstraint = Object.fromEntries(
-                  parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
-                );
-                return this.#parent.fetch({
-                  constraint: {...constraint, ...partitionConstraint},
-                });
-              },
+            const streams = Array.from(partitionEntries.values(), entry =>
+              this.#parent.fetch({
+                constraint: {...constraint, ...entry.constraint},
+              }),
             );
             const compare = (a: Node, b: Node) =>
               this.#parent.getSchema().compareRows(a.row, b.row);
@@ -664,21 +653,24 @@ export class FlippedJoin implements Input {
       return;
     }
     const junctionKey = canonicalKey(row, this.#parentKey);
-    const partitionKey = JSON.stringify(
-      this.#parentPartitionKey.map(k => row[k]),
-    );
+    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
     const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
     let map = this.#partitionMap.get(junctionKey);
     if (!map) {
       map = new Map();
       this.#partitionMap.set(junctionKey, map);
     }
-    let pks = map.get(partitionKey);
-    if (!pks) {
-      pks = new Set();
-      map.set(partitionKey, pks);
+    let entry = map.get(partitionKey);
+    if (!entry) {
+      entry = {
+        constraint: Object.fromEntries(
+          this.#parentPartitionKey.map(k => [k, row[k]]),
+        ),
+        pks: new Set(),
+      };
+      map.set(partitionKey, entry);
     }
-    pks.add(parentPk);
+    entry.pks.add(parentPk);
   }
 
   #unindexParentRow(row: Row): void {
@@ -690,16 +682,14 @@ export class FlippedJoin implements Input {
       return;
     }
     const junctionKey = canonicalKey(row, this.#parentKey);
-    const partitionKey = JSON.stringify(
-      this.#parentPartitionKey.map(k => row[k]),
-    );
+    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
     const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
     const map = this.#partitionMap.get(junctionKey);
     if (map) {
-      const pks = map.get(partitionKey);
-      if (pks) {
-        pks.delete(parentPk);
-        if (pks.size === 0) {
+      const entry = map.get(partitionKey);
+      if (entry) {
+        entry.pks.delete(parentPk);
+        if (entry.pks.size === 0) {
           map.delete(partitionKey);
           if (map.size === 0) {
             this.#partitionMap.delete(junctionKey);
@@ -710,45 +700,4 @@ export class FlippedJoin implements Input {
   }
 }
 
-// Test seam with a widened record type — canonicalValue handles bigint
-// at runtime (zqlite's safeIntegers) but `Value` doesn't list it.
-export function canonicalKeyForTest(
-  record: Record<string, Value | bigint | undefined>,
-  keys: CompoundKey,
-): string {
-  return canonicalKey(record as Record<string, Value | undefined>, keys);
-}
-
-/**
- * Canonical string key over `keys` of `record`, used by `#fetchBatched`
- * both to dedupe `multiConstraint` entries (record = Constraint) and to
- * map each returned parent row back to the children that referenced its
- * parent-key tuple (record = Row).
- */
-function canonicalKey(
-  record: Record<string, Value | undefined>,
-  keys: CompoundKey,
-): string {
-  if (keys.length === 1) {
-    return canonicalValue(record[keys[0]]);
-  }
-  let s = '';
-  for (let i = 0; i < keys.length; i++) {
-    if (i > 0) s += '\x00';
-    s += canonicalValue(record[keys[i]]);
-  }
-  return s;
-}
-
-function canonicalValue(v: Value | bigint | undefined): string {
-  // Tag by type so we don't conflate e.g. `1` (number) with `"1"` (string).
-  // Bigint shows up at runtime when zqlite's safeIntegers is on, even
-  // though the static `Value` type doesn't list it.
-  if (v === null || v === undefined) return 'n';
-  const t = typeof v;
-  if (t === 'string') return 's' + (v as string);
-  if (t === 'number') return 'd' + (v as number);
-  if (t === 'bigint') return 'b' + (v as bigint).toString();
-  if (t === 'boolean') return v ? 't' : 'f';
-  return 'j' + JSON.stringify(v);
-}
+export {canonicalKeyForTest};

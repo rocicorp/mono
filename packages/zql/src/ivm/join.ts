@@ -1,6 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {
@@ -13,10 +13,12 @@ import {
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
+  canonicalKey,
   generateWithOverlay,
   generateWithOverlayUnordered,
   isJoinMatch,
   rowEqualsForCompoundKey,
+  type PartitionEntry,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
 import {
@@ -60,7 +62,7 @@ export class Join implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #partitionMap: Map<string, Map<string, Set<string>>> | undefined;
+  readonly #partitionMap: Map<string, Map<string, PartitionEntry>> | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
@@ -247,38 +249,24 @@ export class Join implements Input {
       if (constraint) {
         let parentNodeStream: Stream<Node | 'yield'>;
         if (this.#partitionMap && this.#parentPartitionKey) {
-          const junctionKey = compoundKeyToString(childRow, this.#childKey);
-          const partitionKeyStrings = this.#partitionMap.get(junctionKey);
-          if (!partitionKeyStrings || partitionKeyStrings.size === 0) {
+          const junctionKey = canonicalKey(childRow, this.#childKey);
+          const partitionEntries = this.#partitionMap.get(junctionKey);
+          if (!partitionEntries || partitionEntries.size === 0) {
             return;
           }
-          const parentPartitionKey = this.#parentPartitionKey;
-          if (partitionKeyStrings.size === 1) {
-            const [partitionKeyString] = partitionKeyStrings.keys();
-            const partitionValues = JSON.parse(partitionKeyString) as Value[];
-            const partitionConstraint = Object.fromEntries(
-              parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
-            );
+          if (partitionEntries.size === 1) {
+            const [entry] = partitionEntries.values();
             parentNodeStream = this.#parent.fetch({
-              constraint: {...constraint, ...partitionConstraint},
+              constraint: {...constraint, ...entry.constraint},
             });
           } else {
-            const streams = Array.from(
-              partitionKeyStrings.keys(),
-              partitionKeyString => {
-                const partitionValues = JSON.parse(
-                  partitionKeyString,
-                ) as Value[];
-                const partitionConstraint = Object.fromEntries(
-                  parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
-                );
-                return this.#parent.fetch({
-                  constraint: {...constraint, ...partitionConstraint},
-                });
-              },
+            const streams = Array.from(partitionEntries.values(), entry =>
+              this.#parent.fetch({
+                constraint: {...constraint, ...entry.constraint},
+              }),
             );
             const compare = (a: Node, b: Node) =>
-              this.#parent.getSchema().compareRows(a.row, b.row);
+              this.#schema.compareRows(a.row, b.row);
             parentNodeStream = mergeSortedStreams(streams, compare);
           }
         } else {
@@ -315,23 +303,25 @@ export class Join implements Input {
     ) {
       return;
     }
-    const junctionKey = compoundKeyToString(row, this.#parentKey);
-    const partitionKey = compoundKeyToString(row, this.#parentPartitionKey);
-    const parentPk = compoundKeyToString(
-      row,
-      this.#parent.getSchema().primaryKey,
-    );
+    const junctionKey = canonicalKey(row, this.#parentKey);
+    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
+    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
     let map = this.#partitionMap.get(junctionKey);
     if (!map) {
       map = new Map();
       this.#partitionMap.set(junctionKey, map);
     }
-    let pks = map.get(partitionKey);
-    if (!pks) {
-      pks = new Set();
-      map.set(partitionKey, pks);
+    let entry = map.get(partitionKey);
+    if (!entry) {
+      entry = {
+        constraint: Object.fromEntries(
+          this.#parentPartitionKey.map(k => [k, row[k]]),
+        ),
+        pks: new Set(),
+      };
+      map.set(partitionKey, entry);
     }
-    pks.add(parentPk);
+    entry.pks.add(parentPk);
   }
 
   #unindexParentRow(row: Row): void {
@@ -342,18 +332,15 @@ export class Join implements Input {
     ) {
       return;
     }
-    const junctionKey = compoundKeyToString(row, this.#parentKey);
-    const partitionKey = compoundKeyToString(row, this.#parentPartitionKey);
-    const parentPk = compoundKeyToString(
-      row,
-      this.#parent.getSchema().primaryKey,
-    );
+    const junctionKey = canonicalKey(row, this.#parentKey);
+    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
+    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
     const map = this.#partitionMap.get(junctionKey);
     if (map) {
-      const pks = map.get(partitionKey);
-      if (pks) {
-        pks.delete(parentPk);
-        if (pks.size === 0) {
+      const entry = map.get(partitionKey);
+      if (entry) {
+        entry.pks.delete(parentPk);
+        if (entry.pks.size === 0) {
           map.delete(partitionKey);
           if (map.size === 0) {
             this.#partitionMap.delete(junctionKey);
@@ -435,8 +422,4 @@ export class Join implements Input {
       },
     };
   }
-}
-
-function compoundKeyToString(row: Row, key: CompoundKey): string {
-  return JSON.stringify(key.map(k => row[k]));
 }

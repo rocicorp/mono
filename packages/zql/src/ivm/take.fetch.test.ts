@@ -1466,7 +1466,7 @@ suite(
       expect((supersetWithinBound[0] as Node).row.id).toBe('c1');
     });
 
-    test('partitioned take unconstrained fetch filters every partition by its bound', () => {
+    test('partitioned take asserts that unpartitioned fetches are not allowed', () => {
       const storage = new MemoryStorage();
       const source = createSource(
         lc,
@@ -1479,57 +1479,18 @@ suite(
         },
         ['id'],
       );
-      // Partition i1: 3 rows (limit 2)
-      consume(
-        source.push(
-          makeSourceChangeAdd({id: 'c1', issueID: 'i1', created: 100}),
-        ),
-      );
-      consume(
-        source.push(
-          makeSourceChangeAdd({id: 'c2', issueID: 'i1', created: 200}),
-        ),
-      );
-      consume(
-        source.push(
-          makeSourceChangeAdd({id: 'c3', issueID: 'i1', created: 300}),
-        ),
-      );
-      // Partition i2: 3 rows (limit 2)
-      consume(
-        source.push(
-          makeSourceChangeAdd({id: 'c4', issueID: 'i2', created: 100}),
-        ),
-      );
-      consume(
-        source.push(
-          makeSourceChangeAdd({id: 'c5', issueID: 'i2', created: 200}),
-        ),
-      );
-      consume(
-        source.push(
-          makeSourceChangeAdd({id: 'c6', issueID: 'i2', created: 300}),
-        ),
-      );
-
       const conn = source.connect([
         ['created', 'asc'],
         ['id', 'asc'],
       ]);
       const take = new Take(conn, storage, 2, ['issueID']);
 
-      // Hydrate both partitions
-      consume(take.fetch({constraint: {issueID: 'i1'}}));
-      consume(take.fetch({constraint: {issueID: 'i2'}}));
-
-      // Unconstrained fetch: must return only rows within each partition's bound (c1, c2, c4, c5), not c3 or c6
-      const unconstrainedRows = [...take.fetch({})];
-      expect(unconstrainedRows.map(n => (n as Node).row.id)).toEqual([
-        'c1',
-        'c4',
-        'c2',
-        'c5',
-      ]);
+      expect(() => [...take.fetch({})]).toThrow(
+        'Partitioned take does not allow unpartitioned fetches',
+      );
+      expect(() => [...take.fetch({constraint: {otherKey: 'val'}})]).toThrow(
+        'Partitioned take does not allow unpartitioned fetches',
+      );
     });
   },
 );
