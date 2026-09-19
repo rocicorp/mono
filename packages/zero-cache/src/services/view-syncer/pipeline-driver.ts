@@ -422,12 +422,30 @@ export class PipelineDriver {
     return this.#permissions;
   }
 
+  /**
+   * Advances the snapshot to the head of the database without diffing the
+   * change log, in preparation for hydrating queries at head.
+   *
+   * Throws a {@link ResetPipelinesSignal} if the change log records a
+   * schema change since the previous snapshot. The table specs (and any
+   * TableSources built from them) were computed at or before that snapshot
+   * and are stale with respect to the new head, so the caller must
+   * {@link reset()} before hydrating. ({@link advance()} detects this when
+   * the diff encounters the RESET op; this path skips the diff and so must
+   * check explicitly.)
+   */
   advanceWithoutDiff(): string {
-    const {db, version} = this.#snapshotter.advanceWithoutDiff().curr;
-    for (const table of this.#tables.values()) {
-      table.setDB(db.db);
+    const {prev, curr} = this.#snapshotter.advanceWithoutDiff();
+    if (curr.schemaChangedSince(prev.version)) {
+      throw new ResetPipelinesSignal(
+        `schema changed between ${prev.version} and ${curr.version}`,
+        'schema-change',
+      );
     }
-    return version;
+    for (const table of this.#tables.values()) {
+      table.setDB(curr.db.db);
+    }
+    return curr.version;
   }
 
   #ensureCostModelExistsIfEnabled(db: Database) {

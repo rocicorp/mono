@@ -336,6 +336,20 @@ class Snapshot {
     return count;
   }
 
+  /**
+   * Whether a table-wide RESET op (i.e. a schema change) was logged after
+   * `prevVersion`. Table specs computed at or before `prevVersion` are
+   * stale with respect to this snapshot if so.
+   */
+  schemaChangedSince(prevVersion: string): boolean {
+    const row = this.db.get(
+      'SELECT 1 FROM "_zero.changeLog2" WHERE stateVersion > ? AND op = ? LIMIT 1',
+      prevVersion,
+      RESET_OP,
+    );
+    return row !== undefined;
+  }
+
   changesSince(prevVersion: string) {
     // Note: The queried fields are constrained to only those that are relevant
     // to the snapshot diff, i.e. those defined in the changeLogEntrySchema.

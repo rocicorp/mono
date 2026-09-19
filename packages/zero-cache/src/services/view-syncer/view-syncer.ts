@@ -890,7 +890,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return;
     }
 
-    const version = this.#pipelines.advanceWithoutDiff();
+    let version: string;
+    try {
+      version = this.#pipelines.advanceWithoutDiff();
+    } catch (e) {
+      if (!(e instanceof ResetPipelinesSignal)) {
+        throw e;
+      }
+      // A schema change landed after the table specs were computed (i.e.
+      // while waiting to hydrate). Recompute them at the new head. Nothing
+      // is hydrated at this point, so there is nothing else to tear down,
+      // and `previousQueries` remain reusable for the same reason they were
+      // for the reset that produced them.
+      lc.info?.(`resetting pipelines: ${e.message}`);
+      this.#pipelineResets.add(1, {reason: e.reason});
+      this.#pipelines.reset(
+        must(cvr.clientSchema, 'cvr.clientSchema missing after initialization'),
+      );
+      version = this.#pipelines.currentVersion();
+    }
     const cvrVer = versionString(cvr.version);
 
     if (version < cvr.version.stateVersion) {
