@@ -347,6 +347,15 @@ export class Join implements Input {
       );
       const stream = constraint ? this.#child.fetch({constraint}) : [];
 
+      const isBackfillFetch =
+        !req?.reverse &&
+        req?.start &&
+        this.#inprogressChildChangePosition &&
+        this.#schema.compareRows(
+          req.start.row,
+          this.#inprogressChildChangePosition,
+        ) >= 0;
+
       if (
         this.#inprogressChildChange &&
         isJoinMatch(
@@ -360,14 +369,7 @@ export class Join implements Input {
           parentNodeRow,
           this.#inprogressChildChangePosition,
         ) > 0 &&
-        !(
-          this.#inprogressChildChange[ChangeIndex.TYPE] === ChangeType.REMOVE &&
-          req?.start &&
-          this.#schema.compareRows(
-            req.start.row,
-            this.#inprogressChildChangePosition,
-          ) >= 0
-        )
+        !isBackfillFetch
       ) {
         const childSchema = this.#child.getSchema();
         if (childSchema.sort === undefined) {
