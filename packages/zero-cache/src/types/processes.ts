@@ -20,6 +20,7 @@ import {pid} from 'node:process';
 export const MESSAGE_TYPES = {
   handoff: 'handoff',
   status: 'status',
+  clientGroupStatus: 'clientGroupStatus',
   subscribe: 'subscribe',
   notify: 'notify',
   ready: 'ready',
@@ -27,6 +28,14 @@ export const MESSAGE_TYPES = {
   profile: 'profile',
   profileResponse: 'profileResponse',
 } as const;
+
+export type ClientGroupStatus = {
+  readonly clientGroupID: string;
+  readonly active: boolean;
+  readonly generation?: number | undefined;
+};
+
+export type ClientGroupStatusMessage = ['clientGroupStatus', ClientGroupStatus];
 
 export type ProfileRequest = {
   readonly id: string;

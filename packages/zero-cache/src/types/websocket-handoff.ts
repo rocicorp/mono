@@ -133,8 +133,12 @@ export function installWebSocketReceiver<P>(
   server: WebSocketServer,
   receive: WebSocketReceiver<P>,
   receiver: Receiver,
+  onAbort?: ((payload: P) => void) | undefined,
+  onReceived?: ((payload: P) => void) | undefined,
 ) {
   receiver.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
+    const {message, head, payload} = msg;
+    onReceived?.(payload);
     // Per https://nodejs.org/api/child_process.html#subprocesssendmessage-sendhandle-options-callback
     //
     // > Any 'message' handlers in the subprocess should verify that socket
@@ -142,24 +146,31 @@ export function installWebSocketReceiver<P>(
     // > takes to send the connection to the child.
     if (!socket) {
       lc.warn?.('websocket closed during handoff');
+      onAbort?.(payload);
       return;
     }
-    const {message, head, payload} = msg;
-    server.handleUpgrade(
-      message as IncomingMessage,
-      socket as Socket,
-      Buffer.from(head),
-      ws => {
-        // Guard against WebSocket being closed during handoff.
-        // This can happen due to network issues or client disconnection
-        // between the time the socket was sent and when handleUpgrade completes.
-        if (ws.readyState === ws.CLOSED || ws.readyState === ws.CLOSING) {
-          lc.warn?.('websocket closed during upgrade, skipping receive');
-          return;
-        }
-        receive(ws, payload, message);
-      },
-    );
+    try {
+      server.handleUpgrade(
+        message as IncomingMessage,
+        socket as Socket,
+        Buffer.from(head),
+        ws => {
+          // Guard against WebSocket being closed during handoff.
+          // This can happen due to network issues or client disconnection
+          // between the time the socket was sent and when handleUpgrade completes.
+          if (ws.readyState === ws.CLOSED || ws.readyState === ws.CLOSING) {
+            lc.warn?.('websocket closed during upgrade, skipping receive');
+            onAbort?.(payload);
+            return;
+          }
+          receive(ws, payload, message);
+        },
+      );
+    } catch (e) {
+      lc.warn?.('error during websocket handleUpgrade', e);
+      (socket as Socket)?.destroy?.();
+      onAbort?.(payload);
+    }
   });
 }
 
