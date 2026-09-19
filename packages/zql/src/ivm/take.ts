@@ -688,9 +688,6 @@ export function constraintMatchesPartitionKey(
   if (constraint === undefined || partitionKey === undefined) {
     return constraint === partitionKey;
   }
-  if (partitionKey.length !== Object.keys(constraint).length) {
-    return false;
-  }
   for (const key of partitionKey) {
     if (!hasOwn(constraint, key)) {
       return false;

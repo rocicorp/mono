@@ -101,7 +101,7 @@ export class FlippedJoin implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #partitionMap: Map<string, Set<string>> | undefined;
+  readonly #partitionMap: Map<string, Map<string, number>> | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
@@ -441,6 +441,9 @@ export class FlippedJoin implements Input {
         this.#childKey,
         this.#parentKey,
       );
+      if (!constraint) {
+        return;
+      }
       let parentNodeStream: Stream<Node | 'yield'>;
       if (this.#partitionMap && this.#parentPartitionKey) {
         const junctionKey = canonicalKey(
@@ -451,7 +454,7 @@ export class FlippedJoin implements Input {
         if (partitionKeyStrings && partitionKeyStrings.size > 0) {
           const parentPartitionKey = this.#parentPartitionKey;
           if (partitionKeyStrings.size === 1) {
-            const [partitionKeyString] = partitionKeyStrings;
+            const [partitionKeyString] = partitionKeyStrings.keys();
             const partitionValues = JSON.parse(partitionKeyString) as Value[];
             const partitionConstraint = Object.fromEntries(
               parentPartitionKey.map((k, i) => [k, partitionValues[i]]),
@@ -461,7 +464,7 @@ export class FlippedJoin implements Input {
             });
           } else {
             const streams = Array.from(
-              partitionKeyStrings,
+              partitionKeyStrings.keys(),
               partitionKeyString => {
                 const partitionValues = JSON.parse(
                   partitionKeyString,
@@ -479,10 +482,10 @@ export class FlippedJoin implements Input {
             parentNodeStream = mergeSortedStreams(streams, compare);
           }
         } else {
-          parentNodeStream = constraint ? this.#parent.fetch({constraint}) : [];
+          parentNodeStream = this.#parent.fetch({constraint});
         }
       } else {
-        parentNodeStream = constraint ? this.#parent.fetch({constraint}) : [];
+        parentNodeStream = this.#parent.fetch({constraint});
       }
       for (const parentNode of parentNodeStream) {
         if (parentNode === 'yield') {
@@ -647,34 +650,49 @@ export class FlippedJoin implements Input {
   }
 
   #indexParentRow(row: Row): void {
-    if (!this.#partitionMap || !this.#parentPartitionKey) {
+    if (
+      !this.#partitionMap ||
+      !this.#parentPartitionKey ||
+      this.#parentKey.some(k => row[k] === null)
+    ) {
       return;
     }
     const junctionKey = canonicalKey(row, this.#parentKey);
     const partitionKey = JSON.stringify(
       this.#parentPartitionKey.map(k => row[k]),
     );
-    let set = this.#partitionMap.get(junctionKey);
-    if (!set) {
-      set = new Set();
-      this.#partitionMap.set(junctionKey, set);
+    let map = this.#partitionMap.get(junctionKey);
+    if (!map) {
+      map = new Map();
+      this.#partitionMap.set(junctionKey, map);
     }
-    set.add(partitionKey);
+    map.set(partitionKey, (map.get(partitionKey) ?? 0) + 1);
   }
 
   #unindexParentRow(row: Row): void {
-    if (!this.#partitionMap || !this.#parentPartitionKey) {
+    if (
+      !this.#partitionMap ||
+      !this.#parentPartitionKey ||
+      this.#parentKey.some(k => row[k] === null)
+    ) {
       return;
     }
     const junctionKey = canonicalKey(row, this.#parentKey);
     const partitionKey = JSON.stringify(
       this.#parentPartitionKey.map(k => row[k]),
     );
-    const set = this.#partitionMap.get(junctionKey);
-    if (set) {
-      set.delete(partitionKey);
-      if (set.size === 0) {
-        this.#partitionMap.delete(junctionKey);
+    const map = this.#partitionMap.get(junctionKey);
+    if (map) {
+      const count = map.get(partitionKey);
+      if (count !== undefined) {
+        if (count <= 1) {
+          map.delete(partitionKey);
+          if (map.size === 0) {
+            this.#partitionMap.delete(junctionKey);
+          }
+        } else {
+          map.set(partitionKey, count - 1);
+        }
       }
     }
   }
