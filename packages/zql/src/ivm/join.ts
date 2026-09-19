@@ -27,6 +27,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
+import type {TakeBoundProvider} from './take-gate.ts';
 
 type Args = {
   parent: Input;
@@ -38,6 +39,7 @@ type Args = {
   hidden: boolean;
   system: System;
   parentPartitionKey?: CompoundKey | undefined;
+  boundProvider?: TakeBoundProvider | undefined;
 };
 
 /**
@@ -59,6 +61,7 @@ export class Join implements Input {
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
   readonly #partitionMap: Map<string, Set<string>> | undefined;
+  readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
 
@@ -74,6 +77,7 @@ export class Join implements Input {
     hidden,
     system,
     parentPartitionKey,
+    boundProvider,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -87,6 +91,7 @@ export class Join implements Input {
     this.#relationshipName = relationshipName;
     this.#parentPartitionKey = parentPartitionKey;
     this.#partitionMap = parentPartitionKey ? new Map() : undefined;
+    this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -130,11 +135,7 @@ export class Join implements Input {
         continue;
       }
       this.#indexParentRow(parentNode.row);
-      yield this.#processParentNode(
-        parentNode.row,
-        parentNode.relationships,
-        req,
-      );
+      yield this.#processParentNode(parentNode.row, parentNode.relationships);
     }
   }
 
@@ -337,7 +338,6 @@ export class Join implements Input {
   #processParentNode(
     parentNodeRow: Row,
     parentNodeRelations: Record<string, () => Stream<Node | 'yield'>>,
-    req?: FetchRequest,
   ): Node {
     const childStream = () => {
       const constraint = buildJoinConstraint(
@@ -347,14 +347,23 @@ export class Join implements Input {
       );
       const stream = constraint ? this.#child.fetch({constraint}) : [];
 
-      const isBackfillFetch =
-        !req?.reverse &&
-        req?.start &&
-        this.#inprogressChildChangePosition &&
+      let bound: Row | undefined;
+      if (this.#boundProvider) {
+        const partitionConstraint = this.#parentPartitionKey
+          ? Object.fromEntries(
+              this.#parentPartitionKey.map(k => [k, parentNodeRow[k]]),
+            )
+          : undefined;
+        bound = this.#boundProvider.getBound(partitionConstraint);
+      }
+
+      const inPushQueue =
+        this.#inprogressChildChangePosition !== undefined &&
         this.#schema.compareRows(
-          req.start.row,
+          parentNodeRow,
           this.#inprogressChildChangePosition,
-        ) >= 0;
+        ) > 0 &&
+        (!bound || this.#schema.compareRows(parentNodeRow, bound) <= 0);
 
       if (
         this.#inprogressChildChange &&
@@ -364,12 +373,7 @@ export class Join implements Input {
           this.#inprogressChildChange[ChangeIndex.NODE].row,
           this.#childKey,
         ) &&
-        this.#inprogressChildChangePosition &&
-        this.#schema.compareRows(
-          parentNodeRow,
-          this.#inprogressChildChangePosition,
-        ) > 0 &&
-        !isBackfillFetch
+        inPushQueue
       ) {
         const childSchema = this.#child.getSchema();
         if (childSchema.sort === undefined) {

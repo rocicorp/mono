@@ -33,7 +33,7 @@ import {Join} from '../ivm/join.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
-import {TakeGate} from '../ivm/take-gate.ts';
+import {TakeGate, type TakeBoundProvider} from '../ivm/take-gate.ts';
 import {Take} from '../ivm/take.ts';
 import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
@@ -397,12 +397,14 @@ function buildPipelineInternal(
         end,
         name,
         true,
+        partitionKey,
+        takeGate,
       );
     }
   }
 
   if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
-    end = applyWhere(end, ast.where, delegate, name, partitionKey);
+    end = applyWhere(end, ast.where, delegate, name, partitionKey, takeGate);
   }
 
   if (ast.limit !== undefined) {
@@ -432,6 +434,9 @@ function buildPipelineInternal(
       delegate.addEdge(end, take);
       end = delegate.decorateInput(take, takeName);
       takeGate?.setBoundProvider(take);
+      if (takeGate) {
+        take.setTakeGate(takeGate);
+      }
     }
   }
 
@@ -463,6 +468,7 @@ function applyWhere(
   delegate: BuilderDelegate,
   name: string,
   parentPartitionKey?: CompoundKey,
+  boundProvider?: TakeBoundProvider,
 ): Input {
   if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
     return buildFilterPipeline(
@@ -479,6 +485,7 @@ function applyWhere(
     delegate,
     name,
     parentPartitionKey,
+    boundProvider,
   );
 }
 
@@ -488,6 +495,7 @@ function applyFilterWithFlips(
   delegate: BuilderDelegate,
   name: string,
   parentPartitionKey?: CompoundKey,
+  boundProvider?: TakeBoundProvider,
 ): Input {
   let end = input;
   assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
@@ -518,6 +526,7 @@ function applyFilterWithFlips(
           delegate,
           name,
           parentPartitionKey,
+          boundProvider,
         );
       }
       break;
@@ -551,7 +560,14 @@ function applyFilterWithFlips(
 
       for (const cond of withFlipped) {
         branches.push(
-          applyFilterWithFlips(end, cond, delegate, name, parentPartitionKey),
+          applyFilterWithFlips(
+            end,
+            cond,
+            delegate,
+            name,
+            parentPartitionKey,
+            boundProvider,
+          ),
         );
       }
 
@@ -585,6 +601,7 @@ function applyFilterWithFlips(
         hidden: sq.hidden ?? false,
         system: sq.system ?? 'client',
         parentPartitionKey,
+        boundProvider,
       });
       delegate.addEdge(end, flippedJoin);
       delegate.addEdge(child, flippedJoin);
@@ -734,6 +751,7 @@ function applyCorrelatedSubQuery(
   name: string,
   fromCondition: boolean,
   parentPartitionKey?: CompoundKey,
+  boundProvider?: TakeBoundProvider,
 ) {
   // TODO: we only omit the join if the CSQ if from a condition since
   // we want to create an empty array for `related` fields that are `limit(0)`
@@ -761,6 +779,7 @@ function applyCorrelatedSubQuery(
     hidden: sq.hidden ?? false,
     system: sq.system ?? 'client',
     parentPartitionKey,
+    boundProvider,
   });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);
