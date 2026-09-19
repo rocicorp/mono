@@ -1,55 +1,25 @@
 import {h32} from '../../../shared/src/hash.ts';
 
-type Assignment = {
-  readonly worker: number;
-  confirmed: boolean;
-  readonly assignedAt: number;
-};
-
 export class SyncerAssigner {
   readonly #taskID: string;
   readonly #numWorkers: number;
-  readonly #pendingTimeoutMs: number;
-  readonly #assignments = new Map<string, Assignment>();
+  readonly #assignments = new Map<string, number>();
   readonly #workerLoads: number[];
-  readonly #sweepTimer: NodeJS.Timeout | undefined;
 
-  constructor(
-    taskID: string,
-    numWorkers: number,
-    pendingTimeoutMs = 30_000,
-    enableSweep = true,
-  ) {
+  constructor(taskID: string, numWorkers: number) {
     this.#taskID = taskID;
     this.#numWorkers = numWorkers;
-    this.#pendingTimeoutMs = pendingTimeoutMs;
     this.#workerLoads = new Array<number>(numWorkers).fill(0);
-
-    if (enableSweep && numWorkers > 0) {
-      this.#sweepTimer = setInterval(
-        () => this.sweepExpired(),
-        pendingTimeoutMs,
-      );
-      this.#sweepTimer.unref?.();
-    }
   }
 
-  assign(clientGroupID: string, now = Date.now()): number {
+  assign(clientGroupID: string): number {
     if (this.#numWorkers <= 0) {
       return 0;
     }
 
     const existing = this.#assignments.get(clientGroupID);
-    if (existing) {
-      if (
-        existing.confirmed ||
-        now - existing.assignedAt < this.#pendingTimeoutMs
-      ) {
-        return existing.worker;
-      }
-      // Tentative assignment expired without confirmation; release it
-      this.#decrementLoad(existing.worker);
-      this.#assignments.delete(clientGroupID);
+    if (existing !== undefined) {
+      return existing;
     }
 
     // Find worker(s) with minimum active load
@@ -72,55 +42,24 @@ export class SyncerAssigner {
         : tied[h32(this.#taskID + '/' + clientGroupID) % tied.length];
 
     this.#workerLoads[chosen]++;
-    this.#assignments.set(clientGroupID, {
-      worker: chosen,
-      confirmed: false,
-      assignedAt: now,
-    });
+    this.#assignments.set(clientGroupID, chosen);
     return chosen;
-  }
-
-  confirm(clientGroupID: string, workerIndex: number): void {
-    const existing = this.#assignments.get(clientGroupID);
-    if (existing) {
-      if (existing.worker === workerIndex) {
-        existing.confirmed = true;
-      }
-      return;
-    }
-    // If confirmation arrives late (e.g. after the tentative assignment timed
-    // out and was swept), re-record the assignment as confirmed so future
-    // connections remain sticky to this worker.
-    this.#workerLoads[workerIndex]++;
-    this.#assignments.set(clientGroupID, {
-      worker: workerIndex,
-      confirmed: true,
-      assignedAt: Date.now(),
-    });
   }
 
   release(clientGroupID: string, workerIndex: number): void {
     const existing = this.#assignments.get(clientGroupID);
-    if (existing && existing.worker === workerIndex) {
+    if (existing === workerIndex) {
       this.#decrementLoad(workerIndex);
       this.#assignments.delete(clientGroupID);
     }
   }
 
-  sweepExpired(now = Date.now()): void {
-    for (const [id, entry] of this.#assignments) {
-      if (
-        !entry.confirmed &&
-        now - entry.assignedAt >= this.#pendingTimeoutMs
-      ) {
-        this.#decrementLoad(entry.worker);
-        this.#assignments.delete(id);
-      }
-    }
-  }
-
   getWorkerLoad(workerIndex: number): number {
     return this.#workerLoads[workerIndex] ?? 0;
+  }
+
+  getAssignment(clientGroupID: string): number | undefined {
+    return this.#assignments.get(clientGroupID);
   }
 
   #decrementLoad(worker: number): void {
@@ -130,8 +69,6 @@ export class SyncerAssigner {
   }
 
   destroy(): void {
-    if (this.#sweepTimer) {
-      clearInterval(this.#sweepTimer);
-    }
+    this.#assignments.clear();
   }
 }

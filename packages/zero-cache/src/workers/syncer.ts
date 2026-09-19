@@ -364,6 +364,7 @@ export class Syncer implements SingletonService {
   readonly #mutagens: ServiceRunner<Mutagen & Service> | undefined;
   readonly #pushers: ServiceRunner<Pusher & Service> | undefined;
   readonly #connections = new Map<string, Connection>();
+  readonly #pendingConnections = new Map<string, number>();
   readonly #drainCoordinator = new DrainCoordinator();
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
@@ -472,6 +473,17 @@ export class Syncer implements SingletonService {
       this.#wss,
       this.#createConnection,
       this.#parent,
+      params => {
+        if (
+          (this.#pendingConnections.get(params.clientGroupID) ?? 0) === 0 &&
+          !this.#viewSyncers.hasService(params.clientGroupID)
+        ) {
+          this.#parent.send<ClientGroupStatusMessage>([
+            'clientGroupStatus',
+            {clientGroupID: params.clientGroupID, active: false},
+          ]);
+        }
+      },
     );
 
     setActiveClientGroupsGetter(() => this.#viewSyncers.size);
@@ -694,186 +706,211 @@ export class Syncer implements SingletonService {
     );
     recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
-    const hasProvidedAuth = auth !== undefined && auth !== '';
-    const incomingUserID = userID ?? null;
+    this.#pendingConnections.set(
+      clientGroupID,
+      (this.#pendingConnections.get(clientGroupID) ?? 0) + 1,
+    );
+    let viewSyncerAcquired = false;
 
-    if (hasProvidedAuth) {
-      const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
-
-      const hasPushOrMutate =
-        this.#config?.push?.url !== undefined ||
-        this.#config?.mutate?.url !== undefined;
-      const hasQueries =
-        this.#config?.query?.url !== undefined ||
-        this.#config?.getQueries?.url !== undefined;
-
-      // must either have one of the token options set or have custom mutations & queries enabled
-      const hasExactlyOneTokenOption = tokenOptions.length === 1;
-      const hasCustomEndpoints = hasPushOrMutate && hasQueries;
-      if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
-        recordConnectionFailure('configuration');
-        throw new Error(
-          'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
-            JSON.stringify(tokenOptions) +
-            '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
-        );
-      }
-    }
-
-    let initialAuth: Auth | undefined;
-
-    // Verify JWT BEFORE touching existing connections - prevents unauthenticated
-    // attackers from force-disconnecting legitimate users via DoS.
     try {
-      initialAuth = await resolveAuth(
-        this.#lc
-          .withContext('clientGroupID', clientGroupID)
-          .withContext('clientID', clientID),
-        // no previous auth, since this is a new connection, and resolveAuth is
-        // connection scoped, not client group scoped
-        undefined,
-        incomingUserID,
-        auth,
-        this.#validateLegacyJWT,
-      );
-    } catch (e) {
-      if (isProtocolError(e)) {
-        this.#lc.warn?.(
-          'Rejecting sync connection during initial auth resolution',
-          {
-            clientGroupID,
-            clientID,
-            incomingUserID,
-            hasProvidedAuth,
-            errorKind: e.message,
-          },
+      const hasProvidedAuth = auth !== undefined && auth !== '';
+      const incomingUserID = userID ?? null;
+
+      if (hasProvidedAuth) {
+        const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
+
+        const hasPushOrMutate =
+          this.#config?.push?.url !== undefined ||
+          this.#config?.mutate?.url !== undefined;
+        const hasQueries =
+          this.#config?.query?.url !== undefined ||
+          this.#config?.getQueries?.url !== undefined;
+
+        // must either have one of the token options set or have custom mutations & queries enabled
+        const hasExactlyOneTokenOption = tokenOptions.length === 1;
+        const hasCustomEndpoints = hasPushOrMutate && hasQueries;
+        if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+          recordConnectionFailure('configuration');
+          throw new Error(
+            'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+              JSON.stringify(tokenOptions) +
+              '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
+          );
+        }
+      }
+
+      let initialAuth: Auth | undefined;
+
+      // Verify JWT BEFORE touching existing connections - prevents unauthenticated
+      // attackers from force-disconnecting legitimate users via DoS.
+      try {
+        initialAuth = await resolveAuth(
+          this.#lc
+            .withContext('clientGroupID', clientGroupID)
+            .withContext('clientID', clientID),
+          // no previous auth, since this is a new connection, and resolveAuth is
+          // connection scoped, not client group scoped
+          undefined,
+          incomingUserID,
+          auth,
+          this.#validateLegacyJWT,
         );
-        recordConnectionFailure('auth');
-        sendError(this.#lc, ws, e.errorBody);
-        ws.close(3000, e.errorBody.message);
+      } catch (e) {
+        if (isProtocolError(e)) {
+          this.#lc.warn?.(
+            'Rejecting sync connection during initial auth resolution',
+            {
+              clientGroupID,
+              clientID,
+              incomingUserID,
+              hasProvidedAuth,
+              errorKind: e.message,
+            },
+          );
+          recordConnectionFailure('auth');
+          sendError(this.#lc, ws, e.errorBody);
+          ws.close(3000, e.errorBody.message);
+          return;
+        }
+        recordConnectionFailure('internal');
+        throw e;
+      }
+
+      // Resolving auth can take a while (e.g. a remote JWKS fetch), during
+      // which the client may have disconnected. A Connection created for a
+      // closed socket never receives the 'close' event and is thus never
+      // cleaned up, leaking its timer, its registrations in the connection
+      // context manager and its refs on the mutagen and pusher services.
+      if (ws.readyState !== WebSocket.OPEN) {
+        this.#lc.debug?.('websocket closed while resolving auth', {
+          clientGroupID,
+          clientID,
+          readyState: ws.readyState,
+        });
+        recordConnectionFailure('closed_during_auth');
         return;
       }
-      recordConnectionFailure('internal');
-      throw e;
-    }
 
-    // Resolving auth can take a while (e.g. a remote JWKS fetch), during
-    // which the client may have disconnected. A Connection created for a
-    // closed socket never receives the 'close' event and is thus never
-    // cleaned up, leaking its timer, its registrations in the connection
-    // context manager and its refs on the mutagen and pusher services.
-    if (ws.readyState !== WebSocket.OPEN) {
-      this.#lc.debug?.('websocket closed while resolving auth', {
-        clientGroupID,
-        clientID,
-        readyState: ws.readyState,
-      });
-      recordConnectionFailure('closed_during_auth');
-      return;
-    }
+      const viewSyncer = this.#viewSyncers.getService(clientGroupID);
+      viewSyncerAcquired = true;
+      const connContextManager = viewSyncer.connContextManager;
+      const group = connContextManager.getGroupState();
 
-    const viewSyncer = this.#viewSyncers.getService(clientGroupID);
-    const connContextManager = viewSyncer.connContextManager;
-    const group = connContextManager.getGroupState();
+      // TODO(0xcadams): we only check for user ID mismatch here if the group is
+      // already validated. This prevents wrong-user reconnects from evicting a
+      // healthy connection, but it does not protect against same-user reconnects
+      // with an invalid opaque token. The long-term fix is to keep the replacement
+      // connection pending until its auth is fully validated, and only then replace
+      // the existing socket.
+      if (
+        group.pinnedUser !== undefined &&
+        group.pinnedUser.id !== incomingUserID
+      ) {
+        const error = new ProtocolError({
+          kind: ErrorKind.Unauthorized,
+          message:
+            'Client groups are pinned to a single userID. Connection userID does not match existing client group userID.',
+          origin: ErrorOrigin.ZeroCache,
+        });
+        recordConnectionFailure('user_mismatch');
+        sendError(this.#lc, ws, error.errorBody);
+        ws.close(3000, error.message);
+        return;
+      }
 
-    // TODO(0xcadams): we only check for user ID mismatch here if the group is
-    // already validated. This prevents wrong-user reconnects from evicting a
-    // healthy connection, but it does not protect against same-user reconnects
-    // with an invalid opaque token. The long-term fix is to keep the replacement
-    // connection pending until its auth is fully validated, and only then replace
-    // the existing socket.
-    if (
-      group.pinnedUser !== undefined &&
-      group.pinnedUser.id !== incomingUserID
-    ) {
-      const error = new ProtocolError({
-        kind: ErrorKind.Unauthorized,
-        message:
-          'Client groups are pinned to a single userID. Connection userID does not match existing client group userID.',
-        origin: ErrorOrigin.ZeroCache,
-      });
-      recordConnectionFailure('user_mismatch');
-      sendError(this.#lc, ws, error.errorBody);
-      ws.close(3000, error.message);
-      return;
-    }
+      // Check for and close existing connections AFTER auth is validated
+      const existing = this.#connections.get(clientID);
+      if (existing) {
+        this.#lc.debug?.(
+          `client ${clientID} already connected, closing existing connection`,
+        );
+        existing.close(`replaced by ${params.wsID}`);
+      }
 
-    // Check for and close existing connections AFTER auth is validated
-    const existing = this.#connections.get(clientID);
-    if (existing) {
-      this.#lc.debug?.(
-        `client ${clientID} already connected, closing existing connection`,
-      );
-      existing.close(`replaced by ${params.wsID}`);
-    }
-
-    connContextManager.registerConnection(
-      {clientID, wsID: params.wsID},
-      params,
-      initialAuth,
-    );
-
-    const mutagen = this.#mutagens?.getService(clientGroupID);
-    const pusher = this.#pushers?.getService(clientGroupID);
-    // a new connection is using the mutagen and pusher. Bump their ref counts.
-    mutagen?.ref();
-    pusher?.ref();
-
-    let connection: Connection;
-    try {
-      connection = new Connection(
-        this.#lc,
+      connContextManager.registerConnection(
+        {clientID, wsID: params.wsID},
         params,
-        ws,
-        this.#config.allowLegacyQueries,
-        new SyncerWsMessageHandler(
+        initialAuth,
+      );
+
+      const mutagen = this.#mutagens?.getService(clientGroupID);
+      const pusher = this.#pushers?.getService(clientGroupID);
+      // a new connection is using the mutagen and pusher. Bump their ref counts.
+      mutagen?.ref();
+      pusher?.ref();
+
+      let connection: Connection;
+      try {
+        connection = new Connection(
           this.#lc,
           params,
-          connContextManager,
-          viewSyncer,
-          mutagen,
-          pusher,
-        ),
-        () => {
-          connContextManager.closeConnection({
-            clientID,
-            wsID: params.wsID,
-          });
-          if (this.#connections.get(clientID) === connection) {
-            this.#connections.delete(clientID);
-          }
-          // Connection is closed. We can unref the mutagen and pusher.
-          // If their ref counts are zero, they will stop themselves and set themselves invalid.
-          mutagen?.unref();
-          pusher?.unref();
-        },
-      );
-    } catch (e) {
-      recordConnectionFailure('internal');
-      connContextManager.closeConnection({clientID, wsID: params.wsID});
-      mutagen?.unref();
-      pusher?.unref();
-      throw e;
-    }
+          ws,
+          this.#config.allowLegacyQueries,
+          new SyncerWsMessageHandler(
+            this.#lc,
+            params,
+            connContextManager,
+            viewSyncer,
+            mutagen,
+            pusher,
+          ),
+          () => {
+            connContextManager.closeConnection({
+              clientID,
+              wsID: params.wsID,
+            });
+            if (this.#connections.get(clientID) === connection) {
+              this.#connections.delete(clientID);
+            }
+            // Connection is closed. We can unref the mutagen and pusher.
+            // If their ref counts are zero, they will stop themselves and set themselves invalid.
+            mutagen?.unref();
+            pusher?.unref();
+          },
+        );
+      } catch (e) {
+        recordConnectionFailure('internal');
+        connContextManager.closeConnection({clientID, wsID: params.wsID});
+        mutagen?.unref();
+        pusher?.unref();
+        throw e;
+      }
 
-    this.#connections.set(clientID, connection);
+      this.#connections.set(clientID, connection);
 
-    if (connection.init()) {
-      recordConnectionSuccessMetric();
-      recordConnectionSuccess();
-    } else {
-      recordConnectionFailure('protocol_version');
-    }
+      if (connection.init()) {
+        recordConnectionSuccessMetric();
+        recordConnectionSuccess();
+      } else {
+        recordConnectionFailure('protocol_version');
+      }
 
-    if (params.initConnectionMsg) {
-      this.#lc.debug?.(
-        'handling init connection message from sec header',
-        params.clientGroupID,
-        params.clientID,
-      );
-      await connection.handleInitConnection(
-        JSON.stringify(params.initConnectionMsg),
-      );
+      if (params.initConnectionMsg) {
+        this.#lc.debug?.(
+          'handling init connection message from sec header',
+          params.clientGroupID,
+          params.clientID,
+        );
+        await connection.handleInitConnection(
+          JSON.stringify(params.initConnectionMsg),
+        );
+      }
+    } finally {
+      const remaining = (this.#pendingConnections.get(clientGroupID) ?? 1) - 1;
+      if (remaining <= 0) {
+        this.#pendingConnections.delete(clientGroupID);
+        if (
+          !viewSyncerAcquired &&
+          !this.#viewSyncers.hasService(clientGroupID)
+        ) {
+          this.#parent.send<ClientGroupStatusMessage>([
+            'clientGroupStatus',
+            {clientGroupID, active: false},
+          ]);
+        }
+      } else {
+        this.#pendingConnections.set(clientGroupID, remaining);
+      }
     }
   };
 

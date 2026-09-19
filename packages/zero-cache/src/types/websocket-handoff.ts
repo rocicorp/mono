@@ -133,8 +133,10 @@ export function installWebSocketReceiver<P>(
   server: WebSocketServer,
   receive: WebSocketReceiver<P>,
   receiver: Receiver,
+  onAbort?: ((payload: P) => void) | undefined,
 ) {
   receiver.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
+    const {message, head, payload} = msg;
     // Per https://nodejs.org/api/child_process.html#subprocesssendmessage-sendhandle-options-callback
     //
     // > Any 'message' handlers in the subprocess should verify that socket
@@ -142,9 +144,9 @@ export function installWebSocketReceiver<P>(
     // > takes to send the connection to the child.
     if (!socket) {
       lc.warn?.('websocket closed during handoff');
+      onAbort?.(payload);
       return;
     }
-    const {message, head, payload} = msg;
     server.handleUpgrade(
       message as IncomingMessage,
       socket as Socket,
@@ -155,6 +157,7 @@ export function installWebSocketReceiver<P>(
         // between the time the socket was sent and when handleUpgrade completes.
         if (ws.readyState === ws.CLOSED || ws.readyState === ws.CLOSING) {
           lc.warn?.('websocket closed during upgrade, skipping receive');
+          onAbort?.(payload);
           return;
         }
         receive(ws, payload, message);

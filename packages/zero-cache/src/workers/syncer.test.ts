@@ -601,6 +601,36 @@ describe('cleanup', () => {
       await env.syncer.stop();
     }
   });
+
+  test('notifies parent with active: false when connection fails before ViewSyncer starts', async () => {
+    const sentMessages: any[] = [];
+    const mockParent = {
+      send: (msg: any) => {
+        sentMessages.push(msg);
+        return true;
+      },
+      onMessageType: () => {},
+    };
+    const env = setupSyncer(
+      lc,
+      {auth: {secret: 'test-secret'}} as ZeroConfig,
+      mockParent,
+    );
+    try {
+      const ws = new MockWebSocket() as unknown as WebSocket;
+      await receiver(
+        ws,
+        makeParams(1, {auth: 'invalid-token', clientGroupID: 'failed-cg'}),
+        {} as any,
+      );
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: 'failed-cg', active: false},
+      ]);
+    } finally {
+      await env.syncer.stop();
+    }
+  });
 });
 
 describe('connection telemetry', () => {

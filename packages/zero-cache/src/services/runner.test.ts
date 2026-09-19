@@ -142,7 +142,9 @@ describe('services/runner', () => {
       id => stopped.push(id),
     );
 
+    expect(callbackRunner.hasService('foo')).toBe(false);
     const s1 = callbackRunner.getService('foo');
+    expect(callbackRunner.hasService('foo')).toBe(true);
     expect(started).toEqual(['foo']);
     expect(stopped).toEqual([]);
 
@@ -154,6 +156,7 @@ describe('services/runner', () => {
     // Stopping service triggers onStop
     s1.resolver.resolve();
     await sleep(1);
+    expect(callbackRunner.hasService('foo')).toBe(false);
     expect(stopped).toEqual(['foo']);
 
     // Re-creating after stop triggers onStart again

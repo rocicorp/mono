@@ -3,54 +3,24 @@ import {SyncerAssigner} from './syncer-assigner.ts';
 
 describe('SyncerAssigner', () => {
   test('sticky routing for the same client group', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
+    const assigner = new SyncerAssigner('task-1', 4);
     const worker1 = assigner.assign('cg-1');
-    assigner.confirm('cg-1', worker1);
 
     // Repeated calls return the same worker
     for (let i = 0; i < 10; i++) {
       expect(assigner.assign('cg-1')).toBe(worker1);
     }
+    // Load count is only incremented once per unique client group
     expect(assigner.getWorkerLoad(worker1)).toBe(1);
-  });
-
-  test('sticky routing for unconfirmed assignment within timeout window', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
-    const worker1 = assigner.assign('cg-1', 1000);
-
-    // Within timeout window, stays sticky even if unconfirmed
-    expect(assigner.assign('cg-1', 5000)).toBe(worker1);
-    expect(assigner.getWorkerLoad(worker1)).toBe(1);
-  });
-
-  test('unconfirmed assignment expires lazily on re-assign after timeout', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
-    const worker1 = assigner.assign('cg-1', 1000);
-    expect(assigner.getWorkerLoad(worker1)).toBe(1);
-
-    // After timeout, next assign call for cg-1 treats it as new and re-assigns
-    const worker2 = assigner.assign('cg-1', 32_000);
-    expect(assigner.getWorkerLoad(worker1)).toBe(1); // since cg-1 re-assigned to least-loaded (worker1 load decremented, then re-incremented or placed on another)
-    expect(assigner.getWorkerLoad(worker2)).toBe(1);
-  });
-
-  test('confirmed assignment does not expire after timeout', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
-    const worker1 = assigner.assign('cg-1', 1000);
-    assigner.confirm('cg-1', worker1);
-
-    // Way past timeout window, still sticky
-    expect(assigner.assign('cg-1', 100_000)).toBe(worker1);
-    expect(assigner.getWorkerLoad(worker1)).toBe(1);
+    expect(assigner.getAssignment('cg-1')).toBe(worker1);
   });
 
   test('least-loaded distribution across workers', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
+    const assigner = new SyncerAssigner('task-1', 4);
     const numGroups = 120;
 
     for (let i = 0; i < numGroups; i++) {
-      const worker = assigner.assign(`cg-${i}`);
-      assigner.confirm(`cg-${i}`, worker);
+      assigner.assign(`cg-${i}`);
     }
 
     // With 120 groups across 4 workers, each worker must have exactly 30
@@ -60,14 +30,13 @@ describe('SyncerAssigner', () => {
   });
 
   test('dynamic re-balancing when client groups are released', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
+    const assigner = new SyncerAssigner('task-1', 4);
     const assignments = new Map<string, number>();
 
     // Assign 40 groups (10 per worker)
     for (let i = 0; i < 40; i++) {
       const id = `cg-${i}`;
       const worker = assigner.assign(id);
-      assigner.confirm(id, worker);
       assignments.set(id, worker);
     }
 
@@ -91,7 +60,6 @@ describe('SyncerAssigner', () => {
       const id = `new-cg-${i}`;
       const worker = assigner.assign(id);
       expect(worker).toBe(0);
-      assigner.confirm(id, worker);
     }
 
     for (let w = 0; w < 4; w++) {
@@ -99,49 +67,39 @@ describe('SyncerAssigner', () => {
     }
   });
 
-  test('sweepExpired cleans up unconfirmed assignments', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
-    const w1 = assigner.assign('cg-1', 1000);
-    const w2 = assigner.assign('cg-2', 1000);
-    assigner.confirm('cg-1', w1); // cg-1 confirmed
+  test('release only applies if worker index matches', () => {
+    const assigner = new SyncerAssigner('task-1', 4);
+    const worker = assigner.assign('cg-1');
+    const wrongWorker = (worker + 1) % 4;
 
-    expect(assigner.getWorkerLoad(w1)).toBe(1);
-    expect(assigner.getWorkerLoad(w2)).toBe(1);
+    assigner.release('cg-1', wrongWorker);
+    expect(assigner.getAssignment('cg-1')).toBe(worker);
+    expect(assigner.getWorkerLoad(worker)).toBe(1);
 
-    // Sweep before expiration: no change
-    assigner.sweepExpired(20_000);
-    expect(assigner.getWorkerLoad(w2)).toBe(1);
-
-    // Sweep after expiration: unconfirmed cg-2 is cleared, confirmed cg-1 remains
-    assigner.sweepExpired(32_000);
-    expect(assigner.getWorkerLoad(w2)).toBe(0);
-    expect(assigner.getWorkerLoad(w1)).toBe(1);
+    assigner.release('cg-1', worker);
+    expect(assigner.getAssignment('cg-1')).toBeUndefined();
+    expect(assigner.getWorkerLoad(worker)).toBe(0);
   });
 
-  test('late confirmation after sweep restores sticky assignment and load', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
-    const w1 = assigner.assign('cg-1', 1000);
-    expect(assigner.getWorkerLoad(w1)).toBe(1);
+  test('handles 0 or 1 worker gracefully', () => {
+    const zeroWorkers = new SyncerAssigner('task-1', 0);
+    expect(zeroWorkers.assign('cg-1')).toBe(0);
+    expect(zeroWorkers.getWorkerLoad(0)).toBe(0);
 
-    // Timeout occurs and assignment is swept
-    assigner.sweepExpired(32_000);
-    expect(assigner.getWorkerLoad(w1)).toBe(0);
-
-    // Worker finally finishes initialization and confirms late
-    assigner.confirm('cg-1', w1);
-    expect(assigner.getWorkerLoad(w1)).toBe(1);
-
-    // Reconnecting cg-1 remains sticky to w1
-    expect(assigner.assign('cg-1', 40_000)).toBe(w1);
-    expect(assigner.getWorkerLoad(w1)).toBe(1);
-
-    // When cg-1 later stops, release decrements load cleanly
-    assigner.release('cg-1', w1);
-    expect(assigner.getWorkerLoad(w1)).toBe(0);
+    const oneWorker = new SyncerAssigner('task-1', 1);
+    expect(oneWorker.assign('cg-1')).toBe(0);
+    expect(oneWorker.assign('cg-2')).toBe(0);
+    expect(oneWorker.getWorkerLoad(0)).toBe(2);
+    oneWorker.release('cg-1', 0);
+    expect(oneWorker.getWorkerLoad(0)).toBe(1);
   });
 
-  test('destroy clears sweep timer', () => {
-    const assigner = new SyncerAssigner('task-1', 4, 30_000, true);
-    expect(() => assigner.destroy()).not.toThrow();
+  test('destroy clears all assignments', () => {
+    const assigner = new SyncerAssigner('task-1', 4);
+    assigner.assign('cg-1');
+    assigner.assign('cg-2');
+    expect(assigner.getAssignment('cg-1')).toBeDefined();
+    assigner.destroy();
+    expect(assigner.getAssignment('cg-1')).toBeUndefined();
   });
 });

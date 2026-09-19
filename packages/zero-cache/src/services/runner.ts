@@ -62,6 +62,10 @@ export class ServiceRunner<S extends Service> {
     return service;
   }
 
+  hasService(id: string): boolean {
+    return this.#instances.has(id);
+  }
+
   get size() {
     return this.#instances.size;
   }
