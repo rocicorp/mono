@@ -59,10 +59,6 @@ export class WorkerDispatcher implements Service {
           }
         },
       );
-
-      syncer.on('close', () => {
-        assigner.workerCrashed(index);
-      });
     });
 
     function connectParams(req: IncomingMessageSubset) {

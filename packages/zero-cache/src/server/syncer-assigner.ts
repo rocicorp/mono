@@ -82,9 +82,21 @@ export class SyncerAssigner {
 
   confirm(clientGroupID: string, workerIndex: number): void {
     const existing = this.#assignments.get(clientGroupID);
-    if (existing && existing.worker === workerIndex) {
-      existing.confirmed = true;
+    if (existing) {
+      if (existing.worker === workerIndex) {
+        existing.confirmed = true;
+      }
+      return;
     }
+    // If confirmation arrives late (e.g. after the tentative assignment timed
+    // out and was swept), re-record the assignment as confirmed so future
+    // connections remain sticky to this worker.
+    this.#workerLoads[workerIndex]++;
+    this.#assignments.set(clientGroupID, {
+      worker: workerIndex,
+      confirmed: true,
+      assignedAt: Date.now(),
+    });
   }
 
   release(clientGroupID: string, workerIndex: number): void {
@@ -93,15 +105,6 @@ export class SyncerAssigner {
       this.#decrementLoad(workerIndex);
       this.#assignments.delete(clientGroupID);
     }
-  }
-
-  workerCrashed(workerIndex: number): void {
-    for (const [id, entry] of this.#assignments) {
-      if (entry.worker === workerIndex) {
-        this.#assignments.delete(id);
-      }
-    }
-    this.#workerLoads[workerIndex] = 0;
   }
 
   sweepExpired(now = Date.now()): void {

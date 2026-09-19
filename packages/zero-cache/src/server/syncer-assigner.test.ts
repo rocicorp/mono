@@ -118,19 +118,26 @@ describe('SyncerAssigner', () => {
     expect(assigner.getWorkerLoad(w1)).toBe(1);
   });
 
-  test('workerCrashed clears all assignments for that worker', () => {
+  test('late confirmation after sweep restores sticky assignment and load', () => {
     const assigner = new SyncerAssigner('task-1', 4, 30_000, false);
-    for (let i = 0; i < 20; i++) {
-      const id = `cg-${i}`;
-      const w = assigner.assign(id);
-      assigner.confirm(id, w);
-    }
+    const w1 = assigner.assign('cg-1', 1000);
+    expect(assigner.getWorkerLoad(w1)).toBe(1);
 
-    const worker1LoadBefore = assigner.getWorkerLoad(1);
-    expect(worker1LoadBefore).toBeGreaterThan(0);
+    // Timeout occurs and assignment is swept
+    assigner.sweepExpired(32_000);
+    expect(assigner.getWorkerLoad(w1)).toBe(0);
 
-    assigner.workerCrashed(1);
-    expect(assigner.getWorkerLoad(1)).toBe(0);
+    // Worker finally finishes initialization and confirms late
+    assigner.confirm('cg-1', w1);
+    expect(assigner.getWorkerLoad(w1)).toBe(1);
+
+    // Reconnecting cg-1 remains sticky to w1
+    expect(assigner.assign('cg-1', 40_000)).toBe(w1);
+    expect(assigner.getWorkerLoad(w1)).toBe(1);
+
+    // When cg-1 later stops, release decrements load cleanly
+    assigner.release('cg-1', w1);
+    expect(assigner.getWorkerLoad(w1)).toBe(0);
   });
 
   test('destroy clears sweep timer', () => {
