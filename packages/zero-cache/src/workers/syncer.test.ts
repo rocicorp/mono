@@ -591,7 +591,7 @@ describe('cleanup', () => {
     }
   });
 
-  test('notifies parent of client group active status via clientGroupStatus message', async () => {
+  test('notifies parent with active: false when ViewSyncer stops', async () => {
     const sentMessages: any[] = [];
     const mockParent = {
       send: (msg: any) => {
@@ -607,11 +607,14 @@ describe('cleanup', () => {
     );
     try {
       const ws = await newConnection(1);
+      ws.close();
+      const vs = env.viewSyncers[0];
+      await vs.stop();
+      await sleep(10);
       expect(sentMessages).toContainEqual([
         'clientGroupStatus',
-        {clientGroupID: '1', active: true},
+        {clientGroupID: '1', active: false},
       ]);
-      ws.close();
     } finally {
       await env.syncer.stop();
     }
@@ -663,11 +666,6 @@ describe('cleanup', () => {
     );
     try {
       const ws = await newConnection(1);
-      expect(sentMessages).toContainEqual([
-        'clientGroupStatus',
-        {clientGroupID: '1', active: true},
-      ]);
-      sentMessages.length = 0;
 
       // Simulate a pending connection received via handoff
       const pendingParams = makeParams(2, {clientGroupID: '1'});
@@ -680,7 +678,9 @@ describe('cleanup', () => {
       await sleep(10);
 
       // Because pending connection exists, active: false should NOT be sent
-      expect(sentMessages).toEqual([]);
+      expect(sentMessages.filter(m => m[0] === 'clientGroupStatus')).toEqual(
+        [],
+      );
 
       // When the pending connection aborts/finishes, active: false is sent
       abortHandoff?.(pendingParams);

@@ -443,17 +443,6 @@ export class Syncer implements SingletonService {
       id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
       id => {
-        const generation = this.#clientGroupGenerations.get(id);
-        this.#parent.send<ClientGroupStatusMessage>([
-          'clientGroupStatus',
-          {
-            clientGroupID: id,
-            active: true,
-            ...(generation !== undefined ? {generation} : {}),
-          },
-        ]);
-      },
-      id => {
         if ((this.#pendingConnections.get(id) ?? 0) === 0) {
           const generation = this.#clientGroupGenerations.get(id);
           this.#parent.send<ClientGroupStatusMessage>([

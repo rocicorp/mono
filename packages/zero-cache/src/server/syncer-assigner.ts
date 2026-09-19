@@ -56,36 +56,6 @@ export class SyncerAssigner {
     return assignment;
   }
 
-  activate(
-    clientGroupID: string,
-    workerIndex: number,
-    generation?: number,
-  ): void {
-    const existing = this.#assignments.get(clientGroupID);
-    if (existing !== undefined) {
-      if (existing.worker === workerIndex) {
-        if (generation !== undefined && generation > existing.generation) {
-          this.#assignments.set(clientGroupID, {
-            worker: workerIndex,
-            generation,
-          });
-        }
-        return;
-      }
-      if (generation !== undefined && existing.generation > generation) {
-        return;
-      }
-      this.#decrementLoad(existing.worker);
-    }
-    const gen =
-      generation ?? (existing ? existing.generation : ++this.#nextGeneration);
-    this.#workerLoads[workerIndex]++;
-    this.#assignments.set(clientGroupID, {
-      worker: workerIndex,
-      generation: gen,
-    });
-  }
-
   release(
     clientGroupID: string,
     workerIndex: number,
@@ -108,10 +78,6 @@ export class SyncerAssigner {
 
   getAssignment(clientGroupID: string): number | undefined {
     return this.#assignments.get(clientGroupID)?.worker;
-  }
-
-  getAssignmentDetails(clientGroupID: string): Assignment | undefined {
-    return this.#assignments.get(clientGroupID);
   }
 
   #decrementLoad(worker: number): void {

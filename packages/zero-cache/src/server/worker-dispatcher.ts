@@ -52,9 +52,7 @@ export class WorkerDispatcher implements Service {
       syncer.onMessageType<ClientGroupStatusMessage>(
         'clientGroupStatus',
         ({clientGroupID, active, generation}) => {
-          if (active) {
-            assigner.activate(clientGroupID, index, generation);
-          } else {
+          if (!active) {
             assigner.release(clientGroupID, index, generation);
           }
         },

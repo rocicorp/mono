@@ -162,27 +162,6 @@ describe('WorkerDispatcher client group routing', () => {
       expect(syncer1Messages.length).toBe(s1Count + 1);
     }
 
-    // Confirm cg-1 and cg-2
-    if (assignedSyncer1 === 0) {
-      syncer0Out.send<ClientGroupStatusMessage>([
-        'clientGroupStatus',
-        {clientGroupID: 'cg-1', active: true},
-      ]);
-      syncer1Out.send<ClientGroupStatusMessage>([
-        'clientGroupStatus',
-        {clientGroupID: 'cg-2', active: true},
-      ]);
-    } else {
-      syncer1Out.send<ClientGroupStatusMessage>([
-        'clientGroupStatus',
-        {clientGroupID: 'cg-1', active: true},
-      ]);
-      syncer0Out.send<ClientGroupStatusMessage>([
-        'clientGroupStatus',
-        {clientGroupID: 'cg-2', active: true},
-      ]);
-    }
-
     // Release cg-1; now assignedSyncer1 has load 0 and the other has load 1
     if (assignedSyncer1 === 0) {
       syncer0Out.send<ClientGroupStatusMessage>([
