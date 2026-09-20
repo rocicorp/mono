@@ -732,6 +732,7 @@ export class PipelineDriver {
         },
         queryID,
         costModel,
+        this.#lc.withContext('queryID', queryID),
       );
       builtInputs.push(input);
       const schema = input.getSchema();
