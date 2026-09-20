@@ -1,0 +1,15 @@
+{
+  "clients": 1,
+  "run": 1,
+  "wallSeconds": 1.3156340329999998,
+  "results": [
+    {
+      "index": 1,
+      "exitCode": 0,
+      "clientGroup": "apihi64o7vg031ro9d",
+      "totalSettleSeconds": 0.989,
+      "spreadSeconds": 0,
+      "trackerRows": 973
+    }
+  ]
+}
