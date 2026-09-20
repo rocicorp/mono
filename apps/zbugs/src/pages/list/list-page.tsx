@@ -417,6 +417,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     estimatedTotal,
     total,
     scrollToItem,
+    firstVisibleItem,
   } = useZeroVirtualizer<typeof listContextParams, Issue, IssueRowSort>({
     estimateSize: () => ITEM_SIZE,
     getScrollElement: () => listRef.current,
@@ -549,7 +550,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
               Number(focusedRow.dataset.vrowIndex) + (e.key === 'j' ? 1 : -1),
             )
           : // Nothing focused in the list: start from the first visible row.
-            itemAt(Math.floor(scrollElement.scrollTop / ITEM_SIZE));
+            firstVisibleItem();
       if (!next) {
         // Either end of the list, or the window edge with paging not caught
         // up yet — scrolling toward it is what advances the window, so the
@@ -564,7 +565,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [selectMode, deleteConfirmationShown, scrollToItem]);
+  }, [selectMode, deleteConfirmationShown, scrollToItem, firstVisibleItem]);
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;
