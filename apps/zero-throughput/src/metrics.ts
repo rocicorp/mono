@@ -1,5 +1,7 @@
 import {createServer, type Server} from 'node:http';
 import {gunzipSync} from 'node:zlib';
+import {newArray} from '../../../packages/shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../packages/shared/src/map.ts';
 import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
 
 export interface PercentileStats {
@@ -224,12 +226,7 @@ export class OTelMetricsCollector {
   }
 
   #addPoint(name: string, point: RawDataPoint): void {
-    let list = this.#metrics.get(name);
-    if (!list) {
-      list = [];
-      this.#metrics.set(name, list);
-    }
-    list.push(point);
+    getOrInsertComputed(this.#metrics, name, newArray).push(point);
   }
 
   getSummary(): MetricSummary {
