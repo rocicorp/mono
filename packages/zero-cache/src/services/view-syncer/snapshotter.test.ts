@@ -971,6 +971,55 @@ describe('view-syncer/snapshotter', () => {
       s2.destroy();
     });
 
+    test('an invalid diff does not poison the cache for valid diffs', () => {
+      const cache = new SnapshotRowCache(1000);
+      const s1 = new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'my_app'},
+        undefined,
+        cache,
+      ).init();
+      const s2 = new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'my_app'},
+        undefined,
+        cache,
+      ).init();
+
+      try {
+        replicator.processTransaction(
+          '02',
+          messages.update('issues', {id: 1, owner: 10, desc: 'updated'}),
+        );
+        const stale = s1.advance(tableSpecs, allTableNames);
+        replicator.processTransaction(
+          '03',
+          messages.update('issues', {id: 1, owner: 10, desc: 'again'}),
+        );
+        // Advancing s1 again moves stale.prev's connection to 03.
+        s1.advance(tableSpecs, allTableNames);
+        expect(() => [...stale]).toThrow(InvalidDiffError);
+
+        // s2's diff from 01 is valid, and must not be served the row that
+        // the stale diff read from its advanced connection.
+        const diff = s2.advance(tableSpecs, allTableNames);
+        expect(diff.prev.version).toBe('01');
+        expect([...diff]).toEqual([
+          {
+            table: 'issues',
+            rowKey: {id: 1},
+            prevValues: [{id: 1, owner: 10, desc: 'foo', _0_version: '01'}],
+            nextValue: {id: 1, owner: 10, desc: 'again', _0_version: '03'},
+          },
+        ]);
+      } finally {
+        s1.destroy();
+        s2.destroy();
+      }
+    });
+
     test.each([false, true])(
       'update followed by delete across Snapshotters (shared cache: %s)',
       sharedCache => {

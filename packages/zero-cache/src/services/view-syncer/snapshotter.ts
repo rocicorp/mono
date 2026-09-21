@@ -452,7 +452,15 @@ class Snapshot {
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         return cached.statement.get<any>(args);
       });
-    return cache ? cache.getOrRead(tag ?? '', sql, 'get', args, read) : read();
+    return cache
+      ? cache.getOrRead(tag ?? '', sql, 'get', args, () => {
+          const row = read();
+          if (row !== undefined) {
+            this.#assertNotAdvanced(row);
+          }
+          return row;
+        })
+      : read();
   }
 
   /**
@@ -507,7 +515,30 @@ class Snapshot {
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         return cached.statement.all<any>(args);
       });
-    return cache ? cache.getOrRead(tag ?? '', sql, 'all', args, read) : read();
+    return cache
+      ? cache.getOrRead(tag ?? '', sql, 'all', args, () => {
+          const rows = read();
+          for (const row of rows) {
+            this.#assertNotAdvanced(row);
+          }
+          return rows;
+        })
+      : read();
+  }
+
+  /**
+   * Rows are shared with other client groups via the SnapshotRowCache, so
+   * one read from a connection that has advanced past this snapshot (i.e. a
+   * {@link SnapshotDiff} used after its Snapshotter advanced) must fail
+   * before it is cached, rather than be served to the valid Diffs of other
+   * client groups (whose own validity checks would then fail).
+   */
+  #assertNotAdvanced(row: RowValue) {
+    if ((row[ROW_VERSION] ?? '~') > this.version) {
+      throw new InvalidDiffError(
+        `Diff is no longer valid. db has advanced past ${this.version}.`,
+      );
+    }
   }
 
   resetToHead(): Snapshot {
