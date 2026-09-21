@@ -1,5 +1,7 @@
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {getOrInsert} from '../../../../shared/src/map.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 
 /**
@@ -97,13 +99,11 @@ const MISS = {result: 'miss'} as const;
 export class SnapshotRowCache {
   readonly #maxEntries: number;
   readonly #entries = new Map<string, unknown>();
-  // The keys of #entries in insertion order, as a ring buffer: once the cache
-  // is full, #keys[#oldest] is the oldest entry, which each new entry evicts
-  // and replaces. (Finding the oldest key with a fresh Map iterator instead
-  // costs O(evictions) per insert, as V8 leaves deleted entries in the table
-  // until it is compacted and every new iterator walks over them.)
-  readonly #keys: string[] = [];
-  #oldest = 0;
+  // The keys of #entries in insertion order, so that the oldest can be
+  // evicted in O(1). (Finding the oldest key with a fresh Map iterator
+  // instead costs O(evictions) per insert, as V8 leaves deleted entries in
+  // the table until it is compacted and every new iterator walks over them.)
+  readonly #keys = new RingBuffer<string>();
   // Interns the SQL text of each distinct read so that entry keys
   // do not repeat the (long) column list of every statement.
   readonly #sqlIDs = new Map<string, number>();
@@ -160,22 +160,18 @@ export class SnapshotRowCache {
     const value = read();
     if (value !== undefined && this.#maxEntries > 0) {
       // `key` is not in #entries (this is a miss), so it is always added.
-      if (this.#keys.length < this.#maxEntries) {
-        this.#keys.push(key);
-      } else {
-        this.#entries.delete(this.#keys[this.#oldest]);
-        this.#keys[this.#oldest] = key;
-        this.#oldest = (this.#oldest + 1) % this.#maxEntries;
-      }
       this.#entries.set(key, value);
+      this.#keys.push(key);
+      if (this.#keys.size > this.#maxEntries) {
+        this.#entries.delete(must(this.#keys.shift()));
+      }
     }
     return value;
   }
 
   clear(): void {
     this.#entries.clear();
-    this.#keys.length = 0;
-    this.#oldest = 0;
+    this.#keys.clear();
   }
 
   #key(tag: string, sql: string, mode: ReadMode, args: unknown[]): string {

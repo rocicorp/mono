@@ -162,6 +162,14 @@ describe('view-syncer/snapshot-row-cache', () => {
     expect([11, 12, 13, 14].map(has)).toEqual([false, true, true, true]);
   });
 
+  test('a fractional max size is bounded', () => {
+    const cache = new SnapshotRowCache(2.5);
+    for (let i = 0; i < 10; i++) {
+      cache.getOrRead('n:01', SQL, 'get', [BigInt(i)], () => ({n: i}));
+    }
+    expect(cache.size).toBe(2);
+  });
+
   test('a max size of 0 disables caching', () => {
     const cache = new SnapshotRowCache(0);
     const read = vi.fn(() => ({id: 1n}));
