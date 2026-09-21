@@ -129,3 +129,43 @@ export interface ReplicationStatusEvent extends StatusEvent {
   stage: ReplicationStage;
   state?: ReplicationState;
 }
+
+/**
+ * Progress of a view-syncer restoring its replica from the
+ * replication-manager's backup.
+ */
+export type RestoreStatus = {
+  /** Bytes of the replica written so far. */
+  bytes: number;
+
+  /**
+   * The estimated size of the restored replica, taken from the size of the
+   * replication-manager's replica when it handed out the backup. This is
+   * `undefined` when the replication-manager does not report it.
+   */
+  totalBytes?: number | undefined;
+
+  /** Milliseconds spent so far restoring the replica. */
+  elapsedMs: number;
+};
+
+export type ViewSyncerState = {
+  restoreStatus?: RestoreStatus | undefined;
+};
+
+/**
+ * - `Restoring`: the replica is being restored from the backup.
+ * - `Restored`: the replica has been restored and the view-syncer is
+ *   starting up.
+ */
+export type ViewSyncerStage = 'Restoring' | 'Restored';
+
+export const VIEW_SYNCER_STATUS_EVENT_V1_TYPE =
+  'zero/events/status/view-syncer/v1';
+
+export interface ViewSyncerStatusEvent extends StatusEvent {
+  type: typeof VIEW_SYNCER_STATUS_EVENT_V1_TYPE;
+  component: 'view-syncer';
+  stage: ViewSyncerStage;
+  state?: ViewSyncerState;
+}

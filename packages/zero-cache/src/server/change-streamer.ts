@@ -230,6 +230,7 @@ export default async function runWorker(
           ? {
               backupURL: destinationBackupURL,
               litestreamVersion: litestream.backupUsingV5 ? 'v5' : 'legacy',
+              replicaFile: replica.file,
             }
           : null,
         purgeLock,

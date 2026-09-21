@@ -95,6 +95,11 @@ import {UpstreamAcker} from './upstream-acker.ts';
 export type BackupConfig = {
   backupURL: string;
   litestreamVersion: LitestreamVersion;
+  /**
+   * The replica being backed up. Its size is sent to subscribers as an
+   * estimate of the size of their restored replica.
+   */
+  replicaFile?: string | undefined;
 };
 
 export type SQLiteCatchupOptions = {
