@@ -151,4 +151,72 @@ describe('MeasurePushOperator', () => {
     expect(() => [...measurePushOperator.push(change)]).toThrow('Test error');
     expect(mockMetricsDelegate.addMetric).not.toHaveBeenCalled();
   });
+
+  test('should measure execution time and record metric for reconcile', () => {
+    const mockInput: Input = {
+      setOutput: vi.fn(),
+      fetch: vi.fn(() => []),
+      getSchema: vi.fn(() => ({}) as SourceSchema),
+      destroy: vi.fn(),
+    };
+
+    const mockOutput: Output = {
+      push: vi.fn(() => emptyArray),
+      reconcile: vi.fn(() => emptyArray),
+    };
+
+    const mockMetricsDelegate: MetricsDelegate = {
+      addMetric: vi.fn(),
+    };
+
+    const measurePushOperator = new MeasurePushOperator(
+      mockInput,
+      'test-query-id',
+      mockMetricsDelegate,
+      'query-update-server',
+    );
+    measurePushOperator.setOutput(mockOutput);
+
+    [...measurePushOperator.reconcile(mockInput)];
+
+    expect(mockOutput.reconcile).toHaveBeenCalledWith(measurePushOperator);
+    expect(mockMetricsDelegate.addMetric).toHaveBeenCalledWith(
+      'query-update-server',
+      expect.any(Number),
+      'test-query-id',
+    );
+  });
+
+  test('should not record metric when output.reconcile throws', () => {
+    const mockInput: Input = {
+      setOutput: vi.fn(),
+      fetch: vi.fn(() => []),
+      getSchema: vi.fn(() => ({}) as SourceSchema),
+      destroy: vi.fn(),
+    };
+
+    const mockOutput: Output = {
+      push: vi.fn(() => emptyArray),
+      reconcile: vi.fn(() => {
+        throw new Error('Reconcile error');
+      }),
+    };
+
+    const mockMetricsDelegate: MetricsDelegate = {
+      addMetric: vi.fn(),
+    };
+
+    const measurePushOperator = new MeasurePushOperator(
+      mockInput,
+      'test-query-id',
+      mockMetricsDelegate,
+      'query-update-server',
+    );
+    measurePushOperator.setOutput(mockOutput);
+
+    expect(() => [...measurePushOperator.reconcile(mockInput)]).toThrow(
+      'Reconcile error',
+    );
+    expect(mockMetricsDelegate.addMetric).not.toHaveBeenCalled();
+  });
 });

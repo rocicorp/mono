@@ -162,7 +162,7 @@ export const throwOutput: Output = {
   push(_change: Change): Stream<'yield'> {
     throw new Error('Output not set');
   },
-  *reconcile(): Stream<'yield'> {
+  reconcile(): Stream<'yield'> {
     throw new Error('Output not set');
   },
 };

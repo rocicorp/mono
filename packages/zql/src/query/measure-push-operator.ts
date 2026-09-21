@@ -63,7 +63,13 @@ export class MeasurePushOperator implements Operator {
 
   *reconcile(_pusher: InputBase): Stream<'yield'> {
     if (this.#output.reconcile) {
+      const startTime = performance.now();
       yield* this.#output.reconcile(this);
+      this.#metricsDelegate.addMetric(
+        this.#metricName,
+        performance.now() - startTime,
+        this.#queryID,
+      );
     }
   }
 }

@@ -58,7 +58,7 @@ export const throwFilterOutput: FilterOutput = {
     throw new Error('Output not set');
   },
 
-  *reconcile(): Stream<'yield'> {
+  reconcile(): Stream<'yield'> {
     throw new Error('Output not set');
   },
 
