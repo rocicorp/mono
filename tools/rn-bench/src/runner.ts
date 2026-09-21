@@ -338,6 +338,25 @@ function describeRan(ran: Ran | undefined): string {
   return `#${index} ${variant ? variant + ' ' : ''}${group}/${name}`;
 }
 
+/**
+ * Accepts only a result object or a string error; anything else becomes an
+ * error outcome, so a bad body cannot crash the formatters downstream.
+ */
+function toOutcome(item: QueueItem, body: ResultBody): Outcome {
+  const {result, error} = body as {result?: unknown; error?: unknown};
+  if (typeof result === 'object' && result !== null) {
+    return {item, result: result as BenchmarkResult};
+  }
+  if (typeof error === 'string') {
+    return {item, error};
+  }
+  return {
+    item,
+    error:
+      'malformed /result body: expected a result object or an error string',
+  };
+}
+
 type ControlServer = {
   readonly port: number;
   /** Resolves when every queued benchmark has reported, rejects on error. */
@@ -468,10 +487,7 @@ function startControlServer(
             );
             return;
           }
-          const outcome: Outcome =
-            'result' in body
-              ? {item, result: body.result}
-              : {item, error: body.error};
+          const outcome: Outcome = toOutcome(item, body);
           outcomes.push(outcome);
           onOutcome(outcome, index, queue.length);
           index++;
