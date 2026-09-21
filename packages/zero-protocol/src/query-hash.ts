@@ -1,3 +1,4 @@
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {normalizeAST, type AST, type NormalizedAST} from './ast.ts';
 import {hashAST} from './query-hash-visitor.ts';
 
@@ -12,13 +13,7 @@ export function hashOfAST(ast: AST): string {
  * whose builder kept it normalized as it built it.
  */
 export function hashOfNormalizedAST(ast: NormalizedAST): string {
-  const cached = hashCache.get(ast);
-  if (cached) {
-    return cached;
-  }
-  const hash = hashAST(ast);
-  hashCache.set(ast, hash);
-  return hash;
+  return getOrInsertComputed(hashCache, ast, hashAST);
 }
 
 export {hashNameAndArgs as hashOfNameAndArgs} from './query-hash-visitor.ts';
