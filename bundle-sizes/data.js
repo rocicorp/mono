@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790000277325,
+  "lastUpdate": 1790014489824,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57897,6 +57897,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/d588313df4ea7a9c58c1b0aaa5b5690170fcfc6f"
         },
         "date": 1790000265187,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 326339,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 59113,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 119460,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34130,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1dbf7f8cfff4ae529409405d093016d0c26f27d5",
+          "message": "perf(replicache): tune the SQLite kv store: page_size, mmap_size, rowid table (#6622)\n\nThree changes to the shared `setupDatabase()`, so op-sqlite, expo-sqlite\nand zero-sqlite all get them:\n\n- `PRAGMA page_size = 8192` (SQLite's default is 4096)\n- `PRAGMA mmap_size = 268435456` (256MB, matching op-sqlite's own\nkey-value store)\n- `entry` becomes a regular rowid table instead of `WITHOUT ROWID`\n\n## Why\n\nReplicache's kv rows are B-tree chunks that `BTreeWrite` targets at\n8–16KB, so most are larger than a page.\n\n- **`WITHOUT ROWID` → rowid.** A `WITHOUT ROWID` table stores whole rows\nin an index B-tree, which keeps at most ~1/4 of a page inline; SQLite\nrecommends it only for rows under ~1/20 of a page. As a rowid table, the\nkey gets a small separate index and the values live in the table B-tree.\n- **page_size 8192.** Chunks overflow at either page size; 8192 halves\nthe number of pages each one is spread over.\n- **mmap.** Reads are served from the mapped window instead of being\ncopied through the pager.\n\n## Results\n\n`replicache-perf/rn`, Release builds, main vs this PR, the four\nbenchmarks that hit SQLite. Change in time taken (negative = faster),\nmedian of 3 cold runs per arm (app data cleared before each run), arms\nalternating:\n\n| device | backend | startup read | startup scan | persist 1024x10000 |\npersist tmcw |\n|---|---|---|---|---|---|\n| iOS simulator (iPhone 17 Pro) | expo | **−26%** | **−15%** | **−14%**\n| **−7%** |\n| | op | **−27%** | **−14%** | **−15%** | **−8%** |\n| Pixel 6 | expo | **−25%** | −5% | −4% | 0% |\n| | op | **−29%** | −10% | −11% | −7% |\n\nOn the iOS simulator every PR run beat every main run on all eight\nbenchmarks. The Pixel's run-to-run spread is much larger, so read its\nsingle-digit rows as small or neutral; startup read is the clear win\nthere. Nothing got slower on either device.\n\nMeasured separately along the way: mmap carries most of the read win,\nthe rowid table adds roughly another 20% on reads and most of the write\nwin, and page_size helps writes on iOS. Binding batched read keys as\nparameters (instead of `JSON.stringify` + `json_each`) was also tried\nand measured flat, so it is not included.\n\n## Ordering is load-bearing\n\n`page_size` **must** be issued before `journal_mode`. SQLite silently\nignores it once a journal mode is set or the database has any content —\nno error, you just stay on 4096. `sqlite-store.test.node.ts` asserts the\nordering, and that `entry` is not `WITHOUT ROWID`; both tests were\nverified to fail when their invariant is broken. On-device database\nfiles were confirmed to be created at 8192.\n\n## Scope\n\n**New databases only**, for both page_size and the table layout. `CREATE\nTABLE IF NOT EXISTS` leaves an existing table as it was created, and\nchanging an existing database's page size needs `journal_mode=DELETE` →\npragma → `VACUUM` → `journal_mode=WAL`. mmap applies to existing stores\nregardless. Whether to migrate existing stores is a product call, since\nrebuilding the table is a startup stall.\n\n## Test plan\n\n- [x] `pnpm --filter replicache run format` / `lint` / `check-types`\n- [x] `vitest run --config vitest.config.node.ts src/kv` — 100 passed\n- [x] Ordering and rowid tests verified to fail when their invariant is\nbroken\n- [x] On-device benchmarks, main vs this PR: iOS simulator and Pixel 6 —\nsee above",
+          "timestamp": "2026-09-21T17:57:17Z",
+          "tree_id": "a01c6843b2aec15b3e4cf0ff7d52165d939993bf",
+          "url": "https://github.com/rocicorp/mono/commit/1dbf7f8cfff4ae529409405d093016d0c26f27d5"
+        },
+        "date": 1790014478360,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
