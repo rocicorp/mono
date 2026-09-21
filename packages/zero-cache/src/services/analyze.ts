@@ -78,7 +78,7 @@ export async function analyzeQuery(
         // Mirror production, as with the planner above.
         disableCorrelatedPredicatePushdown:
           config.enableCorrelatedPredicatePushdown === false,
-        enablePlannerAwarePushdown: config.enablePlannerAwarePushdown === true,
+        enablePlannerAwarePushdown: config.enablePlannerAwarePushdown !== false,
         getSource(tableName: string) {
           let source = tables.get(tableName);
           if (source) {

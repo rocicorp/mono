@@ -720,7 +720,7 @@ export class PipelineDriver {
           disableCorrelatedPredicatePushdown:
             this.#disableCorrelatedPredicatePushdown(),
           enablePlannerAwarePushdown:
-            this.#config?.enablePlannerAwarePushdown === true,
+            this.#config?.enablePlannerAwarePushdown !== false,
           getSource: name => this.#getSource(name),
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
