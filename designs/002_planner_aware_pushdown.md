@@ -1,6 +1,6 @@
 # 002: Planner-aware correlated predicate pushdown
 
-- **Status:** Draft
+- **Status:** Implemented (steps 1–2; parent-side accounting in step 3 is deferred)
 - **Date:** 2026-09-21
 - **Packages:** `zql` (planner, builder), `zero-cache` (flag)
 - **Builds on:** [001](001_correlated_predicate_pushdown.md)

@@ -1,6 +1,6 @@
 # 001: Correlated predicate pushdown
 
-- **Status:** Draft
+- **Status:** Implemented (core scope; extensions remain under Future work)
 - **Date:** 2026-09-21
 - **Packages:** `zql` (the rewrite), `zero-cache` (kill switch)
 
