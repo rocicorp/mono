@@ -11,9 +11,11 @@ import {
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import type {FC} from 'react';
+import '@xyflow/react/dist/style.css';
 import {useMemo} from 'react';
+import {newArray} from '../../../../packages/shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../../packages/shared/src/map.ts';
 import type {Graph} from '../types.ts';
 
 interface DataFlowGraphProps {
@@ -140,11 +142,7 @@ const calculateLayout = (nodes: Graph['nodes'], edges: Graph['edges']) => {
   // Build adjacency list
   const adjList = new Map<number, number[]>();
   edges.forEach(edge => {
-    if (!adjList.has(edge.source)) {
-      adjList.set(edge.source, []);
-    }
-    // oxlint-disable-next-line no-non-null-assertion
-    adjList.get(edge.source)!.push(edge.dest);
+    getOrInsertComputed(adjList, edge.source, newArray).push(edge.dest);
   });
 
   // Calculate levels using BFS
@@ -176,10 +174,7 @@ const calculateLayout = (nodes: Graph['nodes'], edges: Graph['edges']) => {
   // Group nodes by level
   const nodesByLevel = new Map<number, number[]>();
   levels.forEach((level, nodeId) => {
-    if (!nodesByLevel.has(level)) {
-      nodesByLevel.set(level, []);
-    }
-    nodesByLevel.get(level)!.push(nodeId);
+    getOrInsertComputed(nodesByLevel, level, newArray).push(nodeId);
   });
 
   // Position nodes

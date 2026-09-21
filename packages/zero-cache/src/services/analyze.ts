@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -76,25 +77,20 @@ export async function analyzeQuery(
         debug: new Debug(vendedRows, MAX_ANALYZE_ROWS),
         enableNotExists: true,
         getSource(tableName: string) {
-          let source = tables.get(tableName);
-          if (source) {
-            return source;
-          }
+          return getOrInsertComputed(tables, tableName, tableName => {
+            const tableSpec = mustGetTableSpec(tableSpecs, tableName);
+            const {primaryKey} = tableSpec.tableSpec;
 
-          const tableSpec = mustGetTableSpec(tableSpecs, tableName);
-          const {primaryKey} = tableSpec.tableSpec;
-
-          source = new TableSource(
-            lc,
-            config.log,
-            db,
-            tableName,
-            tableSpec.zqlSpec,
-            primaryKey,
-            shouldYield,
-          );
-          tables.set(tableName, source);
-          return source;
+            return new TableSource(
+              lc,
+              config.log,
+              db,
+              tableName,
+              tableSpec.zqlSpec,
+              primaryKey,
+              shouldYield,
+            );
+          });
         },
         createStorage() {
           return new MemoryStorage();

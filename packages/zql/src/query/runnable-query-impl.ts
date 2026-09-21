@@ -1,4 +1,9 @@
 import {
+  getOrInsertComputed,
+  newMap,
+  newWeakMap,
+} from '../../../shared/src/map.ts';
+import {
   tableAST,
   type NormalizedAST,
   type System,
@@ -39,16 +44,8 @@ export function newRunnableQuery<
   schema: TSchema,
   table: TTable,
 ): Query<TTable, TSchema> {
-  let bySchema = rootsByDelegate.get(delegate);
-  if (!bySchema) {
-    bySchema = new WeakMap();
-    rootsByDelegate.set(delegate, bySchema);
-  }
-  let roots = bySchema.get(schema);
-  if (!roots) {
-    roots = new Map();
-    bySchema.set(schema, roots);
-  }
+  const bySchema = getOrInsertComputed(rootsByDelegate, delegate, newWeakMap);
+  const roots = getOrInsertComputed(bySchema, schema, newMap);
 
   const existing = roots.get(table)?.deref();
   if (existing) {

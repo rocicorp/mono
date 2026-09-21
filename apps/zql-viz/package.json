@@ -25,6 +25,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.1",
+    "shared": "workspace:*",
     "typescript": "~6.0.2",
     "vite": "^8.0.13",
     "zero-types": "workspace:*",

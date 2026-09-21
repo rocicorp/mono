@@ -2,6 +2,7 @@ import {
   deepEqual,
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.ts';
+import {getOrInsertComputed, newMap} from '../../../../shared/src/map.ts';
 import {
   normalizeAST,
   type AST,
@@ -69,12 +70,10 @@ export class QueryCoveringIndex {
 
     const normalizedAst = normalizeAST(query.transformedAst);
     const root = rootKey(normalizedAst);
-    let queries = this.#byRoot.get(root);
-    if (!queries) {
-      queries = new Map();
-      this.#byRoot.set(root, queries);
-    }
-    queries.set(queryID, {...query, normalizedAst});
+    getOrInsertComputed(this.#byRoot, root, newMap).set(queryID, {
+      ...query,
+      normalizedAst,
+    });
     this.#queryIDToRoot.set(queryID, root);
   }
 

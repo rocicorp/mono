@@ -1,4 +1,5 @@
 import {assert, assertNumber} from '../../../shared/src/asserts.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {skipGCAsserts} from '../config.ts';
 import {type Hash, emptyHash} from '../hash.ts';
@@ -177,16 +178,15 @@ class RefCountUpdates {
 
   #ensureRefCountLoaded(hash: Hash): Promise<number> {
     // Only get the ref count once.
-    let p = this.#loadedRefCountPromises.get(hash);
-    if (p === undefined) {
-      p = (async () => {
+    return getOrInsertComputed(
+      this.#loadedRefCountPromises,
+      hash,
+      async hash => {
         const value = (await this.#delegate.getRefCount(hash)) || 0;
         this.#refCountUpdates.set(hash, value);
         return value;
-      })();
-      this.#loadedRefCountPromises.set(hash, p);
-    }
-    return p;
+      },
+    );
   }
 
   #updateRefCount(hash: Hash, delta: number): boolean {
