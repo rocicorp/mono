@@ -28,6 +28,7 @@ import {
   getReplicationState,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.ts';
+import type {SnapshotRowCache} from './snapshot-row-cache.ts';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
@@ -93,19 +94,28 @@ export class Snapshotter {
   readonly #dbFile: string;
   readonly #appID: string;
   readonly #pageCacheSizeKib: number | undefined;
+  readonly #rowCache: SnapshotRowCache | undefined;
   #curr: Snapshot | undefined;
   #prev: Snapshot | undefined;
 
+  /**
+   * @param rowCache An optional worker-wide {@link SnapshotRowCache} through
+   *        which the row reads performed when iterating over a
+   *        {@link SnapshotDiff} are shared with the other Snapshotters
+   *        (i.e. client groups) on the worker.
+   */
   constructor(
     lc: LogContext,
     dbFile: string,
     {appID}: AppID,
     pageCacheSizeKib?: number,
+    rowCache?: SnapshotRowCache,
   ) {
     this.#lc = lc;
     this.#dbFile = dbFile;
     this.#appID = appID;
     this.#pageCacheSizeKib = pageCacheSizeKib;
+    this.#rowCache = rowCache;
   }
 
   /**
@@ -185,6 +195,7 @@ export class Snapshotter {
       prev,
       curr,
       observedTables,
+      this.#rowCache,
     );
   }
 
@@ -284,6 +295,24 @@ export class ResetPipelinesSignal extends Error {
   }
 }
 
+// Memoizes the `SELECT <columns> FROM <table> WHERE ` prefix of the row
+// lookups performed for each change, which would otherwise be rebuilt from
+// the table spec for every read. Specs are recreated whenever they are
+// recomputed, so a stale prefix is never served.
+const selectPrefixes = new WeakMap<LiteTableSpecWithKeysAndVersion, string>();
+
+function selectPrefix(table: LiteTableSpecWithKeysAndVersion): string {
+  let prefix = selectPrefixes.get(table);
+  if (prefix === undefined) {
+    const cols = Object.keys(table.columns);
+    prefix = `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
+      table.name,
+    )} WHERE `;
+    selectPrefixes.set(table, prefix);
+  }
+  return prefix;
+}
+
 class Snapshot {
   static create(
     lc: LogContext,
@@ -350,6 +379,21 @@ class Snapshot {
     return row !== undefined;
   }
 
+  /**
+   * Whether any table-wide op (i.e. a RESET or TRUNCATE) was logged after
+   * `prevVersion`. Iterating over a diff ending at this snapshot will
+   * abort with a {@link ResetPipelinesSignal} if so.
+   */
+  hasTableWideOpSince(prevVersion: string): boolean {
+    const row = this.db.get(
+      'SELECT 1 FROM "_zero.changeLog2" WHERE stateVersion > ? AND op IN (?, ?) LIMIT 1',
+      prevVersion,
+      RESET_OP,
+      TRUNCATE_OP,
+    );
+    return row !== undefined;
+  }
+
   changesSince(prevVersion: string) {
     // Note: The queried fields are constrained to only those that are relevant
     // to the snapshot diff, i.e. those defined in the changeLogEntrySchema.
@@ -363,28 +407,47 @@ class Snapshot {
     };
   }
 
-  getRow(table: LiteTableSpecWithKeysAndVersion, rowKey: JSONValue) {
+  /**
+   * Reads the row with the given `rowKey`, or `undefined` if it does not
+   * exist.
+   *
+   * @param cache An optional {@link SnapshotRowCache} through which to
+   *        perform the read, along with the `tag` that identifies the
+   *        version(s) of the replica that the result depends on.
+   */
+  getRow(
+    table: LiteTableSpecWithKeysAndVersion,
+    rowKey: JSONValue,
+    cache?: SnapshotRowCache,
+    tag?: string,
+  ) {
     const key = normalizedKeyOrder(rowKey as RowKey);
     const conds = Object.keys(key).map(c => `${id(c)}=?`);
-    const cols = Object.keys(table.columns);
-    const cached = this.db.statementCache.get(
-      `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
-        table.name,
-      )} WHERE ${conds.join(' AND ')}`,
-    );
-    cached.statement.safeIntegers(true);
-    try {
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      return cached.statement.get<any>(Object.values(key));
-    } finally {
-      this.db.statementCache.return(cached);
-    }
+    const sql = selectPrefix(table) + conds.join(' AND ');
+    const args = Object.values(key);
+    const read = () =>
+      this.db.statementCache.use(sql, cached => {
+        cached.statement.safeIntegers(true);
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        return cached.statement.get<any>(args);
+      });
+    return cache ? cache.getOrRead(tag ?? '', sql, args, read) : read();
   }
 
+  /**
+   * Reads the rows that conflict with `row` on any of the given unique
+   * `keys` (which includes the row with the same primary key, if any).
+   *
+   * @param cache An optional {@link SnapshotRowCache} through which to
+   *        perform the read, along with the `tag` that identifies the
+   *        version(s) of the replica that the result depends on.
+   */
   getRows(
     table: LiteTableSpecWithKeysAndVersion,
     keys: PrimaryKey[],
     row: RowValue,
+    cache?: SnapshotRowCache,
+    tag?: string,
   ) {
     // Filter out keys where any column is NULL. This is both correct and
     // critical for performance:
@@ -399,21 +462,16 @@ class Snapshot {
       return [];
     }
     const conds = validKeys.map(key => key.map(c => `${id(c)}=?`));
-    const cols = Object.keys(table.columns);
-    const cached = this.db.statementCache.get(
-      `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
-        table.name,
-      )} WHERE ${conds.map(cond => cond.join(' AND ')).join(' OR ')}`,
-    );
-    cached.statement.safeIntegers(true);
-    try {
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      return cached.statement.all<any>(
-        validKeys.flatMap(key => key.map(column => row[column])),
-      );
-    } finally {
-      this.db.statementCache.return(cached);
-    }
+    const sql =
+      selectPrefix(table) + conds.map(cond => cond.join(' AND ')).join(' OR ');
+    const args = validKeys.flatMap(key => key.map(column => row[column]));
+    const read = () =>
+      this.db.statementCache.use(sql, cached => {
+        cached.statement.safeIntegers(true);
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        return cached.statement.all<any>(args);
+      });
+    return cache ? cache.getOrRead(tag ?? '', sql, args, read) : read();
   }
 
   resetToHead(): Snapshot {
@@ -427,6 +485,7 @@ class Diff implements SnapshotDiff {
   readonly #syncableTables: Map<string, LiteAndZqlSpec>;
   readonly #allTableNames: Set<string>;
   readonly #observedTables: TableFilter | undefined;
+  readonly #rowCache: SnapshotRowCache | undefined;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
@@ -438,6 +497,7 @@ class Diff implements SnapshotDiff {
     prev: Snapshot,
     curr: Snapshot,
     observedTables?: TableFilter | undefined,
+    rowCache?: SnapshotRowCache | undefined,
   ) {
     this.#permissionsTable = `${appID}.permissions`;
     this.#syncableTables = syncableTables;
@@ -446,6 +506,16 @@ class Diff implements SnapshotDiff {
     this.prev = prev;
     this.curr = curr;
     this.changes = curr.numChangesSince(prev.version);
+    // Row values are only shared (via the cache) between Diffs that do not
+    // straddle a table-wide op. This guarantees that any two Diffs that
+    // encounter the same change log entry read the row from tables with
+    // the same schema (and contents), since a RESET or TRUNCATE between
+    // their `curr` versions would necessarily fall within the range of the
+    // later Diff. (Such a Diff aborts with a ResetPipelinesSignal anyway.)
+    this.#rowCache =
+      rowCache && !curr.hasTableWideOpSince(prev.version)
+        ? rowCache
+        : undefined;
   }
 
   [Symbol.iterator](): Iterator<Change> {
@@ -519,17 +589,56 @@ class Diff implements SnapshotDiff {
             );
 
             assert(rowKey !== null, 'rowKey must be present for row changes');
+
+            // Row reads are shared with the other client groups on the
+            // worker via the SnapshotRowCache (if configured):
+            //
+            // * The new value of the row is read from `curr`, which is
+            //   never written to during the iteration, and is the version
+            //   of the row at `stateVersion` (as verified by
+            //   checkThatDiffIsValid()). It is thus identical for every
+            //   Diff that encounters the change log entry.
+            //
+            // * Previous values are read from `prev`, at `prev.version`,
+            //   which the caller (i.e. IVM) writes to as the iteration
+            //   progresses. For a table whose only unique key is its
+            //   primary key, no change applied before this one can affect
+            //   this row, so the result depends solely on `prev.version`.
+            //   Otherwise, the result can include rows that conflict on
+            //   other unique keys, which may have been added or removed by
+            //   preceding changes; that sequence is determined by the
+            //   `<prev, curr>` versions of the Diff, both of which are then
+            //   included in the cache tag.
+            const cache = this.#rowCache;
+            const prevTag =
+              tableSpec.uniqueKeys.length <= 1
+                ? `p:${this.prev.version}`
+                : `p:${this.prev.version}:${this.curr.version}`;
             const nextValue =
-              op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
+              op === SET_OP
+                ? this.curr.getRow(
+                    tableSpec,
+                    rowKey,
+                    cache,
+                    `n:${stateVersion}`,
+                  )
+                : null;
             let prevValues;
             if (nextValue) {
               prevValues = this.prev.getRows(
                 tableSpec,
                 tableSpec.uniqueKeys,
                 nextValue,
+                cache,
+                prevTag,
               );
             } else {
-              const prevValue = this.prev.getRow(tableSpec, rowKey);
+              const prevValue = this.prev.getRow(
+                tableSpec,
+                rowKey,
+                cache,
+                prevTag,
+              );
               prevValues = prevValue ? [prevValue] : [];
             }
             if (nextValue === undefined) {
@@ -563,8 +672,9 @@ class Diff implements SnapshotDiff {
               );
             }
 
-            // Modify the values in place when converting to ZQL rows
-            // This is safe since we're the first node in the iterator chain.
+            // Note: The raw SQLite rows may be shared with other client
+            // groups via the SnapshotRowCache, so they must not be modified.
+            // fromSQLiteTypes() produces new row objects.
             // TODO Can we get rid of these RowValue casts?
             return {
               value: {

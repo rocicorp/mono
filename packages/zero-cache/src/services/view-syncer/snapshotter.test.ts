@@ -11,10 +11,12 @@ import {
   ReplicationMessages,
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
+import {SnapshotRowCache} from './snapshot-row-cache.ts';
 import {
   InvalidDiffError,
   ResetPipelinesSignal,
   Snapshotter,
+  type Change,
 } from './snapshotter.ts';
 
 describe('view-syncer/snapshotter', () => {
@@ -773,5 +775,248 @@ describe('view-syncer/snapshotter', () => {
     const observed = new Set(['issues']);
     const diff = s.advance(tableSpecs, allTableNames, observed);
     expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
+  });
+
+  describe('snapshot row cache', () => {
+    // Counts the row lookups (i.e. statements other than the change log
+    // iteration) executed on the snapshots of a diff.
+    function rowLookups(spy: {mock: {calls: unknown[][]}}) {
+      return spy.mock.calls.filter(
+        call => typeof call[0] === 'string' && !call[0].includes('changeLog2'),
+      ).length;
+    }
+
+    test('row reads are shared across Snapshotters', () => {
+      const cache = new SnapshotRowCache(1000);
+      const s1 = new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'my_app'},
+        undefined,
+        cache,
+      ).init();
+      const s2 = new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'my_app'},
+        undefined,
+        cache,
+      ).init();
+
+      replicator.processTransaction(
+        '09',
+        messages.insert('issues', {id: 4, owner: 20}),
+        messages.update('issues', {id: 1, owner: 10, desc: 'food'}),
+        messages.delete('issues', {id: 3}),
+        messages.update('users', {id: 10, handle: 'alicia'}),
+        messages.delete('comments', {id: 123}), // never existed
+      );
+
+      const diff1 = s1.advance(tableSpecs, allTableNames);
+      const changes1 = [...diff1];
+      expect(changes1).toMatchInlineSnapshot(`
+        [
+          {
+            "nextValue": {
+              "_0_version": "09",
+              "desc": null,
+              "id": 4,
+              "owner": 20,
+            },
+            "prevValues": [],
+            "rowKey": {
+              "id": 4,
+            },
+            "table": "issues",
+          },
+          {
+            "nextValue": {
+              "_0_version": "09",
+              "desc": "food",
+              "id": 1,
+              "owner": 10,
+            },
+            "prevValues": [
+              {
+                "_0_version": "01",
+                "desc": "foo",
+                "id": 1,
+                "owner": 10,
+              },
+            ],
+            "rowKey": {
+              "id": 1,
+            },
+            "table": "issues",
+          },
+          {
+            "nextValue": null,
+            "prevValues": [
+              {
+                "_0_version": "01",
+                "desc": "baz",
+                "id": 3,
+                "owner": 20,
+              },
+            ],
+            "rowKey": {
+              "id": 3,
+            },
+            "table": "issues",
+          },
+          {
+            "nextValue": {
+              "_0_version": "09",
+              "handle": "alicia",
+              "id": 10,
+            },
+            "prevValues": [
+              {
+                "_0_version": "01",
+                "handle": "alice",
+                "id": 10,
+              },
+            ],
+            "rowKey": {
+              "id": 10,
+            },
+            "table": "users",
+          },
+        ]
+      `);
+      // 2 reads per set (curr.getRow + prev.getRows), 1 per delete
+      // (prev.getRow). The missing "comments" row is not cached.
+      expect(cache.stats()).toEqual({hits: 0, misses: 8, size: 7});
+
+      // The second Snapshotter's reads are all served from the cache.
+      const diff2 = s2.advance(tableSpecs, allTableNames);
+      expect(diff2.prev.version).toBe('01');
+      expect(diff2.curr.version).toBe('09');
+      const prevSpy = vi.spyOn(diff2.prev.db.statementCache, 'get');
+      const currSpy = vi.spyOn(diff2.curr.db.statementCache, 'get');
+
+      const changes2 = [...diff2];
+      expect(changes2).toEqual(changes1);
+      expect(cache.stats()).toEqual({hits: 7, misses: 9, size: 7});
+      expect(rowLookups(prevSpy)).toBe(1); // the missing "comments" row
+      expect(rowLookups(currSpy)).toBe(0);
+
+      // Rows produced by the diff are not shared with the cached SQLite rows.
+      expect(changes2[0].nextValue).not.toBe(changes1[0].nextValue);
+      expect(changes2[1].prevValues[0]).not.toBe(changes1[1].prevValues[0]);
+
+      // Re-iterating a diff is likewise served from the cache.
+      expect([...diff1]).toEqual(changes1);
+      expect(cache.stats()).toEqual({hits: 14, misses: 10, size: 7});
+
+      prevSpy.mockRestore();
+      currSpy.mockRestore();
+      s1.destroy();
+      s2.destroy();
+    });
+
+    test('sharing across Snapshotters at different curr versions', () => {
+      const cache = new SnapshotRowCache(1000);
+      const s1 = new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'my_app'},
+        undefined,
+        cache,
+      ).init();
+      const s2 = new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'my_app'},
+        undefined,
+        cache,
+      ).init();
+
+      replicator.processTransaction(
+        '09',
+        messages.insert('issues', {id: 4, owner: 20}),
+        messages.update('issues', {id: 1, owner: 10, desc: 'food'}),
+        messages.delete('issues', {id: 3}),
+        messages.update('users', {id: 10, handle: 'alicia'}),
+      );
+
+      const changes1 = [...s1.advance(tableSpecs, allTableNames)];
+      expect(cache.stats()).toEqual({hits: 0, misses: 7, size: 7});
+
+      // s2 advances over a range that includes a subsequent transaction.
+      replicator.processTransaction('0b', messages.insert('comments', {id: 1}));
+
+      const diff2 = s2.advance(tableSpecs, allTableNames);
+      expect(diff2.prev.version).toBe('01');
+      expect(diff2.curr.version).toBe('0b');
+      const changes2 = [...diff2];
+      expect(changes2).toEqual([
+        ...changes1,
+        {
+          nextValue: {['_0_version']: '0b', desc: null, id: 1},
+          prevValues: [],
+          rowKey: {id: 1},
+          table: 'comments',
+        },
+      ]);
+      // Hits: the new values of the 3 "issues" and "users" rows, and the
+      //       previous values of the 3 "issues" rows (whose only unique key
+      //       is the primary key).
+      // Misses: the previous value of the "users" row, whose table has an
+      //         additional unique key (and thus depends on the curr version),
+      //         and the 2 reads for the new "comments" row.
+      expect(cache.stats()).toEqual({hits: 6, misses: 10, size: 10});
+
+      s1.destroy();
+      s2.destroy();
+    });
+
+    test('diffs that include a table-wide op bypass the cache', () => {
+      const cache = new SnapshotRowCache(1000);
+      const s1 = new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'my_app'},
+        undefined,
+        cache,
+      ).init();
+
+      replicator.processTransaction(
+        '09',
+        messages.insert('issues', {id: 4, owner: 20}),
+      );
+      replicator.processTransaction('0b', messages.truncate('users'));
+
+      const diff = s1.advance(tableSpecs, allTableNames);
+      expect(diff.changes).toBe(2);
+
+      const changes: Change[] = [];
+      expect(() => {
+        for (const change of diff) {
+          changes.push(change);
+        }
+      }).toThrowError(ResetPipelinesSignal);
+
+      // The change before the truncate was still read (directly).
+      expect(changes).toHaveLength(1);
+      expect(cache.stats()).toEqual({hits: 0, misses: 0, size: 0});
+
+      s1.destroy();
+    });
+
+    test('a Snapshotter without a cache reads directly', () => {
+      replicator.processTransaction(
+        '09',
+        messages.insert('issues', {id: 4, owner: 20}),
+      );
+      const diff = s.advance(tableSpecs, allTableNames);
+      const currSpy = vi.spyOn(diff.curr.db.statementCache, 'get');
+      const prevSpy = vi.spyOn(diff.prev.db.statementCache, 'get');
+      expect([...diff]).toHaveLength(1);
+      expect(rowLookups(currSpy)).toBe(1);
+      expect(rowLookups(prevSpy)).toBe(1);
+      currSpy.mockRestore();
+      prevSpy.mockRestore();
+    });
   });
 });
