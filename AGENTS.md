@@ -226,36 +226,6 @@ const validKeys = keys.filter(key =>
 
 See: https://github.com/rocicorp/mono/pull/5542
 
-### SQLite: `WITHOUT ROWID` rows overflow past ~1KB at the default page size
-
-A `WITHOUT ROWID` table is an index B-tree, and SQLite caps an index B-tree's
-inline payload at `((page_size - 35) * 64 / 255) - 23` — about **1004 bytes** at
-the default `page_size` of 4096, ~2029 at 8192, ~4081 at 16384. Past that, a
-row spills into an overflow page chain.
-
-For rows just past the threshold the penalty is a cliff, not a slope. Measured
-on 100k rows against `replicache`'s kv schema:
-
-| value size | amplification at page_size=4096 |
-| ---------- | ------------------------------- |
-| 950 B      | 1.04x                           |
-| 1000 B     | **4.51x**                       |
-
-**Check what your rows actually are before reaching for this.** Replicache's
-kv `entry` rows are B-tree chunks of 8-16KB (`BTreeWrite` defaults), not the
-1KB app values `replicache-perf` names its benchmarks after, so they overflow
-at 4096 and 8192 alike and the cliff above does not apply. `sqlite-store.ts`
-sets `page_size = 8192` (plus `mmap_size`) for a measured on-device win of a
-few percent to ~40% on reads (#6622), not to escape the cliff.
-
-Two traps:
-
-- `PRAGMA page_size` is **silently ignored** once a journal mode is set or the
-  database has any content. No error. It must come first, before
-  `journal_mode`, or you stay on 4096 and nothing tells you.
-- Changing it on an existing database needs `journal_mode=DELETE` → pragma →
-  `VACUUM` → `journal_mode=WAL`. New databases only, otherwise.
-
 ## Git Conventions
 
 ### Commit Messages
