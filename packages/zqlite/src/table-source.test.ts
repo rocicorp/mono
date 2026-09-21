@@ -1325,3 +1325,173 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
     Statement.prototype.iterate = origIterate;
   }
 });
+
+describe('pushes rejected by every connection', () => {
+  function setup() {
+    const db = new Database(lc, ':memory:');
+    db.exec(/* sql */ `
+      CREATE TABLE foo (id TEXT PRIMARY KEY, owner TEXT, n INTEGER);
+      CREATE UNIQUE INDEX foo_n ON foo(n);
+    `);
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'foo',
+      {id: {type: 'string'}, owner: {type: 'string'}, n: {type: 'number'}},
+      ['id'],
+    );
+    const read = db.prepare('SELECT id, owner, n FROM foo ORDER BY id');
+    const outputted: Change[] = [];
+    const output = {
+      push: function* (change: Change) {
+        outputted.push(change);
+      },
+    };
+    const connect = (owner: string) => {
+      const input = source.connect([['id', 'asc']], {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'owner'},
+        right: {type: 'literal', value: owner},
+      });
+      input.setOutput(output);
+      return input;
+    };
+    return {db, source, read, outputted, connect};
+  }
+
+  test('skips the write and the exists check', () => {
+    const {source, read, outputted, connect} = setup();
+    connect('alice');
+    connect('bob');
+
+    // Rejected by every connection: not written, not pushed.
+    consume(source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})));
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([]);
+
+    // A remove of a row that is not in the snapshot would normally throw
+    // ("Row not found"); the exists check is skipped and the DELETE is a
+    // no-op.
+    consume(
+      source.push(makeSourceChangeRemove({id: 'r1', owner: 'carol', n: 1})),
+    );
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([]);
+
+    // An edit between two rejected rows is neither written nor pushed.
+    consume(
+      source.push(
+        makeSourceChangeEdit(
+          {id: 'r1', owner: 'dave', n: 2},
+          {id: 'r1', owner: 'carol', n: 1},
+        ),
+      ),
+    );
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([]);
+
+    // Accepted by a connection: written and pushed as usual.
+    consume(source.push(makeSourceChangeAdd({id: 'r2', owner: 'alice', n: 3})));
+    expect(outputted).toEqual([
+      makeAddChange({
+        relationships: {},
+        row: {id: 'r2', owner: 'alice', n: 3},
+      }),
+    ]);
+    expect(read.all()).toEqual([{id: 'r2', owner: 'alice', n: 3}]);
+    outputted.length = 0;
+
+    // An edit out of the accepted set is pushed (as a remove) and written.
+    consume(
+      source.push(
+        makeSourceChangeEdit(
+          {id: 'r2', owner: 'carol', n: 3},
+          {id: 'r2', owner: 'alice', n: 3},
+        ),
+      ),
+    );
+    expect(outputted).toEqual([
+      makeRemoveChange({
+        relationships: {},
+        row: {id: 'r2', owner: 'alice', n: 3},
+      }),
+    ]);
+    expect(read.all()).toEqual([{id: 'r2', owner: 'carol', n: 3}]);
+    outputted.length = 0;
+
+    // Now rejected: a remove is not pushed but is still deleted from the
+    // snapshot, so that a subsequent insert of a row displacing it on a
+    // unique key does not violate the unique index.
+    consume(
+      source.push(makeSourceChangeRemove({id: 'r2', owner: 'carol', n: 3})),
+    );
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([]);
+    consume(source.push(makeSourceChangeAdd({id: 'r3', owner: 'bob', n: 3})));
+    expect(outputted).toEqual([
+      makeAddChange({
+        relationships: {},
+        row: {id: 'r3', owner: 'bob', n: 3},
+      }),
+    ]);
+    expect(read.all()).toEqual([{id: 'r3', owner: 'bob', n: 3}]);
+  });
+
+  test('an unfiltered connection disables the skip', () => {
+    const {source, read, outputted, connect} = setup();
+    connect('alice');
+    const unfiltered = source.connect([['id', 'asc']]);
+    unfiltered.setOutput({
+      push: function* () {},
+    });
+
+    consume(source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})));
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([{id: 'r1', owner: 'carol', n: 1}]);
+    expect(() =>
+      consume(
+        source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})),
+      ),
+    ).toThrow('Row already exists');
+
+    // Destroying the unfiltered connection re-enables the skip.
+    unfiltered.destroy();
+    consume(source.push(makeSourceChangeAdd({id: 'r2', owner: 'carol', n: 2})));
+    expect(read.all()).toEqual([{id: 'r1', owner: 'carol', n: 1}]);
+  });
+
+  test('a connection whose subquery conditions were dropped still counts', () => {
+    const {source, read, connect} = setup();
+    connect('alice');
+    // `owner = 'bob' AND EXISTS(...)`: the EXISTS is dropped from the source
+    // filters, leaving `owner = 'bob'` as a necessary condition.
+    const input = source.connect([['id', 'asc']], {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'owner'},
+          right: {type: 'literal', value: 'bob'},
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['id'], childField: ['fooID']},
+            subquery: {table: 'bar', orderBy: [['id', 'asc']]},
+          },
+        },
+      ],
+    });
+    input.setOutput({push: function* () {}});
+    expect(input.fullyAppliedFilters).toBe(false);
+
+    consume(source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})));
+    expect(read.all()).toEqual([]);
+    consume(source.push(makeSourceChangeAdd({id: 'r2', owner: 'bob', n: 2})));
+    expect(read.all()).toEqual([{id: 'r2', owner: 'bob', n: 2}]);
+  });
+});

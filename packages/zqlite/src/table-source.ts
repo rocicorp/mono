@@ -21,6 +21,7 @@ import {
   type NoSubqueryCondition as StrictNoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
+import {ConnectionIndex} from '../../zql/src/ivm/connection-index.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
@@ -77,6 +78,9 @@ let eventCount = 0;
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
   readonly #connections: Connection[] = [];
+  // Indexes #connections by the static equality constraints in their filters
+  // so that a push can cheaply skip rows that no connection could accept.
+  readonly #connectionIndex = new ConnectionIndex<Connection>();
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
@@ -250,6 +254,7 @@ export class TableSource implements Source {
         const idx = this.#connections.indexOf(connection);
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
+        this.#connectionIndex.remove(connection);
       },
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
@@ -275,6 +280,7 @@ export class TableSource implements Source {
     }
 
     this.#connections.push(connection);
+    this.#connectionIndex.add(connection, transformedFilters.filters);
     return input;
   }
 
@@ -423,7 +429,27 @@ export class TableSource implements Source {
     }
   }
 
-  genPush(change: SourceChange) {
+  *genPush(change: SourceChange): Stream<'yield' | undefined> {
+    if (!this.#connectionIndex.mayAcceptChange(change)) {
+      // The filters of every connection reject the row (both the old and the
+      // new row, for an edit). Filters are static for the lifetime of a
+      // connection and are applied to the connection's fetch SQL as well as
+      // to its pushes, so none of the connected pipelines can ever observe
+      // this row: skip the exists check, the per-connection push, and the
+      // simulated INSERT / UPDATE of the row into the snapshot. The row is
+      // already in the replica, which the source switches to after the
+      // advancement.
+      //
+      // A REMOVE still deletes the row from the snapshot: the caller may be
+      // deleting a row displaced by a unique key conflict right before
+      // inserting the displacing row, and the INSERT would violate the
+      // unique index if the DELETE were skipped.
+      if (change[SourceChangeIndex.TYPE] === ChangeType.REMOVE) {
+        this.#writeChange(change);
+      }
+      return;
+    }
+
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -431,7 +457,7 @@ export class TableSource implements Source {
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
 
-    return genPushAndWriteWithSplitEdit(
+    yield* genPushAndWriteWithSplitEdit(
       this.#connections,
       change,
       exists,
