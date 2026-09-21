@@ -431,19 +431,8 @@ export class TableSource implements Source {
 
   *genPush(change: SourceChange): Stream<'yield' | undefined> {
     if (!this.#connectionIndex.mayAcceptChange(change)) {
-      // The filters of every connection reject the row (both the old and the
-      // new row, for an edit). Filters are static for the lifetime of a
-      // connection and are applied to the connection's fetch SQL as well as
-      // to its pushes, so none of the connected pipelines can ever observe
-      // this row: skip the exists check, the per-connection push, and the
-      // simulated INSERT / UPDATE of the row into the snapshot. The row is
-      // already in the replica, which the source switches to after the
-      // advancement.
-      //
-      // A REMOVE still deletes the row from the snapshot: the caller may be
-      // deleting a row displaced by a unique key conflict right before
-      // inserting the displacing row, and the INSERT would violate the
-      // unique index if the DELETE were skipped.
+      // No connection can observe this row, so only a REMOVE needs to be
+      // applied to the snapshot.
       if (change[SourceChangeIndex.TYPE] === ChangeType.REMOVE) {
         this.#writeChange(change);
       }
