@@ -10,11 +10,15 @@ type Defined = {} | null;
  */
 type MapOrWeakMap<K, V> = Map<K, V> | WeakMap<K & WeakKey, V>;
 
-const nativeSupport =
-  typeof (Map.prototype as unknown as MapES2026<unknown, Defined>)
-    .getOrInsert === 'function' &&
-  typeof (WeakMap.prototype as unknown as MapES2026<WeakKey, Defined>)
-    .getOrInsert === 'function';
+function hasNative(name: keyof MapES2026<unknown, Defined>): boolean {
+  return (
+    typeof (Map.prototype as unknown as MapES2026<unknown, Defined>)[name] ===
+      'function' &&
+    typeof (WeakMap.prototype as unknown as MapES2026<WeakKey, Defined>)[
+      name
+    ] === 'function'
+  );
+}
 
 interface MapES2026<K, V> {
   getOrInsert(key: K, defaultValue: V): V;
@@ -76,11 +80,11 @@ function getOrInsertComputedNative<K, V extends Defined>(
   return (map as unknown as MapES2026<K, V>).getOrInsertComputed(key, compute);
 }
 
-export const getOrInsert = nativeSupport
+export const getOrInsert = hasNative('getOrInsert')
   ? getOrInsertNative
   : getOrInsertPolyfill;
 
-export const getOrInsertComputed = nativeSupport
+export const getOrInsertComputed = hasNative('getOrInsertComputed')
   ? getOrInsertComputedNative
   : getOrInsertComputedPolyfill;
 
