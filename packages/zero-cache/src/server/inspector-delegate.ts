@@ -1,5 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {mapValues} from '../../../shared/src/objects.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
@@ -64,12 +65,11 @@ export class InspectorDelegate implements MetricsDelegate {
     if (metric === 'query-materialization-server') {
       this.#perQueryHydrateMs.set(queryID, value);
     } else {
-      let digest = this.#perQueryUpdateMetrics.get(queryID);
-      if (!digest) {
-        digest = new TDigest();
-        this.#perQueryUpdateMetrics.set(queryID, digest);
-      }
-      digest.add(value);
+      getOrInsertComputed(
+        this.#perQueryUpdateMetrics,
+        queryID,
+        () => new TDigest(),
+      ).add(value);
     }
     this.#globalMetrics[metric].add(value);
   }

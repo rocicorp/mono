@@ -1,5 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {newArray} from '../../../../packages/shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../../packages/shared/src/map.ts';
 import {
   listIndexes,
   listTables,
@@ -436,9 +438,9 @@ async function compareReplica(
     const uniqueKeys = new Map<string, string[][]>();
     for (const index of listIndexes(db)) {
       if (index.unique) {
-        const keys = uniqueKeys.get(index.tableName) ?? [];
-        keys.push(Object.keys(index.columns));
-        uniqueKeys.set(index.tableName, keys);
+        getOrInsertComputed(uniqueKeys, index.tableName, newArray).push(
+          Object.keys(index.columns),
+        );
       }
     }
     for (const spec of specs) {

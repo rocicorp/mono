@@ -5,6 +5,7 @@ import {
   type ReadonlyJSONObject,
   type ReadonlyJSONValue,
 } from '../../../shared/src/json.ts';
+import {getOrInsertComputed, newMap} from '../../../shared/src/map.ts';
 import {
   type AST,
   type CompoundKey,
@@ -938,13 +939,10 @@ export function asQueryImpl<
 const astIDs = new WeakMap<AST, number>();
 let nextASTID = 0;
 
+const newASTID = () => ++nextASTID;
+
 function astID(ast: AST): number {
-  let id = astIDs.get(ast);
-  if (id === undefined) {
-    id = ++nextASTID;
-    astIDs.set(ast, id);
-  }
-  return id;
+  return getOrInsertComputed(astIDs, ast, newASTID);
 }
 
 /**
@@ -958,28 +956,16 @@ function astID(ast: AST): number {
 const whereKeys = new Map<string, Map<string, string>>();
 
 function whereKey(column: string, op: string): string {
-  let byOp = whereKeys.get(column);
-  if (byOp === undefined) {
-    byOp = new Map();
-    whereKeys.set(column, byOp);
-  }
-  let key = byOp.get(op);
-  if (key === undefined) {
-    key = `where:${column}:${op}`;
-    byOp.set(op, key);
-  }
-  return key;
+  const byOp = getOrInsertComputed(whereKeys, column, newMap);
+  return getOrInsertComputed(byOp, op, op => `where:${column}:${op}`);
 }
 
 const relatedKeys = new Map<string, string>();
 
+const newRelatedKey = (relationship: string) => `related:${relationship}`;
+
 function relatedKey(relationship: string): string {
-  let key = relatedKeys.get(relationship);
-  if (key === undefined) {
-    key = `related:${relationship}`;
-    relatedKeys.set(relationship, key);
-  }
-  return key;
+  return getOrInsertComputed(relatedKeys, relationship, newRelatedKey);
 }
 
 function isPrimitive(v: LiteralValue): v is string | number | boolean | null {
