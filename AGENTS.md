@@ -256,9 +256,6 @@ Two traps:
 - Changing it on an existing database needs `journal_mode=DELETE` → pragma →
   `VACUUM` → `journal_mode=WAL`. New databases only, otherwise.
 
-`packages/replicache/tool/bench/page-size.c` reproduces all of this in about a
-minute.
-
 ## Git Conventions
 
 ### Commit Messages

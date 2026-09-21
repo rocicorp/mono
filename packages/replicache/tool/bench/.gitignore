@@ -1,5 +1,0 @@
-# The SQLite amalgamation is copied in locally to build against; it is not ours
-# to vendor. See README.md.
-sqlite3.c
-sqlite3.h
-page-size

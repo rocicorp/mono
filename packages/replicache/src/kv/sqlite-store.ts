@@ -228,8 +228,7 @@ export interface SQLiteStoreOptions {
  * Replicache's rows are B-tree chunks, which `BTreeWrite` targets at 8-16KB, so
  * they overflow at either page size. 8192 does not avoid overflow; it halves the
  * number of pages each chunk is split across. (The dramatic 4x file-size cliff
- * that `tool/bench/` shows applies to ~1KB rows, which this store does not
- * normally hold.)
+ * applies to ~1KB rows, which this store does not normally hold.)
  *
  * Measured with `replicache-perf/rn`, 4096 vs 8192 + mmap, change in time:
  *
