@@ -89,6 +89,14 @@ describe('litestream/restore-progress', () => {
     ]);
   });
 
+  test('does not report an existing replica before the restore writes', () => {
+    writeFileSync(replicaFile, Buffer.alloc(2500));
+    reporter.start(3000, 1000);
+    vi.advanceTimersByTime(5000);
+
+    expect(restoreStatuses()).toEqual([['Restoring', 0]]);
+  });
+
   test('ignores a stale temporary replica when starting', () => {
     writeFileSync(`${replicaFile}.tmp`, Buffer.alloc(2000));
     reporter.start(3000, 1000);

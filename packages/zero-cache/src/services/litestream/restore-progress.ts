@@ -25,6 +25,7 @@ export class RestoreProgressReporter {
   #start = performance.now();
   #totalBytes: number | undefined;
   #lastBytes: number | undefined;
+  #sawTempFile = false;
   #timer: NodeJS.Timeout | undefined;
 
   constructor(
@@ -52,6 +53,7 @@ export class RestoreProgressReporter {
     }
     // Start from 0 rather than checking now: a `.tmp` left behind by an
     // interrupted restore is only deleted when the restore starts.
+    this.#sawTempFile = false;
     this.#update(0);
     this.#timer = setInterval(() => this.#check(), intervalMs);
   }
@@ -68,11 +70,17 @@ export class RestoreProgressReporter {
   }
 
   #check() {
-    // litestream renames `.tmp` to the replica before its post-restore
-    // integrity check, so once `.tmp` is gone the replica holds the bytes.
-    this.#update(
-      fileSize(`${this.#replicaFile}.tmp`) ?? fileSize(this.#replicaFile) ?? 0,
-    );
+    const tempBytes = fileSize(`${this.#replicaFile}.tmp`);
+    if (tempBytes !== undefined) {
+      this.#sawTempFile = true;
+      this.#update(tempBytes);
+    } else if (this.#sawTempFile) {
+      // litestream renames `.tmp` to the replica before its post-restore
+      // integrity check, so once `.tmp` is gone the replica holds the bytes.
+      // Before `.tmp` appears, an existing replica is not restore progress
+      // (it may be invalid and about to be deleted).
+      this.#update(fileSize(this.#replicaFile) ?? 0);
+    }
   }
 
   #update(bytes: number) {
