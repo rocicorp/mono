@@ -3,5 +3,6 @@
  */
 // #region Variables
 export var REPLICATION_STATUS_EVENT_V1_TYPE
+export var VIEW_SYNCER_STATUS_EVENT_V1_TYPE
 export var ZERO_STATUS_EVENT_PREFIX
 // #endregion
