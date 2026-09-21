@@ -146,6 +146,12 @@ export interface Output {
    * yielded to the caller of push immediately.
    */
   push(change: Change, pusher: InputBase): Stream<'yield'>;
+
+  /**
+   * Phase 2 reconciliation: allows bounded operators (like Take) to refill
+   * deficits after Phase 1 changes have propagated.
+   */
+  reconcile?(pusher: InputBase): Stream<'yield'>;
 }
 
 /**
@@ -154,6 +160,9 @@ export interface Output {
  */
 export const throwOutput: Output = {
   push(_change: Change): Stream<'yield'> {
+    throw new Error('Output not set');
+  },
+  *reconcile(): Stream<'yield'> {
     throw new Error('Output not set');
   },
 };

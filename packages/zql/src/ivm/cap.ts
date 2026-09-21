@@ -11,6 +11,7 @@ import {
   throwOutput,
   type FetchRequest,
   type Input,
+  type InputBase,
   type Operator,
   type Output,
   type Storage,
@@ -301,6 +302,12 @@ export class Cap implements Operator {
 
   destroy(): void {
     this.#input.destroy();
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 }
 

@@ -86,6 +86,12 @@ export class TakeGate implements Operator, TakeBoundProvider {
     yield* this.#output.push(change, this);
   }
 
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
+  }
+
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     if (this.#openDepth > 0 || req.reverse) {
       yield* this.#input.fetch(req);

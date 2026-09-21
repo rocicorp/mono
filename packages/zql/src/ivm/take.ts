@@ -17,6 +17,7 @@ import {
   throwOutput,
   type FetchRequest,
   type Input,
+  type InputBase,
   type Operator,
   type Output,
   type Storage,
@@ -59,6 +60,7 @@ export class Take implements Operator, TakeBoundProvider {
   #rowHiddenFromFetch: Row | undefined;
 
   #takeGate: TakeGate | undefined;
+  readonly #dirtyPartitions = new Map<string, Constraint | undefined>();
 
   #output: Output = throwOutput;
 
@@ -356,48 +358,6 @@ export class Take implements Operator, TakeBoundProvider {
         break;
       }
 
-      let newBound: {node: Node; push: boolean} | undefined;
-      if (beforeBoundNode) {
-        const push = compareRows(beforeBoundNode.row, takeState.bound) > 0;
-        newBound = {
-          node: beforeBoundNode,
-          push,
-        };
-      }
-      if (!newBound?.push) {
-        this.#takeGate?.open();
-        try {
-          for (const node of this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'at',
-            },
-            constraint,
-          })) {
-            if (node === 'yield') {
-              yield node;
-              continue;
-            }
-            const push = compareRows(node.row, takeState.bound) > 0;
-            newBound = {
-              node,
-              push,
-            };
-            if (push) {
-              break;
-            }
-          }
-        } finally {
-          this.#takeGate?.close();
-        }
-      }
-
-      if (newBound?.push) {
-        yield* this.#output.push(change, this);
-        this.#setTakeState(takeStateKey, takeState.size, newBound.node.row);
-        yield* this.#output.push(makeAddChange(newBound.node), this);
-        return;
-      }
       const finalBound =
         takeState.size - 1 === 0
           ? undefined
@@ -405,6 +365,7 @@ export class Take implements Operator, TakeBoundProvider {
             ? takeState.bound
             : beforeBoundNode?.row;
       this.#setTakeState(takeStateKey, takeState.size - 1, finalBound);
+      this.#dirtyPartitions.set(takeStateKey, constraint);
       yield* this.#output.push(change, this);
     } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
       // A 'child' change should be pushed to output if its row
@@ -670,6 +631,70 @@ export class Take implements Operator, TakeBoundProvider {
 
   destroy(): void {
     this.#input.destroy();
+  }
+
+  *reconcile(_pusher?: InputBase): Stream<'yield'> {
+    if (this.#dirtyPartitions.size > 0) {
+      const dirty = [...this.#dirtyPartitions.entries()];
+      this.#dirtyPartitions.clear();
+
+      for (const [takeStateKey, constraint] of dirty) {
+        const takeState = this.#storage.get(takeStateKey);
+        if (!takeState) {
+          continue;
+        }
+        const deficit = this.#limit - takeState.size;
+        if (deficit <= 0) {
+          continue;
+        }
+
+        let refilledCount = 0;
+        let newBound = takeState.bound;
+        this.#takeGate?.open();
+        try {
+          const stream = this.#input.fetch({
+            start: takeState.bound
+              ? {
+                  row: takeState.bound,
+                  basis: 'at',
+                }
+              : undefined,
+            constraint,
+          });
+
+          for (const node of stream) {
+            if (node === 'yield') {
+              yield 'yield';
+              continue;
+            }
+            if (
+              takeState.bound &&
+              this.getSchema().compareRows(node.row, takeState.bound) <= 0
+            ) {
+              continue;
+            }
+            refilledCount++;
+            newBound = node.row;
+            yield* this.#output.push(makeAddChange(node), this);
+            if (refilledCount === deficit) {
+              break;
+            }
+          }
+        } finally {
+          this.#takeGate?.close();
+        }
+
+        this.#setTakeState(
+          takeStateKey,
+          takeState.size + refilledCount,
+          newBound,
+        );
+      }
+    }
+
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 }
 

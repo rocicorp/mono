@@ -237,6 +237,12 @@ export class UnionFanIn implements Operator {
   setOutput(output: Output): void {
     this.#output = output;
   }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
+  }
 }
 
 export function* mergeFetches(

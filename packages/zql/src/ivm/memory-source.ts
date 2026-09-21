@@ -737,6 +737,9 @@ function* genPush(
                 relationships: {},
               });
       yield* filterPush(outputChange, output, input, filters?.predicate);
+      if (output.reconcile) {
+        yield* output.reconcile(input);
+      }
       yield undefined;
     }
   }
