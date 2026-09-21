@@ -136,10 +136,12 @@ export class SnapshotRowCache {
     const value = read();
     if (value !== undefined && this.#maxEntries > 0) {
       this.#entries.set(key, value);
-      while (this.#entries.size > this.#maxEntries) {
-        // Map iteration order is insertion order, so the first key is the oldest.
-        const oldest = this.#entries.keys().next().value;
-        this.#entries.delete(oldest as string);
+      // Map iteration order is insertion order, so the first key is the oldest.
+      for (const oldest of this.#entries.keys()) {
+        if (this.#entries.size <= this.#maxEntries) {
+          break;
+        }
+        this.#entries.delete(oldest);
       }
     }
     return value;
