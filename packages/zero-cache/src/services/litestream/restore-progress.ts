@@ -45,7 +45,11 @@ export class RestoreProgressReporter {
     this.stop();
     // Measure the restore itself, not the wait for a restorable backup.
     this.#start = performance.now();
-    this.#totalBytes = totalBytes;
+    if (totalBytes !== this.#totalBytes) {
+      // Publish the new total even if the restored bytes are unchanged.
+      this.#lastBytes = undefined;
+      this.#totalBytes = totalBytes;
+    }
     // Start from 0 rather than checking now: a `.tmp` left behind by an
     // interrupted restore is only deleted when the restore starts.
     this.#update(0);

@@ -80,6 +80,15 @@ describe('litestream/restore-progress', () => {
     ]);
   });
 
+  test('republishes when a retry reports a different total', () => {
+    reporter.start(3000, 1000);
+    reporter.start(4000, 1000);
+
+    expect(events.map(e => e.state?.restoreStatus?.totalBytes)).toEqual([
+      3000, 4000,
+    ]);
+  });
+
   test('ignores a stale temporary replica when starting', () => {
     writeFileSync(`${replicaFile}.tmp`, Buffer.alloc(2000));
     reporter.start(3000, 1000);
