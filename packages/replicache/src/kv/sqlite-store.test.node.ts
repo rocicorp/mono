@@ -1,5 +1,10 @@
-import {expect, test} from 'vitest';
-import {SQLiteStoreRead, type PreparedStatements} from './sqlite-store.ts';
+import {expect, test, vi} from 'vitest';
+import {
+  SQLiteStoreRead,
+  setupDatabase,
+  type PreparedStatements,
+  type SQLiteDatabase,
+} from './sqlite-store.ts';
 
 function makeMockStatements(
   opts: {
@@ -122,4 +127,70 @@ test('mixed concurrent gets and has use separate sql calls', async () => {
 
   expect(getManyCallCount()).toBe(1);
   expect(hasCallCount()).toBe(1);
+});
+
+/** Records the pragmas `setupDatabase` issues, in order. */
+function setupAndCollectPragmas(
+  opts?: Parameters<typeof setupDatabase>[1],
+): string[] {
+  const pragmas: string[] = [];
+  const db: SQLiteDatabase = {
+    close: vi.fn(),
+    destroy: vi.fn(),
+    prepare: vi.fn(() => ({
+      exec: () => Promise.resolve(),
+      all: () => Promise.resolve([]),
+    })),
+    execSync: vi.fn((sql: string) => {
+      const match = /^\s*PRAGMA\s+(\w+)/i.exec(sql);
+      if (match) {
+        pragmas.push(sql.trim());
+      }
+    }),
+  };
+  setupDatabase(db, opts);
+  return pragmas;
+}
+
+function indexOfPragma(pragmas: string[], name: string): number {
+  return pragmas.findIndex(p =>
+    new RegExp(`^PRAGMA\\s+${name}\\b`, 'i').test(p),
+  );
+}
+
+test('setupDatabase issues page_size before journal_mode', () => {
+  const pragmas = setupAndCollectPragmas();
+
+  const pageSize = indexOfPragma(pragmas, 'page_size');
+  const journalMode = indexOfPragma(pragmas, 'journal_mode');
+
+  expect(pageSize).toBeGreaterThanOrEqual(0);
+  expect(journalMode).toBeGreaterThanOrEqual(0);
+  // SQLite silently ignores page_size once a journal mode has been set, so the
+  // order here is load-bearing and not merely stylistic. If this fails, the
+  // store is quietly running on 4096 and paying ~4x the disk and ~12x the
+  // bulk-write cost on values over ~1004 bytes.
+  expect(pageSize).toBeLessThan(journalMode);
+});
+
+test('setupDatabase defaults page_size to 8192 and enables mmap', () => {
+  const pragmas = setupAndCollectPragmas();
+
+  expect(pragmas[indexOfPragma(pragmas, 'page_size')]).toBe(
+    'PRAGMA page_size = 8192',
+  );
+  expect(pragmas[indexOfPragma(pragmas, 'mmap_size')]).toBe(
+    'PRAGMA mmap_size = 268435456',
+  );
+});
+
+test('setupDatabase honors pageSize and mmapSize overrides', () => {
+  const pragmas = setupAndCollectPragmas({pageSize: 16384, mmapSize: 0});
+
+  expect(pragmas[indexOfPragma(pragmas, 'page_size')]).toBe(
+    'PRAGMA page_size = 16384',
+  );
+  expect(pragmas[indexOfPragma(pragmas, 'mmap_size')]).toBe(
+    'PRAGMA mmap_size = 0',
+  );
 });

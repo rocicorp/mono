@@ -226,6 +226,40 @@ const validKeys = keys.filter(key =>
 
 See: https://github.com/rocicorp/mono/pull/5542
 
+### SQLite: `WITHOUT ROWID` + the default page size = 4x the disk
+
+A `WITHOUT ROWID` table is an index B-tree, and SQLite caps an index B-tree's
+inline payload at `((page_size - 35) * 64 / 255) - 23` — about **1004 bytes** at
+the default `page_size` of 4096. One byte past that, every row spills into an
+overflow page chain.
+
+The penalty is not gradual. Measured on 100k rows against `replicache`'s kv
+schema, holding everything else equal:
+
+| value size | amplification at page_size=4096 |
+| ---------- | ------------------------------- |
+| 950 B      | 1.06x                           |
+| 1000 B     | **4.62x**                       |
+
+At 1KB values that is 101MB of data becoming 446MB on disk, ~6x slower bulk
+writes and ~4.5x slower reads. `packages/replicache/src/kv/sqlite-store.ts` now
+sets `PRAGMA page_size = 8192`, which moves the threshold to ~2029 bytes.
+
+**The cliff never goes away, it only moves** — 8192 has the same problem at
+~2029 bytes, 16384 at ~4081. If you change what goes in a `WITHOUT ROWID`
+table, check which side of the threshold your values land on.
+
+Two traps:
+
+- `PRAGMA page_size` is **silently ignored** once a journal mode is set or the
+  database has any content. No error. It must come first, before
+  `journal_mode`, or you stay on 4096 and nothing tells you.
+- Changing it on an existing database needs `journal_mode=DELETE` → pragma →
+  `VACUUM` → `journal_mode=WAL`. New databases only, otherwise.
+
+`packages/replicache/tool/bench/page-size.c` reproduces all of this in about a
+minute.
+
 ## Git Conventions
 
 ### Commit Messages

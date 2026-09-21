@@ -217,7 +217,55 @@ export interface SQLiteStoreOptions {
   readUncommitted?: boolean;
   /** Directory in which to create the SQLite file. Defaults to the process CWD. */
   directory?: string | undefined;
+  /**
+   * Page size for a freshly created database. See {@link DEFAULT_PAGE_SIZE} for
+   * why the default is 8192 rather than SQLite's own 4096.
+   *
+   * Only takes effect on a database that has no pages yet: SQLite ignores the
+   * pragma once the file has content or WAL is on. Changing it for an existing
+   * store needs a VACUUM, which this store does not do.
+   */
+  pageSize?: number;
+  /**
+   * Size of the memory-mapped read window, in bytes. 0 disables mmap.
+   *
+   * This is a bounded window over clean, read-only pages that the OS can evict
+   * under pressure — not a resident copy of the database — so it does not grow
+   * with the store.
+   */
+  mmapSize?: number;
 }
+
+/**
+ * `entry` is `WITHOUT ROWID`, which makes it an index B-tree, and SQLite caps
+ * an index B-tree's inline payload at `((page_size - 35) * 64 / 255) - 23`:
+ * about 1004 bytes at SQLite's default page size of 4096. A row past that
+ * spills into an overflow page chain, and the cost of that is not gradual.
+ *
+ * Measured on 100k rows of 1KB values (the size `replicache-perf` itself
+ * uses), against this exact schema and these exact statements:
+ *
+ * | page_size | file              | bulk write | get      | scan(100) |
+ * | --------- | ----------------- | ---------- | -------- | --------- |
+ * | 4096      | 446.4 MB (4.41x)  | 1406 ms    | 18.68 us | 102.1 us  |
+ * | 8192      | 111.6 MB (1.10x)  |  236 ms    |  4.10 us |  38.1 us  |
+ *
+ * The file sizes are deterministic; the timings are from one desktop run and
+ * move around with machine and load, so read them as ratios.
+ *
+ * 8192 moves the threshold to about 2029 bytes, which covers typical chunk
+ * sizes. Going wider buys nothing measurable — 16384 and 32768 came out within
+ * noise of 8192 — while costing space on stores whose values are small.
+ *
+ * The same cliff exists at every page size; it just moves. Values above ~2029
+ * bytes will overflow at 8192 exactly as 1KB values do at 4096.
+ *
+ * See `tool/bench/` for the benchmark that produced the table.
+ */
+const DEFAULT_PAGE_SIZE = 8192;
+
+/** 256MB, matching op-sqlite's own key-value store. */
+const DEFAULT_MMAP_SIZE = 268435456;
 
 /**
  * Common database setup logic shared between expo-sqlite and op-sqlite implementations.
@@ -228,12 +276,27 @@ export function setupDatabase(
   delegate: SQLiteDatabase,
   opts?: SQLiteStoreOptions,
 ): PreparedStatements {
-  // Configure SQLite pragmas for optimal performance
+  // Configure SQLite pragmas for optimal performance.
+  //
+  // page_size MUST come first. SQLite silently ignores it once the database
+  // has content or a journal mode has been set — no error, no warning, the
+  // pragma just does nothing and you are left on the 4096 default. Verified:
+  // issuing it after `journal_mode = WAL`, or after CREATE TABLE, leaves
+  // `PRAGMA page_size` reporting 4096. Do not reorder these.
+  delegate.execSync(
+    `PRAGMA page_size = ${opts?.pageSize ?? DEFAULT_PAGE_SIZE}`,
+  );
   delegate.execSync(`PRAGMA busy_timeout = ${opts?.busyTimeout ?? 200}`);
   delegate.execSync(`PRAGMA journal_mode = '${opts?.journalMode ?? 'WAL'}'`);
   delegate.execSync(`PRAGMA synchronous = '${opts?.synchronous ?? 'NORMAL'}'`);
   delegate.execSync(
     `PRAGMA read_uncommitted = ${Boolean(opts?.readUncommitted)}`,
+  );
+  // Reads served from the mmap window rather than the pager cut a random get
+  // from 10.05us to 4.38us, and a 100-row scan from 57.5us to 36.2us, at
+  // page_size 8192 in the benchmark above.
+  delegate.execSync(
+    `PRAGMA mmap_size = ${opts?.mmapSize ?? DEFAULT_MMAP_SIZE}`,
   );
 
   // Create the entry table
