@@ -3,7 +3,9 @@
 Standalone C benchmarks for the SQLite schema behind `src/kv/sqlite-store.ts`.
 
 They link the SQLite amalgamation directly, with no React Native, JSI or JS in
-the way, so they isolate storage-engine behavior. That makes them good for
+the way, so they isolate storage-engine behavior. The schema, pragmas and the
+`get`/`putN(128)` statements match the store; the `scan` column does not — see
+"What each column is" below. That makes them good for
 questions like "does this pragma matter" and useless for questions like "how
 fast is a `get()` on a Pixel". For the latter, use
 `packages/replicache-perf/rn`, which runs the real store on a real device.
@@ -48,8 +50,8 @@ over the edge:
 | 4096      | 446.4 MB (4.41x) | 1406 ms    | 18.68 us | 102.1 us  |
 | 8192      | 111.6 MB (1.10x) | 236 ms     | 4.10 us  | 38.1 us   |
 
-The `cliff` section shows how abrupt this is — amplification goes from 1.06x at
-950-byte values to 4.62x at 1000-byte values, and the jump reappears at ~2029
+The `cliff` section shows how abrupt this is — amplification goes from 1.04x at
+950-byte values to 4.51x at 1000-byte values, and the jump reappears at ~2029
 bytes for `page_size=8192` and ~4081 for 16384. The cliff never goes away; it
 only moves.
 
@@ -66,3 +68,12 @@ Changing `page_size` on a database that already has content requires
 `journal_mode=DELETE`, then the pragma, then `VACUUM`, then `journal_mode=WAL`.
 The store does not do this, so existing databases keep whatever page size they
 were created with.
+
+### What each column is
+
+| column          | fidelity to the store                                                                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| schema, pragmas | identical, including issue order                                                                                                                                                                                    |
+| `get`           | identical — `SELECT value FROM entry WHERE key = ?`                                                                                                                                                                 |
+| bulk write      | the store's `putN(128)` SQL in one transaction, but none of the JS above it                                                                                                                                         |
+| `scan(100)`     | **not a store statement at all** — `SQLiteStore` has no range scan; Replicache walks ranges above the kv layer. It is a B-tree locality probe, since overflow chains hurt sequential access more than point lookups |

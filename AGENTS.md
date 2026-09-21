@@ -238,11 +238,11 @@ schema, holding everything else equal:
 
 | value size | amplification at page_size=4096 |
 | ---------- | ------------------------------- |
-| 950 B      | 1.06x                           |
-| 1000 B     | **4.62x**                       |
+| 950 B      | 1.04x                           |
+| 1000 B     | **4.51x**                       |
 
 At 1KB values that is 101MB of data becoming 446MB on disk, ~6x slower bulk
-writes and ~4.5x slower reads. `packages/replicache/src/kv/sqlite-store.ts` now
+writes and ~4x slower reads. `packages/replicache/src/kv/sqlite-store.ts` now
 sets `PRAGMA page_size = 8192`, which moves the threshold to ~2029 bytes.
 
 **The cliff never goes away, it only moves** — 8192 has the same problem at

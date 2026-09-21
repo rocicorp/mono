@@ -8,12 +8,26 @@
  * cost of crossing that threshold is not gradual, and `replicache-perf` uses
  * 1KB values, which land just past it.
  *
- * This measures the effect directly, against the same schema, statements and
- * pragmas the store uses, so the claim in `sqlite-store.ts` is reproducible
- * rather than folklore. It links the SQLite amalgamation, so it isolates
- * storage-engine behavior from anything React Native, JSI or JS adds on top —
- * which also means the absolute numbers are desktop numbers. Ratios are the
- * point; for on-device timings use `packages/replicache-perf/rn`.
+ * This measures the effect directly, so the claim in `sqlite-store.ts` is
+ * reproducible rather than folklore. It links the SQLite amalgamation, so it
+ * isolates storage-engine behavior from anything React Native, JSI or JS adds
+ * on top — which also means the absolute numbers are desktop numbers. Ratios
+ * are the point; for on-device timings use `packages/replicache-perf/rn`.
+ *
+ * How faithful each workload is to the store:
+ *
+ * - schema and pragmas: identical, including the order they are issued in.
+ * - `get`: identical — `SELECT value FROM entry WHERE key = ?`.
+ * - bulk write: the store's `putN(128)` statement, the widest `MAX_BATCH`
+ *   width `execInBatches` uses, inside one transaction. It skips the JS above
+ *   it (`WriteImplBase`'s pending map, `JSON.stringify`, the power-of-two
+ *   split across widths), so it is the store's SQL rather than the store's
+ *   write path.
+ * - `scan(100)`: NOT a store statement. `SQLiteStore` has no range scan at
+ *   all; Replicache walks key ranges above the kv layer. It is here as a probe
+ *   of B-tree locality, because overflow chains hurt sequential access more
+ *   than point lookups, and that is worth seeing. Do not read it as a store
+ *   operation.
  *
  * Build and run (needs a C compiler and a sqlite3 amalgamation):
  *
@@ -37,6 +51,7 @@
 
 #define ROWS 100000
 #define MMAP_SIZE "268435456" /* 256MB, same as the store's default */
+#define MAX_BATCH 128         /* matches MAX_BATCH in sqlite-store.ts */
 
 static double now_us(void) {
   struct timespec ts;
@@ -59,6 +74,17 @@ static sqlite3_int64 pragma_int(sqlite3 *db, const char *pragma) {
   sqlite3_int64 v = sqlite3_column_int64(stmt, 0);
   sqlite3_finalize(stmt);
   return v;
+}
+
+/** The store's `putN(n)` SQL: INSERT OR REPLACE ... VALUES (?,?),(?,?),... */
+static char *put_n_sql(int n) {
+  size_t cap = 64 + (size_t)n * 8;
+  char *s = malloc(cap);
+  strcpy(s, "INSERT OR REPLACE INTO entry (key, value) VALUES ");
+  for (int i = 0; i < n; i++) {
+    strcat(s, i ? ",(?,?)" : "(?,?)");
+  }
+  return s;
 }
 
 struct result {
@@ -95,7 +121,7 @@ static struct result measure(int value_size, int page_size, int without_rowid,
 
   /* Order matches setupDatabase(): page_size must precede journal_mode or
      SQLite silently ignores it. Flipping these two lines is the whole point
-     of the ordering test in sqlite-store.test.ts. */
+     of the ordering test in sqlite-store.test.node.ts. */
   snprintf(buf, sizeof buf, "PRAGMA page_size = %d", page_size);
   ex(db, buf);
   ex(db, "PRAGMA busy_timeout = 200");
@@ -115,20 +141,32 @@ static struct result measure(int value_size, int page_size, int without_rowid,
   value[value_size] = '\0';
   char key[64];
 
-  /* Bulk load inside one transaction, as a persist does. */
+  /* Bulk load through the store's own putN(MAX_BATCH) statement, inside one
+     transaction, as a persist does. The statement binds a fixed MAX_BATCH
+     rows, so round down rather than overshooting into a partial batch; the
+     store handles a remainder by stepping down through narrower widths, which
+     is not what this is measuring. */
+  const int written = (rows / MAX_BATCH) * MAX_BATCH;
+  char *put_sql = put_n_sql(MAX_BATCH);
   ex(db, "BEGIN");
   sqlite3_stmt *ins;
-  sqlite3_prepare_v2(db, "INSERT INTO entry VALUES (?,?)", -1, &ins, NULL);
+  if (sqlite3_prepare_v2(db, put_sql, -1, &ins, NULL) != SQLITE_OK) {
+    fprintf(stderr, "prepare putN: %s\n", sqlite3_errmsg(db));
+    exit(1);
+  }
   double t0 = now_us();
-  for (int i = 0; i < rows; i++) {
-    snprintf(key, sizeof key, "c/%08x/key-with-realistic-length", i);
-    sqlite3_bind_text(ins, 1, key, -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(ins, 2, value, value_size, SQLITE_STATIC);
+  for (int i = 0; i < written; i += MAX_BATCH) {
+    for (int j = 0; j < MAX_BATCH; j++) {
+      snprintf(key, sizeof key, "c/%08x/key-with-realistic-length", i + j);
+      sqlite3_bind_text(ins, j * 2 + 1, key, -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(ins, j * 2 + 2, value, value_size, SQLITE_STATIC);
+    }
     sqlite3_step(ins);
     sqlite3_reset(ins);
   }
   double bulk_ms = (now_us() - t0) / 1000.0;
   sqlite3_finalize(ins);
+  free(put_sql);
   ex(db, "COMMIT");
   ex(db, "PRAGMA wal_checkpoint(TRUNCATE)");
 
@@ -137,7 +175,7 @@ static struct result measure(int value_size, int page_size, int without_rowid,
                pragma_int(db, "PRAGMA page_size")) / 1048576.0;
   /* Key plus value plus a few bytes of row header; close enough to call the
      ratio a storage amplification rather than a precise overhead. */
-  double logical_mb = (double)rows * (value_size + 38) / 1048576.0;
+  double logical_mb = (double)written * (value_size + 38) / 1048576.0;
 
   /* Random point reads, prepared once — the store's get() path. */
   sqlite3_stmt *get;
@@ -147,7 +185,7 @@ static struct result measure(int value_size, int page_size, int without_rowid,
   t0 = now_us();
   for (int i = 0; i < reads; i++) {
     snprintf(key, sizeof key, "c/%08x/key-with-realistic-length",
-             (i * 7919) % rows);
+             (i * 7919) % written);
     sqlite3_bind_text(get, 1, key, -1, SQLITE_TRANSIENT);
     sqlite3_step(get);
     sqlite3_column_text(get, 0);
@@ -156,7 +194,10 @@ static struct result measure(int value_size, int page_size, int without_rowid,
   double get_us = (now_us() - t0) / reads;
   sqlite3_finalize(get);
 
-  /* Forward range scan, which is how Replicache walks key ranges. */
+  /* Forward range scan. NOT a store statement — SQLiteStore has no range
+     scan; Replicache walks key ranges above the kv layer. It is here because
+     overflow chains penalize sequential access more than point lookups, which
+     the get() column alone would hide. */
   sqlite3_stmt *scan;
   sqlite3_prepare_v2(db,
                      "SELECT key, value FROM entry WHERE key >= ?"
@@ -166,7 +207,7 @@ static struct result measure(int value_size, int page_size, int without_rowid,
   t0 = now_us();
   for (int i = 0; i < scans; i++) {
     snprintf(key, sizeof key, "c/%08x/key-with-realistic-length",
-             (i * 7919) % rows);
+             (i * 7919) % written);
     sqlite3_bind_text(scan, 1, key, -1, SQLITE_TRANSIENT);
     while (sqlite3_step(scan) == SQLITE_ROW) {
       sqlite3_column_text(scan, 1);
@@ -191,11 +232,18 @@ static void row(const char *label, struct result r) {
          r.file_mb, r.amplification, r.bulk_ms, r.get_us, r.scan_us);
 }
 
+/* `*` on scan: not a store statement, see the file header. */
 static void header(void) {
   printf("%-38s | %-18s | %-11s | %-10s | %-11s\n", "config", "file",
-         "bulk write", "get", "scan(100)");
+         "bulk write", "get", "scan(100)*");
   printf("---------------------------------------"
          "+--------------------+-------------+------------+------------\n");
+}
+
+/** Printed once under each table, so the scan column is not misread. */
+static void footnote(void) {
+  printf("* scan is not a store statement — SQLiteStore has no range scan.\n"
+         "  It is a B-tree locality probe; see the file header.\n");
 }
 
 /** page_size sweep at 1KB values: the reason for the default. */
@@ -208,6 +256,7 @@ static void section_page_size(void) {
              p == 4096 ? " (SQLite default)" : p == 8192 ? " (store default)" : "");
     row(label, measure(1024, p, 1, 1, ROWS));
   }
+  footnote();
 }
 
 /** WITHOUT ROWID vs a plain rowid table, which is what expo-sqlite's kv uses. */
@@ -221,6 +270,7 @@ static void section_layout(void) {
   printf("\nA rowid table keeps values off the index B-tree, so it never hits\n"
          "the overflow cliff and is far less sensitive to page_size. It is\n"
          "still slower than WITHOUT ROWID once page_size is set correctly.\n");
+  footnote();
 }
 
 /** What mmap_size is worth on top of a correct page_size. */
@@ -231,6 +281,7 @@ static void section_mmap(void) {
   row("page_size=4096  mmap 256MB", measure(1024, 4096, 1, 1, ROWS));
   row("page_size=8192  mmap off", measure(1024, 8192, 1, 0, ROWS));
   row("page_size=8192  mmap 256MB", measure(1024, 8192, 1, 1, ROWS));
+  footnote();
 }
 
 /**

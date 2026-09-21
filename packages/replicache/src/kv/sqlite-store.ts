@@ -243,15 +243,17 @@ export interface SQLiteStoreOptions {
  * spills into an overflow page chain, and the cost of that is not gradual.
  *
  * Measured on 100k rows of 1KB values (the size `replicache-perf` itself
- * uses), against this exact schema and these exact statements:
+ * uses), against this schema and pragmas, with the store's own `get` and
+ * `putN(128)` statements:
  *
- * | page_size | file              | bulk write | get      | scan(100) |
- * | --------- | ----------------- | ---------- | -------- | --------- |
- * | 4096      | 446.4 MB (4.41x)  | 1406 ms    | 18.68 us | 102.1 us  |
- * | 8192      | 111.6 MB (1.10x)  |  236 ms    |  4.10 us |  38.1 us  |
+ * | page_size | file              | bulk write | get      |
+ * | --------- | ----------------- | ---------- | -------- |
+ * | 4096      | 446.3 MB (4.41x)  | 1593 ms    | 18.02 us |
+ * | 8192      | 111.6 MB (1.10x)  |  248 ms    |  4.39 us |
  *
  * The file sizes are deterministic; the timings are from one desktop run and
- * move around with machine and load, so read them as ratios.
+ * move around with machine and load, so read them as ratios. The bulk-write
+ * column is the store's SQL, not its write path — it has no JS above it.
  *
  * 8192 moves the threshold to about 2029 bytes, which covers typical chunk
  * sizes. Going wider buys nothing measurable — 16384 and 32768 came out within
@@ -293,8 +295,7 @@ export function setupDatabase(
     `PRAGMA read_uncommitted = ${Boolean(opts?.readUncommitted)}`,
   );
   // Reads served from the mmap window rather than the pager cut a random get
-  // from 10.05us to 4.38us, and a 100-row scan from 57.5us to 36.2us, at
-  // page_size 8192 in the benchmark above.
+  // from 9.63us to 4.01us at page_size 8192 in the benchmark above.
   delegate.execSync(
     `PRAGMA mmap_size = ${opts?.mmapSize ?? DEFAULT_MMAP_SIZE}`,
   );
