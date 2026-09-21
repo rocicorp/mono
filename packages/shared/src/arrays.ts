@@ -1,4 +1,5 @@
 import {assert} from './asserts.ts';
+import {getOrInsertComputed} from './map.ts';
 
 /**
  * Returns `arr` as is if none of the elements are `undefined`.
@@ -37,6 +38,12 @@ export function last<T>(arr: T[]): T | undefined {
   return arr.at(-1);
 }
 
+/**
+ * Creates an empty array.  Pass this to `getOrInsertComputed` instead of an
+ * inline `() => []` so that a hit does not allocate a closure.
+ */
+export const newArray = <T>(): T[] => [];
+
 export function groupBy<T, K>(
   arr: readonly T[],
   keyFn: (el: T) => K,
@@ -44,12 +51,7 @@ export function groupBy<T, K>(
   const groups = new Map<K, T[]>();
   for (const el of arr) {
     const key = keyFn(el);
-    let group = groups.get(key);
-    if (group === undefined) {
-      group = [];
-      groups.set(key, group);
-    }
-    group.push(el);
+    getOrInsertComputed(groups, key, newArray).push(el);
   }
   return groups;
 }

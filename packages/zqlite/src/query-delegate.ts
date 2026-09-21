@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../otel/src/log-options.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
 import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
@@ -36,24 +37,17 @@ export class QueryDelegateImpl extends QueryDelegateBase {
   }
 
   getSource(tableName: string): Source {
-    let source = this.#sources.get(tableName);
-    if (source) {
-      return source;
-    }
-
-    const tableSchema = this.#schema.tables[tableName];
-
-    source = new TableSource(
-      this.#lc,
-      this.#logConfig,
-      this.#db,
-      tableName,
-      tableSchema.columns,
-      tableSchema.primaryKey,
-    );
-
-    this.#sources.set(tableName, source);
-    return source;
+    return getOrInsertComputed(this.#sources, tableName, tableName => {
+      const tableSchema = this.#schema.tables[tableName];
+      return new TableSource(
+        this.#lc,
+        this.#logConfig,
+        this.#db,
+        tableName,
+        tableSchema.columns,
+        tableSchema.primaryKey,
+      );
+    });
   }
 
   onTransactionCommit(cb: CommitListener) {

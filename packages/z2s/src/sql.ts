@@ -5,6 +5,7 @@ import {
 import type {FormatConfig, SQLItem, SQLQuery} from '@databases/sql';
 import sql, {SQLItemType} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {
   isPgNativeStringType,
   isPgNumberType,
@@ -336,11 +337,13 @@ function formatFn(
           .map((name): string => {
             if (typeof name === 'string') return escapeIdentifier(name);
 
-            if (!localIdentifiers.has(name)) {
-              localIdentifiers.set(name, `__local_${localIdentifiers.size}__`);
-            }
-
-            return escapeIdentifier(localIdentifiers.get(name)!);
+            return escapeIdentifier(
+              getOrInsertComputed(
+                localIdentifiers,
+                name,
+                () => `__local_${localIdentifiers.size}__`,
+              ),
+            );
           })
           .join('.');
         break;

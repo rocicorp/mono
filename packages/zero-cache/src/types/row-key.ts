@@ -1,6 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {h128} from '../../../shared/src/hash.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 
 export type ColumnType = {readonly typeOid: number};
 export type RowKeyType = Readonly<Record<string, ColumnType>>;
@@ -62,13 +63,11 @@ const rowIDStrings = new WeakMap<RowID, string>();
  * length.
  */
 export function rowIDString(id: RowID): string {
-  let val = rowIDStrings.get(id);
-  if (val) {
-    return val;
-  }
-  val = stringify([id.schema, id.table, ...tuples(id.rowKey)]);
-  rowIDStrings.set(id, val);
-  return val;
+  return getOrInsertComputed(rowIDStrings, id, rowIDStringUncached);
+}
+
+function rowIDStringUncached(id: RowID): string {
+  return stringify([id.schema, id.table, ...tuples(id.rowKey)]);
 }
 
 const rowIDHashes = new WeakMap<RowID, string>();
@@ -86,13 +85,9 @@ const rowIDHashes = new WeakMap<RowID, string>();
  * The hash is encoded in `base36`, with the maximum 128-bit value being 25 characters long.
  */
 export function rowIDHash(id: RowID): string {
-  let hash = rowIDHashes.get(id);
-  if (hash) {
-    return hash;
-  }
+  return getOrInsertComputed(rowIDHashes, id, rowIDHashUncached);
+}
 
-  const str = rowIDString(id);
-  hash = h128(str).toString(36);
-  rowIDHashes.set(id, hash);
-  return hash;
+function rowIDHashUncached(id: RowID): string {
+  return h128(rowIDString(id)).toString(36);
 }

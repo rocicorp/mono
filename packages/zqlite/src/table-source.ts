@@ -4,6 +4,7 @@ import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
 import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
 import type {Writable} from '../../shared/src/writable.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
@@ -508,19 +509,16 @@ export class TableSource implements Source {
 
   #getRowStmt(keyCols: string[]): string {
     const keyString = JSON.stringify(keyCols);
-    let stmt = this.#getRowStmtCache.get(keyString);
-    if (!stmt) {
-      stmt = compile(
+    return getOrInsertComputed(this.#getRowStmtCache, keyString, () =>
+      compile(
         sql`SELECT ${this.#allColumns} FROM ${sql.ident(
           this.#table,
         )} WHERE ${sql.join(
           keyCols.map(k => sql`${sql.ident(k)}=?`),
           sql` AND`,
         )}`,
-      );
-      this.#getRowStmtCache.set(keyString, stmt);
-    }
-    return stmt;
+      ),
+    );
   }
 
   /**

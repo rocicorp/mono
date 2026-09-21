@@ -1,5 +1,6 @@
 import {createServer, type Server} from 'node:http';
 import {gunzipSync} from 'node:zlib';
+import {getOrInsertComputed} from '../../../../packages/shared/src/map.ts';
 
 /**
  * A minimal OTLP/HTTP-JSON metrics receiver.
@@ -277,21 +278,17 @@ export class MetricStore {
   ): void {
     const attributes = toAttributes(point.attributes);
     const key = `${node}|${name}|${attrKey(attributes)}`;
-    let sample = this.#samples.get(key);
-    if (!sample) {
-      sample = {
-        node,
-        name,
-        attributes,
-        sum: 0,
-        count: 0,
-        last: undefined,
-        min: undefined,
-        max: undefined,
-        lastSeenMs: now,
-      };
-      this.#samples.set(key, sample);
-    }
+    const sample = getOrInsertComputed(this.#samples, key, () => ({
+      node,
+      name,
+      attributes,
+      sum: 0,
+      count: 0,
+      last: undefined,
+      min: undefined,
+      max: undefined,
+      lastSeenMs: now,
+    }));
     sample.lastSeenMs = now;
     update(sample);
     for (const listener of this.#listeners) {

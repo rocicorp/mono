@@ -1,4 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
+import {newArray} from '../../../shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {must} from '../../../shared/src/must.ts';
 import {difference} from '../../../shared/src/set-utils.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -271,10 +273,9 @@ export function computeZqlSpecsFromLiteSpecs(
   for (const {tableName, columns} of indexes.filter(
     idx => idx.unique && !isPartialIndex(idx),
   )) {
-    if (!uniqueIndexColumns.has(tableName)) {
-      uniqueIndexColumns.set(tableName, []);
-    }
-    uniqueIndexColumns.get(tableName)?.push(Object.keys(columns));
+    getOrInsertComputed(uniqueIndexColumns, tableName, newArray).push(
+      Object.keys(columns),
+    );
   }
 
   tables.forEach(fullTable => {

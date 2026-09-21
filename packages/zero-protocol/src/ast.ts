@@ -8,6 +8,7 @@
 
 import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../shared/src/asserts.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
 import type {NameMapper} from '../../zero-types/src/name-mapper.ts';
@@ -441,21 +442,20 @@ function asNormalized(ast: Required<AST>): NormalizedAST {
 const normalizeCache = new WeakMap<AST, NormalizedAST>();
 
 export function normalizeAST(ast: AST): NormalizedAST {
-  let normalized = normalizeCache.get(ast);
-  if (!normalized) {
-    // normalizedAST() normalizes a single level, so normalize the subqueries
-    // first.
-    const {where, related} = ast;
-    normalized = normalizedAST({
-      ...ast,
-      where: where && normalizeSubqueries(where),
-      related: related?.map(r =>
-        normalizedRelated({...r, subquery: normalizeAST(r.subquery)}),
-      ),
-    });
-    normalizeCache.set(ast, normalized);
-  }
-  return normalized;
+  return getOrInsertComputed(normalizeCache, ast, normalizeASTUncached);
+}
+
+function normalizeASTUncached(ast: AST): NormalizedAST {
+  // normalizedAST() normalizes a single level, so normalize the subqueries
+  // first.
+  const {where, related} = ast;
+  return normalizedAST({
+    ...ast,
+    where: where && normalizeSubqueries(where),
+    related: related?.map(r =>
+      normalizedRelated({...r, subquery: normalizeAST(r.subquery)}),
+    ),
+  });
 }
 
 /**

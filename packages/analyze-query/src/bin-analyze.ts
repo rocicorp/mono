@@ -6,6 +6,7 @@ import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
 import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
@@ -207,24 +208,18 @@ class AnalyzeQueryDelegate extends QueryDelegateBase {
   readonly defaultQueryComplete = true;
 
   getSource(serverTableName: string): Source | undefined {
-    let source = sources.get(serverTableName);
-    if (source) {
-      return source;
-    }
-    const tableSpec = mustGetTableSpec(tableSpecs, serverTableName);
-    const {primaryKey} = tableSpec.tableSpec;
-
-    source = new TableSource(
-      lc,
-      config.log,
-      db,
-      serverTableName,
-      tableSpec.zqlSpec,
-      primaryKey,
-    );
-
-    sources.set(serverTableName, source);
-    return source;
+    return getOrInsertComputed(sources, serverTableName, serverTableName => {
+      const tableSpec = mustGetTableSpec(tableSpecs, serverTableName);
+      const {primaryKey} = tableSpec.tableSpec;
+      return new TableSource(
+        lc,
+        config.log,
+        db,
+        serverTableName,
+        tableSpec.zqlSpec,
+        primaryKey,
+      );
+    });
   }
 }
 

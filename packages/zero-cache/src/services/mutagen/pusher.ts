@@ -1,8 +1,9 @@
 import {context, propagation, ROOT_CONTEXT} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
-import {groupBy} from '../../../../shared/src/arrays.ts';
+import {groupBy, newArray} from '../../../../shared/src/arrays.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {getErrorMessage} from '../../../../shared/src/error.ts';
+import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -653,12 +654,7 @@ export function combinePushes(
     }
 
     const key = `${entry.connCtx.clientID}:${entry.connCtx.wsID}:${entry.connCtx.revision}`;
-    const existing = pushesByConnection.get(key);
-    if (existing) {
-      existing.push(entry);
-    } else {
-      pushesByConnection.set(key, [entry]);
-    }
+    getOrInsertComputed(pushesByConnection, key, newArray).push(entry);
   }
 
   return [collect(), false] as const;
