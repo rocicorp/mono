@@ -27,6 +27,7 @@ import {
 } from '../services/view-syncer/connection-context-manager.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
+import {SnapshotRowCache} from '../services/view-syncer/snapshot-row-cache.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
@@ -178,6 +179,14 @@ export default async function runWorker(
     };
   }
 
+  // Shared by all of the view-syncers on this worker so that the row reads
+  // performed when advancing their pipelines are done once per worker rather
+  // than once per client group.
+  const snapshotRowCache =
+    config.snapshotRowCacheSize > 0
+      ? new SnapshotRowCache(config.snapshotRowCacheSize)
+      : undefined;
+
   const viewSyncerFactory = (
     id: string,
     sub: Subscription<ReplicaState>,
@@ -224,7 +233,13 @@ export default async function runWorker(
       new PipelineDriver(
         logger,
         config.log,
-        new Snapshotter(logger, replicaFile, shard),
+        new Snapshotter(
+          logger,
+          replicaFile,
+          shard,
+          undefined,
+          snapshotRowCache,
+        ),
         shard,
         operatorStorage.createClientGroupStorage(id),
         id,
