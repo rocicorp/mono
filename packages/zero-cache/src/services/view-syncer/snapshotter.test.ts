@@ -971,6 +971,70 @@ describe('view-syncer/snapshotter', () => {
       s2.destroy();
     });
 
+    test.each([false, true])(
+      'update followed by delete across Snapshotters (shared cache: %s)',
+      sharedCache => {
+        const cache = sharedCache ? new SnapshotRowCache() : undefined;
+        const s1 = new Snapshotter(
+          lc,
+          dbFile.path,
+          {appID: 'my_app'},
+          undefined,
+          cache,
+        ).init();
+        const s2 = new Snapshotter(
+          lc,
+          dbFile.path,
+          {appID: 'my_app'},
+          undefined,
+          cache,
+        ).init();
+
+        try {
+          // issues has only a primary key, so getRows() for the update and
+          // getRow() for the delete produce the same SQL and p:01 cache tag.
+          const original = {id: 1, owner: 10, desc: 'foo', _0_version: '01'};
+          replicator.processTransaction(
+            '02',
+            messages.update('issues', {id: 1, owner: 10, desc: 'updated'}),
+          );
+          const update = s1.advance(tableSpecs, allTableNames);
+          expect(update.prev.version).toBe('01');
+          expect(update.curr.version).toBe('02');
+          expect([...update]).toEqual([
+            {
+              table: 'issues',
+              rowKey: {id: 1},
+              prevValues: [original],
+              nextValue: {...original, desc: 'updated', _0_version: '02'},
+            },
+          ]);
+
+          // Leave s2 at 01 until the updated row has been deleted at 03.
+          // Its previous-row read must return a row, not the array cached
+          // while iterating s1's update. Currently this throws InvalidDiffError.
+          replicator.processTransaction(
+            '03',
+            messages.delete('issues', {id: 1}),
+          );
+          const deletion = s2.advance(tableSpecs, allTableNames);
+          expect(deletion.prev.version).toBe('01');
+          expect(deletion.curr.version).toBe('03');
+          expect([...deletion]).toEqual([
+            {
+              table: 'issues',
+              rowKey: {id: 1},
+              prevValues: [original],
+              nextValue: null,
+            },
+          ]);
+        } finally {
+          s1.destroy();
+          s2.destroy();
+        }
+      },
+    );
+
     test('diffs that include a table-wide op bypass the cache', () => {
       const cache = new SnapshotRowCache(1000);
       const s1 = new Snapshotter(
