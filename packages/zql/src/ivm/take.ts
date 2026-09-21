@@ -128,6 +128,7 @@ export class Take implements Operator, TakeBoundProvider {
     if (takeState.bound === undefined) {
       return;
     }
+    let count = 0;
     for (const inputNode of this.#input.fetch(req)) {
       if (inputNode === 'yield') {
         yield inputNode;
@@ -146,6 +147,10 @@ export class Take implements Operator, TakeBoundProvider {
         continue;
       }
       yield inputNode;
+      count++;
+      if (count >= this.#limit) {
+        return;
+      }
     }
   }
 
@@ -331,8 +336,8 @@ export class Take implements Operator, TakeBoundProvider {
         change[ChangeIndex.NODE].row,
         takeState.bound,
       );
-      if (compToBound > 0) {
-        // change is after bound
+      if (compToBound > 0 || (compToBound < 0 && this.#limit === 1)) {
+        // change is not in window
         return;
       }
       let beforeBoundNode: Node | undefined;

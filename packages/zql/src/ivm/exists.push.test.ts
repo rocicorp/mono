@@ -181,14 +181,6 @@ suite('EXISTS 1 to many', () => {
             ":exists(issue)",
             "filter",
             {
-              "id": "c2",
-              "issueID": "i1",
-            },
-          ],
-          [
-            ":exists(issue)",
-            "filter",
-            {
               "id": "c4",
               "issueID": "i2",
             },

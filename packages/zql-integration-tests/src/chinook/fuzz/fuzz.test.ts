@@ -48,12 +48,17 @@ import {
   greedyCover,
 } from './cover.ts';
 import {Coverage, tags} from './coverage.ts';
-import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
+import {
+  flipAssignments,
+  flippableExistsCount,
+  flipVariants,
+  setFlips,
+} from './flip.ts';
 import {Data} from './literals.ts';
 import {RELATIONS, transform} from './metamorphic.ts';
 import {miniData} from './mini.ts';
 import {mutate} from './mutate.ts';
-import {fourPhase, pushForSkeleton} from './push.ts';
+import {fourPhase, pushForQuery, pushForSkeleton} from './push.ts';
 import {
   loadRegressions,
   parseRegression,
@@ -74,6 +79,7 @@ import {
   enumerate,
   label,
   lower,
+  lowerOr,
   nExists,
   nRelated,
   type Skeleton,
@@ -972,62 +978,98 @@ test('schema graph exposes junction + self-join relationships', () => {
   ).toBe('employee');
 });
 
-function localDecoratedPushCases(
-  d: Data,
-  skels: readonly Skeleton[],
-  n: number,
-) {
-  const cases = [];
+/**
+ * The decorated-push cases the in-memory lane walks. Each skeleton is lowered with its
+ * root gates ANDed ({@link lower}) and, when it has any, ORed with a simple root filter
+ * ({@link lowerOr}); each lowering gets a root `orderBy` + small `limit` and runs under
+ * the builder's plan plus every flip assignment of its gates. The push history covers
+ * every table the query touches ({@link pushForQuery}).
+ *
+ * Each dimension closes a gap an earlier version of this lane had, and each one hid a
+ * `Take` push bug: the OR is what puts a fan-in under the `Take`, the flip is the only
+ * thing that builds a `UnionFanIn`, mutating every table sends one source change through
+ * two connections (the self-join, two paths to one table), and depth 2 is what nests an
+ * EXISTS gate under another.
+ */
+function decoratedPushLaneCases(skels: readonly Skeleton[], n: number) {
+  const cases: Array<{
+    label: string;
+    query: AnyQuery;
+    mutations: ReturnType<typeof pushForQuery>;
+  }> = [];
   for (const s of skels) {
-    const mutations = pushForSkeleton(d, s, n);
-    if (mutations.length === 0) {
-      continue;
+    const shapes: Array<[string, AnyQuery]> = [['and', lower(s)]];
+    if (s.children.some(c => c.kind !== 'related')) {
+      shapes.push(['or', lowerOr(s)]);
     }
-    cases.push({
-      label: `decpush|${label(s)}`,
-      query: applyLimit(applyOrder(lower(s), s.table, 'asc1'), 'small'),
-      mutations,
-    });
+    for (const [shape, lowered] of shapes) {
+      const base = applyLimit(applyOrder(lowered, s.table, 'asc1'), 'small');
+      const ast = asQueryInternals(base).ast;
+      const mutations = pushForQuery(data, s, ast, n);
+      if (mutations.length === 0) {
+        continue;
+      }
+      const plans: Array<[string, AnyQuery]> = [
+        ['', base],
+        ...flipVariants(ast, 2).map(([suffix, flipped]): [string, AnyQuery] => [
+          suffix,
+          wrapAst(flipped),
+        ]),
+      ];
+      for (const [suffix, query] of plans) {
+        cases.push({
+          label: `decpush|${shape}|${label(s)}${suffix}`,
+          query,
+          mutations,
+        });
+      }
+    }
   }
   return cases;
 }
 
 describe('decorated push memory parity', () => {
   test('all decpush cases', async () => {
-    const skels = enumerate({depth: 1, related: 2, exists: 2});
-    const cases = localDecoratedPushCases(data, skels, 1);
-    const failures: Array<{label: string; error: string}> = [];
+    const skels = enumerate({depth: 2, related: 1, exists: 2});
+    const cases = decoratedPushLaneCases(skels, 1);
+    // One line per failing case: the first step that diverged from a fresh hydrate.
+    const failures: string[] = [];
     for (const c of cases) {
       const delegate = memoryDelegate();
       const memView = delegate.materialize(c.query);
+      // `null` checks the hydration; each later step checks a mutation.
+      const steps = [null, ...c.mutations];
       try {
-        let expected = await delegate.run(c.query);
-        expect(memView.data).toEqual(expected);
-        for (let i = 0; i < c.mutations.length; i++) {
-          const m = c.mutations[i];
-          const src = must(delegate.getSource(m.table));
-          if (m.kind === 'remove') {
-            consume(src.push(makeSourceChangeRemove(m.row)));
-          } else if (m.kind === 'add') {
-            consume(src.push(makeSourceChangeAdd(m.row)));
-          } else if (m.kind === 'edit') {
-            consume(src.push(makeSourceChangeEdit(m.row, m.old)));
+        for (let i = 0; i < steps.length; i++) {
+          const m = steps[i];
+          if (m) {
+            const src = must(delegate.getSource(m.table));
+            if (m.kind === 'remove') {
+              consume(src.push(makeSourceChangeRemove(m.row)));
+            } else if (m.kind === 'add') {
+              consume(src.push(makeSourceChangeAdd(m.row)));
+            } else if (m.kind === 'edit') {
+              consume(src.push(makeSourceChangeEdit(m.row, m.old)));
+            }
           }
-          expected = await delegate.run(c.query);
+          const expected = await delegate.run(c.query);
           try {
             expect(memView.data).toEqual(expected);
-          } catch (e: unknown) {
-            failures.push({
-              label: c.label,
-              error: `Step ${i} (${m.kind} on ${m.table}): ${e instanceof Error ? e.message : String(e)}`,
-            });
+          } catch {
+            failures.push(
+              `${c.label}: ${m ? `step ${i - 1} (${m.kind} on ${m.table})` : 'hydrate'}`,
+            );
             break;
           }
         }
+      } catch (e: unknown) {
+        failures.push(
+          `${c.label}: threw ${e instanceof Error ? e.message : String(e)}`,
+        );
       } finally {
         memView.destroy();
       }
     }
     expect(failures).toEqual([]);
-  });
+  }, 60_000);
 });

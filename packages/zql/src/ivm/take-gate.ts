@@ -64,6 +64,9 @@ export class TakeGate implements Operator, TakeBoundProvider {
   }
 
   getBound(constraint?: Constraint): Row | undefined {
+    if (this.#openDepth > 0) {
+      return undefined;
+    }
     return this.#boundProvider?.getBound(constraint);
   }
 

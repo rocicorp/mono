@@ -397,7 +397,7 @@ function buildPipelineInternal(
         end,
         name,
         true,
-        partitionKey,
+        undefined,
         takeGate,
       );
     }
@@ -778,8 +778,9 @@ function applyCorrelatedSubQuery(
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
     system: sq.system ?? 'client',
-    parentPartitionKey,
+    parentPartitionKey: fromCondition ? undefined : parentPartitionKey,
     boundProvider,
+    trackPartitions: !fromCondition,
   });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);

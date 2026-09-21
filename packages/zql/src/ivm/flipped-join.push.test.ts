@@ -7069,17 +7069,6 @@ suite('test overlay on many:one pushes', () => {
           "fetch",
           {
             "constraint": {
-              "id": "u0",
-              "stateID": "s0",
-            },
-          },
-        ],
-        [
-          ".owner:source(user)",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
               "stateID": "s0",
             },
           },
@@ -9242,7 +9231,6 @@ suite('test overlay on many:many (no junction) pushes', () => {
           "fetch",
           {
             "constraint": {
-              "name": "Aaron",
               "stateID": "s0",
             },
           },

@@ -20,7 +20,6 @@ import {
   generateWithOverlayNoYield,
   isJoinMatch,
   rowEqualsForCompoundKey,
-  type PartitionEntry,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
 import {
@@ -104,7 +103,6 @@ export class FlippedJoin implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #partitionMap: Map<string, Map<string, PartitionEntry>> | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
@@ -134,7 +132,6 @@ export class FlippedJoin implements Input {
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
     this.#parentPartitionKey = parentPartitionKey;
-    this.#partitionMap = parentPartitionKey ? new Map() : undefined;
     this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();
@@ -403,8 +400,6 @@ export class FlippedJoin implements Input {
       }
     }
 
-    this.#indexParentRow(minParentNode.row);
-
     // yield node if after the overlay it still has relationship nodes
     if (overlaidRelatedChildNodes.length > 0) {
       yield {
@@ -453,35 +448,7 @@ export class FlippedJoin implements Input {
       if (!constraint) {
         return;
       }
-      let parentNodeStream: Stream<Node | 'yield'>;
-      if (this.#partitionMap && this.#parentPartitionKey) {
-        const junctionKey = canonicalKey(
-          change[ChangeIndex.NODE].row,
-          this.#childKey,
-        );
-        const partitionEntries = this.#partitionMap.get(junctionKey);
-        if (partitionEntries && partitionEntries.size > 0) {
-          if (partitionEntries.size === 1) {
-            const [entry] = partitionEntries.values();
-            parentNodeStream = this.#parent.fetch({
-              constraint: {...constraint, ...entry.constraint},
-            });
-          } else {
-            const streams = Array.from(partitionEntries.values(), entry =>
-              this.#parent.fetch({
-                constraint: {...constraint, ...entry.constraint},
-              }),
-            );
-            const compare = (a: Node, b: Node) =>
-              this.#parent.getSchema().compareRows(a.row, b.row);
-            parentNodeStream = mergeSortedStreams(streams, compare);
-          }
-        } else {
-          parentNodeStream = this.#parent.fetch({constraint});
-        }
-      } else {
-        parentNodeStream = this.#parent.fetch({constraint});
-      }
+      const parentNodeStream = this.#parent.fetch({constraint});
       for (const parentNode of parentNodeStream) {
         if (parentNode === 'yield') {
           yield 'yield';
@@ -570,19 +537,6 @@ export class FlippedJoin implements Input {
       },
     });
 
-    switch (change[ChangeIndex.TYPE]) {
-      case ChangeType.ADD:
-        this.#indexParentRow(change[ChangeIndex.NODE].row);
-        break;
-      case ChangeType.REMOVE:
-        this.#unindexParentRow(change[ChangeIndex.NODE].row);
-        break;
-      case ChangeType.EDIT:
-        this.#unindexParentRow(change[ChangeIndex.OLD_NODE].row);
-        this.#indexParentRow(change[ChangeIndex.NODE].row);
-        break;
-    }
-
     // If no related child don't push as this is an inner join.
     let hasRelatedChild = false;
     for (const node of childNodeStream(change[ChangeIndex.NODE])()) {
@@ -641,61 +595,6 @@ export class FlippedJoin implements Input {
       }
       default:
         unreachable(change);
-    }
-  }
-
-  #indexParentRow(row: Row): void {
-    if (
-      !this.#partitionMap ||
-      !this.#parentPartitionKey ||
-      this.#parentKey.some(k => row[k] === null)
-    ) {
-      return;
-    }
-    const junctionKey = canonicalKey(row, this.#parentKey);
-    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
-    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
-    let map = this.#partitionMap.get(junctionKey);
-    if (!map) {
-      map = new Map();
-      this.#partitionMap.set(junctionKey, map);
-    }
-    let entry = map.get(partitionKey);
-    if (!entry) {
-      entry = {
-        constraint: Object.fromEntries(
-          this.#parentPartitionKey.map(k => [k, row[k]]),
-        ),
-        pks: new Set(),
-      };
-      map.set(partitionKey, entry);
-    }
-    entry.pks.add(parentPk);
-  }
-
-  #unindexParentRow(row: Row): void {
-    if (
-      !this.#partitionMap ||
-      !this.#parentPartitionKey ||
-      this.#parentKey.some(k => row[k] === null)
-    ) {
-      return;
-    }
-    const junctionKey = canonicalKey(row, this.#parentKey);
-    const partitionKey = canonicalKey(row, this.#parentPartitionKey);
-    const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
-    const map = this.#partitionMap.get(junctionKey);
-    if (map) {
-      const entry = map.get(partitionKey);
-      if (entry) {
-        entry.pks.delete(parentPk);
-        if (entry.pks.size === 0) {
-          map.delete(partitionKey);
-          if (map.size === 0) {
-            this.#partitionMap.delete(junctionKey);
-          }
-        }
-      }
     }
   }
 }

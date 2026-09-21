@@ -21,6 +21,7 @@
  * the output (an EXISTS-subquery table), so gate transitions are exercised.
  */
 
+import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../../zero-protocol/src/data.ts';
 import {columnsOf, pkOf} from './axes.ts';
 import type {Data} from './literals.ts';
@@ -117,4 +118,48 @@ export function pushForSkeleton(
     tables.push(leaf);
   }
   return tables.flatMap(t => fourPhase(data, t, n));
+}
+
+/**
+ * The tables an AST touches (root + every correlated subquery / related child), so a
+ * decorated case can be given mutations on both sides of a gate.
+ */
+export function queryTables(
+  ast: AST,
+  out: Set<string> = new Set(),
+): Set<string> {
+  out.add(ast.table);
+  for (const r of ast.related ?? []) {
+    queryTables(r.subquery, out);
+  }
+  const walk = (c: Condition | undefined): void => {
+    if (!c) {
+      return;
+    }
+    if (c.type === 'and' || c.type === 'or') {
+      c.conditions.forEach(walk);
+    } else if (c.type === 'correlatedSubquery') {
+      queryTables(c.related.subquery, out);
+    }
+  };
+  walk(ast.where);
+  return out;
+}
+
+/**
+ * The push history for a lowered skeleton: {@link pushForSkeleton}'s root and deepest
+ * leaf first, then four-phase on **every other table** `ast` touches — so a table that
+ * reaches the query through more than one connection (a self-join, two paths to one
+ * table) is mutated, and one source change arrives at the same limited window twice.
+ * The root + leaf prefix is kept because the sequence is state-dependent: it reaches
+ * states the all-tables order alone does not.
+ */
+export function pushForQuery(
+  data: Data,
+  skel: Skeleton,
+  ast: AST,
+  n: number,
+): Mutation[] {
+  const tables = new Set([skel.table, deepestTable(skel), ...queryTables(ast)]);
+  return [...tables].flatMap(t => fourPhase(data, t, n));
 }

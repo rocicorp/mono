@@ -42,6 +42,7 @@ type Args = {
   system: System;
   parentPartitionKey?: CompoundKey | undefined;
   boundProvider?: TakeBoundProvider | undefined;
+  trackPartitions?: boolean | undefined;
 };
 
 /**
@@ -80,6 +81,7 @@ export class Join implements Input {
     system,
     parentPartitionKey,
     boundProvider,
+    trackPartitions,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -92,7 +94,8 @@ export class Join implements Input {
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
     this.#parentPartitionKey = parentPartitionKey;
-    this.#partitionMap = parentPartitionKey ? new Map() : undefined;
+    this.#partitionMap =
+      (trackPartitions ?? true) && parentPartitionKey ? new Map() : undefined;
     this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();

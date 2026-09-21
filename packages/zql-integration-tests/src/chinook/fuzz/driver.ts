@@ -20,7 +20,6 @@ import {formatOutput} from '../../../../ast-to-zql/src/format.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {
   AST,
-  Condition,
   LiteralValue,
   SimpleOperator,
 } from '../../../../zero-protocol/src/ast.ts';
@@ -53,10 +52,20 @@ import {
   rowLabel,
 } from './cover.ts';
 import {Coverage} from './coverage.ts';
-import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
+import {
+  flipAssignments,
+  flippableExistsCount,
+  flipVariants,
+  setFlips,
+} from './flip.ts';
 import type {Data} from './literals.ts';
 import {mutate} from './mutate.ts';
-import {fourPhase, type Mutation, pushForSkeleton} from './push.ts';
+import {
+  fourPhase,
+  type Mutation,
+  pushForSkeleton,
+  queryTables,
+} from './push.ts';
 import type {Regression} from './regressions.ts';
 import {rng} from './rng.ts';
 import {scalarizableExistsCount, setScalars} from './scalar.ts';
@@ -654,7 +663,7 @@ export function pinnedPushCases(
       continue;
     }
     const base = lower(s);
-    const mutations = [...astTables(asQueryInternals(base).ast)].flatMap(t =>
+    const mutations = [...queryTables(asQueryInternals(base).ast)].flatMap(t =>
       fourPhase(data, t, n),
     );
     const pins: Array<[string, SimpleOperator, LiteralValue]> = [
@@ -664,7 +673,7 @@ export function pinnedPushCases(
     for (const [tag, op, value] of pins) {
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       const pinned: AnyQuery = (base as any).where(pin.col, op, value);
-      for (const [suffix, query] of flipVariants(pinned, maxFlips)) {
+      for (const [suffix, query] of queryFlipVariants(pinned, maxFlips)) {
         cases.push({
           label: `pinpush|${tag}|${label(s)}${suffix}`,
           query,
@@ -815,7 +824,7 @@ function yieldPlanVariants(
   s: Skeleton,
   maxFlips: number,
 ): Array<[string, AnyQuery]> {
-  return flipVariants(lower(s), maxFlips);
+  return queryFlipVariants(lower(s), maxFlips);
 }
 
 /**
@@ -823,49 +832,20 @@ function yieldPlanVariants(
  * (only `query` when it has none, or more than `maxFlips`). The planner only ever changes
  * flips, so these are all the plans it can produce for `query`.
  */
-function flipVariants(
+function queryFlipVariants(
   query: AnyQuery,
   maxFlips: number,
 ): Array<[string, AnyQuery]> {
-  const out: Array<[string, AnyQuery]> = [['', query]];
   const ast = asQueryInternals(query).ast;
-  const k = flippableExistsCount(ast);
-  if (k === 0 || k > maxFlips) {
-    return out;
-  }
-  for (const bits of flipAssignments(k)) {
-    if (!bits.some(b => b)) {
-      continue; // all-false is the default lowering, already in `out`
-    }
-    out.push([
-      `|flip${bits.map(b => (b ? 1 : 0)).join('')}`,
-      wrapAst(setFlips(ast, bits)),
-    ]);
-  }
-  return out;
-}
-
-/**
- * The tables an AST touches (root + every correlated subquery / related child), so a
- * decorated case can be given mutations on both sides of a gate.
- */
-function astTables(ast: AST, out: Set<string> = new Set()): Set<string> {
-  out.add(ast.table);
-  for (const r of ast.related ?? []) {
-    astTables(r.subquery, out);
-  }
-  const walk = (c: Condition | undefined): void => {
-    if (!c) {
-      return;
-    }
-    if (c.type === 'and' || c.type === 'or') {
-      c.conditions.forEach(walk);
-    } else if (c.type === 'correlatedSubquery') {
-      astTables(c.related.subquery, out);
-    }
-  };
-  walk(ast.where);
-  return out;
+  return [
+    ['', query],
+    ...flipVariants(ast, maxFlips).map(
+      ([suffix, flippedAst]): [string, AnyQuery] => [
+        suffix,
+        wrapAst(flippedAst),
+      ],
+    ),
+  ];
 }
 
 /**
@@ -916,7 +896,7 @@ export async function checkYieldPush(
     const ast = asQueryInternals(c.query).ast;
     // Mutate both sides of the gate: parent pushes drive the fan-out, child pushes drive
     // the flipped join's own push path into the fan-in.
-    const mutations = [...astTables(ast)].flatMap(t => fourPhase(data, t, n));
+    const mutations = [...queryTables(ast)].flatMap(t => fourPhase(data, t, n));
     if (mutations.length === 0) {
       continue;
     }
