@@ -10,6 +10,7 @@ import {
   type PlannerConstraint,
 } from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
+import type {PlannerJoin} from './planner-join.ts';
 import {omitFanout} from './planner-node.ts';
 import type {
   CostEstimate,
@@ -57,11 +58,14 @@ import type {
  *
  * # Pushed conditions
  * Correlated predicate pushdown copies a parent's condition on a correlation
- * column into the child (`pushed`). Wherever the join binds that column, the
- * parent's condition implies the copy, so the copy removes no rows. The
- * connection leaves such a copy out of the cost model call. It also leaves
- * every copy out of `selectivity`: a semi-join always binds the column, and a
- * flipped join gets the copy's reduction through `returnedRows` instead.
+ * column into the child (`pushed`). When the parent drives the join into the
+ * child, the join binds that column to a parent row, so the parent's
+ * condition implies the copy and the copy removes no rows. The connection
+ * leaves such a copy out of the cost model call. Another join that binds the
+ * column does not imply the copy, because its rows need not hold the parent's
+ * condition. The connection also leaves every copy out of `selectivity`: a
+ * semi-join always binds the column, and a flipped join gets the copy's
+ * reduction through `returnedRows` instead.
  *
  * # Lifecycle
  * 1. Construct with immutable structure (ordering, filters, cost model)
@@ -87,6 +91,13 @@ export class PlannerConnection {
   readonly #baseLimit: number | undefined; // Original limit from query structure (never modified)
   readonly selectivity: number; // Fraction of rows passing filters (1.0 = no filtering)
   #output?: PlannerNode | undefined; // Set once during graph construction
+  /**
+   * The join from the parent into this connection's EXISTS subquery. Set once
+   * during graph construction. The pushed conditions are copies of that
+   * parent's conditions. Undefined for a root connection, whose parent (if
+   * it is a `related` subquery) always drives it.
+   */
+  #parentJoin: PlannerJoin | undefined;
 
   // ========================================================================
   // MUTABLE PLANNING STATE (changes during plan search)
@@ -163,6 +174,10 @@ export class PlannerConnection {
   get output(): PlannerNode {
     assert(this.#output !== undefined, 'Output not set');
     return this.#output;
+  }
+
+  setParentJoin(join: PlannerJoin): void {
+    this.#parentJoin = join;
   }
 
   closestJoinOrSource(): JoinOrConnection {
@@ -284,19 +299,31 @@ export class PlannerConnection {
 
   /**
    * `#filters` without the pushed conditions that `constraint` binds the
-   * column of. The runtime still applies them, but they remove no rows.
+   * column of, when the parent drives the join into this connection. The
+   * runtime still applies them, but they remove no rows.
+   *
+   * When that join is flipped, this connection is the outer loop, so every
+   * pushed condition counts, even where another flipped join binds its
+   * column.
    */
   #filtersFor(
     constraint: PlannerConstraint | undefined,
   ): Condition | undefined {
     const pushed = this.#pushed;
-    if (!pushed || !constraint || this.#unpushedFilters === this.#filters) {
+    if (
+      !pushed ||
+      !constraint ||
+      this.#unpushedFilters === this.#filters ||
+      this.#parentJoin?.type === 'flipped'
+    ) {
       return this.#filters;
     }
     return withoutConjuncts(
       this.#filters,
       c =>
-        pushed.has(c) && c.left.type === 'column' && c.left.name in constraint,
+        pushed.has(c) &&
+        c.left.type === 'column' &&
+        Object.hasOwn(constraint, c.left.name),
     );
   }
 

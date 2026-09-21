@@ -326,6 +326,7 @@ function processCorrelatedSubquery(
     initialType,
   );
   graph.joins.push(join);
+  childConnection.setParentJoin(join);
 
   wireOutput(input, join);
   wireOutput(childEnd, join);

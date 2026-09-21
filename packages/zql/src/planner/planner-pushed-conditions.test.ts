@@ -10,7 +10,7 @@ import type {
 import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
 import {pushDownCorrelatedPredicates} from '../builder/correlated-predicate-pushdown.ts';
 import {transformFilters} from '../builder/filter.ts';
-import {planQuery} from './planner-builder.ts';
+import {buildPlanGraph, planQuery} from './planner-builder.ts';
 import type {ConnectionCostModel, CostModelCost} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import {AccumulatorDebugger} from './planner-debug.ts';
@@ -33,6 +33,11 @@ const tables: Record<
     rows: 10_000,
     ndv: {id: 10_000, public: 2},
     columns: {id: {type: 'string'}, public: {type: 'boolean'}},
+  },
+  thing: {
+    rows: 1_000,
+    ndv: {id: 1_000, constructor: 10},
+    columns: {id: {type: 'string'}},
   },
 };
 
@@ -187,11 +192,54 @@ describe('PlannerConnection', () => {
     );
   });
 
+  test('a constraint binds only its own keys', () => {
+    const pinned = cmp('constructor', 'c1');
+    const connection = new PlannerSource('thing', costModel).connect(
+      [['id', 'asc']],
+      pinned,
+      false,
+      undefined,
+      1,
+      new Set([pinned]),
+    );
+    connection.propagateConstraints([0], {id: undefined});
+    expect(connection.estimateCost(1, [0]).returnedRows).toBe(
+      1_000 / 1_000 / 10,
+    );
+  });
+
   test('selectivity with a per-branch filter leaves out pushed conditions', () => {
     const connection = connect(new Set([pin]));
     connection.propagateConstraints([0], {id: undefined});
     connection.setPerBranchFilter([0], cmp('public', false));
     expect(connection.estimateCost(1, [0]).selectivity).toBe(1 / 2 / 2);
+  });
+});
+
+describe('buildPlanGraph', () => {
+  test('a pushed condition counts when its join is flipped', () => {
+    const pushed = new Set<SimpleCondition>();
+    const {plan} = buildPlanGraph(
+      push(readingOfPublicWork(), pushed),
+      costModel,
+      true,
+      undefined,
+      pushed,
+    );
+    const [join] = plan.joins;
+    const work = must(plan.connections.find(c => c.table === 'work'));
+
+    // The semi-join binds `id` to a reading with `workID = 'w1'`.
+    work.propagateConstraints([0], {id: undefined});
+    expect(work.estimateCost(1, [0]).returnedRows).toBe(10_000 / 10_000 / 2);
+
+    // Flipped, `work` is the outer loop. Another flipped join (say, into an
+    // EXISTS of `work`) that binds `id` does not imply `id = 'w1'`.
+    join.flip();
+    work.propagateConstraints([0], {id: undefined});
+    expect(work.estimateCost(1, [0]).returnedRows).toBe(
+      10_000 / 10_000 / 2 / 10_000,
+    );
   });
 });
 
