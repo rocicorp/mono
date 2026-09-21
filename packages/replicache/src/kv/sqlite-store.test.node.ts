@@ -1,5 +1,10 @@
-import {expect, test} from 'vitest';
-import {SQLiteStoreRead, type PreparedStatements} from './sqlite-store.ts';
+import {expect, test, vi} from 'vitest';
+import {
+  SQLiteStoreRead,
+  setupDatabase,
+  type PreparedStatements,
+  type SQLiteDatabase,
+} from './sqlite-store.ts';
 
 function makeMockStatements(
   opts: {
@@ -122,4 +127,85 @@ test('mixed concurrent gets and has use separate sql calls', async () => {
 
   expect(getManyCallCount()).toBe(1);
   expect(hasCallCount()).toBe(1);
+});
+
+/** Records every statement `setupDatabase` executes, in order. */
+function setupAndCollectSQL(): string[] {
+  const statements: string[] = [];
+  const db: SQLiteDatabase = {
+    close: vi.fn(),
+    destroy: vi.fn(),
+    prepare: vi.fn(() => ({
+      exec: () => Promise.resolve(),
+      all: () => Promise.resolve([]),
+    })),
+    execSync: vi.fn((sql: string) => {
+      statements.push(sql.trim());
+    }),
+  };
+  setupDatabase(db);
+  return statements;
+}
+
+/** Records the pragmas `setupDatabase` issues, in order. */
+function setupAndCollectPragmas(): string[] {
+  const pragmas: string[] = [];
+  const db: SQLiteDatabase = {
+    close: vi.fn(),
+    destroy: vi.fn(),
+    prepare: vi.fn(() => ({
+      exec: () => Promise.resolve(),
+      all: () => Promise.resolve([]),
+    })),
+    execSync: vi.fn((sql: string) => {
+      const match = /^\s*PRAGMA\s+(\w+)/i.exec(sql);
+      if (match) {
+        pragmas.push(sql.trim());
+      }
+    }),
+  };
+  setupDatabase(db);
+  return pragmas;
+}
+
+function indexOfPragma(pragmas: string[], name: string): number {
+  return pragmas.findIndex(p =>
+    new RegExp(`^PRAGMA\\s+${name}\\b`, 'i').test(p),
+  );
+}
+
+test('setupDatabase issues page_size before journal_mode', () => {
+  const pragmas = setupAndCollectPragmas();
+
+  const pageSize = indexOfPragma(pragmas, 'page_size');
+  const journalMode = indexOfPragma(pragmas, 'journal_mode');
+
+  expect(pageSize).toBeGreaterThanOrEqual(0);
+  expect(journalMode).toBeGreaterThanOrEqual(0);
+  // SQLite silently ignores page_size once a journal mode has been set, so the
+  // order here is load-bearing and not merely stylistic. If this fails, the
+  // store is quietly running on 4096.
+  expect(pageSize).toBeLessThan(journalMode);
+});
+
+test('setupDatabase sets page_size to 8192 and enables mmap', () => {
+  const pragmas = setupAndCollectPragmas();
+
+  expect(pragmas[indexOfPragma(pragmas, 'page_size')]).toBe(
+    'PRAGMA page_size = 8192',
+  );
+  expect(pragmas[indexOfPragma(pragmas, 'mmap_size')]).toBe(
+    'PRAGMA mmap_size = 268435456',
+  );
+});
+
+test('setupDatabase creates entry as a rowid table', () => {
+  const create = setupAndCollectSQL().find(sql =>
+    /^CREATE TABLE IF NOT EXISTS entry\b/i.test(sql),
+  );
+
+  expect(create).toBeDefined();
+  // Rows are 8-16KB B-tree chunks; WITHOUT ROWID is measurably slower for rows
+  // that size. See the comment on the CREATE TABLE in setupDatabase.
+  expect(create).not.toMatch(/WITHOUT\s+ROWID/i);
 });

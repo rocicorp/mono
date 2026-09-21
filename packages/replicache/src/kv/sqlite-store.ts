@@ -220,6 +220,28 @@ export interface SQLiteStoreOptions {
 }
 
 /**
+ * Replicache's rows are B-tree chunks, which `BTreeWrite` targets at 8-16KB, so
+ * most of them are larger than a page and spill into overflow pages at either
+ * page size. 8192 does not avoid overflow; it halves the number of pages each
+ * chunk is split across.
+ *
+ * Measured with `replicache-perf/rn`, 4096 vs 8192 + mmap, change in time:
+ *
+ * | device                 | persist 1024x10000 | startup read (expo / op) |
+ * | ---------------------- | ------------------ | ------------------------ |
+ * | iOS simulator          | -6%                | -12% / -14%              |
+ * | Android emulator, 2GB  | -1% to -2%         | -19% / -8%               |
+ * | Pixel 6                | ~0%                | ~-40% / ~0%              |
+ *
+ * Split by pragma on iOS, page_size carries the write win (~6%) and mmap most
+ * of the read win. Neither regressed anything on any device.
+ */
+const PAGE_SIZE = 8192;
+
+/** 256MB, matching op-sqlite's own key-value store. */
+const MMAP_SIZE = 268435456;
+
+/**
  * Common database setup logic shared between expo-sqlite and op-sqlite implementations.
  * Configures SQLite pragmas, creates the entry table, and prepares common statements.
  */
@@ -228,20 +250,45 @@ export function setupDatabase(
   delegate: SQLiteDatabase,
   opts?: SQLiteStoreOptions,
 ): PreparedStatements {
-  // Configure SQLite pragmas for optimal performance
+  // Configure SQLite pragmas for optimal performance.
+  //
+  // page_size MUST come first. SQLite silently ignores it once the database
+  // has content or a journal mode has been set — no error, no warning, the
+  // pragma just does nothing and you are left on the 4096 default. Verified:
+  // issuing it after `journal_mode = WAL`, or after CREATE TABLE, leaves
+  // `PRAGMA page_size` reporting 4096. Do not reorder these.
+  delegate.execSync(`PRAGMA page_size = ${PAGE_SIZE}`);
   delegate.execSync(`PRAGMA busy_timeout = ${opts?.busyTimeout ?? 200}`);
   delegate.execSync(`PRAGMA journal_mode = '${opts?.journalMode ?? 'WAL'}'`);
   delegate.execSync(`PRAGMA synchronous = '${opts?.synchronous ?? 'NORMAL'}'`);
   delegate.execSync(
     `PRAGMA read_uncommitted = ${Boolean(opts?.readUncommitted)}`,
   );
+  // Reads served from the mmap window rather than the pager account for most
+  // of the startup-read win measured in the PAGE_SIZE comment.
+  delegate.execSync(`PRAGMA mmap_size = ${MMAP_SIZE}`);
 
-  // Create the entry table
+  // Create the entry table.
+  //
+  // This is deliberately a rowid table, not `WITHOUT ROWID`. A `WITHOUT ROWID`
+  // table stores whole rows in an index B-tree, which keeps at most ~1/4 of a
+  // page inline, and SQLite recommends it only for rows under ~1/20 of a page.
+  // Our rows are 8-16KB chunks. As a rowid table the key gets a small separate
+  // index and the values live in the table B-tree. On a Pixel 6 (5 rounds, on
+  // top of the pragmas above) that cut startup read by 24% on both expo and
+  // op, expo startup scan by 10%, and persist 1024x10000 by 4-7%.
+  //
+  // `key` needs an explicit NOT NULL: in a rowid table a non-INTEGER primary key
+  // is only a UNIQUE index, and SQLite (a bug kept for compatibility) lets it
+  // hold NULLs, several of them. `WITHOUT ROWID` enforced this implicitly.
+  //
+  // `IF NOT EXISTS` leaves an existing database's table as it was created, so
+  // stores created before this change stay `WITHOUT ROWID` until recreated.
   delegate.execSync(`
     CREATE TABLE IF NOT EXISTS entry (
-      key TEXT PRIMARY KEY,
+      key TEXT PRIMARY KEY NOT NULL,
       value TEXT NOT NULL
-    ) WITHOUT ROWID
+    )
   `);
 
   // Prepare common statements
