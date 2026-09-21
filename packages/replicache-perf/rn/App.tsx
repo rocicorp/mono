@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useSyncExternalStore} from 'react';
 import {DevSettings, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {
   configure,
@@ -33,6 +33,7 @@ type Next =
   | {
       done: false;
       backend: Backend;
+      variant: string;
       name: string;
       group: string;
       tmcwUrl: string;
@@ -40,76 +41,118 @@ type Next =
       total: number;
     };
 
-export default function App() {
-  const [status, setStatus] = useState('connecting…');
-  const [lines, setLines] = useState<string[]>([]);
-  const started = useRef(false);
+type State = {status: string; lines: string[]};
 
-  useEffect(() => {
-    if (started.current) {
+/**
+ * Run state lives at module scope, not in the component. Android can re-create
+ * the Activity while the process (and so this JS context) stays alive, which
+ * mounts App a second time. A per-instance guard would then start a second
+ * loop that runs the same benchmark concurrently, sharing its stores, and
+ * posts a duplicate result. A remounted App just subscribes to the one loop.
+ */
+let state: State = {status: 'connecting…', lines: []};
+const listeners = new Set<() => void>();
+let running = false;
+
+function update(patch: Partial<State>) {
+  state = {...state, ...patch};
+  for (const l of listeners) {
+    l();
+  }
+}
+
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
+
+function log(line: string) {
+  // Also to the console so the Metro terminal is readable.
+  // oxlint-disable-next-line no-console
+  console.log(line);
+  update({lines: [...state.lines, line]});
+}
+
+/** Starts the run loop unless one is already running in this JS context. */
+function startLoop() {
+  if (running) {
+    return;
+  }
+  running = true;
+  void runLoop().finally(() => {
+    running = false;
+  });
+}
+
+async function runLoop() {
+  // Release builds have no dev-settings reload, so there we stay in one JS
+  // context and loop. Less isolation between benchmarks than a reload
+  // gives, but teardownEach still cleans up each rep.
+  const canReload = __DEV__ && typeof DevSettings?.reload === 'function';
+
+  for (;;) {
+    let next: Next;
+    try {
+      next = (await fetch(`${base}/next`).then(r => r.json())) as Next;
+    } catch {
+      update({status: `no control server on ${base}`});
       return;
     }
-    started.current = true;
+    if (next.done) {
+      update({status: 'done'});
+      return;
+    }
 
-    const log = (line: string) => {
-      // Also to the console so the Metro terminal is readable.
-      // oxlint-disable-next-line no-console
-      console.log(line);
-      setLines(prev => [...prev, line]);
+    update({
+      status: `[${next.index + 1}/${next.total}] ${next.backend} · ${next.name}`,
+    });
+    configure({backend: next.backend, tmcwUrl: next.tmcwUrl});
+
+    // Echoed back so the control server can reject a result for a benchmark
+    // other than the one in flight instead of attributing it positionally.
+    const ran = {
+      index: next.index,
+      name: next.name,
+      group: next.group,
+      variant: next.variant,
     };
-
-    void (async () => {
-      // Release builds have no dev-settings reload, so there we stay in one JS
-      // context and loop. Less isolation between benchmarks than a reload
-      // gives, but teardownEach still cleans up each rep.
-      const canReload = __DEV__ && typeof DevSettings?.reload === 'function';
-
-      for (;;) {
-        let next: Next;
-        try {
-          next = (await fetch(`${base}/next`).then(r => r.json())) as Next;
-        } catch {
-          setStatus(`no control server on ${base}`);
-          return;
-        }
-        if (next.done) {
-          setStatus('done');
-          return;
-        }
-
-        setStatus(
-          `[${next.index + 1}/${next.total}] ${next.backend} · ${next.name}`,
-        );
-        configure({backend: next.backend, tmcwUrl: next.tmcwUrl});
-
-        let body: {result: BenchmarkResult} | {error: string};
-        try {
-          const out = await runBenchmarkByNameAndGroup(next.name, next.group);
-          if (out && out[0] === 'result') {
-            body = {result: out[1]};
-            log(formatAsReplicache(out[1]));
-          } else {
-            body = {error: String(out?.[1] ?? 'no result')};
-            log(`${next.name}: ${body.error}`);
-          }
-        } catch (e) {
-          body = {error: (e as Error)?.stack ?? String(e)};
-          log(`${next.name} THREW: ${body.error}`);
-        }
-
-        await fetch(`${base}/result`, {
-          method: 'POST',
-          headers: {'content-type': 'application/json'},
-          body: JSON.stringify(body),
-        });
-
-        if (canReload) {
-          DevSettings.reload();
-          return;
-        }
+    let body: {result: BenchmarkResult} | {error: string};
+    try {
+      const out = await runBenchmarkByNameAndGroup(next.name, next.group);
+      if (out && out[0] === 'result') {
+        body = {result: out[1]};
+        log(formatAsReplicache(out[1]));
+      } else {
+        body = {error: String(out?.[1] ?? 'no result')};
+        log(`${next.name}: ${body.error}`);
       }
-    })();
-  }, []);
+    } catch (e) {
+      body = {error: (e as Error)?.stack ?? String(e)};
+      log(`${next.name} THREW: ${body.error}`);
+    }
+
+    const res = await fetch(`${base}/result`, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({ran, ...body}),
+    });
+    if (res.status === 409) {
+      log(`result rejected: ${await res.text()}`);
+    }
+
+    if (canReload) {
+      DevSettings.reload();
+      return;
+    }
+  }
+}
+
+export default function App() {
+  const {status, lines} = useSyncExternalStore(subscribe, () => state);
+
+  useEffect(startLoop, []);
 
   return (
     <View style={styles.container}>
