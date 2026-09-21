@@ -1,3 +1,6 @@
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -67,6 +70,41 @@ describe('change-streamer/snapshot-reservations', () => {
     ]);
     expect(reservations.confirmationsRequired()).toBe(false);
     expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
+  });
+
+  test('confirmFor() reports the size of the replica', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'snapshot-reservations-'));
+    try {
+      const replicaFile = join(dir, 'replica.db');
+      writeFileSync(replicaFile, Buffer.alloc(4096));
+      const reservations = new SnapshotReservations(createSilentLogContext(), {
+        backupURL: 's3://foo/bar',
+        litestreamVersion: 'v5',
+        replicaFile,
+      });
+      const message = getFirstMessage(reservations.open('task-1'));
+
+      reservations.confirmFor('task-1', 'replica-v1', 'watermark-1', 'pg');
+
+      expect((await message)[1].replicaSize).toBe(4096);
+    } finally {
+      rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  test('confirmFor() omits the size of a missing replica', async () => {
+    const reservations = new SnapshotReservations(createSilentLogContext(), {
+      backupURL: 's3://foo/bar',
+      litestreamVersion: 'v5',
+      replicaFile: '/does/not/exist/replica.db',
+    });
+    const message = getFirstMessage(reservations.open('task-1'));
+
+    reservations.confirmFor('task-1', 'replica-v1', 'watermark-1', 'pg');
+
+    const [, status] = await message;
+    expect(status.replicaSize).toBeUndefined();
+    expect(reservations.confirmationsRequired()).toBe(false);
   });
 
   test('confirmFor() is a no-op for an already-confirmed reservation', () => {
