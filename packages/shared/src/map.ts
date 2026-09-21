@@ -8,6 +8,12 @@ const nativeSupport =
   typeof (Map.prototype as unknown as MapES2026<unknown, Defined>)
     .getOrInsert === 'function';
 
+/**
+ * A {@link Map} or a {@link WeakMap}; the ES2026 proposal adds these methods to
+ * both.
+ */
+type MapOrWeakMap<K, V> = Map<K, V> | WeakMap<K & WeakKey, V>;
+
 interface MapES2026<K, V> {
   getOrInsert(key: K, defaultValue: V): V;
   getOrInsertComputed(key: K, compute: (key: K) => V): V;
@@ -20,15 +26,15 @@ interface MapES2026<K, V> {
  * Mirrors the ES2026 `Map.prototype.getOrInsert` proposal.
  */
 function getOrInsertPolyfill<K, V extends Defined>(
-  map: Map<K, V>,
+  map: MapOrWeakMap<K, V>,
   key: K,
   defaultValue: V,
 ): V {
-  const existing = map.get(key);
+  const existing = (map as Map<K, V>).get(key);
   if (existing !== undefined) {
     return existing;
   }
-  map.set(key, defaultValue);
+  (map as Map<K, V>).set(key, defaultValue);
   return defaultValue;
 }
 
@@ -39,21 +45,21 @@ function getOrInsertPolyfill<K, V extends Defined>(
  * Mirrors the ES2026 `Map.prototype.getOrInsertComputed` proposal.
  */
 function getOrInsertComputedPolyfill<K, V extends Defined>(
-  map: Map<K, V>,
+  map: MapOrWeakMap<K, V>,
   key: K,
   compute: (key: K) => V,
 ): V {
-  const existing = map.get(key);
+  const existing = (map as Map<K, V>).get(key);
   if (existing !== undefined) {
     return existing;
   }
   const value = compute(key);
-  map.set(key, value);
+  (map as Map<K, V>).set(key, value);
   return value;
 }
 
 function getOrInsertNative<K, V extends Defined>(
-  map: Map<K, V>,
+  map: MapOrWeakMap<K, V>,
   key: K,
   defaultValue: V,
 ): V {
@@ -61,7 +67,7 @@ function getOrInsertNative<K, V extends Defined>(
 }
 
 function getOrInsertComputedNative<K, V extends Defined>(
-  map: Map<K, V>,
+  map: MapOrWeakMap<K, V>,
   key: K,
   compute: (key: K) => V,
 ): V {

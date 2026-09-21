@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
+import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
@@ -295,23 +296,38 @@ export class ResetPipelinesSignal extends Error {
   }
 }
 
-// Memoizes the `SELECT <columns> FROM <table> WHERE ` prefix of the row
-// lookups performed for each change, which would otherwise be rebuilt from
-// the table spec for every read. Specs are recreated whenever they are
-// recomputed, so a stale prefix is never served.
-const selectPrefixes = new WeakMap<LiteTableSpecWithKeysAndVersion, string>();
+// Memoizes, per table spec, the SQL of the row lookups performed for each
+// change, which would otherwise be rebuilt from the table spec for every
+// read. Handing out the same string for every read of a given shape also
+// lets the SnapshotRowCache and the statement cache look it up without
+// rehashing it. Specs are recreated whenever they are recomputed, so stale
+// SQL is never served.
+type TableReads = {
+  /** `SELECT <columns> FROM <table> WHERE ` */
+  readonly prefix: string;
+  /** {@link Snapshot.getRow} SQL, by the NUL-joined key columns. */
+  readonly byKeyColumns: Map<string, string>;
+  /**
+   * {@link Snapshot.getRows} SQL, by the bitmask of the table's `uniqueKeys`
+   * that are queried.
+   */
+  readonly byUniqueKeys: Map<number, string>;
+};
 
-function selectPrefix(table: LiteTableSpecWithKeysAndVersion): string {
-  let prefix = selectPrefixes.get(table);
-  if (prefix === undefined) {
-    const cols = Object.keys(table.columns);
-    prefix = `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
-      table.name,
-    )} WHERE `;
-    selectPrefixes.set(table, prefix);
-  }
-  return prefix;
+const tableReads = new WeakMap<LiteTableSpecWithKeysAndVersion, TableReads>();
+
+function readsFor(table: LiteTableSpecWithKeysAndVersion): TableReads {
+  return getOrInsertComputed(tableReads, table, () => ({
+    prefix: `SELECT ${Object.keys(table.columns)
+      .map(c => id(c))
+      .join(',')} FROM ${id(table.name)} WHERE `,
+    byKeyColumns: new Map(),
+    byUniqueKeys: new Map(),
+  }));
 }
+
+// The byUniqueKeys bitmask must fit in a (positive) 31-bit integer.
+const MAX_MEMOIZED_UNIQUE_KEYS = 30;
 
 class Snapshot {
   static create(
@@ -422,8 +438,13 @@ class Snapshot {
     tag?: string,
   ) {
     const key = normalizedKeyOrder(rowKey as RowKey);
-    const conds = Object.keys(key).map(c => `${id(c)}=?`);
-    const sql = selectPrefix(table) + conds.join(' AND ');
+    const cols = Object.keys(key);
+    const reads = readsFor(table);
+    const sql = getOrInsertComputed(
+      reads.byKeyColumns,
+      cols.join('\0'),
+      () => reads.prefix + cols.map(c => `${id(c)}=?`).join(' AND '),
+    );
     const args = Object.values(key);
     const read = () =>
       this.db.statementCache.use(sql, cached => {
@@ -455,15 +476,30 @@ class Snapshot {
     // 2. Performance: SQLite's MULTI-INDEX OR optimization completely fails when
     //    any branch involves NULL, falling back to a full table scan. This was
     //    causing slowdowns of hundreds of times on tables with nullable unique columns.
-    const validKeys = keys.filter(key =>
-      key.every(column => row[column] !== null && row[column] !== undefined),
-    );
+    const validKeys: PrimaryKey[] = [];
+    let mask = 0;
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      if (
+        key.every(column => row[column] !== null && row[column] !== undefined)
+      ) {
+        validKeys.push(key);
+        mask |= 1 << i;
+      }
+    }
     if (validKeys.length === 0) {
       return [];
     }
-    const conds = validKeys.map(key => key.map(c => `${id(c)}=?`));
+    const reads = readsFor(table);
+    const buildSQL = () =>
+      reads.prefix +
+      validKeys
+        .map(key => key.map(c => `${id(c)}=?`).join(' AND '))
+        .join(' OR ');
     const sql =
-      selectPrefix(table) + conds.map(cond => cond.join(' AND ')).join(' OR ');
+      keys === table.uniqueKeys && keys.length <= MAX_MEMOIZED_UNIQUE_KEYS
+        ? getOrInsertComputed(reads.byUniqueKeys, mask, buildSQL)
+        : buildSQL();
     const args = validKeys.flatMap(key => key.map(column => row[column]));
     const read = () =>
       this.db.statementCache.use(sql, cached => {
