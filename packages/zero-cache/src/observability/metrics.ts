@@ -7,6 +7,7 @@ import type {
   UpDownCounter,
 } from '@opentelemetry/api';
 import {metrics} from '@opentelemetry/api';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 
 // intentional lazy initialization so it is not started before the SDK is started.
 
@@ -39,21 +40,13 @@ function getMeter() {
   return meter;
 }
 
-function cache<TRet>(): (
+function cache<TRet extends object>(): (
   name: string,
   creator: (name: string) => TRet,
 ) => TRet {
   const instruments = new Map<string, TRet>();
-  return (name: string, creator: (name: string) => TRet) => {
-    const existing = instruments.get(name);
-    if (existing) {
-      return existing;
-    }
-
-    const ret = creator(name);
-    instruments.set(name, ret);
-    return ret;
-  };
+  return (name: string, creator: (name: string) => TRet) =>
+    getOrInsertComputed(instruments, name, creator);
 }
 
 const upDownCounters = cache<UpDownCounter>();

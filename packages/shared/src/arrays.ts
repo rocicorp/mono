@@ -1,4 +1,5 @@
 import {assert} from './asserts.ts';
+import {getOrInsertComputed, newArray} from './map.ts';
 
 /**
  * Returns `arr` as is if none of the elements are `undefined`.
@@ -44,12 +45,7 @@ export function groupBy<T, K>(
   const groups = new Map<K, T[]>();
   for (const el of arr) {
     const key = keyFn(el);
-    let group = groups.get(key);
-    if (group === undefined) {
-      group = [];
-      groups.set(key, group);
-    }
-    group.push(el);
+    getOrInsertComputed(groups, key, newArray).push(el);
   }
   return groups;
 }

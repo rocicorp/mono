@@ -1,3 +1,7 @@
+import {
+  getOrInsertComputed,
+  newArray,
+} from '../../../packages/shared/src/map.ts';
 import type {MetricSummary, PercentileStats} from './metrics.ts';
 
 export type CloudZeroPodResource = {
@@ -136,9 +140,11 @@ export function buildCloudZeroSnapshot(
       replLags.push(m.value);
     } else if (m.name === 'zero_sync_serving_lag_stats_millisecond') {
       if (m.labels.stat) {
-        const list = servingLagStatsByStat.get(m.labels.stat) ?? [];
-        list.push(m.value);
-        servingLagStatsByStat.set(m.labels.stat, list);
+        getOrInsertComputed(
+          servingLagStatsByStat,
+          m.labels.stat,
+          newArray,
+        ).push(m.value);
       } else {
         servingLagScalars.push(m.value);
       }
@@ -155,9 +161,9 @@ export function buildCloudZeroSnapshot(
           const bucket = {le: le * multiplier, count: m.value};
           e2eLagHistogramBuckets.push(bucket);
           if (seriesKey) {
-            const list = e2eBucketsByPod.get(seriesKey) ?? [];
-            list.push(bucket);
-            e2eBucketsByPod.set(seriesKey, list);
+            getOrInsertComputed(e2eBucketsByPod, seriesKey, newArray).push(
+              bucket,
+            );
           }
         }
       }
@@ -193,9 +199,9 @@ export function buildCloudZeroSnapshot(
           const bucket = {le: le * multiplier, count: m.value};
           vsLagHistogramBuckets.push(bucket);
           if (seriesKey) {
-            const list = vsBucketsByPod.get(seriesKey) ?? [];
-            list.push(bucket);
-            vsBucketsByPod.set(seriesKey, list);
+            getOrInsertComputed(vsBucketsByPod, seriesKey, newArray).push(
+              bucket,
+            );
           }
         }
       }

@@ -13,6 +13,7 @@ import {
   type ReadonlyJSONValue,
   assertJSONValue,
 } from '../../../shared/src/json.ts';
+import {getOrInsertComputed, newArray} from '../../../shared/src/map.ts';
 import {skipBTreeNodeAsserts} from '../config.ts';
 import type {IndexKey} from '../db/index.ts';
 import * as FormatVersion from '../format-version-enum.ts';
@@ -514,12 +515,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       }
       searchStart = i;
 
-      let group = childGroups.get(i);
-      if (!group) {
-        group = [];
-        childGroups.set(i, group);
-      }
-      group.push(entry);
+      getOrInsertComputed(childGroups, i, newArray).push(entry);
     }
 
     // Process each affected child

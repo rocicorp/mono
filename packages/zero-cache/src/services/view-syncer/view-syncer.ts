@@ -10,6 +10,7 @@ import {
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {h64} from '../../../../shared/src/hash.ts';
+import {getOrInsertComputed, newArray} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -2234,9 +2235,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     for (const err of errorOrErrors) {
       // Application errors need to be grouped by client
       for (const clientId of getAffectedClientIDs([err.id])) {
-        const group = appErrorGroups.get(clientId) ?? [];
-        group.push(err);
-        appErrorGroups.set(clientId, group);
+        getOrInsertComputed(appErrorGroups, clientId, newArray).push(err);
       }
     }
 
@@ -2834,12 +2833,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         details: {kind: 'HydrationTimeout', timeoutMs},
       };
       for (const clientID of Object.keys(query.clientState)) {
-        let errors = errorsByClient.get(clientID);
-        if (!errors) {
-          errors = [];
-          errorsByClient.set(clientID, errors);
-        }
-        errors.push(error);
+        getOrInsertComputed(errorsByClient, clientID, newArray).push(error);
       }
     }
     for (const [clientID, errors] of errorsByClient) {

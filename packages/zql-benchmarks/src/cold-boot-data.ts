@@ -1,6 +1,7 @@
 /**
  * Data set and startup query set shared by the cold-boot benchmarks.
  */
+import {getOrInsertComputed, newArray} from '../../shared/src/map.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {makeSourceChangeAdd} from '../../zql/src/ivm/source.ts';
@@ -107,11 +108,7 @@ export function load(sources: Record<string, MemorySource>, scale = 1) {
 export function loadBulk(scale = 1): Record<string, MemorySource> {
   const byTable = new Map<string, Row[]>();
   for (const [table, row] of rows(scale)) {
-    let a = byTable.get(table);
-    if (!a) {
-      byTable.set(table, (a = []));
-    }
-    a.push(row);
+    getOrInsertComputed(byTable, table, newArray).push(row);
   }
   const sources = makeSources();
   for (const [table, tableRows] of byTable) {

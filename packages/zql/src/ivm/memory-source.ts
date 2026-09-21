@@ -2,6 +2,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {once, toSorted} from '../../../shared/src/iterables.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {
   Condition,
@@ -229,28 +230,22 @@ export class MemorySource implements Source {
 
   #getOrCreateIndex(sort: Ordering): Index {
     const key = JSON.stringify(sort);
-    const index = this.#indexes.get(key);
     // Future optimization could use existing index if it's the same just sorted
     // in reverse of needed.
-    if (index) {
-      return index;
-    }
+    return getOrInsertComputed(this.#indexes, key, () => {
+      const comparator = makeBoundComparator(sort);
 
-    const comparator = makeBoundComparator(sort);
-
-    // When creating these synchronously becomes a problem, a few options:
-    // 1. Allow users to specify needed indexes up front
-    // 2. Create indexes in a different thread asynchronously (this would require
-    // modifying the BTree to be able to be passed over structured-clone, or using
-    // a different library.)
-    // 3. We could even theoretically do (2) on multiple threads and then merge the
-    // results!
-    const rows = toSorted(this.#getPrimaryIndex().data, comparator);
-    const data = BTreeSet.fromSorted(comparator, rows);
-
-    const newIndex = {comparator, data};
-    this.#indexes.set(key, newIndex);
-    return newIndex;
+      // When creating these synchronously becomes a problem, a few options:
+      // 1. Allow users to specify needed indexes up front
+      // 2. Create indexes in a different thread asynchronously (this would require
+      // modifying the BTree to be able to be passed over structured-clone, or using
+      // a different library.)
+      // 3. We could even theoretically do (2) on multiple threads and then merge the
+      // results!
+      const rows = toSorted(this.#getPrimaryIndex().data, comparator);
+      const data = BTreeSet.fromSorted(comparator, rows);
+      return {comparator, data};
+    });
   }
 
   // For unit testing that we correctly clean up indexes.

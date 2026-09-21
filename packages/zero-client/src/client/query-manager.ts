@@ -3,6 +3,7 @@ import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {must} from '../../../shared/src/must.ts';
 import {difference} from '../../../shared/src/set-utils.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
@@ -625,11 +626,11 @@ export class QueryManager implements InspectorDelegate {
     }
 
     // The query manager manages metrics that are per query.
-    let existing = this.#queryMetrics.get(queryID);
-    if (!existing) {
-      existing = newPerQueryMetrics();
-      this.#queryMetrics.set(queryID, existing);
-    }
+    const existing = getOrInsertComputed(
+      this.#queryMetrics,
+      queryID,
+      newPerQueryMetrics,
+    );
     switch (metric) {
       case 'query-update-client':
         existing['query-update-client'].add(value);

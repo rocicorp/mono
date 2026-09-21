@@ -1,4 +1,5 @@
 import {deepEqual, type ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {getOrInsertComputed, newMap} from '../../../shared/src/map.ts';
 
 /**
  * A transition tree for interning immutable builder objects, modelled on V8's
@@ -222,11 +223,7 @@ export class Transitions<T extends object> {
     }
 
     const rest = (this.#rest ??= new Map());
-    let byValue = rest.get(key);
-    if (byValue === undefined) {
-      byValue = new Map();
-      rest.set(key, byValue);
-    }
+    const byValue = getOrInsertComputed(rest, key, newMap);
 
     const entry: Entry<T> = {delta, ref: new WeakRef(node)};
     const bucket = byValue.get(value);

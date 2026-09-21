@@ -8,6 +8,7 @@ import {bench, describe} from '../../../shared/src/bench.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {getOrInsertComputed, newMap} from '../../../shared/src/map.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
@@ -705,12 +706,10 @@ function gatherRows(
 
   function processNode(schema: SourceSchema, node: Node) {
     const {tableName: table} = schema;
-    let rowsForTable = rows.get(table);
-    if (rowsForTable === undefined) {
-      rowsForTable = new Map();
-      rows.set(table, rowsForTable);
-    }
-    rowsForTable.set(pullPrimaryKey(zqlSchema, table, node.row), node.row);
+    getOrInsertComputed(rows, table, newMap).set(
+      pullPrimaryKey(zqlSchema, table, node.row),
+      node.row,
+    );
     for (const [relationship, getChildren] of Object.entries(
       node.relationships,
     )) {
