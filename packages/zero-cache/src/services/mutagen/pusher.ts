@@ -1,9 +1,9 @@
 import {context, propagation, ROOT_CONTEXT} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
-import {groupBy} from '../../../../shared/src/arrays.ts';
+import {groupBy, newArray} from '../../../../shared/src/arrays.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {getErrorMessage} from '../../../../shared/src/error.ts';
-import {getOrInsertComputed, newArray} from '../../../../shared/src/map.ts';
+import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';

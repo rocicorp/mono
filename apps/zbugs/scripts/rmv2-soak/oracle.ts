@@ -1,9 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {
-  getOrInsertComputed,
-  newArray,
-} from '../../../../packages/shared/src/map.ts';
+import {newArray} from '../../../../packages/shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../../packages/shared/src/map.ts';
 import {
   listIndexes,
   listTables,

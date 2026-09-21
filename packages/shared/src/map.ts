@@ -85,12 +85,6 @@ export const getOrInsertComputed = nativeSupport
   : getOrInsertComputedPolyfill;
 
 /**
- * Creates an empty array.  Pass this to {@link getOrInsertComputed} instead of
- * an inline `() => []` so that a hit does not allocate a closure.
- */
-export const newArray = <T>(): T[] => [];
-
-/**
  * Creates an empty {@link Map}.  Pass this to {@link getOrInsertComputed}
  * instead of an inline `() => new Map()` so that a hit does not allocate a
  * closure.

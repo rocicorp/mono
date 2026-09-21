@@ -1,4 +1,5 @@
-import {getOrInsertComputed, newArray} from '../../../shared/src/map.ts';
+import {newArray} from '../../../shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import type * as v from '../../../shared/src/valita.ts';
 import type {
   attemptStartEventJSONSchema,

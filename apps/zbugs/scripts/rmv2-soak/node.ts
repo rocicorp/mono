@@ -3,10 +3,8 @@ import {createWriteStream, type WriteStream} from 'node:fs';
 import {rm} from 'node:fs/promises';
 import {basename, dirname, join} from 'node:path';
 import {createInterface} from 'node:readline';
-import {
-  getOrInsertComputed,
-  newArray,
-} from '../../../../packages/shared/src/map.ts';
+import {newArray} from '../../../../packages/shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../../packages/shared/src/map.ts';
 import {APP_ROOT, ZERO_CACHE_MAIN} from './config.ts';
 import type {SoakLog} from './logs.ts';
 

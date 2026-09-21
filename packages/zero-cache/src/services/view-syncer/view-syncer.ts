@@ -7,10 +7,11 @@ import {
   startAsyncSpan,
   startSpan,
 } from '../../../../otel/src/span.ts';
+import {newArray} from '../../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {h64} from '../../../../shared/src/hash.ts';
-import {getOrInsertComputed, newArray} from '../../../../shared/src/map.ts';
+import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';

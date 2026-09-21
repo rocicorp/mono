@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {getOrInsertComputed, newArray} from '../../../shared/src/map.ts';
+import {newArray} from '../../../shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {must} from '../../../shared/src/must.ts';
 import {difference} from '../../../shared/src/set-utils.ts';
 import * as v from '../../../shared/src/valita.ts';

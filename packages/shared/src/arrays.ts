@@ -1,5 +1,5 @@
 import {assert} from './asserts.ts';
-import {getOrInsertComputed, newArray} from './map.ts';
+import {getOrInsertComputed} from './map.ts';
 
 /**
  * Returns `arr` as is if none of the elements are `undefined`.
@@ -37,6 +37,12 @@ export function zip<T1, T2>(a1: readonly T1[], a2: readonly T2[]): [T1, T2][] {
 export function last<T>(arr: T[]): T | undefined {
   return arr.at(-1);
 }
+
+/**
+ * Creates an empty array.  Pass this to `getOrInsertComputed` instead of an
+ * inline `() => []` so that a hit does not allocate a closure.
+ */
+export const newArray = <T>(): T[] => [];
 
 export function groupBy<T, K>(
   arr: readonly T[],

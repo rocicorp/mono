@@ -1,9 +1,7 @@
 import {createServer, type Server} from 'node:http';
 import {gunzipSync} from 'node:zlib';
-import {
-  getOrInsertComputed,
-  newArray,
-} from '../../../packages/shared/src/map.ts';
+import {newArray} from '../../../packages/shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../packages/shared/src/map.ts';
 import type {CloudZeroMetricsSummary} from './cloudzero-metrics.ts';
 
 export interface PercentileStats {

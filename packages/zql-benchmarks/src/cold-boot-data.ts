@@ -1,7 +1,8 @@
 /**
  * Data set and startup query set shared by the cold-boot benchmarks.
  */
-import {getOrInsertComputed, newArray} from '../../shared/src/map.ts';
+import {newArray} from '../../shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {makeSourceChangeAdd} from '../../zql/src/ivm/source.ts';

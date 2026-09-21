@@ -1,4 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
+import {newArray} from '../../../shared/src/arrays.ts';
 import {
   assert,
   assertArray,
@@ -13,7 +14,7 @@ import {
   type ReadonlyJSONValue,
   assertJSONValue,
 } from '../../../shared/src/json.ts';
-import {getOrInsertComputed, newArray} from '../../../shared/src/map.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {skipBTreeNodeAsserts} from '../config.ts';
 import type {IndexKey} from '../db/index.ts';
 import * as FormatVersion from '../format-version-enum.ts';

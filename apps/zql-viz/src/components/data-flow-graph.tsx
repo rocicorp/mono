@@ -14,10 +14,8 @@ import {
 import type {FC} from 'react';
 import '@xyflow/react/dist/style.css';
 import {useMemo} from 'react';
-import {
-  getOrInsertComputed,
-  newArray,
-} from '../../../../packages/shared/src/map.ts';
+import {newArray} from '../../../../packages/shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../../../packages/shared/src/map.ts';
 import type {Graph} from '../types.ts';
 
 interface DataFlowGraphProps {
