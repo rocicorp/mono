@@ -1,3 +1,4 @@
+import {deepEqual} from '../../../shared/src/json.ts';
 import type {
   AST,
   Condition,
@@ -41,12 +42,21 @@ type ColumnCondition = SimpleCondition & {
  * column is a `parentField` of the correlation, and the parent and child
  * columns have the same Zero type, which is not `json`.
  *
+ * A condition is not copied when the child already has the same condition as
+ * a conjunct. So the pass does not change an AST that it already pushed.
+ *
  * Does not change its input. Returns the same object for every part of the
  * AST that it does not change.
+ *
+ * @param pushed When given, receives each child conjunct that is a copy of a
+ * parent condition: the copies that the pass adds, and the child's own
+ * conjuncts that equal a copy. The parent's condition implies each of them
+ * wherever the join binds its column, so the planner ignores them there.
  */
 export function pushDownCorrelatedPredicates(
   ast: AST,
   columnsOf: (table: string) => Record<string, SchemaValue>,
+  pushed?: Set<SimpleCondition> | undefined,
 ): AST {
   function visit(ast: AST): AST {
     const where = ast.where && visitCondition(ast.where, ast.table, []);
@@ -110,7 +120,8 @@ export function pushDownCorrelatedPredicates(
   ): AST {
     const {parentField, childField} = csq.correlation;
     const {subquery} = csq;
-    const pushed: SimpleCondition[] = [];
+    const conjuncts = subquery.where ? simpleConjuncts(subquery.where) : [];
+    const added: SimpleCondition[] = [];
     for (const fact of facts) {
       if (!isPushable(fact)) {
         continue;
@@ -123,18 +134,29 @@ export function pushDownCorrelatedPredicates(
             columnsOf(subquery.table)[childField[i]],
           )
         ) {
-          pushed.push({...fact, left: {type: 'column', name: childField[i]}});
+          const copy: SimpleCondition = {
+            ...fact,
+            left: {type: 'column', name: childField[i]},
+          };
+          const same = conjuncts.find(c => isSameCondition(c, copy));
+          if (same) {
+            pushed?.add(same);
+          } else {
+            conjuncts.push(copy);
+            added.push(copy);
+            pushed?.add(copy);
+          }
         }
       }
     }
-    if (pushed.length === 0) {
+    if (added.length === 0) {
       return subquery;
     }
     return {
       ...subquery,
       where: simplifyCondition({
         type: 'and',
-        conditions: subquery.where ? [subquery.where, ...pushed] : pushed,
+        conditions: subquery.where ? [subquery.where, ...added] : added,
       }),
     };
   }
@@ -173,6 +195,18 @@ function isPushable(c: SimpleCondition): c is ColumnCondition {
     default:
       return false;
   }
+}
+
+function isSameCondition(a: SimpleCondition, b: SimpleCondition): boolean {
+  return (
+    a.op === b.op &&
+    a.left.type === 'column' &&
+    b.left.type === 'column' &&
+    a.left.name === b.left.name &&
+    a.right.type === 'literal' &&
+    b.right.type === 'literal' &&
+    deepEqual(a.right.value, b.right.value)
+  );
 }
 
 function haveSameScalarType(

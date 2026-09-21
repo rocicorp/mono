@@ -719,6 +719,8 @@ export class PipelineDriver {
           enableNotExists: true, // Server-side can handle NOT EXISTS
           disableCorrelatedPredicatePushdown:
             this.#disableCorrelatedPredicatePushdown(),
+          enablePlannerAwarePushdown:
+            this.#config?.enablePlannerAwarePushdown === true,
           getSource: name => this.#getSource(name),
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput, _queryID: string): Input =>

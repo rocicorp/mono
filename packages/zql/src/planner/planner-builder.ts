@@ -7,6 +7,7 @@ import type {
   Conjunction,
   CorrelatedSubqueryCondition,
   Disjunction,
+  SimpleCondition,
 } from '../../../zero-protocol/src/ast.ts';
 import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 import {transformFilters} from '../builder/filter.ts';
@@ -42,11 +43,16 @@ export type Plans = {
   subPlans: {[key: string]: Plans};
 };
 
+/**
+ * @param pushed The conditions that correlated predicate pushdown copied into
+ * a child (see `pushDownCorrelatedPredicates`).
+ */
 export function buildPlanGraph(
   ast: AST,
   model: ConnectionCostModel,
   isRoot: boolean,
   baseConstraints?: PlannerConstraint,
+  pushed?: ReadonlySet<SimpleCondition>,
 ): Plans {
   const graph = new PlannerGraph();
   let nextPlanId = 0;
@@ -58,6 +64,7 @@ export function buildPlanGraph(
     isRoot,
     baseConstraints,
     ast.limit,
+    pushed,
   );
   graph.connections.push(connection);
 
@@ -70,6 +77,7 @@ export function buildPlanGraph(
       model,
       ast.table,
       () => nextPlanId++,
+      pushed,
     );
   }
 
@@ -93,6 +101,7 @@ export function buildPlanGraph(
         model,
         true,
         childConstraints,
+        pushed,
       );
     }
   }
@@ -107,14 +116,31 @@ function processCondition(
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
+  pushed: ReadonlySet<SimpleCondition> | undefined,
 ): Exclude<PlannerNode, PlannerTerminus> {
   switch (condition.type) {
     case 'simple':
       return input;
     case 'and':
-      return processAnd(condition, input, graph, model, parentTable, getPlanId);
+      return processAnd(
+        condition,
+        input,
+        graph,
+        model,
+        parentTable,
+        getPlanId,
+        pushed,
+      );
     case 'or':
-      return processOr(condition, input, graph, model, parentTable, getPlanId);
+      return processOr(
+        condition,
+        input,
+        graph,
+        model,
+        parentTable,
+        getPlanId,
+        pushed,
+      );
     case 'correlatedSubquery':
       return processCorrelatedSubquery(
         condition,
@@ -123,6 +149,7 @@ function processCondition(
         model,
         parentTable,
         getPlanId,
+        pushed,
       );
   }
 }
@@ -134,6 +161,7 @@ function processAnd(
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
+  pushed: ReadonlySet<SimpleCondition> | undefined,
 ): Exclude<PlannerNode, PlannerTerminus> {
   let end = input;
   for (const subCondition of condition.conditions) {
@@ -144,6 +172,7 @@ function processAnd(
       model,
       parentTable,
       getPlanId,
+      pushed,
     );
   }
   return end;
@@ -156,6 +185,7 @@ function processOr(
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
+  pushed: ReadonlySet<SimpleCondition> | undefined,
 ): Exclude<PlannerNode, PlannerTerminus> {
   // Skip building fan structure when no branch contains a CSQ. The runtime
   // collapses such ORs to a single Filter node, so the planner has nothing
@@ -185,6 +215,7 @@ function processOr(
         model,
         parentTable,
         getPlanId,
+        pushed,
       );
     } else {
       // Simple OR branch: wrap in a PlannerFilter so its filter can be
@@ -216,6 +247,7 @@ function processCorrelatedSubquery(
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
+  pushed: ReadonlySet<SimpleCondition> | undefined,
 ): Exclude<PlannerNode, PlannerTerminus> {
   const {related} = condition;
   const childTable = related.subquery.table;
@@ -230,6 +262,7 @@ function processCorrelatedSubquery(
     false,
     undefined, // no base constraints for EXISTS/NOT EXISTS
     condition.op === 'EXISTS' ? 1 : undefined,
+    pushed,
   );
   graph.connections.push(childConnection);
 
@@ -242,6 +275,7 @@ function processCorrelatedSubquery(
       model,
       childTable,
       getPlanId,
+      pushed,
     );
   }
 
@@ -328,13 +362,19 @@ function planRecursively(
   plans.plan.plan(planDebugger, lc);
 }
 
+/**
+ * @param pushed The conditions that correlated predicate pushdown copied into
+ * a child (see `pushDownCorrelatedPredicates`). The planner counts each one
+ * only where it removes rows.
+ */
 export function planQuery(
   ast: AST,
   model: ConnectionCostModel,
   planDebugger?: PlanDebugger,
   lc?: LogContext,
+  pushed?: ReadonlySet<SimpleCondition>,
 ): AST {
-  const plans = buildPlanGraph(ast, model, true);
+  const plans = buildPlanGraph(ast, model, true, undefined, pushed);
   planRecursively(plans, planDebugger, lc);
   return applyPlansToAST(ast, plans);
 }

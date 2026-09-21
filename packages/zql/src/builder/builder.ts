@@ -84,6 +84,18 @@ export interface BuilderDelegate {
   readonly disableCorrelatedPredicatePushdown?: boolean | undefined;
 
   /**
+   * When true, copies a parent's conditions into its subqueries before
+   * planning instead of after, and tells the planner which conditions it
+   * copied. The planner then sees when a copied condition makes a flipped
+   * join cheap. Has no effect when `disableCorrelatedPredicatePushdown` is
+   * true. Defaults to false.
+   *
+   * Only zero-cache sets this. This changes plans, and the pushdown alone
+   * does not.
+   */
+  readonly enablePlannerAwarePushdown?: boolean | undefined;
+
+  /**
    * Called once for each source needed by the AST.
    * Might be called multiple times with same tableName. It is OK to return
    * same storage instance in that case.
@@ -151,16 +163,25 @@ export function buildPipeline(
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
   );
 
-  if (costModel) {
-    ast = planQuery(ast, costModel, planDebugger, lc);
-  }
-  // After planning, so that the planner does not read the pushed conditions
-  // as selective filters.
-  if (!delegate.disableCorrelatedPredicatePushdown) {
-    ast = pushDownCorrelatedPredicates(
-      ast,
-      tableName => must(delegate.getSource(tableName)).tableSchema.columns,
-    );
+  const columnsOf = (tableName: string) =>
+    must(delegate.getSource(tableName)).tableSchema.columns;
+  if (delegate.disableCorrelatedPredicatePushdown) {
+    if (costModel) {
+      ast = planQuery(ast, costModel, planDebugger, lc);
+    }
+  } else if (delegate.enablePlannerAwarePushdown) {
+    const pushed = new Set<SimpleCondition>();
+    ast = pushDownCorrelatedPredicates(ast, columnsOf, pushed);
+    if (costModel) {
+      ast = planQuery(ast, costModel, planDebugger, lc, pushed);
+    }
+  } else {
+    if (costModel) {
+      ast = planQuery(ast, costModel, planDebugger, lc);
+    }
+    // After planning, so that the planner does not read the pushed conditions
+    // as selective filters.
+    ast = pushDownCorrelatedPredicates(ast, columnsOf);
   }
   return buildPipelineInternal(ast, delegate, queryID, '');
 }

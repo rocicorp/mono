@@ -617,6 +617,18 @@ export const zeroOptions = {
     hidden: true,
   },
 
+  enablePlannerAwarePushdown: {
+    type: v.boolean().default(false),
+    desc: [
+      `Copy the conditions of correlated predicate pushdown before the query`,
+      `planner runs instead of after, so that the planner can use them. This`,
+      `can change the plans that the planner picks.`,
+      ``,
+      `Has no effect when correlated predicate pushdown is off.`,
+    ],
+    hidden: true,
+  },
+
   enableQueryCovering: {
     type: v.boolean().default(true),
     desc: [

@@ -1,5 +1,9 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {
+  Condition,
+  Ordering,
+  SimpleCondition,
+} from '../../../zero-protocol/src/ast.ts';
 import type {NoSubqueryCondition} from '../builder/filter.ts';
 import {
   mergeConstraints,
@@ -51,6 +55,14 @@ import type {
  * - If `assignee` chosen first: Reveals constraint `assignee_id` for issue connection
  * - Updated costs guide the next selection
  *
+ * # Pushed conditions
+ * Correlated predicate pushdown copies a parent's condition on a correlation
+ * column into the child (`pushed`). Wherever the join binds that column, the
+ * parent's condition implies the copy, so the copy removes no rows. The
+ * connection leaves such a copy out of the cost model call. It also leaves
+ * every copy out of `selectivity`: a semi-join always binds the column, and a
+ * flipped join gets the copy's reduction through `returnedRows` instead.
+ *
  * # Lifecycle
  * 1. Construct with immutable structure (ordering, filters, cost model)
  * 2. Wire to output node during graph construction
@@ -65,6 +77,9 @@ export class PlannerConnection {
   // ========================================================================
   readonly #sort: Ordering;
   readonly #filters: Condition | undefined;
+  readonly #pushed: ReadonlySet<SimpleCondition> | undefined;
+  /** `#filters` without the pushed conditions. */
+  readonly #unpushedFilters: Condition | undefined;
   readonly #model: ConnectionCostModel;
   readonly table: string;
   readonly name: string; // Human-readable name for debugging (defaults to table name)
@@ -121,11 +136,16 @@ export class PlannerConnection {
     baseConstraints?: PlannerConstraint,
     limit?: number,
     name?: string,
+    pushed?: ReadonlySet<SimpleCondition>,
   ) {
     this.table = table;
     this.name = name ?? table;
     this.#sort = sort;
     this.#filters = filters;
+    this.#pushed = pushed;
+    this.#unpushedFilters = pushed
+      ? withoutConjuncts(filters, c => pushed.has(c))
+      : filters;
     this.#model = model;
     this.#baseConstraints = baseConstraints;
     this.#baseLimit = limit;
@@ -133,7 +153,7 @@ export class PlannerConnection {
     this.#constraints = new Map();
     this.#isRoot = isRoot;
 
-    this.selectivity = this.#computeSelectivity(filters);
+    this.selectivity = this.#computeSelectivity(this.#unpushedFilters);
   }
 
   setOutput(node: PlannerNode): void {
@@ -221,21 +241,16 @@ export class PlannerConnection {
     // simple OR branch in UFI mode) with the connection-time filter so
     // the cost model sees the same effective filter the runtime applies.
     const perBranchFilter = this.#perBranchFilters.get(key);
-    const effectiveFilters: Condition | undefined =
-      this.#filters && perBranchFilter
-        ? {
-            type: 'and',
-            conditions: [this.#filters, perBranchFilter],
-          }
-        : (this.#filters ?? perBranchFilter);
     const {startupCost, fanout, rows} = this.#model(
       this.table,
       this.#sort,
-      effectiveFilters,
+      andFilters(this.#filtersFor(mergedConstraint), perBranchFilter),
       mergedConstraint,
     );
     const selectivity = perBranchFilter
-      ? this.#computeSelectivity(effectiveFilters)
+      ? this.#computeSelectivity(
+          andFilters(this.#unpushedFilters, perBranchFilter),
+        )
       : this.selectivity;
     cost = {
       startupCost,
@@ -265,6 +280,24 @@ export class PlannerConnection {
     }
 
     return cost;
+  }
+
+  /**
+   * `#filters` without the pushed conditions that `constraint` binds the
+   * column of. The runtime still applies them, but they remove no rows.
+   */
+  #filtersFor(
+    constraint: PlannerConstraint | undefined,
+  ): Condition | undefined {
+    const pushed = this.#pushed;
+    if (!pushed || !constraint || this.#unpushedFilters === this.#filters) {
+      return this.#filters;
+    }
+    return withoutConjuncts(
+      this.#filters,
+      c =>
+        pushed.has(c) && c.left.type === 'column' && c.left.name in constraint,
+    );
   }
 
   #computeSelectivity(filters: Condition | undefined): number {
@@ -378,6 +411,48 @@ export class PlannerConnection {
       record[key] = value;
     }
     return record;
+  }
+}
+
+function andFilters(
+  a: Condition | undefined,
+  b: Condition | undefined,
+): Condition | undefined {
+  return a && b ? {type: 'and', conditions: [a, b]} : (a ?? b);
+}
+
+/**
+ * `c` without the simple conjuncts, including those of nested ANDs, for which
+ * `remove` returns true. Returns `c` itself when it removes nothing.
+ */
+function withoutConjuncts(
+  c: Condition | undefined,
+  remove: (c: SimpleCondition) => boolean,
+): Condition | undefined {
+  switch (c?.type) {
+    case 'simple':
+      return remove(c) ? undefined : c;
+    case 'and': {
+      const conditions: Condition[] = [];
+      for (const x of c.conditions) {
+        const y = withoutConjuncts(x, remove);
+        if (y !== undefined) {
+          conditions.push(y);
+        }
+      }
+      if (
+        conditions.length === c.conditions.length &&
+        conditions.every((x, i) => x === c.conditions[i])
+      ) {
+        return c;
+      }
+      if (conditions.length <= 1) {
+        return conditions[0];
+      }
+      return {type: 'and', conditions};
+    }
+    default:
+      return c;
   }
 }
 

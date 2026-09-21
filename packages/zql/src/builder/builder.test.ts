@@ -11,6 +11,7 @@ import type {
 import {Catch} from '../ivm/catch.ts';
 import {consume} from '../ivm/stream.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
+import type {ConnectionCostModel} from '../planner/planner-connection.ts';
 import {simpleCostModel} from '../planner/test/helpers.ts';
 import {
   bindStaticParameters,
@@ -2954,4 +2955,72 @@ test('duplicate relationship alias uses last-writer-wins', () => {
   );
   expect(sink.pushes.length).toBe(1);
   expect(sink.pushes[0].type).toBe('child');
+});
+
+test('enablePlannerAwarePushdown pushes before planning', () => {
+  const {sources} = testBuilderDelegate();
+  const ast: AST = {
+    table: 'users',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'id'},
+          op: '=',
+          right: {type: 'literal', value: 3},
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['id'], childField: ['userID']},
+            subquery: {
+              table: 'userStates',
+              alias: 'userStates',
+              orderBy: [
+                ['userID', 'asc'],
+                ['stateCode', 'asc'],
+              ],
+            },
+          },
+        },
+      ],
+    },
+  };
+  const pushed: Condition = {
+    type: 'simple',
+    left: {type: 'column', name: 'userID'},
+    op: '=',
+    right: {type: 'literal', value: 3},
+  };
+
+  function run(enablePlannerAwarePushdown: boolean) {
+    const userStatesFilters: (Condition | undefined)[] = [];
+    const costModel: ConnectionCostModel = (table, sort, filters, c) => {
+      if (table === 'userStates') {
+        userStatesFilters.push(filters);
+      }
+      return simpleCostModel(table, sort, filters, c);
+    };
+    class Delegate extends TestBuilderDelegate {
+      readonly enablePlannerAwarePushdown = enablePlannerAwarePushdown;
+    }
+    const sink = new Catch(
+      buildPipeline(ast, new Delegate(sources), 'query-id', costModel),
+    );
+    return {
+      userStatesFilters,
+      ids: sink.fetch().map(node => node !== 'yield' && node.row.id),
+    };
+  }
+
+  const after = run(false);
+  expect(after.userStatesFilters).not.toContainEqual(pushed);
+  expect(after.ids).toEqual([3]);
+
+  const before = run(true);
+  expect(before.userStatesFilters).toContainEqual(pushed);
+  expect(before.ids).toEqual([3]);
 });

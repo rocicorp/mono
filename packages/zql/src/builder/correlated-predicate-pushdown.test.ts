@@ -559,3 +559,82 @@ test('returns the same objects when nothing is pushed', () => {
   };
   expect(push(nothing)).toBe(nothing);
 });
+
+describe('pushed', () => {
+  test('receives the copies that the pass adds', () => {
+    const pushed = new Set<SimpleCondition>();
+    const ast: AST = {
+      table: 'user',
+      where: and(
+        cmp('userID', '=', 'u1'),
+        exists(['userID'], ['userID'], reading(cmp('workID', '=', 'w1'))),
+      ),
+      related: [related(['userID'], ['userID'], reading())],
+    };
+    const result = pushDownCorrelatedPredicates(ast, columnsOf, pushed);
+
+    const existsWhere = (
+      (result.where as Conjunction).conditions[1] as CorrelatedSubqueryCondition
+    ).related.subquery.where as Conjunction;
+    const relatedWhere = must(result.related)[0].subquery.where;
+    expect([...pushed]).toEqual([
+      cmp('userID', '=', 'u1'),
+      cmp('userID', '=', 'u1'),
+    ]);
+    expect(pushed.has(existsWhere.conditions[1] as SimpleCondition)).toBe(true);
+    expect(pushed.has(existsWhere.conditions[0] as SimpleCondition)).toBe(
+      false,
+    );
+    expect(pushed.has(relatedWhere as SimpleCondition)).toBe(true);
+  });
+
+  test('receives a child conjunct that equals a copy, and the pass does not add the copy', () => {
+    const pushed = new Set<SimpleCondition>();
+    const own = cmp('userID', '=', 'u1');
+    const readingWhere = and(cmp('workID', '=', 'w1'), and(own));
+    const ast = userReading(cmp('userID', '=', 'u1'), readingWhere);
+    const result = pushDownCorrelatedPredicates(ast, columnsOf, pushed);
+
+    expect(result).toBe(ast);
+    expect([...pushed]).toEqual([own]);
+    expect([...pushed][0]).toBe(own);
+  });
+
+  test('a conjunct with another value or operator is not the same', () => {
+    const pushed = new Set<SimpleCondition>();
+    const ast = userReading(
+      cmp('userID', 'IN', ['u1', 'u2']),
+      and(cmp('userID', 'IN', ['u2', 'u1']), cmp('userID', '=', 'u1')),
+    );
+    const result = pushDownCorrelatedPredicates(ast, columnsOf, pushed);
+
+    expect(must(result.related)[0].subquery.where).toEqual(
+      and(
+        cmp('userID', 'IN', ['u2', 'u1']),
+        cmp('userID', '=', 'u1'),
+        cmp('userID', 'IN', ['u1', 'u2']),
+      ),
+    );
+    expect([...pushed]).toEqual([cmp('userID', 'IN', ['u1', 'u2'])]);
+  });
+});
+
+test('does not change an AST that it already pushed', () => {
+  const ast: AST = {
+    table: 'user',
+    where: and(
+      cmp('userID', '=', 'u1'),
+      cmp('orgID', 'IN', [1, 2]),
+      exists(['userID'], ['userID'], reading(cmp('workID', '=', 'w1'))),
+    ),
+    related: [
+      related(['userID', 'orgID'], ['userID', 'orgID'], {
+        ...reading(),
+        related: [related(['userID'], ['userID'], {table: 'user', alias: 'u'})],
+      }),
+    ],
+  };
+  const once = push(ast);
+  expect(once).not.toBe(ast);
+  expect(push(once)).toBe(once);
+});
