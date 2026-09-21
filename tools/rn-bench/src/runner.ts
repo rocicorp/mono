@@ -149,6 +149,13 @@ type DeviceDriver = {
    * happens to be frontmost — which silently strands the run.
    */
   nudge?(appDir: string, metroPort: number): Promise<void>;
+  /**
+   * Kills the app if it is running, so each run (and each `--repeat`) starts
+   * cold. Otherwise `expo run:*` relaunches the still-running process, which
+   * can re-create the Activity and mount App a second time in the same JS
+   * context. Must not fail when the app is not installed yet.
+   */
+  stopApp(appId: string): Promise<void>;
 };
 
 function adbPath(): string {
@@ -185,6 +192,10 @@ const androidDriver: DeviceDriver = {
     for (const p of ports) {
       await execFile(adbPath(), ['reverse', `tcp:${p}`, `tcp:${p}`]);
     }
+  },
+
+  async stopApp(appId) {
+    await execFile(adbPath(), ['shell', 'am', 'force-stop', appId]);
   },
 
   expoArgs(device, metroPort, release) {
@@ -233,6 +244,13 @@ const iosDriver: DeviceDriver = {
   // reaches us. Nothing to do.
   forwardPorts: () => Promise.resolve(),
 
+  async stopApp(appId) {
+    // Fails when the app is not running, which is fine.
+    await execFile('xcrun', ['simctl', 'terminate', 'booted', appId]).catch(
+      () => {},
+    );
+  },
+
   expoArgs(device, metroPort, release) {
     return [
       'expo',
@@ -277,6 +295,67 @@ type QueueItem = {variant: string | undefined; name: string; group: string};
 type Outcome =
   | {item: QueueItem; result: BenchmarkResult}
   | {item: QueueItem; error: string};
+
+/**
+ * What the app echoes back in `/result` from the `/next` it ran, so a result
+ * can be checked against the benchmark actually in flight.
+ */
+type Ran = {
+  index: number;
+  name: string;
+  group: string;
+  variant?: string | undefined;
+};
+
+type ResultBody = {ran: Ran | undefined} & (
+  | {result: BenchmarkResult}
+  | {error: string}
+);
+
+function isRan(ran: unknown): ran is Ran {
+  return typeof ran === 'object' && ran !== null;
+}
+
+function ranMatches(
+  ran: Ran | undefined,
+  item: QueueItem,
+  index: number,
+): boolean {
+  return (
+    isRan(ran) &&
+    ran.index === index &&
+    ran.name === item.name &&
+    ran.group === item.group &&
+    ran.variant === item.variant
+  );
+}
+
+function describeRan(ran: Ran | undefined): string {
+  if (!isRan(ran)) {
+    return 'an unidentified benchmark (no `ran` in the body)';
+  }
+  const {index, name, group, variant} = ran;
+  return `#${index} ${variant ? variant + ' ' : ''}${group}/${name}`;
+}
+
+/**
+ * Accepts only a result object or a string error; anything else becomes an
+ * error outcome, so a bad body cannot crash the formatters downstream.
+ */
+function toOutcome(item: QueueItem, body: ResultBody): Outcome {
+  const {result, error} = body as {result?: unknown; error?: unknown};
+  if (typeof result === 'object' && result !== null) {
+    return {item, result: result as BenchmarkResult};
+  }
+  if (typeof error === 'string') {
+    return {item, error};
+  }
+  return {
+    item,
+    error:
+      'malformed /result body: expected a result object or an error string',
+  };
+}
 
 type ControlServer = {
   readonly port: number;
@@ -349,12 +428,12 @@ function startControlServer(
           settle(outcomes);
           return;
         }
-        const {variant, ...rest} = item;
+        const {variant} = item;
         json(res, {
           done: false,
-          ...rest,
-          // The variant travels under the config's own flag name, so an app
-          // reading `next.backend` keeps working.
+          ...item,
+          // The variant also travels under the config's own flag name, so an
+          // app reading `next.backend` keeps working.
           ...(config.variants && variant !== undefined
             ? {[config.variants.flag]: variant}
             : {}),
@@ -378,18 +457,37 @@ function startControlServer(
             res.end(JSON.stringify({error: 'no benchmark in flight'}));
             return;
           }
-          let body: {result: BenchmarkResult} | {error: string};
+          let body: ResultBody;
+          let parsed = true;
           try {
-            body = JSON.parse(Buffer.concat(chunks).toString());
+            const raw: unknown = JSON.parse(Buffer.concat(chunks).toString());
+            if (typeof raw !== 'object' || raw === null) {
+              throw new TypeError(`expected an object, got ${String(raw)}`);
+            }
+            body = raw as ResultBody;
           } catch (e) {
+            parsed = false;
             // Record it as a failed benchmark rather than taking the runner
             // down with it, so the rest of the queue still runs.
-            body = {error: `malformed /result body: ${String(e)}`};
+            body = {
+              ran: undefined,
+              error: `malformed /result body: ${String(e)}`,
+            };
           }
-          const outcome: Outcome =
-            'result' in body
-              ? {item, result: body.result}
-              : {item, error: body.error};
+          if (parsed && !ranMatches(body.ran, item, index)) {
+            // Not the benchmark in flight: a second run loop in the app (e.g.
+            // Android re-created the Activity and App mounted again) posting a
+            // result we already recorded. Attributing it positionally would
+            // duplicate and mislabel results.
+            res.writeHead(409, {'content-type': 'application/json'});
+            res.end(
+              JSON.stringify({
+                error: `result for ${describeRan(body.ran)} but ${describeRan({...item, index})} is in flight`,
+              }),
+            );
+            return;
+          }
+          const outcome: Outcome = toOutcome(item, body);
           outcomes.push(outcome);
           onOutcome(outcome, index, queue.length);
           index++;
@@ -785,6 +883,7 @@ async function runPlatform(
   logLine(`Running ${queue.length} benchmarks on ${p} (${device})...`, options);
 
   await driver.forwardPorts([options.port, metroPort]);
+  await driver.stopApp(await appIdFor(options.app, p));
 
   if (options.profile) {
     // An empty queue: the app's first /next gets `done`, so it settles into
