@@ -39,11 +39,13 @@ export class UnionFanOut implements Operator {
   }
 
   *reconcile(_pusher: InputBase): Stream<'yield'> {
+    must(this.#unionFanIn).fanOutStartedReconciling();
     for (const output of this.#outputs) {
       if (output.reconcile) {
         yield* output.reconcile(this);
       }
     }
+    yield* must(this.#unionFanIn).fanOutDoneReconciling();
   }
 
   setOutput(output: Output): void {

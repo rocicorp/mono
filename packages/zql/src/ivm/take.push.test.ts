@@ -1519,6 +1519,14 @@ describe('take with no partition', () => {
                   "text": null,
                 },
               },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": null,
+                },
+              },
             ],
           },
         ]
@@ -1677,54 +1685,62 @@ describe('take with no partition', () => {
         }
       `);
       expect(pushesWithFetch).toMatchInlineSnapshot(`
-        [
-          {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 100,
-                  "id": "i1",
-                },
-              },
-              "type": "remove",
-            },
-            "fetch": [
-              {
-                "relationships": {},
-                "row": {
-                  "created": 200,
-                  "id": "i2",
-                  "text": null,
-                },
-              },
-            ],
-          },
-          {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 300,
-                  "id": "i3",
-                  "text": null,
-                },
-              },
-              "type": "add",
-            },
-            "fetch": [
-              {
-                "relationships": {},
-                "row": {
-                  "created": 200,
-                  "id": "i2",
-                  "text": null,
-                },
-              },
-            ],
-          },
-        ]
-      `);
+                [
+                  {
+                    "change": {
+                      "node": {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "i1",
+                        },
+                      },
+                      "type": "remove",
+                    },
+                    "fetch": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "i2",
+                          "text": null,
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    "change": {
+                      "node": {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "i3",
+                          "text": null,
+                        },
+                      },
+                      "type": "add",
+                    },
+                    "fetch": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "i2",
+                          "text": null,
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "i3",
+                          "text": null,
+                        },
+                      },
+                    ],
+                  },
+                ]
+              `);
     });
 
     test('at limit remove row at start with row after, limit 1', () => {
@@ -1883,7 +1899,16 @@ describe('take with no partition', () => {
               },
               "type": "add",
             },
-            "fetch": [],
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+            ],
           },
         ]
       `);
@@ -2293,6 +2318,14 @@ describe('take with no partition', () => {
                 "row": {
                   "created": 200,
                   "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
                   "text": null,
                 },
               },
@@ -8771,6 +8804,15 @@ describe('take with partition', () => {
                           "id": "c2",
                           "issueID": "i1",
                           "text": "b",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c",
                         },
                       },
                     ],

@@ -716,11 +716,11 @@ function* genPush(
       unreachable(change);
   }
 
+  setOverlay({epoch: pushEpoch, change});
   for (const conn of connections) {
     const {output, filters, input} = conn;
     if (output) {
       conn.lastPushedEpoch = pushEpoch;
-      setOverlay({epoch: pushEpoch, change});
       const outputChange: Change =
         change[SourceChangeIndex.TYPE] === ChangeType.EDIT
           ? makeEditChange(
@@ -737,9 +737,14 @@ function* genPush(
                 relationships: {},
               });
       yield* filterPush(outputChange, output, input, filters?.predicate);
-      if (output.reconcile) {
-        yield* output.reconcile(input);
-      }
+      yield undefined;
+    }
+  }
+
+  for (const conn of connections) {
+    const {output, input} = conn;
+    if (output?.reconcile) {
+      yield* output.reconcile(input);
       yield undefined;
     }
   }

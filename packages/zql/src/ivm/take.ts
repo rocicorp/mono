@@ -648,8 +648,7 @@ export class Take implements Operator, TakeBoundProvider {
           continue;
         }
 
-        let refilledCount = 0;
-        let newBound = takeState.bound;
+        const toPush: Node[] = [];
         this.#takeGate?.open();
         try {
           const stream = this.#input.fetch({
@@ -673,10 +672,8 @@ export class Take implements Operator, TakeBoundProvider {
             ) {
               continue;
             }
-            refilledCount++;
-            newBound = node.row;
-            yield* this.#output.push(makeAddChange(node), this);
-            if (refilledCount === deficit) {
+            toPush.push(node);
+            if (toPush.length === deficit) {
               break;
             }
           }
@@ -684,11 +681,12 @@ export class Take implements Operator, TakeBoundProvider {
           this.#takeGate?.close();
         }
 
-        this.#setTakeState(
-          takeStateKey,
-          takeState.size + refilledCount,
-          newBound,
-        );
+        let currentSize = takeState.size;
+        for (const node of toPush) {
+          currentSize++;
+          this.#setTakeState(takeStateKey, currentSize, node.row);
+          yield* this.#output.push(makeAddChange(node), this);
+        }
       }
     }
 

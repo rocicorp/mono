@@ -4,6 +4,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {Catch} from './catch.ts';
 import {consume} from './stream.ts';
 import {createSource} from './test/source-factory.ts';
+import {UnionFanIn} from './union-fan-in.ts';
 import {UnionFanOut} from './union-fan-out.ts';
 
 import {
@@ -15,6 +16,8 @@ const lc = createSilentLogContext();
 const mockFanIn = {
   fanOutStartedPushing() {},
   *fanOutDonePushing() {},
+  fanOutStartedReconciling() {},
+  *fanOutDoneReconciling() {},
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
@@ -213,4 +216,23 @@ test('destroy throws error when called more times than outputs', () => {
   expect(() => fanOut.destroy()).toThrowError(
     'FanOut already destroyed once for each output',
   );
+});
+
+test('UnionFanOut and UnionFanIn coordinate reconcile to notify downstream only once', () => {
+  const s = createSource(lc, testLogConfig, 'table', {a: {type: 'number'}}, [
+    'a',
+  ]);
+  const connector = s.connect([['a', 'asc']]);
+
+  const fanOut = new UnionFanOut(connector);
+  const fanIn = new UnionFanIn(fanOut, [fanOut, fanOut]);
+
+  const mockOutput = {
+    push: vi.fn().mockReturnValue([]),
+    reconcile: vi.fn().mockReturnValue([]),
+  };
+  fanIn.setOutput(mockOutput);
+
+  consume(fanOut.reconcile(connector));
+  expect(mockOutput.reconcile).toHaveBeenCalledTimes(1);
 });
