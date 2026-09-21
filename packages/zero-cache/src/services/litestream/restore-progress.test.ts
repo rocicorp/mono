@@ -67,6 +67,27 @@ describe('litestream/restore-progress', () => {
     expect(restoreStatuses()).toEqual([['Restoring', 0]]);
   });
 
+  test('ignores a stale temporary replica when starting', () => {
+    writeFileSync(`${replicaFile}.tmp`, Buffer.alloc(2000));
+    reporter.start(3000, 1000);
+
+    expect(restoreStatuses()).toEqual([['Restoring', 0]]);
+  });
+
+  test('keeps the progress once the temporary replica is renamed', () => {
+    reporter.start(3000, 1000);
+    writeFileSync(`${replicaFile}.tmp`, Buffer.alloc(2000));
+    vi.advanceTimersByTime(1000);
+    // litestream renames the file before its post-restore integrity check.
+    renameSync(`${replicaFile}.tmp`, replicaFile);
+    vi.advanceTimersByTime(1000);
+
+    expect(restoreStatuses()).toEqual([
+      ['Restoring', 0],
+      ['Restoring', 2000],
+    ]);
+  });
+
   test('publishes the size of the restored replica when done', () => {
     reporter.start(undefined, 1000);
     writeFileSync(`${replicaFile}.tmp`, Buffer.alloc(2500));

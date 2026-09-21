@@ -44,7 +44,9 @@ export class RestoreProgressReporter {
   start(totalBytes: number | undefined, intervalMs = PUBLISH_INTERVAL_MS) {
     this.stop();
     this.#totalBytes = totalBytes;
-    this.#check();
+    // Start from 0 rather than checking now: a `.tmp` left behind by an
+    // interrupted restore is only deleted when the restore starts.
+    this.#update(0);
     this.#timer = setInterval(() => this.#check(), intervalMs);
   }
 
@@ -60,7 +62,14 @@ export class RestoreProgressReporter {
   }
 
   #check() {
-    const bytes = fileSize(`${this.#replicaFile}.tmp`) ?? 0;
+    // litestream renames `.tmp` to the replica before its post-restore
+    // integrity check, so once `.tmp` is gone the replica holds the bytes.
+    this.#update(
+      fileSize(`${this.#replicaFile}.tmp`) ?? fileSize(this.#replicaFile) ?? 0,
+    );
+  }
+
+  #update(bytes: number) {
     if (bytes !== this.#lastBytes) {
       this.#lastBytes = bytes;
       this.#publish('Restoring', bytes);
