@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789488841692,
+  "lastUpdate": 1790000277325,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57873,6 +57873,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 34103,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d588313df4ea7a9c58c1b0aaa5b5690170fcfc6f",
+          "message": "refactor(shared): use getOrInsert helpers for get-or-create map patterns (#6625)\n\nReplaces hand-rolled \"get, insert if missing\" map code across the repo\nwith `getOrInsert` / `getOrInsertComputed` from\n`packages/shared/src/map.ts`.\n\n## Helper changes (`shared/src/map.ts`)\n\n- Accept `WeakMap` as well as `Map`. The ES2026 proposal adds both\nmethods to `WeakMap.prototype`; native dispatch is used only when both\nprototypes have them.\n- `compute` / `defaultValue` are typed `NoInfer<V>`, so `V` is inferred\nfrom the map alone. Without it, passing a generic factory like `newMap`\nmade inference fall back to the `Defined` constraint.\n- New `newArray`, `newMap`, `newWeakMap` factories. Passing these\ninstead of inline `() => []` avoids allocating a closure on every call.\n\n## Call sites\n\n- get / if-missing / set, `?? []` + set, and `has` / set / `get(k)!`\npatterns (grouping helpers, per-query metrics, error grouping, btree\n`putMany`, pusher batching, etc.).\n- Early-return caches: `getSource` in pipeline-driver, analyze, zqlite\nquery delegate, bin-analyze, benchmark, zql-viz; `MemorySource` indexes;\n`observability/metrics.ts` `cache()`.\n- WeakMap caches: `normalizeAST`, `hashOfNormalizedAST`, `astID`,\n`rowIDString`, `rowIDHash`, runnable-query roots. Hot paths use\nmodule-level compute functions so a hit allocates nothing.\n\nIntentionally left alone: counters/upserts, LRU reorder (delete + set),\nsites that only insert on some paths, `record-proxy.ts` (values may be\n`undefined`), `CustomKeyMap` users, `replicache/sync/pull.ts` (would\ndiscard a promise), and `tools/verify-package-deps` (standalone, no\nmonorepo imports).\n\n## Testing\n\n- `pnpm run check-types`, lint, format clean.\n- Tests: shared, zero-protocol, zql, zqlite, z2s, zero-client (full);\nzero-cache and replicache (affected files).",
+          "timestamp": "2026-09-21T14:07:43Z",
+          "tree_id": "590e0284549d3d7b285de2caec32a13e38755aee",
+          "url": "https://github.com/rocicorp/mono/commit/d588313df4ea7a9c58c1b0aaa5b5690170fcfc6f"
+        },
+        "date": 1790000265187,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 326339,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 59113,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 119460,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34130,
             "unit": "bytes"
           }
         ]
