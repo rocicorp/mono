@@ -155,11 +155,11 @@ export class SnapshotRowCache {
       this.#sqlIDs.set(sql, sqlID);
     }
     let key = `${tag}\0${sqlID}`;
-    // The number of args is fixed by the SQL, so a simple separator suffices
-    // (a value containing the separator can only ever be compared to values
-    // at the same position of the same statement).
+    // Include each value's length so separators inside string values cannot
+    // make different argument arrays produce the same key.
     for (const arg of args) {
-      key += '\0' + serialize(arg);
+      const serialized = serialize(arg);
+      key += `\0${serialized.length}:${serialized}`;
     }
     return key;
   }
