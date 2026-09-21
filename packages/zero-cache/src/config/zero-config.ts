@@ -518,6 +518,20 @@ export const zeroOptions = {
     hidden: true,
   },
 
+  snapshotRowCacheSize: {
+    type: v.number().default(50_000),
+    desc: [
+      `The maximum number of entries in the per-worker cache of replica rows`,
+      `read while advancing IVM pipelines. Every client group on a sync worker`,
+      `reads the new and previous value of each replicated row change; the`,
+      `cache lets the client groups on a worker share those reads. A replicated`,
+      `transaction of N rows produces up to 2N entries.`,
+      ``,
+      `Setting this to 0 disables the cache.`,
+    ],
+    hidden: true,
+  },
+
   enableQueryPlanner: {
     type: v.boolean().default(true),
     desc: [
