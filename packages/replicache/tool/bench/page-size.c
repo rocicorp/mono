@@ -1,12 +1,20 @@
 /**
- * Why `SQLiteStore` sets `PRAGMA page_size = 8192`.
+ * How `PRAGMA page_size` behaves for a `WITHOUT ROWID` key/value table.
  *
  * `entry` is `WITHOUT ROWID` (see `src/kv/sqlite-store.ts`), which makes it an
  * index B-tree. SQLite caps an index B-tree's inline payload at
- * `((page_size - 35) * 64 / 255) - 23` — about 1004 bytes at the default page
- * size of 4096 — and spills anything larger into an overflow page chain. The
- * cost of crossing that threshold is not gradual, and `replicache-perf` uses
- * 1KB values, which land just past it.
+ * `((page_size - 35) * 64 / 255) - 23` — about 1004 bytes at 4096 and 2029 at
+ * 8192 — and spills anything larger into an overflow page chain.
+ *
+ * Read the `cliff` and `page-size` sections for what that costs, but do not
+ * read them as this store's workload. Replicache's `entry` rows are B-tree
+ * chunks, which `BTreeWrite` targets at 8-16KB (`src/btree/write.ts`), so they
+ * overflow at 4096 and 8192 alike; 8192 halves the number of overflow pages a
+ * chunk spans rather than avoiding the spill. The 4.4x file-size cliff those
+ * sections show belongs to ~1KB rows, which this store does not normally hold.
+ * The `chunks` section measures the sizes it does hold. For the numbers that
+ * actually justify the default, see `src/kv/sqlite-store.ts` — they are from
+ * `replicache-perf/rn` on real devices, not from here.
  *
  * This measures the effect directly, so the claim in `sqlite-store.ts` is
  * reproducible rather than folklore. It links the SQLite amalgamation, so it
@@ -33,7 +41,8 @@
  *
  *     cc -O2 -o page-size page-size.c sqlite3.c -lpthread -ldl -lm
  *     ./page-size            # all sections
- *     ./page-size cliff      # just the value-size sweep
+ *     ./page-size chunks     # the 8-16KB sizes this store actually holds
+ *     ./page-size cliff      # the ~1KB value-size sweep
  *
  * A matching amalgamation ships inside op-sqlite, which is what the store runs
  * against on React Native:
@@ -307,6 +316,31 @@ static void section_cliff(void) {
   }
 }
 
+/**
+ * The sizes Replicache's `entry` rows actually take: `BTreeWrite` targets
+ * 8-16KB chunks. Every one of these overflows at both page sizes, so this shows
+ * what page_size is worth once the spill is unavoidable — a much smaller effect
+ * than the cliff, and the one that applies to this store.
+ */
+static void section_chunks(void) {
+  const int sizes[] = {8192, 12288, 16384};
+  const int chunk_rows = 12800; /* ~100-200MB; a multiple of MAX_BATCH */
+
+  printf("\n== B-tree chunk sizes (8-16KB), WITHOUT ROWID, %d rows ==\n",
+         chunk_rows);
+  header();
+  char label[64];
+  for (unsigned i = 0; i < sizeof sizes / sizeof *sizes; i++) {
+    for (int p = 4096; p <= 16384; p *= 2) {
+      snprintf(label, sizeof label, "value=%5dB  page_size=%-6d", sizes[i], p);
+      row(label, measure(sizes[i], p, 1, 1, chunk_rows));
+    }
+  }
+  footnote();
+  printf("All of these overflow at every page size shown. page_size only\n"
+         "changes how many overflow pages each row is split across.\n");
+}
+
 int main(int argc, char **argv) {
   const char *only = argc > 1 ? argv[1] : NULL;
   int all = only == NULL;
@@ -315,10 +349,13 @@ int main(int argc, char **argv) {
   if (all || strcmp(only, "layout") == 0) section_layout();
   if (all || strcmp(only, "mmap") == 0) section_mmap();
   if (all || strcmp(only, "cliff") == 0) section_cliff();
+  if (all || strcmp(only, "chunks") == 0) section_chunks();
 
   if (!all && strcmp(only, "page-size") && strcmp(only, "layout") &&
-      strcmp(only, "mmap") && strcmp(only, "cliff")) {
-    fprintf(stderr, "usage: %s [page-size|layout|mmap|cliff]\n", argv[0]);
+      strcmp(only, "mmap") && strcmp(only, "cliff") &&
+      strcmp(only, "chunks")) {
+    fprintf(stderr, "usage: %s [page-size|layout|mmap|cliff|chunks]\n",
+            argv[0]);
     return 2;
   }
   return 0;

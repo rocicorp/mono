@@ -26,6 +26,7 @@ function of `page_size`, not of the SQLite version. Then:
 cc -O2 -o page-size page-size.c sqlite3.c -lpthread -ldl -lm
 
 ./page-size             # all sections
+./page-size chunks      # the 8-16KB sizes this store actually holds
 ./page-size page-size   # page_size sweep at 1KB values
 ./page-size layout      # WITHOUT ROWID vs a plain rowid table
 ./page-size mmap        # what mmap_size is worth
@@ -82,3 +83,34 @@ were created with.
 | `get`           | identical — `SELECT value FROM entry WHERE key = ?`                                                                                                                                                                 |
 | bulk write      | the store's `putN(128)` SQL in one transaction, but none of the JS above it                                                                                                                                         |
 | `scan(100)`     | **not a store statement at all** — `SQLiteStore` has no range scan; Replicache walks ranges above the kv layer. It is a B-tree locality probe, since overflow chains hurt sequential access more than point lookups |
+
+## What this tool does and does not justify
+
+The `cliff` and `page-size` sections use ~1KB rows. **This store does not
+normally hold rows that size.** Replicache's `entry` rows are B-tree chunks,
+which `BTreeWrite` targets at 8-16KB (`src/btree/write.ts`), so they overflow at
+4096 and 8192 alike — 8192 halves the number of overflow pages a chunk spans
+rather than avoiding the spill. The 4.4x cliff is real, but it belongs to ~1KB
+rows, not to this workload.
+
+The `chunks` section measures the sizes the store does hold, and it is less
+flattering to `page_size = 8192` (12800 rows, desktop, file sizes deterministic):
+
+| value | page_size | file                 | bulk write   | get          |
+| ----- | --------- | -------------------- | ------------ | ------------ |
+| 8 KB  | 4096      | 107.1 MB (1.07x)     | 210.3 ms     | 8.45 us      |
+| 8 KB  | **8192**  | **114.3 MB (1.14x)** | **166.8 ms** | **8.67 us**  |
+| 12 KB | 4096      | 157.1 MB (1.04x)     | 291.4 ms     | 11.36 us     |
+| 12 KB | **8192**  | **214.3 MB (1.42x)** | **305.6 ms** | **11.79 us** |
+| 16 KB | 4096      | 207.1 MB (1.03x)     | 381.9 ms     | 14.32 us     |
+| 16 KB | **8192**  | **214.3 MB (1.07x)** | **292.1 ms** | **14.81 us** |
+
+At every chunk size 8192 uses _more_ disk than 4096, and point reads are a hair
+slower. Bulk writes are mixed — faster at 8KB and 16KB, slower at 12KB. The
+waste depends on how the post-inline remainder divides into overflow pages,
+which is why 12KB is the worst case at 8192.
+
+None of that settles the question on its own: these are uniform-size rows on a
+desktop, real chunks vary across the 8-16KB range, and latency matters more than
+bytes on a phone. The numbers that justify the default are the on-device ones in
+`src/kv/sqlite-store.ts`. But if you are revisiting `page_size`, start here.
