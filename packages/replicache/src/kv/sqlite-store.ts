@@ -278,11 +278,15 @@ export function setupDatabase(
   // top of the pragmas above) that cut startup read by 24% on both expo and
   // op, expo startup scan by 10%, and persist 1024x10000 by 4-7%.
   //
+  // `key` needs an explicit NOT NULL: in a rowid table a non-INTEGER primary key
+  // is only a UNIQUE index, and SQLite (a bug kept for compatibility) lets it
+  // hold NULLs, several of them. `WITHOUT ROWID` enforced this implicitly.
+  //
   // `IF NOT EXISTS` leaves an existing database's table as it was created, so
   // stores created before this change stay `WITHOUT ROWID` until recreated.
   delegate.execSync(`
     CREATE TABLE IF NOT EXISTS entry (
-      key TEXT PRIMARY KEY,
+      key TEXT PRIMARY KEY NOT NULL,
       value TEXT NOT NULL
     )
   `);
