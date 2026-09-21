@@ -227,8 +227,7 @@ export interface SQLiteStoreOptions {
  *
  * Replicache's rows are B-tree chunks, which `BTreeWrite` targets at 8-16KB, so
  * they overflow at either page size. 8192 does not avoid overflow; it halves the
- * number of pages each chunk is split across. (The dramatic 4x file-size cliff
- * applies to ~1KB rows, which this store does not normally hold.)
+ * number of pages each chunk is split across.
  *
  * Measured with `replicache-perf/rn`, 4096 vs 8192 + mmap, change in time:
  *
@@ -270,7 +269,7 @@ export function setupDatabase(
     `PRAGMA read_uncommitted = ${Boolean(opts?.readUncommitted)}`,
   );
   // Reads served from the mmap window rather than the pager account for most
-  // of the startup-read win in the table above.
+  // of the startup-read win measured in the PAGE_SIZE comment.
   delegate.execSync(`PRAGMA mmap_size = ${MMAP_SIZE}`);
 
   // Create the entry table
