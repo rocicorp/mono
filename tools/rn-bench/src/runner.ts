@@ -312,13 +312,17 @@ type ResultBody = {ran: Ran | undefined} & (
   | {error: string}
 );
 
+function isRan(ran: unknown): ran is Ran {
+  return typeof ran === 'object' && ran !== null;
+}
+
 function ranMatches(
   ran: Ran | undefined,
   item: QueueItem,
   index: number,
 ): boolean {
   return (
-    ran !== undefined &&
+    isRan(ran) &&
     ran.index === index &&
     ran.name === item.name &&
     ran.group === item.group &&
@@ -327,7 +331,7 @@ function ranMatches(
 }
 
 function describeRan(ran: Ran | undefined): string {
-  if (ran === undefined) {
+  if (!isRan(ran)) {
     return 'an unidentified benchmark (no `ran` in the body)';
   }
   const {index, name, group, variant} = ran;
@@ -437,7 +441,11 @@ function startControlServer(
           let body: ResultBody;
           let parsed = true;
           try {
-            body = JSON.parse(Buffer.concat(chunks).toString());
+            const raw: unknown = JSON.parse(Buffer.concat(chunks).toString());
+            if (typeof raw !== 'object' || raw === null) {
+              throw new TypeError(`expected an object, got ${String(raw)}`);
+            }
+            body = raw as ResultBody;
           } catch (e) {
             parsed = false;
             // Record it as a failed benchmark rather than taking the runner

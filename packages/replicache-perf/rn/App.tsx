@@ -139,7 +139,11 @@ async function runLoop() {
       body: JSON.stringify({ran, ...body}),
     });
     if (res.status === 409) {
+      // Some other loop owns the queue (this one is stale), so stop rather
+      // than keep running benchmarks alongside it.
       log(`result rejected: ${await res.text()}`);
+      update({status: 'stopped: result rejected'});
+      return;
     }
 
     if (canReload) {
