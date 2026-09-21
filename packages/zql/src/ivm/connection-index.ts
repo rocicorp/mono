@@ -126,11 +126,17 @@ export class ConnectionIndex<C> {
  * Extracts a static equality constraint that every row accepted by
  * `condition` must satisfy, or `undefined` if there is none.
  *
- * - `column = literal` and `column IN (literals)` constrain the column.
+ * - `column = literal`, `column IS literal` and `column IN (literals)`
+ *   constrain the column. `column = null` (which the predicate folds to
+ *   `false`) and an empty `IN` constrain it to the empty set, i.e. the
+ *   connection never accepts a row.
  * - An `and` is constrained by any of its constrained conditions; the one
- *   with the fewest values is chosen.
+ *   with the fewest values is chosen, so a never-matching condition wins.
  * - An `or` is constrained only if all of its branches constrain the same
- *   column, by the union of their values.
+ *   column, by the union of their values. Never-matching branches cannot
+ *   widen the result and are ignored.
+ * - Anything else (`!=`, `IS NOT`, `NOT IN`, ranges, `LIKE`, a literal on
+ *   the left) is unconstrained.
  */
 export function staticKey(
   condition: NoSubqueryCondition | undefined,
@@ -144,13 +150,21 @@ export function staticKey(
       if (left.type !== 'column' || right.type !== 'literal') {
         return undefined;
       }
-      if (op === '=') {
-        return {column: left.name, values: [right.value]};
+      switch (op) {
+        case '=':
+          return {
+            column: left.name,
+            values: right.value === null ? [] : [right.value],
+          };
+        case 'IS':
+          return {column: left.name, values: [right.value]};
+        case 'IN':
+          return Array.isArray(right.value)
+            ? {column: left.name, values: right.value}
+            : undefined;
+        default:
+          return undefined;
       }
-      if (op === 'IN' && Array.isArray(right.value)) {
-        return {column: left.name, values: right.value};
-      }
-      return undefined;
     }
     case 'and': {
       let best: StaticKey | undefined;
@@ -167,13 +181,20 @@ export function staticKey(
       const values: Value[] = [];
       for (const c of condition.conditions) {
         const key = staticKey(c);
-        if (!key || (column !== undefined && key.column !== column)) {
+        if (!key) {
+          return undefined;
+        }
+        if (key.values.length === 0) {
+          continue; // a never-matching branch cannot widen the result
+        }
+        if (column !== undefined && key.column !== column) {
           return undefined;
         }
         column = key.column;
         values.push(...key.values);
       }
-      return column === undefined ? undefined : {column, values};
+      // Every branch never matches: the whole `or` never matches.
+      return {column: column ?? '', values};
     }
   }
 }
