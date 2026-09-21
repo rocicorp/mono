@@ -547,6 +547,10 @@ export class PipelineDriver {
     }
   }
 
+  #disableCorrelatedPredicatePushdown(): boolean {
+    return this.#config?.enableCorrelatedPredicatePushdown === false;
+  }
+
   #resolveScalarSubqueries(ast: AST): {
     ast: AST;
     companionRows: {table: string; row: Row}[];
@@ -564,6 +568,8 @@ export class PipelineDriver {
       const input = buildPipeline(
         subqueryAST,
         {
+          disableCorrelatedPredicatePushdown:
+            this.#disableCorrelatedPredicatePushdown(),
           getSource: name => this.#getSource(name),
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput): Input => input,
@@ -711,6 +717,8 @@ export class PipelineDriver {
         {
           debug: debugDelegate,
           enableNotExists: true, // Server-side can handle NOT EXISTS
+          disableCorrelatedPredicatePushdown:
+            this.#disableCorrelatedPredicatePushdown(),
           getSource: name => this.#getSource(name),
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput, _queryID: string): Input =>

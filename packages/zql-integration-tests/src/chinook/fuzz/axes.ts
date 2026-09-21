@@ -47,13 +47,16 @@ export type Col = {
  * One outgoing relationship: the child table it reaches, its cardinality, and whether
  * it is a **junction** (a hidden two-hop, e.g. `track.playlists`). The relationship
  * *name* is what the fluent builder lowers (`.related(name)` / `.whereExists(name)`),
- * so we never need the correlation keys here.
+ * so the builder supplies the correlation keys. Only the parent's join columns are
+ * kept, so a root filter can pin one (the pinned-push lane).
  */
 export type Rel = {
   readonly name: string;
   readonly child: string;
   readonly card: Card;
   readonly junction: boolean;
+  /** The parent's join columns (the first hop's `sourceField`). */
+  readonly parentField: readonly string[];
 };
 
 /** All modeled (client) table names, in schema declaration order. */
@@ -85,6 +88,7 @@ export function relsOf(table: string): Rel[] {
   const rels = schema.relationships[table] ?? {};
   return Object.entries(rels).map(([name, conns]) => {
     const chain = conns as ReadonlyArray<{
+      sourceField: readonly string[];
       destSchema: string;
       cardinality: Card;
     }>;
@@ -95,6 +99,7 @@ export function relsOf(table: string): Rel[] {
       // A junction (multi-hop) is always plural; a single hop carries its own card.
       card: chain.length > 1 ? 'many' : chain[0].cardinality,
       junction: chain.length > 1,
+      parentField: chain[0].sourceField,
     };
   });
 }

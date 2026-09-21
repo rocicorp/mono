@@ -40,6 +40,7 @@ import {planQuery} from '../planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../planner/planner-connection.ts';
 import type {PlanDebugger} from '../planner/planner-debug.ts';
 import {completeOrdering} from '../query/complete-ordering.ts';
+import {pushDownCorrelatedPredicates} from './correlated-predicate-pushdown.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {
   createPredicate,
@@ -72,6 +73,15 @@ export interface BuilderDelegate {
    * 3. NOT EXISTS requires complete knowledge of what doesn't exist
    */
   readonly enableNotExists?: boolean | undefined;
+
+  /**
+   * When true, does not copy a parent's conditions on correlation columns
+   * into its subqueries (see {@link pushDownCorrelatedPredicates}).
+   * Defaults to false.
+   *
+   * Only zero-cache sets this, as a kill switch.
+   */
+  readonly disableCorrelatedPredicatePushdown?: boolean | undefined;
 
   /**
    * Called once for each source needed by the AST.
@@ -143,6 +153,14 @@ export function buildPipeline(
 
   if (costModel) {
     ast = planQuery(ast, costModel, planDebugger, lc);
+  }
+  // After planning, so that the planner does not read the pushed conditions
+  // as selective filters.
+  if (!delegate.disableCorrelatedPredicatePushdown) {
+    ast = pushDownCorrelatedPredicates(
+      ast,
+      tableName => must(delegate.getSource(tableName)).tableSchema.columns,
+    );
   }
   return buildPipelineInternal(ast, delegate, queryID, '');
 }

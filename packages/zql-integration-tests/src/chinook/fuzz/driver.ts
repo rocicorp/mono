@@ -18,7 +18,12 @@ import {expect} from 'vitest';
 import {astToZQL} from '../../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../../ast-to-zql/src/format.ts';
 import {must} from '../../../../shared/src/must.ts';
-import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
+import type {
+  AST,
+  Condition,
+  LiteralValue,
+  SimpleOperator,
+} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {NameMapper} from '../../../../zero-schema/src/name-mapper.ts';
 import {makeServerTransaction} from '../../../../zero-server/src/custom.ts';
@@ -35,6 +40,7 @@ import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {mapResultToClientNames} from '../../../../zqlite/src/test/source-factory.ts';
 import {type Delegates, runAndCompare} from '../../helpers/runner.ts';
 import {schema} from '../schema.ts';
+import {relOf} from './axes.ts';
 import type {CostModel} from './cost.ts';
 import {
   applyLimit,
@@ -49,6 +55,7 @@ import {
 import {Coverage} from './coverage.ts';
 import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
 import type {Data} from './literals.ts';
+import {miniData} from './mini.ts';
 import {mutate} from './mutate.ts';
 import {fourPhase, type Mutation, pushForSkeleton} from './push.ts';
 import type {Regression} from './regressions.ts';
@@ -615,6 +622,77 @@ export function decoratedPushCases(
     });
   }
   return cases;
+}
+
+/**
+ * Push cases whose root `where` pins the join column of the root's first relationship,
+ * with `=` on one present value or `IN` on two. Correlated predicate pushdown copies such
+ * a pin into the child, and on down a chain that correlates on the same column, so these
+ * are the queries it rewrites. The generated filters seldom pin a join column, so no other
+ * lane reaches the rewrite. Every table in the query is mutated, so pushes cross the
+ * copied filter both from the parent side and from the child side.
+ */
+export function pinnedPushCases(
+  data: Data,
+  skels: readonly Skeleton[],
+  n: number,
+): readonly PushCase[] {
+  const cases: PushCase[] = [];
+  for (const s of skels) {
+    if (s.children.length === 0) {
+      continue;
+    }
+    const col = must(relOf(s.table, s.children[0].rel)).parentField[0];
+    const present = data.values(s.table, col);
+    if (present.length === 0) {
+      continue;
+    }
+    // Prefer the value of the first seed row, which is the root row the four-phase
+    // history churns.
+    const pinned = (miniData[s.table]?.[0]?.[col] ?? present[0]) as
+      | string
+      | number;
+    const other = (present.find(v => v !== pinned) ?? pinned) as
+      | string
+      | number;
+    const base = lower(s);
+    const mutations = [...astTables(asQueryInternals(base).ast)].flatMap(t =>
+      fourPhase(data, t, n),
+    );
+    const pins: Array<[string, SimpleOperator, LiteralValue]> = [
+      ['eq', '=', pinned],
+      ['in', 'IN', [pinned, other]],
+    ];
+    for (const [tag, op, value] of pins) {
+      cases.push({
+        label: `pinpush|${tag}|${label(s)}`,
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        query: (base as any).where(col, op, value),
+        mutations,
+      });
+    }
+  }
+  return cases;
+}
+
+/**
+ * Check per-step push parity for each case inside a rolled-back transaction, collecting
+ * every failure.
+ */
+export async function checkPushCases(
+  transact: Transact,
+  cases: readonly PushCase[],
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  for (const c of cases) {
+    const msg = await capture(() =>
+      transact(d => pushWalk(d, c.query, c.mutations)),
+    );
+    if (msg) {
+      failures.push([c.label, msg]);
+    }
+  }
+  return {total: cases.length, failures};
 }
 
 /**

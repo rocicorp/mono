@@ -960,6 +960,23 @@ test('--enable-query-covering can be disabled', () => {
   expect(config.enableQueryCovering).toBe(false);
 });
 
+test('correlated predicate pushdown defaults to on and can be disabled', () => {
+  const defaults = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+  expect(defaults.config.enableCorrelatedPredicatePushdown).toBe(true);
+
+  const disabled = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+    env: {ZERO_ENABLE_CORRELATED_PREDICATE_PUSHDOWN: 'false'},
+  });
+  expect(disabled.config.enableCorrelatedPredicatePushdown).toBe(false);
+});
+
 test('view-syncer hydration budget defaults to disabled and accepts milliseconds', () => {
   const defaults = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: 'ZERO_',

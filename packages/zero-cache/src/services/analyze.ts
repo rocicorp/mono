@@ -75,6 +75,9 @@ export async function analyzeQuery(
       host: {
         debug: new Debug(vendedRows, MAX_ANALYZE_ROWS),
         enableNotExists: true,
+        // Mirror production, as with the planner above.
+        disableCorrelatedPredicatePushdown:
+          config.enableCorrelatedPredicatePushdown === false,
         getSource(tableName: string) {
           let source = tables.get(tableName);
           if (source) {

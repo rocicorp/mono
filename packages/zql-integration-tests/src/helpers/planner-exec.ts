@@ -12,7 +12,10 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {buildPipeline} from '../../../zql/src/builder/builder.ts';
+import {
+  buildPipeline,
+  type BuilderDelegate,
+} from '../../../zql/src/builder/builder.ts';
 import {
   Debug,
   runtimeDebugFlags,
@@ -558,10 +561,12 @@ export async function createPlannerInfrastructure(config: {
       selectedDelegate.debug = debug;
 
       try {
-        // Build pipeline
+        // Build pipeline. The planner's cost model does not know about the
+        // conditions that correlated predicate pushdown adds, so run the plan
+        // that it costed.
         const pipeline = buildPipeline(
           astWithFlips,
-          selectedDelegate,
+          withoutCorrelatedPredicatePushdown(selectedDelegate),
           `query-${planEvent.attemptNumber}`,
         );
 
@@ -620,5 +625,25 @@ export async function createPlannerInfrastructure(config: {
     initializePlannerInfrastructure,
     initializeIndexedDatabase,
     executeAllPlanAttempts,
+  };
+}
+
+function withoutCorrelatedPredicatePushdown(
+  delegate: BuilderDelegate,
+): BuilderDelegate {
+  return {
+    debug: delegate.debug,
+    mapAst: delegate.mapAst,
+    enableNotExists: delegate.enableNotExists,
+    applyFiltersAnyway: delegate.applyFiltersAnyway,
+    disableCorrelatedPredicatePushdown: true,
+    getSource: tableName => delegate.getSource(tableName),
+    createStorage: name => delegate.createStorage(name),
+    decorateInput: (input, name) => delegate.decorateInput(input, name),
+    addEdge: (source, dest) => delegate.addEdge(source, dest),
+    decorateFilterInput: (input, name) =>
+      delegate.decorateFilterInput(input, name),
+    decorateSourceInput: (input, queryID) =>
+      delegate.decorateSourceInput(input, queryID),
   };
 }

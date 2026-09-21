@@ -30,12 +30,14 @@ import {
   checkFlipInvariance,
   checkL0Hydrate,
   checkL1,
+  checkPushCases,
   checkPushWalk,
   checkYield,
   checkYieldPush,
   fanInTakeCases,
   l1QueryCases,
   panicIfFailed,
+  pinnedPushCases,
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
@@ -97,6 +99,26 @@ test(
     const report = await checkPushWalk(harness.transact, data, skels, 1);
     console.log(
       `Push backbone (D≤1): ${report.total} cases, ${report.failures.length} failures`,
+    );
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+// oxlint-disable-next-line expect-expect
+test(
+  'Pinned push — a root filter on a join column, four-phase per-step parity over mini (D≤2)',
+  async () => {
+    // The root pins the join column of its first relationship, which is the shape that
+    // correlated predicate pushdown rewrites. D≤2 so the copied filter also sits in the
+    // middle of a chain, where a leaf push fetches through it.
+    const skels = enumerate({depth: 2, related: 1, exists: 1});
+    const report = await checkPushCases(
+      harness.transact,
+      pinnedPushCases(data, skels, 1),
+    );
+    console.log(
+      `Pinned push backbone (D≤2): ${report.total} cases, ${report.failures.length} failures`,
     );
     panicIfFailed(report, 12);
   },

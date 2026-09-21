@@ -605,6 +605,18 @@ export const zeroOptions = {
     ],
   },
 
+  enableCorrelatedPredicatePushdown: {
+    type: v.boolean().default(true),
+    desc: [
+      `Copy a query's equality conditions on a relationship's join columns`,
+      `into the related subquery. This reduces the rows that are read when a`,
+      `change is pushed through the query.`,
+      ``,
+      `This is a kill switch. It will be removed.`,
+    ],
+    hidden: true,
+  },
+
   enableQueryCovering: {
     type: v.boolean().default(true),
     desc: [
