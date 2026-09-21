@@ -977,21 +977,21 @@ test('correlated predicate pushdown defaults to on and can be disabled', () => {
   expect(disabled.config.enableCorrelatedPredicatePushdown).toBe(false);
 });
 
-test('planner-aware pushdown defaults to off and can be enabled', () => {
+test('planner-aware pushdown defaults to on and can be disabled', () => {
   const defaults = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: 'ZERO_',
     allowUnknown: false,
     allowPartial: true,
   });
-  expect(defaults.config.enablePlannerAwarePushdown).toBe(false);
+  expect(defaults.config.enablePlannerAwarePushdown).toBe(true);
 
-  const enabled = parseOptionsAdvanced(zeroOptions, {
+  const disabled = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: 'ZERO_',
     allowUnknown: false,
     allowPartial: true,
-    env: {ZERO_ENABLE_PLANNER_AWARE_PUSHDOWN: 'true'},
+    env: {ZERO_ENABLE_PLANNER_AWARE_PUSHDOWN: 'false'},
   });
-  expect(enabled.config.enablePlannerAwarePushdown).toBe(true);
+  expect(disabled.config.enablePlannerAwarePushdown).toBe(false);
 });
 
 test('view-syncer hydration budget defaults to disabled and accepts milliseconds', () => {
