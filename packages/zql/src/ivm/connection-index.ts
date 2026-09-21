@@ -7,8 +7,10 @@ import type {SourceChange} from './source.ts';
 /**
  * The static equality constraint a connection's filters place on a single
  * column: the row is accepted only if `row[column]` is one of `values`.
+ * The push-time counterpart of the fetch-time `Constraint` in
+ * `constraint.ts`, which pins columns to single values.
  */
-export type StaticKey = {
+export type StaticConstraint = {
   readonly column: string;
   readonly values: readonly Value[];
 };
@@ -35,44 +37,44 @@ export type StaticKey = {
 export class ConnectionIndex<C> {
   // column -> value -> number of connections constrained to that value.
   readonly #byColumn = new Map<string, Map<Value, number>>();
-  readonly #keys = new Map<C, StaticKey | undefined>();
+  readonly #constraints = new Map<C, StaticConstraint | undefined>();
   #unconstrained = 0;
 
   add(connection: C, filters: NoSubqueryCondition | undefined): void {
-    if (this.#keys.has(connection)) {
+    if (this.#constraints.has(connection)) {
       throw new Error('connection is already indexed');
     }
-    const key = staticKey(filters);
-    this.#keys.set(connection, key);
-    if (!key) {
+    const constraint = staticConstraint(filters);
+    this.#constraints.set(connection, constraint);
+    if (!constraint) {
       this.#unconstrained++;
       return;
     }
-    let byValue = this.#byColumn.get(key.column);
+    let byValue = this.#byColumn.get(constraint.column);
     if (!byValue) {
       byValue = new Map();
-      this.#byColumn.set(key.column, byValue);
+      this.#byColumn.set(constraint.column, byValue);
     }
-    for (const value of key.values) {
+    for (const value of constraint.values) {
       byValue.set(value, (byValue.get(value) ?? 0) + 1);
     }
   }
 
   remove(connection: C): void {
-    if (!this.#keys.has(connection)) {
+    if (!this.#constraints.has(connection)) {
       throw new Error('connection is not indexed');
     }
-    const key = this.#keys.get(connection);
-    this.#keys.delete(connection);
-    if (!key) {
+    const constraint = this.#constraints.get(connection);
+    this.#constraints.delete(connection);
+    if (!constraint) {
       this.#unconstrained--;
       return;
     }
-    const byValue = this.#byColumn.get(key.column);
+    const byValue = this.#byColumn.get(constraint.column);
     if (!byValue) {
-      throw new Error(`no index for column ${key.column}`);
+      throw new Error(`no index for column ${constraint.column}`);
     }
-    for (const value of key.values) {
+    for (const value of constraint.values) {
       const count = byValue.get(value) ?? 0;
       if (count <= 1) {
         byValue.delete(value);
@@ -81,12 +83,12 @@ export class ConnectionIndex<C> {
       }
     }
     if (byValue.size === 0) {
-      this.#byColumn.delete(key.column);
+      this.#byColumn.delete(constraint.column);
     }
   }
 
   get size(): number {
-    return this.#keys.size;
+    return this.#constraints.size;
   }
 
   /**
@@ -95,7 +97,7 @@ export class ConnectionIndex<C> {
    * is still written to (e.g. to populate it).
    */
   mayAccept(row: Row): boolean {
-    if (this.#unconstrained > 0 || this.#keys.size === 0) {
+    if (this.#unconstrained > 0 || this.#constraints.size === 0) {
       return true;
     }
     for (const [column, byValue] of this.#byColumn) {
@@ -138,9 +140,9 @@ export class ConnectionIndex<C> {
  * - Anything else (`!=`, `IS NOT`, `NOT IN`, ranges, `LIKE`, a literal on
  *   the left) is unconstrained.
  */
-export function staticKey(
+export function staticConstraint(
   condition: NoSubqueryCondition | undefined,
-): StaticKey | undefined {
+): StaticConstraint | undefined {
   if (!condition) {
     return undefined;
   }
@@ -167,11 +169,14 @@ export function staticKey(
       }
     }
     case 'and': {
-      let best: StaticKey | undefined;
+      let best: StaticConstraint | undefined;
       for (const c of condition.conditions) {
-        const key = staticKey(c);
-        if (key && (!best || key.values.length < best.values.length)) {
-          best = key;
+        const constraint = staticConstraint(c);
+        if (
+          constraint &&
+          (!best || constraint.values.length < best.values.length)
+        ) {
+          best = constraint;
         }
       }
       return best;
@@ -180,18 +185,18 @@ export function staticKey(
       let column: string | undefined;
       const values: Value[] = [];
       for (const c of condition.conditions) {
-        const key = staticKey(c);
-        if (!key) {
+        const constraint = staticConstraint(c);
+        if (!constraint) {
           return undefined;
         }
-        if (key.values.length === 0) {
+        if (constraint.values.length === 0) {
           continue; // a never-matching branch cannot widen the result
         }
-        if (column !== undefined && key.column !== column) {
+        if (column !== undefined && constraint.column !== column) {
           return undefined;
         }
-        column = key.column;
-        values.push(...key.values);
+        column = constraint.column;
+        values.push(...constraint.values);
       }
       // Every branch never matches: the whole `or` never matches.
       return {column: column ?? '', values};

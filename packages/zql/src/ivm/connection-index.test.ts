@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {createPredicate, type NoSubqueryCondition} from '../builder/filter.ts';
-import {ConnectionIndex, staticKey} from './connection-index.ts';
+import {ConnectionIndex, staticConstraint} from './connection-index.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
@@ -35,16 +35,19 @@ function gt(column: string, value: number): NoSubqueryCondition {
   };
 }
 
-describe('staticKey', () => {
+describe('staticConstraint', () => {
   test('no filters', () => {
-    expect(staticKey(undefined)).toBeUndefined();
+    expect(staticConstraint(undefined)).toBeUndefined();
   });
 
   test('equality, IS and IN', () => {
-    expect(staticKey(eq('a', 1))).toEqual({column: 'a', values: [1]});
-    expect(staticKey(inn('a', [1, 2]))).toEqual({column: 'a', values: [1, 2]});
+    expect(staticConstraint(eq('a', 1))).toEqual({column: 'a', values: [1]});
+    expect(staticConstraint(inn('a', [1, 2]))).toEqual({
+      column: 'a',
+      values: [1, 2],
+    });
     expect(
-      staticKey({
+      staticConstraint({
         type: 'simple',
         op: 'IS',
         left: {type: 'column', name: 'a'},
@@ -54,23 +57,23 @@ describe('staticKey', () => {
   });
 
   test('never-matching conditions constrain to the empty set', () => {
-    expect(staticKey(eq('a', null))).toEqual({column: 'a', values: []});
-    expect(staticKey(inn('a', []))).toEqual({column: 'a', values: []});
+    expect(staticConstraint(eq('a', null))).toEqual({column: 'a', values: []});
+    expect(staticConstraint(inn('a', []))).toEqual({column: 'a', values: []});
     expect(
-      staticKey({type: 'and', conditions: [eq('b', 1), eq('a', null)]}),
+      staticConstraint({type: 'and', conditions: [eq('b', 1), eq('a', null)]}),
     ).toEqual({column: 'a', values: []});
     expect(
-      staticKey({type: 'or', conditions: [eq('a', null), eq('b', 1)]}),
+      staticConstraint({type: 'or', conditions: [eq('a', null), eq('b', 1)]}),
     ).toEqual({column: 'b', values: [1]});
     expect(
-      staticKey({type: 'or', conditions: [eq('a', null), inn('b', [])]}),
+      staticConstraint({type: 'or', conditions: [eq('a', null), inn('b', [])]}),
     ).toEqual({column: '', values: []});
   });
 
   test('other operators and literal left sides are unconstrained', () => {
-    expect(staticKey(gt('a', 1))).toBeUndefined();
+    expect(staticConstraint(gt('a', 1))).toBeUndefined();
     expect(
-      staticKey({
+      staticConstraint({
         type: 'simple',
         op: '=',
         left: {type: 'literal', value: 1},
@@ -78,7 +81,7 @@ describe('staticKey', () => {
       }),
     ).toBeUndefined();
     expect(
-      staticKey({
+      staticConstraint({
         type: 'simple',
         op: '!=',
         left: {type: 'column', name: 'a'},
@@ -89,37 +92,37 @@ describe('staticKey', () => {
 
   test('and picks the constraint with the fewest values', () => {
     expect(
-      staticKey({
+      staticConstraint({
         type: 'and',
         conditions: [gt('c', 0), inn('a', [1, 2, 3]), eq('b', 'x')],
       }),
     ).toEqual({column: 'b', values: ['x']});
     expect(
-      staticKey({type: 'and', conditions: [gt('c', 0), gt('d', 1)]}),
+      staticConstraint({type: 'and', conditions: [gt('c', 0), gt('d', 1)]}),
     ).toBeUndefined();
   });
 
   test('or is constrained only when every branch constrains the same column', () => {
     expect(
-      staticKey({
+      staticConstraint({
         type: 'or',
         conditions: [eq('a', 1), inn('a', [2, 3])],
       }),
     ).toEqual({column: 'a', values: [1, 2, 3]});
     expect(
-      staticKey({
+      staticConstraint({
         type: 'or',
         conditions: [eq('a', 1), eq('b', 1)],
       }),
     ).toBeUndefined();
     expect(
-      staticKey({
+      staticConstraint({
         type: 'or',
         conditions: [eq('a', 1), gt('a', 5)],
       }),
     ).toBeUndefined();
     expect(
-      staticKey({
+      staticConstraint({
         type: 'or',
         conditions: [
           {type: 'and', conditions: [eq('a', 1), gt('c', 0)]},
