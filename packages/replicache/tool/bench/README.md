@@ -60,7 +60,7 @@ desktop run and move with machine and load — read them as ratios.
 This models 1KB rows, not what the store holds in practice. Replicache's kv rows
 are B-tree chunks of 8-16KB, which overflow at 4096 and 8192 alike, so the
 4.4x → 1.1x above is not the real-world effect of the pragma. For that, use
-`replicache-perf/rn` on a device (see the comment on `DEFAULT_PAGE_SIZE` in
+`replicache-perf/rn` on a device (see the comment on `PAGE_SIZE` in
 `src/kv/sqlite-store.ts`).
 
 ### Two things worth knowing before changing the schema

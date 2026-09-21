@@ -217,23 +217,6 @@ export interface SQLiteStoreOptions {
   readUncommitted?: boolean;
   /** Directory in which to create the SQLite file. Defaults to the process CWD. */
   directory?: string | undefined;
-  /**
-   * Page size for a freshly created database. See {@link DEFAULT_PAGE_SIZE} for
-   * why the default is 8192 rather than SQLite's own 4096.
-   *
-   * Only takes effect on a database that has no pages yet: SQLite ignores the
-   * pragma once the file has content or WAL is on. Changing it for an existing
-   * store needs a VACUUM, which this store does not do.
-   */
-  pageSize?: number;
-  /**
-   * Size of the memory-mapped read window, in bytes. 0 disables mmap.
-   *
-   * This is a bounded window over clean, read-only pages that the OS can evict
-   * under pressure — not a resident copy of the database — so it does not grow
-   * with the store.
-   */
-  mmapSize?: number;
 }
 
 /**
@@ -248,7 +231,7 @@ export interface SQLiteStoreOptions {
  * that `tool/bench/` shows applies to ~1KB rows, which this store does not
  * normally hold.)
  *
- * Measured with `replicache-perf/rn`, main vs this default, change in time:
+ * Measured with `replicache-perf/rn`, 4096 vs 8192 + mmap, change in time:
  *
  * | device                 | persist 1024x10000 | startup read (expo / op) |
  * | ---------------------- | ------------------ | ------------------------ |
@@ -259,10 +242,10 @@ export interface SQLiteStoreOptions {
  * Split by pragma on iOS, page_size carries the write win (~6%) and mmap most
  * of the read win. Neither regressed anything on any device.
  */
-const DEFAULT_PAGE_SIZE = 8192;
+const PAGE_SIZE = 8192;
 
 /** 256MB, matching op-sqlite's own key-value store. */
-const DEFAULT_MMAP_SIZE = 268435456;
+const MMAP_SIZE = 268435456;
 
 /**
  * Common database setup logic shared between expo-sqlite and op-sqlite implementations.
@@ -280,9 +263,7 @@ export function setupDatabase(
   // pragma just does nothing and you are left on the 4096 default. Verified:
   // issuing it after `journal_mode = WAL`, or after CREATE TABLE, leaves
   // `PRAGMA page_size` reporting 4096. Do not reorder these.
-  delegate.execSync(
-    `PRAGMA page_size = ${opts?.pageSize ?? DEFAULT_PAGE_SIZE}`,
-  );
+  delegate.execSync(`PRAGMA page_size = ${PAGE_SIZE}`);
   delegate.execSync(`PRAGMA busy_timeout = ${opts?.busyTimeout ?? 200}`);
   delegate.execSync(`PRAGMA journal_mode = '${opts?.journalMode ?? 'WAL'}'`);
   delegate.execSync(`PRAGMA synchronous = '${opts?.synchronous ?? 'NORMAL'}'`);
@@ -291,9 +272,7 @@ export function setupDatabase(
   );
   // Reads served from the mmap window rather than the pager account for most
   // of the startup-read win in the table above.
-  delegate.execSync(
-    `PRAGMA mmap_size = ${opts?.mmapSize ?? DEFAULT_MMAP_SIZE}`,
-  );
+  delegate.execSync(`PRAGMA mmap_size = ${MMAP_SIZE}`);
 
   // Create the entry table
   delegate.execSync(`
