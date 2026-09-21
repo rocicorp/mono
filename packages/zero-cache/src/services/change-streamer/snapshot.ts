@@ -45,6 +45,13 @@ const statusSchema = v.object({
    * `WatermarkTooOld` response from a `/changes` subscription).
    */
   minWatermark: v.string(),
+
+  /**
+   * The size in bytes of the replication-manager's replica when the snapshot
+   * was reserved, used as an estimate of the size of the restored replica
+   * when reporting restore progress. Absent from older replication-managers.
+   */
+  replicaSize: v.number().optional(),
 });
 
 export type SnapshotStatus = v.Infer<typeof statusSchema>;

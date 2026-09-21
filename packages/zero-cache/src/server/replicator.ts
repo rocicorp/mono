@@ -26,6 +26,7 @@ import {
   litestreamRestoreMetricAttrs,
   litestreamRestoreRuns,
 } from '../services/litestream/metrics.ts';
+import {RestoreProgressReporter} from '../services/litestream/restore-progress.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
   ReplicatorService,
@@ -242,12 +243,14 @@ async function restoreReplica(lc: LogContext, config: NormalizedZeroConfig) {
   const start = performance.now();
   let backupURL: string | undefined;
   let result: RestoreResult | undefined;
+  const progress = new RestoreProgressReporter(lc, config.replica.file);
   try {
     for (;;) {
       const snapshotStatus = await reserveAndGetSnapshotStatus(lc, config);
       // The backupURL comes from the replication-manager's snapshot response.
       ({backupURL} = snapshotStatus);
       const litestream: LitestreamConfig = {...config.litestream, backupURL};
+      progress.start(snapshotStatus.replicaSize);
       const attempt = await tryRestore(
         lc,
         litestream,
@@ -255,8 +258,10 @@ async function restoreReplica(lc: LogContext, config: NormalizedZeroConfig) {
         snapshotStatus,
         'view_syncer',
       );
+      progress.stop();
       if (attempt.restored) {
         result = attempt.result;
+        progress.done();
         return;
       }
       lc.info?.(
@@ -265,6 +270,7 @@ async function restoreReplica(lc: LogContext, config: NormalizedZeroConfig) {
       await sleep(RETRY_INTERVAL_MS);
     }
   } finally {
+    progress.stop();
     const attrs = litestreamRestoreMetricAttrs(
       config.litestream,
       'view_syncer',

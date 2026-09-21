@@ -1,3 +1,4 @@
+import {statSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
@@ -109,13 +110,31 @@ export class SnapshotReservations {
       this.#lc.info?.(
         `reserving change-log entries since ${minWatermark} for ${taskID}`,
       );
-      res.confirm(this.#backupConfig.backupURL, replicaVersion, minWatermark);
+      res.confirm(
+        this.#backupConfig.backupURL,
+        replicaVersion,
+        minWatermark,
+        this.#replicaSize(),
+      );
       // Measured from `open()`, not from the first confirmation attempt: what
       // matters is how long the follower waited before it could restore.
       litestreamSnapshotReservationConfirmDuration().recordMs(
         Date.now() - res.startTime.getTime(),
         {...this.#metricAttrs(), source},
       );
+    }
+  }
+
+  #replicaSize(): number | undefined {
+    const {replicaFile} = this.#backupConfig;
+    if (!replicaFile) {
+      return undefined;
+    }
+    try {
+      return statSync(replicaFile).size;
+    } catch (e) {
+      this.#lc.warn?.(`Unable to get the size of ${replicaFile}`, e);
+      return undefined;
     }
   }
 
@@ -173,12 +192,17 @@ class Reservation {
     return true;
   }
 
-  confirm(backupURL: string, replicaVersion: string, minWatermark: string) {
+  confirm(
+    backupURL: string,
+    replicaVersion: string,
+    minWatermark: string,
+    replicaSize: number | undefined,
+  ) {
     if (this.#watermark === null) {
       if (this.#downstream.active) {
         this.#downstream.push([
           'status',
-          {tag: 'status', backupURL, replicaVersion, minWatermark},
+          {tag: 'status', backupURL, replicaVersion, minWatermark, replicaSize},
         ]);
       }
       this.#watermark = minWatermark;
