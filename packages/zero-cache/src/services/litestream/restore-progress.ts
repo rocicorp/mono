@@ -22,7 +22,7 @@ export class RestoreProgressReporter {
   readonly #lc: LogContext;
   readonly #replicaFile: string;
   readonly #publishFn: PublishFn;
-  readonly #start = performance.now();
+  #start = performance.now();
   #totalBytes: number | undefined;
   #lastBytes: number | undefined;
   #timer: NodeJS.Timeout | undefined;
@@ -43,6 +43,8 @@ export class RestoreProgressReporter {
    */
   start(totalBytes: number | undefined, intervalMs = PUBLISH_INTERVAL_MS) {
     this.stop();
+    // Measure the restore itself, not the wait for a restorable backup.
+    this.#start = performance.now();
     this.#totalBytes = totalBytes;
     // Start from 0 rather than checking now: a `.tmp` left behind by an
     // interrupted restore is only deleted when the restore starts.

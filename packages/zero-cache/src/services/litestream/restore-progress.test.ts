@@ -67,6 +67,19 @@ describe('litestream/restore-progress', () => {
     expect(restoreStatuses()).toEqual([['Restoring', 0]]);
   });
 
+  test('measures elapsed time from the start of the restore', () => {
+    // e.g. waiting for the replication-manager's backup.
+    vi.advanceTimersByTime(60_000);
+    reporter.start(3000, 1000);
+    vi.advanceTimersByTime(2000);
+    writeFileSync(replicaFile, Buffer.alloc(3000));
+    reporter.done();
+
+    expect(events.map(e => e.state?.restoreStatus?.elapsedMs)).toEqual([
+      0, 2000,
+    ]);
+  });
+
   test('ignores a stale temporary replica when starting', () => {
     writeFileSync(`${replicaFile}.tmp`, Buffer.alloc(2000));
     reporter.start(3000, 1000);
