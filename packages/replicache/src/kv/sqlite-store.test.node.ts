@@ -129,6 +129,24 @@ test('mixed concurrent gets and has use separate sql calls', async () => {
   expect(hasCallCount()).toBe(1);
 });
 
+/** Records every statement `setupDatabase` executes, in order. */
+function setupAndCollectSQL(): string[] {
+  const statements: string[] = [];
+  const db: SQLiteDatabase = {
+    close: vi.fn(),
+    destroy: vi.fn(),
+    prepare: vi.fn(() => ({
+      exec: () => Promise.resolve(),
+      all: () => Promise.resolve([]),
+    })),
+    execSync: vi.fn((sql: string) => {
+      statements.push(sql.trim());
+    }),
+  };
+  setupDatabase(db);
+  return statements;
+}
+
 /** Records the pragmas `setupDatabase` issues, in order. */
 function setupAndCollectPragmas(): string[] {
   const pragmas: string[] = [];
@@ -179,4 +197,15 @@ test('setupDatabase sets page_size to 8192 and enables mmap', () => {
   expect(pragmas[indexOfPragma(pragmas, 'mmap_size')]).toBe(
     'PRAGMA mmap_size = 268435456',
   );
+});
+
+test('setupDatabase creates entry as a rowid table', () => {
+  const create = setupAndCollectSQL().find(sql =>
+    /^CREATE TABLE IF NOT EXISTS entry\b/i.test(sql),
+  );
+
+  expect(create).toBeDefined();
+  // Rows are 8-16KB B-tree chunks; WITHOUT ROWID is measurably slower for rows
+  // that size. See the comment on the CREATE TABLE in setupDatabase.
+  expect(create).not.toMatch(/WITHOUT\s+ROWID/i);
 });

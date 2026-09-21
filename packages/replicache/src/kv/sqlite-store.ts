@@ -220,14 +220,10 @@ export interface SQLiteStoreOptions {
 }
 
 /**
- * `entry` is `WITHOUT ROWID`, which makes it an index B-tree, and SQLite caps
- * an index B-tree's inline payload at `((page_size - 35) * 64 / 255) - 23`:
- * about 1004 bytes at 4096 and 2029 bytes at 8192. A longer row spills into an
- * overflow page chain.
- *
  * Replicache's rows are B-tree chunks, which `BTreeWrite` targets at 8-16KB, so
- * they overflow at either page size. 8192 does not avoid overflow; it halves the
- * number of pages each chunk is split across.
+ * most of them are larger than a page and spill into overflow pages at either
+ * page size. 8192 does not avoid overflow; it halves the number of pages each
+ * chunk is split across.
  *
  * Measured with `replicache-perf/rn`, 4096 vs 8192 + mmap, change in time:
  *
@@ -272,12 +268,23 @@ export function setupDatabase(
   // of the startup-read win measured in the PAGE_SIZE comment.
   delegate.execSync(`PRAGMA mmap_size = ${MMAP_SIZE}`);
 
-  // Create the entry table
+  // Create the entry table.
+  //
+  // This is deliberately a rowid table, not `WITHOUT ROWID`. A `WITHOUT ROWID`
+  // table stores whole rows in an index B-tree, which keeps at most ~1/4 of a
+  // page inline, and SQLite recommends it only for rows under ~1/20 of a page.
+  // Our rows are 8-16KB chunks. As a rowid table the key gets a small separate
+  // index and the values live in the table B-tree. On a Pixel 6 (5 rounds, on
+  // top of the pragmas above) that cut startup read by 24% on both expo and
+  // op, expo startup scan by 10%, and persist 1024x10000 by 4-7%.
+  //
+  // `IF NOT EXISTS` leaves an existing database's table as it was created, so
+  // stores created before this change stay `WITHOUT ROWID` until recreated.
   delegate.execSync(`
     CREATE TABLE IF NOT EXISTS entry (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
-    ) WITHOUT ROWID
+    )
   `);
 
   // Prepare common statements
