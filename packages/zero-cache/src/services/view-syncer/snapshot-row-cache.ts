@@ -1,4 +1,5 @@
 import {stringify} from '../../../../shared/src/bigint-json.ts';
+import {getOrInsert} from '../../../../shared/src/map.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 
 /**
@@ -149,11 +150,7 @@ export class SnapshotRowCache {
   }
 
   #key(tag: string, sql: string, args: unknown[]): string {
-    let sqlID = this.#sqlIDs.get(sql);
-    if (sqlID === undefined) {
-      sqlID = this.#sqlIDs.size;
-      this.#sqlIDs.set(sql, sqlID);
-    }
+    const sqlID = getOrInsert(this.#sqlIDs, sql, this.#sqlIDs.size);
     let key = `${tag}\0${sqlID}`;
     // Include each value's length so separators inside string values cannot
     // make different argument arrays produce the same key.

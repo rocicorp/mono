@@ -21,3 +21,14 @@ test('getOrInsertComputed', () => {
   expect(getOrInsertComputed(map, 'a', () => 2)).toBe(1);
   expect(getOrInsertComputed(map, 'b', () => 3)).toBe(3);
 });
+
+test('getOrInsert and getOrInsertComputed with a WeakMap', () => {
+  const map = new WeakMap<object, number>();
+  const a = {};
+  const b = {};
+  expect(getOrInsert(map, a, 1)).toBe(1);
+  expect(getOrInsert(map, a, 2)).toBe(1);
+  expect(getOrInsertComputed(map, a, () => 3)).toBe(1);
+  expect(getOrInsertComputed(map, b, () => 4)).toBe(4);
+  expect(getOrInsert(map, b, 5)).toBe(4);
+});
