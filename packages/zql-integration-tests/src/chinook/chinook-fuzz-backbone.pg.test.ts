@@ -105,18 +105,19 @@ test(
   TIMEOUT_MS,
 );
 
-// oxlint-disable-next-line expect-expect
 test(
-  'Pinned push — a root filter on a join column, four-phase per-step parity over mini (D≤2)',
+  'Pinned push — a root filter on a join column, every flip plan, four-phase per-step parity over mini (D≤2)',
   async () => {
     // The root pins the join column of its first relationship, which is the shape that
     // correlated predicate pushdown rewrites. D≤2 so the copied filter also sits in the
-    // middle of a chain, where a leaf push fetches through it.
+    // middle of a chain, where a leaf push fetches through it. Every flip assignment runs
+    // too, since those are the plans the planner can pick in production.
     const skels = enumerate({depth: 2, related: 1, exists: 1});
-    const report = await checkPushCases(
-      harness.transact,
-      pinnedPushCases(data, skels, 1),
+    const cases = pinnedPushCases(data, skels, 1);
+    expect(cases.filter(c => c.label.includes('|flip')).length).toBeGreaterThan(
+      0,
     );
+    const report = await checkPushCases(harness.transact, cases);
     console.log(
       `Pinned push backbone (D≤2): ${report.total} cases, ${report.failures.length} failures`,
     );

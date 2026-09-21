@@ -7,16 +7,20 @@
  *
  * A random query is a random **skeleton** (deeper than the enumerator's caps — depth up
  * to 4, same "no `related` under EXISTS" invariant), lowered via the fluent builder and
- * given an optional random root filter + `order` / `limit`. The data-driven `start` axis
- * is covered by L1/swarm; `select` remains absent because mono ZQL has no projection.
+ * given an optional random root filter, join-column pin, `order` and `limit`. The
+ * data-driven `start` axis is covered by L1/swarm; `select` remains absent because mono
+ * ZQL has no projection.
  */
 
+import {must} from '../../../../shared/src/must.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {
   FILTER_VALS,
   filterRealizable,
   type LimitVal,
   type OrderVal,
+  pinOn,
+  relOf,
   relsOf,
   tables,
 } from './axes.ts';
@@ -32,6 +36,13 @@ import {
   type SkelChild,
   type Skeleton,
 } from './skeleton.ts';
+
+/**
+ * The chance that a tail query pins the join column of one of its root's children. The
+ * random root filter pins a join column only by luck, and then often one that no child
+ * correlates on.
+ */
+const PIN_P = 0.3;
 
 /** Bounds for the random tail (beyond the enumerator's `D ≤ 2`). */
 export type DeepBounds = {
@@ -77,6 +88,22 @@ export function tailGen(
     if (cond) {
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       q = (q as any).where(() => cond);
+    }
+  }
+
+  // Optionally pin the join column of one of the root's children, which is the shape
+  // correlated predicate pushdown rewrites. A deep chain carries the copied pin on down
+  // every hop that correlates on the same column (e.g. track → album → tracks).
+  if (rng.bool(PIN_P)) {
+    const child = rng.choose(skel.children);
+    const pin =
+      child && pinOn(root, must(relOf(root, child.rel)).parentField[0]);
+    if (pin) {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      const qq = q as any;
+      q = rng.bool()
+        ? qq.where(pin.col, '=', pin.eq)
+        : qq.where(pin.col, 'IN', pin.in);
     }
   }
 
