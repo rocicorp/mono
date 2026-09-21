@@ -56,7 +56,7 @@ describe('snapshot row cache sustained eviction', () => {
             for (let id = 0; id < BATCH_SIZE; id++) {
               const read = () => statement.get<Row>(id);
               const row = cache
-                ? cache.getOrRead(tag, SQL, [id], read)
+                ? cache.getOrRead(tag, SQL, 'get', [id], read)
                 : read();
               checksum += Number(row.id);
             }

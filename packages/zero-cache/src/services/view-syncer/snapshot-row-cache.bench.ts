@@ -1,6 +1,6 @@
 import {bench, describe, use} from '../../../../shared/src/bench.ts';
 import {getOrInsert, getOrInsertComputed} from '../../../../shared/src/map.ts';
-import {SnapshotRowCache} from './snapshot-row-cache.ts';
+import {SnapshotRowCache, type ReadMode} from './snapshot-row-cache.ts';
 
 // Measures the per-read overhead of the SnapshotRowCache (i.e. everything
 // but the SQLite reads themselves) on the access pattern of Snapshotter's
@@ -8,7 +8,13 @@ import {SnapshotRowCache} from './snapshot-row-cache.ts';
 // table (as the Snapshotter does).
 
 type Cache = {
-  getOrRead<T>(tag: string, sql: string, args: unknown[], read: () => T): T;
+  getOrRead<T>(
+    tag: string,
+    sql: string,
+    mode: ReadMode,
+    args: unknown[],
+    read: () => T,
+  ): T;
 };
 
 // Floor: interns the SQL (as the cache does) but builds no key and never
@@ -16,7 +22,13 @@ type Cache = {
 class SqlInternOnly implements Cache {
   readonly #sqlIDs = new Map<string, number>();
 
-  getOrRead<T>(_tag: string, sql: string, _args: unknown[], read: () => T): T {
+  getOrRead<T>(
+    _tag: string,
+    sql: string,
+    _mode: ReadMode,
+    _args: unknown[],
+    read: () => T,
+  ): T {
     use(getOrInsert(this.#sqlIDs, sql, this.#sqlIDs.size));
     return read();
   }
@@ -99,10 +111,11 @@ function runWorkload(
       const next = cache.getOrRead(
         `n:${c.stateVersion}`,
         sql,
+        'get',
         c.nextArgs,
         readRow,
       );
-      const prev = cache.getOrRead(prevTag, sql, c.prevArgs, readRows);
+      const prev = cache.getOrRead(prevTag, sql, 'all', c.prevArgs, readRows);
       n += (next ? 1 : 0) + prev.length;
     }
   }

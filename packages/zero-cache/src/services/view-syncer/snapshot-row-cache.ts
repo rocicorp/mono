@@ -36,6 +36,12 @@ function serialize(v: unknown): string {
   }
 }
 
+/**
+ * How a statement's results are read: a single row (`Statement.get()`) or
+ * all rows (`Statement.all()`).
+ */
+export type ReadMode = 'get' | 'all';
+
 const HIT = {result: 'hit'} as const;
 const MISS = {result: 'miss'} as const;
 
@@ -91,6 +97,13 @@ const MISS = {result: 'miss'} as const;
 export class SnapshotRowCache {
   readonly #maxEntries: number;
   readonly #entries = new Map<string, unknown>();
+  // The keys of #entries in insertion order, as a ring buffer: once the cache
+  // is full, #keys[#oldest] is the oldest entry, which each new entry evicts
+  // and replaces. (Finding the oldest key with a fresh Map iterator instead
+  // costs O(evictions) per insert, as V8 leaves deleted entries in the table
+  // until it is compacted and every new iterator walks over them.)
+  readonly #keys: string[] = [];
+  #oldest = 0;
   // Interns the SQL text of each distinct read so that entry keys
   // do not repeat the (long) column list of every statement.
   readonly #sqlIDs = new Map<string, number>();
@@ -119,12 +132,23 @@ export class SnapshotRowCache {
   }
 
   /**
-   * Returns the cached result of the read identified by `tag`, `sql` and
-   * `args`, or performs the read via `read()`, caching and returning its
+   * Returns the cached result of the read identified by `tag`, `sql`, `mode`
+   * and `args`, or performs the read via `read()`, caching and returning its
    * result. `undefined` results (i.e. a missing row) are not cached.
+   *
+   * `mode` is part of the key because the same statement can be read both
+   * ways: for a table whose only unique key is its primary key, `getRow()`
+   * and `getRows()` produce identical SQL, args and tags, but the former
+   * caches a row and the latter an array of rows.
    */
-  getOrRead<T>(tag: string, sql: string, args: unknown[], read: () => T): T {
-    const key = this.#key(tag, sql, args);
+  getOrRead<T>(
+    tag: string,
+    sql: string,
+    mode: ReadMode,
+    args: unknown[],
+    read: () => T,
+  ): T {
+    const key = this.#key(tag, sql, mode, args);
     const cached = this.#entries.get(key);
     if (cached !== undefined) {
       this.#hits++;
@@ -135,25 +159,28 @@ export class SnapshotRowCache {
     this.#reads.add(1, MISS);
     const value = read();
     if (value !== undefined && this.#maxEntries > 0) {
-      this.#entries.set(key, value);
-      // Map iteration order is insertion order, so the first key is the oldest.
-      for (const oldest of this.#entries.keys()) {
-        if (this.#entries.size <= this.#maxEntries) {
-          break;
-        }
-        this.#entries.delete(oldest);
+      // `key` is not in #entries (this is a miss), so it is always added.
+      if (this.#keys.length < this.#maxEntries) {
+        this.#keys.push(key);
+      } else {
+        this.#entries.delete(this.#keys[this.#oldest]);
+        this.#keys[this.#oldest] = key;
+        this.#oldest = (this.#oldest + 1) % this.#maxEntries;
       }
+      this.#entries.set(key, value);
     }
     return value;
   }
 
   clear(): void {
     this.#entries.clear();
+    this.#keys.length = 0;
+    this.#oldest = 0;
   }
 
-  #key(tag: string, sql: string, args: unknown[]): string {
+  #key(tag: string, sql: string, mode: ReadMode, args: unknown[]): string {
     const sqlID = getOrInsert(this.#sqlIDs, sql, this.#sqlIDs.size);
-    let key = `${tag}\0${sqlID}`;
+    let key = `${tag}\0${mode}${sqlID}`;
     // Include each value's length so separators inside string values cannot
     // make different argument arrays produce the same key.
     for (const arg of args) {

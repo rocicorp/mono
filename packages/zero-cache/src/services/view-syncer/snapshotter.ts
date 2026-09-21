@@ -452,7 +452,7 @@ class Snapshot {
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         return cached.statement.get<any>(args);
       });
-    return cache ? cache.getOrRead(tag ?? '', sql, args, read) : read();
+    return cache ? cache.getOrRead(tag ?? '', sql, 'get', args, read) : read();
   }
 
   /**
@@ -507,7 +507,7 @@ class Snapshot {
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         return cached.statement.all<any>(args);
       });
-    return cache ? cache.getOrRead(tag ?? '', sql, args, read) : read();
+    return cache ? cache.getOrRead(tag ?? '', sql, 'all', args, read) : read();
   }
 
   resetToHead(): Snapshot {
