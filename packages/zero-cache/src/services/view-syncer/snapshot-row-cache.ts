@@ -44,6 +44,13 @@ function serialize(v: unknown): string {
  */
 export type ReadMode = 'get' | 'all';
 
+/**
+ * The maximum number of distinct SQL statements interned by a
+ * {@link SnapshotRowCache} before it is cleared. There is one per table and
+ * lookup shape, so this is only reached after many schema changes.
+ */
+export const MAX_INTERNED_STATEMENTS = 10_000;
+
 const HIT = {result: 'hit'} as const;
 const MISS = {result: 'miss'} as const;
 
@@ -172,9 +179,19 @@ export class SnapshotRowCache {
   clear(): void {
     this.#entries.clear();
     this.#keys.clear();
+    this.#sqlIDs.clear();
   }
 
   #key(tag: string, sql: string, mode: ReadMode, args: unknown[]): string {
+    if (
+      this.#sqlIDs.size >= MAX_INTERNED_STATEMENTS &&
+      !this.#sqlIDs.has(sql)
+    ) {
+      // Statements are only added (e.g. when schema changes produce new
+      // column lists), so bound them by starting over. The entries refer to
+      // statements by ID and are cleared with them.
+      this.clear();
+    }
     const sqlID = getOrInsert(this.#sqlIDs, sql, this.#sqlIDs.size);
     let key = `${tag}\0${mode}${sqlID}`;
     // Include each value's length so separators inside string values cannot

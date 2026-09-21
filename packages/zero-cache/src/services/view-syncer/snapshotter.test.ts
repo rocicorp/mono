@@ -971,6 +971,37 @@ describe('view-syncer/snapshotter', () => {
       s2.destroy();
     });
 
+    test('replaying a diff after advancing throws despite cache hits', () => {
+      const cache = new SnapshotRowCache(1000);
+      const s = new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'my_app'},
+        undefined,
+        cache,
+      ).init();
+
+      try {
+        replicator.processTransaction(
+          '02',
+          messages.update('issues', {id: 1, owner: 10, desc: 'updated'}),
+        );
+        const diff = s.advance(tableSpecs, allTableNames);
+        expect([...diff]).toHaveLength(1);
+
+        replicator.processTransaction(
+          '03',
+          messages.insert('comments', {id: 1}),
+        );
+        s.advance(tableSpecs, allTableNames);
+
+        // Every read of the replay would be a cache hit.
+        expect(() => [...diff]).toThrow(InvalidDiffError);
+      } finally {
+        s.destroy();
+      }
+    });
+
     test('an invalid diff does not poison the cache for valid diffs', () => {
       const cache = new SnapshotRowCache(1000);
       const s1 = new Snapshotter(

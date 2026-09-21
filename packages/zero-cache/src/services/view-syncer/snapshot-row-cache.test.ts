@@ -1,6 +1,7 @@
 import {describe, expect, test, vi} from 'vitest';
 import {
   DEFAULT_MAX_SNAPSHOT_ROW_CACHE_ENTRIES,
+  MAX_INTERNED_STATEMENTS,
   SnapshotRowCache,
 } from './snapshot-row-cache.ts';
 
@@ -168,6 +169,26 @@ describe('view-syncer/snapshot-row-cache', () => {
       cache.getOrRead('n:01', SQL, 'get', [BigInt(i)], () => ({n: i}));
     }
     expect(cache.size).toBe(2);
+  });
+
+  test('interned statements are bounded', () => {
+    const cache = new SnapshotRowCache(MAX_INTERNED_STATEMENTS * 2);
+    const read = vi.fn(() => ({id: 1n}));
+    for (let i = 0; i < MAX_INTERNED_STATEMENTS; i++) {
+      cache.getOrRead('n:01', `${SQL} -- ${i}`, 'get', [1n], read);
+    }
+    expect(cache.size).toBe(MAX_INTERNED_STATEMENTS);
+
+    // A known statement does not clear the cache.
+    cache.getOrRead('n:01', `${SQL} -- 0`, 'get', [2n], read);
+    expect(cache.size).toBe(MAX_INTERNED_STATEMENTS + 1);
+
+    // A new statement beyond the bound starts over.
+    cache.getOrRead('n:01', SQL, 'get', [1n], read);
+    expect(cache.size).toBe(1);
+    expect(read).toHaveBeenCalledTimes(MAX_INTERNED_STATEMENTS + 2);
+    cache.getOrRead('n:01', SQL, 'get', [1n], read);
+    expect(read).toHaveBeenCalledTimes(MAX_INTERNED_STATEMENTS + 2);
   });
 
   test('a max size of 0 disables caching', () => {

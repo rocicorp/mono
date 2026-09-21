@@ -360,6 +360,7 @@ class Snapshot {
   readonly db: StatementRunner;
   readonly #appID: string;
   readonly version: string;
+  #reset = false;
 
   constructor(db: StatementRunner, appID: string) {
     db.beginConcurrent();
@@ -541,7 +542,17 @@ class Snapshot {
     }
   }
 
+  /**
+   * Whether the connection has been reset to a newer snapshot (i.e. via
+   * {@link resetToHead()}), after which reads no longer reflect
+   * {@link version}.
+   */
+  get reset(): boolean {
+    return this.#reset;
+  }
+
   resetToHead(): Snapshot {
+    this.#reset = true;
     this.db.rollback();
     return new Snapshot(this.db, this.#appID);
   }
@@ -676,6 +687,17 @@ class Diff implements SnapshotDiff {
             //   preceding changes; that sequence is determined by the
             //   `<prev, curr>` versions of the Diff, both of which are then
             //   included in the cache tag.
+            // The first advance() after this Diff was created resets the
+            // `prev` connection to head. Reads would then no longer reflect
+            // `prev.version`, and cache hits would not reveal it (the cached
+            // rows were read by valid Diffs), so this must be checked
+            // explicitly rather than inferred from the rows' versions.
+            if (this.prev.reset) {
+              throw new InvalidDiffError(
+                `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
+              );
+            }
+
             const cache = this.#rowCache;
             const prevTag =
               tableSpec.uniqueKeys.length <= 1
