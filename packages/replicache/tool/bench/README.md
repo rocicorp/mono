@@ -41,9 +41,8 @@ on its default of 4096.
 
 `entry` is `WITHOUT ROWID`, so it is an index B-tree, and SQLite caps an index
 B-tree's inline payload at `((page_size - 35) * 64 / 255) - 23` — about 1004
-bytes at 4096. Values past that spill into overflow page chains. Since
-`replicache-perf` uses 1KB values, the default page size puts the store just
-over the edge:
+bytes at 4096. Values past that spill into overflow page chains. With 1KB rows,
+the default page size puts the store just over the edge:
 
 | page_size | file             | bulk write | get      | scan(100) |
 | --------- | ---------------- | ---------- | -------- | --------- |
@@ -57,6 +56,12 @@ only moves.
 
 File sizes are deterministic and should reproduce exactly. Timings are from one
 desktop run and move with machine and load — read them as ratios.
+
+This models 1KB rows, not what the store holds in practice. Replicache's kv rows
+are B-tree chunks of 8-16KB, which overflow at 4096 and 8192 alike, so the
+4.4x → 1.1x above is not the real-world effect of the pragma. For that, use
+`replicache-perf/rn` on a device (see the comment on `DEFAULT_PAGE_SIZE` in
+`src/kv/sqlite-store.ts`).
 
 ### Two things worth knowing before changing the schema
 

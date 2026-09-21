@@ -226,28 +226,27 @@ const validKeys = keys.filter(key =>
 
 See: https://github.com/rocicorp/mono/pull/5542
 
-### SQLite: `WITHOUT ROWID` + the default page size = 4x the disk
+### SQLite: `WITHOUT ROWID` rows overflow past ~1KB at the default page size
 
 A `WITHOUT ROWID` table is an index B-tree, and SQLite caps an index B-tree's
 inline payload at `((page_size - 35) * 64 / 255) - 23` — about **1004 bytes** at
-the default `page_size` of 4096. One byte past that, every row spills into an
-overflow page chain.
+the default `page_size` of 4096, ~2029 at 8192, ~4081 at 16384. Past that, a
+row spills into an overflow page chain.
 
-The penalty is not gradual. Measured on 100k rows against `replicache`'s kv
-schema, holding everything else equal:
+For rows just past the threshold the penalty is a cliff, not a slope. Measured
+on 100k rows against `replicache`'s kv schema:
 
 | value size | amplification at page_size=4096 |
 | ---------- | ------------------------------- |
 | 950 B      | 1.04x                           |
 | 1000 B     | **4.51x**                       |
 
-At 1KB values that is 101MB of data becoming 446MB on disk, ~6x slower bulk
-writes and ~4x slower reads. `packages/replicache/src/kv/sqlite-store.ts` now
-sets `PRAGMA page_size = 8192`, which moves the threshold to ~2029 bytes.
-
-**The cliff never goes away, it only moves** — 8192 has the same problem at
-~2029 bytes, 16384 at ~4081. If you change what goes in a `WITHOUT ROWID`
-table, check which side of the threshold your values land on.
+**Check what your rows actually are before reaching for this.** Replicache's
+kv `entry` rows are B-tree chunks of 8-16KB (`BTreeWrite` defaults), not the
+1KB app values `replicache-perf` names its benchmarks after, so they overflow
+at 4096 and 8192 alike and the cliff above does not apply. `sqlite-store.ts`
+sets `page_size = 8192` (plus `mmap_size`) for a measured on-device win of a
+few percent to ~40% on reads (#6622), not to escape the cliff.
 
 Two traps:
 

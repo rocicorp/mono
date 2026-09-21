@@ -239,30 +239,25 @@ export interface SQLiteStoreOptions {
 /**
  * `entry` is `WITHOUT ROWID`, which makes it an index B-tree, and SQLite caps
  * an index B-tree's inline payload at `((page_size - 35) * 64 / 255) - 23`:
- * about 1004 bytes at SQLite's default page size of 4096. A row past that
- * spills into an overflow page chain, and the cost of that is not gradual.
+ * about 1004 bytes at 4096 and 2029 bytes at 8192. A longer row spills into an
+ * overflow page chain.
  *
- * Measured on 100k rows of 1KB values (the size `replicache-perf` itself
- * uses), against this schema and pragmas, with the store's own `get` and
- * `putN(128)` statements:
+ * Replicache's rows are B-tree chunks, which `BTreeWrite` targets at 8-16KB, so
+ * they overflow at either page size. 8192 does not avoid overflow; it halves the
+ * number of pages each chunk is split across. (The dramatic 4x file-size cliff
+ * that `tool/bench/` shows applies to ~1KB rows, which this store does not
+ * normally hold.)
  *
- * | page_size | file              | bulk write | get      |
- * | --------- | ----------------- | ---------- | -------- |
- * | 4096      | 446.3 MB (4.41x)  | 1593 ms    | 18.02 us |
- * | 8192      | 111.6 MB (1.10x)  |  248 ms    |  4.39 us |
+ * Measured with `replicache-perf/rn`, main vs this default, change in time:
  *
- * The file sizes are deterministic; the timings are from one desktop run and
- * move around with machine and load, so read them as ratios. The bulk-write
- * column is the store's SQL, not its write path — it has no JS above it.
+ * | device                 | persist 1024x10000 | startup read (expo / op) |
+ * | ---------------------- | ------------------ | ------------------------ |
+ * | iOS simulator          | -6%                | -12% / -14%              |
+ * | Android emulator, 2GB  | -1% to -2%         | -19% / -8%               |
+ * | Pixel 6                | ~0%                | ~-40% / ~0%              |
  *
- * 8192 moves the threshold to about 2029 bytes, which covers typical chunk
- * sizes. Going wider buys nothing measurable — 16384 and 32768 came out within
- * noise of 8192 — while costing space on stores whose values are small.
- *
- * The same cliff exists at every page size; it just moves. Values above ~2029
- * bytes will overflow at 8192 exactly as 1KB values do at 4096.
- *
- * See `tool/bench/` for the benchmark that produced the table.
+ * Split by pragma on iOS, page_size carries the write win (~6%) and mmap most
+ * of the read win. Neither regressed anything on any device.
  */
 const DEFAULT_PAGE_SIZE = 8192;
 
@@ -294,8 +289,8 @@ export function setupDatabase(
   delegate.execSync(
     `PRAGMA read_uncommitted = ${Boolean(opts?.readUncommitted)}`,
   );
-  // Reads served from the mmap window rather than the pager cut a random get
-  // from 9.63us to 4.01us at page_size 8192 in the benchmark above.
+  // Reads served from the mmap window rather than the pager account for most
+  // of the startup-read win in the table above.
   delegate.execSync(
     `PRAGMA mmap_size = ${opts?.mmapSize ?? DEFAULT_MMAP_SIZE}`,
   );
