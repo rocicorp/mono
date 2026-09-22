@@ -217,8 +217,7 @@ export class BackfillManager implements Cancelable, Listener {
       this.#lc.debug?.(`not retrying backfill: change stream canceled`, e);
       return;
     }
-    const log = this.#retryDelayMs === this.#maxBackoffMs ? 'error' : 'warn';
-    this.#lc[log]?.(
+    this.#lc.warn?.(
       `Error running backfill. Retrying in ${this.#retryDelayMs} ms`,
       e,
     );
