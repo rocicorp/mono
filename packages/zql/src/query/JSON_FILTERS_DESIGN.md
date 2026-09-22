@@ -214,9 +214,13 @@ where(({cmp, json}) => cmp(json('metadata', 'priority'), '=', 'high'));
 
   Three implementation constraints worth recording (each learned the hard way — the
   first two caused a ~360-error cascade across the query builder):
-  1. `ValueAtPath`/`ValidJsonPath` must be **non-recursive** (unrolled to a fixed
-     depth). A self-recursive conditional in `cmp`/`json`'s signature defeats
-     TypeScript's structural comparison of `ExpressionBuilder`.
+  1. `ValueAtPath`/`ValidJsonPath` recurse under an explicit **depth budget** (a
+     shrinking `Tuple` counter, `MaxJsonPathDepth`), never unboundedly: an
+     unbounded self-recursive conditional in `cmp`/`json`'s signature defeats
+     TypeScript's structural comparison of `ExpressionBuilder`. For a `const`
+     tuple path the recursion ends when the path does, so the budget only bounds
+     the non-tuple `(string | number)[]` case; past it, segments are left
+     unconstrained.
   2. The leaf type must be resolved over a **concrete** type, not a deferred schema
      lookup _in `cmp`_. So `json` resolves the column's TS type at its (concrete) call
      site and stores it in `ColumnRef`; `cmp` walks that. Because that puts a
@@ -288,44 +292,60 @@ sidesteps jsonb-comparison quirks and reuses the existing literal binding. A
 a literal, so the symmetric `valueComparison`/`literalValueComparison` flow already
 renders both sides — the two `'json'` cases just make them line up:
 
-- `valueComparison` `'json'` (`jsonPathLeaf`): emit
-  `("col" #>> ARRAY['a','b']::text[])`. `#>>` works on both `json` and `jsonb` and
-  maps **both** a missing key and a JSON null to SQL NULL — matching SQLite
-  `json_extract` and the in-memory predicate, so `IS NULL` agrees across all three.
-  The leaf is then cast to a type derived from the literal (`pgCastTypeForJsonLeaf`:
-  string → `text`, number → `double precision`, boolean → `boolean`), and every
-  cast is **gated on the leaf's JSON type**
-  (`CASE WHEN jsonb_typeof(col::jsonb #> path) = 'number' THEN … END`), which makes
-  the comparison **type-strict** like the in-memory predicate (`42 !== '42'`) and
-  SQLite (integer ≠ text): `#>>` renders a numeric `42` as the text `'42'`, so an
-  ungated text comparison would wrongly match it against the string `'42'`. For
+- `valueComparison` `'json'` (`jsonPathLeaf`, built on `jsonPathParts`): navigate
+  with a chain of typed `->` steps and extract the leaf as text with `->>` —
+  `(((obj -> 'a') -> 0) ->> 'b')`, where `obj` is the column as `jsonb` (`col` for
+  `jsonb`, `col::jsonb` for `json`, `to_jsonb(col)` for a native array column).
+  Each segment is bound by its own kind — a `text` parameter for a key, an inlined
+  integer for an index — so `->` yields NULL when the container is of the other
+  kind: the same strict index-vs-key rule as SQLite's `$[i]`/`$."k"` and the
+  in-memory reader (§5.6). `->>` maps **both** a missing key and a JSON null to SQL
+  NULL — matching SQLite `json_extract` and the in-memory predicate, so `IS NULL`
+  agrees across all three. The leaf is then cast to the type derived from the
+  literal (`leafType` → `jsonLiteralType`, shared with the other engines, keyed
+  into the same `pgTypeForLiteralType` table that casts the literal: string →
+  `text`, number → `double precision`, boolean → `boolean`), and every cast is
+  **gated on the leaf's JSON type**
+  (`CASE WHEN jsonb_typeof(obj -> leaf) = 'number' THEN … END`), which makes the
+  comparison **type-strict** like the in-memory predicate (`42 !== '42'`) and SQLite
+  (integer ≠ text): `->>` renders a numeric `42` as the text `'42'`, so an ungated
+  text comparison would wrongly match it against the string `'42'`. For
   `number`/`boolean` the gate is also what keeps the cast from throwing — Postgres
   errors when casting non-conforming text (a string `"n/a"`, an object's JSON text)
   to `double precision`/`boolean`, which would fail the whole query on one row.
 - Negated operators (`!=`, `NOT LIKE`, `NOT ILIKE`, `NOT IN`) need a different form
-  (`negatedJsonPathCondition`): the gate's NULL would _exclude_ a mismatched leaf,
-  but strict inequality _includes_ it (`42 !== '42'` is true). So they compile to
-  `CASE WHEN leaf IS NULL THEN false WHEN jsonb_typeof(…) = 'string' THEN leaf != $n
-ELSE true END` — a null/missing leaf never matches (the predicate's null guard),
-  a same-typed leaf is compared for real, and a mismatched one matches. `IS`/`IS
+  (`jsonPathCondition`): the gate's NULL would _exclude_ a mismatched leaf, but
+  strict inequality _includes_ it (`42 !== '42'` is true). So they compile to
+  `CASE COALESCE(jsonb_typeof(…), 'null') WHEN 'null' THEN false WHEN 'string' THEN
+(…)::text != $n ELSE true END` — a null/missing leaf never matches (the
+  predicate's null guard; `jsonb_typeof` is `'null'` for a JSON null and SQL NULL
+  for a missing key, hence the `COALESCE`), a same-typed leaf is compared for real,
+  and a mismatched one matches. The same function covers the two list edge cases:
+  an empty `NOT IN` is `(…) IS NOT NULL` (a bare `NOT IN ()` would also match
+  NULL), and `IN`/`NOT IN` with a `null` literal is constant `false`. `IS`/`IS
 NOT` need nothing extra: `IS [NOT] DISTINCT FROM` treats the gate's NULL as a
   value, which already yields the strict result.
 - `literalValueComparison` `'json'`: render the literal by its **own** JS type
   (`sqlConvert{Singular,Plural}LiteralArg`), not the column's server type — so its
   cast matches the leaf's.
 
-This yields, e.g., `(CASE WHEN jsonb_typeof(…) = 'string' THEN (col #>> …)::text END)
-= $n::text::text` for string equality, `… = 'number' THEN (…)::double precision END)
+This yields, e.g.,
+`(CASE WHEN jsonb_typeof(col -> $1) = 'string' THEN (col ->> $1)::text END) = $2::text`
+for string equality,
+`(CASE WHEN jsonb_typeof((col -> $1) -> 0) = 'number' THEN ((col -> $1) ->> 0)::double precision END) > $2::double precision`
+for numeric ordering on an index path, `… ILIKE …` for text patterns,
+`… = ANY(ARRAY(…))` for `IN`,
+`(CASE COALESCE(jsonb_typeof(col -> $1), 'null') WHEN 'null' THEN false WHEN 'string' THEN (col ->> $1)::text != $2::text ELSE true END)`
+for `!=`, `(col ->> $1) IS NOT NULL` for an empty `NOT IN`, `false` for `IN`/`NOT IN`
+with a `null` literal, and `(col ->> $1) IS NOT DISTINCT FROM NULL` for `IS NULL`
+(leaf left uncast so missing/JSON-null both read as SQL NULL). In the real output
+the JSON type name is itself a bound parameter. Snapshot-tested in
+`compiler.output.test.ts` and **executed against live Postgres** in
+`compiler.pg.test.ts`.
 
-> …`for numeric ordering,`… ILIKE …`for text patterns,`… = ANY(ARRAY(…))`for`IN`, `(CASE WHEN (col #>> …) IS NULL THEN false WHEN … THEN (…)::text != $n ELSE
-> true END)`for`!=`, and `(col #>> …) IS NOT DISTINCT FROM NULL`for`IS NULL`(leaf
-left uncast so missing/JSON-null both read as SQL NULL).
-Snapshot-tested in`compiler.output.test.ts`and **executed against live Postgres**
-in`compiler.pg.test.ts`.
-
-> Note: this targets object/scalar `json`/`jsonb` columns. A `json<T[]>()` column
-> backed by a native Postgres array (server type `text[]`, not json) is not a `#>>`
-> target; array-typed json columns aren't a JSON-path filter use case.
+> Note: a `json<T[]>()` column backed by a native Postgres array (server type e.g.
+> `text[]` with `isArray: true`, not json) is wrapped as `to_jsonb(col)` first, so
+> index paths work on it too; its leaves then follow `jsonb_typeof` as usual.
 
 ### 5.6 Cross-engine parity (test this hardest)
 
@@ -347,13 +367,17 @@ Three evaluators must agree: JS `===`/`<`, SQLite `json_extract`, PG `jsonb`.
   across types (`'3' < 5`) is therefore simply a non-match everywhere rather than
   engine-specific; typed `json<T>()` steers callers within one type.
 - **index vs key segments:** a `number` segment is an array index and a `string`
-  segment is an object key — strictly, on the client and the replica: SQLite
-  applies it syntactically (`$[i]` vs `$."k"`) and the in-memory reader enforces the
-  same rule, so a numeric-looking string on an array (`'1'`) is `null` on both.
-  Postgres `#>>` resolves by the container's runtime type and remains lenient there
-  (it also reads a string `'-1'` as an index from the end) — a documented caveat for
-  untyped paths; typed columns enforce the rule via `ValidJsonPath` (an array step
-  admits only `number`).
+  segment is an object key — strictly, on all three engines: SQLite applies it
+  syntactically (`$[i]` vs `$."k"`), the in-memory reader enforces the same rule,
+  and Postgres receives each segment as a typed `->` operand (an integer for an
+  index, `text` for a key), which is NULL when the container is of the other kind.
+  So a numeric-looking string on an array (`'1'`, `'-1'`) and a number on an object
+  are `null` everywhere. An index is further restricted to `[0, MAX_JSON_PATH_INDEX]`
+  (`2^31 - 1`) at the builder and on the wire: Postgres `->` takes an `int4`, SQLite
+  wraps larger values, and Postgres would read a negative index from the end where
+  the others yield null. Typed columns enforce the kind statically via
+  `ValidJsonPath` (an array step admits only `number`; an object step only its
+  string keys, with a `Record<number, …>` key written in its string form).
 
 The in-memory predicate now coalesces a path miss (missing key / null intermediate)
 to `null` so `IS NULL` matches both a missing key and a JSON null — identical to the
@@ -476,7 +500,7 @@ optimizing layer over the same "materialize a derived field + index it" core.
 | 4   | `zql/src/builder/filter.ts`                       | path navigation in `createPredicate`.                                                                                                                                                                                                                                                      |
 | 5   | `zql/src/ivm/constraint.ts`                       | `extractColumn` extracts only `'column'` refs; `'json'` refs fall through to `undefined`. **(correctness-critical)**                                                                                                                                                                       |
 | 6   | `zqlite/src/query-builder.ts`                     | `json_extract` in `valuePositionToSQL`.                                                                                                                                                                                                                                                    |
-| 7   | `z2s/src/compiler.ts`                             | `#>>` text extraction (`jsonPathLeaf`) + literal-driven cast (`pgCastTypeForJsonLeaf`); literal rendered by its own type. **(done; live-PG tested)**                                                                                                                                       |
+| 7   | `z2s/src/compiler.ts`                             | typed `->` chaining + `->>` text extraction (`jsonPathParts`/`jsonPathLeaf`) with a `jsonb_typeof`-gated, literal-driven cast (`leafType` → `pgTypeForLiteralType`); negated/list forms in `jsonPathCondition`; literal rendered by its own type. **(done; live-PG tested)**               |
 | 8   | `ast-to-zql/src/ast-to-zql.ts`                    | render the path (inspector/debug).                                                                                                                                                                                                                                                         |
 | 9   | `zero-cache .../analyze` (cost model)             | path predicate = scan, never a seek.                                                                                                                                                                                                                                                       |
 | 10  | `zero-schema/src/builder/relationship-builder.ts` | accept a path in `sourceField`/`destField` (Phase 2).                                                                                                                                                                                                                                      |
