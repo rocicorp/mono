@@ -19,11 +19,7 @@ import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Subscription, type Options} from './subscription.ts';
-import {
-  closeWithError,
-  expectPingsForLiveness,
-  sendPingsForLiveness,
-} from './ws.ts';
+import {closeWithError, sendPingsForLiveness} from './ws.ts';
 
 // Consistent with Postgres keepalives, and shorter than the
 // commonly used default idle timeout of 1 minute.
@@ -76,10 +72,11 @@ export type Sink<T> = {
 /**
  * Back-pressure-aware transformation of a WebSocket into
  * upstream and downstream {@link Subscription} objects.
+ *
+ * This is used for connections with external servers
+ * (i.e. custom change sources). For inter-zero-cache communication,
+ * see {@link streamInternal}.
  */
-// TODO: Change {@link streamIn} and {@link streamOut} to use this
-//       under the covers so that internal communication is also
-//       responsive to backpressure.
 export function stream<In extends JSONValue, Out extends JSONValue>(
   lc: LogContext,
   ws: WebSocket,
@@ -268,55 +265,102 @@ function sendTextFrame(sink: WebSocket, data: Buffer | string) {
   }
 }
 
-export function streamOut<T extends JSONValue>(
-  lc: LogContext,
-  source: Source<T>,
-  sink: WebSocket,
-  options?: StreamOutOptions | undefined,
-): Promise<void> {
-  return streamOutInternal(lc, source, sink, BigIntJSON.stringify, options);
-}
-
 /**
- * Streams out a `Source` for which messages are already stringified JSON or pre-serialized Buffers.
+ * Establishes a bidirectional stream over an internal zero-cache to zero-cache
+ * WebSocket. Both peers call this: each may send an outbound {@link Source}
+ * (`outSource`) and receives an inbound {@link Source} (the return value).
+ * Transport-level `{id, msg}` / `{ack}` framing is multiplexed in both
+ * directions over the single socket.
+ *
+ * `inSchema` validates inbound application frames; it may be omitted by a peer
+ * that expects no inbound application messages (any that arrive are a protocol
+ * error).
  */
-export function streamOutStringified(
+export function streamInternal<
+  In extends JSONValue,
+  Out extends JSONValue = JSONValue,
+>(
   lc: LogContext,
-  source: Source<string | PreSerialized>,
-  sink: WebSocket,
-  options?: StreamOutOptions | undefined,
-): Promise<void> {
-  return streamOutInternal(
+  ws: WebSocket,
+  inSchema: v.Type<In> | undefined,
+  outSource?: Source<Out>,
+  options?: StreamOutOptions,
+): Promise<Source<In>> {
+  return streamInternalCore(
     lc,
-    source,
-    sink,
-    msg => (typeof msg === 'string' ? msg : msg.payload.toString('utf8')),
+    ws,
+    inSchema,
+    outSource,
+    BigIntJSON.stringify,
+    data => data,
     options,
   );
 }
 
-async function streamOutInternal<T extends JSONValue | PreSerialized>(
+/**
+ * {@link streamInternal} whose outbound `Source` carries messages that are
+ * already stringified JSON or pre-serialized Buffers.
+ */
+export function streamInternalStringified<In extends JSONValue>(
+  lc: LogContext,
+  ws: WebSocket,
+  inSchema: v.Type<In> | undefined,
+  outSource?: Source<string | PreSerialized>,
+  options?: StreamOutOptions,
+): Promise<Source<In>> {
+  return streamInternalCore(
+    lc,
+    ws,
+    inSchema,
+    outSource,
+    msg => (typeof msg === 'string' ? msg : msg.payload.toString('utf8')),
+    data => data,
+    options,
+  );
+}
+
+/**
+ * {@link streamInternal} that retains only the transport-frame size of each
+ * inbound message. The size bounds downstream batching without keeping or
+ * copying the JSON.
+ */
+export function streamInternalWithSize<
+  In extends JSONValue,
+  Out extends JSONValue = JSONValue,
+>(
+  lc: LogContext,
+  ws: WebSocket,
+  inSchema: v.Type<In>,
+  outSource?: Source<Out>,
+  options?: StreamOutOptions,
+): Promise<Source<Sized<In>>> {
+  return streamInternalCore(
+    lc,
+    ws,
+    inSchema,
+    outSource,
+    BigIntJSON.stringify,
+    (data, _frame, _id, size) => ({data, size}),
+    options,
+  );
+}
+
+/**
+ * Runs the outbound send loop of a {@link streamInternal} connection: reads
+ * messages from `source`, frames them as `{id, msg}` / `{id, batch}` (or
+ * pre-serialized Buffers), and awaits the corresponding `{ack}` frames — which
+ * are demuxed off the socket by the shared message handler in
+ * {@link streamInternalCore} and delivered via the `acks` queue.
+ */
+async function runOutbound<T extends JSONValue | PreSerialized>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
   stringify: (payload: T) => string,
+  acks: Queue<Ack>,
+  closer: WebSocketCloser,
   options?: StreamOutOptions | undefined,
 ): Promise<void> {
-  sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
-
-  const closer = WebSocketCloser.forSource(lc, sink, source);
-
-  const acks = new Queue<Ack>();
-  sink.addEventListener('message', ({data}) => {
-    try {
-      const text = typeof data === 'string' ? data : data.toString();
-      acks.enqueue(v.parse(JSON.parse(text), ackSchema));
-    } catch (e) {
-      lc.error?.(`error parsing ack`, e);
-      closer.close(e);
-    }
-  });
-
   try {
     let nextID = 0;
     const {pipeline} = source;
@@ -445,49 +489,38 @@ async function streamOutInternal<T extends JSONValue | PreSerialized>(
   }
 }
 
-export function streamIn<T extends JSONValue>(
+async function streamInternalCore<
+  In extends JSONValue,
+  Out extends JSONValue | PreSerialized,
+  TIn,
+>(
   lc: LogContext,
-  source: WebSocket,
-  schema: v.Type<T>,
-): Promise<Source<T>> {
-  return streamInInternal(lc, source, schema, data => data);
-}
+  ws: WebSocket,
+  inSchema: v.Type<In> | undefined,
+  outSource: Source<Out> | undefined,
+  stringify: (payload: Out) => string,
+  transform: (data: In, frame: string, id: number, size: number) => TIn,
+  options: StreamOutOptions | undefined,
+): Promise<Source<TIn>> {
+  sendPingsForLiveness(lc, ws, PING_INTERVAL_MS);
 
-/**
- * Streams in parsed messages while retaining only the transport-frame size.
- * The size bounds downstream batching without keeping or copying the JSON.
- */
-export function streamInWithSize<T extends JSONValue>(
-  lc: LogContext,
-  source: WebSocket,
-  schema: v.Type<T>,
-): Promise<Source<Sized<T>>> {
-  return streamInInternal(lc, source, schema, (data, _frame, _id, size) => ({
-    data,
-    size,
-  }));
-}
+  // Acks received from the peer for the messages we send on `outSource`.
+  const acks = new Queue<Ack>();
 
-async function streamInInternal<T extends JSONValue, Out>(
-  lc: LogContext,
-  source: WebSocket,
-  schema: v.Type<T>,
-  transform: (data: T, frame: string, id: number, size: number) => Out,
-): Promise<Source<Out>> {
-  expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
-
-  const streamedSchema = v.object({
-    id: v.number(),
-    msg: schema.optional(),
-    batch: v.array(schema).optional(),
-  });
+  const streamedSchema = inSchema
+    ? v.object({
+        id: v.number(),
+        msg: inSchema.optional(),
+        batch: v.array(inSchema).optional(),
+      })
+    : undefined;
 
   type SinkEntry = {
     consumed: () => void;
-    data: Out;
+    data: TIn;
   };
 
-  const sink: Subscription<Out, SinkEntry> = new Subscription<Out, SinkEntry>(
+  const sink: Subscription<TIn, SinkEntry> = new Subscription<TIn, SinkEntry>(
     {
       consumed: ({consumed}) => consumed(),
       cleanup: () => closer.close(),
@@ -495,22 +528,41 @@ async function streamInInternal<T extends JSONValue, Out>(
     ({data}) => data,
   );
 
-  const closer = WebSocketCloser.forSink(lc, source, sink, handleMessage);
+  const closer = WebSocketCloser.forDuplex(
+    lc,
+    ws,
+    outSource,
+    sink,
+    handleMessage,
+  );
 
   function handleMessage(event: MessageEvent) {
     const data = event.data.toString();
     if (!sink.active) {
-      lc.warn?.('dropping ws message received after close', data);
+      lc.warn?.('dropping ws message received after close');
       return;
     }
     try {
       const value = BigIntJSON.parse(data);
+
+      // Demux: an `{ack}` frame acknowledges a message we sent on `outSource`.
+      const parsedAck = v.test(value, ackSchema);
+      if (parsedAck.ok) {
+        acks.enqueue(parsedAck.value);
+        return;
+      }
+
+      // Otherwise it is an inbound application frame.
+      if (!streamedSchema) {
+        closer.close(new Error(`unexpected inbound message: ${data}`));
+        return;
+      }
       const parsed = v.parse(value, streamedSchema, 'passthrough');
       const {id, msg, batch} = parsed;
 
       const sendAck = () => {
-        if (source.readyState === source.OPEN) {
-          source.send(JSON.stringify({ack: id} satisfies Ack));
+        if (ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify({ack: id} satisfies Ack));
         }
       };
 
@@ -550,6 +602,13 @@ async function streamInInternal<T extends JSONValue, Out>(
   }
 
   await closer.connected;
+
+  // Start the outbound send loop only after the connection is open, so that a
+  // client whose socket begins in CONNECTING can push before it connects.
+  if (outSource) {
+    void runOutbound(lc, outSource, ws, stringify, acks, closer, options);
+  }
+
   return sink;
 }
 
@@ -564,31 +623,29 @@ class WebSocketCloser {
     return this.#connected.promise;
   }
 
-  static forSource<T>(lc: LogContext, ws: WebSocket, stream: Source<T>) {
-    // If the websocket is closed, call cancel() to notify the Source of
-    // any unconsumed messages.
-    return new WebSocketCloser(lc, ws, (err?: unknown) =>
-      stream.cancel(err instanceof Error ? err : undefined),
-    );
-  }
-
-  static forSink<T, Input>(
+  /**
+   * Closer for a {@link streamInternalCore} duplex. On socket close it cancels
+   * the outbound `Source` (notifying it of unconsumed messages, as the old
+   * `forSource` did) and fails/ends the inbound `Sink` (as the old `forSink`
+   * did): fail() on error so consumers throw, end() otherwise so pending
+   * messages finish. Either stream may be absent for a one-directional peer.
+   */
+  static forDuplex<In, InInput, Out>(
     lc: LogContext,
     ws: WebSocket,
-    stream: Subscription<T, Input>,
+    outSource: Source<Out> | undefined,
+    inSink: Subscription<In, InInput>,
     messageHandler: (e: MessageEvent) => void | undefined,
   ) {
-    // If the websocket is closed with an error, fail() the downstream Sink
-    // so consumers catch the error. Otherwise, call end() to allow pending
-    // messages to finish.
     return new WebSocketCloser(
       lc,
       ws,
       (err?: unknown) => {
+        outSource?.cancel(err instanceof Error ? err : undefined);
         if (err) {
-          stream.fail(err instanceof Error ? err : new Error(String(err)));
+          inSink.fail(err instanceof Error ? err : new Error(String(err)));
         } else {
-          stream.end();
+          inSink.end();
         }
       },
       messageHandler,
