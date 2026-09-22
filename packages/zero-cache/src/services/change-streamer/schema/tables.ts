@@ -270,16 +270,30 @@ export async function ensureReplicationConfig(
         // The TRUNCATE statements require ACCESS EXCLUSIVE locks, which may
         // be blocked by old storer catchup reads. Race against a timeout
         // that terminates the blocking backends if the TRUNCATE takes too
-        // long.
-        const timer = setTimeoutFn(async () => {
-          lc.info?.(
-            'ensureReplicationConfig blocked, terminating lock holders',
-          );
-          await terminateChangeDBLockHolders(lc, db, shard);
-        }, LOCK_HOLDER_TERMINATE_TIMEOUT_MS);
+        // long. The check is repeated until the statements complete, since
+        // the TRUNCATE may not yet be waiting on a lock when the timer fires.
+        let done = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const scheduleTerminate = () => {
+          timer = setTimeoutFn(async () => {
+            lc.info?.(
+              'ensureReplicationConfig blocked, terminating lock holders',
+            );
+            try {
+              await terminateChangeDBLockHolders(lc, db, shard);
+            } catch (e) {
+              lc.warn?.('error terminating lock holders', e);
+            }
+            if (!done) {
+              scheduleTerminate();
+            }
+          }, LOCK_HOLDER_TERMINATE_TIMEOUT_MS);
+        };
+        scheduleTerminate();
         try {
           return await Promise.all(stmts);
         } finally {
+          done = true;
           clearTimeout(timer);
         }
       }
