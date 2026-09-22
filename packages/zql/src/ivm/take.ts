@@ -39,6 +39,11 @@ interface TakeStorage {
 
 export type PartitionKey = PrimaryKey;
 
+type DirtyPartitionState = {
+  constraint: Constraint | undefined;
+  lastBound: Row | undefined;
+};
+
 /**
  * The Take operator is for implementing limit queries. It takes the first n
  * nodes of its input as determined by the input’s comparator. It then keeps
@@ -60,7 +65,7 @@ export class Take implements Operator, TakeBoundProvider {
   #rowHiddenFromFetch: Row | undefined;
 
   #takeGate: TakeGate | undefined;
-  readonly #dirtyPartitions = new Map<string, Constraint | undefined>();
+  readonly #dirtyPartitions = new Map<string, DirtyPartitionState>();
 
   #output: Output = throwOutput;
 
@@ -103,6 +108,10 @@ export class Take implements Operator, TakeBoundProvider {
       return undefined;
     }
     const takeStateKey = getTakeStateKey(this.#partitionKey, constraint);
+    const dirty = this.#dirtyPartitions.get(takeStateKey);
+    if (dirty) {
+      return dirty.lastBound;
+    }
     const takeState = this.#storage.get(takeStateKey);
     if (!takeState || takeState.size < this.#limit) {
       return undefined;
@@ -376,8 +385,13 @@ export class Take implements Operator, TakeBoundProvider {
           : compToBound < 0
             ? takeState.bound
             : beforeBoundNode?.row;
+      if (!this.#dirtyPartitions.has(takeStateKey)) {
+        this.#dirtyPartitions.set(takeStateKey, {
+          constraint,
+          lastBound: takeState.bound,
+        });
+      }
       this.#setTakeState(takeStateKey, takeState.size - 1, finalBound);
-      this.#dirtyPartitions.set(takeStateKey, constraint);
       yield* this.#output.push(change, this);
     } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
       // A 'child' change should be pushed to output if its row
@@ -650,7 +664,7 @@ export class Take implements Operator, TakeBoundProvider {
       const dirty = [...this.#dirtyPartitions.entries()];
       this.#dirtyPartitions.clear();
 
-      for (const [takeStateKey, constraint] of dirty) {
+      for (const [takeStateKey, {constraint}] of dirty) {
         const takeState = this.#storage.get(takeStateKey);
         if (!takeState) {
           continue;

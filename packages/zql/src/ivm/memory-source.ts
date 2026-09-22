@@ -717,39 +717,41 @@ function* genPush(
   }
 
   setOverlay({epoch: pushEpoch, change});
-  for (const conn of connections) {
-    const {output, filters, input} = conn;
-    if (output) {
-      conn.lastPushedEpoch = pushEpoch;
-      const outputChange: Change =
-        change[SourceChangeIndex.TYPE] === ChangeType.EDIT
-          ? makeEditChange(
-              {row: change[SourceChangeIndex.ROW], relationships: {}},
-              {row: change[SourceChangeIndex.OLD_ROW], relationships: {}},
-            )
-          : change[SourceChangeIndex.TYPE] === ChangeType.ADD
-            ? makeAddChange({
-                row: change[SourceChangeIndex.ROW],
-                relationships: {},
-              })
-            : makeRemoveChange({
-                row: change[SourceChangeIndex.ROW],
-                relationships: {},
-              });
-      yield* filterPush(outputChange, output, input, filters?.predicate);
-      yield undefined;
+  try {
+    for (const conn of connections) {
+      const {output, filters, input} = conn;
+      if (output) {
+        conn.lastPushedEpoch = pushEpoch;
+        const outputChange: Change =
+          change[SourceChangeIndex.TYPE] === ChangeType.EDIT
+            ? makeEditChange(
+                {row: change[SourceChangeIndex.ROW], relationships: {}},
+                {row: change[SourceChangeIndex.OLD_ROW], relationships: {}},
+              )
+            : change[SourceChangeIndex.TYPE] === ChangeType.ADD
+              ? makeAddChange({
+                  row: change[SourceChangeIndex.ROW],
+                  relationships: {},
+                })
+              : makeRemoveChange({
+                  row: change[SourceChangeIndex.ROW],
+                  relationships: {},
+                });
+        yield* filterPush(outputChange, output, input, filters?.predicate);
+        yield undefined;
+      }
     }
-  }
 
-  for (const conn of connections) {
-    const {output, input} = conn;
-    if (output?.reconcile) {
-      yield* output.reconcile(input);
-      yield undefined;
+    for (const conn of connections) {
+      const {output, input} = conn;
+      if (output?.reconcile) {
+        yield* output.reconcile(input);
+        yield undefined;
+      }
     }
+  } finally {
+    setOverlay(undefined);
   }
-
-  setOverlay(undefined);
 }
 
 export function* generateWithStart(
