@@ -1,11 +1,16 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {
+  Condition,
+  Ordering,
+  SimpleCondition,
+} from '../../../zero-protocol/src/ast.ts';
 import type {NoSubqueryCondition} from '../builder/filter.ts';
 import {
   mergeConstraints,
   type PlannerConstraint,
 } from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
+import type {PlannerJoin} from './planner-join.ts';
 import {omitFanout} from './planner-node.ts';
 import type {
   CostEstimate,
@@ -51,6 +56,17 @@ import type {
  * - If `assignee` chosen first: Reveals constraint `assignee_id` for issue connection
  * - Updated costs guide the next selection
  *
+ * # Pushed conditions
+ * Correlated predicate pushdown copies a parent's condition on a correlation
+ * column into the child (`pushed`). When the parent drives the join into the
+ * child, the join binds that column to a parent row, so the parent's
+ * condition implies the copy and the copy removes no rows. The connection
+ * leaves such a copy out of the cost model call. Another join that binds the
+ * column does not imply the copy, because its rows need not hold the parent's
+ * condition. The connection also leaves every copy out of `selectivity`: a
+ * semi-join always binds the column, and a flipped join gets the copy's
+ * reduction through `returnedRows` instead.
+ *
  * # Lifecycle
  * 1. Construct with immutable structure (ordering, filters, cost model)
  * 2. Wire to output node during graph construction
@@ -65,6 +81,9 @@ export class PlannerConnection {
   // ========================================================================
   readonly #sort: Ordering;
   readonly #filters: Condition | undefined;
+  readonly #pushed: ReadonlySet<SimpleCondition> | undefined;
+  /** `#filters` without the pushed conditions. */
+  readonly #unpushedFilters: Condition | undefined;
   readonly #model: ConnectionCostModel;
   readonly table: string;
   readonly name: string; // Human-readable name for debugging (defaults to table name)
@@ -72,6 +91,13 @@ export class PlannerConnection {
   readonly #baseLimit: number | undefined; // Original limit from query structure (never modified)
   readonly selectivity: number; // Fraction of rows passing filters (1.0 = no filtering)
   #output?: PlannerNode | undefined; // Set once during graph construction
+  /**
+   * The join from the parent into this connection's EXISTS subquery. Set once
+   * during graph construction. The pushed conditions are copies of that
+   * parent's conditions. Undefined for a root connection, whose parent (if
+   * it is a `related` subquery) always drives it.
+   */
+  #parentJoin: PlannerJoin | undefined;
 
   // ========================================================================
   // MUTABLE PLANNING STATE (changes during plan search)
@@ -121,11 +147,16 @@ export class PlannerConnection {
     baseConstraints?: PlannerConstraint,
     limit?: number,
     name?: string,
+    pushed?: ReadonlySet<SimpleCondition>,
   ) {
     this.table = table;
     this.name = name ?? table;
     this.#sort = sort;
     this.#filters = filters;
+    this.#pushed = pushed;
+    this.#unpushedFilters = pushed
+      ? withoutConjuncts(filters, c => pushed.has(c))
+      : filters;
     this.#model = model;
     this.#baseConstraints = baseConstraints;
     this.#baseLimit = limit;
@@ -133,7 +164,7 @@ export class PlannerConnection {
     this.#constraints = new Map();
     this.#isRoot = isRoot;
 
-    this.selectivity = this.#computeSelectivity(filters);
+    this.selectivity = this.#computeSelectivity(this.#unpushedFilters);
   }
 
   setOutput(node: PlannerNode): void {
@@ -143,6 +174,10 @@ export class PlannerConnection {
   get output(): PlannerNode {
     assert(this.#output !== undefined, 'Output not set');
     return this.#output;
+  }
+
+  setParentJoin(join: PlannerJoin): void {
+    this.#parentJoin = join;
   }
 
   closestJoinOrSource(): JoinOrConnection {
@@ -221,21 +256,16 @@ export class PlannerConnection {
     // simple OR branch in UFI mode) with the connection-time filter so
     // the cost model sees the same effective filter the runtime applies.
     const perBranchFilter = this.#perBranchFilters.get(key);
-    const effectiveFilters: Condition | undefined =
-      this.#filters && perBranchFilter
-        ? {
-            type: 'and',
-            conditions: [this.#filters, perBranchFilter],
-          }
-        : (this.#filters ?? perBranchFilter);
     const {startupCost, fanout, rows} = this.#model(
       this.table,
       this.#sort,
-      effectiveFilters,
+      andFilters(this.#filtersFor(mergedConstraint), perBranchFilter),
       mergedConstraint,
     );
     const selectivity = perBranchFilter
-      ? this.#computeSelectivity(effectiveFilters)
+      ? this.#computeSelectivity(
+          andFilters(this.#unpushedFilters, perBranchFilter),
+        )
       : this.selectivity;
     cost = {
       startupCost,
@@ -265,6 +295,36 @@ export class PlannerConnection {
     }
 
     return cost;
+  }
+
+  /**
+   * `#filters` without the pushed conditions that `constraint` binds the
+   * column of, when the parent drives the join into this connection. The
+   * runtime still applies them, but they remove no rows.
+   *
+   * When that join is flipped, this connection is the outer loop, so every
+   * pushed condition counts, even where another flipped join binds its
+   * column.
+   */
+  #filtersFor(
+    constraint: PlannerConstraint | undefined,
+  ): Condition | undefined {
+    const pushed = this.#pushed;
+    if (
+      !pushed ||
+      !constraint ||
+      this.#unpushedFilters === this.#filters ||
+      this.#parentJoin?.type === 'flipped'
+    ) {
+      return this.#filters;
+    }
+    return withoutConjuncts(
+      this.#filters,
+      c =>
+        pushed.has(c) &&
+        c.left.type === 'column' &&
+        Object.hasOwn(constraint, c.left.name),
+    );
   }
 
   #computeSelectivity(filters: Condition | undefined): number {
@@ -378,6 +438,48 @@ export class PlannerConnection {
       record[key] = value;
     }
     return record;
+  }
+}
+
+function andFilters(
+  a: Condition | undefined,
+  b: Condition | undefined,
+): Condition | undefined {
+  return a && b ? {type: 'and', conditions: [a, b]} : (a ?? b);
+}
+
+/**
+ * `c` without the simple conjuncts, including those of nested ANDs, for which
+ * `remove` returns true. Returns `c` itself when it removes nothing.
+ */
+function withoutConjuncts(
+  c: Condition | undefined,
+  remove: (c: SimpleCondition) => boolean,
+): Condition | undefined {
+  switch (c?.type) {
+    case 'simple':
+      return remove(c) ? undefined : c;
+    case 'and': {
+      const conditions: Condition[] = [];
+      for (const x of c.conditions) {
+        const y = withoutConjuncts(x, remove);
+        if (y !== undefined) {
+          conditions.push(y);
+        }
+      }
+      if (
+        conditions.length === c.conditions.length &&
+        conditions.every((x, i) => x === c.conditions[i])
+      ) {
+        return c;
+      }
+      if (conditions.length <= 1) {
+        return conditions[0];
+      }
+      return {type: 'and', conditions};
+    }
+    default:
+      return c;
   }
 }
 
