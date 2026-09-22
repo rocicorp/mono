@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import {handleHeapzRequest} from '../../services/heapz.ts';
 import {HttpService, type Options} from '../../services/http-service.ts';
+import {handlePlannerzRequest} from '../../services/plannerz.ts';
 import {
   handleProfrmzRequest,
   handleProfzRequest,
@@ -29,6 +30,9 @@ export class ZeroDispatcher extends HttpService {
     super(`zero-dispatcher`, lc, opts, fastify => {
       fastify.get('/statz', (req, res) =>
         handleStatzRequest(lc, config, req, res),
+      );
+      fastify.get('/plannerz', (req, res) =>
+        handlePlannerzRequest(lc, config, req, res),
       );
       fastify.get('/heapz', (req, res) =>
         handleHeapzRequest(lc, config, req, res),

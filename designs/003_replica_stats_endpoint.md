@@ -111,9 +111,14 @@ from the catalog, `sqlite_stat*`, and config. No user tables are scanned.
         "avgRowsPerPrefix": [1001, 3],   // key prefix of length 1, 2, …
         "flags": []                      // e.g. "unordered", "noskipscan", "sz=N"
       },
-      "stat4": [                          // omitted when empty (the normal case)
-        {"nEq": [..], "nLt": [..], "nDLt": [..], "sample": [{"kind": "text"}, …]}
-      ]
+      "stat4": {
+        // A digest, not the raw histogram; omitted when there is no stat4.
+        "samples": 52,
+        "sampleKinds": ["integer", "text", "integer"],  // + the rowid
+        "perPrefix": [                                   // per key prefix depth
+          {"maxRowsPerKey": 4500, "medianRowsPerKey": 4500, "estimatedDistinctKeys": 2}
+        ]
+      }
     }]
   }]
 }
@@ -124,9 +129,28 @@ from the catalog, `sqlite_stat*`, and config. No user tables are scanned.
 - Tables and columns: `listTables` and `computeZqlSpecs` from `db/lite-tables.ts`.
   Don't list Zero's internal tables (`_zero.*`, change log, and so on).
 - Indexes: `listIndexes` from `db/lite-tables.ts`. It also returns the indexes
-  Zero creates itself.
+  Zero creates itself, and the ones SQLite creates for primary keys.
+- `listTables` reads `_zero.tableMetadata` for backfill status, which does not
+  exist until initial sync creates it. Fall back to listing without it, so a
+  fresh replica reports its schema instead of failing the request.
 - Stats: plain `SELECT` from `sqlite_stat1` and `sqlite_stat4`. Handle the
   case where these tables don't exist yet.
+
+#### 1.1b Size
+
+stat4 holds a few hundred samples per index, which serialized to 170KB of JSON
+for a two-table schema in testing, or roughly 40k tokens. So the default
+response carries a **digest** per index instead: for each key prefix depth, the
+rows behind the most common sampled key, the median, and a lower bound on the
+distinct keys. That is the skew an LLM would compute from the raw samples
+anyway, and it brought the same schema to 8.5KB.
+
+`?stat4=full` adds the raw (redacted) histogram for a deep dive.
+
+The digest must not depend on the order the samples arrive in. `nLt` and `nDLt`
+are text columns, so `ORDER BY nlt` in SQL sorts them as strings: "1049" sorts
+below "20". An early version read the last row's `nDLt` as the distinct count
+and was off by 8x because of this.
 
 #### 1.2 Privacy rules
 
