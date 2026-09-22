@@ -15,7 +15,7 @@ on:
         description: JSON array of shard indices, 1-based (e.g. "[1, 2, 3]")
         required: false
         type: string
-        default: '[1, 2, 3]'
+        default: '[1, 2, 3, 4]'
 
 permissions:
   contents: read
