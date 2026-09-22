@@ -339,6 +339,14 @@ Three evaluators must agree: JS `===`/`<`, SQLite `json_extract`, PG `jsonb`.
   §5.5). **Decision:** ordering across types (`'3' < 5`) is the caller's problem —
   JS coerces, SQLite orders by storage class, Postgres (gated) never matches — and
   is not made consistent; typed `json<T>()` steers callers within one type.
+- **index vs key segments:** a `number` segment is an array index and a `string`
+  segment is an object key. SQLite applies this statically (`$[i]` vs `$."k"`)
+  while JS and Postgres resolve by the container's runtime type, so a
+  numeric-looking string on an array (`'1'`) matches on JS/PG but is `NULL` on
+  SQLite. Not normalized — the JSON shape type is erased at runtime, so `json()`
+  can't tell an index from a key; typed columns enforce the rule via
+  `ValidJsonPath` (an array step admits only `number`), and untyped paths are the
+  caller's responsibility.
 
 The in-memory predicate now coalesces a path miss (missing key / null intermediate)
 to `null` so `IS NULL` matches both a missing key and a JSON null — identical to the
