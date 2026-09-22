@@ -1,4 +1,8 @@
-import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {
+  Condition,
+  Ordering,
+  SimpleCondition,
+} from '../../../zero-protocol/src/ast.ts';
 import {
   PlannerConnection,
   type ConnectionCostModel,
@@ -22,6 +26,7 @@ export class PlannerSource {
     isRoot: boolean,
     baseConstraints?: PlannerConstraint,
     limit?: number,
+    pushed?: ReadonlySet<SimpleCondition>,
   ): PlannerConnection {
     return new PlannerConnection(
       this.name,
@@ -31,6 +36,8 @@ export class PlannerSource {
       isRoot,
       baseConstraints,
       limit,
+      undefined,
+      pushed,
     );
   }
 }
