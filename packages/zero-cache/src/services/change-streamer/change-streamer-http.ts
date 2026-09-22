@@ -10,10 +10,9 @@ import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
-  streamIn,
-  streamInWithSize,
-  streamOut,
-  streamOutStringified,
+  streamInternal,
+  streamInternalStringified,
+  streamInternalWithSize,
   type Source,
 } from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
@@ -129,7 +128,9 @@ export class ChangeStreamerHttpServer extends HttpService {
       }
       const downstream =
         await this.#changeStreamer.startSnapshotReservation(taskID);
-      void streamOut(this._lc, downstream, ws);
+      // Send-only for now: the reservation carries no inbound application
+      // messages (only transport acks, demuxed internally).
+      void streamInternal(this._lc, ws, undefined, downstream);
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
@@ -143,7 +144,9 @@ export class ChangeStreamerHttpServer extends HttpService {
       }
 
       const downstream = await this.#changeStreamer.subscribe(ctx);
-      void streamOutStringified(this._lc, downstream, ws, {
+      // Send-only for now: the subscription carries no inbound application
+      // messages (only transport acks, demuxed internally).
+      void streamInternalStringified(this._lc, ws, undefined, downstream, {
         batched: ctx.wsBatched,
       });
     } catch (err) {
@@ -251,7 +254,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     const params = new URLSearchParams({taskID});
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamIn(this.#lc, ws, snapshotMessageSchema);
+    return streamInternal(this.#lc, ws, snapshotMessageSchema);
   }
 
   async subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>> {
@@ -260,7 +263,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     const params = getParams({wsBatched: true, ...ctx});
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamInWithSize(this.#lc, ws, downstreamSchema);
+    return streamInternalWithSize(this.#lc, ws, downstreamSchema);
   }
 }
 
