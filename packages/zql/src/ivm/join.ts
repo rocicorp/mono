@@ -45,14 +45,14 @@ interface JoinStorage {
 }
 
 function makeJunctionPrefix(junctionKey: string): string {
-  return `j\x00${junctionKey.length}\x00${junctionKey}\x00`;
+  return `j\x00${junctionKey}\x00`;
 }
 
 function makePartitionStorageKey(
   junctionKey: string,
   partitionKey: string,
 ): string {
-  return `${makeJunctionPrefix(junctionKey)}${partitionKey}`;
+  return `j\x00${junctionKey}\x00${partitionKey}`;
 }
 
 type Args = {

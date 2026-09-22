@@ -251,18 +251,16 @@ export function buildJoinConstraint(
   return constraint;
 }
 
-// Test seam with a widened record type — canonicalValue handles bigint
-// at runtime (zqlite's safeIntegers) but `Value` doesn't list it.
 export function canonicalKeyForTest(
-  record: Record<string, Value | bigint | undefined>,
+  record: Record<string, Value | undefined>,
   keys: CompoundKey,
 ): string {
-  return canonicalKey(record as Record<string, Value | undefined>, keys);
+  return canonicalKey(record, keys);
 }
 
 /**
- * Canonical string key over `keys` of `record`, handling bigint values
- * safely without throwing on JSON.stringify.
+ * Canonical string key over `keys` of `record`. Tags values by type
+ * so distinct types (e.g. 1 and "1") do not collide.
  */
 export function canonicalKey(
   record: Record<string, Value | undefined>,
@@ -279,15 +277,12 @@ export function canonicalKey(
   return s;
 }
 
-function canonicalValue(v: Value | bigint | undefined): string {
+function canonicalValue(v: Value): string {
   // Tag by type so we don't conflate e.g. `1` (number) with `"1"` (string).
-  // Bigint shows up at runtime when zqlite's safeIntegers is on, even
-  // though the static `Value` type doesn't list it.
   if (v === null || v === undefined) return 'n';
   const t = typeof v;
   if (t === 'string') return 's' + (v as string);
   if (t === 'number') return 'd' + (v as number);
-  if (t === 'bigint') return 'b' + (v as bigint).toString();
   if (t === 'boolean') return v ? 't' : 'f';
   return 'j' + JSON.stringify(v);
 }
