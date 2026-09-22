@@ -1,7 +1,7 @@
 /**
  * Protocol-client lanes of the zero-cache fuzzer: the view-syncer's downstream
  * stays query-equivalent to PostgreSQL through query churn and replicated writes.
- * See chinook-zero-cache-fuzzer-helpers.ts.
+ * See chinook-zero-cache-fuzzer.test.helpers.ts.
  */
 
 import {expect} from 'vitest';
@@ -25,7 +25,7 @@ import {
   trackByIDCase,
   tracksInAlbumCase,
   waitForProtocolAfterReplica,
-} from './chinook-zero-cache-fuzzer-helpers.ts';
+} from './chinook-zero-cache-fuzzer.test.helpers.ts';
 import {checkQueryCases, panicIfFailed} from './fuzz/driver.ts';
 import {builder} from './schema.ts';
 

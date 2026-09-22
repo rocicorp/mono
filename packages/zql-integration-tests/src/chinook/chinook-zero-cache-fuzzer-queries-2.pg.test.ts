@@ -2,7 +2,7 @@
  * Replica lane of the zero-cache fuzzer, part 2 of 3: the replica stays
  * query-equivalent to PostgreSQL for a slice of the generated query cases. The
  * slices are split across files so CI can spread them over test shards. See
- * chinook-zero-cache-fuzzer-helpers.ts.
+ * chinook-zero-cache-fuzzer.test.helpers.ts.
  */
 
 import {expect} from 'vitest';
@@ -14,7 +14,7 @@ import {
   ZERO_CACHE_QUERY_CASES,
   expectReplicaMatchesPG,
   startZeroCacheReplica,
-} from './chinook-zero-cache-fuzzer-helpers.ts';
+} from './chinook-zero-cache-fuzzer.test.helpers.ts';
 import {checkQueryCases, panicIfFailed} from './fuzz/driver.ts';
 
 const PART = 2;

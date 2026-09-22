@@ -3,7 +3,9 @@
  * and view-syncer) over the mini chinook fixture and compares query results across
  * PostgreSQL, the replica and the protocol client. The tests live in the
  * `chinook-zero-cache-fuzzer*.pg.test.ts` files, split so CI can spread them over
- * test shards.
+ * test shards. The `.test.` in this file's name keeps it classified as test code
+ * (excluded from CodeQL and from verify-package-deps) even though it defines no
+ * tests itself.
  */
 import {expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';

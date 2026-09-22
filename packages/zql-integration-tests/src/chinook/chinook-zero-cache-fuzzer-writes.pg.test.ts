@@ -1,7 +1,7 @@
 /**
  * Replica lane of the zero-cache fuzzer: the replica stays query-equivalent to
  * PostgreSQL through generated writes and replicated writes. See
- * chinook-zero-cache-fuzzer-helpers.ts.
+ * chinook-zero-cache-fuzzer.test.helpers.ts.
  */
 
 import {expect} from 'vitest';
@@ -17,7 +17,7 @@ import {
   insertTrack,
   moveTrackOutOfQuery,
   startZeroCacheReplica,
-} from './chinook-zero-cache-fuzzer-helpers.ts';
+} from './chinook-zero-cache-fuzzer.test.helpers.ts';
 import {builder} from './schema.ts';
 
 test(
