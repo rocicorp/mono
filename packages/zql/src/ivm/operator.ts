@@ -150,6 +150,8 @@ export interface Output {
   /**
    * Phase 2 reconciliation: allows bounded operators (like Take) to refill
    * deficits after Phase 1 changes have propagated.
+   *
+   * Optional on terminal Output sinks (e.g., custom UI views).
    */
   reconcile?(pusher: InputBase): Stream<'yield'>;
 }
@@ -173,7 +175,15 @@ export const throwOutput: Output = {
  * Each operator is an input to the next operator in the chain and an output
  * to the previous.
  */
-export interface Operator extends Input, Output {}
+export interface Operator extends Input, Output {
+  /**
+   * Phase 2 reconciliation: allows bounded operators (like Take) to refill
+   * deficits after Phase 1 changes have propagated.
+   * Intermediate pipeline operators MUST implement reconcile so that Phase 2
+   * reconciliation is never accidentally swallowed or dropped.
+   */
+  reconcile(pusher: InputBase): Stream<'yield'>;
+}
 
 /**
  * Operators get access to storage that they can store their internal
