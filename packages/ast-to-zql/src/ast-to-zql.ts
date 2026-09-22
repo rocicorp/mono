@@ -107,19 +107,17 @@ function transformSimpleCondition(
       ? `${leftCode}, ${rightCode}`
       : `${leftCode}, '${op}', ${rightCode}`;
 
-  if (left.type !== 'json') {
-    return `${prefix}(${argsCode})`;
+  if (left.type === 'json') {
+    // A JSON path operand only exists through the expression builder's
+    // `json()`, so it must be destructured wherever it appears: at the top
+    // level `.where(field, ...)` has no such form, so emit the callback form;
+    // inside a callback, add it to the enclosing callback's args.
+    if (prefix === '.where') {
+      return `.where(({cmp, json}) => cmp(${argsCode}))`;
+    }
+    args.add('json');
   }
-
-  // A JSON path operand only exists through the expression builder's `json()`,
-  // so it must be destructured wherever it appears: inside a callback that
-  // means adding it to the args; at the top level `.where(field, ...)` has no
-  // such form, so emit the callback form instead.
-  args.add('json');
-  if (prefix === 'cmp') {
-    return `cmp(${argsCode})`;
-  }
-  return `.where(({cmp, json}) => cmp(${argsCode}))`;
+  return `${prefix}(${argsCode})`;
 }
 
 function transformLogicalCondition(
