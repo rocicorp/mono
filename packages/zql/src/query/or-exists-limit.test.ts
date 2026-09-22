@@ -1,5 +1,7 @@
-// Scratch port of Rindle's take_bounded_fanout::same_join_key_mid_fanout
-// (039274b). Not for commit.
+// or(filter, exists) under a limit: removing the row a join key points at
+// drops several issues at once, some inside the Take's bound and some past
+// it, while other issues sharing the same ord survive through the filter
+// branch. The view must end up where a fresh materialization does.
 import {expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
