@@ -1020,7 +1020,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1035,7 +1035,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1173,7 +1173,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -1188,7 +1188,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -1408,7 +1408,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1423,7 +1423,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1634,7 +1634,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -1649,7 +1649,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -2013,7 +2013,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -2028,7 +2028,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -2210,7 +2210,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -2225,7 +2225,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -2434,7 +2434,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -2449,7 +2449,7 @@ describe('take with no partition', () => {
             {
               "constraint": undefined,
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -5167,7 +5167,7 @@ describe('take with partition', () => {
                 "issueID": "i1",
               },
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 300,
                   "id": "c3",
@@ -5185,7 +5185,7 @@ describe('take with partition', () => {
                 "issueID": "i1",
               },
               "start": {
-                "basis": "at",
+                "basis": "after",
                 "row": {
                   "created": 300,
                   "id": "c3",
@@ -8460,7 +8460,7 @@ describe('take with partition', () => {
                   "issueID": "i1",
                 },
                 "start": {
-                  "basis": "at",
+                  "basis": "after",
                   "row": {
                     "created": 200,
                     "id": "c2",
@@ -8478,7 +8478,7 @@ describe('take with partition', () => {
                   "issueID": "i1",
                 },
                 "start": {
-                  "basis": "at",
+                  "basis": "after",
                   "row": {
                     "created": 200,
                     "id": "c2",

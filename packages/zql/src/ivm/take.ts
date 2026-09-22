@@ -698,7 +698,7 @@ export class Take implements Operator, TakeBoundProvider {
             start: takeState.bound
               ? {
                   row: takeState.bound,
-                  basis: 'at',
+                  basis: 'after',
                 }
               : undefined,
             constraint,
@@ -707,12 +707,6 @@ export class Take implements Operator, TakeBoundProvider {
           for (const node of stream) {
             if (node === 'yield') {
               yield 'yield';
-              continue;
-            }
-            if (
-              takeState.bound &&
-              this.getSchema().compareRows(node.row, takeState.bound) <= 0
-            ) {
               continue;
             }
             toPush.push(node);
