@@ -1,10 +1,11 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import type {
-  ColumnReference,
-  Condition,
-  JsonPathReference,
-  SimpleCondition,
-  SimpleOperator,
+import {
+  isLikeOperator,
+  isNegatedOperator,
+  jsonLiteralType,
+  type Condition,
+  type SimpleCondition,
+  type SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {compareValues} from '../ivm/data.ts';
@@ -16,33 +17,19 @@ export type SimplePredicate = (rhs: Value) => boolean;
 export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
 
 /**
- * Reads the left-hand value of a comparison out of a row, navigating into a
- * JSON column for a {@link JsonPathReference}.
- *
- * For path navigation, a missing key (or a null/undefined encountered partway
- * through the path) yields `null`. JSON has no `undefined`, so absence is
- * treated as null — this matches SQLite `json_extract` (which returns SQL NULL
- * for both a missing path and a JSON null), so `IS NULL` behaves identically
- * on the client and against the replica. Plain column reads are unchanged.
- */
-function readColumn(row: Row, ref: ColumnReference | JsonPathReference): Value {
-  if (ref.type === 'column') {
-    return row[ref.name];
-  }
-  return valueAtPath(row[ref.value.name], ref.path);
-}
-
-/**
- * Navigates into a JSON value following `path`, strictly: a `number` segment
- * indexes an array and a `string` segment reads an own property of a plain
- * object — never a string's characters, an array's `length`, or an inherited
- * member such as `constructor`. Any other step (a null/undefined or scalar
- * intermediate, a segment of the wrong kind, a missing key) yields `null`.
+ * Navigates into a JSON column value following `path`, strictly: a `number`
+ * segment indexes an array and a `string` segment reads an own property of a
+ * plain object — never a string's characters, an array's `length`, or an
+ * inherited member such as `constructor`. Any other step (a null/undefined or
+ * scalar intermediate, a segment of the wrong kind, a missing key) yields
+ * `null`.
  *
  * This is the rule SQLite `json_extract` applies (`$[i]` is array-only and
  * `$."k"` is object-only, anything else is NULL), so the client and the replica
- * it syncs from agree. See {@link readColumn} for why absence is treated as
- * null.
+ * it syncs from agree. JSON has no `undefined`, so absence collapses to `null`
+ * — matching SQLite `json_extract` (which returns SQL NULL for both a missing
+ * path and a JSON null), so `IS NULL` behaves identically on the client and
+ * against the replica.
  */
 function valueAtPath(value: Value, path: readonly (string | number)[]): Value {
   let v: Value = value;
@@ -119,7 +106,13 @@ export function createPredicate(
         const result = impl(left.value);
         return () => result;
       }
-      return (row: Row) => impl(readColumn(row, left));
+      if (left.type === 'json') {
+        const {name} = left.value;
+        const {path} = left;
+        return (row: Row) => impl(valueAtPath(row[name], path));
+      }
+      const {name} = left;
+      return (row: Row) => impl(row[name]);
     }
   }
 
@@ -138,63 +131,40 @@ export function createPredicate(
 
   if (left.type === 'json') {
     // A JSON leaf is dynamically typed, unlike a schema-typed column, so the
-    // comparison is type-strict: a leaf whose JSON type differs from the
-    // literal's is never equal — a non-match for a positive operator and a
-    // match for a negated one — and never an error. This mirrors the
-    // `json_type` / `jsonb_typeof` gates in the SQLite and Postgres backends,
-    // and keeps `compareValues` and the LIKE matcher (which assume operands of
-    // one type) from throwing on user data.
-    const literalType = jsonLiteralType(right.value);
-    const negated = negatedOps.has(condition.op);
+    // comparison is type-strict (see JsonPathReference): a leaf whose JSON
+    // type differs from the literal's is never equal — a non-match for a
+    // positive operator and a match for a negated one — and never an error.
+    // This keeps `compareValues` and the LIKE matcher (which assume operands
+    // of one type) from throwing on user data. The LIKE family compares text,
+    // so it requires a string leaf whatever the literal's type.
+    const requiredType = isLikeOperator(condition.op)
+      ? 'string'
+      : jsonLiteralType(right.value);
+    const negated = isNegatedOperator(condition.op);
+    const {name} = left.value;
+    const {path} = left;
     return (row: Row) => {
-      const lhs = readColumn(row, left);
+      const lhs = valueAtPath(row[name], path);
       if (lhs === null || lhs === undefined) {
         return false;
       }
       // An empty IN/NOT IN list has no type to be strict about: `IN ()` never
       // matches and `NOT IN ()` always does (for a non-null leaf).
-      if (literalType === undefined || typeof lhs !== literalType) {
+      if (requiredType === undefined || typeof lhs !== requiredType) {
         return negated;
       }
       return impl(lhs);
     };
   }
 
+  const {name} = left;
   return (row: Row) => {
-    const lhs = readColumn(row, left);
+    const lhs = row[name];
     if (lhs === null || lhs === undefined) {
       return false;
     }
     return impl(lhs);
   };
-}
-
-const negatedOps: ReadonlySet<SimpleOperator> = new Set([
-  '!=',
-  'NOT LIKE',
-  'NOT ILIKE',
-  'NOT IN',
-]);
-
-/**
- * The JS type a JSON leaf must have to be compared against `literal` (for an
- * `IN`/`NOT IN` list, the type of its first element); `undefined` for an empty
- * list.
- */
-function jsonLiteralType(
-  literal: NonNullValue | readonly NonNullValue[],
-): 'string' | 'number' | 'boolean' | undefined {
-  const v = Array.isArray(literal) ? literal[0] : literal;
-  switch (typeof v) {
-    case 'string':
-      return 'string';
-    case 'number':
-      return 'number';
-    case 'boolean':
-      return 'boolean';
-    default:
-      return undefined;
-  }
 }
 
 function createIsPredicate(

@@ -5,14 +5,12 @@ import {must} from '../../../shared/src/must.ts';
 import {
   formatJsonPathReference,
   type AST,
-  type ColumnReference,
   type CompoundKey,
   type Condition,
   type Conjunction,
   type CorrelatedSubquery,
   type CorrelatedSubqueryCondition,
   type Disjunction,
-  type JsonPathReference,
   type LiteralValue,
   type Ordering,
   type Parameter,
@@ -163,10 +161,7 @@ export function bindStaticParameters(
       return {
         ...condition,
         left: bindValue(condition.left),
-        right: bindValue(condition.right) as Exclude<
-          ValuePosition,
-          ColumnReference | JsonPathReference
-        >,
+        right: bindValue(condition.right) as SimpleCondition['right'],
       };
     }
     if (condition.type === 'correlatedSubquery') {

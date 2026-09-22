@@ -262,6 +262,15 @@ test('json path', () => {
   expect(p('=', ['tags', '0'], 'a')(row)).toBe(false);
   expect(p('IS', ['tags', '0'], null)(row)).toBe(true);
   expect(p('IS', ['nested', 0], null)(row)).toBe(true);
+
+  // The LIKE family compares text, so it requires a string leaf whatever the
+  // literal's type — a numeric leaf is a mismatch, never an assertString throw.
+  expect(p('LIKE', ['count'], 3)(row)).toBe(false);
+  expect(p('NOT LIKE', ['count'], 3)(row)).toBe(true);
+  expect(p('ILIKE', ['priority'], 3)(row)).toBe(false);
+  // IN / NOT IN with a null list are constant-false.
+  expect(p('IN', ['priority'], null)(row)).toBe(false);
+  expect(p('NOT IN', ['priority'], null)(row)).toBe(false);
 });
 
 test('and', () => {
