@@ -956,6 +956,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   async subscribe(
     ctx: SubscriberContext,
+    downstream: Subscription<
+      string | PreSerializedBatch
+    > = Subscription.create(),
   ): Promise<Source<string | PreSerialized>> {
     const {protocolVersion, id, mode, replicaVersion, watermark, wsBatched} =
       ctx;
@@ -963,9 +966,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#serving.resolve();
     }
     let cleanupSubscriber = () => {};
-    const downstream = Subscription.create<string | PreSerializedBatch>({
-      cleanup: () => cleanupSubscriber(),
-    });
+    downstream.addCloseHandler(() => cleanupSubscriber());
+
     // No subscriber's ACK advances the SQLite change log's head any more: the
     // writer runs in this process, so the barrier is notified from the commit
     // itself (see #changeLogWriter's onCommit).
