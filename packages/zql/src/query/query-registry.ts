@@ -555,16 +555,10 @@ export function defineQueryWithType() {
  * defineQuery overloads but with Schema and Context pre-bound.
  */
 type TypedDefineQuery<TSchema extends Schema, TContext> = {
-  // Signature order matters:
-  // - The validator signature must precede the codec one. Standard Schema
-  //   implementations such as Zod 4 also expose `.decode()` / `.encode()`, so
-  //   they would otherwise resolve to the codec signature at the type level
-  //   (the runtime already prefers the validator path).
-  // - The codec signature must not be the last one. When it is, TypeScript's
-  //   variance measurement for this generic alias degrades `Query`'s schema
-  //   parameter, letting legacy queries type-check against a `Zero` whose
-  //   schema has `enableLegacyQueries: false` (see the enableLegacyQueries
-  //   test in zero-client's custom.test.ts).
+  // The validator signature must precede the codec one: Standard Schema
+  // implementations such as Zod 4 also expose `.decode()` / `.encode()`, so
+  // they would otherwise resolve to the codec signature at the type level
+  // (the runtime already prefers the validator path).
 
   // With validator
   <

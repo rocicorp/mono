@@ -1,3 +1,15 @@
+// NOTE: This file is deliberately named so that it sorts AFTER custom.test.ts.
+//
+// TypeScript's variance measurement is order-dependent. If a file that is
+// type-checked before custom.test.ts instantiates the schema-builder types
+// (even a bare createSchema() call is enough), the enableLegacyQueries guard
+// in custom.test.ts -- where z.run(legacyQuery) must be a type error -- stops
+// firing and its @ts-expect-error becomes unused. This is a pre-existing
+// fragility of the Query/Schema typings, not something the codec work
+// introduced; declaring `in out` variance on Query does not resolve it, so the
+// degraded relation lies elsewhere and a proper fix is a follow-up.
+//
+// Do not rename this file to sort before custom.test.ts.
 import {expect, test} from 'vitest';
 import type {CRUDOp} from '../../../zero-protocol/src/mutation.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
