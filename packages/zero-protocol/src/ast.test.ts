@@ -691,7 +691,7 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toEqual('1n2euh7jf7r2y');
+  expect(hash).toEqual('19apwsypfsksu');
   expect(PROTOCOL_VERSION).toBe(54);
 });
 
@@ -1072,6 +1072,9 @@ test('json path: numeric segments must be non-negative integer indices', () => {
     /non-negative integer/,
   );
   expect(() => astSchema.parse(ast(['tags', 2 ** 31 - 1]))).not.toThrow();
+  // An empty path is not a JSON leaf (the compilers address the last segment;
+  // the builder's `json(col, ...path)` already requires one).
+  expect(() => astSchema.parse(ast([]))).toThrow(/non-empty JSON path/);
 });
 
 test('json path: IN lists must be homogeneous; json refs must wrap json columns', () => {
@@ -1093,6 +1096,34 @@ test('json path: IN lists must be homogeneous; json refs must wrap json columns'
   // The engines compare the leaf against the type of the first element, so a
   // mixed list has no consistent meaning: rejected at the wire.
   expect(() => astSchema.parse(cond([1, 'a']))).toThrow(/one type/);
+  expect(() =>
+    astSchema.parse({
+      table: 'issue',
+      where: {
+        type: 'simple',
+        op: 'NOT IN',
+        left: {
+          type: 'json',
+          value: {type: 'column', name: 'metadata'},
+          path: ['k'],
+        },
+        right: {type: 'literal', value: [true, 'a']},
+      },
+    }),
+  ).toThrow(/one type/);
+  // A plain column's list is not restricted (its type is the column's, and
+  // `cmp()` only checks json() references), as before JSON paths existed.
+  expect(() =>
+    astSchema.parse({
+      table: 'issue',
+      where: {
+        type: 'simple',
+        op: 'IN',
+        left: {type: 'column', name: 'title'},
+        right: {type: 'literal', value: [1, 'a']},
+      },
+    }),
+  ).not.toThrow();
 
   // A JSON path on a non-json column would make the replica's json_type()
   // throw at fetch time; a type-aware mapper rejects it at the query boundary.

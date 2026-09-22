@@ -9,6 +9,7 @@ import {hasOwn} from '../../shared/src/has-own.ts';
 import {type JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import {
+  isLikeOperator,
   isNegatedOperator,
   jsonLiteralType,
   type AST,
@@ -777,6 +778,11 @@ function jsonPathLeaf(
  * - An empty `NOT IN` list matches every non-null leaf: SQL's
  *   `NOT (x = ANY('{}'))` is TRUE even for a NULL leaf, whereas the
  *   predicate's null guard excludes it.
+ * - The LIKE family compares text, so the leaf must be a string whatever the
+ *   literal's type, and the pattern is the literal's text form — as in the
+ *   in-memory predicate (`String(pattern)`) and SQLite. Deriving the leaf type
+ *   from a numeric or boolean literal instead would cast the leaf to
+ *   `double precision`/`boolean` and hand Postgres a LIKE it cannot execute.
  * - The negated operators (`!=`, `NOT LIKE`, `NOT ILIKE`, `NOT IN`): the gate
  *   makes a mismatched leaf SQL NULL, which a positive comparison correctly
  *   excludes — but NULL also excludes under a negated operator, where a
@@ -791,13 +797,37 @@ function jsonPathCondition(
   condition: SimpleCondition,
   table: Table,
 ): SQLQuery | undefined {
-  const {op, right} = condition;
+  const {op} = condition;
+  let {right} = condition;
   if (
     (op === 'IN' || op === 'NOT IN') &&
     right.type === 'literal' &&
     right.value === null
   ) {
     return sql`false`;
+  }
+  if (
+    isLikeOperator(op) &&
+    right.type === 'literal' &&
+    right.value !== null &&
+    !Array.isArray(right.value)
+  ) {
+    right = {type: 'literal', value: String(right.value)};
+    if (!isNegatedOperator(op)) {
+      return sql`${valueComparison(
+        spec,
+        left,
+        table,
+        right,
+        false,
+      )} ${sql.__dangerous__rawValue(op)} ${valueComparison(
+        spec,
+        right,
+        table,
+        left,
+        false,
+      )}`;
+    }
   }
   if ((op === '=' || op === 'IN') && right.type === 'literal') {
     const t = leafType(right);

@@ -61,17 +61,7 @@ const literalReferenceSchema: v.Type<LiteralReference> = v.readonlyObject({
     v.number(),
     v.boolean(),
     v.null(),
-    // An IN / NOT IN list is homogeneous: the engines compare a JSON path leaf
-    // against the type of the list's first element (see `jsonLiteralType`),
-    // and a mixed list would cast-fail on Postgres while silently dropping
-    // elements elsewhere. Typed builders never produce one; reject it at the
-    // wire so a hand-built AST cannot either.
-    v
-      .readonlyArray(v.union(v.string(), v.number(), v.boolean()))
-      .assert(
-        list => list.every(e => typeof e === typeof list[0]),
-        'expected a list of values of one type',
-      ),
+    v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
   ),
 });
 const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
@@ -169,17 +159,22 @@ export function formatJsonPathReference(ref: JsonPathReference): string {
 const jsonPathReferenceSchema: v.Type<JsonPathReference> = v.readonlyObject({
   type: v.literal('json'),
   value: columnReferenceSchema,
-  path: v.readonlyArray(
-    v.union(
-      v.string(),
-      v
-        .number()
-        .assert(
-          isValidJsonPathIndex,
-          'expected a non-negative integer array index',
-        ),
-    ),
-  ),
+  path: v
+    .readonlyArray(
+      v.union(
+        v.string(),
+        v
+          .number()
+          .assert(
+            isValidJsonPathIndex,
+            'expected a non-negative integer array index',
+          ),
+      ),
+    )
+    // `json(col, ...path)` types the path as non-empty; reject an empty one at
+    // the wire too, since the compilers address the last segment and a bare
+    // column is not a JSON leaf.
+    .assert(path => path.length > 0, 'expected a non-empty JSON path'),
 });
 
 /**
@@ -219,12 +214,41 @@ const conditionValueSchema = v.union(
 
 export type Parameter = v.Infer<typeof parameterReferenceSchema>;
 
-export const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
-  type: v.literal('simple'),
-  op: simpleOperatorSchema,
-  left: conditionValueSchema,
-  right: v.union(parameterReferenceSchema, literalReferenceSchema),
-});
+/**
+ * An `IN`/`NOT IN` list against a JSON path leaf is homogeneous: the engines
+ * compare the leaf against the type of the list's first element (see
+ * `jsonLiteralType`), and a mixed list would cast-fail on Postgres while
+ * silently dropping elements elsewhere. `cmp()` rejects one for a `json()`
+ * reference; this rejects it at the wire so a hand-built AST cannot bypass
+ * that. A plain column's list is not restricted (its type is the column's).
+ */
+function hasHomogeneousJsonInList(c: SimpleCondition): boolean {
+  if (
+    c.left.type !== 'json' ||
+    (c.op !== 'IN' && c.op !== 'NOT IN') ||
+    c.right.type !== 'literal'
+  ) {
+    return true;
+  }
+  const {value} = c.right;
+  if (!Array.isArray(value)) {
+    return true;
+  }
+  const list: readonly (string | number | boolean)[] = value;
+  return list.every(e => typeof e === typeof list[0]);
+}
+
+export const simpleConditionSchema: v.Type<SimpleCondition> = v
+  .readonlyObject({
+    type: v.literal('simple'),
+    op: simpleOperatorSchema,
+    left: conditionValueSchema,
+    right: v.union(parameterReferenceSchema, literalReferenceSchema),
+  })
+  .assert(
+    hasHomogeneousJsonInList,
+    'expected a list of values of one type for IN against a JSON path',
+  );
 
 type ConditionValue = v.Infer<typeof conditionValueSchema>;
 

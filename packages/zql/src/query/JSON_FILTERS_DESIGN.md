@@ -12,7 +12,7 @@ relationships; on-the-fly acceleration for ad-hoc `orderBy`) proposed.
   `ColumnReference` (AST + valita schema + normalize/hash + name-mapping maps the
   wrapped column and preserves the path); `eb.json(col, ...path)` accessor accepted
   by `cmp` (the chosen API — see §5.2); in-memory predicate navigation; SQLite
-  `json_extract` pushdown; `PROTOCOL_VERSION` 51 → 52. Covered by unit tests
+  `json_extract` pushdown; `PROTOCOL_VERSION` 53 → 54. Covered by unit tests
   (predicate, AST hash/mapping, `ast-to-zql` render) and an end-to-end zqlite test
   (builder → AST → `json_extract` → results).
 - **Done (Phase 1, Postgres):** the `z2s` compiler emits `#>>` json/jsonb text
@@ -548,10 +548,10 @@ valita parse is **strict** (`shared/src/valita.ts:180`) → an older `zero-cache
 rejects an AST carrying a `'json'` ref. Gate behind a **protocol/AST version bump**;
 a new client must not emit a `JsonPathReference` to an older server.
 
-Done in Phase 1: `PROTOCOL_VERSION` bumped 51 → 52 and the `astSchema` guard hash
+Done in Phase 1: `PROTOCOL_VERSION` bumped 53 → 54 and the `astSchema` guard hash
 in `ast.test.ts` (plus the `protocol-version.test.ts` schema hash) updated.
 `MIN_SERVER_SUPPORTED_SYNC_PROTOCOL` is unchanged (30), so clients only emit a
-`JsonPathReference` once both ends are on ≥ 52, per the standard server-before-clients
+`JsonPathReference` once both ends are on ≥ 54, per the standard server-before-clients
 deploy contract.
 
 ---

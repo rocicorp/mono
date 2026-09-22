@@ -730,6 +730,61 @@ test('json path filter: ILIKE', () => {
   `);
 });
 
+test('json path filter: LIKE with a non-string literal compares text', () => {
+  // The LIKE family requires a string leaf whatever the literal's type and
+  // matches the literal's text form (as the in-memory predicate does with
+  // `String(pattern)`): `LIKE 3` gates on a string leaf and binds '3', never a
+  // `double precision` cast that Postgres cannot LIKE. The negated form keeps
+  // the mismatched-leaf-matches CASE.
+  const query = (op: 'LIKE' | 'NOT LIKE') =>
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op,
+          left: jsonRef(['count']),
+          right: {type: 'literal', value: 3},
+        },
+      }),
+    );
+  expect(query('LIKE')).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text END) LIKE $3::text::text
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "count",
+        "string",
+        "3",
+      ],
+    }
+  `);
+  expect(query('NOT LIKE')).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE (CASE COALESCE(jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text), 'null') WHEN 'null' THEN false WHEN $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text NOT LIKE $3::text::text ELSE true END)
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "count",
+        "string",
+        "3",
+      ],
+    }
+  `);
+});
+
 test('json path filter: IS NULL collapses missing key and JSON null', () => {
   expect(
     formatPgInternalConvert(

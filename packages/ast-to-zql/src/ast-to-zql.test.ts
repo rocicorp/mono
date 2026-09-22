@@ -96,6 +96,27 @@ test('where condition on a json path with array index and operator', () => {
   );
 });
 
+test('json path keys and string literals are escaped as JavaScript strings', () => {
+  // A key like `c\\d` must round-trip: escaping only `'` would render `'c\\d'`,
+  // which JavaScript reads as `cd` — a different path than the engines query.
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'simple',
+      left: {
+        type: 'json',
+        value: {type: 'column', name: 'metadata'},
+        path: ['c\\d', "it's", 'a"b\n'],
+      },
+      op: '=',
+      right: {type: 'literal', value: 'x\\y'},
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({cmp, json}) => cmp(json('metadata', 'c\\\\d', 'it\\'s', 'a"b\\n'), 'x\\\\y'))"`,
+  );
+});
+
 test('where condition with non-equality operator', () => {
   const ast: AST = {
     table: 'issue',

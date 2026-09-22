@@ -308,9 +308,20 @@ function transformLiteral(literal: LiteralReference): string {
     return JSON.stringify(literal.value);
   }
   if (typeof literal.value === 'string') {
-    return `'${literal.value.replace(/'/g, "\\'")}'`;
+    return jsStringLiteral(literal.value);
   }
   return String(literal.value);
+}
+
+/**
+ * A single-quoted JavaScript string literal for `s`. `JSON.stringify` does the
+ * escaping (backslashes, control characters, quotes), so the rendered code
+ * parses back to exactly `s`: escaping only `'` would drop the backslash from
+ * a JSON path key like `c\d` and name a different path than the engines read.
+ */
+function jsStringLiteral(s: string): string {
+  const inner = JSON.stringify(s).slice(1, -1);
+  return `'${inner.replace(/\\"/g, '"').replace(/'/g, "\\'")}'`;
 }
 
 function transformParameter(param: Parameter): string {

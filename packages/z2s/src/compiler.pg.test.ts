@@ -422,6 +422,19 @@ describe('compiler with PostgreSQL', () => {
     expect(
       await queryDocIds('IN', jsonRef('priority'), ['high', 'low']),
     ).toEqual(['row1', 'row2']);
+    // The LIKE family compares text: a non-string literal is matched by its
+    // text form against string leaves only. row1's and row2's `count` are
+    // numbers (a type mismatch, not a `double precision LIKE` error) and
+    // row5's is the string 'n/a'.
+    expect(await queryDocIds('LIKE', jsonRef('count'), 3)).toEqual([]);
+    expect(await queryDocIds('NOT LIKE', jsonRef('count'), 3)).toEqual([
+      'row1',
+      'row2',
+      'row5',
+    ]);
+    expect(await queryDocIds('LIKE', jsonRef('count'), 'n/%')).toEqual([
+      'row5',
+    ]);
   });
 
   test('json path filter: IS NULL collapses missing key and JSON null', async () => {

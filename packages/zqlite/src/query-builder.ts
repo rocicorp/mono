@@ -1,6 +1,7 @@
 import type {SQLQuery} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {
+  isLikeOperator,
   isNegatedOperator,
   jsonLiteralType,
   type Condition,
@@ -327,7 +328,21 @@ function jsonPathConditionToSQL(
     return sql`FALSE`;
   }
   const raw = jsonExtract(left);
-  const t = jsonLiteralType(right.value);
+  let cond = filter;
+  let t = jsonLiteralType(right.value);
+  if (
+    isLikeOperator(op) &&
+    right.value !== null &&
+    !Array.isArray(right.value)
+  ) {
+    // The LIKE family compares text, so the leaf must be a string whatever
+    // the literal's type, and the pattern is the literal's text form — as in
+    // the in-memory predicate (`String(pattern)`) and the Postgres compiler.
+    // Gating on the literal's type instead would let SQLite's text coercion
+    // match `3 LIKE 3` on a numeric leaf that the predicate rejects.
+    t = 'string';
+    cond = {...filter, right: {type: 'literal', value: String(right.value)}};
+  }
   if (t === undefined) {
     // Only an empty list reaches here (a null literal has no type either, but
     // the generic NULL comparison is already constant-false for it).
@@ -342,13 +357,13 @@ function jsonPathConditionToSQL(
       sql`, `,
     );
     return comparisonToSQL(
-      filter,
+      cond,
       sql`(CASE WHEN json_type(${col}, ${path}) IN (${typeList}) THEN ${raw} END)`,
     );
   }
   // One WHEN per accepted type name (a number leaf is 'integer' or 'real');
   // only one branch runs per row.
-  const cmp = comparisonToSQL(filter, raw);
+  const cmp = comparisonToSQL(cond, raw);
   const whens = sql.join(
     types.map(x => sql`WHEN ${x} THEN ${cmp}`),
     sql` `,

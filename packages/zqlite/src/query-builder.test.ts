@@ -207,6 +207,34 @@ test('json path filters: type gate, negation, empty NOT IN and key escaping', ()
       ],
     }
   `);
+  // The LIKE family compares text: the gate is on a string leaf whatever the
+  // literal's type and the pattern is bound as text, so `LIKE 3` cannot match
+  // a numeric leaf through SQLite's `3 LIKE 3` coercion (the predicate treats
+  // that leaf as a type mismatch).
+  expect(format(filtersToSQL(cond('LIKE', ref('count'), 3))))
+    .toMatchInlineSnapshot(`
+      {
+        "text": "(CASE WHEN json_type("metadata", ?) IN (?) THEN json_extract("metadata", ?) END) LIKE ? ESCAPE '\\'",
+        "values": [
+          "$."count"",
+          "text",
+          "$."count"",
+          "3",
+        ],
+      }
+    `);
+  expect(format(filtersToSQL(cond('NOT LIKE', ref('count'), 3))))
+    .toMatchInlineSnapshot(`
+      {
+        "text": "(CASE COALESCE(json_type("metadata", ?), 'null') WHEN 'null' THEN 0 WHEN ? THEN json_extract("metadata", ?) NOT LIKE ? ESCAPE '\\' ELSE 1 END)",
+        "values": [
+          "$."count"",
+          "text",
+          "$."count"",
+          "3",
+        ],
+      }
+    `);
   // A null literal has no type to gate on: the raw extraction, so a missing
   // key and a JSON null both read as NULL.
   expect(format(filtersToSQL(cond('IS', ref('priority'), null))))
