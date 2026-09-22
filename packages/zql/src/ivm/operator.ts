@@ -151,10 +151,9 @@ export interface Output {
   push(change: Change, pusher: InputBase): Stream<'yield'>;
 
   /**
-   * Phase 2 of two-phase push: invoked after all Phase 1 changes in a batch or
-   * transaction have propagated. Bounded operators (such as Take or Cap) use
-   * this signal to refill deficits, emit refilled rows downstream via push(),
-   * and update their bounds.
+   * Phase 2 of two-phase push: invoked after Phase 1 changes have propagated.
+   * Bounded operators (such as Take or Cap) use this signal to refill deficits,
+   * emit refilled rows downstream via push(), and update their bounds.
    *
    * This method is optional on Output to allow terminal sinks (such as UI views
    * or custom third-party sinks) that only consume changes to omit it without
