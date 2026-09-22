@@ -28,14 +28,45 @@ import type {ReplicaState, ReplicaStateNotifier} from './replicator.ts';
  * subscribe and unsubscribe traffic from View Syncers remains within each
  * Syncer Thread.
  */
+function oldest(
+  curr: number | undefined,
+  prev: number | undefined,
+): number | undefined {
+  if (curr === undefined) {
+    return prev;
+  }
+  if (prev === undefined) {
+    return curr;
+  }
+  return Math.min(curr, prev);
+}
+
 export class Notifier implements ReplicaStateNotifier {
   readonly #eventEmitter = new EventEmitter();
   #lastStateReceived: ReplicaState | undefined;
 
+  get latestState(): ReplicaState | undefined {
+    return this.#lastStateReceived;
+  }
+
   #newSubscription() {
     const notify = (state: ReplicaState) => subscription.push(state);
     const subscription = Subscription.create<ReplicaState>({
-      coalesce: curr => curr,
+      // A coalesced notification stands in for every notification it
+      // subsumed, so both timestamps keep the *oldest* value: they measure how
+      // long work has been outstanding, and the subsumed watermarks are still
+      // unserved.
+      coalesce: (curr, prev) => ({
+        ...curr,
+        replicaReadyTimeMs: oldest(
+          curr.replicaReadyTimeMs,
+          prev.replicaReadyTimeMs,
+        ),
+        upstreamCommitTimeMs: oldest(
+          curr.upstreamCommitTimeMs,
+          prev.upstreamCommitTimeMs,
+        ),
+      }),
       cleanup: () => this.#eventEmitter.off('version', notify),
     });
     return {notify, subscription};

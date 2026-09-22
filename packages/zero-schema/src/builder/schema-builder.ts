@@ -1,6 +1,6 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {h64} from '../../../shared/src/hash.ts';
-import {mapEntries} from '../../../shared/src/objects.ts';
+import {assignProperty, mapEntries} from '../../../shared/src/objects.ts';
 import {
   normalizeClientSchema,
   type ClientSchema,
@@ -64,15 +64,19 @@ export function createSchema<
         `Table "${table.schema.name}" is defined more than once in the schema`,
       );
     }
-    retTables[table.schema.name] = table.build();
+    assignProperty(retTables, table.schema.name, table.build());
   });
   options.relationships?.forEach(relationships => {
-    if (retRelationships[relationships.name]) {
+    if (Object.hasOwn(retRelationships, relationships.name)) {
       throw new Error(
         `Relationships for table "${relationships.name}" are defined more than once in the schema`,
       );
     }
-    retRelationships[relationships.name] = relationships.relationships;
+    assignProperty(
+      retRelationships,
+      relationships.name,
+      relationships.relationships,
+    );
     checkRelationship(
       relationships.relationships,
       relationships.name,
@@ -96,18 +100,18 @@ function checkRelationship(
   // TS should be able to check this for us but something is preventing it from happening.
   Object.entries(relationships).forEach(([name, rel]) => {
     let source = tables[tableName];
-    if (source.columns[name] !== undefined) {
+    if (Object.hasOwn(source.columns, name)) {
       throw new Error(
         `Relationship "${tableName}"."${name}" cannot have the same name as the column "${name}" on the the table "${source.name}"`,
       );
     }
     rel.forEach(connection => {
-      if (!tables[connection.destSchema]) {
+      if (!Object.hasOwn(tables, connection.destSchema)) {
         throw new Error(
           `For relationship "${tableName}"."${name}", destination table "${connection.destSchema}" is missing in the schema`,
         );
       }
-      if (!source.columns[connection.sourceField[0]]) {
+      if (!Object.hasOwn(source.columns, connection.sourceField[0])) {
         throw new Error(
           `For relationship "${tableName}"."${name}", the source field "${connection.sourceField[0]}" is missing in the table schema "${source.name}"`,
         );

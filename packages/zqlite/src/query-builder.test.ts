@@ -15,6 +15,90 @@ import {
   type NoSubqueryCondition,
 } from './query-builder.ts';
 
+test.each(['IS', 'IS NOT'] as const)(
+  '%s NULL filters use a literal instead of a binding',
+  op => {
+    expect(
+      format(
+        filtersToSQL({
+          type: 'simple',
+          left: {type: 'column', name: 'deleted_at'},
+          op,
+          right: {type: 'literal', value: null},
+        }),
+      ),
+    ).toEqual({text: `"deleted_at" ${op} NULL`, values: []});
+  },
+);
+
+test('a production NULL filter can use a partial index', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(`
+    CREATE TABLE issue(id TEXT PRIMARY KEY, deleted_at TEXT);
+    CREATE INDEX live_issue ON issue(id) WHERE deleted_at IS NULL;
+  `);
+  const query = format(
+    buildSelectQuery(
+      'issue',
+      {id: {type: 'string'}, deleted_at: {type: 'string', optional: true}},
+      undefined,
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'deleted_at'},
+        op: 'IS',
+        right: {type: 'literal', value: null},
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ),
+  );
+  const plan = db
+    .prepare(`EXPLAIN QUERY PLAN ${query.text}`)
+    .all<{detail: string}>(...query.values);
+  expect(plan.some(({detail}) => detail.includes('live_issue'))).toBe(true);
+});
+
+test('a bound equality value can use a partial index', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(`
+    CREATE TABLE issue(id TEXT PRIMARY KEY, priority INTEGER);
+    CREATE INDEX urgent_issue ON issue(id) WHERE priority = 1;
+  `);
+  const query = format(
+    buildSelectQuery(
+      'issue',
+      {id: {type: 'string'}, priority: {type: 'number'}},
+      undefined,
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'priority'},
+        op: '=',
+        right: {type: 'literal', value: 1},
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ),
+  );
+  expect(query.text).toContain('"priority" = ?');
+  expect(query.values).toEqual([1]);
+
+  // SQLite consults the bound value when planning, and re-plans when the
+  // value changes, so the partial index is used exactly when the bound
+  // value satisfies its predicate. (Note that this does not apply to
+  // `IS ?`, which is why NULL filters are emitted as literals.)
+  const usesIndex = (priority: number) =>
+    db
+      .prepare(`EXPLAIN QUERY PLAN ${query.text}`)
+      .all<{detail: string}>(priority)
+      .some(({detail}) => detail.includes('urgent_issue'));
+  expect(usesIndex(1)).toBe(true);
+  expect(usesIndex(2)).toBe(false);
+});
+
 test('non-nullable cursor columns use range and equality operators without IS NULL guards', () => {
   const columns = {
     id: {type: 'string'},
@@ -41,8 +125,9 @@ test('non-nullable cursor columns use range and equality operators without IS NU
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "id","name" FROM "issues" WHERE (("id" > ?) OR ("id" = ? AND "name" < ?)) ORDER BY "id" asc, "name" desc",
+      "text": "SELECT "id","name" FROM "issues" WHERE ("id" >= ? AND (("id" > ?) OR ("id" = ? AND "name" < ?))) ORDER BY "id" asc, "name" desc",
       "values": [
+        "issue-1",
         "issue-1",
         "issue-1",
         "z",
@@ -126,14 +211,13 @@ test('json path filters: type gate, negation, empty NOT IN and key escaping', ()
   // key and a JSON null both read as NULL.
   expect(format(filtersToSQL(cond('IS', ref('priority'), null))))
     .toMatchInlineSnapshot(`
-    {
-      "text": "json_extract("metadata", ?) IS ?",
-      "values": [
-        "$."priority"",
-        null,
-      ],
-    }
-  `);
+      {
+        "text": "json_extract("metadata", ?) IS NULL",
+        "values": [
+          "$."priority"",
+        ],
+      }
+    `);
   // `IN`/`NOT IN` with a null literal is constant-false rather than falling
   // into the empty-list special case above (a null is not a list).
   expect(format(filtersToSQL(cond('NOT IN', ref('priority'), null))))
@@ -145,7 +229,7 @@ test('json path filters: type gate, negation, empty NOT IN and key escaping', ()
     `);
 });
 
-test('optional cursor columns keep IS and IS NULL checks while non-nullable columns do not', () => {
+test('optional cursor columns keep IS equality for tie-break groups; a non-null range bound needs no NULL guard', () => {
   const columns = {
     owner: {type: 'string', optional: true},
     id: {type: 'string'},
@@ -171,7 +255,7 @@ test('optional cursor columns keep IS and IS NULL checks while non-nullable colu
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "owner","id" FROM "issues" WHERE (((? IS NULL OR "owner" > ?)) OR ("owner" IS ? AND "id" > ?) OR ("owner" IS ? AND "id" = ?)) ORDER BY "owner" asc, "id" asc",
+      "text": "SELECT "owner","id" FROM "issues" WHERE ("owner" >= ? AND (("owner" > ?) OR ("owner" IS ? AND "id" > ?) OR ("owner" IS ? AND "id" = ?))) ORDER BY "owner" asc, "id" asc",
       "values": [
         "alice",
         "alice",
@@ -180,6 +264,312 @@ test('optional cursor columns keep IS and IS NULL checks while non-nullable colu
         "alice",
         "issue-1",
       ],
+    }
+  `);
+});
+
+test('a NULL cursor bound selects the strictly-after set, with or without column metadata', () => {
+  // Replica-introspected specs historically carried no `optional` flag, so
+  // the NULL handling must come from the bound value itself: strictly after
+  // a NULL bound under SQLite's NULLS-first ordering is exactly the
+  // non-NULL values, and the tie-break group needs the null-safe IS.
+  const columns = {
+    a: {type: 'number'},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['a', 'asc'],
+          ['id', 'asc'],
+        ],
+        undefined,
+        {
+          row: {a: null, id: 'issue-5'},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "a","id" FROM "issues" WHERE (("a" IS NOT NULL) OR ("a" IS NULL AND "id" > ?)) ORDER BY "a" asc, "id" asc",
+      "values": [
+        "issue-5",
+      ],
+    }
+  `);
+});
+
+test('a NULL cursor bound in a reverse walk yields the empty strictly-before set', () => {
+  // Nothing sorts strictly before NULL under NULLS-first ordering, so the
+  // range group must compile to FALSE — the previous `col < NULL` form was
+  // never true either, but `col IS NULL OR col < ?` (the optional-column
+  // form) would wrongly match the bound's own NULL group.
+  const columns = {
+    a: {type: 'number'},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['a', 'asc'],
+          ['id', 'asc'],
+        ],
+        true,
+        {
+          row: {a: null, id: 'issue-5'},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "a","id" FROM "issues" WHERE ((FALSE) OR ("a" IS NULL AND "id" < ?)) ORDER BY "a" desc, "id" desc",
+      "values": [
+        "issue-5",
+      ],
+    }
+  `);
+});
+
+test('a NULL cursor bound on a descending sort yields the empty strictly-after set', () => {
+  // Under `ORDER BY a DESC` NULLs sort last, so nothing sorts strictly after
+  // a NULL bound — the same truth-table cell as the reversed-ascending walk,
+  // reached through the declared sort direction instead of `reverse`.
+  const columns = {
+    a: {type: 'number'},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['a', 'desc'],
+          ['id', 'desc'],
+        ],
+        undefined,
+        {
+          row: {a: null, id: 'issue-5'},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "a","id" FROM "issues" WHERE ((FALSE) OR ("a" IS NULL AND "id" < ?)) ORDER BY "a" desc, "id" desc",
+      "values": [
+        "issue-5",
+      ],
+    }
+  `);
+});
+
+test('basis at with a NULL bound keeps the anchor row reachable', () => {
+  const columns = {
+    a: {type: 'number'},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['a', 'asc'],
+          ['id', 'asc'],
+        ],
+        undefined,
+        {
+          row: {a: null, id: 'issue-5'},
+          basis: 'at',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "a","id" FROM "issues" WHERE (("a" IS NOT NULL) OR ("a" IS NULL AND "id" > ?) OR ("a" IS NULL AND "id" = ?)) ORDER BY "a" asc, "id" asc",
+      "values": [
+        "issue-5",
+        "issue-5",
+      ],
+    }
+  `);
+});
+
+test('a non-null bound on an optional column admits the NULL group when walking backward', () => {
+  // NULLs sort before every non-NULL value, so the strictly-before set of a
+  // non-NULL bound includes the whole NULL group; a bare `col < ?` silently
+  // drops those rows from a reverse walk.
+  const columns = {
+    owner: {type: 'string', optional: true},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['owner', 'asc'],
+          ['id', 'asc'],
+        ],
+        true,
+        {
+          row: {owner: 'alice', id: 'issue-1'},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "owner","id" FROM "issues" WHERE ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?)) ORDER BY "owner" desc, "id" desc",
+      "values": [
+        "alice",
+        "alice",
+        "issue-1",
+      ],
+    }
+  `);
+});
+
+test('null cursor range starts after null with IS NOT NULL', () => {
+  const columns = {
+    owner: {type: 'string', optional: true},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [['owner', 'asc']],
+        undefined,
+        {
+          row: {owner: null},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "owner","id" FROM "issues" WHERE (("owner" IS NOT NULL)) ORDER BY "owner" asc",
+      "values": [],
+    }
+  `);
+});
+
+test('null cursor descending range has no rows after null', () => {
+  const columns = {
+    owner: {type: 'string', optional: true},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [['owner', 'desc']],
+        undefined,
+        {
+          row: {owner: null},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "owner","id" FROM "issues" WHERE ((FALSE)) ORDER BY "owner" desc",
+      "values": [],
+    }
+  `);
+});
+
+test('null cursor on first column preserves compound tie-breaker ranges', () => {
+  const columns = {
+    owner: {type: 'string', optional: true},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['owner', 'desc'],
+          ['id', 'asc'],
+        ],
+        undefined,
+        {
+          row: {owner: null},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "owner","id" FROM "issues" WHERE ((FALSE) OR ("owner" IS NULL AND "id" IS NOT NULL)) ORDER BY "owner" desc, "id" asc",
+      "values": [],
+    }
+  `);
+});
+
+test('omitted cursor fields are treated as null', () => {
+  const columns = {
+    id: {type: 'string'},
+    owner: {type: 'string', optional: true},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [['id', 'asc']],
+        undefined,
+        {
+          row: {owner: null},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "id","owner" FROM "issues" WHERE (("id" IS NOT NULL)) ORDER BY "id" asc",
+      "values": [],
     }
   `);
 });
@@ -298,16 +688,104 @@ test('multiConstraints + constraint + start + reverse compose into a single WHER
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "id","org","rank" FROM "issues" WHERE "org" = ? AND "id" IN (?,?,?) AND (("rank" < ?)) ORDER BY "rank" desc",
+      "text": "SELECT "id","org","rank" FROM "issues" WHERE "org" = ? AND "id" IN (?,?,?) AND ("rank" <= ? AND (("rank" < ?))) ORDER BY "rank" desc",
       "values": [
         "acme",
         "i1",
         "i2",
         "i3",
         100,
+        100,
       ],
     }
   `);
+});
+
+test('start constraint adds a sargable leading-column bound', () => {
+  const columns = {
+    workspaceID: {type: 'string'},
+    a: {type: 'number'},
+    b: {type: 'number'},
+    c: {type: 'number'},
+  } as const satisfies Record<string, SchemaValue>;
+  const lc = createSilentLogContext();
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    CREATE TABLE activity (
+      workspaceID TEXT NOT NULL,
+      a INTEGER NOT NULL,
+      b INTEGER NOT NULL,
+      c INTEGER NOT NULL
+    );
+    CREATE INDEX activity_sort ON activity(workspaceID, a DESC, b ASC, c ASC);
+  `);
+
+  const {text, values} = format(
+    buildSelectQuery(
+      'activity',
+      columns,
+      {workspaceID: 'w1'},
+      undefined,
+      [
+        ['a', 'desc'],
+        ['b', 'asc'],
+        ['c', 'asc'],
+      ],
+      true,
+      {row: {a: 500, b: 123, c: 99}, basis: 'after'},
+    ),
+  );
+  const plan = db
+    .prepare(`EXPLAIN QUERY PLAN ${text} LIMIT 2`)
+    .all<{detail: string}>(...values)
+    .map(r => r.detail)
+    .join('\n');
+
+  expect(text).toContain(`"workspaceID" = ? AND ("a" >= ? AND (("a" > ?)`);
+  expect(plan).toMatch(/SEARCH activity USING (COVERING )?INDEX/);
+  expect(plan).toMatch(/workspaceID=\? AND a>\?/);
+});
+
+test('nullable forward cursor keeps a sargable leading-column bound', () => {
+  const columns = {
+    a: {type: 'number', optional: true},
+    id: {type: 'number'},
+  } as const satisfies Record<string, SchemaValue>;
+  const lc = createSilentLogContext();
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    CREATE TABLE items (
+      a INTEGER,
+      id INTEGER PRIMARY KEY
+    );
+    CREATE INDEX items_sort ON items(a, id);
+  `);
+
+  const {text, values} = format(
+    buildSelectQuery(
+      'items',
+      columns,
+      undefined,
+      undefined,
+      [
+        ['a', 'asc'],
+        ['id', 'asc'],
+      ],
+      undefined,
+      {row: {a: 500, id: 123}, basis: 'after'},
+    ),
+  );
+  const plan = db
+    .prepare(`EXPLAIN QUERY PLAN ${text} LIMIT 2`)
+    .all<{detail: string}>(...values)
+    .map(r => r.detail)
+    .join('\n');
+
+  expect(text).toContain(`"a" >= ? AND (("a" > ?)`);
+  expect(plan).toMatch(
+    /SEARCH items USING (COVERING )?INDEX items_sort \(a>\?\)/,
+  );
+  expect(plan).not.toMatch(/USE TEMP B-TREE FOR ORDER BY/);
 });
 
 test('multiConstraintToSQL asserts on empty multiConstraint', () => {

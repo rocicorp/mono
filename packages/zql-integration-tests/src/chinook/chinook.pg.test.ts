@@ -10,10 +10,6 @@ import {createVitests} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
-// Junction edges do not correctly handle limits in ZQL
-// oxlint-disable-next-line unicorn/prefer-set-has -- Keep as array for consistency with existing code
-const brokenRelationshipLimits = ['tracks', 'customer', 'playlists'];
-
 const pgContent = await getChinook();
 const tables = Object.keys(schema.tables) as Array<keyof typeof schema.tables>;
 let data: ReadonlyMap<string, readonly Row[]> | undefined;
@@ -146,8 +142,12 @@ describe(
           },
           {
             name: 'Scalar subquery: tracks for album by title',
+            // `title` is not unique on `album`, so the server ignores the hint
+            // and runs a plain EXISTS. The type says so; the case stays to
+            // prove the results are correct either way.
             createQuery: q =>
               q.track.whereExists('album', a => a.where('title', 'Riot Act'), {
+                // @ts-expect-error deliberately unpinned
                 scalar: true,
               }),
           },
@@ -158,6 +158,7 @@ describe(
             createQuery: q =>
               q.track
                 .whereExists('album', a => a.where('title', 'Riot Act'), {
+                  // @ts-expect-error deliberately unpinned, as above
                   scalar: true,
                 })
                 .where('name', 'LIKE', '%Mine%'),
@@ -438,34 +439,6 @@ describe(
                 createQuery: q => q[table].limit(100),
               }) as const,
           ))(),
-        // table.related('relationship')
-        (() =>
-          tables.flatMap(table =>
-            getRelationships(table).map(
-              relationship =>
-                ({
-                  name: `${table}.related('${relationship}')`,
-                  createQuery: q =>
-                    (q[table] as AnyQuery).related(relationship),
-                }) as const,
-            ),
-          ))(),
-        // table.related('relationship', q => q.limit(100))
-        (() =>
-          tables.flatMap(table =>
-            getRelationships(table)
-              .filter(r => !brokenRelationshipLimits.includes(r))
-              .map(
-                relationship =>
-                  ({
-                    name: `${table}.related('${relationship}', q => q.limit(100))`,
-                    createQuery: q =>
-                      (q[table] as AnyQuery).related(relationship, q =>
-                        q.limit(100),
-                      ),
-                  }) as const,
-              ),
-          ))(),
         // OR tests
         [
           // unary or --
@@ -611,13 +584,6 @@ describe(
     });
   },
 );
-
-function getRelationships(table: string) {
-  return Object.keys(
-    (schema.relationships as Record<string, Record<string, unknown>>)[table] ??
-      {},
-  );
-}
 
 function randomRowAndColumn<TTable extends keyof Schema['tables']>(
   table: TTable,

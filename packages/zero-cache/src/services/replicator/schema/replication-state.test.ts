@@ -48,6 +48,15 @@ describe('replicator/schema/replication-state', () => {
         },
       ],
     });
+
+    // The change log lives in its own database as of replica schema v16, so
+    // initial sync neither creates nor seeds a copy here.
+    expect(
+      db.db
+        .prepare(/*sql*/ `SELECT "name" FROM "sqlite_master"
+                     WHERE "tbl_name" = '_zero.changeLogStream'`)
+        .all(),
+    ).toEqual([]);
   });
 
   test('runtime events', () => {

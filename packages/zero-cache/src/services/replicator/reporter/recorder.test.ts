@@ -1,15 +1,13 @@
 import type {ObservableResult} from '@opentelemetry/api';
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import {ReplicationReportRecorder} from './recorder.ts';
+import {
+  estimateUpstreamClockSkewMs,
+  ReplicationReportRecorder,
+} from './recorder.ts';
 
 test('replication report recorder', () => {
-  let now: number = 10_000;
-
-  const recorder = new ReplicationReportRecorder(
-    createSilentLogContext(),
-    () => now,
-  );
+  const recorder = new ReplicationReportRecorder(createSilentLogContext());
 
   recorder.record({
     lastTimings: {
@@ -23,7 +21,7 @@ test('replication report recorder', () => {
 
   function expectObserved(
     observer: (o: ObservableResult) => void,
-    expected: number,
+    expected: number | undefined,
   ) {
     let observed: number | undefined;
     observer({observe: v => (observed = v)});
@@ -35,23 +33,19 @@ test('replication report recorder', () => {
   expectObserved(recorder.reportTotalLag, 550);
   expectObserved(recorder.reportLastTotalLag, 550);
 
-  now = 11_550;
+  expectObserved(recorder.reportUpstreamLag, 200);
+  expectObserved(recorder.reportReplicaLag, 350);
+  expectObserved(recorder.reportTotalLag, 550);
+  expectObserved(recorder.reportLastTotalLag, 550);
 
   expectObserved(recorder.reportUpstreamLag, 200);
   expectObserved(recorder.reportReplicaLag, 350);
   expectObserved(recorder.reportTotalLag, 550);
   expectObserved(recorder.reportLastTotalLag, 550);
 
-  now = 12_123;
   expectObserved(recorder.reportUpstreamLag, 200);
   expectObserved(recorder.reportReplicaLag, 350);
-  expectObserved(recorder.reportTotalLag, 1123);
-  expectObserved(recorder.reportLastTotalLag, 550);
-
-  now = 12_246;
-  expectObserved(recorder.reportUpstreamLag, 200);
-  expectObserved(recorder.reportReplicaLag, 350);
-  expectObserved(recorder.reportTotalLag, 1246);
+  expectObserved(recorder.reportTotalLag, 550);
   expectObserved(recorder.reportLastTotalLag, 550);
 
   recorder.record({
@@ -68,4 +62,77 @@ test('replication report recorder', () => {
   expectObserved(recorder.reportReplicaLag, 400);
   expectObserved(recorder.reportTotalLag, 650);
   expectObserved(recorder.reportLastTotalLag, 650);
+  // commit at 11_123 vs a round-trip midpoint of 11_125.
+  expectObserved(recorder.reportUpstreamClockSkew, -2);
+});
+
+test('replication report recorder ignores pending report without timings', () => {
+  const recorder = new ReplicationReportRecorder(createSilentLogContext());
+
+  recorder.record({
+    nextSendTimeMs: 1_000,
+  });
+
+  function expectObserved(
+    observer: (o: ObservableResult) => void,
+    expected: number | undefined,
+  ) {
+    let observed: number | undefined;
+    observer({observe: v => (observed = v)});
+    expect(observed).toBe(expected);
+  }
+
+  expectObserved(recorder.reportUpstreamLag, undefined);
+  expectObserved(recorder.reportReplicaLag, undefined);
+  expectObserved(recorder.reportTotalLag, undefined);
+  expectObserved(recorder.reportLastTotalLag, undefined);
+  expectObserved(recorder.reportUpstreamClockSkew, undefined);
+});
+
+describe('estimateUpstreamClockSkewMs', () => {
+  test('a commit landing at the round-trip midpoint reads as no skew', () => {
+    expect(
+      estimateUpstreamClockSkewMs({
+        sendTimeMs: 1_000,
+        commitTimeMs: 1_100,
+        receiveTimeMs: 1_200,
+      }),
+    ).toBe(0);
+  });
+
+  test('an upstream clock running ahead reads positive', () => {
+    // This is the direction that biases sync.e2e_serving_lag *low*, so it must
+    // not be mistaken for a healthy pipeline.
+    expect(
+      estimateUpstreamClockSkewMs({
+        sendTimeMs: 1_000,
+        commitTimeMs: 31_100,
+        receiveTimeMs: 1_200,
+      }),
+    ).toBe(30_000);
+  });
+
+  test('an upstream clock running behind reads negative', () => {
+    expect(
+      estimateUpstreamClockSkewMs({
+        sendTimeMs: 1_000,
+        commitTimeMs: -28_900,
+        receiveTimeMs: 1_200,
+      }),
+    ).toBe(-30_000);
+  });
+
+  test('a commit outside the round trip proves skew regardless of latency', () => {
+    // The commit genuinely happened between send and receive, so a commit
+    // timestamp before send can only be clock offset. The estimate stays
+    // conservative: it reports at least half the amount by which the commit
+    // falls outside the window.
+    const skew = estimateUpstreamClockSkewMs({
+      sendTimeMs: 1_000,
+      commitTimeMs: 900,
+      receiveTimeMs: 1_200,
+    });
+    expect(skew).toBeLessThan(0);
+    expect(skew).toBe(-200);
+  });
 });

@@ -181,16 +181,8 @@ suite('EXISTS 1 to many', () => {
             ":exists(issue)",
             "filter",
             {
-              "id": "c2",
-              "issueID": "i1",
-            },
-          ],
-          [
-            ":exists(issue)",
-            "filter",
-            {
-              "id": "c3",
-              "issueID": "i1",
+              "id": "c4",
+              "issueID": "i2",
             },
           ],
           [
@@ -210,25 +202,6 @@ suite('EXISTS 1 to many', () => {
             {
               "id": "c3",
               "issueID": "i1",
-            },
-          ],
-          [
-            ":exists(issue)",
-            "filter",
-            {
-              "id": "c4",
-              "issueID": "i2",
-            },
-          ],
-          [
-            ":exists(issue)",
-            "push",
-            {
-              "row": {
-                "id": "c3",
-                "issueID": "i1",
-              },
-              "type": "remove",
             },
           ],
           [
@@ -259,28 +232,6 @@ suite('EXISTS 1 to many', () => {
           "push",
           {
             "row": {
-              "id": "c3",
-              "issueID": "i1",
-            },
-            "type": "add",
-          },
-        ],
-        [
-          ":take",
-          "push",
-          {
-            "row": {
-              "id": "c2",
-              "issueID": "i1",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          ":take",
-          "push",
-          {
-            "row": {
               "id": "c4",
               "issueID": "i2",
             },
@@ -292,7 +243,7 @@ suite('EXISTS 1 to many', () => {
           "push",
           {
             "row": {
-              "id": "c3",
+              "id": "c2",
               "issueID": "i1",
             },
             "type": "remove",
@@ -318,46 +269,6 @@ suite('EXISTS 1 to many', () => {
             },
             "row": {
               "id": "c1",
-              "issueID": "i1",
-            },
-          },
-          "type": "remove",
-        },
-        {
-          "node": {
-            "relationships": {
-              "issue": [
-                {
-                  "relationships": {},
-                  "row": {
-                    "id": "i1",
-                    "title": "issue 1",
-                  },
-                },
-              ],
-            },
-            "row": {
-              "id": "c3",
-              "issueID": "i1",
-            },
-          },
-          "type": "add",
-        },
-        {
-          "node": {
-            "relationships": {
-              "issue": [
-                {
-                  "relationships": {},
-                  "row": {
-                    "id": "i1",
-                    "title": "issue 1",
-                  },
-                },
-              ],
-            },
-            "row": {
-              "id": "c2",
               "issueID": "i1",
             },
           },
@@ -397,7 +308,7 @@ suite('EXISTS 1 to many', () => {
               ],
             },
             "row": {
-              "id": "c3",
+              "id": "c2",
               "issueID": "i1",
             },
           },
@@ -416,10 +327,6 @@ suite('EXISTS 1 to many', () => {
             "issueID": "i2",
           },
           "size": 1,
-        },
-        "maxBound": {
-          "id": "c4",
-          "issueID": "i2",
         },
       }
     `);

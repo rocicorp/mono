@@ -1,7 +1,11 @@
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../db.ts';
-import {type CachedStatement, StatementCache} from './statement-cache.ts';
+import {
+  type CachedStatement,
+  DEFAULT_MAX_CACHED_STATEMENTS,
+  StatementCache,
+} from './statement-cache.ts';
 
 test('Same sql results in same statement instance. The same instance is not outstanding twice.', () => {
   const db = new Database(createSilentLogContext(), ':memory:');
@@ -60,4 +64,140 @@ test('Same sql results in same statement instance. The same instance is not outs
 
   // all statements are outstanding
   expect(cache.size).toBe(0);
+});
+
+test('cache is bounded: returning past maxSize evicts the least recently used statements', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  const cache = new StatementCache(db, 3);
+  expect(cache.maxSize).toBe(3);
+
+  const returned: CachedStatement[] = [];
+  for (let i = 0; i < 5; ++i) {
+    const stmt = cache.get(`SELECT ${i}`);
+    cache.return(stmt);
+    returned.push(stmt);
+    expect(cache.size).toBe(Math.min(i + 1, 3));
+  }
+
+  // The 3 most recently used statements are retained and served from the
+  // cache (same instance).
+  for (let i = 2; i < 5; ++i) {
+    expect(cache.get(`SELECT ${i}`).statement).toBe(returned[i].statement);
+  }
+
+  // The 2 least recently used statements were evicted, so a fresh
+  // statement is prepared.
+  for (let i = 0; i < 2; ++i) {
+    expect(cache.get(`SELECT ${i}`).statement).not.toBe(returned[i].statement);
+  }
+});
+
+test('returning a statement refreshes its recency', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  const cache = new StatementCache(db, 3);
+
+  const returned: CachedStatement[] = [];
+  for (let i = 0; i < 3; ++i) {
+    const stmt = cache.get(`SELECT ${i}`);
+    cache.return(stmt);
+    returned.push(stmt);
+  }
+
+  // Touch 'SELECT 0', making 'SELECT 1' the least recently used.
+  cache.use('SELECT 0', () => {});
+
+  // Push the cache over its bound.
+  cache.return(cache.get('SELECT 3'));
+
+  expect(cache.size).toBe(3);
+  expect(cache.get('SELECT 1').statement).not.toBe(returned[1].statement);
+  expect(cache.get('SELECT 0').statement).toBe(returned[0].statement);
+  expect(cache.get('SELECT 2').statement).toBe(returned[2].statement);
+});
+
+test('a cache hit refreshes the recency of remaining statements for the same sql', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  const cache = new StatementCache(db, 3);
+
+  // Two copies of 'SELECT 0', then 'SELECT 1'. Recency order (LRU first):
+  // 'SELECT 0', 'SELECT 1'.
+  const a1 = cache.get('SELECT 0');
+  const a2 = cache.get('SELECT 0');
+  cache.return(a1);
+  cache.return(a2);
+  const b = cache.get('SELECT 1');
+  cache.return(b);
+  expect(cache.size).toBe(3);
+
+  // A hit on 'SELECT 0' moves its remaining cached copy to the most
+  // recently used position: 'SELECT 1' is now the LRU.
+  const gotten = cache.get('SELECT 0');
+  expect(cache.size).toBe(2);
+  cache.return(gotten);
+  expect(cache.size).toBe(3);
+
+  // Push the cache over its bound; 'SELECT 1' is evicted, both copies of
+  // 'SELECT 0' are retained.
+  cache.return(cache.get('SELECT 2'));
+  expect(cache.size).toBe(3);
+  expect(cache.get('SELECT 0').statement).toBe(gotten.statement);
+  expect(cache.get('SELECT 0').statement).toBe(a1.statement);
+  expect(cache.get('SELECT 1').statement).not.toBe(b.statement);
+});
+
+test('in-flight statements are never evicted and stay usable', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  const cache = new StatementCache(db, 2);
+
+  // Check out more statements than the cache can hold.
+  const outstanding: CachedStatement[] = [];
+  for (let i = 0; i < 5; ++i) {
+    outstanding.push(cache.get(`SELECT ${i}`));
+  }
+  // Outstanding statements are not in the cache.
+  expect(cache.size).toBe(0);
+
+  // Fill the cache to its bound with other statements; eviction churn must
+  // not affect the outstanding statements.
+  for (let i = 5; i < 10; ++i) {
+    cache.return(cache.get(`SELECT ${i}`));
+  }
+  expect(cache.size).toBe(2);
+
+  for (let i = 0; i < 5; ++i) {
+    expect(outstanding[i].statement.get<Record<string, number>>()).toEqual({
+      [`${i}`]: i,
+    });
+  }
+
+  // Returning the outstanding statements only retains up to the bound.
+  for (const stmt of outstanding) {
+    cache.return(stmt);
+  }
+  expect(cache.size).toBe(2);
+});
+
+test('duplicate statements for the same sql count against the bound', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  const cache = new StatementCache(db, 1);
+
+  const first = cache.get('SELECT 1');
+  const second = cache.get('SELECT 1');
+  cache.return(first);
+  cache.return(second);
+
+  expect(cache.size).toBe(1);
+  // The least recently returned copy was evicted.
+  expect(cache.get('SELECT 1').statement).toBe(second.statement);
+});
+
+test('the default bound applies when none is given', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  const cache = new StatementCache(db);
+  expect(cache.maxSize).toBe(DEFAULT_MAX_CACHED_STATEMENTS);
+
+  for (let i = 0; i < DEFAULT_MAX_CACHED_STATEMENTS + 1; ++i) {
+    cache.return(cache.get(`SELECT ${i}`));
+  }
+  expect(cache.size).toBe(DEFAULT_MAX_CACHED_STATEMENTS);
 });

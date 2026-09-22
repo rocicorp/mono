@@ -1,4 +1,6 @@
+import {newArray} from '../../../shared/src/arrays.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import type * as v from '../../../shared/src/valita.ts';
 import type {
   attemptStartEventJSONSchema,
@@ -101,7 +103,13 @@ export type BestPlanSelectedEvent = v.Infer<
 export type NodeCostEvent = {
   type: 'node-cost';
   attemptNumber?: number;
-  nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
+  nodeType:
+    | 'connection'
+    | 'join'
+    | 'fan-out'
+    | 'fan-in'
+    | 'filter'
+    | 'terminus';
   node: string;
   branchPattern: number[];
   downstreamChildSelectivity: number;
@@ -501,12 +509,7 @@ export function formatPlannerEvents(
     if ('attemptNumber' in event) {
       const attempt = event.attemptNumber;
       if (attempt !== undefined) {
-        let attemptEvents = eventsByAttempt.get(attempt);
-        if (!attemptEvents) {
-          attemptEvents = [];
-          eventsByAttempt.set(attempt, attemptEvents);
-        }
-        attemptEvents.push(event);
+        getOrInsertComputed(eventsByAttempt, attempt, newArray).push(event);
       }
     } else if (event.type === 'best-plan-selected') {
       // Save for displaying at the end

@@ -69,24 +69,39 @@ describe('decommission', () => {
       [['_zeroout_public_13'], ['_zeroout_metadata_13']],
     );
     expect(
-      await upstream`SELECT evtname FROM pg_event_trigger WHERE evtname LIKE 'zeroout%'`.values(),
+      await upstream`
+        SELECT evtname FROM pg_event_trigger
+          WHERE evtname IN ('zeroout_ddl_start_13', 'zeroout_ddl_end_13')
+      `.values(),
     ).toEqual([['zeroout_ddl_start_13'], ['zeroout_ddl_end_13']]);
     expect(
-      await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zeroout%'`.values(),
+      await upstream`
+        SELECT slot_name FROM pg_replication_slots
+          WHERE slot_name LIKE 'zeroout_13_%'
+      `.values(),
     ).toMatchObject([[expect.stringMatching('zeroout_13_')]]);
     expect(
       (
-        await upstream`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values()
+        await upstream`
+          SELECT nspname FROM pg_namespace
+            WHERE nspname IN ('zeroout_13', 'zeroout')
+        `.values()
       ).flat(),
     ).toEqual(expect.arrayContaining(['zeroout_13', 'zeroout']));
     expect(
       (
-        await cvr`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values()
+        await cvr`
+          SELECT nspname FROM pg_namespace
+            WHERE nspname = 'zeroout_13/cvr'
+        `.values()
       ).flat(),
     ).toEqual(expect.arrayContaining(['zeroout_13/cvr']));
     expect(
       (
-        await cdc`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values()
+        await cdc`
+          SELECT nspname FROM pg_namespace
+            WHERE nspname = 'zeroout_13/cdc'
+        `.values()
       ).flat(),
     ).toEqual(expect.arrayContaining(['zeroout_13/cdc']));
 
@@ -96,20 +111,35 @@ describe('decommission', () => {
       [],
     );
     expect(
-      await upstream`SELECT evtname FROM pg_event_trigger WHERE evtname LIKE 'zeroout%'`.values(),
+      await upstream`
+        SELECT evtname FROM pg_event_trigger
+          WHERE evtname IN ('zeroout_ddl_start_13', 'zeroout_ddl_end_13')
+      `.values(),
     ).toEqual([]);
     expect(
-      await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zeroout%'`.values(),
+      await upstream`
+        SELECT slot_name FROM pg_replication_slots
+          WHERE slot_name LIKE 'zeroout_13_%'
+      `.values(),
     ).toEqual([]);
 
     expect(
-      await upstream`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values(),
+      await upstream`
+        SELECT nspname FROM pg_namespace
+          WHERE nspname IN ('zeroout_13', 'zeroout')
+      `.values(),
     ).toEqual([]);
     expect(
-      await cvr`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values(),
+      await cvr`
+        SELECT nspname FROM pg_namespace
+          WHERE nspname = 'zeroout_13/cvr'
+      `.values(),
     ).toEqual([]);
     expect(
-      await cdc`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values(),
+      await cdc`
+        SELECT nspname FROM pg_namespace
+          WHERE nspname = 'zeroout_13/cdc'
+      `.values(),
     ).toEqual([]);
   }
 

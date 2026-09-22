@@ -3,16 +3,20 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
-import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {
+  BigIntJSON,
+  type JSONObject,
+} from '../../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
-import {TransactionPool} from '../../db/transaction-pool.ts';
+import {sharedSnapshot, TransactionPool} from '../../db/transaction-pool.ts';
 import {type PostgresDB, type PostgresTransaction} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
+import {orTimeout} from '../../types/timeout.ts';
 import {
   backfillRequestSchema,
   isDataChange,
@@ -29,13 +33,22 @@ import {
   type ChangeStreamData,
   type Commit,
 } from '../change-source/protocol/current/downstream.ts';
-import type {
-  DownstreamStatusMessage,
-  UpstreamStatusMessage,
-} from '../change-source/protocol/current/status.ts';
+import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import {
+  cookieOps,
+  type BackfillCookie,
+  type CookieOp,
+  type CookieSet,
+  type TableMetadataCookie,
+} from '../replicator/change-log-cookies.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
-import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
+import {
+  reconstructWatermarkedChange,
+  serializeChangeStreamDataWithChange,
+  type ChangeLogEntry,
+  type SerializedChangeStreamData,
+} from './change-log-codec.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {
   AutoResetSignal,
@@ -44,6 +57,15 @@ import {
   type TableMetadataRow,
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
+
+/**
+ * Factory for creating dynamic connection pools used by the Storer to
+ * isolate concurrent transactions into separate pg clients.
+ */
+export type PostgresDBProvider = (
+  applicationName: string,
+  maxConns: number,
+) => PostgresDB;
 
 type SubscriberAndMode = {
   subscriber: Subscriber;
@@ -55,11 +77,11 @@ type QueueEntry =
       'change',
       watermark: string,
       json: string,
+      storedChange: string,
       orig: Exclude<Change, DataChange> | null, // null for DataChanges
     ]
   | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
-  | DownstreamStatusMessage
   | ['abort']
   | 'stop';
 
@@ -69,6 +91,11 @@ type PendingTransaction = {
   pos: number;
   startingReplicationState: Promise<ReplicationOwner>;
   ack: boolean;
+  // changeLog rows buffered for the next multi-row INSERT flush.
+  batch: ChangeLogRow[];
+  // The most recently issued flush (or metadata) process, awaited to bound
+  // pipeline depth and to order the commit-time replicationState update.
+  lastFlush: Promise<unknown> | undefined;
 };
 
 type ReplicationOwner = {
@@ -80,6 +107,19 @@ const backfillRequestsSchema = v.array(backfillRequestSchema);
 export type TuningOptions = {
   backPressureLimitHeapProportion: number;
   statementTimeoutMs: number;
+  changeLogBatchSize: number;
+  drainTimeoutMs?: number | undefined;
+};
+
+/**
+ * A single `changeLog` row, accumulated in {@link PendingTransaction.batch}
+ * and written via `json_to_recordset()` (see `#flushChangeLog()`).
+ */
+type ChangeLogRow = {
+  watermark: string;
+  precommit: string | null;
+  pos: number;
+  change: string;
 };
 
 /**
@@ -119,13 +159,24 @@ export class Storer implements Service {
   readonly #taskID: string;
   readonly #discoveryAddress: string;
   readonly #discoveryProtocol: string;
+  readonly #makeConnectionPool: PostgresDBProvider;
+
+  // Isolated connection pools for steady-state, potentially concurrent
+  // queries, in order to avoid a postgres.js connection-swapping bug:
+  // https://github.com/porsager/postgres/issues/1204
   readonly #db: PostgresDB;
+  readonly #inserter: PostgresDB;
+  readonly #purger: PostgresDB;
+
   readonly #replicaVersion: string;
-  readonly #onConsumed: (c: Commit | UpstreamStatusMessage) => void;
+  readonly #onCommitted: (c: Commit) => void;
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
   readonly #statementTimeoutMs: number;
+  readonly #changeLogBatchSize: number;
+  readonly #drainTimeoutMs: number;
+  readonly #progressMonitor: ProgressMonitor;
 
   #approximateQueuedBytes = 0;
   #running = false;
@@ -136,22 +187,37 @@ export class Storer implements Service {
     taskID: string,
     discoveryAddress: string,
     discoveryProtocol: string,
-    db: PostgresDB,
+    dbProvider: PostgresDBProvider,
     replicaVersion: string,
-    onConsumed: (c: Commit | UpstreamStatusMessage) => void,
+    onCommitted: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
-    {backPressureLimitHeapProportion, statementTimeoutMs}: TuningOptions,
+    {
+      backPressureLimitHeapProportion,
+      statementTimeoutMs,
+      changeLogBatchSize,
+      drainTimeoutMs = 30_000,
+    }: TuningOptions,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
     this.#taskID = taskID;
     this.#discoveryAddress = discoveryAddress;
     this.#discoveryProtocol = discoveryProtocol;
-    this.#db = db;
+    this.#makeConnectionPool = dbProvider;
+    this.#db = dbProvider('change-stream-init', 3);
+    this.#inserter = dbProvider('change-log-inserter', 1);
+    this.#purger = dbProvider('change-log-purger', 1);
     this.#replicaVersion = replicaVersion;
-    this.#onConsumed = onConsumed;
+    this.#onCommitted = onCommitted;
     this.#onFatal = onFatal;
     this.#statementTimeoutMs = statementTimeoutMs;
+    this.#changeLogBatchSize = Math.max(1, changeLogBatchSize);
+    this.#drainTimeoutMs = drainTimeoutMs;
+    this.#progressMonitor = new ProgressMonitor(
+      lc,
+      statementTimeoutMs,
+      onFatal,
+    );
 
     const heapStats = getHeapStatistics();
     this.#backPressureThresholdBytes =
@@ -171,6 +237,31 @@ export class Storer implements Service {
     return this.#db(`${cdcSchema(this.#shard)}.${table}`);
   }
 
+  /**
+   * Bounds a one-off db call (i.e. not part of the main storer loop or the
+   * background catchup read, which are tracked by the ProgressMonitor
+   * instead) with a plain timeout. This covers calls like
+   * {@link assumeOwnership} and {@link getStartStreamInitializationParameters}
+   * that are made by the caller *before* {@link run()} -- and thus before the
+   * ProgressMonitor's polling starts -- as well as ones made well after,
+   * where a continuously-polling watchdog would be overkill for a single
+   * bounded db round trip.
+   *
+   * Does not cancel `promise` on timeout (there is no cancellation mechanism
+   * for a postgres.js query); it just stops waiting for it, and swallows a
+   * later rejection so it doesn't surface as an unhandled rejection.
+   */
+  async #withTimeout<T>(name: string, promise: Promise<T>): Promise<T> {
+    const result = await orTimeout(promise, this.#statementTimeoutMs);
+    if (result === 'timed-out') {
+      void promise.catch(() => {});
+      throw new AbortError(
+        `${name} did not complete within ${this.#statementTimeoutMs}ms`,
+      );
+    }
+    return result;
+  }
+
   async assumeOwnership(purgeLock?: PurgeLock | null) {
     const db = this.#db;
     const owner = this.#taskID;
@@ -183,7 +274,10 @@ export class Storer implements Service {
         : `${ownerProtocol}://${ownerAddress}`;
     this.#lc.info?.(`assuming ownership at ${addressWithProtocol}`);
     const start = performance.now();
-    await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner, ownerAddress: addressWithProtocol})}`;
+    await this.#withTimeout(
+      'assume-ownership',
+      db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner, ownerAddress: addressWithProtocol})}`,
+    );
     const elapsed = (performance.now() - start).toFixed(2);
     this.#lc.info?.(
       `assumed ownership at ${addressWithProtocol} (${elapsed} ms)`,
@@ -198,52 +292,161 @@ export class Storer implements Service {
     }
   }
 
+  /**
+   * The whole of what a stream connection starts from: where to resume, what to
+   * ask the change source to backfill, and the raw cookie set those requests
+   * were derived from.
+   *
+   * All four statements run in one REPEATABLE READ transaction, so they see one
+   * snapshot. That is invariant 15 — the resume watermark and the cookies must
+   * come from the same store, read at the same position — and it is why the
+   * cookies are read here rather than by a second call: a cookie set paired
+   * with a watermark it was not folded to loses every backfill that completed
+   * in the interval, and those rows are not replayable from the slot.
+   *
+   * `cookies` is not `backfillRequests` in another shape. The request list is
+   * driven off `backfilling`, so it drops the metadata of every table with no
+   * in-flight backfill — correct for starting a stream, lossy as the cookie
+   * snapshot that the SQLite change log continues folding onto.
+   */
   async getStartStreamInitializationParameters(): Promise<{
     lastWatermark: string;
     backfillRequests: BackfillRequest[];
+    cookies: CookieSet;
   }> {
-    const [[{lastWatermark}], result] = await runTx(
-      this.#db,
-      sql => [
-        sql<{lastWatermark: string}[]>`
+    const [[{lastWatermark}], result, tableMetadata, backfilling] =
+      await this.#withTimeout(
+        'get-stream-params',
+        runTx(
+          this.#db,
+          sql => [
+            sql<{lastWatermark: string}[]>`
         SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`,
 
-        // Formats a BackfillRequest using json_object_agg() to construct the
-        // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
-        // to make it optional and possibly `null`.
-        sql`
-        SELECT 
+            // Formats a BackfillRequest using json_object_agg() to construct the
+            // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
+            // to make it optional and possibly `null`.
+            sql`
+        SELECT
             json_build_object(
               'schema', b."schema",
               'name', b."table",
               'metadata', t."metadata"
             ) as "table",
-            json_object_agg(b."column", b."backfill") 
+            json_object_agg(b."column", b."backfill")
               as "columns"
           FROM ${this.#cdc('backfilling')} as b
           LEFT JOIN ${this.#cdc('tableMetadata')} as t
           ON (b."schema" = t."schema" AND b."table" = t."table")
           GROUP BY b."schema", b."table", t."metadata"
         `,
-      ],
-      {mode: Mode.READONLY},
-    );
+
+            // Ordered by primary key, so that this set and the SQLite change log's
+            // can be compared row for row. `COLLATE "C"` because that comparison is
+            // against a store whose TEXT columns sort by byte: a linguistic
+            // collation orders `foo-bar` and `foobar` differently than SQLite's
+            // BINARY does, which would read as a divergence rather than as the
+            // identical set it is.
+            sql<TableMetadataCookie[]>`
+        SELECT "schema", "table", "metadata" FROM ${this.#cdc('tableMetadata')}
+          ORDER BY "schema" COLLATE "C", "table" COLLATE "C"`,
+
+            sql<BackfillCookie[]>`
+        SELECT "schema", "table", "column", "backfill" FROM ${this.#cdc('backfilling')}
+          ORDER BY "schema" COLLATE "C", "table" COLLATE "C", "column" COLLATE "C"`,
+          ],
+          {mode: Mode.READONLY},
+        ),
+      );
 
     return {
       lastWatermark,
       backfillRequests: v.parse(result, backfillRequestsSchema),
+      cookies: {
+        tableMetadata: [...tableMetadata],
+        backfilling: [...backfilling],
+      },
     };
   }
 
   async getMinWatermarkForCatchup(): Promise<string | null> {
-    const [{minWatermark}] = await this.#db<{minWatermark: string | null}[]>
-    /*sql*/ `
-      SELECT min(watermark) as "minWatermark" FROM ${this.#cdc('changeLog')}`;
+    const [{minWatermark}] = await this.#withTimeout(
+      'get-min-watermark',
+      this.#db<{minWatermark: string | null}[]> /*sql*/ `
+      SELECT min(watermark) as "minWatermark" FROM ${this.#cdc('changeLog')}`,
+    );
     return minWatermark;
   }
 
+  /**
+   * Returns the retained Postgres catchup bounds.
+   * `minWatermark` is the oldest transaction, or `null` for a new replica.
+   * `lastWatermark` is the durable head.
+   */
+  async getCatchupBounds(): Promise<{
+    minWatermark: string | null;
+    lastWatermark: string;
+  }> {
+    const [bounds] = await this.#withTimeout(
+      'get-catchup-bounds',
+      this.#db<{minWatermark: string | null; lastWatermark: string}[]> /*sql*/ `
+      SELECT
+        (SELECT min(watermark) FROM ${this.#cdc('changeLog')}) as "minWatermark",
+        (SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}) as "lastWatermark"`,
+    );
+    return bounds;
+  }
+
+  /**
+   * Lists at most `limit` committed transaction watermarks in
+   * `(afterWatermark, throughWatermark]`, in ascending order.
+   */
+  async listCommitWatermarks(
+    afterWatermark: string,
+    throughWatermark: string,
+    limit: number,
+  ): Promise<string[]> {
+    const rows = await this.#db<{watermark: string}[]> /*sql*/ `
+      SELECT watermark FROM ${this.#cdc('changeLog')}
+       WHERE precommit IS NOT NULL
+         AND watermark > ${afterWatermark}
+         AND watermark <= ${throughWatermark}
+       ORDER BY watermark
+       LIMIT ${limit}`;
+    return rows.map(({watermark}) => watermark);
+  }
+
+  /**
+   * Reads `(afterWatermark, throughWatermark]` in stream order and bounded batches.
+   * This query matches the subscriber catchup query.
+   *
+   * Both queries fail when an escaped NUL reaches `change->'tag'`.
+   * Postgres cannot convert that value to text.
+   */
+  readCatchupRange(
+    afterWatermark: string,
+    throughWatermark: string,
+    batchRows = 2000,
+  ): AsyncIterable<ChangeLogEntry[]> {
+    assert(
+      Number.isSafeInteger(batchRows) && batchRows > 0,
+      'Postgres change log batch size must be a positive safe integer',
+    );
+    return this.#db<ChangeLogEntry[]> /*sql*/ `
+      SELECT watermark, change->'tag' as tag, change::text FROM ${this.#cdc('changeLog')}
+       WHERE watermark > ${afterWatermark}
+         AND watermark <= ${throughWatermark}
+       ORDER BY watermark, pos`.cursor(batchRows) as AsyncIterable<
+      ChangeLogEntry[]
+    >;
+  }
+
+  // Note: These are the only db `await`s that are not tracked by the
+  //       ProgressMonitor, as the delete can legitimately block and/or take
+  //       an arbitrary amount of time. Luckily, this is a background call and
+  //       thus cannot cause the storer loop to hang.
   purgeRecordsBefore(watermark: string): Promise<number> {
-    return runTx(this.#db, async sql => {
+    return runTx(this.#purger, async sql => {
       // This NOWAIT pre-check is an optimization to abort the transaction
       // (and release associated resources) early.
       await sql<{watermark: string}[]>`
@@ -257,8 +460,18 @@ export class Storer implements Service {
       // in ownership to be reliably detected (and the transaction aborted)
       // in the subsequent check.
       const [{deleted}] = await sql<{deleted: bigint}[]>`
-        WITH purged AS (
+        -- The backup watermark can be ahead of the durable changeLog if the
+        -- storer is behind but the backup replica has consumed forwarded
+        -- changes. Preserve the latest durable changeLog transaction as the
+        -- catchup boundary instead of assuming the backup watermark exists.
+        -- The storer inserts each changeLog transaction atomically, so any
+        -- durable row for a watermark implies the full transaction is durable.
+        WITH keep AS (
+          SELECT max(watermark) AS watermark
+          FROM ${this.#cdc('changeLog')}
+        ), purged AS (
           DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
+            AND watermark < (SELECT watermark FROM keep)
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
@@ -276,11 +489,17 @@ export class Storer implements Service {
   /**
    * @returns The JSON stringified stream message to be sent downstream.
    */
-  store(watermark: string, data: ChangeStreamData) {
+  store(
+    watermark: string,
+    data: ChangeStreamData,
+    serialized: SerializedChangeStreamData = serializeChangeStreamDataWithChange(
+      data,
+    ),
+  ) {
     // Eagerly stringify the JSON payload to:
     // - avoid redundant stringification when fanning out to subscribers
     // - efficiently estimate the amount of memory the payload consumes
-    const json = BigIntJSON.stringify(data);
+    const {json, change: storedChange} = serialized;
     this.#approximateQueuedBytes += json.length;
 
     const change = data[1];
@@ -288,6 +507,7 @@ export class Storer implements Service {
       'change',
       watermark,
       json,
+      storedChange,
       isDataChange(change) ? null : change, // drop DataChanges to save memory
     ]);
 
@@ -296,10 +516,6 @@ export class Storer implements Service {
 
   abort() {
     this.#queue.enqueue(['abort']);
-  }
-
-  status(s: DownstreamStatusMessage) {
-    this.#queue.enqueue(s);
   }
 
   catchup(subscriber: Subscriber, mode: ReplicatorMode) {
@@ -335,17 +551,50 @@ export class Storer implements Service {
   }
 
   #maybeReleaseBackPressure() {
-    if (
-      this.#readyForMore !== null &&
+    if (this.#readyForMore !== null) {
       // Wait for at least 20% of the threshold to free up.
-      this.#approximateQueuedBytes < this.#backPressureThresholdBytes * 0.8
-    ) {
-      this.#lc.info?.(
-        `releasing back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)`,
-      );
-      this.#readyForMore.resolve();
-      this.#readyForMore = null;
+      if (
+        this.#approximateQueuedBytes <
+        this.#backPressureThresholdBytes * 0.8
+      ) {
+        this.#lc.info?.(
+          `releasing back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)`,
+        );
+        this.#readyForMore.resolve();
+        this.#readyForMore = null;
+      }
     }
+  }
+
+  /**
+   * Flushes any buffered {@link PendingTransaction.batch} rows to the changeLog.
+   *
+   * Uses `json_to_recordset()` so the batch is a single JSON parameter: the
+   * statement text stays constant regardless of batch size, avoiding the
+   * unbounded prepared-statement variants (and Postgres memory growth) that a
+   * multi-row INSERT would produce. See rocicorp/mono#3511.
+   *
+   * Returns (and updates) {@link PendingTransaction.lastFlush}; a no-op when the
+   * batch is empty.
+   */
+  #flushChangeLog(tx: PendingTransaction): Promise<unknown> | undefined {
+    const {batch} = tx;
+    if (batch.length === 0) {
+      return tx.lastFlush;
+    }
+    tx.batch = [];
+    tx.lastFlush = tx.pool.process(sql => [
+      sql`
+        INSERT INTO ${this.#cdc('changeLog')} ("watermark", "pos", "change", "precommit")
+        SELECT "watermark", "pos", "change"::json, "precommit"
+          FROM json_to_recordset(${batch}) AS x(
+            "watermark" TEXT,
+            "pos" INT8,
+            "change" TEXT,
+            "precommit" TEXT
+          )`,
+    ]);
+    return tx.lastFlush;
   }
 
   #stopped = promiseVoid;
@@ -362,6 +611,7 @@ export class Storer implements Service {
     this.#stopped = stopped;
 
     this.#lc.info?.('starting storer');
+    this.#progressMonitor.start(); // Note: This is stopped in stop()
     let err: unknown;
     try {
       await this.#processQueue();
@@ -414,9 +664,27 @@ export class Storer implements Service {
     let tx: PendingTransaction | null = null;
     let msg: QueueEntry | false;
 
+    // Track the progress of each (previous and next) queue entry before it is
+    // processed in the loop.
+    let lastTaskDone: TaskDoneFn | undefined;
+    const nextMessage = async () => {
+      lastTaskDone?.();
+      lastTaskDone = undefined;
+      const entry = await this.#queue.dequeue();
+      if (entry !== 'stop') {
+        lastTaskDone = this.#progressMonitor.trackTask({
+          task: 'queue-entry',
+          // Note: TaskKeys are logged, so only include entry[0] (the type) to
+          // avoid logging application data.
+          type: entry[0],
+        });
+      }
+      return entry;
+    };
+
     const catchupQueue: SubscriberAndMode[] = [];
     try {
-      while ((msg = await this.#queue.dequeue()) !== 'stop') {
+      while ((msg = await nextMessage()) !== 'stop') {
         const [msgType] = msg;
         switch (msgType) {
           case 'ready': {
@@ -433,9 +701,6 @@ export class Storer implements Service {
             }
             continue;
           }
-          case 'status':
-            this.#onConsumed(msg);
-            continue;
           case 'abort': {
             if (tx) {
               tx.pool.abort();
@@ -446,7 +711,7 @@ export class Storer implements Service {
           }
         }
         // msgType === 'change'
-        const [_, watermark, json, change] = msg;
+        const [_, watermark, json, storedChange, change] = msg;
         const tag = change?.tag;
         this.#approximateQueuedBytes -= json.length;
 
@@ -457,17 +722,16 @@ export class Storer implements Service {
           tx = {
             pool: new TransactionPool(
               this.#lc.withContext('watermark', watermark),
-              {
-                mode: Mode.READ_COMMITTED,
-                statementResponseTimeout: this.#statementTimeoutMs,
-              },
+              {mode: Mode.READ_COMMITTED},
             ),
             preCommitWatermark: watermark,
             pos: 0,
             startingReplicationState: promise,
             ack: !change.skipAck,
+            batch: [],
+            lastFlush: undefined,
           };
-          tx.pool.run(this.#db);
+          tx.pool.run(this.#inserter);
           // Acquire a lock on the replicationState row to detect and/or prevent
           // a concurrent ownership change.
           void tx.pool.process(tx => {
@@ -483,31 +747,52 @@ export class Storer implements Service {
           tx.pos++;
         }
 
-        const entry = {
+        const entry: ChangeLogRow = {
           watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
           precommit: tag === 'commit' ? tx.preCommitWatermark : null,
           pos: tx.pos,
           // For backwards compatibility, only the change message is stored
-          // in the cdc changeLog.
-          change: extractChangeSubstring(json, tag),
+          // in the cdc changeLog. It was serialized separately with the
+          // downstream envelope, so no full-message scan is needed here.
+          change: storedChange,
         };
 
-        const processed = tx.pool.process(sql => [
-          sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
-          ...(change !== null && isSchemaChange(change)
-            ? this.#trackBackfillMetadata(sql, change)
-            : []),
-        ]);
-
-        if (tx.pos % 100 === 0) {
-          // Backpressure is exerted on commit when awaiting tx.pool.done().
-          // However, backpressure checks need to be regularly done for
-          // very large transactions in order to avoid memory blowup.
-          await processed;
+        if (change !== null && isSchemaChange(change)) {
+          // Schema changes carry backfill / table-metadata statements that
+          // must be applied in stream order relative to the changeLog rows.
+          // Flush any buffered rows first, then write this row together with
+          // its metadata statements as a single unit (preserving the previous
+          // per-change ordering for schema changes).
+          await this.#flushChangeLog(tx);
+          tx.lastFlush = tx.pool.process(sql => [
+            sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+            ...this.#trackBackfillMetadata(sql, change),
+          ]);
+        } else {
+          // Accumulate plain changeLog rows (begin, data changes, commit) and
+          // write them as a single multi-row INSERT. Collapsing the per-change
+          // single-row INSERTs into batches is the dominant cost reduction for
+          // large transactions, where the previous one-statement-per-change
+          // path dominated the upstream replication lag.
+          tx.batch.push(entry);
+          if (tx.batch.length >= this.#changeLogBatchSize) {
+            // Bound pipeline depth (and thus memory) by awaiting the previous
+            // flush before issuing the next. This is the batched analog of the
+            // previous per-100-statement backpressure await, and likewise
+            // guards against memory blowup on very large transactions.
+            const prevFlush = tx.lastFlush;
+            void this.#flushChangeLog(tx);
+            await prevFlush;
+          }
         }
         this.#maybeReleaseBackPressure();
 
         if (tag === 'commit') {
+          // Flush any remaining buffered changeLog rows (including this commit
+          // row) before updating the replication state, so the state update is
+          // ordered after all changeLog inserts for this transaction.
+          void this.#flushChangeLog(tx);
+
           const {owner} = await tx.startingReplicationState;
           if (owner !== this.#taskID) {
             // Ownership change reflected in the replicationState read in 'begin'.
@@ -530,7 +815,7 @@ export class Storer implements Service {
 
           // ACK the LSN to the upstream Postgres.
           if (tx.ack) {
-            this.#onConsumed(['commit', change, {watermark}]);
+            this.#onCommitted(['commit', change, {watermark}]);
           }
           tx = null;
 
@@ -554,17 +839,33 @@ export class Storer implements Service {
   }
 
   async #startCatchup(subs: SubscriberAndMode[]) {
-    if (subs.length === 0) {
+    const numCatchups = subs.length;
+    if (numCatchups === 0) {
       return;
     }
 
-    const reader = new TransactionPool(
-      this.#lc.withContext('pool', 'catchup'),
-      {mode: Mode.READONLY},
+    const lc = this.#lc.withContext('pool', 'catchup');
+    const {init, cleanup, snapshotID} = sharedSnapshot();
+    const reader = new TransactionPool(lc, {
+      mode: Mode.READONLY,
+      init,
+      cleanup,
+      initialWorkers: subs.length,
+    });
+
+    // A dynamic connection pool is created for catchup, sized to the number
+    // of subscribers being caught up.
+    const catchupConns = this.#makeConnectionPool(
+      'subscriber-catchup',
+      numCatchups,
     );
-    reader.run(this.#db);
+    reader.run(catchupConns);
 
     let lastWatermark: string | undefined;
+    const catchupSnapshotted = this.#progressMonitor.trackTask({
+      task: 'capture-catchup-snapshot',
+      subscribers: subs.map(({subscriber: s}) => s.id),
+    });
     try {
       // Ensure that the transaction has started (and is thus holding a snapshot
       // of the database) before continuing on to commit more changes. This is
@@ -575,25 +876,55 @@ export class Storer implements Service {
         SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}
       `,
       );
+      lc.info?.(
+        `snapshotted db at ${lastWatermark} (${await snapshotID}) ` +
+          `to catchup ${numCatchups} subscriber(s)`,
+      );
     } catch (e) {
       subs.map(({subscriber}) => subscriber.fail(e));
+      // Nothing will run the catchup tasks that normally finalize the pool
+      // (below), so tear it down here. Otherwise its workers (each holding an
+      // open READ ONLY transaction) and the connection pool are leaked.
+      reader.abort();
+      void catchupConns.end().catch(() => {});
       throw e;
+    } finally {
+      catchupSnapshotted();
     }
 
     // Run the actual catchup queries in the background. Errors are handled in
     // #catchup() by disconnecting the associated subscriber.
-    void Promise.all(
-      subs.map(sub => this.#catchup(sub, lastWatermark, reader)),
-    ).finally(() => reader.setDone());
+    void Promise.allSettled(
+      subs.map(sub =>
+        this.#catchup(
+          lc.withContext('subscriber', sub.subscriber.id),
+          sub,
+          lastWatermark,
+          reader,
+        ),
+      ),
+    ).finally(() => {
+      reader.setDone();
+      void catchupConns.end().catch(() => {});
+    });
   }
 
   async #catchup(
+    lc: LogContext,
     {subscriber: sub, mode}: SubscriberAndMode,
     lastWatermark: string,
     reader: TransactionPool,
   ) {
+    let entriesReceived = 0;
+    let catchupProgressed = this.#progressMonitor.trackTask({
+      task: 'catchup',
+      subscriber: sub.id,
+      entriesReceived,
+    });
     try {
+      lc.info?.(`starting catchup`);
       await reader.processReadTask(async tx => {
+        lc.info?.(`catching up`);
         const start = Date.now();
 
         // When starting from initial-sync, there won't be a change with a watermark
@@ -607,178 +938,176 @@ export class Storer implements Service {
            WHERE watermark >= ${sub.watermark}
              AND watermark <= ${lastWatermark}
            ORDER BY watermark, pos`.cursor(2000)) {
-          // Wait for the last batch of entries to be consumed by the
-          // subscriber before sending down the current batch. This pipelining
-          // allows one batch of changes to be received from the change-db
-          // while the previous batch of changes are sent to the subscriber,
-          // resulting in flow control that caps the number of changes
-          // referenced in memory to 2 * batch-size.
-          const start = performance.now();
-          await lastBatchConsumed;
-          const elapsed = performance.now() - start;
-          if (lastBatchConsumed) {
-            (elapsed > 100 ? this.#lc.info : this.#lc.debug)?.(
-              `waited ${elapsed.toFixed(3)} ms for ${sub.id} to consume last batch of catchup entries`,
-            );
-          }
+          catchupProgressed();
+          entriesReceived += entries.length;
 
-          for (const entry of entries) {
-            if (entry.watermark === sub.watermark) {
-              // This should be the first entry.
-              // Catchup starts from *after* the watermark.
-              watermarkFound = true;
-            } else if (watermarkFound) {
-              lastBatchConsumed = sub.catchup(toDownstream(entry));
-              count++;
-            } else if (mode === 'backup') {
-              throw new AutoResetSignal(
-                `backup replica at watermark ${sub.watermark} is behind change db: ${entry.watermark})`,
+          try {
+            // Wait for the last batch of entries to be consumed by the
+            // subscriber before sending down the current batch. This pipelining
+            // allows one batch of changes to be received from the change-db
+            // while the previous batch of changes are sent to the subscriber,
+            // resulting in flow control that caps the number of changes
+            // referenced in memory to 2 * batch-size.
+            const start = performance.now();
+            await lastBatchConsumed;
+            const elapsed = performance.now() - start;
+            if (lastBatchConsumed) {
+              lc[elapsed > 100 ? 'info' : 'debug']?.(
+                `waited ${elapsed.toFixed(3)} ms for ${sub.id} to consume last batch of catchup entries`,
               );
-            } else {
-              this.#lc.warn?.(
-                `rejecting subscriber at watermark ${sub.watermark} (earliest watermark: ${entry.watermark})`,
-              );
-              sub.close(
-                ErrorType.WatermarkTooOld,
-                `earliest supported watermark is ${entry.watermark} (requested ${sub.watermark})`,
-              );
-              return;
             }
+
+            for (const entry of entries) {
+              if (entry.watermark === sub.watermark) {
+                // This should be the first entry.
+                // Catchup starts from *after* the watermark.
+                watermarkFound = true;
+              } else if (watermarkFound) {
+                lastBatchConsumed = sub.catchup(
+                  reconstructWatermarkedChange(entry),
+                );
+                count++;
+              } else if (mode === 'backup') {
+                throw new AutoResetSignal(
+                  `backup replica at watermark ${sub.watermark} is behind change db: ${entry.watermark})`,
+                );
+              } else {
+                lc.warn?.(
+                  `rejecting subscriber at watermark ${sub.watermark} (earliest watermark: ${entry.watermark})`,
+                );
+                sub.close(
+                  ErrorType.WatermarkTooOld,
+                  `earliest supported watermark is ${entry.watermark} (requested ${sub.watermark})`,
+                );
+                return;
+              }
+            }
+          } finally {
+            // Track the db's read of the next chunk of changes.
+            catchupProgressed = this.#progressMonitor.trackTask({
+              task: 'catchup',
+              subscriber: sub.id,
+              entriesReceived,
+            });
           }
         }
+        catchupProgressed();
+
         if (watermarkFound) {
           await lastBatchConsumed;
-          this.#lc.info?.(
+          lc.info?.(
             `caught up ${sub.id} with ${count} changes (${
               Date.now() - start
             } ms)`,
           );
         } else {
-          this.#lc.warn?.(
-            `subscriber at watermark ${sub.watermark} is ahead of latest watermark`,
+          // The subscriber is ahead of the latest durable changeLog entry
+          // (lastWatermark). This can legitimately happen: changes are
+          // forwarded to subscribers (the backup replica and view-syncers)
+          // concurrently with — and can outrun — the durable store, so a
+          // replica may briefly lead the change DB after the storer falls
+          // behind or the change-streamer restarts. No catchup is possible or
+          // needed; once the change DB catches back up, forwarding resumes and
+          // the subscriber dedups any watermarks it already has. Unlike the
+          // AutoResetSignal / WatermarkTooOld cases above, this is not a gap in
+          // replication history, so the subscriber is simply marked caught up.
+          lc.warn?.(
+            `subscriber ${sub.id} at watermark ${sub.watermark} is ahead of ` +
+              `the latest durable watermark ${lastWatermark}; waiting for the ` +
+              `change DB to catch up`,
           );
         }
-        // Flushes the backlog of messages buffered during catchup and
-        // allows the subscription to forward subsequent messages immediately.
-        sub.setCaughtUp();
+        // Start draining messages buffered during catchup. The returned promise
+        // is intentionally not awaited here: while the drain is in progress,
+        // new sends keep appending to the subscriber backlog and inherit its
+        // byte-based backpressure.
+        void sub.setCaughtUp();
       });
     } catch (err) {
-      this.#lc.error?.(`error while catching up subscriber ${sub.id}`, err);
+      lc.error?.(`error while catching up subscriber ${sub.id}`, err);
       if (err instanceof AutoResetSignal) {
         await markResetRequired(this.#db, this.#shard);
         this.#onFatal(err);
       }
       sub.fail(err);
+    } finally {
+      catchupProgressed();
     }
   }
 
   /**
    * Returns the db statements necessary to track backfill and table metadata
    * presented in the `change`, if any.
+   *
+   * This is the Postgres interpreter of {@link cookieOps}, which is also
+   * interpreted against the SQLite change log by `ChangeLogCookieWriter`. The
+   * two stores have to agree on every transition forever, and the failure mode
+   * if they drift is a backfill that is silently never re-requested — so the
+   * decision of what a schema change *means* lives in one place and only its
+   * transport lives here.
    */
   #trackBackfillMetadata(sql: PostgresTransaction, change: SchemaChange) {
-    const stmts: PendingQuery<Row[]>[] = [];
+    return cookieOps(change).flatMap(op => this.#cookieStmts(sql, op));
+  }
 
-    switch (change.tag) {
-      case 'update-table-metadata': {
-        const {table, new: metadata} = change;
-        stmts.push(this.#upsertTableMetadataStmt(sql, table, metadata));
-        break;
-      }
+  #cookieStmts(sql: PostgresTransaction, op: CookieOp): PendingQuery<Row[]>[] {
+    switch (op.op) {
+      case 'upsert-metadata':
+        return [this.#upsertTableMetadataStmt(sql, op.table, op.metadata)];
 
-      case 'create-table': {
-        const {spec, metadata, backfill} = change;
-        if (metadata) {
-          stmts.push(this.#upsertTableMetadataStmt(sql, spec, metadata));
-        }
-        if (backfill) {
-          Object.entries(backfill).forEach(([col, backfill]) => {
-            stmts.push(
-              this.#upsertColumnBackfillStmt(sql, spec, col, backfill),
-            );
-          });
-        }
-        break;
-      }
+      case 'upsert-backfill':
+        return [
+          this.#upsertColumnBackfillStmt(sql, op.table, op.column, op.backfill),
+        ];
 
       case 'rename-table': {
-        const {old} = change;
-        const row = {schema: change.new.schema, table: change.new.name};
-        stmts.push(
+        const {old} = op;
+        const row = {schema: op.new.schema, table: op.new.name};
+        return [
           sql`UPDATE ${this.#cdc('tableMetadata')} SET ${sql(row)}
                 WHERE "schema" = ${old.schema} AND "table" = ${old.name}`,
           sql`UPDATE ${this.#cdc('backfilling')} SET ${sql(row)}
                 WHERE "schema" = ${old.schema} AND "table" = ${old.name}`,
-        );
-        break;
+        ];
       }
 
       case 'drop-table': {
-        const {
-          id: {schema, name},
-        } = change;
-        stmts.push(
+        const {schema, name} = op.table;
+        return [
           sql`DELETE FROM ${this.#cdc('tableMetadata')}
                 WHERE "schema" = ${schema} AND "table" = ${name}`,
           sql`DELETE FROM ${this.#cdc('backfilling')}
                 WHERE "schema" = ${schema} AND "table" = ${name}`,
-        );
-        break;
+        ];
       }
 
-      case 'add-column': {
-        const {table, tableMetadata, column, backfill} = change;
-        if (tableMetadata) {
-          stmts.push(this.#upsertTableMetadataStmt(sql, table, tableMetadata));
-        }
-        if (backfill) {
-          stmts.push(
-            this.#upsertColumnBackfillStmt(sql, table, column.name, backfill),
-          );
-        }
-        break;
-      }
-
-      case 'update-column': {
-        const {
-          table: {schema, name: table},
-          old: {name: oldName},
-          new: {name: newName},
-        } = change;
-        if (oldName !== newName) {
-          stmts.push(
-            sql`UPDATE ${this.#cdc('backfilling')} SET "column" = ${newName}
-                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" = ${oldName}`,
-          );
-        }
-        break;
+      case 'rename-column': {
+        const {schema, name: table} = op.table;
+        return [
+          sql`UPDATE ${this.#cdc('backfilling')} SET "column" = ${op.new}
+                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" = ${op.old}`,
+        ];
       }
 
       case 'drop-column': {
-        const {
-          table: {schema, name},
-          column,
-        } = change;
-        stmts.push(
+        const {schema, name} = op.table;
+        return [
           sql`DELETE FROM ${this.#cdc('backfilling')}
-                WHERE "schema" = ${schema} AND "table" = ${name} AND "column" = ${column}`,
-        );
-        break;
+                WHERE "schema" = ${schema} AND "table" = ${name} AND "column" = ${op.column}`,
+        ];
       }
 
-      case 'backfill-completed': {
-        const {
-          relation: {schema, name: table, rowKey},
-          columns,
-        } = change;
-        const cols = [...rowKey.columns, ...columns];
-        stmts.push(
+      case 'complete-backfill': {
+        const {schema, name: table} = op.table;
+        return [
           sql`DELETE FROM ${this.#cdc('backfilling')}
-                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" IN ${sql(cols)}`,
-        );
+                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" IN ${sql([...op.columns])}`,
+        ];
       }
+
+      default:
+        unreachable(op);
     }
-    return stmts;
   }
 
   #upsertTableMetadataStmt(
@@ -789,7 +1118,7 @@ export class Storer implements Service {
     const row: TableMetadataRow = {schema, table, metadata};
     return sql`
         INSERT INTO ${this.#cdc('tableMetadata')} ${sql(row)}
-          ON CONFLICT ("schema", "table") 
+          ON CONFLICT ("schema", "table")
           DO UPDATE SET ${sql(row)};
     `;
   }
@@ -803,7 +1132,7 @@ export class Storer implements Service {
     const row: BackfillingColumn = {schema, table, column, backfill};
     return sql`
         INSERT INTO ${this.#cdc('backfilling')} ${sql(row)}
-          ON CONFLICT ("schema", "table", "column") 
+          ON CONFLICT ("schema", "table", "column")
           DO UPDATE SET ${sql(row)};
     `;
   }
@@ -820,71 +1149,25 @@ export class Storer implements Service {
     }
   }
 
-  stop() {
+  /**
+   * Stops the storer and waits up to a drain timeout for entries to drain,
+   * throwing an exception if it doesn't drain in time, in order to abort
+   * the server when PG (or the connection to it) appears to be wedged.
+   */
+  async stop() {
     if (this.#running) {
+      this.#progressMonitor.stop();
       this.#lc.info?.(`draining ${this.#queue.size()} changeLog entries`);
+      this.abort(); // for cleanliness, abort any open transactions
       this.#queue.enqueue('stop');
     }
-    return this.#stopped;
-  }
-}
-
-/**
- * Extracts the stringified change message from the stringified
- * stream message (e.g. the second tuple element). This optimization
- * facilitates stringifying (and sharing the result of) the stream
- * message exactly once, but storing only the change message substring
- * in the changeLog for backwards compatibility.
- */
-export function extractChangeSubstring(
-  streamMessageJSON: string,
-  tag: Change['tag'] | undefined,
-) {
-  switch (tag) {
-    case 'begin':
-    case 'commit':
-      // e.g.
-      // ["begin",<message-json>,{"commitWatermark":"92fj2d0s"}]
-      // ["commit",<message-json>,{"watermark":"92fj2d0s"}]
-      return streamMessageJSON.substring(
-        streamMessageJSON.indexOf(',') + 1,
-        streamMessageJSON.lastIndexOf(','),
+    if (
+      (await orTimeout(this.#stopped, this.#drainTimeoutMs)) === 'timed-out'
+    ) {
+      throw new AbortError(
+        `changeLog did not drain within ${this.#drainTimeoutMs}ms`,
       );
-    default:
-      // ["data",<message-json>]
-      return streamMessageJSON.substring(
-        streamMessageJSON.indexOf(',') + 1,
-        streamMessageJSON.lastIndexOf(']'),
-      );
-  }
-}
-
-type ChangeLogEntry = {
-  watermark: string;
-  tag: string;
-  change: string;
-};
-
-function toDownstream(entry: ChangeLogEntry): WatermarkedChange {
-  const {watermark, change} = entry;
-  const tag = entry.tag as ChangeTag;
-  switch (tag) {
-    case 'begin':
-      return [
-        watermark,
-        tag,
-        `["begin",${change},{"commitWatermark":"${watermark}"}]`,
-      ];
-    case 'commit':
-      return [
-        watermark,
-        tag,
-        `["commit",${change},{"watermark":"${watermark}"}]`,
-      ];
-    case 'rollback':
-      return [watermark, tag, `["rollback",${change}]`];
-    default:
-      return [watermark, tag, `["data",${change}]`];
+    }
   }
 }
 
@@ -964,5 +1247,92 @@ export class PurgeLocker {
       `locked watermark ${watermark} from being purged from replica@${replicaVersion}`,
     );
     return new PurgeLock(this.#lc, tx, replicaVersion, watermark);
+  }
+}
+
+// A TaskKey, keyed by identity, representing an db task monitored by the
+// ProgressMonitor. The contents are stringified in error messages if the
+// task fails to make progress for more than a failure threshold interval.
+type TaskKey = JSONObject;
+
+type TaskDoneFn = () => void;
+
+/**
+ * Periodic monitor for detecting the pathological condition in which a db
+ * query hangs forever because of a connection problem, such as a half-closed
+ * socket.
+ *
+ * Use this for db calls that recur or accumulate progress within a single
+ * logical operation on the main storer loop (e.g. the queue-processing loop,
+ * or a multi-batch catchup read), where "no progress for N ms" is the
+ * meaningful signal. For a one-off db call -- including ones made before
+ * {@link Storer.run} starts this monitor's polling -- use a plain timeout
+ * (see `Storer.#withTimeout`) instead.
+ *
+ * The failure handler should stop the server. The ProgressMonitor will
+ * assume this and stop itself after calling it.
+ *
+ * Internal to the Storer, but exported for testing.
+ */
+export class ProgressMonitor {
+  readonly #lc: LogContext;
+  readonly #failureThresholdMs;
+  readonly #onFailure: (err: Error) => void;
+  readonly #taskUpdates = new Map<TaskKey, Date>();
+
+  #timer: NodeJS.Timeout | undefined;
+
+  constructor(
+    lc: LogContext,
+    failureThresholdMs: number,
+    onFailure: (err: Error) => void,
+  ) {
+    this.#lc = lc.withContext('component', 'storer-progress-monitor');
+    this.#failureThresholdMs = failureThresholdMs;
+    this.#onFailure = onFailure;
+  }
+
+  start() {
+    clearInterval(this.#timer);
+    this.#timer = setInterval(
+      () => this.checkTaskProgress(new Date()),
+      this.#failureThresholdMs,
+    ).unref();
+  }
+
+  // Called by an internal periodic timer, but exported for testing.
+  checkTaskProgress(now: Date) {
+    for (const [task, lastUpdate] of this.#taskUpdates.entries()) {
+      if (now.getTime() - lastUpdate.getTime() >= this.#failureThresholdMs) {
+        this.#lc.error?.(
+          `Last task update was more than ${this.#failureThresholdMs}ms ago`,
+          {task, lastUpdate},
+        );
+        this.#onFailure(
+          new Error(
+            `Task failed to progress for over ${this.#failureThresholdMs}ms: ${BigIntJSON.stringify(task)}`,
+          ),
+        );
+        this.stop();
+        return;
+      }
+    }
+  }
+
+  /**
+   * Starts a task to be tracked.
+   *
+   * @return a callback to invoke when the task is done.
+   */
+  trackTask(task: TaskKey, now = new Date()): TaskDoneFn {
+    this.#taskUpdates.set(task, now);
+    return () => {
+      this.#taskUpdates.delete(task);
+    };
+  }
+
+  stop() {
+    clearInterval(this.#timer);
+    this.#taskUpdates.clear();
   }
 }

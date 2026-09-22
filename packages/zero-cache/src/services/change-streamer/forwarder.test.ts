@@ -1,14 +1,164 @@
-import {describe, expect, test} from 'vitest';
+import {LogContext} from '@rocicorp/logger';
+import {describe, expect, test, vi} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
+import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {StreamTooFarBehind} from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
+import type {SubscriberStats} from './subscriber.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = BigIntJSON.stringify;
 
+function nextEventLoopTurn() {
+  return new Promise<void>(resolve => setImmediate(resolve));
+}
+
 describe('change-streamer/forwarder', () => {
   const messages = new ReplicationMessages({issues: 'id'});
+
+  test('flow control waits on catching-up subscriber backlog', async () => {
+    const forwarder = new Forwarder(createSilentLogContext());
+    const [sub, _, receiver] = createSubscriber('00', false, {
+      backlogHighWaterBytes: 1,
+    });
+
+    forwarder.add(sub);
+
+    let released = false;
+    const forwarded = forwarder
+      .forwardWithFlowControl([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ])
+      .then(() => {
+        released = true;
+      });
+
+    await nextEventLoopTurn();
+    expect(released).toBe(false);
+
+    const drained = sub.setCaughtUp();
+    await nextEventLoopTurn();
+
+    // Status initialization plus the forwarded change are now queued
+    // downstream, but the forwarder should still be waiting on consumption.
+    expect(receiver.queued).toBe(2);
+    expect(released).toBe(false);
+
+    receiver.cancel();
+    await forwarded;
+    await drained;
+    expect(released).toBe(true);
+  });
+
+  test('coalesces forward() across event loop turn into single batch', async () => {
+    const forwarder = new Forwarder(createSilentLogContext());
+    const [sub, _, receiver] = createSubscriber('00', true);
+    forwarder.add(sub);
+
+    const sendBatchSpy = vi.spyOn(sub, 'sendBatch');
+
+    for (let i = 1; i <= 5; i++) {
+      forwarder.forward([
+        `1${i}`,
+        'insert',
+        json(['data', messages.insert('issues', {id: `issue_${i}`})]),
+      ]);
+    }
+
+    expect(sendBatchSpy).not.toHaveBeenCalled();
+    expect(receiver.queued).toBe(1);
+
+    await nextEventLoopTurn();
+
+    expect(sendBatchSpy).toHaveBeenCalledTimes(1);
+    const batchedChanges = sendBatchSpy.mock.calls[0][0];
+    expect(batchedChanges).toHaveLength(5);
+    // Pre-serialized batch is pushed downstream as a single item (1 status + 1 batch).
+    expect(receiver.queued).toBe(2);
+    sub.close();
+    expect(_).toHaveLength(6);
+  });
+
+  test('coalesces forward() across async microtask turns into single batch', async () => {
+    const forwarder = new Forwarder(createSilentLogContext());
+    const [sub, _, receiver] = createSubscriber('00', true);
+    forwarder.add(sub);
+
+    const sendBatchSpy = vi.spyOn(sub, 'sendBatch');
+
+    for (let i = 1; i <= 5; i++) {
+      forwarder.forward([
+        `1${i}`,
+        'insert',
+        json(['data', messages.insert('issues', {id: `issue_${i}`})]),
+      ]);
+      await Promise.resolve(); // Simulates async await boundary between stream.changes items
+    }
+
+    expect(sendBatchSpy).not.toHaveBeenCalled();
+
+    await nextEventLoopTurn();
+
+    expect(sendBatchSpy).toHaveBeenCalledTimes(1);
+    const batchedChanges = sendBatchSpy.mock.calls[0][0];
+    expect(batchedChanges).toHaveLength(5);
+    // Pre-serialized batch is pushed downstream as a single item (1 status + 1 batch).
+    expect(receiver.queued).toBe(2);
+    sub.close();
+    expect(_).toHaveLength(6);
+  });
+
+  test('flushes immediately when batch reaches FORWARD_BATCH_SIZE (64)', () => {
+    const forwarder = new Forwarder(createSilentLogContext());
+    const [sub, _, receiver] = createSubscriber('00', true);
+    forwarder.add(sub);
+
+    const sendBatchSpy = vi.spyOn(sub, 'sendBatch');
+
+    for (let i = 1; i <= 64; i++) {
+      forwarder.forward([
+        `${i.toString().padStart(4, '0')}`,
+        'insert',
+        json(['data', messages.insert('issues', {id: `issue_${i}`})]),
+      ]);
+    }
+
+    expect(sendBatchSpy).toHaveBeenCalledTimes(1);
+    expect(sendBatchSpy.mock.calls[0][0]).toHaveLength(64);
+    // Pre-serialized batch is pushed downstream as a single item (1 status + 1 batch).
+    expect(receiver.queued).toBe(2);
+    sub.close();
+    expect(_).toHaveLength(65);
+  });
+
+  test('stopProgressMonitor flushes pending changes', () => {
+    const forwarder = new Forwarder(createSilentLogContext());
+    const [sub, _, receiver] = createSubscriber('00', true);
+    forwarder.add(sub);
+
+    const sendBatchSpy = vi.spyOn(sub, 'sendBatch');
+
+    forwarder.forward([
+      '01',
+      'insert',
+      json(['data', messages.insert('issues', {id: '1'})]),
+    ]);
+
+    expect(sendBatchSpy).not.toHaveBeenCalled();
+
+    forwarder.stopProgressMonitor();
+
+    expect(sendBatchSpy).toHaveBeenCalledTimes(1);
+    expect(sendBatchSpy.mock.calls[0][0]).toHaveLength(1);
+    expect(receiver.queued).toBe(2);
+  });
 
   test('in transaction queueing', () => {
     const forwarder = new Forwarder(createSilentLogContext());
@@ -303,5 +453,246 @@ describe('change-streamer/forwarder', () => {
         ],
       ]
     `);
+  });
+
+  describe('lagging subscriber disconnection', () => {
+    // Adds an active subscriber whose sampled stats are controlled directly, so
+    // the progress-monitor's classification can be driven deterministically. The
+    // real reportChangeRate() accumulation still runs, so its `missedLastTimeout`
+    // state is set for real to match the mocked stats.
+    function addSubscriber(
+      forwarder: Forwarder,
+      stats: {processRate: number; missedLastTimeout: boolean},
+      mode: ReplicatorMode = 'serving',
+    ) {
+      const [sub] = createSubscriber('00', true, {}, mode);
+      vi.spyOn(sub, 'getStats').mockReturnValue({
+        processRate: stats.processRate,
+        pending: 0,
+        backlog: 0,
+        backlogBytes: 0,
+        totalBufferedBytes: 0,
+        missedLastTimeout: stats.missedLastTimeout,
+      } satisfies SubscriberStats);
+      sub.trackResponseResult(
+        stats.missedLastTimeout ? 'timed-out' : 'on-time',
+      );
+      const close = vi.spyOn(sub, 'close').mockImplementation(() => {});
+      forwarder.add(sub);
+      return {sub, close};
+    }
+
+    test('a lagging subscriber is disconnected only after the grace period', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      // The healthy subscriber's positive rate is the baseline; a `0`-seeded
+      // slowestOnTime would never adopt it and detection would silently no-op.
+      const healthy = addSubscriber(forwarder, {
+        processRate: 10,
+        missedLastTimeout: false,
+      });
+      const laggard = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+
+      // Within the grace period the laggard is left alone.
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(1500);
+      expect(laggard.close).not.toHaveBeenCalled();
+
+      // Once it has lagged continuously for the grace period, it is disconnected.
+      forwarder.checkSubscriberProgress(2000);
+      expect(laggard.close).toHaveBeenCalledWith(
+        StreamTooFarBehind,
+        expect.stringContaining('lagging'),
+      );
+      expect(healthy.close).not.toHaveBeenCalled();
+    });
+
+    test('a catching-up subscriber is never disconnected', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      // Faster than the healthy baseline: timing out is expected while catching
+      // up, so it must never be counted as lagging no matter how long it takes.
+      const catchingUp = addSubscriber(forwarder, {
+        processRate: 100,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(5000);
+      forwarder.checkSubscriberProgress(60_000);
+      expect(catchingUp.close).not.toHaveBeenCalled();
+    });
+
+    test('a lagging backup subscriber is never disconnected (fail-safe)', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      // A backup-replicator that is genuinely lagging (slower than the healthy
+      // baseline, timing out). Disconnecting it would shut down the whole
+      // replication-manager, so the forwarder must never close it even long
+      // after the grace period has elapsed.
+      const backup = addSubscriber(
+        forwarder,
+        {processRate: 1, missedLastTimeout: true},
+        'backup',
+      );
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(2000);
+      forwarder.checkSubscriberProgress(60_000);
+      expect(backup.close).not.toHaveBeenCalled();
+    });
+
+    test('a lagging backup does not shield a lagging serving replica', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      const backup = addSubscriber(
+        forwarder,
+        {processRate: 1, missedLastTimeout: true},
+        'backup',
+      );
+      const serving = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(1500);
+      forwarder.checkSubscriberProgress(2000);
+
+      // The serving replica is still disconnected on its own merits; only the
+      // backup is exempt.
+      expect(serving.close).toHaveBeenCalledWith(
+        StreamTooFarBehind,
+        expect.stringContaining('lagging'),
+      );
+      expect(backup.close).not.toHaveBeenCalled();
+    });
+
+    test('backup lag warnings are throttled to once per grace period and report a running total', () => {
+      const logSink = new TestLogSink();
+      const forwarder = new Forwarder(
+        new LogContext('warn', undefined, logSink),
+        {
+          flowControlConsensusTimeoutProportion: 2,
+          flowControlSlowSubscriberGracePeriodMs: 1000,
+        },
+      );
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      addSubscriber(
+        forwarder,
+        {processRate: 1, missedLastTimeout: true},
+        'backup',
+      );
+
+      const backupWarnings = () =>
+        logSink.messages
+          .map(([, , args]) => String(args[0]))
+          .filter(msg => msg.startsWith('backup subscriber'));
+
+      // t=1000 seeds the lagging clock (laggingDuration 0, below the grace
+      // period), so no event yet.
+      forwarder.checkSubscriberProgress(1000);
+      expect(backupWarnings()).toHaveLength(0);
+
+      // t=2000 crosses the grace period: the first event is warned immediately.
+      forwarder.checkSubscriberProgress(2000);
+      // t=2400/2800 are within a grace period of the last warning: counted but
+      // suppressed.
+      forwarder.checkSubscriberProgress(2400);
+      forwarder.checkSubscriberProgress(2800);
+      expect(backupWarnings()).toHaveLength(1);
+      expect(backupWarnings()[0]).toContain('1 lag events so far');
+
+      // t=3000 is a full grace period after the first warning: warned again,
+      // now reporting the accumulated total.
+      forwarder.checkSubscriberProgress(3000);
+      const warnings = backupWarnings();
+      expect(warnings).toHaveLength(2);
+      expect(warnings[1]).toContain('4 lag events so far');
+    });
+
+    test('recovering before the grace period elapses avoids disconnection', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      const {sub, close} = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(1500);
+
+      // A subsequent broadcast the subscriber responds to on time resets the
+      // lagging clock, so it survives even a later stretch of lagging.
+      sub.trackResponseResult('on-time');
+      vi.spyOn(sub, 'getStats').mockReturnValue({
+        processRate: 1,
+        pending: 0,
+        backlog: 0,
+        backlogBytes: 0,
+        totalBufferedBytes: 0,
+        missedLastTimeout: true,
+      });
+      sub.trackResponseResult('timed-out');
+
+      forwarder.checkSubscriberProgress(2400); // clock restarts here
+      forwarder.checkSubscriberProgress(3200); // only 800ms of lagging so far
+      expect(close).not.toHaveBeenCalled();
+    });
+
+    test('detection is disabled when no grace period is configured', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        // flowControlSlowSubscriberGracePeriodMs omitted -> disabled.
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      const laggard = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(100_000);
+      expect(laggard.close).not.toHaveBeenCalled();
+    });
+
+    test('no subscriber is disconnected without an on-time baseline', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      // Every subscriber timed out: there is no healthy peer to judge against,
+      // so none can be classified as lagging.
+      const laggard1 = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+      const laggard2 = addSubscriber(forwarder, {
+        processRate: 2,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(100_000);
+      expect(laggard1.close).not.toHaveBeenCalled();
+      expect(laggard2.close).not.toHaveBeenCalled();
+    });
   });
 });

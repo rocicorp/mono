@@ -1,5 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
-import type {Benchmark} from '../benchmark.ts';
+import type {Benchmark} from '../../../../tools/rn-bench/src/benchmark.ts';
 import {makeRandomASCIIStrings, makeRandomStrings} from '../data.ts';
 
 const encoder = new TextEncoder();

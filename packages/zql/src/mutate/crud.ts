@@ -1,4 +1,5 @@
 import type {Expand} from '../../../shared/src/expand.ts';
+import {assignProperty, mapValues} from '../../../shared/src/objects.ts';
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
@@ -12,10 +13,11 @@ export type TransactionMutate<S extends Schema> = SchemaCRUD<S>;
 
 export type TableCRUD<S extends TableSchema> = {
   /**
-   * Writes a row if a row with the same primary key doesn't already exist.
-   * Non-primary-key fields that are 'optional' can be omitted or set to
-   * `undefined`. Such fields will be assigned the value `null` optimistically
-   * and then the default value as defined by the server.
+   * Writes a row. If a row with the same primary key already exists this is a
+   * no-op; the existing row is left unchanged. A collision on any other unique
+   * constraint still throws. Non-primary-key fields that are 'optional' can be
+   * omitted or set to `undefined`. Such fields will be assigned the value
+   * `null` optimistically and then the default value as defined by the server.
    */
   insert: (value: InsertValue<S>) => Promise<void>;
 
@@ -48,21 +50,24 @@ export const CRUD_KINDS = ['insert', 'upsert', 'update', 'delete'] as const;
 export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;
 
 type PrimaryKeyFields<S extends TableSchema> = {
-  [K in Extract<
-    S['primaryKey'][number],
-    keyof S['columns']
-  >]: SchemaValueToTSType<S['columns'][K]>;
+  [
+    K in Extract<S['primaryKey'][number], keyof S['columns']>
+  ]: SchemaValueToTSType<S['columns'][K]>;
 };
 
 export type InsertValue<S extends TableSchema> = Expand<
   PrimaryKeyFields<S> & {
-    [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
-      ? K
-      : never]?: SchemaValueToTSType<S['columns'][K]> | undefined;
+    [
+      K in keyof S['columns'] as S['columns'][K] extends {optional: true}
+        ? K
+        : never
+    ]?: SchemaValueToTSType<S['columns'][K]> | undefined;
   } & {
-    [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
-      ? never
-      : K]: SchemaValueToTSType<S['columns'][K]>;
+    [
+      K in keyof S['columns'] as S['columns'][K] extends {optional: true}
+        ? never
+        : K
+    ]: SchemaValueToTSType<S['columns'][K]>;
   }
 >;
 
@@ -81,10 +86,11 @@ export type UpdateValue<S extends TableSchema> = Expand<
  */
 export type TableMutator<TS extends TableSchema> = {
   /**
-   * Writes a row if a row with the same primary key doesn't already exist.
-   * Non-primary-key fields that are 'optional' can be omitted or set to
-   * `undefined`. Such fields will be assigned the value `null` optimistically
-   * and then the default value as defined by the server.
+   * Writes a row. If a row with the same primary key already exists this is a
+   * no-op; the existing row is left unchanged. A collision on any other unique
+   * constraint still throws. Non-primary-key fields that are 'optional' can be
+   * omitted or set to `undefined`. Such fields will be assigned the value
+   * `null` optimistically and then the default value as defined by the server.
    */
   insert: (value: InsertValue<TS>) => Promise<void>;
 
@@ -146,7 +152,11 @@ export function makeCRUDMutate<
   if (addSchemaCRUD) {
     // Add table names as keys so the proxy can discover them
     for (const tableName of Object.keys(schema.tables)) {
-      (mutate as unknown as Record<string, undefined>)[tableName] = undefined;
+      assignProperty(
+        mutate as unknown as Record<string, undefined>,
+        tableName,
+        undefined,
+      );
     }
 
     // Wrap in proxy that lazily creates and caches table CRUD objects
@@ -163,10 +173,7 @@ export function makeTransactionMutate<TSchema extends Schema>(
   schema: TSchema,
   executor: CRUDExecutor,
 ): TransactionMutate<TSchema> {
-  const target: Record<string, undefined> = {};
-  for (const tableName of Object.keys(schema.tables)) {
-    target[tableName] = undefined;
-  }
+  const target = mapValues(schema.tables, () => undefined);
 
   return recordProxy(target, (_value, tableName) =>
     makeTableCRUD(tableName, executor),

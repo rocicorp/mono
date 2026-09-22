@@ -114,7 +114,7 @@ async function run() {
         total++;
         inFlight--;
       })
-      .catch(lc.error);
+      .catch(e => lc.error?.(e));
     if (running) {
       setTimeout(sendQueries, 1000 / qps);
     } else {

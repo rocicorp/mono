@@ -4,7 +4,7 @@ import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
 import {WebSocket, WebSocketServer, type RawData} from 'ws';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {randInt} from '../../../shared/src/rand.ts';
-import {inProcChannel} from './processes.ts';
+import {inProcChannel, MESSAGE_TYPES} from './processes.ts';
 import {
   installWebSocketHandoff,
   installWebSocketReceiver,
@@ -270,6 +270,8 @@ describe('types/websocket-handoff', () => {
     );
 
     let receiveCalled = false;
+    let abortPayload: unknown;
+    let receivedPayload: unknown;
     const {promise: testComplete, resolve: completeTest} = resolver<void>();
 
     // Create a custom WSS that simulates a closed websocket after upgrade
@@ -294,6 +296,12 @@ describe('types/websocket-handoff', () => {
         receiveCalled = true;
       },
       parent,
+      payload => {
+        abortPayload = payload;
+      },
+      payload => {
+        receivedPayload = payload;
+      },
     );
 
     const ws = new WebSocket(`ws://localhost:${port}/`);
@@ -312,7 +320,49 @@ describe('types/websocket-handoff', () => {
     // The receive callback should NOT have been called because
     // the websocket was closed during the handoff
     expect(receiveCalled).toBe(false);
+    expect(receivedPayload).toEqual({foo: 'boo'});
+    expect(abortPayload).toEqual({foo: 'boo'});
 
     wssWithClosedWs.close();
+  });
+
+  test('missing socket during handoff triggers onAbort and onReceived', () => {
+    const [parent, child] = inProcChannel();
+    let receiveCalled = false;
+    let abortPayload: unknown;
+    let receivedPayload: unknown;
+
+    const wss = new WebSocketServer({noServer: true});
+    installWebSocketReceiver(
+      lc,
+      wss,
+      () => {
+        receiveCalled = true;
+      },
+      child,
+      payload => {
+        abortPayload = payload;
+      },
+      payload => {
+        receivedPayload = payload;
+      },
+    );
+
+    parent.send(
+      [
+        MESSAGE_TYPES.handoff,
+        {
+          message: {headers: {}, url: '/'},
+          head: new ArrayBuffer(0),
+          payload: {foo: 'missing-socket'},
+        },
+      ],
+      undefined,
+    );
+
+    expect(receiveCalled).toBe(false);
+    expect(receivedPayload).toEqual({foo: 'missing-socket'});
+    expect(abortPayload).toEqual({foo: 'missing-socket'});
+    wss.close();
   });
 });

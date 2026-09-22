@@ -264,6 +264,61 @@ describe('CRUDMutatorFactory', () => {
     expect(queries).toHaveLength(1);
   });
 
+  test('uses primary keys only to select an updated row', async () => {
+    const factory = new CRUDMutatorFactory(schema);
+    const {mockTx, queries} = createMockTx();
+    const executor = factory.createExecutor(mockTx, mockServerSchema);
+
+    await executor('basic', 'update', {id: '1', b: 'updated'});
+
+    expect(queries).toEqual([
+      [
+        'UPDATE "basic" SET "b" = $1::text::text WHERE "id" = $2::text',
+        ['updated', '1'],
+      ],
+    ]);
+  });
+
+  test('does not query for an update containing only primary keys', async () => {
+    const factory = new CRUDMutatorFactory(schema);
+    const {mockTx, queries} = createMockTx();
+    const executor = factory.createExecutor(mockTx, mockServerSchema);
+
+    await executor('basic', 'update', {id: '1'});
+
+    expect(queries).toEqual([]);
+  });
+
+  test('does not update primary keys during an upsert', async () => {
+    const factory = new CRUDMutatorFactory(schema);
+    const {mockTx, queries} = createMockTx();
+    const executor = factory.createExecutor(mockTx, mockServerSchema);
+
+    await executor('basic', 'upsert', {id: '1', a: 1, b: 'updated'});
+
+    expect(queries).toEqual([
+      [
+        'INSERT INTO "basic" ("id","a","b") VALUES ($1::text::text, $2::text::integer, $3::text::text) ON CONFLICT ("id") DO UPDATE SET "a" = $2::text::integer, "b" = $3::text::text',
+        ['1', '1', 'updated'],
+      ],
+    ]);
+  });
+
+  test('does nothing on conflict when an upsert has only primary keys', async () => {
+    const factory = new CRUDMutatorFactory(schema);
+    const {mockTx, queries} = createMockTx();
+    const executor = factory.createExecutor(mockTx, mockServerSchema);
+
+    await executor('basic', 'upsert', {id: '1'});
+
+    expect(queries).toEqual([
+      [
+        'INSERT INTO "basic" ("id") VALUES ($1::text::text) ON CONFLICT ("id") DO NOTHING',
+        ['1'],
+      ],
+    ]);
+  });
+
   test('creates isolated executors for different transactions', () => {
     const factory = new CRUDMutatorFactory(schema);
 
@@ -330,7 +385,7 @@ describe('CRUDMutatorFactory', () => {
     const factory = new CRUDMutatorFactory(simpleSchema);
     const {mockTx} = createMockTx();
 
-    // Mock the information_schema query that getServerSchema uses
+    // Mock the introspection query that getServerSchema uses
     const mockSchemaRows = [
       {
         schema: 'public',
@@ -376,7 +431,7 @@ describe('CRUDMutatorFactory', () => {
     const originalQuery = mockTx.query;
     mockTx.query = vi.fn((...args: unknown[]) => {
       const sql = args[0] as string;
-      if (sql.includes('information_schema')) {
+      if (sql.includes('pg_attribute')) {
         return Promise.resolve(mockSchemaRows);
       }
       return originalQuery.apply(
@@ -395,7 +450,7 @@ describe('CRUDMutatorFactory', () => {
     // Verify mutate works
     void tx.mutate.basic.insert({id: '1', a: 1, b: 'test'});
 
-    // The information_schema query + the insert
+    // The introspection query + the insert
     expect(mockTx.query).toHaveBeenCalled();
   });
 
@@ -465,7 +520,7 @@ describe('CRUDMutatorFactory', () => {
         wrappedTransaction: null,
         query: (...args: unknown[]) => {
           const sql = args[0] as string;
-          if (sql.includes('information_schema')) {
+          if (sql.includes('pg_attribute')) {
             serverSchemaFetchCount++;
             return Promise.resolve(mockSchemaRows);
           }
@@ -559,7 +614,7 @@ describe('CRUDMutatorFactory', () => {
         wrappedTransaction: null,
         query: (...args: unknown[]) => {
           const sql = args[0] as string;
-          if (sql.includes('information_schema')) {
+          if (sql.includes('pg_attribute')) {
             serverSchemaFetchCount++;
             return Promise.resolve(mockSchemaRows);
           }

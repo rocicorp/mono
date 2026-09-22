@@ -3,6 +3,12 @@ import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {AbortError} from '../../../shared/src/abort-error.ts';
+import {logLastChanceSQLiteCorruptionDiagnostics} from '../db/sqlite-corruption.ts';
+import {
+  getOrCreateHistogram,
+  LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
+} from '../observability/metrics.ts';
 import {ConfigurationError} from '../types/configuration-error.ts';
 import {
   singleProcessMode,
@@ -31,6 +37,60 @@ export const GRACEFUL_SHUTDOWN = ['SIGTERM', 'SIGINT'] as const;
 export const FORCEFUL_SHUTDOWN = ['SIGQUIT', 'SIGABRT'] as const;
 
 type GracefulShutdownSignal = (typeof GRACEFUL_SHUTDOWN)[number];
+
+function workerStartupMetricName(name: string) {
+  if (name === 'zero-cache') {
+    return undefined;
+  }
+  if (name.startsWith('change-streamer')) {
+    return 'change_streamer';
+  }
+  if (name.startsWith('replicator')) {
+    if (name.includes('(backup)')) {
+      return 'backup_replicator';
+    }
+    if (name.includes('(serving-copy)')) {
+      return 'serving_copy_replicator';
+    }
+    if (name.includes('(serving)')) {
+      return 'serving_replicator';
+    }
+    return 'other';
+  }
+  if (name.startsWith('syncer')) {
+    return 'syncer';
+  }
+  if (name.startsWith('reaper')) {
+    return 'reaper';
+  }
+  if (name.startsWith('shadow-syncer')) {
+    return 'shadow_syncer';
+  }
+  if (name.startsWith('mutator')) {
+    return 'mutator';
+  }
+  return 'other';
+}
+
+function startupDuration() {
+  return getOrCreateHistogram('server', 'startup_duration', {
+    description: 'Duration from starting zero-cache to its ready signal.',
+    unit: 's',
+    bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
+  });
+}
+
+export function recordStartupDurationMs(durationMs: number) {
+  startupDuration().recordMs(durationMs, {component: 'dispatcher'});
+}
+
+function workerStartupDuration() {
+  return getOrCreateHistogram('server', 'worker_startup_duration', {
+    description: 'Duration from starting a worker to its ready signal.',
+    unit: 's',
+    bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
+  });
+}
 
 // An internal error code used to indicate that a message has already been
 // logged at level ERRROR. When a process exits with this error code, the
@@ -100,8 +160,11 @@ export class ProcessManager {
     };
   }
 
-  done() {
-    return this.#runningState.stopped();
+  async shutdown() {
+    if (this.#drainStart === 0) {
+      this.#startDrain(GRACEFUL_SHUTDOWN[0]);
+    }
+    await this.#runningState.stopped();
   }
 
   #exit(code: number) {
@@ -155,12 +218,21 @@ export class ProcessManager {
   addWorker(worker: Worker, type: WorkerType, name: string): Worker {
     this.addSubprocess(worker, type, name);
 
+    const start = performance.now();
     const id = ++this.#nextID;
     this.#initializing.set(id, name);
     const {promise, resolve} = resolver();
     this.#ready.push(promise);
 
     worker.onceMessageType('ready', () => {
+      const elapsed = performance.now() - start;
+      const workerMetricName = workerStartupMetricName(name);
+      if (workerMetricName) {
+        workerStartupDuration().recordMs(elapsed, {
+          worker: workerMetricName,
+          type,
+        });
+      }
       this.#lc.debug?.(`${name} ready (${Date.now() - this.#start} ms)`);
       this.#initializing.delete(id);
       resolve();
@@ -237,7 +309,7 @@ export class ProcessManager {
             } ms)`
           : `all user-facing workers exited`,
       );
-      return this.#exit(0);
+      return this.#exit(this.#drainStart ? 0 : code || -1);
     }
 
     if (this.#drainStart === 0) {
@@ -303,18 +375,43 @@ export async function runUntilKilled(
   }
 }
 
-export async function exitAfter(lc: LogContext, run: () => Promise<void>) {
+export async function exitAfter(
+  logContext: LogContext | (() => LogContext),
+  run: () => Promise<void>,
+) {
+  const getLogContext =
+    typeof logContext === 'function' ? logContext : () => logContext;
   try {
     await run();
+    const lc = getLogContext();
     lc.info?.(`pid ${pid} exiting normally`);
     process.exit(0);
   } catch (e) {
+    const lc = getLogContext();
     if (e instanceof ConfigurationError) {
       lc.error?.(`exiting with configuration error: ${String(e)}`, e);
       process.exit(0);
     }
-    lc.error?.(`exiting with error: ${String(e)}`, e);
-    process.exit(-1);
+    if (e instanceof AbortError) {
+      // AbortErrors signal an intentional shutdown or restart (e.g. SIGTERM
+      // during a rollout, AutoResetSignal) and should not raise alerts. The
+      // non-zero exit code is kept so that restart semantics are unchanged.
+      lc.warn?.(`exiting after abort: ${String(e)}`, e);
+    } else {
+      lc.error?.(`exiting with error: ${String(e)}`, e);
+    }
+    try {
+      logLastChanceSQLiteCorruptionDiagnostics(lc, e);
+    } catch (diagnosticError) {
+      lc.error?.('SQLite corruption last-chance diagnostic failed', {
+        error: diagnosticError,
+      });
+    }
+    try {
+      await lc.flush();
+    } finally {
+      process.exit(-1);
+    }
   }
 }
 

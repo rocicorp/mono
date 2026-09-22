@@ -51,6 +51,14 @@ const temporalsTable = table('temporalsTable')
   })
   .primaryKey('id');
 
+const issueTable = table('issue')
+  .columns({
+    id: string(),
+    owner: string().optional(),
+    rank: number(),
+  })
+  .primaryKey('id');
+
 const docsTable = table('docsTable')
   .from('docs')
   .columns({
@@ -61,7 +69,9 @@ const docsTable = table('docsTable')
   })
   .primaryKey('id');
 
-const schema = createSchema({tables: [timesTable, temporalsTable, docsTable]});
+const schema = createSchema({
+  tables: [timesTable, temporalsTable, issueTable, docsTable],
+});
 
 const serverSchema: ServerSchema = {
   times: {
@@ -94,6 +104,11 @@ const serverSchema: ServerSchema = {
       isArray: true,
       isEnum: false,
     },
+  },
+  issue: {
+    id: {type: 'text', isArray: false, isEnum: false},
+    owner: {type: 'text', isArray: false, isEnum: false},
+    rank: {type: 'double precision', isArray: false, isEnum: false},
   },
   docs: {
     id: {type: 'text', isArray: false, isEnum: false},
@@ -145,6 +160,19 @@ describe('compiler with PostgreSQL', () => {
       );
 
       INSERT INTO temporals (id) VALUES ('row1');
+
+      CREATE TABLE issue (
+        id TEXT PRIMARY KEY,
+        owner TEXT,
+        rank DOUBLE PRECISION NOT NULL
+      );
+
+      INSERT INTO issue (id, owner, rank) VALUES
+        ('a', NULL, 1),
+        ('e', NULL, 2),
+        ('b', 'alice', 1),
+        ('c', 'bob', 1),
+        ('d', 'bob', 2);
 
       CREATE TABLE docs (
         id TEXT PRIMARY KEY,
@@ -470,5 +498,53 @@ describe('compiler with PostgreSQL', () => {
     // The type-gated forms are plain filters.
     expect(await plan('>', 'a')).not.toContain('docs_priority_idx');
     expect(await plan('!=', 'high')).not.toContain('docs_priority_idx');
+  });
+
+  test('compiled start paginates from a null cursor', async () => {
+    const sqlQuery = formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        orderBy: [['owner', 'asc']],
+        start: {
+          row: {owner: null, id: 'a'},
+          exclusive: true,
+        },
+      }),
+    );
+
+    const compiled = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
+    );
+
+    expect(compiled).toEqual([
+      {id: 'e', owner: null, rank: 2},
+      {id: 'b', owner: 'alice', rank: 1},
+      {id: 'c', owner: 'bob', rank: 1},
+      {id: 'd', owner: 'bob', rank: 2},
+    ]);
+  });
+
+  test('compiled start paginates descending orderings', async () => {
+    const sqlQuery = formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        orderBy: [['rank', 'desc']],
+        start: {
+          row: {rank: 2, id: 'd'},
+          exclusive: true,
+        },
+      }),
+    );
+
+    const compiled = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
+    );
+
+    expect(compiled).toEqual([
+      {id: 'e', owner: null, rank: 2},
+      {id: 'a', owner: null, rank: 1},
+      {id: 'b', owner: 'alice', rank: 1},
+      {id: 'c', owner: 'bob', rank: 1},
+    ]);
   });
 });

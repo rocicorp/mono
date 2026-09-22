@@ -1,5 +1,6 @@
 import {RWLock} from '@rocicorp/lock';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {Read, Store, Write} from './store.ts';
 import {
@@ -11,6 +12,13 @@ import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
 
 /**
  * A SQLite prepared statement.
+ *
+ * `SQLiteStore` prepares one statement per SQL and shares it across all
+ * concurrent readers, so implementations must make each call atomic with
+ * respect to other callers of the same statement: `all()` must not let another
+ * `exec()`/`all()` rebind or reset the underlying statement between executing
+ * it and fetching its rows. Delegates whose native API splits execute and fetch
+ * into separate round trips (e.g. expo-sqlite) must serialize per statement.
  */
 export interface PreparedStatement {
   exec(params: string[]): Promise<void>;
@@ -52,6 +60,7 @@ export type CreateSQLiteDatabase = (
 export class SQLiteStore implements Store {
   readonly #filename: string;
   readonly #entry: StoreEntry;
+  readonly #kind: string;
 
   #closed = false;
 
@@ -59,9 +68,15 @@ export class SQLiteStore implements Store {
     name: string,
     create: CreateSQLiteDatabase,
     opts?: SQLiteStoreOptions,
+    kind = 'sqlite',
   ) {
     this.#filename = resolveFilename(name, opts);
     this.#entry = getOrCreateEntry(this.#filename, create, opts);
+    this.#kind = kind;
+  }
+
+  get kind(): string {
+    return this.#kind;
   }
 
   async read(): Promise<Read> {
@@ -141,7 +156,58 @@ export type PreparedStatements = {
   getMany: PreparedStatement;
   put: PreparedStatement;
   del: PreparedStatement;
+  /** Multi-row INSERT with the values bound as parameters, n rows wide. */
+  putN: (n: number) => PreparedStatement;
+  /** Multi-key DELETE with the keys bound as parameters, n keys wide. */
+  delN: (n: number) => PreparedStatement;
 };
+
+/**
+ * Widest batch we bind in one statement. SQLite's SQLITE_MAX_VARIABLE_NUMBER is
+ * 32766, and a put costs two parameters per row, so this is far below the cap;
+ * it exists to bound how many distinct statements we prepare and cache.
+ */
+const MAX_BATCH = 128;
+
+/** `repeatList('?', 3)` -> `'?,?,?'`. */
+function repeatList(item: string, n: number): string {
+  return `${item},`.repeat(n).slice(0, -1);
+}
+
+/**
+ * Prepares (and caches) a statement of each width on demand. Callers only ever
+ * ask for powers of two, so the cache holds at most log2(MAX_BATCH)+1 entries
+ * however many rows a commit turns out to have.
+ */
+function batchStatements(
+  delegate: SQLiteDatabase,
+  sqlFor: (n: number) => string,
+): (n: number) => PreparedStatement {
+  const cache = new Map<number, PreparedStatement>();
+  return (n: number) =>
+    getOrInsertComputed(cache, n, () => delegate.prepare(sqlFor(n)));
+}
+
+/**
+ * Runs `items` through `getStatement` in power-of-two sized batches, so any
+ * length is covered by a handful of cached statement widths.
+ */
+async function execInBatches<T>(
+  items: readonly T[],
+  getStatement: (n: number) => PreparedStatement,
+  toParams: (item: T, out: string[]) => void,
+): Promise<void> {
+  for (let i = 0; i < items.length;) {
+    const remaining = Math.min(MAX_BATCH, items.length - i);
+    const n = 1 << (31 - Math.clz32(remaining));
+    const params: string[] = [];
+    for (let j = 0; j < n; j++) {
+      toParams(items[i + j], params);
+    }
+    await getStatement(n).exec(params);
+    i += n;
+  }
+}
 
 export interface SQLiteStoreOptions {
   // Common options
@@ -154,6 +220,28 @@ export interface SQLiteStoreOptions {
 }
 
 /**
+ * Replicache's rows are B-tree chunks, which `BTreeWrite` targets at 8-16KB, so
+ * most of them are larger than a page and spill into overflow pages at either
+ * page size. 8192 does not avoid overflow; it halves the number of pages each
+ * chunk is split across.
+ *
+ * Measured with `replicache-perf/rn`, 4096 vs 8192 + mmap, change in time:
+ *
+ * | device                 | persist 1024x10000 | startup read (expo / op) |
+ * | ---------------------- | ------------------ | ------------------------ |
+ * | iOS simulator          | -6%                | -12% / -14%              |
+ * | Android emulator, 2GB  | -1% to -2%         | -19% / -8%               |
+ * | Pixel 6                | ~0%                | ~-40% / ~0%              |
+ *
+ * Split by pragma on iOS, page_size carries the write win (~6%) and mmap most
+ * of the read win. Neither regressed anything on any device.
+ */
+const PAGE_SIZE = 8192;
+
+/** 256MB, matching op-sqlite's own key-value store. */
+const MMAP_SIZE = 268435456;
+
+/**
  * Common database setup logic shared between expo-sqlite and op-sqlite implementations.
  * Configures SQLite pragmas, creates the entry table, and prepares common statements.
  */
@@ -162,20 +250,45 @@ export function setupDatabase(
   delegate: SQLiteDatabase,
   opts?: SQLiteStoreOptions,
 ): PreparedStatements {
-  // Configure SQLite pragmas for optimal performance
+  // Configure SQLite pragmas for optimal performance.
+  //
+  // page_size MUST come first. SQLite silently ignores it once the database
+  // has content or a journal mode has been set — no error, no warning, the
+  // pragma just does nothing and you are left on the 4096 default. Verified:
+  // issuing it after `journal_mode = WAL`, or after CREATE TABLE, leaves
+  // `PRAGMA page_size` reporting 4096. Do not reorder these.
+  delegate.execSync(`PRAGMA page_size = ${PAGE_SIZE}`);
   delegate.execSync(`PRAGMA busy_timeout = ${opts?.busyTimeout ?? 200}`);
   delegate.execSync(`PRAGMA journal_mode = '${opts?.journalMode ?? 'WAL'}'`);
   delegate.execSync(`PRAGMA synchronous = '${opts?.synchronous ?? 'NORMAL'}'`);
   delegate.execSync(
     `PRAGMA read_uncommitted = ${Boolean(opts?.readUncommitted)}`,
   );
+  // Reads served from the mmap window rather than the pager account for most
+  // of the startup-read win measured in the PAGE_SIZE comment.
+  delegate.execSync(`PRAGMA mmap_size = ${MMAP_SIZE}`);
 
-  // Create the entry table
+  // Create the entry table.
+  //
+  // This is deliberately a rowid table, not `WITHOUT ROWID`. A `WITHOUT ROWID`
+  // table stores whole rows in an index B-tree, which keeps at most ~1/4 of a
+  // page inline, and SQLite recommends it only for rows under ~1/20 of a page.
+  // Our rows are 8-16KB chunks. As a rowid table the key gets a small separate
+  // index and the values live in the table B-tree. On a Pixel 6 (5 rounds, on
+  // top of the pragmas above) that cut startup read by 24% on both expo and
+  // op, expo startup scan by 10%, and persist 1024x10000 by 4-7%.
+  //
+  // `key` needs an explicit NOT NULL: in a rowid table a non-INTEGER primary key
+  // is only a UNIQUE index, and SQLite (a bug kept for compatibility) lets it
+  // hold NULLs, several of them. `WITHOUT ROWID` enforced this implicitly.
+  //
+  // `IF NOT EXISTS` leaves an existing database's table as it was created, so
+  // stores created before this change stay `WITHOUT ROWID` until recreated.
   delegate.execSync(`
     CREATE TABLE IF NOT EXISTS entry (
-      key TEXT PRIMARY KEY,
+      key TEXT PRIMARY KEY NOT NULL,
       value TEXT NOT NULL
-    ) WITHOUT ROWID
+    )
   `);
 
   // Prepare common statements
@@ -194,6 +307,15 @@ export function setupDatabase(
     ),
     del: delegate.prepare(
       `DELETE FROM entry WHERE key IN (SELECT value FROM json_each(?))`,
+    ),
+    putN: batchStatements(
+      delegate,
+      n =>
+        `INSERT OR REPLACE INTO entry (key, value) VALUES ${repeatList('(?,?)', n)}`,
+    ),
+    delN: batchStatements(
+      delegate,
+      n => `DELETE FROM entry WHERE key IN (${repeatList('?', n)})`,
     ),
   };
 }
@@ -404,15 +526,37 @@ export class SQLiteWrite extends WriteImplBase implements Write {
       }
     }
 
-    const delP =
-      deleteKeys.length > 0
-        ? this.#preparedStatements.del.exec([JSON.stringify(deleteKeys)])
-        : undefined;
+    // Bind real parameters rather than serializing the whole pending set into
+    // one JSON document for json_each() to parse back out. Serializing it, and
+    // pushing the resulting (often megabyte-scale) string across the native
+    // bridge, measured as roughly a quarter of persist on device.
+    //
+    // Puts and deletes use different statements over disjoint keys (deletes
+    // were removed from _pending above), so they overlap. The batches *within*
+    // each must not: the power-of-two split reuses a width when a commit is
+    // wide enough (300 rows -> 128, 128, 32, 8, 4), and running two of those
+    // concurrently would have two callers on one prepared statement — the
+    // rebind-during-execute hazard described in kv/expo-sqlite/store.ts, which
+    // op-sqlite has no per-statement lock to absorb.
     const putP =
       this._pending.size > 0
-        ? this.#preparedStatements.put.exec([
-            JSON.stringify([...this._pending]),
-          ])
+        ? execInBatches(
+            [...this._pending] as [string, ReadonlyJSONValue][],
+            this.#preparedStatements.putN,
+            ([key, value], out) => {
+              out.push(key, JSON.stringify(value));
+            },
+          )
+        : undefined;
+    const delP =
+      deleteKeys.length > 0
+        ? execInBatches(
+            deleteKeys,
+            this.#preparedStatements.delN,
+            (key, out) => {
+              out.push(key);
+            },
+          )
         : undefined;
 
     if (putP) await putP;

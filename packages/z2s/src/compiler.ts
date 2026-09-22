@@ -12,6 +12,7 @@ import {
   isNegatedOperator,
   jsonLiteralType,
   type AST,
+  type Bound,
   type Condition,
   type CorrelatedSubquery,
   type CorrelatedSubqueryCondition,
@@ -114,7 +115,7 @@ function select(
   }
 
   let appliedWhere = false;
-  function maybeWhere(test: unknown | undefined) {
+  function maybeWhere(test: unknown) {
     if (!test) {
       return sql``;
     }
@@ -126,7 +127,12 @@ function select(
 
   return sql`SELECT ${sql.join(selectionSet, ',')}
     FROM ${fromIdent(spec.server, table)}
-    ${maybeWhere(ast.where)} ${where(spec, ast.where, table)}
+    ${maybeWhere(ast.where)} ${where(spec, ast.where, table)}${
+      ast.start
+        ? sql`
+    ${maybeWhere(ast.start)} ${start(spec, ast.start, ast.orderBy, table)}`
+        : sql``
+    }
     ${maybeWhere(correlate)} ${correlate ? correlate(table) : sql``}
     ${orderBy(spec, ast.orderBy, table)}
     ${limit(ast.limit, format?.singular)}`;
@@ -180,6 +186,57 @@ export function orderBy(
     ),
     ', ',
   )}`;
+}
+
+export function start(
+  spec: Spec,
+  bound: Bound | undefined,
+  orderBy: Ordering | undefined,
+  table: Table,
+): SQLQuery {
+  if (!bound) {
+    return sql``;
+  }
+  assert(
+    orderBy !== undefined && orderBy.length > 0,
+    'start requires ordering',
+  );
+
+  const constraints: SQLQuery[] = [];
+  for (let i = 0; i < orderBy.length; i++) {
+    const group: SQLQuery[] = [];
+    const [iField, iDirection] = orderBy[i];
+    for (let j = 0; j <= i; j++) {
+      const [field] = orderBy[j];
+      if (j === i) {
+        group.push(
+          startRangeComparison(
+            spec,
+            table,
+            iField,
+            bound.row[iField] ?? null,
+            iDirection === 'asc' ? '>' : '<',
+          ),
+        );
+      } else {
+        group.push(startEquality(spec, table, field, bound.row[field] ?? null));
+      }
+    }
+    constraints.push(sql`(${sql.join(group, ' AND ')})`);
+  }
+
+  if (!bound.exclusive) {
+    constraints.push(
+      sql`(${sql.join(
+        orderBy.map(([field]) =>
+          startEquality(spec, table, field, bound.row[field] ?? null),
+        ),
+        ' AND ',
+      )})`,
+    );
+  }
+
+  return sql`(${sql.join(constraints, ' OR ')})`;
 }
 
 function related(
@@ -245,6 +302,15 @@ function relationshipSubquery(
           nestedAst.where
             ? sql`AND ${where(spec, nestedAst.where, lastTable)}`
             : sql``
+        }${
+          nestedAst.start
+            ? sql` AND ${start(
+                spec,
+                nestedAst.start,
+                nestedAst.orderBy,
+                lastTable,
+              )}`
+            : sql``
         } ${orderBy(spec, nestedAst.orderBy, lastTable)} ${limit(
           last(participatingTables)?.limit,
           format?.singular,
@@ -290,9 +356,15 @@ function where(
         ' OR ',
       )})`;
     case 'correlatedSubquery':
-      if (condition.scalar) {
-        return scalarSubquery(spec, condition, table);
-      }
+      // `scalar` is deliberately ignored here. It is a planner hint for the
+      // IVM engines, which have no cost-based planner and benefit from
+      // pre-resolving an at-most-one-row subquery to a literal comparison
+      // (see zqlite's `resolveSimpleScalarSubqueries`). Postgres decorrelates
+      // EXISTS into a semi-join on its own, so the hint buys nothing here —
+      // and honoring it as `parentField = (SELECT childField … LIMIT 1)` is
+      // only sound when the subquery matches at most one row *globally*.
+      // Applying it unconditionally silently dropped rows whenever the
+      // subquery was not pinned to a unique key.
       return exists(spec, condition, table);
     case 'simple':
       return simple(spec, condition, table);
@@ -334,38 +406,6 @@ function exists(
         ),
       )})`;
   }
-}
-
-function scalarSubquery(
-  spec: Spec,
-  condition: CorrelatedSubqueryCondition,
-  parentTable: Table,
-): SQLQuery {
-  const parentField = condition.related.correlation.parentField[0];
-  const childField = condition.related.correlation.childField[0];
-  const subqueryAST = condition.related.subquery;
-
-  const parentCol = colIdent(spec.server, {
-    table: parentTable,
-    zql: parentField,
-  });
-
-  const subqueryTable = makeTable(spec, subqueryAST.table);
-  const childCol = colIdent(spec.server, {
-    table: subqueryTable,
-    zql: childField,
-  });
-
-  const op = sql.__dangerous__rawValue(
-    condition.op === 'EXISTS' ? '=' : 'IS NOT',
-  );
-
-  const subqueryWhere = subqueryAST.where
-    ? sql`WHERE ${where(spec, subqueryAST.where, subqueryTable)}`
-    : sql``;
-  const subqueryOrderBy = orderBy(spec, subqueryAST.orderBy, subqueryTable);
-
-  return sql`${parentCol} ${op} (SELECT ${childCol} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
 }
 
 export function makeCorrelator(
@@ -455,6 +495,49 @@ export function distinctFrom(
   return sql`${valueComparison(spec, condition.left, table, condition.right, false)} ${
     condition.op === 'IS' ? sql`IS NOT DISTINCT FROM` : sql`IS DISTINCT FROM`
   } ${valueComparison(spec, condition.right, table, condition.left, false)}`;
+}
+
+function startEquality(
+  spec: Spec,
+  table: Table,
+  field: string,
+  value: unknown,
+): SQLQuery {
+  return sql`${colIdent(spec.server, {
+    table,
+    zql: field,
+  })} IS NOT DISTINCT FROM ${startValue(spec, table, field, value)}`;
+}
+
+function startRangeComparison(
+  spec: Spec,
+  table: Table,
+  field: string,
+  value: unknown,
+  operator: '>' | '<',
+): SQLQuery {
+  const column = colIdent(spec.server, {table, zql: field});
+  if (value === null) {
+    return operator === '>' ? sql`${column} IS NOT NULL` : sql`FALSE`;
+  }
+  const typedValue = startValue(spec, table, field, value);
+  return operator === '>'
+    ? sql`${column} > ${typedValue}`
+    : sql`(${column} IS NULL OR ${column} < ${typedValue})`;
+}
+
+function startValue(
+  spec: Spec,
+  table: Table,
+  field: string,
+  value: unknown,
+): SQLQuery {
+  return sqlConvertColumnArg(
+    getServerColumn(spec.server, table, field),
+    value,
+    false,
+    true,
+  );
 }
 
 function valueComparison(
@@ -563,9 +646,7 @@ function literalValueComparison(
       ) {
         return sqlConvertSingularLiteralArg(valuePos.value);
       }
-      throw new Error(
-        `Literal of unexpected type. ${valuePos.value} of type ${typeof valuePos.value}`,
-      );
+      throw new Error(`Literal of unexpected type: ${typeof valuePos.value}`);
     }
     case 'static':
       throw new Error(

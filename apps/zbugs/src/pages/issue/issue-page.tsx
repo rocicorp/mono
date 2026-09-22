@@ -1,7 +1,5 @@
 import type {Row} from '@rocicorp/zero';
 import {useQuery, useZero} from '@rocicorp/zero/react';
-import type {Virtualizer} from '@tanstack/react-virtual';
-import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {
   useCallback,
@@ -19,14 +17,12 @@ import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {assert} from '../../../../../packages/shared/src/asserts.js';
 import {must} from '../../../../../packages/shared/src/must.ts';
-import {difference} from '../../../../../packages/shared/src/set-utils.ts';
-import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import {mutators, type NotificationType} from '../../../shared/mutators.ts';
 import {queries, type ListContextParams} from '../../../shared/queries.ts';
 import circle from '../../assets/icons/circle.svg';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
-import {commentQuery} from '../../comment-query.ts';
+import {parsePermalink} from '../../comment-permalink.ts';
 import {AvatarImage} from '../../components/avatar-image.tsx';
 import {Button} from '../../components/button.tsx';
 import {CanEdit} from '../../components/can-edit.tsx';
@@ -45,6 +41,7 @@ import {UserPicker} from '../../components/user-picker.tsx';
 import {type Emoji} from '../../emoji-utils.ts';
 import {useCanEdit} from '../../hooks/use-can-edit.ts';
 import {useEmojiDataSourcePreload} from '../../hooks/use-emoji-data-source-preload.ts';
+import {useHash} from '../../hooks/use-hash.ts';
 import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
@@ -53,13 +50,12 @@ import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
-import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_NAV} from '../../query-cache-policy.ts';
 import {links, useListContext, type ZbugsHistoryState} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 import {CommentComposer} from './comment-composer.tsx';
-import {Comment} from './comment.tsx';
+import {Comments} from './comments.tsx';
 import {getID} from './get-id.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 import {ToastContainer, ToastContent} from './toast-content.tsx';
@@ -255,71 +251,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     [displayed?.labels],
   );
 
-  const [displayAllComments, setDisplayAllComments] = useState(false);
-
-  const [allComments, allCommentsResult] = useQuery(
-    commentQuery(displayed?.id),
-    {
-      enabled: displayAllComments && displayed !== undefined,
-      ...CACHE_NAV,
-    },
-  );
-
-  const [comments, hasOlderComments] = useMemo(() => {
-    if (displayed?.comments === undefined) {
-      return [undefined, false];
-    }
-    if (allCommentsResult.type === 'complete') {
-      return [allComments, false];
-    }
-    return [
-      displayed.comments.slice(0, INITIAL_COMMENT_LIMIT).reverse(),
-      displayed.comments.length > INITIAL_COMMENT_LIMIT,
-    ];
-  }, [displayed?.comments, allCommentsResult.type, allComments]);
-
-  const issueDescriptionRef = useRef<HTMLDivElement | null>(null);
-  const restoreScrollRef = useRef<() => void>(undefined);
-  const {listRef, virtualizer} = useVirtualComments(comments ?? []);
-
-  // Restore scroll on changes to comments.
-  useEffect(() => {
-    restoreScrollRef.current?.();
-  }, [comments]);
-
-  useEffect(() => {
-    if (comments === undefined || comments.length === 0) {
-      restoreScrollRef.current = undefined;
-      return;
-    }
-
-    restoreScrollRef.current = getScrollRestore(
-      issueDescriptionRef.current,
-      virtualizer,
-      comments,
-    );
-  }, [virtualizer.scrollOffset, comments, virtualizer]);
-
-  // Permalink scrolling behavior
-  const [highlightedCommentID, setHighlightedCommentID] = useState<
-    string | null
-  >(null);
-
-  const highlightComment = (commentID: string) => {
-    if (comments === undefined) {
-      return;
-    }
-    const commentIndex = comments.findIndex(c => c.id === commentID);
-    if (commentIndex !== -1) {
-      setHighlightedCommentID(commentID);
-      virtualizer.scrollToIndex(commentIndex, {
-        // auto for minimal amount of scrolling.
-        align: 'auto',
-        // The `smooth` scroll behavior is not fully supported with dynamic size.
-        // behavior: 'smooth',
-      });
-    }
-  };
+  // A `#comment-<id>` permalink: the comments virtualizer loads the window
+  // around the target and scrolls it into view; the Comment highlights itself
+  // by comparing the hash.
+  const hash = useHash();
+  const commentPermalinkID = parsePermalink(hash) ?? null;
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
@@ -338,7 +274,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           maybeShowToastForEmoji(
             emoji,
             displayed,
-            virtualizer,
             issueEmojiRef.current,
             setRecentEmojis,
           );
@@ -353,7 +288,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
       setRecentEmojis([...newRecentEmojis.values()]);
     },
-    [displayed, recentEmojis, virtualizer, z.userID],
+    [displayed, recentEmojis, z.userID],
   );
 
   const removeRecentEmoji = useCallback((id: string) => {
@@ -370,13 +305,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   useEmojiChangeListener(displayed, handleEmojiChange);
   useEmojiDataSourcePreload();
-  useShowToastForNewComment(comments, virtualizer, highlightComment);
 
   if (!displayed && issueResult.type === 'complete') {
     return <NotFound></NotFound>;
   }
 
-  if (!displayed || !comments) {
+  if (!displayed) {
     return null;
   }
 
@@ -467,7 +401,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           </CanEdit>
         </div>
 
-        <div ref={issueDescriptionRef}>
+        <div>
           {!editing ? (
             <h1 className="issue-detail-title">{rendering.title}</h1>
           ) : (
@@ -706,43 +640,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
         </div>
 
         <h2 className="issue-detail-label">Comments</h2>
-        <Button
-          className="show-older-comments"
-          style={{
-            visibility: hasOlderComments ? 'visible' : 'hidden',
-          }}
-          onAction={() => setDisplayAllComments(true)}
-        >
-          Show Older
-        </Button>
 
-        <div className="comments-container" ref={listRef}>
-          <div
-            className="virtual-list"
-            style={{height: virtualizer.getTotalSize()}}
-          >
-            {virtualizer.getVirtualItems().map(item => (
-              <div
-                key={item.key as string}
-                ref={virtualizer.measureElement}
-                data-index={item.index}
-                style={{
-                  transform: `translateY(${
-                    item.start - virtualizer.options.scrollMargin
-                  }px)`,
-                }}
-              >
-                <Comment
-                  id={comments[item.index].id}
-                  issueID={displayed.id}
-                  comment={comments[item.index]}
-                  height={item.size}
-                  highlight={highlightedCommentID === comments[item.index].id}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        <Comments issueID={displayed.id} permalinkID={commentPermalinkID} />
 
         {z.userID === undefined ? (
           <a href="/api/login/github" className="login-to-comment">
@@ -768,9 +667,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   );
 }
 
-// This cache is stored outside the state so that it can be used between renders.
-const commentSizeCache = new LRUCache<string, number>(2000);
-
 function NotFound() {
   return (
     <div>
@@ -784,10 +680,7 @@ function NotFound() {
 
 function maybeShowToastForEmoji(
   emoji: Emoji,
-  issue: Row['issue'] & {
-    readonly comments: readonly Row['comment'][];
-  },
-  virtualizer: Virtualizer<Window, HTMLElement>,
+  issue: Row['issue'],
   emojiElement: HTMLDivElement | null,
   setRecentEmojis: Dispatch<SetStateAction<Emoji[]>>,
 ) {
@@ -806,13 +699,10 @@ function maybeShowToastForEmoji(
   // - no toast. Just the tooltip (which is always shown)
   let containerID: 'top' | 'bottom' | undefined;
   const rect = emojiElement.getBoundingClientRect();
-  const {scrollRect} = virtualizer;
-  if (scrollRect) {
-    if (rect.bottom < 0) {
-      containerID = 'top';
-    } else if (rect.top > scrollRect.height) {
-      containerID = 'bottom';
-    }
+  if (rect.bottom < 0) {
+    containerID = 'top';
+  } else if (rect.top > window.innerHeight) {
+    containerID = 'bottom';
   }
 
   if (containerID === undefined) {
@@ -845,128 +735,7 @@ function maybeShowToastForEmoji(
   );
 }
 
-const sampleSize = 100;
-function average(numbers: number[]) {
-  return numbers.reduce((a, b) => a + b, 0) / numbers.length;
-}
-function sample(bucket: number[], sample: number, size: number) {
-  if (bucket.length < size) {
-    bucket.push(sample);
-    return;
-  }
-
-  bucket.shift();
-  bucket.push(sample);
-}
-
-function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
-  const listRef = useRef<HTMLDivElement | null>(null);
-
-  const measurements = useRef<number[]>([200]);
-
-  const virtualizer = useWindowVirtualizer({
-    count: comments.length,
-    estimateSize: index => {
-      const {id} = comments[index];
-      const cached = commentSizeCache.get(id);
-      if (cached) {
-        return cached;
-      }
-      return average(measurements.current);
-    },
-    overscan: 3,
-    scrollMargin: listRef.current?.offsetTop ?? 0,
-    measureElement: (el: HTMLElement) => {
-      const height = el.offsetHeight;
-      const {index} = el.dataset;
-      if (index && height) {
-        const {id} = comments[parseInt(index)];
-        commentSizeCache.set(id, height);
-      }
-      sample(measurements.current, height, sampleSize);
-      return height;
-    },
-    getItemKey: index => comments[index].id,
-    gap: 16,
-  });
-  return {listRef, virtualizer};
-}
-
-function getScrollRestore(
-  issueDescriptionElement: HTMLDivElement | null,
-  virtualizer: Virtualizer<Window, HTMLElement>,
-  comments: readonly {id: string}[],
-): () => void {
-  const getScrollHeight = () =>
-    virtualizer.options.scrollMargin + virtualizer.getTotalSize();
-  const getClientHeight = () => virtualizer.scrollRect?.height ?? 0;
-  const getScrollTop = () => virtualizer.scrollOffset ?? 0;
-
-  // If the issue description is visible we keep scroll as is.
-  if (issueDescriptionElement && issueDescriptionElement.isConnected) {
-    const rect = issueDescriptionElement.getBoundingClientRect();
-    const inView = rect.bottom > 0 && rect.top < getClientHeight();
-    if (inView) {
-      return noop;
-    }
-  }
-
-  // If almost at the bottom of the page, maintain the scrollBottom.
-  const bottomMargin = 175;
-  const scrollBottom = getScrollHeight() - getScrollTop() - getClientHeight();
-
-  if (scrollBottom <= bottomMargin) {
-    return () => {
-      virtualizer.scrollToOffset(
-        getScrollHeight() - getClientHeight() - scrollBottom,
-      );
-    };
-  }
-
-  // Npw we use the first comment that is visible in the viewport as the anchor.
-  const scrollTop = getScrollTop();
-  const topVirtualItem = virtualizer.getVirtualItemForOffset(scrollTop);
-  if (topVirtualItem) {
-    const top = topVirtualItem.start - scrollTop;
-    const {key, index} = topVirtualItem;
-    return () => {
-      let newIndex = -1;
-      // First search the virtual items for the comment.
-      const newVirtualItem = virtualizer
-        .getVirtualItems()
-        .find(vi => vi.key === key);
-      if (newVirtualItem) {
-        newIndex = newVirtualItem.index;
-      } else {
-        // The comment is not in the virtual items. Let's try to find it in the
-        // comments list
-        newIndex = comments.findIndex(c => c.id === key);
-        if (newIndex === -1) {
-          // The comment was removed. Use the old index instead.
-          newIndex = index;
-        }
-      }
-
-      const offsetForIndex = virtualizer.getOffsetForIndex(newIndex, 'start');
-      if (offsetForIndex === undefined) {
-        return;
-      }
-      virtualizer.scrollToOffset(offsetForIndex[0] - top, {
-        align: 'start',
-      });
-    };
-  }
-
-  return noop;
-}
-
-function noop() {
-  // no op
-}
-
-type Issue = Row['issue'] & {
-  readonly comments: readonly Row['comment'][];
-};
+type Issue = NonNullable<Row<ReturnType<typeof queries.issueDetail>>>;
 
 function useEmojiChangeListener(
   issue: Issue | undefined,
@@ -1011,88 +780,6 @@ function useEmojiChangeListener(
       lastEmojis.current = newEmojis;
     }
   }, [cb, emojis, issueID, result.type]);
-}
-
-function useShowToastForNewComment(
-  comments:
-    | ReadonlyArray<
-        Row['comment'] & {readonly creator: Row['user'] | undefined}
-      >
-    | undefined,
-  virtualizer: Virtualizer<Window, HTMLElement>,
-  highlightComment: (id: string) => void,
-) {
-  // Keep track of the last comment IDs so we can compare them to the current
-  // comment IDs and show a toast for new comments.
-  const lastCommentIDs = useRef<Set<string>>(undefined);
-  const {userID} = useZero();
-
-  useEffect(() => {
-    if (comments === undefined || comments.length === 0) {
-      return;
-    }
-    if (lastCommentIDs.current === undefined) {
-      lastCommentIDs.current = new Set(comments.map(c => c.id));
-      return;
-    }
-
-    const currentCommentIDs = new Set(comments.map(c => c.id));
-
-    const lCommentIDs = lastCommentIDs.current;
-    const removedCommentIDs = difference(lCommentIDs, currentCommentIDs);
-
-    const newCommentIDs = [];
-    for (let i = comments.length - 1; i >= 0; i--) {
-      const commentID = comments[i].id;
-      if (lCommentIDs.has(commentID)) {
-        break;
-      }
-      newCommentIDs.push(commentID);
-    }
-
-    for (const commentID of newCommentIDs) {
-      const index = comments.findLastIndex(c => c.id === commentID);
-      if (index === -1) {
-        continue;
-      }
-
-      // Don't show a toast if the user is the one who posted the comment.
-      const comment = comments[index];
-      if (comment.creatorID === userID) {
-        continue;
-      }
-
-      const scrollTop = virtualizer.scrollOffset ?? 0;
-      const clientHeight = virtualizer.scrollRect?.height ?? 0;
-      const isCommentBelowViewport =
-        virtualizer.measurementsCache[index].start > scrollTop + clientHeight;
-
-      if (!isCommentBelowViewport || !comment.creator) {
-        continue;
-      }
-
-      toast(
-        <ToastContent toastID={commentID}>
-          <AvatarImage className="toast-avatar-icon" user={comment.creator} />
-          {comment.creator?.login + ' posted a new comment'}
-        </ToastContent>,
-
-        {
-          toastId: commentID,
-          containerId: 'bottom',
-          onClick: () => {
-            highlightComment(comment.id);
-          },
-        },
-      );
-    }
-
-    for (const commentID of removedCommentIDs) {
-      toast.dismiss(commentID);
-    }
-
-    lastCommentIDs.current = currentCommentIDs;
-  }, [comments, virtualizer, userID, highlightComment]);
 }
 
 export function IssueRedirect({onReady}: {onReady: () => void}) {

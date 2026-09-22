@@ -13,12 +13,13 @@ import {
 } from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {id} from '../../../../types/sql.ts';
+import {CURRENT_SCHEMA_VERSION, ensureShardSchema} from './init.ts';
+import * as ReplicaStage from './replica-stage-enum.ts';
 import {
-  CURRENT_SCHEMA_VERSION,
-  ensureShardSchema,
-  updateShardSchema,
-} from './init.ts';
-import {createReplica, initReplica, metadataPublicationName} from './shard.ts';
+  createReplica,
+  initInitialSyncReplica,
+  metadataPublicationName,
+} from './shard.ts';
 
 const APP_ID = 'zappz';
 const SHARD_NUM = 23;
@@ -69,7 +70,12 @@ describe('change-streamer/pg/schema/init', () => {
             id: /\d{10,}/,
             rank: expect.any(BigInt),
             slot: `${APP_ID}_${SHARD_NUM}_1234`,
-            version: '2dhf29ef',
+            version: null,
+            epoch: 0,
+            generation: '2dhf29ef',
+            stage: ReplicaStage.InitialSync,
+            backupPath: '12345',
+            backupV5: true,
             initialSchema: {tables: [], indexes: []},
             initialSyncContext: {foo: 'bar'},
             subscriberContext: null,
@@ -100,7 +106,12 @@ describe('change-streamer/pg/schema/init', () => {
             id: /\d{10,}/,
             rank: expect.any(BigInt),
             slot: `${APP_ID}_${SHARD_NUM}_5678`,
-            version: 's8dfh2d',
+            version: null,
+            epoch: 0,
+            generation: 's8dfh2d',
+            stage: ReplicaStage.InitialSync,
+            backupPath: '12345',
+            backupV5: true,
             initialSchema: {tables: [], indexes: []},
           },
         ],
@@ -131,10 +142,11 @@ describe('change-streamer/pg/schema/init', () => {
       },
     },
     {
-      name: 'Migration from v5',
+      name: 'Migration from v6',
       upstreamSetup: `
         CREATE SCHEMA ${APP_ID}_${SHARD_NUM};
         CREATE TABLE ${APP_ID}_${SHARD_NUM}."shardConfig" (
+          "replicaVersion" TEXT, 
           "publications"  TEXT[] NOT NULL,
           "ddlDetection"  BOOL NOT NULL,
           "initialSchema" JSON,
@@ -144,8 +156,9 @@ describe('change-streamer/pg/schema/init', () => {
         );
 
         INSERT INTO ${APP_ID}_${SHARD_NUM}."shardConfig" 
-          ("lock", "publications", "ddlDetection", "initialSchema")
-          VALUES (true, 
+          ("lock", "replicaVersion", "publications", "ddlDetection", "initialSchema")
+          VALUES (true,
+            '123',
             ARRAY['_${APP_ID}_metadata_23', '_${APP_ID}_public_23'], 
             true,
             '{"tables":[],"indexes":[]}'
@@ -157,8 +170,8 @@ describe('change-streamer/pg/schema/init', () => {
             FOR TABLE ${APP_ID}_${SHARD_NUM}."clients";
   `,
       existingVersionHistory: {
-        schemaVersion: 5,
-        dataVersion: 5,
+        schemaVersion: 6,
+        dataVersion: 6,
         minSafeVersion: 1,
       },
       upstreamPostState: {
@@ -182,12 +195,142 @@ describe('change-streamer/pg/schema/init', () => {
             rank: expect.any(BigInt),
             slot: `${APP_ID}_${SHARD_NUM}`,
             version: '123',
+            epoch: 0,
+            generation: '123',
+            stage: ReplicaStage.InitialSync,
+            backupPath: null,
+            backupV5: false,
             initialSchema: {tables: [], indexes: []},
           },
         ],
       },
     },
+    {
+      name: 'Migration from v15',
+      upstreamSetup: /*sql*/ `
+        CREATE SCHEMA ${APP_ID}_${SHARD_NUM};
+        CREATE TABLE ${APP_ID}_${SHARD_NUM}."shardConfig" (
+          "replicaVersion" TEXT, 
+          "publications"  TEXT[] NOT NULL,
+          "ddlDetection"  BOOL NOT NULL,
+          "initialSchema" JSON,
+
+          -- Ensure that there is only a single row in the table.
+          "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
+        );
+
+        CREATE TABLE ${APP_ID}_${SHARD_NUM}.replicas (
+          -- The DEFAULT exists purely for backwards compatibility support.
+          -- New code always specifies a value based on Date.now().
+          "slot"               TEXT NOT NULL,
+          "version"            TEXT NOT NULL PRIMARY KEY,
+          "initialSchema"      JSON NOT NULL,
+          "initialSyncContext" JSON,
+          "subscriberContext"  JSON
+        );
+
+        INSERT INTO ${APP_ID}_${SHARD_NUM}."replicas"
+          ("slot", "version", "initialSchema", "subscriberContext")
+          VALUES ('${APP_ID}_${SHARD_NUM}_b', '101', '{"tables": [], "indexes": []}', '{"foo":"bar"}');
+
+        INSERT INTO ${APP_ID}_${SHARD_NUM}."shardConfig" 
+          ("lock", "replicaVersion", "publications", "ddlDetection", "initialSchema")
+          VALUES (true,
+            '123',
+            ARRAY['_${APP_ID}_metadata_23', '_${APP_ID}_public_23'], 
+            true,
+            '{"tables":[],"indexes":[]}'
+          );
+        CREATE TABLE ${APP_ID}_${SHARD_NUM}."clients" 
+            ("clientGroupID" TEXT PRIMARY KEY, "clientID" TEXT, "lastMutationID" INT8);
+
+        CREATE PUBLICATION ${id(metadataPublicationName(APP_ID, SHARD_NUM))}
+            FOR TABLE ${APP_ID}_${SHARD_NUM}."clients";
+  `,
+      existingVersionHistory: {
+        schemaVersion: 15,
+        dataVersion: 15,
+        minSafeVersion: 1,
+      },
+      upstreamPostState: {
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
+          {
+            lock: true,
+            publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
+            ddlDetection: true,
+          },
+        ],
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [
+          {
+            id: /[a-z0-9]{10,}/, // Random ID is backfilled
+            rank: expect.any(BigInt),
+            slot: `${APP_ID}_${SHARD_NUM}_b`,
+            version: '101',
+            epoch: 0,
+            generation: '101',
+            stage: ReplicaStage.Replicate,
+            backupPath: null,
+            backupV5: false,
+            initialSchema: {tables: [], indexes: []},
+            subscriberContext: {foo: 'bar'},
+          },
+        ],
+      },
+    },
   ];
+
+  test('v29 upgrades DDL triggers to report partial indexes', async () => {
+    await initDB(
+      upstream,
+      `
+      CREATE TABLE foo(id TEXT PRIMARY KEY, flag INT4);
+      CREATE UNIQUE INDEX foo_live ON foo (id) WHERE flag > 0;
+      CREATE PUBLICATION ${APP_ID}_foo FOR TABLE foo;
+    `,
+    );
+    const shard = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: [`${APP_ID}_foo`],
+    };
+    const schema = id(`${APP_ID}_${SHARD_NUM}`);
+    await ensureShardSchema(lc, upstream, shard, false);
+
+    const [{specs: v25Specs, current: v25Current}] = (await upstream.unsafe(`
+        SELECT ${schema}.schema_specs() AS specs, current
+          FROM ${schema}."publishedSchema"`)) as unknown as {
+      specs: {indexes: {name: string; tableName: string}[]};
+      current: unknown;
+    }[];
+    expect(
+      v25Specs.indexes.filter(index => index.tableName === 'foo'),
+    ).toMatchObject([{name: 'foo_pkey'}]);
+    expect(v25Current).toEqual(v25Specs);
+    await expectTablesToMatch(upstream, {
+      [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [
+        {...CURRENT_SCHEMA_VERSIONS, dataVersion: 28, schemaVersion: 28},
+      ],
+    });
+
+    await ensureShardSchema(lc, upstream, shard);
+
+    const [{specs, current}] = (await upstream.unsafe(`
+      SELECT ${schema}.schema_specs() AS specs, current
+        FROM ${schema}."publishedSchema"`)) as unknown as {
+      specs: {indexes: {tableName: string}[]};
+      current: unknown;
+    }[];
+    expect(specs.indexes.filter(idx => idx.tableName === 'foo')).toMatchObject([
+      {name: 'foo_live', unique: false, predicateSQL: '(flag > 0)'},
+      {name: 'foo_pkey', unique: true, predicateSQL: null},
+    ]);
+    // The stored schema is refreshed along with the function so that the
+    // change in format is not reported as a schema change on the next DDL.
+    expect(current).toEqual(specs);
+    await expectTablesToMatch(upstream, {
+      [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+    });
+  });
 
   for (const c of cases) {
     test(c.name, async () => {
@@ -198,38 +341,33 @@ describe('change-streamer/pg/schema/init', () => {
         await createVersionHistoryTable(upstream, schema);
         await upstream`INSERT INTO ${upstream(schema)}."versionHistory"
           ${upstream(c.existingVersionHistory)}`;
-        await updateShardSchema(
-          lc,
+      }
+      await ensureShardSchema(lc, upstream, {
+        appID: APP_ID,
+        shardNum: SHARD_NUM,
+        publications: c.requestedPublications ?? [],
+      });
+      if (c.newReplica) {
+        await createReplica(
           upstream,
+          {appID: APP_ID, shardNum: SHARD_NUM},
+          '12345',
+          c.newReplica[0],
+          0,
+          c.newReplica[1],
           {
-            appID: APP_ID,
-            shardNum: SHARD_NUM,
-            publications: c.requestedPublications ?? [],
+            backupPath: '12345',
+            backupV5: true,
           },
-          '123',
+          ReplicaStage.InitialSync,
         );
-      } else {
-        await ensureShardSchema(lc, upstream, {
-          appID: APP_ID,
-          shardNum: SHARD_NUM,
-          publications: c.requestedPublications ?? [],
-        });
-        if (c.newReplica) {
-          await createReplica(
-            upstream,
-            {appID: APP_ID, shardNum: SHARD_NUM},
-            '12345',
-            c.newReplica[0],
-            c.newReplica[1],
-          );
-          await initReplica(
-            upstream,
-            {appID: APP_ID, shardNum: SHARD_NUM},
-            '12345',
-            {tables: [], indexes: []},
-            {foo: 'bar'},
-          );
-        }
+        await initInitialSyncReplica(
+          upstream,
+          {appID: APP_ID, shardNum: SHARD_NUM},
+          '12345',
+          {tables: [], indexes: []},
+          {foo: 'bar'},
+        );
       }
 
       await expectTablesToMatch(upstream, c.upstreamPostState);

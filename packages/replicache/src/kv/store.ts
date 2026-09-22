@@ -18,6 +18,12 @@ export interface Store {
   write(): Promise<Write>;
   close(): Promise<void>;
   closed: boolean;
+  /**
+   * The kind of storage backing this store, e.g. `'idb'` or `'mem'`. This can
+   * change over time, for example when an IndexedDB store fails to open and
+   * falls back to memory.
+   */
+  readonly kind?: string | undefined;
 }
 
 /**

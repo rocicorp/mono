@@ -2,22 +2,23 @@ import path from 'node:path';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../shared/src/must.ts';
+import {runsChangeStreamer} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {initEventSink} from '../observability/events.ts';
 import {
   exitAfter,
   ProcessManager,
+  recordStartupDurationMs,
   runUntilKilled,
   type WorkerType,
 } from '../services/life-cycle.ts';
 import {
-  restoreReplica,
-  startReplicaBackupProcess,
-} from '../services/litestream/commands.ts';
-import {
   childWorker,
   parentWorker,
   singleProcessMode,
+  type ProfileMessage,
+  type ProfileResponseMessage,
   type Worker,
 } from '../types/processes.ts';
 import {
@@ -56,6 +57,13 @@ export default async function runWorker(
     0,
   );
   lc = createLogContext(config, 'dispatcher');
+  registerSQLiteCorruptionDiagnosticTarget(
+    {
+      debugName: 'dispatcher replica',
+      dbPath: config.replica.file,
+    },
+    config.sqliteCorruptionChecks,
+  );
   initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);
@@ -84,6 +92,7 @@ export default async function runWorker(
           String(Math.floor(config.cvr.maxConns / numSyncers)),
         ];
 
+  const allSubWorkers: Worker[] = [];
   function loadWorker(
     moduleUrl: URL,
     type: WorkerType,
@@ -92,58 +101,45 @@ export default async function runWorker(
   ): Worker {
     const worker = childWorker(moduleUrl, env, ...args, ...internalFlags);
     const name = path.basename(moduleUrl.pathname) + (id ? ` (${id})` : '');
-    return processes.addWorker(worker, type, name);
+    const w = processes.addWorker(worker, type, name);
+    allSubWorkers.push(w);
+    w.onMessageType<ProfileResponseMessage>('profileResponse', res =>
+      parent.send(['profileResponse', res]),
+    );
+    return w;
   }
 
-  const {
-    taskID,
-    changeStreamer: {mode: changeStreamerMode, uri: changeStreamerURI},
-    litestream,
-  } = config;
-  const runChangeStreamer =
-    changeStreamerMode === 'dedicated' && changeStreamerURI === undefined;
+  const {taskID, litestream} = config;
+  const runChangeStreamer = runsChangeStreamer(config);
+  const sqliteChangeLogEnabled =
+    config.changeStreamer.sqliteChangeLogMode !== 'off';
+  if (sqliteChangeLogEnabled && !runChangeStreamer) {
+    // A multi-node deployment configures every task from one environment, so
+    // the change log's options reach the view-syncers too. The log lives in
+    // the change-streamer, and a task that connects to one simply never writes
+    // a log. Warning rather than refusing to start is what makes the
+    // fleet-wide environment -- often the only knob an operator has -- able to
+    // express the rollout at all.
+    lc.warn?.(
+      `ignoring --change-streamer-sqlite-change-log-mode=` +
+        `${config.changeStreamer.sqliteChangeLogMode}: this task connects to ` +
+        `a change-streamer rather than running one, and the SQLite change log ` +
+        `lives in the change-streamer`,
+    );
+  }
 
   let changeStreamer: Worker | undefined;
 
-  if (!runChangeStreamer) {
-    changeStreamer = undefined;
-    if (litestream.executable) {
-      // For view-syncers, the backup is restored here. For the replication-manager,
-      // the backup is restored in the change-streamer worker.
-      await restoreReplica(lc, config, null);
-    }
-  } else {
+  if (runChangeStreamer) {
     const {promise: changeStreamerReady, resolve: changeStreamerStarted} =
       resolver();
     changeStreamer = loadWorker(CHANGE_STREAMER_URL, 'supporting').once(
       'message',
       changeStreamerStarted,
     );
-
     // Wait for the change-streamer to be ready to guarantee that a replica
     // file is present.
     await changeStreamerReady;
-
-    if (litestream.backupURL) {
-      // Start a backup replicator and corresponding litestream backup process.
-      const {promise: backupReady, resolve} = resolver();
-      const mode: ReplicaFileMode = 'backup';
-      loadWorker(REPLICATOR_URL, 'supporting', mode, mode).once(
-        // Wait for the Replicator's first message (i.e. "ready") before starting
-        // litestream backup in order to avoid contending on the lock when the
-        // replicator first prepares the db file.
-        'message',
-        () => {
-          processes.addSubprocess(
-            startReplicaBackupProcess(lc, config),
-            'supporting',
-            'litestream',
-          );
-          resolve();
-        },
-      );
-      await backupReady;
-    }
   }
 
   if (numSyncers > 0) {
@@ -197,9 +193,16 @@ export default async function runWorker(
   );
   await processes.allWorkersReady();
   clearInterval(logWaiting);
-  lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
+  const startupDurationMs = Date.now() - startMs;
+  lc.info?.(`all workers ready (${startupDurationMs} ms)`);
+  recordStartupDurationMs(startupDurationMs);
 
   parent.send(['ready', {ready: true}]);
+  parent.onMessageType<ProfileMessage>('profile', req => {
+    for (const w of allSubWorkers) {
+      w.send(['profile', req]);
+    }
+  });
 
   try {
     await runUntilKilled(
@@ -216,11 +219,14 @@ export default async function runWorker(
     );
   } catch (err) {
     processes.logErrorAndExit(err, 'dispatcher');
+  } finally {
+    await processes.shutdown();
   }
-
-  await processes.done();
 }
 
 if (!singleProcessMode()) {
-  void exitAfter(lc, () => runWorker(must(parentWorker), process.env));
+  void exitAfter(
+    () => lc,
+    () => runWorker(must(parentWorker), process.env),
+  );
 }

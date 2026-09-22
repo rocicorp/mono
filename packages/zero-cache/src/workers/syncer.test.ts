@@ -11,12 +11,21 @@ import {
 } from 'vitest';
 
 let receiver: WebSocketReceiver<any>;
+let abortHandoff: ((payload: any) => void) | undefined;
+let receivedHandoff: ((payload: any) => void) | undefined;
 vi.mock('../types/websocket-handoff.ts', () => ({
   installWebSocketReceiver: vi
     .fn()
-    .mockImplementation((_lc, _server, receive, _sender) => {
-      receiver = receive;
-    }),
+    .mockImplementation(
+      (_lc, _server, receive, _sender, onAbort, onReceived) => {
+        abortHandoff = onAbort;
+        receivedHandoff = onReceived;
+        receiver = (ws, payload, msg) => {
+          onReceived?.(payload);
+          return receive(ws, payload, msg);
+        };
+      },
+    ),
 }));
 
 // Mock the anonymous telemetry functions
@@ -36,6 +45,7 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
@@ -56,7 +66,13 @@ import type {ConnectionContextManager} from '../services/view-syncer/connection-
 import {ConnectionContextManagerImpl} from '../services/view-syncer/connection-context-manager.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
-import {Syncer} from './syncer.ts';
+import {
+  computeMaxServingLagMs,
+  computePipelineDedupStats,
+  computeServingLagStatsMs,
+  MAX_REPLICA_READY_STATES,
+  Syncer,
+} from './syncer.ts';
 
 const lc = createSilentLogContext();
 const tempDir = await fs.mkdtemp(
@@ -85,6 +101,7 @@ function makeFactories(
   mutagensOut: MutagenService[],
   pushersOut: PusherService[],
   contextManagersOut: Map<string, ConnectionContextManagerImpl>,
+  viewSyncersOut: (ViewSyncer & ActivityBasedService)[] = [],
 ) {
   const storageDb = new Database(lc, ':memory:');
   storageDb.prepare(CREATE_STORAGE_TABLE).run();
@@ -101,7 +118,7 @@ function makeFactories(
         const stopped = resolver<void>();
         const connContextManager = new ConnectionContextManagerImpl(lc);
         contextManagersOut.set(id, connContextManager);
-        return {
+        const vs = {
           id,
           connContextManager,
           initConnection: vi.fn(),
@@ -112,6 +129,11 @@ function makeFactories(
           keepalive: () => true,
           queryCount: 0,
           rowCount: 0,
+          createdAtMs: Date.now(),
+          servedVersion: null,
+          servingLagEligible: true,
+          pipelineHashes: () => [],
+          clientSchemaKey: undefined,
           stop() {
             stopped.resolve();
             return stopped.promise;
@@ -120,6 +142,8 @@ function makeFactories(
             return stopped.promise;
           },
         } as ViewSyncer & ActivityBasedService;
+        viewSyncersOut.push(vs);
+        return vs;
       })(),
     mutagenFactory: (id: string) => {
       const ret = new MutagenService(
@@ -155,15 +179,21 @@ function makeFactories(
   } as const;
 }
 
-function setupSyncer(lc: LogContext, config: ZeroConfig) {
+function setupSyncer(
+  lc: LogContext,
+  config: ZeroConfig,
+  parent: any = TEST_PARENT,
+) {
   const mutagens: MutagenService[] = [];
   const pushers: PusherService[] = [];
+  const viewSyncers: (ViewSyncer & ActivityBasedService)[] = [];
   const contextManagers = new Map<string, ConnectionContextManagerImpl>();
   const {viewSyncerFactory, mutagenFactory, pusherFactory} = makeFactories(
     lc,
     mutagens,
     pushers,
     contextManagers,
+    viewSyncers,
   );
   const validateLegacyJWT: ValidateLegacyJWT | undefined =
     jwt.tokenConfigOptions(config.auth ?? {}).length === 1
@@ -186,10 +216,10 @@ function setupSyncer(lc: LogContext, config: ZeroConfig) {
     viewSyncerFactory,
     mutagenFactory,
     pusherFactory,
-    TEST_PARENT,
+    parent,
     validateLegacyJWT,
   );
-  return {syncer, mutagens, pushers, contextManagers};
+  return {syncer, mutagens, pushers, contextManagers, viewSyncers};
 }
 
 const baseParams = {
@@ -197,6 +227,272 @@ const baseParams = {
   wsID: '1',
   protocolVersion: 30,
 };
+
+describe('computeMaxServingLagMs', () => {
+  test('returns zero with no active view syncers', () => {
+    const states = [{watermark: '02', replicaReadyTimeMs: 100}];
+    expect(computeMaxServingLagMs(200, states, [])).toBe(0);
+    expect(states).toEqual([]);
+  });
+
+  test('uses oldest unserved replica-ready state across active view syncers', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 175},
+    ];
+
+    expect(
+      computeMaxServingLagMs(300, states, [
+        {createdAtMs: 0, servedVersion: '03', servingLagEligible: true},
+        {createdAtMs: 0, servedVersion: '02', servingLagEligible: true},
+      ]),
+    ).toBe(150);
+
+    expect(states).toEqual([
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 175},
+    ]);
+  });
+
+  test('ignores replica states from before a view syncer was created', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+    ];
+
+    expect(
+      computeMaxServingLagMs(300, states, [
+        {createdAtMs: 125, servedVersion: null, servingLagEligible: true},
+      ]),
+    ).toBe(150);
+
+    expect(states).toEqual([{watermark: '03', replicaReadyTimeMs: 150}]);
+  });
+
+  test('uses the later of creation time and served version as the first unserved state', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 200},
+      {watermark: '05', replicaReadyTimeMs: 250},
+    ];
+
+    expect(
+      computeMaxServingLagMs(300, states, [
+        {createdAtMs: 175, servedVersion: '02', servingLagEligible: true},
+        {createdAtMs: 0, servedVersion: '04', servingLagEligible: true},
+      ]),
+    ).toBe(100);
+
+    expect(states).toEqual([
+      {watermark: '04', replicaReadyTimeMs: 200},
+      {watermark: '05', replicaReadyTimeMs: 250},
+    ]);
+  });
+
+  test('bounds retained states even when a client group is behind', () => {
+    const states = Array.from(
+      {length: MAX_REPLICA_READY_STATES + 1},
+      (_, i) => ({
+        watermark: String(i).padStart(5, '0'),
+        replicaReadyTimeMs: i,
+      }),
+    );
+
+    expect(
+      computeMaxServingLagMs(20_000, states, [
+        {createdAtMs: 0, servedVersion: null, servingLagEligible: true},
+      ]),
+    ).toBe(20_000);
+
+    expect(states).toHaveLength(MAX_REPLICA_READY_STATES);
+    expect(states[0]).toEqual({watermark: '00001', replicaReadyTimeMs: 1});
+  });
+});
+
+describe('computeServingLagStatsMs', () => {
+  test('returns distribution across active view syncers including zero-lag groups', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 200},
+      {watermark: '05', replicaReadyTimeMs: 250},
+    ];
+
+    expect(
+      computeServingLagStatsMs(300, states, [
+        {createdAtMs: 0, servedVersion: '05', servingLagEligible: true},
+        {createdAtMs: 0, servedVersion: '03', servingLagEligible: true},
+        {createdAtMs: 0, servedVersion: '04', servingLagEligible: true},
+        {createdAtMs: 225, servedVersion: null, servingLagEligible: true},
+      ]),
+    ).toEqual({
+      activeClientGroups: 4,
+      laggingClientGroups: 3,
+      minMs: 0,
+      p50Ms: 50,
+      p75Ms: 50,
+      p99Ms: 100,
+      maxMs: 100,
+    });
+
+    expect(states).toEqual([
+      {watermark: '04', replicaReadyTimeMs: 200},
+      {watermark: '05', replicaReadyTimeMs: 250},
+    ]);
+  });
+
+  test('returns zero stats with no active view syncers', () => {
+    const states = [{watermark: '02', replicaReadyTimeMs: 100}];
+
+    expect(computeServingLagStatsMs(300, states, [])).toEqual({
+      activeClientGroups: 0,
+      laggingClientGroups: 0,
+      minMs: 0,
+      p50Ms: 0,
+      p75Ms: 0,
+      p99Ms: 0,
+      maxMs: 0,
+    });
+    expect(states).toEqual([]);
+  });
+
+  test('ignores view syncers without active validated clients', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 200},
+    ];
+
+    expect(
+      computeServingLagStatsMs(300, states, [
+        {createdAtMs: 0, servedVersion: null, servingLagEligible: false},
+        {createdAtMs: 0, servedVersion: '03', servingLagEligible: true},
+      ]),
+    ).toEqual({
+      activeClientGroups: 1,
+      laggingClientGroups: 1,
+      minMs: 100,
+      p50Ms: 100,
+      p75Ms: 100,
+      p99Ms: 100,
+      maxMs: 100,
+    });
+
+    expect(states).toEqual([{watermark: '04', replicaReadyTimeMs: 200}]);
+  });
+
+  test('clears retained replica-ready states when no view syncer is eligible', () => {
+    const states = [{watermark: '02', replicaReadyTimeMs: 100}];
+
+    expect(
+      computeServingLagStatsMs(300, states, [
+        {createdAtMs: 0, servedVersion: null, servingLagEligible: false},
+      ]),
+    ).toEqual({
+      activeClientGroups: 0,
+      laggingClientGroups: 0,
+      minMs: 0,
+      p50Ms: 0,
+      p75Ms: 0,
+      p99Ms: 0,
+      maxMs: 0,
+    });
+    expect(states).toEqual([]);
+  });
+});
+
+describe('computePipelineDedupStats', () => {
+  test('empty', () => {
+    const stats = computePipelineDedupStats([]);
+    expect(stats.clientTotal).toBe(0);
+    expect(stats.internalTotal).toBe(0);
+    expect(stats.clientHashes.size).toBe(0);
+    expect(stats.internalUnique).toBe(0);
+    expect(stats.clientSchemas).toBe(0);
+  });
+
+  test('counts duplicates across client groups by (schemaKey, hash)', () => {
+    const stats = computePipelineDedupStats([
+      {
+        clientSchemaKey: 'schema1',
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+          {transformationHash: 'bbb', internal: false, queryName: undefined},
+          {transformationHash: 'lmids', internal: true, queryName: undefined},
+        ],
+      },
+      {
+        clientSchemaKey: 'schema1',
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+          {transformationHash: 'lmids', internal: true, queryName: undefined},
+        ],
+      },
+      // Same transformationHash but different clientSchema: not shareable,
+      // so it counts as a distinct unique pipeline.
+      {
+        clientSchemaKey: 'schema2',
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+        ],
+      },
+      // Not yet initialized: contributes nothing.
+      {
+        clientSchemaKey: undefined,
+        pipelineHashes: () => [],
+      },
+    ]);
+
+    expect(stats.clientTotal).toBe(4);
+    expect(stats.internalTotal).toBe(2);
+    expect(stats.clientHashes.size).toBe(3);
+    expect(stats.clientHashes.get('schema1/aaa')).toEqual({
+      count: 2,
+      queryName: 'issues',
+    });
+    expect(stats.clientHashes.get('schema1/bbb')).toEqual({
+      count: 1,
+      queryName: undefined,
+    });
+    expect(stats.clientHashes.get('schema2/aaa')).toEqual({
+      count: 1,
+      queryName: 'issues',
+    });
+    // The internal (lmids) hash collides across CGs of the same schema in
+    // this synthetic input, but real internal queries embed the
+    // clientGroupID in their AST and would never collide; the stat exists
+    // to keep them segmented out of the client dedup factor.
+    expect(stats.internalUnique).toBe(1);
+    expect(stats.clientSchemas).toBe(2);
+  });
+
+  test('schema-less pipelines are not deduplicated across view-syncers', () => {
+    // A view-syncer with no client schema yet (clientSchemaKey undefined) has
+    // an unknown dedup identity. Two such view-syncers running the same
+    // transformationHash must not collapse into one unique pipeline, which
+    // would overstate the available deduplication.
+    const stats = computePipelineDedupStats([
+      {
+        clientSchemaKey: undefined,
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+        ],
+      },
+      {
+        clientSchemaKey: undefined,
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+        ],
+      },
+    ]);
+
+    expect(stats.clientTotal).toBe(2);
+    expect(stats.clientHashes.size).toBe(2);
+    expect(stats.clientSchemas).toBe(0);
+  });
+});
 
 function makeParams(clientID: number, params: any = {}) {
   return {
@@ -292,6 +588,139 @@ describe('cleanup', () => {
     for (let i = 0; i < 10; i++) {
       await newConnection(1);
       check(i);
+    }
+  });
+
+  test('notifies parent with active: false when ViewSyncer stops', async () => {
+    const sentMessages: any[] = [];
+    const mockParent = {
+      send: (msg: any) => {
+        sentMessages.push(msg);
+        return true;
+      },
+      onMessageType: () => {},
+    };
+    const env = setupSyncer(
+      lc,
+      {auth: {secret: 'test-secret'}} as ZeroConfig,
+      mockParent,
+    );
+    try {
+      const ws = await newConnection(1);
+      ws.close();
+      const vs = env.viewSyncers[0];
+      await vs.stop();
+      await sleep(10);
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: '1', active: false},
+      ]);
+    } finally {
+      await env.syncer.stop();
+    }
+  });
+
+  test('notifies parent with active: false when connection fails before ViewSyncer starts', async () => {
+    const sentMessages: any[] = [];
+    const mockParent = {
+      send: (msg: any) => {
+        sentMessages.push(msg);
+        return true;
+      },
+      onMessageType: () => {},
+    };
+    const env = setupSyncer(
+      lc,
+      {auth: {secret: 'test-secret'}} as ZeroConfig,
+      mockParent,
+    );
+    try {
+      const ws = new MockWebSocket() as unknown as WebSocket;
+      await receiver(
+        ws,
+        makeParams(1, {auth: 'invalid-token', clientGroupID: 'failed-cg'}),
+        {} as any,
+      );
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: 'failed-cg', active: false},
+      ]);
+    } finally {
+      await env.syncer.stop();
+    }
+  });
+
+  test('onStop does not emit active: false if a new connection is pending', async () => {
+    const sentMessages: any[] = [];
+    const mockParent = {
+      send: (msg: any) => {
+        sentMessages.push(msg);
+        return true;
+      },
+      onMessageType: () => {},
+    };
+    const env = setupSyncer(
+      lc,
+      {auth: {secret: 'test-secret'}} as ZeroConfig,
+      mockParent,
+    );
+    try {
+      const ws = await newConnection(1);
+
+      // Simulate a pending connection received via handoff
+      const pendingParams = makeParams(2, {clientGroupID: '1'});
+      receivedHandoff?.(pendingParams);
+
+      // Close the active connection and stop ViewSyncer
+      ws.close();
+      const vs = env.viewSyncers[0];
+      await vs.stop();
+      await sleep(10);
+
+      // Because pending connection exists, active: false should NOT be sent
+      expect(sentMessages.filter(m => m[0] === 'clientGroupStatus')).toEqual(
+        [],
+      );
+
+      // When the pending connection aborts/finishes, active: false is sent
+      abortHandoff?.(pendingParams);
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: '1', active: false},
+      ]);
+    } finally {
+      await env.syncer.stop();
+    }
+  });
+
+  test('notifies parent with active: false and generation when handoff aborts', async () => {
+    const sentMessages: any[] = [];
+    const mockParent = {
+      send: (msg: any) => {
+        sentMessages.push(msg);
+        return true;
+      },
+      onMessageType: () => {},
+    };
+    const env = setupSyncer(
+      lc,
+      {auth: {secret: 'test-secret'}} as ZeroConfig,
+      mockParent,
+    );
+    try {
+      const params = makeParams(1, {
+        clientGroupID: 'aborted-cg',
+        generation: 42,
+      });
+      receivedHandoff?.(params);
+      abortHandoff?.(params);
+
+      expect(sentMessages).toContainEqual([
+        'clientGroupStatus',
+        {clientGroupID: 'aborted-cg', active: false, generation: 42},
+      ]);
+    } finally {
+      await env.syncer.stop();
     }
   });
 });
@@ -543,6 +972,94 @@ describe('jwt auth missing options and missing endpoints', () => {
 
     expect(mutagens.length).toBe(0);
     expect(pushers.length).toBe(0);
+  });
+});
+
+describe('websocket closed while resolving auth', () => {
+  let syncer: Syncer;
+  let mutagens: MutagenService[];
+  let pushers: PusherService[];
+  let contextManagers: Map<string, ConnectionContextManagerImpl>;
+  let verifySpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    verifySpy = vi.spyOn(jwt, 'verifyToken');
+    verifySpy.mockReset();
+    const env = setupSyncer(lc, {
+      auth: {
+        secret: 'test-secret',
+      },
+    } as ZeroConfig);
+    syncer = env.syncer;
+    mutagens = env.mutagens;
+    pushers = env.pushers;
+    contextManagers = env.contextManagers;
+  });
+
+  afterEach(async () => {
+    await syncer.stop();
+  });
+
+  test('does not create a connection or services for the closed socket', async () => {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+
+    // The client disconnects while its token is being verified.
+    verifySpy.mockImplementationOnce(() => {
+      (ws as unknown as MockWebSocket).close();
+      return Promise.resolve({sub: 'user-1'});
+    });
+
+    await receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: 'client-1',
+        userID: 'user-1',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+        auth: 'dummy-token',
+      },
+      {} as any,
+    );
+
+    expect(verifySpy).toHaveBeenCalledOnce();
+    expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
+
+    // No per-client-group services are created, and no connection is
+    // registered, for the socket that closed during auth resolution.
+    expect(mutagens).toHaveLength(0);
+    expect(pushers).toHaveLength(0);
+    expect(contextManagers.size).toBe(0);
+  });
+
+  test('registers the connection when the socket is still open', async () => {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+    verifySpy.mockResolvedValueOnce({sub: 'user-1'});
+
+    await receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: 'client-1',
+        userID: 'user-1',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+        auth: 'dummy-token',
+      },
+      {} as any,
+    );
+
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledOnce();
+    expect(mutagens).toHaveLength(1);
+    expect(pushers).toHaveLength(1);
+    expect(mutagens[0].hasRefs()).toBe(true);
+    expect(pushers[0].hasRefs()).toBe(true);
+    expect(
+      contextManagers
+        .get('1')
+        ?.getConnectionContext({clientID: 'client-1', wsID: 'ws-1'}),
+    ).toBeDefined();
   });
 });
 

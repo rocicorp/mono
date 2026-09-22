@@ -2,6 +2,7 @@ import type postgres from 'postgres';
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
+import {PG_17} from '../../../types/pg-versions.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {
   getInitialDownloadState,
@@ -80,7 +81,66 @@ describe('makeDownloadStatements', () => {
       0.5,
     );
     expect(stmts.select).toMatch(
-      /FROM "public"\."t" TABLESAMPLE BERNOULLI\(50\) WHERE a > 10/,
+      /FROM "public"\."t" TABLESAMPLE BERNOULLI\(50\) WHERE \(a > 10\)/,
+    );
+  });
+
+  test('an unfiltered publication makes every row eligible', () => {
+    const stmts = makeDownloadStatements(
+      spec({p: {rowFilter: 'a > 10'}, q: {rowFilter: null}}),
+      ['a'],
+    );
+    expect(stmts.select).not.toMatch(/\bWHERE\b/);
+    expect(stmts.getTotalRows).not.toMatch(/\bWHERE\b/);
+    expect(stmts.getTotalBytes).not.toMatch(/\bWHERE\b/);
+  });
+
+  test('order.by appends ORDER BY', () => {
+    const stmts = makeDownloadStatements(
+      spec(),
+      ['a', 'b'],
+      undefined,
+      undefined,
+      undefined,
+      {by: '"a","b"'},
+    );
+    expect(stmts.select).toBe(
+      `SELECT "a","b" FROM "public"."t"  ORDER BY "a","b"`,
+    );
+    // Totals are unaffected by ordering.
+    expect(stmts.getTotalRows).not.toMatch(/ORDER BY/);
+    expect(stmts.getTotalBytes).not.toMatch(/ORDER BY/);
+  });
+
+  test('order.after restricts the select and the totals', () => {
+    const stmts = makeDownloadStatements(
+      spec(),
+      ['a'],
+      undefined,
+      undefined,
+      undefined,
+      {by: '"a"', after: '("a") > (10)'},
+    );
+    expect(stmts.select).toBe(
+      `SELECT "a" FROM "public"."t" WHERE ("a") > (10) ORDER BY "a"`,
+    );
+    expect(stmts.getTotalRows).toBe(
+      `SELECT COUNT(*) AS "totalRows" FROM "public"."t" WHERE ("a") > (10)`,
+    );
+    expect(stmts.getTotalBytes).toMatch(/WHERE \("a"\) > \(10\)$/);
+  });
+
+  test('order.after is ANDed with a parenthesized row filter', () => {
+    const stmts = makeDownloadStatements(
+      spec({p: {rowFilter: 'a > 10'}, q: {rowFilter: 'b < 5'}}),
+      ['a'],
+      undefined,
+      undefined,
+      undefined,
+      {by: '"a"', after: '("a") > (20)'},
+    );
+    expect(stmts.select).toBe(
+      `SELECT "a" FROM "public"."t" WHERE (a > 10 OR b < 5) AND ("a") > (20) ORDER BY "a"`,
     );
   });
 });
@@ -175,6 +235,9 @@ describe('createReplicationSlot', () => {
       if (stmt.startsWith('SET lock_timeout')) {
         return Promise.resolve([]);
       }
+      if (stmt.includes('SELECT current_setting')) {
+        return Promise.resolve([{pgVersion: PG_17}]);
+      }
       // CREATE_REPLICATION_SLOT
       return Promise.resolve([slot]);
     });
@@ -208,7 +271,8 @@ describe('createReplicationSlot', () => {
       slotName: 's',
     });
     expect(calls[0]).toMatch(/^SET lock_timeout = \d+$/);
-    expect(calls[1]).toMatch(/CREATE_REPLICATION_SLOT/);
+    expect(calls[1]).toMatch(/^\s*SELECT current_setting/);
+    expect(calls[2]).toMatch(/CREATE_REPLICATION_SLOT/);
   });
 
   test('propagates server-side errors (e.g. lock_not_available)', async () => {
@@ -235,6 +299,9 @@ describe('createReplicationSlot', () => {
       const session = mockSession(stmt => {
         if (stmt.startsWith('SET lock_timeout')) {
           return Promise.resolve([]);
+        }
+        if (stmt.includes('SELECT current_setting')) {
+          return Promise.resolve([{pgVersion: PG_17}]);
         }
         // Simulate a hang: never resolve (e.g. network partition where
         // the server aborted but the client never receives the error).

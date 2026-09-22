@@ -1,4 +1,5 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
+import {mapValues} from '../../../shared/src/objects.ts';
 import type {Relationship, TableSchema} from '../table-schema.ts';
 import type {TableBuilderWithColumns} from './table-builder.ts';
 
@@ -130,11 +131,14 @@ export function relationships<
     one: OneConnector<TSource>;
   }) => TRelationships,
 ): {name: TSource['name']; relationships: TRelationships} {
-  const relationships = cb({many, one} as any);
+  const relationships = mapValues(
+    cb({many, one} as any),
+    relationship => relationship,
+  );
 
   return {
     name: table.schema.name,
-    relationships,
+    relationships: relationships as TRelationships,
   };
 }
 

@@ -50,6 +50,7 @@ export function makeDefine(
     ),
     ['process.env.ZERO_VERSION']: JSON.stringify(getVersion('zero')),
     ['process.env.DISABLE_MUTATION_RECOVERY']: 'false',
+    ['process.env.DISABLE_REPLICACHE_INDEXES']: 'false',
   };
   if (mode === 'unknown') {
     return define;

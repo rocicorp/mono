@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
@@ -19,7 +20,7 @@ import {
   pushAccumulatedChanges,
 } from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
-import {first, type Stream} from './stream.ts';
+import type {Stream} from './stream.ts';
 import type {UnionFanOut} from './union-fan-out.ts';
 
 export class UnionFanIn implements Operator {
@@ -113,12 +114,12 @@ export class UnionFanIn implements Operator {
     return this.#schema;
   }
 
-  *push(change: Change, pusher: InputBase): Stream<'yield'> {
+  push(change: Change, pusher: InputBase): Stream<'yield'> {
     if (!this.#fanOutPushStarted) {
-      yield* this.#pushInternalChange(change, pusher);
-    } else {
-      this.#accumulatedPushes.push(change);
+      return this.#pushInternalChange(change, pusher);
     }
+    this.#accumulatedPushes.push(change);
+    return emptyArray;
   }
 
   /**
@@ -170,7 +171,24 @@ export class UnionFanIn implements Operator {
         constraint,
       });
 
-      if (first(fetchResult) !== undefined) {
+      // `fetch` interleaves 'yield' sentinels for cooperative multitasking.
+      // They must be forwarded, not just skipped: this probe runs inside a
+      // push, and the sentinel is the source offering the scheduler a breath.
+      // They must also not be mistaken for rows -- reading one as a row is
+      // what broke this before, since an empty branch that happened to yield
+      // looked like a branch holding the row, silently dropping the
+      // add/remove and desyncing a downstream `Take`'s push and fetch paths.
+      let otherBranchHasRow = false;
+      for (const node of fetchResult) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
+        otherBranchHasRow = true;
+        break;
+      }
+
+      if (otherBranchHasRow) {
         // Another branch has the row, so the add/remove is not needed.
         return;
       }
@@ -190,23 +208,23 @@ export class UnionFanIn implements Operator {
     this.#fanOutPushStarted = true;
   }
 
-  *fanOutDonePushing(fanOutChangeType: ChangeType): Stream<'yield'> {
+  fanOutDonePushing(fanOutChangeType: ChangeType): Stream<'yield'> {
     assert(
       this.#fanOutPushStarted,
       'UnionFanIn: fanOutDonePushing called without fanOutStartedPushing',
     );
     this.#fanOutPushStarted = false;
     if (this.#inputs.length === 0) {
-      return;
+      return emptyArray;
     }
 
     if (this.#accumulatedPushes.length === 0) {
       // It is possible for no forks to pass along the push.
       // E.g., if no filters match in any fork.
-      return;
+      return emptyArray;
     }
 
-    yield* pushAccumulatedChanges(
+    return pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
       this,

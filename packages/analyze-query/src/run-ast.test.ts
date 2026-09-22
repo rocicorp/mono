@@ -38,7 +38,7 @@ function createMockHost(withDebug = false): BuilderDelegate {
   };
 
   if (withDebug) {
-    const debug = new Debug();
+    const debug = new Debug(true);
     debug.initQuery('users', 'SELECT * FROM users');
     debug.rowVended('users', 'SELECT * FROM users', {id: 1, name: 'Alice'});
     debug.rowVended('users', 'SELECT * FROM users', {id: 2, name: 'Bob'});
@@ -458,4 +458,113 @@ test('runAst handles case where all synced rows are duplicates', async () => {
   expect(result.syncedRows).toEqual({
     users: [{id: 1, name: 'Alice'}],
   });
+});
+
+test('runAst caps synced rows per table but counts all of them', async () => {
+  const max = 3;
+  const total = max + 5;
+  vi.mocked(hydrate).mockImplementation(function* () {
+    for (let i = 0; i < total; i++) {
+      yield {
+        type: ChangeType.ADD,
+        table: 'users',
+        queryID: 'test-query-id',
+        rowKey: {id: i},
+        row: {id: i, name: `user${i}`},
+      };
+    }
+    yield {
+      type: ChangeType.ADD,
+      table: 'posts',
+      queryID: 'test-query-id',
+      rowKey: {id: 1},
+      row: {id: 1, title: 'Post 1'},
+    };
+  });
+
+  const lc = createSilentLogContext();
+  const db = new Database(lc, ':memory:');
+  db.exec(CREATE_TABLE_METADATA_TABLE);
+
+  const result = await runAst(
+    lc,
+    minimalClientSchema,
+    {table: 'users'},
+    true,
+    {
+      db,
+      host: createMockHost(),
+      tableSpecs: new Map(),
+      syncedRows: true,
+      maxSyncedRowsPerTable: max,
+    },
+    async () => {},
+  );
+
+  expect(result.syncedRowCount).toBe(total + 1);
+  expect(result.syncedRows?.users).toHaveLength(max);
+  expect(result.syncedRows?.posts).toHaveLength(1);
+  expect(result.warnings).toEqual([
+    `Only the first ${max} synced rows of "users" are included.`,
+  ]);
+});
+
+test('runAst does not cap synced rows by default', async () => {
+  vi.mocked(hydrate).mockImplementation(function* () {
+    for (let i = 0; i < 5; i++) {
+      yield {
+        type: ChangeType.ADD,
+        table: 'users',
+        queryID: 'test-query-id',
+        rowKey: {id: i},
+        row: {id: i},
+      };
+    }
+  });
+
+  const lc = createSilentLogContext();
+  const db = new Database(lc, ':memory:');
+  db.exec(CREATE_TABLE_METADATA_TABLE);
+
+  const result = await runAst(
+    lc,
+    minimalClientSchema,
+    {table: 'users'},
+    true,
+    {db, host: createMockHost(), tableSpecs: new Map(), syncedRows: true},
+    async () => {},
+  );
+
+  expect(result.syncedRows?.users).toHaveLength(5);
+  expect(result.warnings).toEqual([]);
+});
+
+test('runAst warns when read rows are capped', async () => {
+  const lc = createSilentLogContext();
+  const db = new Database(lc, ':memory:');
+  db.exec(CREATE_TABLE_METADATA_TABLE);
+
+  const debug = new Debug(true, 1);
+  debug.rowVended('users', 'SELECT * FROM users', {id: 1});
+  debug.rowVended('users', 'SELECT * FROM users', {id: 2});
+  debug.rowVended('posts', 'SELECT * FROM posts', {id: 1});
+  const host = {...createMockHost(), debug};
+
+  const result = await runAst(
+    lc,
+    minimalClientSchema,
+    {table: 'users'},
+    true,
+    {db, host, tableSpecs: new Map(), vendedRows: true},
+    async () => {},
+  );
+
+  expect(result.readRowCount).toBe(3);
+  expect(result.readRows).toEqual({
+    users: {'SELECT * FROM users': [{id: 1}]},
+    posts: {'SELECT * FROM posts': [{id: 1}]},
+  });
+  expect(result.warnings).toEqual([
+    'Only the first 1 read rows of "users" are included for: SELECT * FROM users',
+  ]);
 });

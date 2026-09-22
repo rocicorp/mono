@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -102,7 +103,6 @@ export async function runSchemaMigrations(
       }
       return versions;
     });
-
     if (versions.dataVersion < codeVersion) {
       db.unsafeMode(true); // Enables journal_mode = OFF
       db.pragma('locking_mode = EXCLUSIVE');
@@ -143,22 +143,26 @@ export async function runSchemaMigrations(
         }
       }
 
-      db.exec('ANALYZE main');
-      log.info?.('ANALYZE completed');
-    } else {
-      // Run optimize whenever opening an sqlite db file as recommended in
-      // https://www.sqlite.org/pragma.html#pragma_optimize
-      // It is important to run the same initialization steps as is done
-      // in the view-syncer (i.e. when preparing database for serving
-      // replication) so that any corruption detected in the view-syncer is
-      // similarly detected in the change-streamer, facilitating an eventual
-      // recovery by resyncing the replica anew.
-      db.pragma('optimize = 0x10002');
-
-      // TODO: Investigate running `integrity_check` or `quick_check` as well,
-      // provided that they are not inordinately expensive on large databases.
+      // Note: This used to be ANALYZE but that takes a long time for large
+      // dbs. The SQLite docs generally recommend optimize instead.
+      //
+      // https://sqlite.org/pragma.html#pragma_analysis_limit
+      //
+      // Beginning with SQLite version 3.46.0 (2024-05-23), the recommended
+      // way of running ANALYZE is with the PRAGMA optimize command.
+      // The PRAGMA optimize will automatically set a reasonable, temporary
+      // analysis limit that ensures that the PRAGMA optimize command will
+      // finish quickly even on enormous databases. Applications that use
+      // the PRAGMA optimize instead of running ANALYZE directly do not need
+      // to set an analysis limit.
+      const start = performance.now();
+      db.pragma('optimize');
+      const elapsed = performance.now() - start;
+      log.info?.(`OPTIMIZE completed (${elapsed.toFixed(2)}ms)`);
     }
 
+    // Do not run `quick_check` here. It scans the full database and can
+    // dominate startup time for large replicas or slower disks.
     db.pragma('synchronous = NORMAL');
     db.unsafeMode(false);
 
@@ -173,7 +177,16 @@ export async function runSchemaMigrations(
       } ms)`,
     );
   } catch (e) {
-    log.error?.('Error in ensureSchemaMigrated', e);
+    if (e instanceof AbortError) {
+      // AbortErrors (e.g. AutoResetSignal) are not failures. They are the
+      // expected mechanism for signaling that the replica needs a reset (e.g.
+      // corruption or an incompatible schema version) so that the caller can
+      // resync anew. Logging them at `error` would trip error-based alerting
+      // for a normal, self-healing path.
+      log.warn?.('Replica requires reset; resync will follow', e);
+    } else {
+      log.error?.('Error in ensureSchemaMigrated', e);
+    }
     throw e;
   } finally {
     db.close();
@@ -335,7 +348,14 @@ async function runTransaction<T>(
     db.prepare('COMMIT').run();
     return result;
   } catch (e) {
-    log.error?.('Aborted transaction due to error', e);
+    if (e instanceof AbortError) {
+      // AbortErrors (e.g. AutoResetSignal) are an expected, self-healing
+      // control-flow signal, not a failure. Log at `warn` so the rollback is
+      // still visible without tripping error-based alerting.
+      log.warn?.('Aborted transaction for reset signal', e);
+    } else {
+      log.error?.('Aborted transaction due to error', e);
+    }
     try {
       db.prepare('ROLLBACK').run();
     } catch (rollbackError) {

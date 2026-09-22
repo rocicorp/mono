@@ -93,6 +93,7 @@ export class MutatorProxy {
         };
         this.#mutationTracker.rejectAllOutstandingMutations(state.reason);
         break;
+      case ConnectionStatus.Initializing:
       case ConnectionStatus.Connected:
       case ConnectionStatus.Connecting:
       case ConnectionStatus.NeedsAuth:

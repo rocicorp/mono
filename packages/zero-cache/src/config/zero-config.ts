@@ -290,13 +290,32 @@ const makeMutatorQueryOptions = (
       `A list of header names that clients are allowed to set via custom headers.`,
       `If specified, only headers in this list will be forwarded to the ${suffix === 'push mutations' ? 'push' : 'query'} URL.`,
       `Header names are case-insensitive.`,
-      `If not specified, no client-provided headers are forwarded (secure by default).`,
+      `If not specified, no client-provided headers are forwarded.`,
       `Example: ZERO_${replacement ? replacement.toUpperCase() : suffix === 'push mutations' ? 'MUTATE' : 'QUERY'}_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id`,
     ],
     ...(replacement
       ? {
           deprecated: [
             makeDeprecationMessage(`${replacement}-allowed-client-headers`),
+          ],
+        }
+      : {}),
+  },
+  allowedRequestHeaders: {
+    type: v.array(v.string()).optional(),
+    desc: [
+      `A list of header names to forward from the incoming HTTP request to the ${suffix === 'push mutations' ? 'push' : 'query'} URL.`,
+      `Unlike {bold allowed-client-headers} (which forwards headers set by the client), these are taken`,
+      `from the HTTP request that established the connection (e.g. headers injected by a proxy or load balancer).`,
+      `If a listed header is present on the request, its value is forwarded upstream under the same header name.`,
+      `Header names are case-insensitive.`,
+      `If not specified, no request headers are forwarded.`,
+      `Example: ZERO_${replacement ? replacement.toUpperCase() : suffix === 'push mutations' ? 'MUTATE' : 'QUERY'}_ALLOWED_REQUEST_HEADERS=x-forwarded-for,cf-ray`,
+    ],
+    ...(replacement
+      ? {
+          deprecated: [
+            makeDeprecationMessage(`${replacement}-allowed-request-headers`),
           ],
         }
       : {}),
@@ -374,6 +393,102 @@ export const zeroOptions = {
         `(Note that this option has no effect for Postgres versions before 17.)`,
       ],
     },
+
+    pgReplicationSlotPerReplica: {
+      type: v.boolean().default(false),
+      desc: [
+        `Allocates a dedicated replication slot per replication-manager, allowing multiple tasks`,
+        `to run in tandem for high-availability.`,
+      ],
+      hidden: true, // Implementation flag, covered by --upstream-pg-high-availability-replication
+    },
+
+    pgHighAvailabilityReplication: {
+      type: v.boolean().optional(),
+      desc: [
+        `Runs replication-managers in high-availability mode, allowing multiple tasks to`,
+        `run concurrently, each using their own replication slot and maintaining a local`,
+        `change-log in sqlite.`,
+        ``,
+        `In this configuration, the PG change-streamer db is not used or maintained. Consequently`,
+        `after running servers in high-availability mode, rolling back to a legacy singleton-mode task`,
+        `will trigger a resync in order to re-intialize the PG change-streamer db.`,
+        // Note: This is a feature flag that automatically enables the necessary
+        //       implementation flags:
+        //   ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA = true
+        //   ZERO_LITESTREAM_BACKUP_USING_V5 = true,
+        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE = serve
+        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT = 100
+        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COLD_READ_PERCENT = 100
+        //   ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED = false
+      ],
+      hidden: true, // TODO: Expose / roll out.
+    },
+
+    pgResumeOrphanedSlotGracePeriodMs: {
+      type: v.number().default(20_000),
+      desc: [
+        `The grace period to wait before taking over an inactive replication slot, "resuming"`,
+        `the replica. With high availability replication, a new replica is generally "forked"`,
+        `from a running, active replica. Resumption happens as a last resort when no there are no`,
+        `active replicas, as it carries the risk of stealing the slot from a task that is attempting`,
+        `to reconnect to its slot.`,
+        ``,
+        `In local development, where it is often expected for slots to be inactive, it is reasonable to set`,
+        `this to value to 0.`,
+      ],
+      hidden: true,
+    },
+
+    pgReplicationEpoch: {
+      type: v.number().default(0),
+      desc: [
+        `Replication managers sharing the same epoch attempt to converge on a single`,
+        `generation (i.e. the result of an initial-sync); if multiple tasks are started`,
+        `simultaneously, they coordinate with each other such that one performs the`,
+        `initial-sync while the others wait for it.`,
+        ``,
+        `Incrementing the epoch is the way to reliably force a resync; a replication manager`,
+        `on a new epoch will ignore any replicas on other epochs.`,
+        ``,
+        `Note that changing the {bold ZERO_LITESTREAM_BACKUP_URL} generally achieves a resync`,
+        `as well, but with high available replication managers, changing only the backup url can`,
+        `lead to confusion if an old replication manager is performing initial sync, causing the`,
+        `new replication manager to wait for it. Incrementing the replication epoch is recommended`,
+        `instead.`,
+      ],
+      hidden: true,
+    },
+
+    // Temporary rollout gate. This defaults off for the compatibility
+    // deployment; enable it after all replication managers can consume
+    // partial-index schema snapshots.
+    pgPartialIndexTriggers: {
+      type: v.boolean().default(false),
+      hidden: true,
+    },
+
+    pgStreamInboundTimeoutMs: {
+      type: v.number().optional(),
+      desc: [
+        `The time (in milliseconds) without any inbound message from the upstream`,
+        `wal sender after which the replication stream is considered unresponsive`,
+        `and torn down to force a reconnect.`,
+        ``,
+        `Defaults to 2x the server's {bold wal_sender_timeout}. That suits idle`,
+        `streams, but a busy wal sender can be legitimately silent for longer —`,
+        `e.g. while decoding through WAL from unpublished tables, or assembling a`,
+        `large transaction that is only sent at commit. If the server's`,
+        `{bold wal_sender_timeout} is aggressive (some managed environments`,
+        `default it as low as 5 seconds), the resulting teardown aborts and`,
+        `replays the in-flight transaction, which can prevent replication from`,
+        `ever catching up on a large backlog. Set this option to widen the`,
+        `client-side threshold without changing the server setting.`,
+        ``,
+        `(This option has no effect when {bold wal_sender_timeout} is 0, which`,
+        `disables inbound liveness detection entirely.)`,
+      ],
+    },
   },
 
   /** @deprecated */
@@ -389,6 +504,15 @@ export const zeroOptions = {
       `Enables support for legacy CRUD mutations. When this is {bold false}, no connections`,
       `are made from view-syncers to the upstream db, and push messages with CRUD mutations`,
       `result in an InvalidPush response.`,
+    ],
+  },
+
+  allowLegacyQueries: {
+    type: v.boolean().default(false),
+    desc: [
+      `Allows clients to send legacy query ASTs directly to zero-cache.`,
+      `Keep this disabled when using custom queries so that zero-cache rejects`,
+      `client-supplied ASTs without parsing them.`,
     ],
   },
 
@@ -419,9 +543,12 @@ export const zeroOptions = {
     },
 
     garbageCollectionInactivityThresholdHours: {
-      type: v.number().default(48),
+      type: v.number().default(24 * 7),
       desc: [
         `The duration after which an inactive CVR is eligible for garbage collection.`,
+        `Purging a CVR forces the next connection from that client group to`,
+        `re-sync from scratch, so this should comfortably exceed how long a`,
+        `typical user goes between sessions.`,
         `Note that garbage collection is an incremental, periodic process which does not`,
         `necessarily purge all eligible CVRs immediately.`,
       ],
@@ -457,6 +584,29 @@ export const zeroOptions = {
     ],
   },
 
+  sqliteCorruptionChecks: {
+    type: v.boolean().default(false),
+    desc: [
+      `Run SQLite quick_check and integrity_check when corruption is detected.`,
+      `These checks scan the replica and can take a long time on large databases.`,
+    ],
+    hidden: true,
+  },
+
+  snapshotRowCacheSize: {
+    type: v.number().default(50_000),
+    desc: [
+      `The maximum number of entries in the per-worker cache of replica rows`,
+      `read while advancing IVM pipelines. Every client group on a sync worker`,
+      `reads the new and previous value of each replicated row change; the`,
+      `cache lets the client groups on a worker share those reads. A replicated`,
+      `transaction of N rows produces up to 2N entries.`,
+      ``,
+      `Setting this to 0 disables the cache.`,
+    ],
+    hidden: true,
+  },
+
   enableQueryPlanner: {
     type: v.boolean().default(true),
     desc: [
@@ -466,6 +616,42 @@ export const zeroOptions = {
       `the most efficient join strategies.`,
       ``,
       `You can disable the planner if it is picking bad strategies.`,
+    ],
+  },
+
+  enableCorrelatedPredicatePushdown: {
+    type: v.boolean().default(true),
+    desc: [
+      `Copy a query's equality conditions on a relationship's join columns`,
+      `into the related subquery. This reduces the rows that are read when a`,
+      `change is pushed through the query.`,
+      ``,
+      `This is a kill switch. It will be removed.`,
+    ],
+    hidden: true,
+  },
+
+  enablePlannerAwarePushdown: {
+    type: v.boolean().default(true),
+    desc: [
+      `Copy the conditions of correlated predicate pushdown before the query`,
+      `planner runs instead of after, so that the planner can use them. This`,
+      `can change the plans that the planner picks.`,
+      ``,
+      `Has no effect when correlated predicate pushdown is off.`,
+    ],
+    hidden: true,
+  },
+
+  enableQueryCovering: {
+    type: v.boolean().default(true),
+    desc: [
+      `Enable shadow-mode query covering detection during query hydration.`,
+      ``,
+      `When enabled, view-syncers compare newly hydrated queries against running`,
+      `queries with the same root table and log aggregate coverage stats.`,
+      ``,
+      `You can disable this if covering detection adds too much CPU overhead.`,
     ],
   },
 
@@ -479,6 +665,44 @@ export const zeroOptions = {
     ],
   },
 
+  viewSyncerHydrationBudgetMs: {
+    type: v
+      .number()
+      .assert(
+        value => Number.isSafeInteger(value) && value >= 0,
+        'must be a nonnegative integer',
+      )
+      .default(0),
+    desc: [
+      `The soft time budget in milliseconds for hydrating inactive queries`,
+      `during a view-syncer hydration pass. Active and internal queries always`,
+      `finish, and time spent in custom-query transform round trips is not`,
+      `charged to the budget. An inactive query not reached before the budget`,
+      `is spent is evicted: its CVR record and the remaining TTL that would`,
+      `have kept it warm are both dropped. A value of 0 disables`,
+      `hydration-budget eviction.`,
+    ],
+  },
+
+  viewSyncerQueryHydrationTimeoutMs: {
+    type: v
+      .number()
+      .assert(
+        value => Number.isSafeInteger(value) && value >= 0,
+        'must be a nonnegative integer',
+      )
+      .default(0),
+    desc: [
+      `The maximum processing time in milliseconds that a view-syncer spends`,
+      `hydrating a single client query. Time spent yielding to other work is`,
+      `not counted. A query whose hydration exceeds this limit is aborted and`,
+      `removed from the client's view, and affected clients receive an error`,
+      `for the query. The query is then rejected without being run again for`,
+      `a cooldown period, after which a retry is allowed. Internal queries are`,
+      `never aborted. A value of 0 disables the limit.`,
+    ],
+  },
+
   change: {
     db: {
       type: v.string().optional(),
@@ -489,22 +713,42 @@ export const zeroOptions = {
       ],
     },
 
+    /** @deprecated */
     maxConns: {
       type: v.number().default(5),
-      desc: [
-        `The maximum number of connections to open to the change database.`,
-        `This is used by the {bold change-streamer} for catching up`,
-        `{bold zero-cache} replication subscriptions.`,
+      deprecated: [
+        `Connections to the change db are created dynamically for subscriber catchup. Ensure`,
+        `that the database supports sufficient connections for at least 5 + numViewSyncers.`,
       ],
+      hidden: true,
     },
 
     statementTimeoutMs: {
-      type: v.number().default(20_000),
+      type: v.number().default(30_000),
       desc: [
-        `Fail change-log transactions if a statement response from postgres is not received within`,
-        `the specified timeout. This differs from a postgres {bold statement_timeout} in that`,
-        `it is implemented to handle a pathological case in which Postgres does not return a`,
-        `response but otherwise believes the transaction to be idle.`,
+        `Fail change-log db operations that make no progress within the specified timeout. This`,
+        `differs from a postgres {bold statement_timeout} in that it is implemented to handle a`,
+        `pathological case in which Postgres does not return a response but otherwise believes the`,
+        `connection to be idle (e.g. a half-open connection).`,
+      ],
+      hidden: true, // make visible if proven to be effective/necessary
+    },
+
+    logBatchSize: {
+      type: v
+        .number()
+        .assert(
+          n => Number.isInteger(n) && n >= 1,
+          `change.logBatchSize must be an integer >= 1`,
+        )
+        .default(2000),
+      desc: [
+        `The maximum number of change-log rows written per multi-row INSERT to the change`,
+        `database. Larger upstream transactions are persisted in batches of this size rather`,
+        `than one INSERT per change, which is the dominant cost when replicating large`,
+        `transactions (e.g. bulk backfills or migrations). Larger values increase throughput`,
+        `at the cost of higher transient memory; the effective batch is internally capped to`,
+        `stay within Postgres's bind-parameter limit. Set to {bold 1} to disable batching.`,
       ],
       hidden: true, // make visible if proven to be effective/necessary
     },
@@ -626,6 +870,86 @@ export const zeroOptions = {
       ],
     },
 
+    sqliteChangeLogMode: {
+      type: v.literalUnion('off', 'write', 'compare', 'serve').default('off'),
+      desc: [
+        `Controls the staged SQLite change-log rollout. Modes are cumulative:`,
+        `{bold off}, {bold write}, {bold compare}, and {bold serve}.`,
+      ],
+      hidden: true,
+    },
+
+    pgChangeLogEnabled: {
+      type: v.boolean().default(true),
+      desc: [
+        `Whether the legacy Postgres change log remains authoritative for`,
+        `stream initialization, persistence, catchup, and upstream ACKs.`,
+        `Disabling it requires SQLite serve mode at 100 percent and a v5 backup.`,
+      ],
+      hidden: true,
+    },
+
+    sqliteChangeLogReadPercent: {
+      type: v.number().default(0),
+      desc: [
+        `The stable percentage of eligible catchup subscriptions served from SQLite.`,
+      ],
+      hidden: true,
+    },
+
+    sqliteChangeLogColdReadPercent: {
+      type: v.number().default(0),
+      desc: [
+        `The stable percentage of eligible catchup subscriptions served from a`,
+        `SQLite change log that is younger than its retention window, i.e. one`,
+        `seeded less than {bold --change-streamer-sqlite-change-log-retention-ms}`,
+        `ago. Selection uses the same hash as`,
+        `{bold --change-streamer-sqlite-change-log-read-percent}, so a task that`,
+        `serves cold is always one that would serve warm.`,
+      ],
+      hidden: true,
+    },
+
+    sqliteChangeLogComparePercent: {
+      type: v.number().default(1),
+      desc: [
+        `The stable percentage of committed transactions whose catchup output is`,
+        `compared between the Postgres and SQLite change logs in {bold compare} mode.`,
+      ],
+      hidden: true,
+    },
+
+    sqliteChangeLogRetentionMs: {
+      type: v.number().default(60_000),
+      desc: [`The minimum time window retained in the SQLite change log.`],
+      hidden: true,
+    },
+
+    sqliteChangeLogReadBatchRows: {
+      type: v.number().default(1000),
+      desc: [`The target number of rows in each SQLite catchup read batch.`],
+      hidden: true,
+    },
+
+    sqliteChangeLogPurgeBatchRows: {
+      type: v.number().default(1000),
+      desc: [`The target number of rows in each SQLite purge batch.`],
+      hidden: true,
+    },
+
+    sqliteChangeLogBarrierTimeoutMs: {
+      type: v.number().default(300_000),
+      desc: [
+        `The maximum wait for the SQLite required-head barrier. This is a`,
+        `backstop for a wedged replica on an idle shard, where waiting costs`,
+        `nothing and would otherwise go unnoticed. A shard with traffic is`,
+        `bounded well before this by the subscriber's backlog reaching its`,
+        `high water mark, which is the point at which waiting starts holding`,
+        `up replication.`,
+      ],
+      hidden: true,
+    },
+
     backPressureLimitHeapProportion: {
       type: v.number().default(0.04),
       desc: [
@@ -650,20 +974,57 @@ export const zeroOptions = {
       ],
     },
 
-    flowControlConsensusPaddingSeconds: {
-      type: v.number().default(1),
+    flowControlConsensusTimeoutProportion: {
+      type: v.number().default(4.0),
       desc: [
-        `During periodic flow control checks (every 64kb), the amount of time to wait after the`,
-        `majority of subscribers have acked, after which replication will continue even if`,
-        `some subscribers have yet to ack. (Note that this is not a timeout for the {italic entire} send,`,
-        `but a timeout that starts {italic after} the majority of receivers have acked.)`,
+        `During periodic flow control checks (every 64kb), the amount of time to wait after the majority`,
+        `of subscribers have acked, proportional to that interval, after which replication will continue`,
+        `even if some subscribers have yet to ack.`,
         ``,
         `This allows a bounded amount of time for backlogged subscribers to catch up on each flush`,
         `without forcing all subscribers to wait for the entire backlog to be processed. It is also`,
         `useful for mitigating the effect of unresponsive subscribers due to severed websocket`,
-        `connections (until liveness checks disconnect them).`,
+        `connections or pathological zombie situations (until liveness checks or laggard detection`,
+        `disconnects them).`,
+        ``,
+        `For example, if the majority of subscribers ack a message in 2.5ms, a padding proportion of`,
+        `1.0 instructs replication to continue after an additional 2.5ms; for a proportion of 2.0, an`,
+        `additional 5.0ms, etc. The default value of 4.0 allows for a subscriber to be 5x slower than the`,
+        `majority in the steady state, while similarly bounding the extent to which a temporarily lagging`,
+        `subscriber (e.g. due to catchup) slows down the fleet.`,
+        ``,
+        `Note that subscribers that continually exceed the timeout will eventually be disconnected and`,
+        `instructed to shutdown in order to protect the healthy subscribers. It is thus important that`,
+        `the proportion account for expected variance in processing speed across subscribers.`,
         ``,
         `Set this to a negative number to disable early flow control releases. (Not recommended, but`,
+        `available as an emergency measure.)`,
+      ],
+    },
+
+    flowControlSlowSubscriberGracePeriodSeconds: {
+      type: v.number().default(30),
+      desc: [
+        `The period of time after which a lagging subscriber is disconnected and instructed to`,
+        `restart. A subscriber is considered lagging if it {italic continuously} (1) exceeds the`,
+        `consensus timeout and (2) fails to exceed the change rate of healthy subscribers. These`,
+        `conditions distinguish expected, temporary periods of slowness from pathological`,
+        `scenarios, such as zombie tasks, in which the subscriber is unlikely to recover.`,
+        ``,
+        `In particular, the second condition excludes subscribers that are performing initial`,
+        `catchup, as the rate of change for catchup must eventually exceed the rate of upstream`,
+        `changes. Note, however, that catchup rate can be legitimately slow during (rare) expensive`,
+        `operations such as index creation.`,
+        ``,
+        `Thus, this grace period caps the amount of time that a lagging subscriber degrades overall`,
+        `throughput, but should be long enough to allow for legitimate intervals of slowness.`,
+        ``,
+        `Note that in the pathological case where a catchup operation exceeds this grace period,`,
+        `the system will eventually recover after the next backup/restore cycle, as the expensive`,
+        `operation (e.g. index creation) will have been applied to the restored replica and no longer`,
+        `executed during catchup.`,
+        ``,
+        `Set this to 0 or a negative number to disable laggard detection. (Not recommended, but`,
         `available as an emergency measure.)`,
       ],
     },
@@ -714,10 +1075,10 @@ export const zeroOptions = {
       type: v.number().default(30000),
       desc: [
         `The minimum interval at which replication lag reports are written upstream and`,
-        `reported via the {bold zero.replication.total_lag} opentelemetry metric. Because`,
-        `replication lag reports are only issued after the previous one was received, the`,
-        `actual interval between reports may be longer when there is a backlog in the`,
-        `replication stream. A negative or 0 value disables lag reporting.`,
+        `reported via the {bold zero.replication.total_lag} opentelemetry metric. If`,
+        `an expected report is not received before the next interval, Zero retries with`,
+        `a new report and increments {bold zero.replication.lag_report_retries}. A`,
+        `negative or 0 value disables lag reporting.`,
         ``,
         `This monitoring feature is only support on the postgres upstream type.`,
       ],
@@ -791,9 +1152,21 @@ export const zeroOptions = {
     },
 
     restoreUsingV5: {
-      type: v.boolean().default(false),
+      type: v.boolean().default(true),
       desc: [
         `Restores the backup using the {bold ZERO_LITESTREAM_EXECUTABLE_V5} if specified.`,
+        `This provides a recovery path if rolling back from {bold ZERO_LITESTREAM_BACKUP_USING_V5}`,
+        `as v5 restores from both v3 and v5 backups (whichever is more recent).`,
+      ],
+    },
+
+    backupUsingV5: {
+      type: v.boolean().default(false),
+      desc: [
+        `Backs up the replica using Litestream v0.5.x and monitors cleanup`,
+        `watermarks by reading the backup through the Litestream SQLite VFS.`,
+        `This requires {bold ZERO_LITESTREAM_RESTORE_USING_V5} and`,
+        `{bold ZERO_LITESTREAM_VFS_QUERY_EXECUTABLE}`,
       ],
     },
 
@@ -807,6 +1180,53 @@ export const zeroOptions = {
         `* {bold ZERO_LITESTREAM_BACKUP_LOCATION} for the db replica url`,
         `* {bold ZERO_LITESTREAM_LOG_LEVEL} for the log level`,
         `* {bold ZERO_LOG_FORMAT} for the log type`,
+      ],
+    },
+
+    configPathV5: {
+      type: v.string().default('./src/services/litestream/config-v5.yml'),
+      desc: [
+        `Path to the litestream v5 yaml config file. zero-cache will run this with its`,
+        `environment variables, which can be referenced in the file via $\\{ENV\\}`,
+        `substitution, for example:`,
+        `* {bold ZERO_REPLICA_FILE} for the db path`,
+        `* {bold ZERO_LITESTREAM_BACKUP_LOCATION} for the db replica url`,
+        `* {bold ZERO_LITESTREAM_LOG_LEVEL} for the log level`,
+        `* {bold ZERO_LOG_FORMAT} for the log type`,
+      ],
+    },
+
+    vfsQueryExecutable: {
+      type: v.string().optional(),
+      desc: [
+        `Path to the rocicorp vfs-query executable that runs the VFS-based`,
+        `polling of backup watermark. This is required when backing up with V5.`,
+      ],
+    },
+
+    vfsPollIntervalMs: {
+      type: v.number().default(15 * 1000),
+      desc: [
+        `Interval in milliseconds litestream vfs extension polls the backup store (e.g. s3)`,
+        `to determine the most recent backup.`,
+        ``,
+        `This, in turn, influences how quickly new backups are confirmed, allowing the`,
+        `change-streamer to ack the upstream change-source (e.g. replication slot).`,
+      ],
+    },
+
+    vfsPollTimeoutMs: {
+      type: v.number().default(10 * 1000),
+      desc: [
+        `Timeout in milliseconds for requests to the Litestream VFS poller.`,
+      ],
+    },
+
+    vfsLogFile: {
+      type: v.string().optional(),
+      desc: [
+        `Optional file path for logs emitted by the Litestream VFS native`,
+        `extension. If unset, the extension writes to stdout.`,
       ],
     },
 
@@ -853,21 +1273,19 @@ export const zeroOptions = {
     checkpointThresholdMB: {
       type: v.number().default(40),
       desc: [
-        `The size of the WAL file at which to perform an SQlite checkpoint to apply`,
-        `the writes in the WAL to the main database file. Each checkpoint creates`,
-        `a new WAL segment file that will be backed up by litestream. Smaller thresholds`,
-        `may improve read performance, at the expense of creating more files to download`,
-        `when restoring the replica from the backup.`,
+        `The size of the WAL file at which litestream performs background, best-effort (PASSIVE)`,
+        `SQLite checkpoints to apply the writes in the WAL to the main database file. Checkpoints`,
+        `result in new WAL (v3) or LTS (v5) files that are then backed up asynchronously.`,
+        ``,
+        `Note that these PASSIVE checkpoints are skipped if a write is in progress, so high writes rates`,
+        `can precipitate runaway wal growth. Also see {bold ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB}`,
       ],
     },
 
     minCheckpointPageCount: {
       type: v.number().optional(),
-      desc: [
-        `The WAL page count at which SQLite attempts a PASSIVE checkpoint, which`,
-        `transfers pages to the main database file without blocking writers.`,
-        `Defaults to {bold checkpointThresholdMB * 250} (since SQLite page size is 4KB).`,
-      ],
+      deprecated: [`Use {bold ZERO_CHECKPOINT_THRESHOLD_MB}`],
+      hidden: true,
     },
 
     maxCheckpointPageCount: {
@@ -876,16 +1294,64 @@ export const zeroOptions = {
         `The WAL page count at which SQLite performs a RESTART checkpoint, which`,
         `blocks writers until complete. Defaults to {bold minCheckpointPageCount * 10}.`,
         `Set to {bold 0} to disable RESTART checkpoints entirely.`,
+        ``,
+        `This setting is only relevant when replicating with litestream v3, and is ignored`,
+        `when replicating with litestream v5.`,
+      ],
+    },
+
+    forceCheckpointThresholdMB: {
+      type: v.number().default(256),
+      desc: [
+        `The size of the WAL file at which to pause writes and explicitly initiate a`,
+        `local litestream sync. This is a safeguard for the situation in which litestream's`,
+        `background checkpoints continually defer to incoming writes (i.e. high write load).`,
+        ``,
+        `If the WAL size reaches the forced checkpoint threshold, writes pause for an`,
+        `an explicit litestream checkpoint, providing a flow-control mechanism to ensure timely`,
+        `backups and prevent runaway wal growth.`,
+        ``,
+        `Note that these checkpoints {italic can} be skipped if litestream is performing a`,
+        `snapshot at the time (though snapshots are disabled by default). For such configurations,`,
+        `the {bold ZERO_LITESTREAM_MAX_WAL_SIZE_MB} provides an emergency break to prevent`,
+        `exceeding available disk space.`,
+        ``,
+        `Set this to 0 to disable and instead rely on the litestream's default {bold truncate-page-n}`,
+        `emergency break.`,
+        ``,
+        `This feature is only enabled with {bold ZERO_LITESTREAM_BACKUP_USING_V5}.`,
+      ],
+    },
+
+    maxWalSizeMB: {
+      type: v.number().default(10240),
+      desc: [
+        `A fail-safe that pauses writes once the un-checkpointed WAL reaches this size,`,
+        `resuming when litestream manages to checkpoint it. This bounds WAL growth (and`,
+        `ultimately disk usage) whenever litestream cannot checkpoint — e.g. while it holds`,
+        `the checkpoint lock for an in-progress snapshot — and serves as an alternative to`,
+        `litestream's {bold truncate-page-n} emergency checkpoint, which would otherwise block`,
+        `writes for a second "bounary" snapshot.`,
+        ``,
+        `Size this generously relative to available disk; it should rarely be hit, as`,
+        `{bold ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB} keeps the WAL far smaller in`,
+        `normal operation. Set to {bold 0} to disable.`,
+        ``,
+        `This feature is only enabled with {bold ZERO_LITESTREAM_BACKUP_USING_V5}.`,
       ],
     },
 
     incrementalBackupIntervalMinutes: {
       type: v.number().default(15),
       desc: [
-        `The interval between incremental backups of the replica. Shorter intervals`,
+        `The interval between incremental v3 backups of the replica. Shorter intervals`,
         `reduce the amount of change history that needs to be replayed when catching`,
         `up a new view-syncer, at the expense of increasing the number of files needed`,
         `to download for the initial litestream restore.`,
+        ``,
+        `This option only applies to litestream v3 backups and will be deprecated/removed`,
+        `once the zero-cache is transitioned to litestream v5. For configuring v5 backup`,
+        `frequency, use {bold ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}.`,
       ],
     },
 
@@ -897,6 +1363,51 @@ export const zeroOptions = {
         `improves restore time at the expense of bandwidth. Applications with a`,
         `large database and low write rate can increase this interval to reduce`,
         `network usage for backups (litestream defaults to 24 hours).`,
+        ``,
+        `This option only applies to litestream v3 backups and will be deprecated/removed`,
+        `once the zero-cache is transitioned to litestream v5. For configuring v5 backup`,
+        `frequency, use {bold ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS_V5}.`,
+      ],
+    },
+
+    incrementalBackupIntervalSeconds: {
+      type: v.number().default(15),
+      desc: [
+        `The interval between incremental v5 backups of the replica. With litestream v5`,
+        `the upstream change source is not ACKed until the corresponding changes have been`,
+        `applied to the replica and backed up by litestream. As such, shorter intervals`,
+        `incur a higher number of backup storage writes and files managed (e.g. in s3),`,
+        `while longer intervals result requiring a larger buffer for changes upstream `,
+        `(e.g. per-replication slot wal records). The default value of 15 seconds targets`,
+        `an s3 API cost of ~$1/month (not counting storage costs).`,
+        ``,
+        `This option only applies to litestream v5 backups. For v3 backups, use`,
+        `{bold ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES}.`,
+      ],
+    },
+
+    snapshotBackupIntervalHoursV5: {
+      type: v.number().default(24 * 30),
+      desc: [
+        `The interval between snapshot backups of the replica when`,
+        `{bold ZERO_LITESTREAM_BACKUP_USING_V5} is enabled.`,
+        ``,
+        `By default, snapshots are effectively disabled (i.e. every 30 days)`,
+        `because v5 compaction fulfills the role that snapshots played in v3`,
+        `(i.e. because of litestream v5 compaction, restores will generally involve`,
+        `O(db-size) bytes.`,
+        ``,
+        `Snapshots are disabled by default because they hold a read-lock on`,
+        `the database and prevent wal checkpoints, introducing the risk of large wal`,
+        `files for large databases with a high write rate.`,
+        ``,
+        `If configuring the zero-cache to actually perform v5 snapshots, the`,
+        `{bold ZERO_LITESTREAM_MAX_WAL_SIZE_MB} option can be used to pause replication`,
+        `if the wal reaches a certain size and cannot be checkpointed because of an`,
+        `in-progress snapshot.`,
+        ``,
+        `This option only applies to litestream v5 backups. For v3 backups, use`,
+        `{bold ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS}.`,
       ],
     },
 

@@ -6,11 +6,20 @@ import {getConnectionURI} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 
-const SCHEMA_URL =
-  'https://raw.githubusercontent.com/devrimgunduz/pagila/master/pagila-schema.sql';
-const DATA_URL =
-  'https://raw.githubusercontent.com/devrimgunduz/pagila/master/pagila-insert-data.sql';
-const CACHE_FILE = 'Pagila_PostgreSql.sql';
+// Pinned to a specific upstream commit. `master` is a moving target: the
+// planner-exec tests calibrate cost-model thresholds against this exact
+// dataset, so an upstream data or schema change silently breaks CI on
+// branches that never touched the planner. (2026-07-28: upstream retyped
+// `language.name` from `character(20)` to `text`, unpadding 'English' and
+// flipping a whereExists branch from matching nothing to matching every
+// film.) Bump this SHA deliberately, and re-calibrate the thresholds in
+// planner-exec.pg.test.ts in the same change.
+const PAGILA_REF = '5ba5a57aeb159f75f02aca2432d3c262186d13d3';
+const SCHEMA_URL = `https://raw.githubusercontent.com/devrimgunduz/pagila/${PAGILA_REF}/pagila-schema.sql`;
+const DATA_URL = `https://raw.githubusercontent.com/devrimgunduz/pagila/${PAGILA_REF}/pagila-insert-data.sql`;
+// The ref is part of the cache file name so that a cache populated from the
+// old floating `master` URL is not silently reused.
+const CACHE_FILE = `Pagila_PostgreSql-${PAGILA_REF.slice(0, 12)}.sql`;
 
 async function fetchUrl(url: string): Promise<string> {
   const response = await fetch(url);

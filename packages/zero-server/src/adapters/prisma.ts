@@ -19,7 +19,7 @@ export type PrismaTransactionLike = {
 
 export type PrismaClientLike<
   TTransaction extends PrismaTransactionLike = PrismaTransactionLike,
-> = {
+> = PrismaTransactionLike & {
   $transaction: <T>(fn: (tx: TTransaction) => Promise<T>) => Promise<T>;
 };
 
@@ -42,6 +42,10 @@ export class PrismaConnection<
 
   constructor(client: TClient) {
     this.#client = client;
+  }
+
+  query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
+    return prismaQuery(this.#client, sql, params);
   }
 
   transaction<T>(
@@ -81,13 +85,18 @@ class PrismaInternalTransaction<
     );
   }
 
-  async query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
-    const result = await this.wrappedTransaction.$queryRawUnsafe(
-      sql,
-      ...params,
-    );
-    return toIterableRows(result);
+  query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
+    return prismaQuery(this.wrappedTransaction, sql, params);
   }
+}
+
+async function prismaQuery(
+  client: PrismaTransactionLike,
+  sql: string,
+  params: unknown[],
+): Promise<Iterable<Row>> {
+  const result = await client.$queryRawUnsafe(sql, ...params);
+  return toIterableRows(result);
 }
 
 function isIterable(value: unknown): value is Iterable<unknown> {

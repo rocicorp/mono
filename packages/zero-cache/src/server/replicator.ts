@@ -4,25 +4,48 @@ import type {ObservableCallback} from '@opentelemetry/api';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {
+  LitestreamConfig,
+  NormalizedZeroConfig,
+} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {initEventSink} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
+import {reserveAndGetSnapshotStatus} from '../services/change-streamer/snapshot.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {
+  tryRestore,
+  type RestoreResult,
+} from '../services/litestream/commands.ts';
+import {
+  litestreamRestoreDuration,
+  litestreamRestoreMetricAttrs,
+  litestreamRestoreRuns,
+} from '../services/litestream/metrics.ts';
+import {RestoreProgressReporter} from '../services/litestream/restore-progress.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
   ReplicatorService,
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
-import {ThreadWriteWorkerClient} from '../services/replicator/write-worker-client.ts';
+import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
+import {
+  ThreadWriteWorkerClient,
+  type ForceCheckpointConfig,
+} from '../services/replicator/write-worker-client.ts';
 import {
   parentWorker,
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {installProfileHandler} from '../types/profiler.ts';
 import {getShardConfig} from '../types/shards.ts';
 import {
+  deleteStaleChangeLog,
   getPragmaConfig,
   replicaFileModeSchema,
   setUpMessageHandlers,
@@ -45,26 +68,75 @@ export default async function runWorker(
 
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
+  const runningLocalChangeStreamer =
+    config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
   const workerName = `${mode}-replicator`;
+  installProfileHandler(parent, workerName);
   startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
   lc = createLogContext(config, workerName);
+  const unregisterInitialCorruptionDiagnosticTarget =
+    registerSQLiteCorruptionDiagnosticTarget(
+      {
+        debugName: `${workerName} replica`,
+        dbPath: config.replica.file,
+      },
+      config.sqliteCorruptionChecks,
+    );
   initEventSink(lc, config);
 
-  const {file: dbPath, walMode} = await setupReplica(
-    lc,
-    fileMode,
-    config.replica,
+  // Remote view-syncers restore from the replication-manager, which supplies
+  // the backup URL. A local change-streamer owns the canonical replica and
+  // must not infer backup configuration from bundled executable paths.
+  if (
+    fileMode === 'serving' &&
+    !runningLocalChangeStreamer &&
+    (config.litestream.executable || config.litestream.executableV5)
+  ) {
+    await restoreReplica(lc, config);
+  }
+
+  const {
+    file: dbPath,
+    walMode,
+    pageSize,
+  } = await setupReplica(lc, fileMode, config.replica);
+  unregisterInitialCorruptionDiagnosticTarget();
+  registerSQLiteCorruptionDiagnosticTarget(
+    {
+      debugName: `${workerName} replica`,
+      dbPath,
+    },
+    config.sqliteCorruptionChecks,
   );
+
+  // A file left behind by a run with the writer enabled would otherwise hold
+  // local disk indefinitely. See `replicatorDeletesStaleChangeLog` for why
+  // this is keyed on the config flag and nothing else.
+  deleteStaleChangeLog(config.changeStreamer.sqliteChangeLogMode, dbPath);
 
   setupMetrics(lc, dbPath, walMode);
 
-  // Create the write worker for async SQLite writes.
+  // Create the write worker for async SQLite writes. Enable write-path
+  // checkpoint backpressure only for the backup replicator on litestream v5,
+  // which owns the replica litestream backs up.
   const pragmas = getPragmaConfig(fileMode);
+  const checkpoint: ForceCheckpointConfig | null =
+    mode === 'backup' &&
+    config.litestream.backupURL &&
+    config.litestream.backupUsingV5 &&
+    config.litestream.forceCheckpointThresholdMB
+      ? {
+          checkpointThresholdPages:
+            (config.litestream.forceCheckpointThresholdMB * 1024 ** 2) /
+            pageSize,
+          maxWalPages: !config.litestream.maxWalSizeMB
+            ? undefined
+            : (config.litestream.maxWalSizeMB * 1024 ** 2) / pageSize,
+        }
+      : null;
   const workerClient = new ThreadWriteWorkerClient();
-  await workerClient.init(dbPath, mode, pragmas, config.log);
+  await workerClient.init(dbPath, mode, pragmas, config.log, checkpoint);
 
-  const runningLocalChangeStreamer =
-    config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
   const shard = getShardConfig(config);
   const {
     taskID,
@@ -128,6 +200,16 @@ function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
       unit: 'bytes',
     }).addCallback(observeFileSize(lc, `${file}-wal2`));
   }
+
+  // A whole-database total rather than a per-file one. Its counterpart,
+  // `sqlite_change_log.file_bytes`, is emitted by the change-streamer, which is
+  // the process that writes the log.
+  getOrCreateGauge('replica', 'file_bytes', {
+    description:
+      `The replica's total on-disk footprint: its main db file plus its ` +
+      `wal sidecars.`,
+    unit: 'By',
+  }).addCallback(observeSQLiteFileBytes(lc, file));
 }
 
 function observeFileSize(lc: LogContext, file: string): ObservableCallback {
@@ -141,9 +223,69 @@ function observeFileSize(lc: LogContext, file: string): ObservableCallback {
   };
 }
 
+function observeSQLiteFileBytes(
+  lc: LogContext,
+  file: string,
+): ObservableCallback {
+  return async o => o.observe(await sqliteFileBytes(lc, file));
+}
+
+const RETRY_INTERVAL_MS = 3000;
+
+// View-syncers (no replicaConstraints) wait indefinitely for the
+// replication-manager to publish a restorable backup. On a fresh stack the
+// first backup is not durable until the initial sync completes and litestream
+// uploads the initial snapshot, which can take many minutes for a large
+// replica. The platform's startup probe budget (which scales with replica
+// size) is the backstop, so restoreReplica must not impose its own shorter
+// cap and self-terminate while the backup is still being produced.
+async function restoreReplica(lc: LogContext, config: NormalizedZeroConfig) {
+  const start = performance.now();
+  let backupURL: string | undefined;
+  let result: RestoreResult | undefined;
+  const progress = new RestoreProgressReporter(lc, config.replica.file);
+  try {
+    for (;;) {
+      const snapshotStatus = await reserveAndGetSnapshotStatus(lc, config);
+      // The backupURL comes from the replication-manager's snapshot response.
+      ({backupURL} = snapshotStatus);
+      const litestream: LitestreamConfig = {...config.litestream, backupURL};
+      progress.start(snapshotStatus.replicaSize);
+      const attempt = await tryRestore(
+        lc,
+        litestream,
+        config.replica.file,
+        snapshotStatus,
+        'view_syncer',
+      );
+      progress.stop();
+      if (attempt.restored) {
+        result = attempt.result;
+        progress.done();
+        return;
+      }
+      lc.info?.(
+        `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
+      );
+      await sleep(RETRY_INTERVAL_MS);
+    }
+  } finally {
+    progress.stop();
+    const attrs = litestreamRestoreMetricAttrs(
+      config.litestream,
+      'view_syncer',
+      backupURL,
+    );
+    const labels = {...attrs, result: result ?? 'error'};
+    litestreamRestoreRuns().add(1, labels);
+    litestreamRestoreDuration().recordMs(performance.now() - start, labels);
+  }
+}
+
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(lc, () =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  void exitAfter(
+    () => lc,
+    () => runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
 }

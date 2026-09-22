@@ -7,13 +7,16 @@ import type {
   Conjunction,
   CorrelatedSubqueryCondition,
   Disjunction,
+  SimpleCondition,
 } from '../../../zero-protocol/src/ast.ts';
 import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
+import {transformFilters} from '../builder/filter.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
 import {PlannerFanIn} from './planner-fan-in.ts';
 import {PlannerFanOut} from './planner-fan-out.ts';
+import {PlannerFilter} from './planner-filter.ts';
 import {PlannerGraph} from './planner-graph.ts';
 import {PlannerJoin} from './planner-join.ts';
 import type {PlannerNode} from './planner-node.ts';
@@ -24,6 +27,7 @@ function wireOutput(from: PlannerNode, to: PlannerNode): void {
     case 'connection':
     case 'join':
     case 'fan-in':
+    case 'filter':
       from.setOutput(to);
       break;
     case 'fan-out':
@@ -39,11 +43,16 @@ export type Plans = {
   subPlans: {[key: string]: Plans};
 };
 
+/**
+ * @param pushed The conditions that correlated predicate pushdown copied into
+ * a child (see `pushDownCorrelatedPredicates`).
+ */
 export function buildPlanGraph(
   ast: AST,
   model: ConnectionCostModel,
   isRoot: boolean,
   baseConstraints?: PlannerConstraint,
+  pushed?: ReadonlySet<SimpleCondition>,
 ): Plans {
   const graph = new PlannerGraph();
   let nextPlanId = 0;
@@ -55,6 +64,7 @@ export function buildPlanGraph(
     isRoot,
     baseConstraints,
     ast.limit,
+    pushed,
   );
   graph.connections.push(connection);
 
@@ -67,6 +77,7 @@ export function buildPlanGraph(
       model,
       ast.table,
       () => nextPlanId++,
+      pushed,
     );
   }
 
@@ -90,6 +101,7 @@ export function buildPlanGraph(
         model,
         true,
         childConstraints,
+        pushed,
       );
     }
   }
@@ -104,14 +116,31 @@ function processCondition(
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
+  pushed: ReadonlySet<SimpleCondition> | undefined,
 ): Exclude<PlannerNode, PlannerTerminus> {
   switch (condition.type) {
     case 'simple':
       return input;
     case 'and':
-      return processAnd(condition, input, graph, model, parentTable, getPlanId);
+      return processAnd(
+        condition,
+        input,
+        graph,
+        model,
+        parentTable,
+        getPlanId,
+        pushed,
+      );
     case 'or':
-      return processOr(condition, input, graph, model, parentTable, getPlanId);
+      return processOr(
+        condition,
+        input,
+        graph,
+        model,
+        parentTable,
+        getPlanId,
+        pushed,
+      );
     case 'correlatedSubquery':
       return processCorrelatedSubquery(
         condition,
@@ -120,6 +149,7 @@ function processCondition(
         model,
         parentTable,
         getPlanId,
+        pushed,
       );
   }
 }
@@ -131,6 +161,7 @@ function processAnd(
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
+  pushed: ReadonlySet<SimpleCondition> | undefined,
 ): Exclude<PlannerNode, PlannerTerminus> {
   let end = input;
   for (const subCondition of condition.conditions) {
@@ -141,6 +172,7 @@ function processAnd(
       model,
       parentTable,
       getPlanId,
+      pushed,
     );
   }
   return end;
@@ -153,12 +185,15 @@ function processOr(
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
+  pushed: ReadonlySet<SimpleCondition> | undefined,
 ): Exclude<PlannerNode, PlannerTerminus> {
-  const subqueryConditions = condition.conditions.filter(
+  // Skip building fan structure when no branch contains a CSQ. The runtime
+  // collapses such ORs to a single Filter node, so the planner has nothing
+  // to choose between.
+  const hasAnySubquery = condition.conditions.some(
     c => c.type === 'correlatedSubquery' || hasCorrelatedSubquery(c),
   );
-
-  if (subqueryConditions.length === 0) {
+  if (!hasAnySubquery) {
     return input;
   }
 
@@ -167,15 +202,31 @@ function processOr(
   wireOutput(input, fanOut);
 
   const branches: Exclude<PlannerNode, PlannerTerminus>[] = [];
-  for (const subCondition of subqueryConditions) {
-    const branch = processCondition(
-      subCondition,
-      fanOut,
-      graph,
-      model,
-      parentTable,
-      getPlanId,
-    );
+  for (const subCondition of condition.conditions) {
+    let branch: Exclude<PlannerNode, PlannerTerminus>;
+    if (
+      subCondition.type === 'correlatedSubquery' ||
+      hasCorrelatedSubquery(subCondition)
+    ) {
+      branch = processCondition(
+        subCondition,
+        fanOut,
+        graph,
+        model,
+        parentTable,
+        getPlanId,
+        pushed,
+      );
+    } else {
+      // Simple OR branch: wrap in a PlannerFilter so its filter can be
+      // registered at the receiving connection on a per-branch basis when
+      // the FanIn is in UFI mode.
+      const transformed = transformFilters(subCondition).filters;
+      const filter = new PlannerFilter(fanOut, transformed);
+      graph.filters.push(filter);
+      wireOutput(fanOut, filter);
+      branch = filter;
+    }
     branches.push(branch);
     fanOut.addOutput(branch);
   }
@@ -196,6 +247,7 @@ function processCorrelatedSubquery(
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
+  pushed: ReadonlySet<SimpleCondition> | undefined,
 ): Exclude<PlannerNode, PlannerTerminus> {
   const {related} = condition;
   const childTable = related.subquery.table;
@@ -210,6 +262,7 @@ function processCorrelatedSubquery(
     false,
     undefined, // no base constraints for EXISTS/NOT EXISTS
     condition.op === 'EXISTS' ? 1 : undefined,
+    pushed,
   );
   graph.connections.push(childConnection);
 
@@ -222,6 +275,7 @@ function processCorrelatedSubquery(
       model,
       childTable,
       getPlanId,
+      pushed,
     );
   }
 
@@ -272,6 +326,7 @@ function processCorrelatedSubquery(
     initialType,
   );
   graph.joins.push(join);
+  childConnection.setParentJoin(join);
 
   wireOutput(input, join);
   wireOutput(childEnd, join);
@@ -308,13 +363,19 @@ function planRecursively(
   plans.plan.plan(planDebugger, lc);
 }
 
+/**
+ * @param pushed The conditions that correlated predicate pushdown copied into
+ * a child (see `pushDownCorrelatedPredicates`). The planner counts each one
+ * only where it removes rows.
+ */
 export function planQuery(
   ast: AST,
   model: ConnectionCostModel,
   planDebugger?: PlanDebugger,
   lc?: LogContext,
+  pushed?: ReadonlySet<SimpleCondition>,
 ): AST {
-  const plans = buildPlanGraph(ast, model, true);
+  const plans = buildPlanGraph(ast, model, true, undefined, pushed);
   planRecursively(plans, planDebugger, lc);
   return applyPlansToAST(ast, plans);
 }

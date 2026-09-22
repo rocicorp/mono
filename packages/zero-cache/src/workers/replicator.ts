@@ -5,6 +5,7 @@ import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
+import {deleteChangeLogDB} from '../services/replicator/change-log-db.ts';
 import {Notifier} from '../services/replicator/notifier.ts';
 import type {
   ReplicaState,
@@ -35,6 +36,46 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
   return mode === 'serving-copy' ? `${replicaFile}-serving-copy` : replicaFile;
 }
 
+/**
+ * Whether a replicator worker deletes the change-log file beside its replica at
+ * startup.
+ *
+ * The change log belongs to the change-streamer, so this only ever cleans up a
+ * file that nothing is writing. The predicate is deliberately the config flag
+ * and nothing else: keying it on anything derived per replica -- a file mode, or
+ * the retired `logsChangeStream` -- would make every replicator start unlink the
+ * change-streamer's live log, because no replicator writes it any more. Paths
+ * coincide whenever `fileMode !== 'serving-copy'`, so that hazard is real in the
+ * shipped no-`backupURL` configuration.
+ *
+ * Deleting is safe when nothing writes the log: it is excluded from the
+ * litestream backup, only the writer purges it, and re-enabling the writer
+ * reseeds at the resume watermark.
+ */
+export function replicatorDeletesStaleChangeLog(
+  sqliteChangeLogMode: string,
+): boolean {
+  return sqliteChangeLogMode === 'off';
+}
+
+/**
+ * The `mode=off` cleanup itself: deletes the change-log file beside `dbPath`
+ * when {@link replicatorDeletesStaleChangeLog} says nothing writes it, and
+ * reports whether it did. The decision and the delete live in one function so
+ * that the guard test covers the call the replicator actually makes, not just
+ * the predicate.
+ */
+export function deleteStaleChangeLog(
+  sqliteChangeLogMode: string,
+  dbPath: string,
+): boolean {
+  if (!replicatorDeletesStaleChangeLog(sqliteChangeLogMode)) {
+    return false;
+  }
+  deleteChangeLogDB(dbPath);
+  return true;
+}
+
 const MILLIS_PER_HOUR = 1000 * 60 * 60;
 const MB = 1024 * 1024;
 
@@ -43,60 +84,61 @@ async function prepare(
   {file, vacuumIntervalHours}: ReplicaOptions,
   walMode: WalMode,
   mode: ReplicaFileMode,
-): Promise<{file: string; walMode: WalMode}> {
-  const replica = new Database(lc, file);
-
+): Promise<{file: string; walMode: WalMode; pageSize: number}> {
   // Perform any upgrades to the replica in case the backup is an
   // earlier version.
   await upgradeReplica(lc, `${mode}-replica`, file);
 
-  // Start by folding any (e.g. restored) WAL(2) files into the main db.
-  await setJournalMode(lc, replica, 'delete');
+  const replica = new Database(lc, file);
+  let pageSize: number;
+  try {
+    // Start by folding any (e.g. restored) WAL(2) files into the main db.
+    await setJournalMode(lc, replica, 'delete');
 
-  const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
-    'page_size',
-  );
-  const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
-    'page_count',
-  );
-  const [{freelist_count: freelistCount}] = replica.pragma<{
-    freelist_count: number;
-  }>('freelist_count');
+    [{page_size: pageSize}] = replica.pragma<{page_size: number}>('page_size');
+    const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
+      'page_count',
+    );
+    const [{freelist_count: freelistCount}] = replica.pragma<{
+      freelist_count: number;
+    }>('freelist_count');
 
-  const dbSize = ((pageCount * pageSize) / MB).toFixed(2);
-  const freelistSize = ((freelistCount * pageSize) / MB).toFixed(2);
+    const dbSize = ((pageCount * pageSize) / MB).toFixed(2);
+    const freelistSize = ((freelistCount * pageSize) / MB).toFixed(2);
 
-  // TODO: Consider adding a freelist size or ratio based vacuum trigger.
-  lc.info?.(`Size of db ${file}: ${dbSize} MB (${freelistSize} MB freeable)`);
+    // TODO: Consider adding a freelist size or ratio based vacuum trigger.
+    lc.info?.(`Size of db ${file}: ${dbSize} MB (${freelistSize} MB freeable)`);
 
-  // Check for the VACUUM threshold.
-  const events = getAscendingEvents(replica);
-  lc.debug?.(`Runtime events for db ${file}`, {events});
-  if (vacuumIntervalHours !== undefined) {
-    const millisSinceLastEvent =
-      Date.now() - (events.at(-1)?.timestamp.getTime() ?? 0);
-    if (millisSinceLastEvent / MILLIS_PER_HOUR > vacuumIntervalHours) {
-      lc.info?.(`Performing maintenance cleanup on ${file}`);
-      const t0 = performance.now();
-      replica.unsafeMode(true);
-      replica.pragma('journal_mode = OFF');
-      replica.exec('VACUUM');
-      recordEvent(replica, 'vacuum');
-      replica.unsafeMode(false);
-      const t1 = performance.now();
-      lc.info?.(`VACUUM completed (${t1 - t0} ms)`);
+    // Check for the VACUUM threshold.
+    const events = getAscendingEvents(replica);
+    lc.debug?.(`Runtime events for db ${file}`, {events});
+    if (vacuumIntervalHours !== undefined) {
+      const millisSinceLastEvent =
+        Date.now() - (events.at(-1)?.timestamp.getTime() ?? 0);
+      if (millisSinceLastEvent / MILLIS_PER_HOUR > vacuumIntervalHours) {
+        lc.info?.(`Performing maintenance cleanup on ${file}`);
+        const t0 = performance.now();
+        replica.unsafeMode(true);
+        replica.pragma('journal_mode = OFF');
+        replica.exec('VACUUM');
+        recordEvent(replica, 'vacuum');
+        replica.unsafeMode(false);
+        const t1 = performance.now();
+        lc.info?.(`VACUUM completed (${t1 - t0} ms)`);
+      }
     }
+
+    await setJournalMode(lc, replica, walMode);
+
+    const pragmas = getPragmaConfig(mode);
+    applyPragmas(replica, pragmas);
+
+    replica.pragma('optimize = 0x10002');
+    lc.info?.(`optimized ${file}`);
+  } finally {
+    replica.close();
   }
-
-  await setJournalMode(lc, replica, walMode);
-
-  const pragmas = getPragmaConfig(mode);
-  applyPragmas(replica, pragmas);
-
-  replica.pragma('optimize = 0x10002');
-  lc.info?.(`optimized ${file}`);
-  replica.close();
-  return {file, walMode};
+  return {file, walMode, pageSize};
 }
 
 // Setting the journal_mode requires an exclusive lock on the replica.
@@ -222,11 +264,16 @@ export function handleSubscriptionsFrom(
  * This does not send the initial subscription message. Use {@link subscribeTo}
  * to initiate the subscription.
  */
-export function createNotifierFrom(_lc: LogContext, source: Worker): Notifier {
+export function createNotifierFrom(
+  _lc: LogContext,
+  source: Worker,
+  onNotify?: (state: ReplicaState) => void,
+): Notifier {
   const notifier = new Notifier();
-  source.onMessageType<Notification>('notify', msg =>
-    notifier.notifySubscribers(msg),
-  );
+  source.onMessageType<Notification>('notify', msg => {
+    onNotify?.(msg);
+    void notifier.notifySubscribers(msg);
+  });
   return notifier;
 }
 

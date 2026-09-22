@@ -267,6 +267,48 @@ describe('SQL builder with PostgreSQL', () => {
       expect(result).toEqual([{value}]);
     },
   );
+
+  test('text-represented scalar types insert and compare by native type', async () => {
+    await using pg = await testDBs.create(`${DB_NAME}_text_represented`);
+    await pg.unsafe(`
+      CREATE EXTENSION IF NOT EXISTS isn;
+      CREATE TABLE text_represented_scalars (
+        isbn ISBN13 PRIMARY KEY,
+        ip INET NOT NULL,
+        mac MACADDR NOT NULL
+      );
+    `);
+
+    const row = {
+      isbn: '9780306406157',
+      ip: '192.168.0.1/24',
+      mac: '08:00:2b:01:02:03',
+    };
+
+    const insertStmt = formatPgInternalConvert(sql`
+      INSERT INTO text_represented_scalars (isbn, ip, mac)
+      VALUES (
+        ${sqlConvertArg('isbn13', row.isbn)},
+        ${sqlConvertArg('inet', row.ip)},
+        ${sqlConvertArg('macaddr', row.mac)}
+      )
+    `);
+    await pg.unsafe(insertStmt.text, insertStmt.values as JSONValue[]);
+
+    const selectStmt = formatPgInternalConvert(sql`
+      SELECT isbn::text AS isbn, ip::text AS ip, mac::text AS mac
+      FROM text_represented_scalars
+      WHERE isbn = ${sqlConvertArg('isbn13', row.isbn, singularComparison)}
+        AND ip = ${sqlConvertArg('inet', row.ip, singularComparison)}
+        AND mac = ${sqlConvertArg('macaddr', row.mac, singularComparison)}
+    `);
+    const result = await pg.unsafe(
+      selectStmt.text,
+      selectStmt.values as JSONValue[],
+    );
+
+    expect(result).toEqual([{...row, isbn: '978-0-306-40615-7'}]);
+  });
 });
 
 const pluralComparison = {

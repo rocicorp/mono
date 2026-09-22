@@ -13,6 +13,7 @@ import * as v from '../../../../../../shared/src/valita.ts';
 import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.ts';
 import type {Satisfies} from '../../../../types/satisfies.ts';
 import {jsonObjectSchema} from './json.ts';
+import {schemaChangeTags} from './schema-change-tags.ts';
 
 export const beginSchema = v.object({
   tag: v.literal('begin'),
@@ -34,6 +35,19 @@ export const beginSchema = v.object({
 
 export const commitSchema = v.object({
   tag: v.literal('commit'),
+
+  // Millisecond epoch at which the transaction committed upstream, as reported
+  // by the upstream database (e.g. the `commitTime` of the Postgres logical
+  // replication Commit message).
+  //
+  // This is the origin timestamp of the end-to-end serving lag measurement:
+  // it is carried through the replication stream to the ViewSyncer, which
+  // records `now - commitTimeMs` once the change has been poked to clients.
+  //
+  // Optional because it is absent from changes written to the Change DB by
+  // older versions, which are replayed verbatim during catchup, and from
+  // ChangeSources that do not report a commit time.
+  commitTimeMs: v.number().optional(),
 });
 
 export const rollbackSchema = v.object({
@@ -369,20 +383,6 @@ const schemaChanges = [
   createIndexSchema,
   dropIndexSchema,
   backfillCompletedSchema,
-] as const;
-
-// Note: keep in sync or the tag tests will fail
-const schemaChangeTags = [
-  'create-table',
-  'rename-table',
-  'update-table-metadata',
-  'add-column',
-  'update-column',
-  'drop-column',
-  'drop-table',
-  'create-index',
-  'drop-index',
-  'backfill-completed',
 ] as const;
 
 export const schemaChangeSchema = v.union(...schemaChanges);

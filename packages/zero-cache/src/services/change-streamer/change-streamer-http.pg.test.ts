@@ -13,7 +13,6 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {installWebSocketHandoff} from '../../types/websocket-handoff.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import type {BackupMonitor} from './backup-monitor.ts';
 import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
@@ -36,8 +35,9 @@ describe('change-streamer/http', () => {
   let subscribeFn: MockedFunction<
     (ctx: SubscriberContext) => Promise<Subscription<string>>
   >;
-  let snapshotFn: MockedFunction<(id: string) => Subscription<SnapshotMessage>>;
-  let endReservationFn: MockedFunction<(id: string) => void>;
+  let snapshotFn: MockedFunction<
+    (id: string) => Promise<Subscription<SnapshotMessage>>
+  >;
   let runFn: MockedFunction<() => Promise<void>>;
   let stopFn: MockedFunction<() => Promise<void>>;
 
@@ -71,7 +71,6 @@ describe('change-streamer/http', () => {
     snapshotStream = Subscription.create();
     subscribeFn = vi.fn();
     snapshotFn = vi.fn();
-    endReservationFn = vi.fn();
     runFn = vi.fn();
     stopFn = vi.fn();
 
@@ -99,18 +98,14 @@ describe('change-streamer/http', () => {
       {
         id: 'change-streamer',
         subscribe: subscribeFn.mockResolvedValue(downstream),
+        startSnapshotReservation: snapshotFn.mockResolvedValue(snapshotStream),
+        trackBackupWatermark: vi.fn(),
         run: runFn.mockImplementation(() => service.promise),
         stop: stopFn.mockImplementation(() => {
           service.resolve();
           return service.promise;
         }),
-        scheduleCleanup: vi.fn(),
-        getChangeLogState: vi.fn(),
       },
-      {
-        startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
-        endReservation: endReservationFn,
-      } as unknown as BackupMonitor,
     );
 
     const [dispatcherURL, serverURL] = await Promise.all([
@@ -159,15 +154,14 @@ describe('change-streamer/http', () => {
       {
         id: 'change-streamer',
         subscribe: subscribeFn.mockResolvedValue(downstream),
+        startSnapshotReservation: vi.fn(),
+        trackBackupWatermark: vi.fn(),
         run: runFn.mockImplementation(() => service.promise),
         stop: stopFn.mockImplementation(() => {
           service.resolve();
           return service.promise;
         }),
-        scheduleCleanup: vi.fn(),
-        getChangeLogState: vi.fn(),
       },
-      null,
     );
     const baseURL = await server.start();
 
@@ -193,22 +187,26 @@ describe('change-streamer/http', () => {
         `/replication/v${PROTOCOL_VERSION}/changes`,
       ],
       [
+        'invalid querystring - missing taskID',
+        `/replication/v${PROTOCOL_VERSION}/changes?id=foo`,
+      ],
+      [
         'Missing taskID in snapshot request',
         `/replication/v${PROTOCOL_VERSION}/snapshot`,
       ],
       [
         'invalid querystring - missing watermark',
-        `/replication/v${PROTOCOL_VERSION}/changes?id=foo&replicaVersion=bar&initial=true`,
+        `/replication/v${PROTOCOL_VERSION}/changes?id=foo&replicaVersion=bar&initial=true&taskID=foo`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
+        `Cannot service client at protocol v7. Supported protocols: [v4 ... v6]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
-          `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
+          `?id=foo&replicaVersion=bar&watermark=123&initial=true&id=foo`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
+        `Cannot service client at protocol v7. Supported protocols: [v4 ... v6]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
@@ -277,6 +275,9 @@ describe('change-streamer/http', () => {
         replicaVersion: 'abc',
         watermark: '123',
         initial: true,
+        // Non-default so that the roundtrip below pins the parameter.
+        logsChangeStream: true,
+        wsBatched: true,
       } as const;
       await setChangeStreamerAddress(addr());
       const client = autoDiscover
@@ -289,18 +290,31 @@ describe('change-streamer/http', () => {
           );
       const sub = await client.subscribe(ctx);
 
-      expect(endReservationFn).toHaveBeenCalledWith('foo-task');
+      const begin = JSON.stringify([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: '456'},
+      ]);
+      const commit = JSON.stringify([
+        'commit',
+        {tag: 'commit'},
+        {watermark: '456'},
+      ]);
+      downstream.push(begin);
+      downstream.push(commit);
 
-      downstream.push(
-        JSON.stringify(['begin', {tag: 'begin'}, {commitWatermark: '456'}]),
-      );
-      downstream.push(
-        JSON.stringify(['commit', {tag: 'commit'}, {watermark: '456'}]),
-      );
+      const batchedFrame = `{"id":1,"batch":[${begin},${commit}]}`;
+      const batchedSize = Math.round(batchedFrame.length / 2);
 
       expect(await drain(2, sub)).toEqual([
-        ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
-        ['commit', {tag: 'commit'}, {watermark: '456'}],
+        {
+          data: ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
+          size: batchedSize,
+        },
+        {
+          data: ['commit', {tag: 'commit'}, {watermark: '456'}],
+          size: batchedSize,
+        },
       ]);
 
       // Draining the client-side subscription should cancel it, closing the
@@ -326,6 +340,7 @@ describe('change-streamer/http', () => {
       replicaVersion: 'abc',
       watermark: '123',
       initial: true,
+      logsChangeStream: false,
     });
 
     const messages = new ReplicationMessages({issues: 'id'});
@@ -336,33 +351,10 @@ describe('change-streamer/http', () => {
       big3: BigInt(Number.MAX_SAFE_INTEGER) + 3n,
     });
 
-    downstream.push(BigIntJSON.stringify(['data', insert]));
-    expect(await drain(1, sub)).toMatchInlineSnapshot(`
-      [
-        [
-          "data",
-          {
-            "new": {
-              "big1": 9007199254740992n,
-              "big2": 9007199254740993n,
-              "big3": 9007199254740994n,
-              "id": "foo",
-            },
-            "relation": {
-              "name": "issues",
-              "rowKey": {
-                "columns": [
-                  "id",
-                ],
-                "type": "default",
-              },
-              "schema": "public",
-              "tag": "relation",
-            },
-            "tag": "insert",
-          },
-        ],
-      ]
-    `);
+    const json = BigIntJSON.stringify(['data', insert]);
+    downstream.push(json);
+    expect(await drain(1, sub)).toEqual([
+      {data: ['data', insert], size: `{"id":1,"msg":${json}}`.length},
+    ]);
   });
 });

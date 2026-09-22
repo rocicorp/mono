@@ -53,6 +53,46 @@ function getErrorMessageInternal(error: unknown, seen: Set<unknown>): string {
   return `Unknown error of type ${typeof error} was thrown and the message could not be determined. See cause for details.`;
 }
 
+/**
+ * Returns the chain of `cause` values hanging off `error`, outermost first.
+ *
+ * Errors that Zero raises on a fatal path wrap the original exception as
+ * `cause`. Console sinks on some runtimes (React Native's Hermes among them)
+ * print only the outer error's message and stack, so the original error's
+ * name, message and stack are lost unless they are logged as separate
+ * arguments. Spread the result of this function into a log call to keep them
+ * visible.
+ */
+export function getErrorCauses(error: unknown): unknown[] {
+  const causes: unknown[] = [];
+  const seen = new Set<unknown>([error]);
+  let current = error;
+  for (;;) {
+    const cause = readCause(current);
+    if (cause === undefined || seen.has(cause)) {
+      return causes;
+    }
+    seen.add(cause);
+    causes.push(cause);
+    current = cause;
+  }
+}
+
+/**
+ * Reads `cause` exactly once. `error` is `unknown`, so `cause` may be an
+ * accessor or proxy trap: a stateful getter must not be consulted twice per
+ * hop, and a throwing one must not escape from a log call in an error handler.
+ */
+function readCause(error: unknown): unknown {
+  try {
+    return typeof error === 'object' && error !== null && 'cause' in error
+      ? (error as {cause: unknown}).cause
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function getErrorDetails(error: unknown): ReadonlyJSONValue | undefined {
   if (error instanceof Error) {
     if ('details' in error) {

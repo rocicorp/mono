@@ -152,6 +152,58 @@ export function runSQLiteStoreTests<TOptions = unknown>(
     await store.close();
   });
 
+  test('concurrent readers batching multiple keys do not interleave', async () => {
+    // Regression test: SQLiteStore shares one prepared statement per SQL
+    // across all concurrent readers. A delegate whose statement execution is
+    // not atomic (e.g. expo-sqlite's execute + getAll cursor pair) can have one
+    // reader's fetch return rows bound by another reader, so keys read back as
+    // undefined or as another key's value. Each reader batches several keys
+    // in one microtask so the store uses getMany/hasMany, which return multiple
+    // rows and are therefore sensitive to cursor interleaving.
+    const store = createStoreWithDefaults(`interleave-test-${++storeCounter}`);
+
+    const readerCount = 4;
+    const keysPerReader = 3;
+    const keysFor = (r: number) =>
+      Array.from({length: keysPerReader}, (_, i) => `r${r}/k${i}`);
+
+    await withWrite(store, async wt => {
+      for (let r = 0; r < readerCount; r++) {
+        for (const key of keysFor(r)) {
+          await wt.put(key, `value-${key}`);
+        }
+      }
+    });
+
+    for (let round = 0; round < 5; round++) {
+      const reads = await Promise.all(
+        Array.from({length: readerCount}, () => store.read()),
+      );
+      try {
+        const results = await Promise.all(
+          reads.map((rt, r) => {
+            const keys = keysFor(r);
+            return Promise.all([
+              Promise.all(keys.map(k => rt.get(k))),
+              Promise.all([...keys.map(k => rt.has(k)), rt.has(`r${r}/nope`)]),
+            ]);
+          }),
+        );
+        for (let r = 0; r < readerCount; r++) {
+          const [values, has] = results[r];
+          expect(values).toEqual(keysFor(r).map(k => `value-${k}`));
+          expect(has).toEqual([...keysFor(r).map(() => true), false]);
+        }
+      } finally {
+        for (const rt of reads) {
+          rt.release();
+        }
+      }
+    }
+
+    await store.close();
+  });
+
   test('concurrent reads with write blocking', async () => {
     const store = createStoreWithDefaults(`concurrent-test-${++storeCounter}`);
 

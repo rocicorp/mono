@@ -27,13 +27,45 @@ export function isPgNumberType(pgType: string): boolean {
   return Object.hasOwn(pgToZqlNumericTypeMap, formatTypeForLookup(pgType));
 }
 
-export const pgToZqlStringTypeMap = Object.freeze({
+export const pgToZqlNativeStringTypeMap = Object.freeze({
   'bpchar': 'string',
   'character': 'string',
   'character varying': 'string',
   'text': 'string',
-  'uuid': 'string',
   'varchar': 'string',
+});
+
+export function isPgNativeStringType(pgType: string): boolean {
+  return Object.hasOwn(pgToZqlNativeStringTypeMap, formatTypeForLookup(pgType));
+}
+
+export const pgToZqlTextRepresentedTypeMap = Object.freeze({
+  cidr: 'string',
+  ean13: 'string',
+  inet: 'string',
+  isbn: 'string',
+  isbn13: 'string',
+  ismn: 'string',
+  ismn13: 'string',
+  issn: 'string',
+  issn13: 'string',
+  macaddr: 'string',
+  macaddr8: 'string',
+  pg_lsn: 'string',
+  upc: 'string',
+  uuid: 'string',
+});
+
+export function isPgTextRepresentedType(pgType: string): boolean {
+  return Object.hasOwn(
+    pgToZqlTextRepresentedTypeMap,
+    formatTypeForLookup(pgType),
+  );
+}
+
+export const pgToZqlStringTypeMap = Object.freeze({
+  ...pgToZqlNativeStringTypeMap,
+  ...pgToZqlTextRepresentedTypeMap,
 });
 
 export function isPgStringType(pgType: string): boolean {

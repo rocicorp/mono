@@ -14,15 +14,15 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "oxc-parser": "^0.94.0"
+    "oxc-parser": "^0.129.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "oxfmt": "^0.45.0",
-    "typescript": "~6.0.2"
+    "oxfmt": "^0.65.0",
+    "typescript": "~7.0.2"
   },
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.11.0"
 }

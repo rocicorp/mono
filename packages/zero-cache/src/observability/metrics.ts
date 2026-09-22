@@ -7,6 +7,7 @@ import type {
   UpDownCounter,
 } from '@opentelemetry/api';
 import {metrics} from '@opentelemetry/api';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 
 // intentional lazy initialization so it is not started before the SDK is started.
 
@@ -20,6 +21,17 @@ export type Category =
 let meter: Meter | undefined;
 
 type Options = MetricOptions & {description: string};
+type HistogramOptions = Options & {bucketBoundaries: number[]};
+
+export const NATIVE_HISTOGRAM_INSTRUMENT_NAMES = [
+  'zero.sync.view_syncer_lag',
+  'zero.sync.view_syncer_hydration',
+  'zero.sync.e2e_serving_lag',
+] as const;
+
+export const LONG_DURATION_HISTOGRAM_BOUNDARIES_S = [
+  1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 2400, 3600, 7200,
+];
 
 function getMeter() {
   if (!meter) {
@@ -28,21 +40,13 @@ function getMeter() {
   return meter;
 }
 
-function cache<TRet>(): (
+function cache<TRet extends object>(): (
   name: string,
   creator: (name: string) => TRet,
 ) => TRet {
   const instruments = new Map<string, TRet>();
-  return (name: string, creator: (name: string) => TRet) => {
-    const existing = instruments.get(name);
-    if (existing) {
-      return existing;
-    }
-
-    const ret = creator(name);
-    instruments.set(name, ret);
-    return ret;
-  };
+  return (name: string, creator: (name: string) => TRet) =>
+    getOrInsertComputed(instruments, name, creator);
 }
 
 const upDownCounters = cache<UpDownCounter>();
@@ -107,7 +111,66 @@ const LATENCY_HISTOGRAM_BOUNDARIES_S = [
   0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30,
 ];
 
-const latencyHistograms = cache<Histogram>();
+const histograms = cache<Histogram>();
+
+/**
+ * Creates a histogram for dimensionless values without applying the
+ * millisecond-to-second conversion used by the latency helpers below.
+ */
+export function getOrCreateValueHistogram(
+  category: Category,
+  name: string,
+  opts: HistogramOptions,
+): Histogram {
+  const {bucketBoundaries, ...metricOptions} = opts;
+  return histograms(name, name =>
+    getMeter().createHistogram(`zero.${category}.${name}`, {
+      ...metricOptions,
+      advice: {
+        ...metricOptions.advice,
+        explicitBucketBoundaries: bucketBoundaries,
+      },
+    }),
+  );
+}
+
+export function getOrCreateHistogram(
+  category: Category,
+  name: string,
+  opts: HistogramOptions,
+): LatencyHistogram {
+  const {bucketBoundaries, ...metricOptions} = opts;
+  const h = histograms(name, name =>
+    getMeter().createHistogram(`zero.${category}.${name}`, {
+      ...metricOptions,
+      advice: {
+        ...metricOptions.advice,
+        explicitBucketBoundaries: bucketBoundaries,
+      },
+    }),
+  );
+  return {
+    recordMs: (durationMs, attributes) =>
+      h.record(durationMs / 1000, attributes),
+  };
+}
+
+// Add instruments created through this helper to
+// NATIVE_HISTOGRAM_INSTRUMENT_NAMES so the SDK exports them as exponential
+// histograms.
+export function getOrCreateNativeHistogram(
+  category: Category,
+  name: string,
+  opts: Options,
+): LatencyHistogram {
+  const h = histograms(name, name =>
+    getMeter().createHistogram(`zero.${category}.${name}`, opts),
+  );
+  return {
+    recordMs: (durationMs, attributes) =>
+      h.record(durationMs / 1000, attributes),
+  };
+}
 
 /**
  * Creates (or retrieves) a latency histogram for the given metric.
@@ -132,19 +195,11 @@ export function getOrCreateLatencyHistogram(
   name: string,
   description: string,
 ): LatencyHistogram {
-  const h = latencyHistograms(name, name =>
-    getMeter().createHistogram(`zero.${category}.${name}`, {
-      description,
-      unit: 's',
-      advice: {
-        explicitBucketBoundaries: LATENCY_HISTOGRAM_BOUNDARIES_S,
-      },
-    }),
-  );
-  return {
-    recordMs: (durationMs, attributes) =>
-      h.record(durationMs / 1000, attributes),
-  };
+  return getOrCreateHistogram(category, name, {
+    description,
+    unit: 's',
+    bucketBoundaries: LATENCY_HISTOGRAM_BOUNDARIES_S,
+  });
 }
 
 const counters = cache<Counter>();

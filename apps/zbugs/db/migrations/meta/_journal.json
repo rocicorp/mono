@@ -57,6 +57,13 @@
       "when": 1770409020281,
       "tag": "0007_red_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789695049703,
+      "tag": "0008_emoji_modified_trigger_index_lookup",
+      "breakpoints": true
     }
   ]
 }

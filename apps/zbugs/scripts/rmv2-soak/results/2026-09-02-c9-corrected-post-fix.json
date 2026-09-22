@@ -1,0 +1,656 @@
+{
+  "runID": "c9-corrected-post-fix-2026-09-02",
+  "startedMs": 1788377668466,
+  "finishedMs": 1788378694943,
+  "config": {
+    "appID": "rmv2_soak",
+    "viewSyncers": 3,
+    "changeLog": {
+      "mode": "serve",
+      "readPercent": 100,
+      "coldReadPercent": 100,
+      "comparePercent": 100,
+      "retentionMs": 60000
+    },
+    "backupIntervalSeconds": 2,
+    "vfsPollIntervalMs": 1000,
+    "startupDelayMs": 1000,
+    "snapshotBackupIntervalHours": 4,
+    "chaos": ["C9"],
+    "scale": 1,
+    "baseline": false,
+    "root": "/Users/mlaw/workspace/zero/mono/apps/zbugs/.soak/c9-corrected-post-fix-2026-09-02"
+  },
+  "phases": [
+    {
+      "name": "sustained",
+      "startedMs": 1788377679817,
+      "finishedMs": 1788377979812,
+      "stages": [
+        {
+          "label": "sustained",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 300,
+          "transactions": 7500,
+          "mutations": 9000,
+          "elapsedSeconds": 299.967197083,
+          "actualTransactionsPerSecond": 25.002733875346955,
+          "shapes": {
+            "insert": 3000,
+            "update": 3000,
+            "delete": 750,
+            "churn": 750
+          },
+          "residueRows": 2250,
+          "latencyMs": {
+            "p50": 4.324082999955863,
+            "p95": 7.001583000004757,
+            "p99": 10.022209000017028,
+            "max": 52.41425000000163
+          }
+        }
+      ]
+    },
+    {
+      "name": "burst",
+      "startedMs": 1788377980488,
+      "finishedMs": 1788378080498,
+      "stages": [
+        {
+          "label": "burst-1",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 20,
+          "transactions": 10000,
+          "mutations": 12000,
+          "elapsedSeconds": 20.000067374999983,
+          "actualTransactionsPerSecond": 499.99831563067465,
+          "shapes": {
+            "insert": 4000,
+            "update": 4000,
+            "delete": 1000,
+            "churn": 1000
+          },
+          "residueRows": 5250,
+          "latencyMs": {
+            "p50": 1.4968750000116415,
+            "p95": 3.0627919999533333,
+            "p99": 5.752166999969631,
+            "max": 14.095499999995809
+          }
+        },
+        {
+          "label": "burst-gap-1",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 20,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 20.001557542000025,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 5250,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        },
+        {
+          "label": "burst-2",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 20,
+          "transactions": 10000,
+          "mutations": 12000,
+          "elapsedSeconds": 20.000873334000005,
+          "actualTransactionsPerSecond": 499.9781676033486,
+          "shapes": {
+            "insert": 4000,
+            "update": 4000,
+            "delete": 1000,
+            "churn": 1000
+          },
+          "residueRows": 8250,
+          "latencyMs": {
+            "p50": 1.585625000006985,
+            "p95": 3.4449169999570586,
+            "p99": 6.7827500000130385,
+            "max": 31.68962499999907
+          }
+        },
+        {
+          "label": "burst-gap-2",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 20,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 20.00110183399997,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 8250,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        },
+        {
+          "label": "burst-3",
+          "targetTransactionsPerSecond": 500,
+          "durationSeconds": 20,
+          "transactions": 10000,
+          "mutations": 12000,
+          "elapsedSeconds": 19.999027750000007,
+          "actualTransactionsPerSecond": 500.02430743164484,
+          "shapes": {
+            "insert": 4000,
+            "update": 4000,
+            "delete": 1000,
+            "churn": 1000
+          },
+          "residueRows": 11250,
+          "latencyMs": {
+            "p50": 1.6112090000533499,
+            "p95": 3.39570900000399,
+            "p99": 6.430041000014171,
+            "max": 37.08045799995307
+          }
+        }
+      ]
+    },
+    {
+      "name": "quiet",
+      "startedMs": 1788378081325,
+      "finishedMs": 1788378171327,
+      "stages": [
+        {
+          "label": "quiet",
+          "targetTransactionsPerSecond": 0,
+          "durationSeconds": 90,
+          "transactions": 0,
+          "mutations": 0,
+          "elapsedSeconds": 90.00125779200002,
+          "actualTransactionsPerSecond": 0,
+          "shapes": {
+            "insert": 0,
+            "update": 0,
+            "delete": 0,
+            "churn": 0
+          },
+          "residueRows": 11250,
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "fat",
+      "startedMs": 1788378172272,
+      "finishedMs": 1788378292244,
+      "stages": [
+        {
+          "label": "fat",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 120,
+          "transactions": 3000,
+          "mutations": 3600,
+          "elapsedSeconds": 119.96768516699998,
+          "actualTransactionsPerSecond": 25.006734070294645,
+          "shapes": {
+            "insert": 1200,
+            "update": 1200,
+            "delete": 300,
+            "churn": 300
+          },
+          "residueRows": 12150,
+          "latencyMs": {
+            "p50": 4.719500000006519,
+            "p95": 7.63737500004936,
+            "p99": 11.025332999997772,
+            "max": 30.51100000005681
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed",
+      "startedMs": 1788378293521,
+      "finishedMs": 1788378688939,
+      "stages": [
+        {
+          "label": "mixed-sustained",
+          "targetTransactionsPerSecond": 25,
+          "durationSeconds": 60,
+          "transactions": 1500,
+          "mutations": 1526,
+          "elapsedSeconds": 59.96444254199997,
+          "actualTransactionsPerSecond": 25.014824392795415,
+          "shapes": {
+            "insert": 1161,
+            "update": 39,
+            "delete": 287,
+            "churn": 13
+          },
+          "residueRows": 13050,
+          "latencyMs": {
+            "p50": 4.2091669999063015,
+            "p95": 6.338667000061832,
+            "p99": 8.848250000039116,
+            "max": 22.598333000089042
+          }
+        }
+      ]
+    }
+  ],
+  "oracle": [
+    {
+      "label": "after phase sustained",
+      "atMs": 1788377980488,
+      "quiesceMs": 230,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "6951frg0",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 16484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "6951frg0",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 16484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "6951frg0",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 16484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "6951frg0",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 16484,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase burst",
+      "atMs": 1788378081325,
+      "quiesceMs": 106,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "697nmxs0",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "697nmxs0",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "697nmxs0",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "697nmxs0",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase quiet",
+      "atMs": 1788378172272,
+      "quiesceMs": 244,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "697y1cyg",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "697y1cyg",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "697y1cyg",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "697y1cyg",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 25484,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after phase fat",
+      "atMs": 1788378293521,
+      "quiesceMs": 226,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "6989l63k",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 26384,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "6989l63k",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 26384,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "6989l63k",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 26384,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "6989l63k",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 26384,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    },
+    {
+      "label": "after C9",
+      "atMs": 1788378688939,
+      "quiesceMs": 243,
+      "comparisons": [
+        {
+          "node": "rm",
+          "stateVersion": "699fphco",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 29534,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-0",
+          "stateVersion": "699fphco",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 29534,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-1",
+          "stateVersion": "699fphco",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 29534,
+          "diffs": [],
+          "ok": true
+        },
+        {
+          "node": "vs-2",
+          "stateVersion": "699fphco",
+          "replicaVersion": "694c4954",
+          "tables": 13,
+          "rows": 29534,
+          "diffs": [],
+          "ok": true
+        }
+      ],
+      "ok": true,
+      "verdict": "clean"
+    }
+  ],
+  "chaos": [
+    {
+      "id": "C9",
+      "title": "Stop minio under sustained writes, then restart it",
+      "startedMs": 1788378293521,
+      "finishedMs": 1788378687552,
+      "notes": ["stopped minio for 300s", "restarted minio"],
+      "census": {},
+      "findings": ["C9: the minio outage did not grow live change-log pages"],
+      "measurements": {
+        "changeLogBytesBefore": 42334672,
+        "changeLogBytesDuring": 42334672,
+        "changeLogBytesAfter": 42334672,
+        "changeLogLiveBytesBefore": 20406272,
+        "changeLogLiveBytesDuring": 13434880,
+        "changeLogLiveBytesAfter": 1486848,
+        "changeLogFreeBytesAfter": 31989760,
+        "slotRetainedBytesBefore": 1054720,
+        "slotRetainedBytesDuring": 56292600,
+        "slotRetainedBytesAfter": 858072,
+        "backupRecoveries": 21,
+        "purgePassesAfterRecovery": 2,
+        "purgedRowsAfterRecovery": 30604
+      }
+    }
+  ],
+  "census": {
+    "pg/not-ready": 1,
+    "pg/log-unavailable": 1,
+    "sqlite/selected-cold": 2
+  },
+  "coverage": [],
+  "tripwires": [
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788378297512,
+      "message": "vfs-query exited with error",
+      "detail": {}
+    },
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788378404766,
+      "message": "",
+      "detail": {}
+    },
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788378406040,
+      "message": "vfs-query exited with error",
+      "detail": {}
+    },
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788378526591,
+      "message": "",
+      "detail": {}
+    },
+    {
+      "name": "error-log",
+      "node": "rm",
+      "tsMs": 1788378528816,
+      "message": "vfs-query exited with error",
+      "detail": {}
+    }
+  ],
+  "measurements": {
+    "reseedToCoveringBackupMs": {
+      "n": 0
+    },
+    "reservationHoldMs": {
+      "n": 0
+    },
+    "reservationHoldMsC3": {
+      "n": 0
+    },
+    "reseedToCoveringBackupMsC6C13": {
+      "n": 0
+    },
+    "backupLagMs": {
+      "n": 291,
+      "min": 13,
+      "p50": 226,
+      "p95": 1053,
+      "max": 2624,
+      "mean": 539.6323024054983
+    },
+    "reservationConfirmDelays": 0,
+    "reservationDemotions": 0,
+    "barrierTimeouts": 0,
+    "compareResults": {
+      "match": 40567
+    },
+    "initCompareResults": {
+      "equal": 1
+    },
+    "floorProbes": {
+      "retained": 24
+    },
+    "reconcileWipes": {
+      "created": 1
+    },
+    "purgeDeclines": {},
+    "catchupRows": 0,
+    "catchupBytes": 0,
+    "catchupDurationSeconds": 0,
+    "catchupResults": {
+      "range/false": 2
+    },
+    "litestreamRestores": {
+      "no_backup": 1,
+      "success": 3
+    },
+    "purgedRows": 160169
+  },
+  "resources": {
+    "changeLogBytes": {
+      "n": 205,
+      "min": 2274248,
+      "p50": 42334672,
+      "p95": 42334672,
+      "max": 42334672,
+      "mean": 32087123.2
+    },
+    "changeLogBytesFinal": 42334672,
+    "changeLogLiveBytes": {
+      "n": 205,
+      "min": 77824,
+      "p50": 8536064,
+      "p95": 26480640,
+      "max": 32718848,
+      "mean": 9374065.63902439
+    },
+    "changeLogLiveBytesFinal": 1486848,
+    "changeLogFreeBytes": {
+      "n": 205,
+      "min": 0,
+      "p50": 18362368,
+      "p95": 30887936,
+      "max": 33398784,
+      "mean": 14123407.609756097
+    },
+    "changeLogFreeBytesFinal": 31989760,
+    "slotRetainedBytes": {
+      "n": 205,
+      "min": 56,
+      "p50": 2824488,
+      "p95": 53883560,
+      "max": 59051648,
+      "mean": 13028350.43902439
+    },
+    "slotRetainedBytesFinal": 936184,
+    "backupBytesFinal": 75785048,
+    "backupObjectsFinal": 813,
+    "purge": {
+      "longestBatchLimitStreak": 0,
+      "passes": 24,
+      "batchLimitPasses": 0,
+      "immediateContinuations": 0,
+      "byStopReason": {
+        "none": 24
+      }
+    },
+    "samples": 205
+  },
+  "findings": ["C9: the minio outage did not grow live change-log pages"],
+  "pass": false
+}

@@ -18,12 +18,84 @@ import type {
   ServerColumnSchema,
   ServerSchema,
 } from '../../zero-types/src/server-schema.ts';
+import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
 import {
   checkSchemasAreCompatible,
+  getServerSchema,
   type SchemaIncompatibilityError,
 } from './schema.ts';
 
 describe('checkSchemasAreCompatible', () => {
+  test('getServerSchema maps known text-represented user-defined types', async () => {
+    const schema = createSchema({
+      tables: [
+        table('book')
+          .columns({
+            id: string(),
+            ip: string(),
+            mac: string(),
+          })
+          .primaryKey('id'),
+      ],
+      relationships: [],
+    });
+
+    const mockTx: DBTransaction<unknown> = {
+      wrappedTransaction: null,
+      query: () =>
+        Promise.resolve([
+          {
+            schema: 'public',
+            table: 'book',
+            column: 'id',
+            dataType: 'USER-DEFINED',
+            length: null,
+            precision: null,
+            scale: null,
+            typtype: 'b',
+            typename: 'isbn13',
+            elemTyptype: null,
+            elemTypname: null,
+          },
+          {
+            schema: 'public',
+            table: 'book',
+            column: 'ip',
+            dataType: 'inet',
+            length: null,
+            precision: null,
+            scale: null,
+            typtype: 'b',
+            typename: 'inet',
+            elemTyptype: null,
+            elemTypname: null,
+          },
+          {
+            schema: 'public',
+            table: 'book',
+            column: 'mac',
+            dataType: 'macaddr',
+            length: null,
+            precision: null,
+            scale: null,
+            typtype: 'b',
+            typename: 'macaddr',
+            elemTyptype: null,
+            elemTypname: null,
+          },
+        ]),
+      runQuery: () => Promise.reject(new Error('not implemented')),
+    };
+
+    expect(await getServerSchema(mockTx, schema)).toEqual({
+      book: {
+        id: {type: 'isbn13', isEnum: false, isArray: false},
+        ip: {type: 'inet', isEnum: false, isArray: false},
+        mac: {type: 'macaddr', isEnum: false, isArray: false},
+      },
+    });
+  });
+
   test('should return empty array when schemas are compatible', () => {
     const schema = createSchema({
       tables: [

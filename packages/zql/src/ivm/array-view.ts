@@ -50,7 +50,9 @@ function changeToViewChange(change: Change): ViewChange {
 export class ArrayView<V extends View> implements Output, TypedView<V> {
   readonly #input: Input;
   readonly #listeners = new Set<Listener<V>>();
-  readonly #schema: SourceSchema;
+  // Read lazily: a DeferredInput has no schema until its pipeline is attached,
+  // and the schema is only needed once there is a change to apply.
+  #schema: SourceSchema | undefined;
   readonly #format: Format;
 
   // Synthetic "root" entry that has a single "" relationship, so that we can
@@ -64,6 +66,17 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   onDestroy: (() => void) | undefined;
 
   #dirty = false;
+  // Set by holdData(): the root that `data` and newly added listeners keep
+  // seeing until releaseData() or the next flush, while pushes build up #root
+  // behind it.
+  #committedRoot: Entry | undefined;
+  // From holdData() until the next flush. Outlasts #committedRoot, which
+  // releaseData() drops first.
+  #held = false;
+  // The result type and error as of holdData(): what a listener added while
+  // held is called with, so it never sees old rows paired with a new type.
+  #heldResultType: ResultType = 'unknown';
+  #heldError: ErroredQuery | undefined;
   #resultType: ResultType = 'unknown';
   #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
@@ -82,7 +95,6 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     updateTTL: (ttl: TTL) => void,
   ) {
     this.#input = input;
-    this.#schema = input.getSchema();
     this.#format = format;
     this.#updateTTL = updateTTL;
     this.#root = {'': format.singular ? undefined : []};
@@ -95,21 +107,18 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       this.#error = queryComplete;
     } else {
       void queryComplete
-        .then(() => {
-          this.#resultType = 'complete';
-          this.#fireListeners();
-        })
-        .catch(e => {
-          this.#resultType = 'error';
-          this.#error = e;
-          this.#fireListeners();
-        });
+        .then(() => this.#setResultType('complete'))
+        .catch(e => this.#setResultType('error', e));
     }
     this.#hydrate();
   }
 
   get data() {
-    return this.#root[''] as V;
+    return (this.#committedRoot ?? this.#root)[''] as V;
+  }
+
+  #getSchema(): SourceSchema {
+    return (this.#schema ??= this.#input.getSchema());
   }
 
   addListener(listener: Listener<V>) {
@@ -130,6 +139,15 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   #fireListener(listener: Listener<V>) {
+    if (this.#committedRoot !== undefined) {
+      // Held rows go with the held type; after releaseData() both are current.
+      listener(
+        this.data as Immutable<V>,
+        this.#heldResultType,
+        this.#heldError,
+      );
+      return;
+    }
     listener(this.data as Immutable<V>, this.#resultType, this.#error);
   }
 
@@ -143,7 +161,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       this.#root = applyChange(
         this.#root,
         {type: 'add', node},
-        this.#schema,
+        this.#getSchema(),
         '',
         this.#format,
         false /* withIDs */,
@@ -161,7 +179,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     this.#root = applyChange(
       this.#root,
       changeToViewChange(change),
-      this.#schema,
+      this.#getSchema(),
       '',
       this.#format,
       false /* withIDs */,
@@ -170,7 +188,37 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     return emptyArray;
   }
 
+  /**
+   * Keep exposing the current snapshot, whatever is pushed in the meantime,
+   * until {@link releaseData} or the next {@link flush}. Result type
+   * notifications are held back until that flush.
+   *
+   * A transaction is normally one synchronous task, so nobody can look at a
+   * view between its pushes and its flush. Deferred pipelines are different:
+   * they are hydrated over several tasks and flushed together (see
+   * `QueryDelegate.onPipelinesReady`), and a view that already has its rows
+   * must not show them early.
+   */
+  holdData(): void {
+    this.#committedRoot = this.#root;
+    this.#held = true;
+    this.#heldResultType = this.#resultType;
+    this.#heldError = this.#error;
+  }
+
+  /**
+   * Make `data` current again without notifying anyone yet; listeners are
+   * still only called by the next {@link flush}. Views released together get
+   * this called on all of them before any is flushed, so a listener of one
+   * that reads another sees its rows too.
+   */
+  releaseData(): void {
+    this.#committedRoot = undefined;
+  }
+
   flush() {
+    this.#committedRoot = undefined;
+    this.#held = false;
     if (!this.#dirty) {
       return;
     }
@@ -184,5 +232,42 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   updateTTL(ttl: TTL) {
     this.#updateTTL(ttl);
+  }
+
+  /**
+   * The store holds the server-confirmed complete result of this query from a
+   * previous sync (the persisted got-queries key exists, pre-authoritative).
+   * Never downgrades 'complete'/'error', and never resolves anything that
+   * waits on 'complete' — freshness stays a promise only the connection can
+   * keep.
+   */
+  markCached(): void {
+    if (this.#resultType === 'unknown') {
+      this.#setResultType('cached');
+    }
+  }
+
+  /** The got key was deleted (eviction) while still pre-authoritative. */
+  unmarkCached(): void {
+    if (this.#resultType === 'cached') {
+      this.#setResultType('unknown');
+    }
+  }
+
+  #setResultType(resultType: ResultType, error?: ErroredQuery) {
+    this.#resultType = resultType;
+    this.#error = error;
+    // A dirty view is mid-transaction: rows were pushed and not yet flushed,
+    // and the objects in #txnDirty are still mutable. Firing now would hand
+    // those to listeners and then fire again at flush() with the same data, so
+    // let the pending flush deliver the new result type instead.
+    // A held view is waiting to be exposed together with others at the next
+    // flush; that goes for its result type as much as for its rows.
+    if (this.#held) {
+      // Dirty so that the flush notifies even when no rows were pushed.
+      this.#dirty = true;
+    } else if (!this.#dirty) {
+      this.#fireListeners();
+    }
   }
 }

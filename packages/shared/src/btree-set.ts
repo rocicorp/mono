@@ -262,7 +262,7 @@ class BTreeReverseIterator<K> implements IterableIterator<K> {
 
       let level;
       // Advance to the next leaf node
-      for (level = -1; ; ) {
+      for (level = -1; ;) {
         if (++level >= this.#nodeQueue.length) {
           return {done: true, value: undefined as unknown as K};
         }

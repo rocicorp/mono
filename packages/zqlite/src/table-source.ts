@@ -4,6 +4,7 @@ import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
 import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
 import type {Writable} from '../../shared/src/writable.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
@@ -17,8 +18,10 @@ import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
 import {
   createPredicate,
   transformFilters,
+  type NoSubqueryCondition as StrictNoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
+import {ConnectionIndex} from '../../zql/src/ivm/connection-index.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
@@ -58,6 +61,19 @@ type Statements = {
 
 let eventCount = 0;
 
+export type TableSourceOptions = {
+  /**
+   * When set, a pushed change that the filters of every connection reject
+   * is neither pushed nor applied to the backing table, on the grounds that
+   * no connection can observe it. This departs from the `Source.push`
+   * contract (a push commits the change to the source), so it is only
+   * appropriate when the caller does not read the table through any other
+   * path and replaces the table's contents afterwards, as the view-syncer's
+   * pipeline driver does when it advances to the next snapshot.
+   */
+  skipUnobservableChanges?: boolean | undefined;
+};
+
 /**
  * A source that is backed by a SQLite table.
  *
@@ -75,6 +91,9 @@ let eventCount = 0;
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
   readonly #connections: Connection[] = [];
+  // Indexes #connections by the static equality constraints in their filters
+  // so that a push can cheaply skip rows that no connection could accept.
+  readonly #connectionIndex = new ConnectionIndex<Connection>();
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
@@ -83,6 +102,7 @@ export class TableSource implements Source {
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
   readonly #shouldYield: () => boolean;
+  readonly #skipUnobservableChanges: boolean;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
   #pushEpoch = 0;
@@ -101,6 +121,7 @@ export class TableSource implements Source {
     columns: Record<string, SchemaValue>,
     primaryKey: PrimaryKey,
     shouldYield = () => false,
+    options: TableSourceOptions = {},
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
@@ -110,10 +131,12 @@ export class TableSource implements Source {
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
     this.#shouldYield = shouldYield;
+    this.#skipUnobservableChanges = options.skipUnobservableChanges ?? false;
 
+    const primaryKeyStr = JSON.stringify(primaryKey.toSorted());
     assert(
-      this.#uniqueIndexes.has(JSON.stringify(primaryKey.toSorted())),
-      `primary key ${primaryKey} does not have a UNIQUE index`,
+      this.#uniqueIndexes.has(primaryKeyStr),
+      `primary key ${primaryKeyStr} does not have a UNIQUE index`,
     );
   }
 
@@ -221,6 +244,10 @@ export class TableSource implements Source {
     };
   }
 
+  hasConnections(): boolean {
+    return this.#connections.length > 0;
+  }
+
   connect(
     sort: Ordering | undefined,
     filters?: Condition,
@@ -243,6 +270,7 @@ export class TableSource implements Source {
         const idx = this.#connections.indexOf(connection);
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
+        this.#connectionIndex.remove(connection);
       },
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
@@ -268,6 +296,7 @@ export class TableSource implements Source {
     }
 
     this.#connections.push(connection);
+    this.#connectionIndex.add(connection, transformedFilters.filters);
     return input;
   }
 
@@ -291,6 +320,10 @@ export class TableSource implements Source {
     const rowIterator = cachedStatement.statement.iterate<Row>(
       ...sqlAndBindings.values,
     );
+    const overlayPredicate = mergeOverlayPredicate(
+      connection.filters?.predicate,
+      req.filter,
+    );
     try {
       debug?.initQuery(this.#table, sqlAndBindings.text);
 
@@ -310,7 +343,11 @@ export class TableSource implements Source {
               this.#overlay,
               connection.lastPushedEpoch,
               comparator,
-              connection.filters?.predicate,
+              // SQL does the ordering and constraining, so the row stream is
+              // already in the connection's sort order: the splice comparator
+              // and the `startAt` comparator coincide here.
+              comparator,
+              overlayPredicate,
               req.multiConstraints,
             ),
             this.#shouldYield,
@@ -331,7 +368,7 @@ export class TableSource implements Source {
             this.#overlay,
             connection.lastPushedEpoch,
             this.#primaryKey,
-            connection.filters?.predicate,
+            overlayPredicate,
             req.multiConstraints,
           ),
           this.#shouldYield,
@@ -408,7 +445,19 @@ export class TableSource implements Source {
     }
   }
 
-  *genPush(change: SourceChange) {
+  *genPush(change: SourceChange): Stream<'yield' | undefined> {
+    if (
+      this.#skipUnobservableChanges &&
+      !this.#connectionIndex.mayAcceptChange(change)
+    ) {
+      // No connection can observe this row, so only a REMOVE needs to be
+      // applied to the snapshot.
+      if (change[SourceChangeIndex.TYPE] === ChangeType.REMOVE) {
+        this.#writeChange(change);
+      }
+      return;
+    }
+
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -494,19 +543,16 @@ export class TableSource implements Source {
 
   #getRowStmt(keyCols: string[]): string {
     const keyString = JSON.stringify(keyCols);
-    let stmt = this.#getRowStmtCache.get(keyString);
-    if (!stmt) {
-      stmt = compile(
+    return getOrInsertComputed(this.#getRowStmtCache, keyString, () =>
+      compile(
         sql`SELECT ${this.#allColumns} FROM ${sql.ident(
           this.#table,
         )} WHERE ${sql.join(
           keyCols.map(k => sql`${sql.ident(k)}=?`),
           sql` AND`,
         )}`,
-      );
-      this.#getRowStmtCache.set(keyString, stmt);
-    }
-    return stmt;
+      ),
+    );
   }
 
   /**
@@ -545,8 +591,23 @@ export class TableSource implements Source {
       request.reverse,
       request.start,
       request.multiConstraints,
+      request.filter,
     );
   }
+}
+
+function mergeOverlayPredicate(
+  connPredicate: ((row: Row) => boolean) | undefined,
+  reqFilter: StrictNoSubqueryCondition | undefined,
+): ((row: Row) => boolean) | undefined {
+  if (!reqFilter) {
+    return connPredicate;
+  }
+  const reqPredicate = createPredicate(reqFilter);
+  if (!connPredicate) {
+    return reqPredicate;
+  }
+  return row => connPredicate(row) && reqPredicate(row);
 }
 
 function getUniqueIndexes(
@@ -561,7 +622,8 @@ function getUniqueIndexes(
       JOIN pragma_index_info(idx.name) as col
       WHERE idx.tbl_name = ${tableName} AND
             idx.type = 'index' AND 
-            info."unique" != 0
+            info."unique" != 0 AND
+            info.partial = 0
       GROUP BY idx.name
       ORDER BY idx.name`,
   );
@@ -634,12 +696,13 @@ function fromSQLiteType(
     case 'string':
     case 'null':
       if (typeof v === 'bigint') {
-        if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
+        const bi = v as bigint;
+        if (bi > Number.MAX_SAFE_INTEGER || bi < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
-            `value ${v} (in ${tableName}.${column}) is outside of supported bounds`,
+            `value ${bi} (in ${tableName}.${column}) is outside of supported bounds`,
           );
         }
-        return Number(v);
+        return Number(bi);
       }
       return v;
     case 'json':

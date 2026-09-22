@@ -7,7 +7,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
-import type {Upstream} from '../../../zero-protocol/src/up.ts';
+import type {UpstreamWithUnparsedAnalyzeQuery} from '../../../zero-protocol/src/up.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import {
@@ -69,7 +69,9 @@ export class SyncerWsMessageHandler implements MessageHandler {
     };
   }
 
-  async handleMessage(msg: Upstream): Promise<HandlerResult[]> {
+  async handleMessage(
+    msg: UpstreamWithUnparsedAnalyzeQuery,
+  ): Promise<HandlerResult[]> {
     const lc = this.#lc;
     const msgType = msg[0];
     const viewSyncer = this.#viewSyncer;
@@ -154,31 +156,42 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 'Only JWT auth is supported for CRUD mutations',
               );
 
-              // Hold a connection-level lock while processing mutations so that:
-              // 1. Mutations are processed in the order in which they are received and
-              // 2. A single view syncer connection cannot hog multiple upstream connections.
-              const ret = await this.#mutationLock.withLock(async () => {
-                const errors: ErrorBody[] = [];
-                for (const mutation of mutations) {
-                  const maybeError = await mutagen.processMutation(
-                    mutation,
-                    auth?.decoded,
-                    this.#pusher !== undefined,
-                  );
-                  if (maybeError !== undefined) {
-                    errors.push({
-                      kind: maybeError[0],
-                      message: maybeError[1],
-                      origin: ErrorOrigin.ZeroCache,
-                    });
+              // Hold a ref on the mutagen for the duration of the push so that
+              // the connection closing mid-push does not stop the service
+              // (closing its replica handle) between two of its mutations.
+              // (The connection holds a ref while open, and messages are not
+              // dispatched after it has closed, so the service is running
+              // here.)
+              mutagen.ref();
+              try {
+                // Hold a connection-level lock while processing mutations so that:
+                // 1. Mutations are processed in the order in which they are received and
+                // 2. A single view syncer connection cannot hog multiple upstream connections.
+                const ret = await this.#mutationLock.withLock(async () => {
+                  const errors: ErrorBody[] = [];
+                  for (const mutation of mutations) {
+                    const maybeError = await mutagen.processMutation(
+                      mutation,
+                      auth?.decoded,
+                      this.#pusher !== undefined,
+                    );
+                    if (maybeError !== undefined) {
+                      errors.push({
+                        kind: maybeError[0],
+                        message: maybeError[1],
+                        origin: ErrorOrigin.ZeroCache,
+                      });
+                    }
                   }
-                }
-                if (errors.length > 0) {
-                  return {type: 'transient', errors} satisfies HandlerResult;
-                }
-                return {type: 'ok'} satisfies HandlerResult;
-              });
-              return [ret];
+                  if (errors.length > 0) {
+                    return {type: 'transient', errors} satisfies HandlerResult;
+                  }
+                  return {type: 'ok'} satisfies HandlerResult;
+                });
+                return [ret];
+              } finally {
+                mutagen.unref();
+              }
             },
           ),
         );

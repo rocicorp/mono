@@ -1,4 +1,9 @@
-import {expect, suite, test} from 'vitest';
+import {expect, suite, test, vi} from 'vitest';
+import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import {transformFilters} from '../builder/filter.ts';
+import type {CostModelCost} from './planner-connection.ts';
+import type {PlannerConstraint} from './planner-constraint.ts';
+import {PlannerSource} from './planner-source.ts';
 import {BASE_COST, CONSTRAINTS, createConnection} from './test/helpers.ts';
 
 suite('PlannerConnection', () => {
@@ -109,5 +114,157 @@ suite('PlannerConnection', () => {
       selectivity: 1.0,
       limit: undefined,
     });
+  });
+});
+
+suite('PlannerConnection.setPerBranchFilter', () => {
+  const fanout = () => ({fanout: 1, confidence: 'none' as const});
+
+  /**
+   * Build a connection wired to a spy cost model so we can inspect the
+   * exact filter argument it receives.
+   */
+  function setup(connFilters?: Condition) {
+    const model = vi.fn(
+      (
+        _t: string,
+        _s: Ordering,
+        _f: Condition | undefined,
+        _c: PlannerConstraint | undefined,
+      ): CostModelCost => ({
+        startupCost: 0,
+        rows: 1,
+        fanout,
+      }),
+    );
+    const source = new PlannerSource('t', model);
+    const conn = source.connect([['id', 'asc']], connFilters, false);
+    return {conn, model};
+  }
+
+  const cmpAEq1: Condition = {
+    type: 'simple',
+    op: '=',
+    left: {type: 'column', name: 'a'},
+    right: {type: 'literal', value: 1},
+  };
+  const cmpBEq2: Condition = {
+    type: 'simple',
+    op: '=',
+    left: {type: 'column', name: 'b'},
+    right: {type: 'literal', value: 2},
+  };
+
+  test('per-branch filter is passed to the cost model on the matching branch', () => {
+    const {conn, model} = setup();
+
+    // Branch [0] gets the per-branch filter; branch [1] does not.
+    conn.setPerBranchFilter([0], cmpAEq1);
+    conn.estimateCost(1, [0]);
+    conn.estimateCost(1, [1]);
+
+    const filterArgs = model.mock.calls.map(c => c[2]);
+    expect(filterArgs[0]).toEqual(cmpAEq1);
+    expect(filterArgs[1]).toBeUndefined();
+  });
+
+  test('per-branch filter is AND-merged with the connection-time filter', () => {
+    const {conn, model} = setup(cmpBEq2);
+
+    conn.setPerBranchFilter([0], cmpAEq1);
+    conn.estimateCost(1, [0]);
+
+    expect(model.mock.calls[0][2]).toEqual({
+      type: 'and',
+      conditions: [cmpBEq2, cmpAEq1],
+    });
+  });
+
+  test('per-branch filter recomputes selectivity for EXISTS connections', () => {
+    const connFilters: Condition = {
+      type: 'or',
+      conditions: [
+        cmpAEq1,
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['parentId'],
+            },
+            subquery: {table: 'child'},
+          },
+        },
+      ],
+    };
+    const model = vi.fn(
+      (
+        _t: string,
+        _s: Ordering,
+        filter: Condition | undefined,
+        _c: PlannerConstraint | undefined,
+      ): CostModelCost => {
+        const pushableFilter = transformFilters(filter).filters;
+        const isSimpleBranch =
+          pushableFilter?.type === 'simple' &&
+          pushableFilter.left.type === 'column' &&
+          pushableFilter.left.name === 'a';
+        return {
+          startupCost: 0,
+          rows: isSimpleBranch ? 10 : 100,
+          fanout,
+        };
+      },
+    );
+    const conn = new PlannerSource('t', model).connect(
+      [['id', 'asc']],
+      connFilters,
+      false,
+      undefined,
+      1,
+    );
+
+    // The mixed OR cannot be pushed to the source, so the connection-time
+    // selectivity is 100%. In UFI mode the simple branch is pushed alone.
+    expect(conn.selectivity).toBe(1);
+    conn.setPerBranchFilter([0], cmpAEq1);
+
+    expect(conn.estimateCost(1, [0])).toMatchObject({
+      returnedRows: 10,
+      selectivity: 0.1,
+    });
+    expect(conn.estimateCost(1, [1])).toMatchObject({
+      returnedRows: 100,
+      selectivity: 1,
+    });
+  });
+
+  test('setPerBranchFilter invalidates the cost cache', () => {
+    const {conn, model} = setup();
+
+    conn.estimateCost(1, [0]);
+    expect(model).toHaveBeenCalledTimes(1);
+
+    // Same branch, no change → cache hit.
+    conn.estimateCost(1, [0]);
+    expect(model).toHaveBeenCalledTimes(1);
+
+    // Per-branch filter changed → cache invalidated.
+    conn.setPerBranchFilter([0], cmpAEq1);
+    conn.estimateCost(1, [0]);
+    expect(model).toHaveBeenCalledTimes(2);
+  });
+
+  test('reset() clears per-branch filters', () => {
+    const {conn, model} = setup();
+
+    conn.setPerBranchFilter([0], cmpAEq1);
+    conn.estimateCost(1, [0]);
+    expect(model.mock.calls[0][2]).toEqual(cmpAEq1);
+
+    conn.reset();
+    conn.estimateCost(1, [0]);
+    expect(model.mock.calls[1][2]).toBeUndefined();
   });
 });

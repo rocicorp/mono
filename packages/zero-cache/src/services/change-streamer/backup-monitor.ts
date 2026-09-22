@@ -1,266 +1,129 @@
 import type {LogContext} from '@rocicorp/logger';
-import parsePrometheusTextFormat from 'parse-prometheus-text-format';
+import {resolver} from '@rocicorp/resolver';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {getOrCreateGauge} from '../../observability/metrics.ts';
-import {Subscription} from '../../types/subscription.ts';
-import {RunningState} from '../running-state.ts';
-import type {Service} from '../service.ts';
+import type {Source} from '../../types/streams.ts';
+import type {SingletonService} from '../service.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
-import type {SnapshotMessage} from './snapshot.ts';
 
-export const CHECK_INTERVAL_MS = 60_000;
-const MIN_CLEANUP_DELAY_MS = 30_000;
-
-type Reservation = {
-  start: Date;
-  sub: Subscription<SnapshotMessage>;
+export type BackedUpWatermark = {
+  watermark: string;
+  writeTimeMs?: number | undefined; // optional for debuggin; available on v5
+  backupTimeMs: number;
 };
 
-/**
- * The BackupMonitor polls the litestream "/metrics" endpoint to track the
- * watermark (label) value of the `litestream_replica_progress` gauge and
- * schedules cleanup of change log entries that can be purged as a result.
- *
- * See: https://github.com/rocicorp/litestream/pull/3
- *
- * Note that change log entries cannot simply be purged as soon as they
- * have been applied and backed up by litestream. Consider the case in which
- * litestream backs up new wal segments every minute, but it takes 5 minutes
- * to restore a replica: if a zero-cache starts restoring a replica at
- * minute 0, and new watermarks are replicated at minutes 1, 2, 3, 4, and 5,
- * purging changelog records as soon as those watermarks are replicated would
- * result in the zero-cache not being able to catch up from minute 0 once it
- * has finished restoring the replica.
- *
- * The `/snapshot` reservation protocol is used to prevent premature change
- * log cleanup:
- * - Clients restoring a snapshot initiate a `/snapshot` request and hold that
- *   request open while it restores its snapshot, prepares it, and
- *   starts its subscription to the change stream. During this time, no
- *   cleanups are scheduled.
- * - When the subscription is started, the interval since the beginning of
- *   of the reservation is tracked to increase the background cleanup delay
- *   interval if needed. The reservation is ended (and request closed), and
- *   cleanup scheduling is resumed with the current delay interval.
- *
- * Note that the reservation request is the primary mechanism by which
- * premature change log cleanup is prevented. The cleanup delay interval is
- * a secondary safeguard.
- */
-export class BackupMonitor implements Service {
+export class BackupMonitor implements SingletonService {
   readonly id = 'backup-monitor';
   readonly #lc: LogContext;
-  readonly #replicaFile: string;
-  readonly #backupURL: string;
-  readonly #metricsEndpoint: string;
+  readonly #watermarks: Source<BackedUpWatermark>;
   readonly #changeStreamer: ChangeStreamerService;
-  readonly #state = new RunningState(this.id);
+  readonly #replicaFile: string;
+  readonly #firstBackupReceived = resolver();
 
-  readonly #reservations = new Map<string, Reservation>();
-  readonly #watermarks = new Map<string, Date>();
-
-  #lastWatermark: string = '';
-  #latestBackupTime: Date | null = null;
-  #cleanupDelayMs: number;
-  #checkMetricsTimer: NodeJS.Timeout | undefined;
+  #latestBackup: BackedUpWatermark | undefined;
+  #firstBackupResolved = false;
+  /**
+   * The replica's `stateVersion` when the monitor started, i.e. the point the
+   * backup has to reach before it covers what this task is about to serve.
+   * `undefined` when the replica could not be read, which degrades the gate to
+   * "any watermark" rather than hanging startup forever.
+   */
+  #coverageTarget: string | undefined;
 
   constructor(
     lc: LogContext,
-    replicaFile: string,
-    backupURL: string,
-    metricsEndpoint: string,
+    watermarks: Source<BackedUpWatermark>,
     changeStreamer: ChangeStreamerService,
-    initialCleanupDelayMs: number,
+    replicaFile: string,
   ) {
-    this.#lc = lc.withContext('component', this.id);
-    this.#replicaFile = replicaFile;
-    this.#backupURL = backupURL;
-    this.#metricsEndpoint = metricsEndpoint;
+    this.#lc = lc;
+    this.#watermarks = watermarks;
     this.#changeStreamer = changeStreamer;
-    this.#cleanupDelayMs = Math.max(
-      initialCleanupDelayMs,
-      MIN_CLEANUP_DELAY_MS, // purely for peace of mind
-    );
-
-    this.#lc.info?.(
-      `backup monitor started ${initialCleanupDelayMs} ms after snapshot restore`,
-    );
+    this.#replicaFile = replicaFile;
   }
 
-  run(): Promise<void> {
-    this.#lc.info?.(
-      `monitoring backups at ${this.#metricsEndpoint} with ` +
-        `${this.#cleanupDelayMs} ms cleanup delay`,
-    );
-    this.#checkMetricsTimer = setInterval(
-      this.checkWatermarksAndScheduleCleanup,
-      CHECK_INTERVAL_MS,
-    );
+  firstBackupReceived() {
+    return this.#firstBackupReceived.promise;
+  }
+
+  async run() {
+    this.#lc.info?.('starting backup monitor');
     this.#initBackupLagMetric();
-    return this.#state.stopped();
+    this.#coverageTarget = this.#readReplicaStateVersion();
+
+    for await (const backedUp of this.#watermarks) {
+      if (this.#latestBackup) {
+        if (backedUp.watermark < this.#latestBackup.watermark) {
+          this.#lc.warn?.(`ignoring earlier backup watermark`, {backedUp});
+          continue;
+        }
+        if (backedUp.watermark === this.#latestBackup.watermark) {
+          this.#lc.debug?.(`ignoring redundant backup watermark`, {backedUp});
+          continue;
+        }
+      }
+      this.#lc.info?.(`received backup watermark`, {backedUp});
+      this.#latestBackup = backedUp;
+      this.#changeStreamer.trackBackupWatermark(backedUp.watermark);
+      this.#checkFirstBackupCovers(backedUp);
+    }
+    this.#lc.info?.('watermark stream closed. BackupMonitor stopped.');
   }
 
-  startSnapshotReservation(taskID: string): Subscription<SnapshotMessage> {
-    this.#lc.info?.(`pausing change-log cleanup while ${taskID} snapshots`);
-    // In the case of retries, only track the last reservation.
-    this.#reservations.get(taskID)?.sub.cancel();
-
-    const sub = Subscription.create<SnapshotMessage>({
-      // If the reservation still exists when the connection closes
-      // (e.g. subscriber crashed), clean it up without updating the
-      // cleanup delay.
-      cleanup: () => this.endReservation(taskID, false),
-    });
-    this.#reservations.set(taskID, {start: new Date(), sub});
-    // Note: the Subscription must be returned immediately so that the
-    //       websocket can begin sending liveness pings.
-    void this.#changeStreamer
-      .getChangeLogState()
-      .then(changeLogState => {
-        sub.push([
-          'status',
-          {tag: 'status', backupURL: this.#backupURL, ...changeLogState},
-        ]);
-      })
-      .catch(e => {
-        this.#lc.warn?.(`failing snapshot reservation`, e);
-        sub.fail(e);
+  /**
+   * Resolves {@link firstBackupReceived} once the backup actually covers the
+   * replica, rather than on the first watermark of any value.
+   *
+   * A new backup destination starts empty and is filled by re-uploading the
+   * local LTX chain, so the first watermarks read back out of it are real but
+   * far behind the replica. Releasing the readiness gate on one of those lets
+   * the task serve against a backup that does not yet cover it, which is what
+   * demotes a restoring view-syncer to Postgres catchup.
+   *
+   * The target is pinned at startup rather than compared against the replica's
+   * current position, which keeps the gate satisfiable under sustained writes.
+   */
+  #checkFirstBackupCovers(backedUp: BackedUpWatermark) {
+    if (this.#firstBackupResolved) {
+      return;
+    }
+    const target = this.#coverageTarget;
+    if (target !== undefined && backedUp.watermark < target) {
+      this.#lc.info?.(`backup does not yet cover the replica`, {
+        backedUp,
+        coverageTarget: target,
       });
-    return sub;
-  }
-
-  endReservation(taskID: string, updateCleanupDelay = true) {
-    const res = this.#reservations.get(taskID);
-    if (res === undefined) {
       return;
     }
-    this.#reservations.delete(taskID);
-    const {start, sub} = res;
-    sub.cancel(); // closes the connection if still open
-
-    if (updateCleanupDelay) {
-      const duration = Date.now() - start.getTime();
-      this.#lc.info?.(`snapshot initialized by ${taskID} in ${duration} ms`);
-      if (duration > this.#cleanupDelayMs) {
-        this.#cleanupDelayMs = duration;
-        this.#lc.info?.(`increased cleanup delay to ${duration} ms`);
-      }
-    }
+    this.#firstBackupResolved = true;
+    this.#firstBackupReceived.resolve();
   }
 
-  // Exported for testing
-  readonly checkWatermarksAndScheduleCleanup = async () => {
+  #readReplicaStateVersion(): string | undefined {
+    let db;
     try {
-      await this.#checkWatermarks();
+      db = new Database(this.#lc, this.#replicaFile, {readonly: true});
+      const {stateVersion} = db
+        .prepare(/*sql*/ `SELECT stateVersion FROM "_zero.replicationState"`)
+        .get<{stateVersion: string}>();
+      return stateVersion;
     } catch (e) {
-      this.#lc.warn?.(`unable to fetch metrics at ${this.#metricsEndpoint}`, e);
-    }
-    try {
-      this.#scheduleCleanup();
-    } catch (e) {
-      this.#lc.warn?.(`error scheduling cleanup`, e);
-    }
-  };
-
-  async *#fetchWatermarks(): AsyncGenerator<{
-    watermark: string;
-    time: Date;
-    name?: string | undefined;
-  }> {
-    const metricsEndpoint = this.#metricsEndpoint;
-    const signal = this.#state.signal;
-    let resp;
-    try {
-      resp = await fetch(metricsEndpoint, {signal});
-    } catch (e) {
-      if (signal.aborted) {
-        // not an error.
-        return;
-      }
-      // Treat exceptions from fetch (e.g. network errors) as non-fatal, and simply
-      // log them and skip the watermark check until the next interval.
-      this.#lc.warn?.(`unable to fetch metrics at ${this.#metricsEndpoint}`, e);
-      return;
-    }
-    if (!resp.ok) {
+      // Without a target the gate degrades to its previous behavior. That is
+      // strictly better than blocking startup on a replica we cannot read.
       this.#lc.warn?.(
-        `unable to fetch metrics at ${this.#metricsEndpoint}: ${await resp.text()}`,
+        `unable to read the replica's stateVersion; ` +
+          `the initial backup gate will accept the first watermark`,
+        e,
       );
-      return;
-    }
-
-    const families = parsePrometheusTextFormat(await resp.text());
-    for (const family of families) {
-      if (
-        family.type === 'GAUGE' &&
-        family.name === 'litestream_replica_progress'
-      ) {
-        for (const metric of family.metrics) {
-          const watermark = metric.labels?.watermark;
-          const name = metric.labels?.name;
-          const time = new Date(parseFloat(metric.value) * 1000);
-
-          if (watermark) {
-            yield {watermark, time, name};
-          }
-        }
-      }
-    }
-  }
-
-  async #checkWatermarks() {
-    for await (const {watermark, name, time} of this.#fetchWatermarks()) {
-      if (watermark > this.#lastWatermark && !this.#watermarks.has(watermark)) {
-        this.#lc.info?.(
-          `replicated watermark=${watermark} to ${name}` +
-            ` at ${time.toISOString()}.`,
-        );
-        this.#watermarks.set(watermark, time);
-        this.#latestBackupTime = time;
-      }
-    }
-    return this.#latestBackupTime;
-  }
-
-  #scheduleCleanup() {
-    if (this.#reservations.size > 0) {
-      this.#lc.info?.(
-        `watermark cleanup paused for snapshot(s): ${[...this.#reservations.keys()]}`,
-      );
-      return;
-    }
-    const latestCleanupTime = Date.now() - this.#cleanupDelayMs;
-    let maxWatermark = '';
-    for (const [watermark, backupTime] of this.#watermarks.entries()) {
-      if (
-        backupTime.getTime() <= latestCleanupTime &&
-        watermark > maxWatermark
-      ) {
-        maxWatermark = watermark;
-      }
-    }
-    if (maxWatermark.length) {
-      this.#changeStreamer.scheduleCleanup(maxWatermark);
-      for (const watermark of this.#watermarks.keys()) {
-        if (watermark <= maxWatermark) {
-          this.#watermarks.delete(watermark);
-        }
-      }
-      this.#lastWatermark = maxWatermark;
+      return undefined;
+    } finally {
+      db?.close();
     }
   }
 
   stop(): Promise<void> {
-    clearInterval(this.#checkMetricsTimer);
-    for (const {sub} of this.#reservations.values()) {
-      // Close any pending reservations. This commonly happens when a new
-      // replication-manager makes a `/snapshot` reservation on the existing
-      // replication-manager, and then shuts it down when it takes over the
-      // replication slot.
-      sub.cancel();
-    }
-    this.#state.stop(this.#lc);
+    this.#watermarks.cancel();
     return promiseVoid;
   }
 
@@ -271,16 +134,8 @@ export class BackupMonitor implements Service {
         'to when it is backed up to litestream. It is expected to create a saw ' +
         'pattern from 0 to the configured ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES.',
       unit: 'millisecond',
-    }).addCallback(async o => {
-      // For legacy litestream, we use the watermark metric (and its associated
-      // backup time) exported by litestream metrics to determine the time of
-      // of the backed up watermark. This is technically imprecise--it would be
-      // more correct to use the committed writeTimeMs--but it is good enough
-      // in that it serves the purpose of detecting a non-functioning backup.
-      // With litestream v5, this can be made more precise by querying the
-      // _zero.replicationState row from the backup directly using an LTX-based
-      // database reader.
-      const latestBackup = await this.#checkWatermarks();
+    }).addCallback(o => {
+      const latestBackup = this.#latestBackup;
       if (!latestBackup) {
         this.#lc.warn?.(
           `no backed up watermarks. unable to report replica.backup_lag`,
@@ -292,7 +147,7 @@ export class BackupMonitor implements Service {
         const {writeTimeMs} = db
           .prepare(/*sql*/ `SELECT writeTimeMs FROM "_zero.replicationState"`)
           .get<{writeTimeMs: number}>();
-        const backupLag = Math.max(0, writeTimeMs - latestBackup.getTime());
+        const backupLag = Math.max(0, writeTimeMs - latestBackup.backupTimeMs);
         o.observe(backupLag);
       } catch (e) {
         this.#lc.warn?.(`error measuring replica.backup_lag metric`, e);

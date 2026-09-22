@@ -29,7 +29,10 @@ const {dbs, delegates, queries} = await bootstrap({
   pgContent,
 });
 
-// Run ANALYZE to populate SQLite statistics for cost model
+dbs.sqlite.exec('CREATE INDEX IF NOT EXISTS idx_album_title ON album(title)');
+dbs.sqlite.exec('CREATE INDEX IF NOT EXISTS idx_genre_name ON genre(name)');
+
+// Run ANALYZE after index creation to populate SQLite statistics for cost model.
 dbs.sqlite.exec('ANALYZE;');
 
 const tables: {[key: string]: TableSchema} = schema.tables;

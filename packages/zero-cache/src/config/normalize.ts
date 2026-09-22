@@ -24,6 +24,8 @@ export type NormalizedZeroConfig = ZeroConfig & {
   numSyncWorkers: number;
 };
 
+export type LitestreamConfig = NormalizedZeroConfig['litestream'];
+
 export function isDevelopmentMode(): boolean {
   return process.env.NODE_ENV === 'development';
 }
@@ -35,13 +37,121 @@ function isRunningInECS(): boolean {
 
 const DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS = 20_000;
 
+/**
+ * Whether this process tree runs the change-streamer, as opposed to connecting
+ * to one that another task runs.
+ */
+export function runsChangeStreamer(config: ZeroConfig): boolean {
+  const {mode, uri} = config.changeStreamer;
+  return mode === 'dedicated' && uri === undefined;
+}
+
 export function assertNormalized(
   config: ZeroConfig,
 ): asserts config is NormalizedZeroConfig {
   assert(config.taskID, 'missing --task-id');
   assert(config.changeStreamer.port, 'missing --change-streamer-port');
   assert(config.changeStreamer.address, 'missing --change-streamer-address');
+  const {pgReplicationSlotPerReplica} = config.upstream;
+  const {
+    pgChangeLogEnabled,
+    sqliteChangeLogMode,
+    sqliteChangeLogReadPercent,
+    sqliteChangeLogColdReadPercent,
+    sqliteChangeLogComparePercent,
+    sqliteChangeLogRetentionMs,
+    sqliteChangeLogReadBatchRows,
+    sqliteChangeLogPurgeBatchRows,
+    sqliteChangeLogBarrierTimeoutMs,
+  } = config.changeStreamer;
+  assert(
+    Number.isSafeInteger(sqliteChangeLogReadPercent) &&
+      sqliteChangeLogReadPercent >= 0 &&
+      sqliteChangeLogReadPercent <= 100,
+    '--change-streamer-sqlite-change-log-read-percent must be an integer between 0 and 100',
+  );
+  assert(
+    Number.isSafeInteger(sqliteChangeLogColdReadPercent) &&
+      sqliteChangeLogColdReadPercent >= 0 &&
+      sqliteChangeLogColdReadPercent <= 100,
+    '--change-streamer-sqlite-change-log-cold-read-percent must be an integer between 0 and 100',
+  );
+  // This setting has no mode restriction. Comparison starts in `compare` mode.
+  assert(
+    Number.isSafeInteger(sqliteChangeLogComparePercent) &&
+      sqliteChangeLogComparePercent >= 0 &&
+      sqliteChangeLogComparePercent <= 100,
+    '--change-streamer-sqlite-change-log-compare-percent must be an integer between 0 and 100',
+  );
+  assert(
+    sqliteChangeLogMode === 'serve' || sqliteChangeLogReadPercent === 0,
+    '--change-streamer-sqlite-change-log-read-percent must be 0 unless --change-streamer-sqlite-change-log-mode=serve',
+  );
+  assert(
+    sqliteChangeLogMode === 'serve' || sqliteChangeLogColdReadPercent === 0,
+    '--change-streamer-sqlite-change-log-cold-read-percent must be 0 unless --change-streamer-sqlite-change-log-mode=serve',
+  );
+  // The cold gate only admits a task to the read gate; it never serves one on
+  // its own. A nonzero cold percentage with a zero read percentage is a
+  // silent no-op, which is the shape of a rollout that looks enabled and
+  // serves nothing.
+  assert(
+    sqliteChangeLogReadPercent > 0 || sqliteChangeLogColdReadPercent === 0,
+    '--change-streamer-sqlite-change-log-cold-read-percent must be 0 when --change-streamer-sqlite-change-log-read-percent is 0',
+  );
+  if (pgReplicationSlotPerReplica) {
+    assert(
+      !pgChangeLogEnabled,
+      `--upstream-pg-replication-slot-per-replica=true requires --change-streamer-pg-change-log-enabled=false`,
+    );
+  }
+  if (!pgChangeLogEnabled) {
+    assert(
+      sqliteChangeLogMode === 'serve',
+      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-mode=serve',
+    );
+    assert(
+      sqliteChangeLogReadPercent === 100,
+      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-read-percent=100',
+    );
+    assert(
+      sqliteChangeLogColdReadPercent === 100,
+      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-cold-read-percent=100',
+    );
+    assert(
+      config.litestream.backupURL && config.litestream.backupUsingV5,
+      '--change-streamer-pg-change-log-enabled=false requires a litestream v5 backup',
+    );
+  }
+  for (const [flag, value] of [
+    ['retention-ms', sqliteChangeLogRetentionMs],
+    ['read-batch-rows', sqliteChangeLogReadBatchRows],
+    ['purge-batch-rows', sqliteChangeLogPurgeBatchRows],
+    ['barrier-timeout-ms', sqliteChangeLogBarrierTimeoutMs],
+  ] as const) {
+    assert(
+      Number.isSafeInteger(value) && value > 0,
+      `--change-streamer-sqlite-change-log-${flag} must be a positive integer`,
+    );
+  }
   assert(config.litestream.port, 'missing --litestream-port');
+  assert(
+    !config.litestream.backupUsingV5 || config.litestream.restoreUsingV5,
+    '--litestream-backup-using-v5 requires --litestream-restore-using-v5',
+  );
+  assert(
+    !config.litestream.backupURL ||
+      config.litestream.executableV5 ||
+      !(config.litestream.restoreUsingV5 || config.litestream.backupUsingV5),
+    '--litestream-restore-using-v5 and --litestream-backup-using-v5 ' +
+      'require --litestream-executable-v5 to be specified',
+  );
+  assert(
+    !config.litestream.backupURL ||
+      !config.litestream.backupUsingV5 ||
+      config.litestream.vfsQueryExecutable,
+    '--litestream-backup-using-v5 requires --litestream-vfs-query-executable to be specified',
+  );
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
   assertNotUndefined(config.numSyncWorkers, 'missing --num-sync-workers');
@@ -113,6 +223,27 @@ export function normalizeZeroConfig(
   if (!config.keepaliveTimeoutMs && isRunningInECS()) {
     config.keepaliveTimeoutMs = DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS;
     env['ZERO_KEEPALIVE_TIMEOUT_MS'] = String(DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS);
+  }
+
+  if (config.upstream.pgHighAvailabilityReplication) {
+    config.upstream.pgReplicationSlotPerReplica = true;
+    env['ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA'] = 'true';
+
+    config.litestream.restoreUsingV5 = true;
+    config.litestream.backupUsingV5 = true;
+    env['ZERO_LITESTREAM_RESTORE_USING_V5'] = 'true';
+    env['ZERO_LITESTREAM_BACKUP_USING_V5'] = 'true';
+
+    config.changeStreamer.sqliteChangeLogMode = 'serve';
+    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE'] = 'serve';
+
+    config.changeStreamer.sqliteChangeLogReadPercent = 100;
+    config.changeStreamer.sqliteChangeLogColdReadPercent = 100;
+    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT'] = '100';
+    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COLD_READ_PERCENT'] = '100';
+
+    config.changeStreamer.pgChangeLogEnabled = false;
+    env['ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED'] = 'false';
   }
 
   lc.info?.(`runtime env: taskID=${config.taskID}, hostIP=${hostIP}`);

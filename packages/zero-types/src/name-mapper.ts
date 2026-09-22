@@ -25,32 +25,28 @@ export class NameMapper {
     this.#tables = tables;
   }
 
-  #getTable(src: string, ctx?: JSONValue): DestNames {
+  #getTable(src: string): DestNames {
     const table = this.#tables.get(src);
     if (!table) {
-      throw new Error(
-        `unknown table "${src}" ${!ctx ? '' : `in ${JSON.stringify(ctx)}`}`,
-      );
+      // log-leak-ignore -- a table name is schema, not customer data
+      throw new Error(`unknown table "${src}"`);
     }
     return table;
   }
 
-  tableName(src: string, context?: JSONValue): string {
-    return this.#getTable(src, context).tableName;
+  tableName(src: string): string {
+    return this.#getTable(src).tableName;
   }
 
   tableNameIfKnown(src: string): string | undefined {
     return this.#tables.get(src)?.tableName;
   }
 
-  columnName(table: string, src: string, ctx?: JSONValue): string {
-    const dst = this.#getTable(table, ctx).columns[src];
+  columnName(table: string, src: string): string {
+    const dst = this.#getTable(table).columns[src];
     if (!dst) {
-      throw new Error(
-        `unknown column "${src}" of "${table}" table ${
-          !ctx ? '' : `in ${JSON.stringify(ctx)}`
-        }`,
-      );
+      // log-leak-ignore -- table and column names are schema, not customer data
+      throw new Error(`unknown column "${src}" of "${table}" table`);
     }
     return dst;
   }
@@ -62,16 +58,15 @@ export class NameMapper {
    * whole client connection down — so a mapper that knows column types
    * rejects it here, at the query boundary.
    */
-  jsonColumnName(table: string, src: string, ctx?: JSONValue): string {
-    const dest = this.#getTable(table, ctx);
+  jsonColumnName(table: string, src: string): string {
+    const dest = this.#getTable(table);
     if (dest.jsonColumns && !dest.jsonColumns.has(src)) {
+      // log-leak-ignore -- table and column names are schema, not customer data
       throw new Error(
-        `column "${src}" of "${table}" table is not a json column ${
-          !ctx ? '' : `in ${JSON.stringify(ctx)}`
-        }`,
+        `column "${src}" of "${table}" table is not a json column`,
       );
     }
-    return this.columnName(table, src, ctx);
+    return this.columnName(table, src);
   }
 
   row<V extends Value>(

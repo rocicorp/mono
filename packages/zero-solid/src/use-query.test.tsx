@@ -191,6 +191,36 @@ test('useQuery with ttl', () => {
   expect(materializeSpy).toHaveBeenCalledTimes(0);
 });
 
+test('a view materialized after a ttl change uses the current ttl', () => {
+  // The ttl the hook starts with is read once. A view built later -- because
+  // the query changed -- must still be materialized with whatever ttl is in
+  // effect by then, not the one the hook happened to start with.
+  const {tableQuery, queryDelegate} = setupTestEnvironment();
+  const [ttl, setTTL] = createSignal<TTL>('1m');
+  const [query, setQuery] = createSignal(tableQuery);
+
+  const zero = newMockZero('solid-ttl-on-rematerialize', queryDelegate);
+  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+  useQueryWithZeroProvider(
+    zero,
+    () => query(),
+    () => ({ttl: ttl()}),
+  );
+
+  expect(materializeSpy).toHaveBeenCalledTimes(1);
+  expect(materializeSpy.mock.calls[0][2]).toEqual({ttl: '1m'});
+
+  // Changing the ttl updates the live view rather than building a new one.
+  setTTL('10m');
+  expect(materializeSpy).toHaveBeenCalledTimes(1);
+
+  // Changing the query does build a new one, which must carry '10m'.
+  setQuery(() => tableQuery.where('a', 1));
+  expect(materializeSpy).toHaveBeenCalledTimes(2);
+  expect(materializeSpy.mock.calls[1][2]).toEqual({ttl: '10m'});
+});
+
 test('useQuery gets an error', async () => {
   const {tableQuery, queryDelegate} = setupTestEnvironment();
   const querySignal = vi.fn(() => tableQuery);
@@ -297,7 +327,9 @@ test('useQuery query deps change', async () => {
 test('useQuery query deps change, reconcile minimizes reactive updates', async () => {
   const {tableQuery, queryDelegate} = setupTestEnvironment();
 
-  const [querySignal, setQuery] = createSignal(tableQuery.where('a', 1));
+  const [querySignal, setQuery] = createSignal<typeof tableQuery>(
+    tableQuery.where('a', 1),
+  );
 
   const zero = newMockZero('useQuery-deps-change-id-min', queryDelegate);
   const renderHookResult = useQueryWithZeroProvider(zero, querySignal);
@@ -415,9 +447,9 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   });
   const issueQuery = newQuery(schema, 'issue');
 
-  const [querySignal, setQuery] = createSignal(
-    issueQuery.where('id', 'i1').related('comments'),
-  );
+  const [querySignal, setQuery] = createSignal<
+    ReturnType<typeof issueQuery.related<'comments'>>
+  >(issueQuery.where('id', 'i1').related('comments'));
 
   const zero = newMockZero('useQuery-deps-change-id-min-tree', queryDelegate);
   const renderHookResult = useQueryWithZeroProvider(zero, querySignal);
@@ -929,7 +961,10 @@ test('useQuery plural and singular with same hash create different views', () =>
   // because the singular flag is no longer included in the zql-level hash.
   const pluralQuery = tableQuery.where('a', 1).limit(1);
   const singularQuery = tableQuery.where('a', 1).one();
-  expect(asQueryInternals(pluralQuery).hash()).toBe(
+  expect(asQueryInternals(pluralQuery).ast).toEqual(
+    asQueryInternals(singularQuery).ast,
+  );
+  expect(asQueryInternals(pluralQuery).hash()).not.toBe(
     asQueryInternals(singularQuery).hash(),
   );
 
@@ -959,6 +994,79 @@ test('useQuery plural and singular with same hash create different views', () =>
   expect(destroy0Spy).toHaveBeenCalledTimes(1);
   expect(materializeSpy).toHaveBeenCalledTimes(2);
   expect(materializeSpy.mock.calls[1][0]).toBe(singularQuery);
+});
+
+test('useQuery nested one() and limit(1) with same hash create different views', () => {
+  const issue = table('issue').columns({id: string()}).primaryKey('id');
+  const comment = table('comment')
+    .columns({id: string(), issueID: string()})
+    .primaryKey('id');
+  const schema = createSchema({
+    tables: [issue, comment],
+    relationships: [
+      relationships(issue, connect => ({
+        comments: connect.many({
+          sourceField: ['id'],
+          destField: ['issueID'],
+          destSchema: comment,
+        }),
+      })),
+    ],
+  });
+  const issueSource = new MemorySource(
+    schema.tables.issue.name,
+    schema.tables.issue.columns,
+    schema.tables.issue.primaryKey,
+  );
+  const commentSource = new MemorySource(
+    schema.tables.comment.name,
+    schema.tables.comment.columns,
+    schema.tables.comment.primaryKey,
+  );
+  consume(issueSource.push(makeSourceChangeAdd({id: 'i1'})));
+  consume(commentSource.push(makeSourceChangeAdd({id: 'c1', issueID: 'i1'})));
+  const queryDelegate = new QueryDelegateImpl({
+    sources: {issue: issueSource, comment: commentSource},
+  });
+  const issueQuery = newQuery(schema, 'issue');
+
+  // one() and limit(1) on a *nested* relationship produce the same AST
+  // because the singular flag lives only in the format, not the AST. The view
+  // hash must therefore fold the whole format (including nested relationships),
+  // not just the top-level singular flag.
+  const pluralRel = issueQuery
+    .where('id', 'i1')
+    .related('comments', q => q.limit(1));
+  const singularRel = issueQuery
+    .where('id', 'i1')
+    .related('comments', q => q.one());
+  expect(asQueryInternals(pluralRel).ast).toEqual(
+    asQueryInternals(singularRel).ast,
+  );
+  expect(asQueryInternals(pluralRel).hash()).not.toBe(
+    asQueryInternals(singularRel).hash(),
+  );
+
+  type AnyQuery = typeof pluralRel | typeof singularRel;
+  const [querySignal, setQuery] = createSignal<AnyQuery>(pluralRel);
+
+  const zero = newMockZero('useQuery-nested-one-limit', queryDelegate);
+  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  useQueryWithZeroProvider(zero, querySignal as () => typeof pluralRel);
+
+  expect(materializeSpy).toHaveBeenCalledTimes(1);
+  expect(materializeSpy.mock.calls[0][0]).toBe(pluralRel);
+
+  const view0 = materializeSpy.mock.results[0].value;
+  const destroy0Spy = vi.spyOn(view0, 'destroy');
+
+  // Switch to the singular relationship — the view hash must change even though
+  // the underlying AST hash is identical.
+  setQuery(singularRel as unknown as AnyQuery);
+
+  expect(destroy0Spy).toHaveBeenCalledTimes(1);
+  expect(materializeSpy).toHaveBeenCalledTimes(2);
+  expect(materializeSpy.mock.calls[1][0]).toBe(singularRel);
 });
 
 test('useQuery same query for different clientIDs creates different views', () => {

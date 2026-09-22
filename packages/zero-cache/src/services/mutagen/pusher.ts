@@ -1,8 +1,9 @@
 import {context, propagation, ROOT_CONTEXT} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
-import {groupBy} from '../../../../shared/src/arrays.ts';
+import {groupBy, newArray} from '../../../../shared/src/arrays.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {getErrorMessage} from '../../../../shared/src/error.ts';
+import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -95,7 +96,7 @@ export class PusherService implements Service, Pusher {
     this.id = clientGroupID;
   }
 
-  initConnection(selector: ConnectionSelector) {
+  initConnection(selector: ConnectionSelector): Source<Downstream> {
     return this.#pusher.initConnection(selector);
   }
 
@@ -103,10 +104,10 @@ export class PusherService implements Service, Pusher {
     selector: ConnectionSelector,
     push: PushBody,
   ): Exclude<HandlerResult, StreamResult> {
-    this.#pusher.enqueuePush(
-      this.#connContextManager.mustGetConnectionContext(selector),
-      push,
-    );
+    const connCtx = this.#connContextManager.getConnectionContext(selector);
+    if (connCtx) {
+      this.#pusher.enqueuePush(connCtx, push);
+    }
 
     return {
       type: 'ok',
@@ -155,6 +156,7 @@ export class PusherService implements Service, Pusher {
         connCtx,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         cleanupBody,
+        {operation: 'cleanup', cleanupType: 'single'},
       );
     } catch (e) {
       this.#lc.warn?.('Failed to send cleanup mutation', {
@@ -214,6 +216,7 @@ export class PusherService implements Service, Pusher {
         connCtx,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         cleanupBody,
+        {operation: 'cleanup', cleanupType: 'bulk'},
       );
     } catch (e) {
       this.#lc.warn?.('Failed to send bulk cleanup mutation', {
@@ -302,7 +305,7 @@ class PushWorker {
    * Returns a new downstream stream if the clientID,wsID pair has not been seen before.
    * If a clientID already exists with a different wsID, that client's downstream is cancelled.
    */
-  initConnection(selector: ConnectionSelector) {
+  initConnection(selector: ConnectionSelector): Subscription<Downstream> {
     const existing = this.#clients.get(selector.clientID);
     if (existing && existing.wsID === selector.wsID) {
       // already initialized for this socket
@@ -527,6 +530,7 @@ class PushWorker {
           shardNum: this.#config.shard.num,
         },
         entry.push,
+        {operation: 'mutate'},
       );
       if (
         ('kind' in response && response.kind === ErrorKind.PushFailed) ||
@@ -650,12 +654,7 @@ export function combinePushes(
     }
 
     const key = `${entry.connCtx.clientID}:${entry.connCtx.wsID}:${entry.connCtx.revision}`;
-    const existing = pushesByConnection.get(key);
-    if (existing) {
-      existing.push(entry);
-    } else {
-      pushesByConnection.set(key, [entry]);
-    }
+    getOrInsertComputed(pushesByConnection, key, newArray).push(entry);
   }
 
   return [collect(), false] as const;

@@ -34,6 +34,7 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
+import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
@@ -82,7 +83,7 @@ test('add', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '12hwg3ihkijhm',
+          hash: '12fshk4151m9cn',
           ast: {
             table: 'issues',
             where: undefined,
@@ -131,7 +132,7 @@ test('add and remove a custom query', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '2l1ig6e3tnu0a',
+          hash: '0c5kpya05ymm4b',
           name: 'customQuery',
           args: [1],
           ttl: 60000,
@@ -179,7 +180,7 @@ test('add and remove a custom query', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '2l1ig6e3tnu0a',
+          hash: '0c5kpya05ymm4b',
           name: 'customQuery',
           args: [1],
           ttl: 120000,
@@ -334,6 +335,7 @@ test('add renamed fields', () => {
                     "type": "simple",
                   },
                   {
+                    "flip": undefined,
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
@@ -344,6 +346,7 @@ test('add renamed fields', () => {
                           "id",
                         ],
                       },
+                      "hidden": undefined,
                       "subquery": {
                         "alias": undefined,
                         "limit": undefined,
@@ -354,14 +357,16 @@ test('add renamed fields', () => {
                         "table": "comments",
                         "where": undefined,
                       },
+                      "system": undefined,
                     },
+                    "scalar": undefined,
                     "type": "correlatedSubquery",
                   },
                 ],
                 "type": "and",
               },
             },
-            "hash": "2courpv3kf7et",
+            "hash": "0lqpte300mr6il",
             "name": undefined,
             "op": "put",
             "ttl": 600000,
@@ -402,7 +407,7 @@ test('remove, recent queries max size 0', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '12hwg3ihkijhm',
+          hash: '12fshk4151m9cn',
           ast: {
             table: 'issues',
             where: undefined,
@@ -430,7 +435,7 @@ test('remove, recent queries max size 0', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '12hwg3ihkijhm',
+          hash: '12fshk4151m9cn',
         },
       ],
     },
@@ -486,7 +491,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '12hwg3ihkijhm',
+          hash: '12fshk4151m9cn',
           ast: {
             table: 'issues',
             where: undefined,
@@ -511,7 +516,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '1hydj1t7t5yv4',
+          hash: '0exun0d0iqan4l',
           ast: {
             table: 'issues',
             where: undefined,
@@ -532,7 +537,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3c5d3uiyypuxu',
+          hash: '14mt91l1cqiemy',
           ast: {
             table: 'users',
             where: undefined,
@@ -553,7 +558,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '2q7cds8pild5w',
+          hash: '02bmi980t323gc',
           ast: {
             table: 'users',
             where: undefined,
@@ -585,7 +590,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '12hwg3ihkijhm',
+          hash: '12fshk4151m9cn',
         },
       ],
     },
@@ -600,7 +605,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '1hydj1t7t5yv4',
+          hash: '0exun0d0iqan4l',
         },
       ],
     },
@@ -652,7 +657,7 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '12hwg3ihkijhm',
+          hash: '12fshk4151m9cn',
           ast: {
             table: 'issues',
             where: undefined,
@@ -673,7 +678,7 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '1hydj1t7t5yv4',
+          hash: '0exun0d0iqan4l',
           ast: {
             table: 'issues',
             where: undefined,
@@ -694,7 +699,7 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3c5d3uiyypuxu',
+          hash: '14mt91l1cqiemy',
           ast: {
             table: 'users',
             where: undefined,
@@ -715,7 +720,7 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '2q7cds8pild5w',
+          hash: '02bmi980t323gc',
           ast: {
             table: 'users',
             where: undefined,
@@ -753,7 +758,7 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '1hydj1t7t5yv4',
+          hash: '0exun0d0iqan4l',
         },
       ],
     },
@@ -768,7 +773,7 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '12hwg3ihkijhm',
+          hash: '12fshk4151m9cn',
         },
       ],
     },
@@ -842,14 +847,14 @@ describe('getQueriesPatch', () => {
       slowMaterializeThreshold,
       onFatalError,
     );
-    // hash: 12hwg3ihkijhm
+    // hash: 12fshk4151m9cn
     const ast1: AST = {
       table: 'issue',
       orderBy: [['id', 'asc']],
     };
     queryManager.addLegacy(ast1, 'forever');
     queryManager.flushBatch();
-    // hash 1hydj1t7t5yv4
+    // hash 0exun0d0iqan4l
     const ast2: AST = {
       table: 'issue',
       orderBy: [['id', 'desc']],
@@ -859,7 +864,7 @@ describe('getQueriesPatch', () => {
 
     const testReadTransaction = new TestTransaction();
     testReadTransaction.scanEntries = [
-      ['d/client1/12hwg3ihkijhm', 'unused'],
+      ['d/client1/12fshk4151m9cn', 'unused'],
       ['d/client1/shouldBeDeleted', 'unused'],
     ];
 
@@ -873,7 +878,7 @@ describe('getQueriesPatch', () => {
           },
           {
             op: 'put',
-            hash: '1hydj1t7t5yv4',
+            hash: '0exun0d0iqan4l',
             ast: {
               table: 'issues',
               orderBy: [['id', 'desc']],
@@ -913,7 +918,7 @@ describe('getQueriesPatch', () => {
     });
 
     async function add(ttl: TTL): Promise<number | undefined> {
-      // hash 1hydj1t7t5yv4
+      // hash 0exun0d0iqan4l
       const ast: AST = {
         table: 'issue',
         orderBy: [['id', 'desc']],
@@ -925,7 +930,7 @@ describe('getQueriesPatch', () => {
       testReadTransaction.scanEntries = [];
       const patch = await queryManager.getQueriesPatch(testReadTransaction);
       expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
-      const op = patch.get('1hydj1t7t5yv4');
+      const op = patch.get('0exun0d0iqan4l');
       v.assert(op, upPutOpSchema);
       return op.ttl;
     }
@@ -956,7 +961,7 @@ describe('getQueriesPatch', () => {
                     "table": "issues",
                     "where": undefined,
                   },
-                  "hash": "1hydj1t7t5yv4",
+                  "hash": "0exun0d0iqan4l",
                   "name": undefined,
                   "op": "put",
                   "ttl": 1000,
@@ -993,7 +998,7 @@ describe('getQueriesPatch', () => {
                     "table": "issues",
                     "where": undefined,
                   },
-                  "hash": "1hydj1t7t5yv4",
+                  "hash": "0exun0d0iqan4l",
                   "name": undefined,
                   "op": "put",
                   "ttl": 2000,
@@ -1039,7 +1044,7 @@ describe('getQueriesPatch', () => {
                   "table": "issues",
                   "where": undefined,
                 },
-                "hash": "1hydj1t7t5yv4",
+                "hash": "0exun0d0iqan4l",
                 "name": undefined,
                 "op": "put",
                 "ttl": 0,
@@ -1080,7 +1085,7 @@ describe('getQueriesPatch', () => {
                     "table": "issues",
                     "where": undefined,
                   },
-                  "hash": "1hydj1t7t5yv4",
+                  "hash": "0exun0d0iqan4l",
                   "name": undefined,
                   "op": "put",
                   "ttl": 1000,
@@ -1150,67 +1155,67 @@ describe('getQueriesPatch', () => {
 
     const testReadTransaction = new TestTransaction();
     testReadTransaction.scanEntries = [
-      ['d/client1/12hwg3ihkijhm', 'unused'],
+      ['d/client1/12fshk4151m9cn', 'unused'],
       ['d/client1/shouldBeDeleted', 'unused'],
     ];
 
     const patch = await queryManager.getQueriesPatch(testReadTransaction);
     expect(patch).toMatchInlineSnapshot(`
-        Map {
-          "12hwg3ihkijhm" => {
-            "hash": "12hwg3ihkijhm",
-            "op": "del",
-          },
-          "shouldBeDeleted" => {
-            "hash": "shouldBeDeleted",
-            "op": "del",
-          },
-          "3c5d3uiyypuxu" => {
-            "args": undefined,
-            "ast": {
-              "alias": undefined,
-              "limit": undefined,
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
+      Map {
+        "12fshk4151m9cn" => {
+          "hash": "12fshk4151m9cn",
+          "op": "del",
+        },
+        "shouldBeDeleted" => {
+          "hash": "shouldBeDeleted",
+          "op": "del",
+        },
+        "14mt91l1cqiemy" => {
+          "args": undefined,
+          "ast": {
+            "alias": undefined,
+            "limit": undefined,
+            "orderBy": [
+              [
+                "id",
+                "asc",
               ],
-              "related": undefined,
-              "schema": undefined,
-              "start": undefined,
-              "table": "users",
-              "where": undefined,
-            },
-            "hash": "3c5d3uiyypuxu",
-            "name": undefined,
-            "op": "put",
-            "ttl": 600000,
+            ],
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
+            "table": "users",
+            "where": undefined,
           },
-          "2q7cds8pild5w" => {
-            "args": undefined,
-            "ast": {
-              "alias": undefined,
-              "limit": undefined,
-              "orderBy": [
-                [
-                  "id",
-                  "desc",
-                ],
+          "hash": "14mt91l1cqiemy",
+          "name": undefined,
+          "op": "put",
+          "ttl": 600000,
+        },
+        "02bmi980t323gc" => {
+          "args": undefined,
+          "ast": {
+            "alias": undefined,
+            "limit": undefined,
+            "orderBy": [
+              [
+                "id",
+                "desc",
               ],
-              "related": undefined,
-              "schema": undefined,
-              "start": undefined,
-              "table": "users",
-              "where": undefined,
-            },
-            "hash": "2q7cds8pild5w",
-            "name": undefined,
-            "op": "put",
-            "ttl": 600000,
+            ],
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
+            "table": "users",
+            "where": undefined,
           },
-        }
-      `);
+          "hash": "02bmi980t323gc",
+          "name": undefined,
+          "op": "put",
+          "ttl": 600000,
+        },
+      }
+    `);
     expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
   });
 });
@@ -1235,7 +1240,7 @@ test('handleClosed marks queries as errored exactly once', () => {
 
   const ast: AST = {table: 'issue'};
   const queryHash = hashOfAST(ast);
-  const gotCallback = vi.fn<(got: boolean, error?: ErroredQuery) => void>();
+  const gotCallback = vi.fn<GotCallback>();
 
   queryManager.addLegacy(ast, 0, gotCallback);
   queryManager.flushBatch();
@@ -1266,7 +1271,7 @@ test('handleClosed marks queries as errored exactly once', () => {
 });
 
 test('gotCallback, query already got', () => {
-  const queryHash = '12hwg3ihkijhm';
+  const queryHash = '12fshk4151m9cn';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
 
@@ -1286,6 +1291,7 @@ test('gotCallback, query already got', () => {
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
+  queryManager.markGotQueriesAuthoritative();
   watchCallback([
     {
       op: 'add',
@@ -1299,7 +1305,7 @@ test('gotCallback, query already got', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCallback1 = vi.fn<(got: boolean) => void>();
+  const gotCallback1 = vi.fn<GotCallback>();
   const ttl = 200;
   queryManager.addLegacy(ast, ttl, gotCallback1);
   queryManager.flushBatch();
@@ -1329,7 +1335,7 @@ test('gotCallback, query already got', () => {
 
   expect(gotCallback1).nthCalledWith(1, true);
 
-  const gotCallback2 = vi.fn<(got: boolean) => void>();
+  const gotCallback2 = vi.fn<GotCallback>();
   queryManager.addLegacy(ast, ttl, gotCallback2);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
@@ -1339,7 +1345,7 @@ test('gotCallback, query already got', () => {
 });
 
 test('gotCallback, query got after add', () => {
-  const queryHash = '12hwg3ihkijhm';
+  const queryHash = '12fshk4151m9cn';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
@@ -1358,13 +1364,14 @@ test('gotCallback, query got after add', () => {
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
+  queryManager.markGotQueriesAuthoritative();
 
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean) => void>();
+  const gotCalback1 = vi.fn<GotCallback>();
   const ttl = 'forever';
   queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
@@ -1406,7 +1413,7 @@ test('gotCallback, query got after add', () => {
 });
 
 test('gotCallback, query got after add then removed', () => {
-  const queryHash = '12hwg3ihkijhm';
+  const queryHash = '12fshk4151m9cn';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
@@ -1425,13 +1432,14 @@ test('gotCallback, query got after add then removed', () => {
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
+  queryManager.markGotQueriesAuthoritative();
 
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean) => void>();
+  const gotCalback1 = vi.fn<GotCallback>();
   const ttl = 100;
   queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
@@ -1483,7 +1491,7 @@ test('gotCallback, query got after add then removed', () => {
 });
 
 test('gotCallback, query got after subscription removed', () => {
-  const queryHash = '12hwg3ihkijhm';
+  const queryHash = '12fshk4151m9cn';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(q: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
@@ -1508,7 +1516,7 @@ test('gotCallback, query got after subscription removed', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean) => void>();
+  const gotCalback1 = vi.fn<GotCallback>();
   const ttl = 50;
   const remove = queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
@@ -1598,7 +1606,7 @@ describe('queriesPatch with lastPatch', () => {
           table: 'issues',
           ...normalizingFields,
         },
-        hash: '12hwg3ihkijhm',
+        hash: '12fshk4151m9cn',
         op: 'put',
         ttl: MAX_TTL_MS,
       },
@@ -1638,13 +1646,13 @@ describe('queriesPatch with lastPatch', () => {
       testReadTransaction,
       new Map([
         [
-          '12hwg3ihkijhm',
+          '12fshk4151m9cn',
           {
             ast: {
               orderBy: [['id', 'asc']],
               table: 'issues',
             },
-            hash: '12hwg3ihkijhm',
+            hash: '12fshk4151m9cn',
             op: 'put',
           },
         ],
@@ -1658,13 +1666,13 @@ describe('queriesPatch with lastPatch', () => {
       testReadTransaction,
       new Map([
         [
-          '12hwg3ihkijhm',
+          '12fshk4151m9cn',
           {
             ast: {
               orderBy: [['id', 'asc']],
               table: 'issues',
             },
-            hash: '12hwg3ihkijhm',
+            hash: '12fshk4151m9cn',
             op: 'put',
           },
         ],
@@ -1672,7 +1680,7 @@ describe('queriesPatch with lastPatch', () => {
     );
     expect([...patch2.values()]).toEqual([
       {
-        hash: '12hwg3ihkijhm',
+        hash: '12fshk4151m9cn',
         op: 'del',
       },
     ]);
@@ -1712,9 +1720,9 @@ describe('query transform errors', () => {
       onFatalErrorMock,
     );
 
-    const gotCallback1 = vi.fn<(got: boolean | Error) => void>();
-    const gotCallback2 = vi.fn<(got: boolean | Error) => void>();
-    const gotCallback1Dupe = vi.fn<(got: boolean | Error) => void>();
+    const gotCallback1 = vi.fn<GotCallback>();
+    const gotCallback2 = vi.fn<GotCallback>();
+    const gotCallback1Dupe = vi.fn<GotCallback>();
 
     queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback1);
     // duplicate addition of same query
@@ -1722,7 +1730,7 @@ describe('query transform errors', () => {
     queryManager.addCustom(stubAst, nameAndArgs2, 0, gotCallback2);
     queryManager.flushBatch();
 
-    function checkInitialGots(cb: Mock<(got: boolean | Error) => void>) {
+    function checkInitialGots(cb: Mock<GotCallback>) {
       expect(cb).toBeCalledTimes(1);
       expect(cb).toBeCalledWith(false);
     }
@@ -1742,7 +1750,7 @@ describe('query transform errors', () => {
     // set an error
     queryManager.handleTransformErrors([err]);
 
-    function checkFinalGots(cb: Mock<(got: boolean | Error) => void>) {
+    function checkFinalGots(cb: Mock<GotCallback>) {
       expect(cb).toBeCalledTimes(2);
       expect(cb).nthCalledWith(2, false, err);
     }
@@ -1781,8 +1789,8 @@ describe('query transform errors', () => {
       onFatalErrorMock,
     );
 
-    const gotCallback1 = vi.fn<(got: boolean | Error) => void>();
-    const gotCallback2 = vi.fn<(got: boolean | Error) => void>();
+    const gotCallback1 = vi.fn<GotCallback>();
+    const gotCallback2 = vi.fn<GotCallback>();
 
     queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback1);
     queryManager.addCustom(stubAst, nameAndArgs2, 0, gotCallback2);
@@ -1919,7 +1927,7 @@ describe('query transform errors', () => {
 });
 
 test('gotCallback, add same got callback twice', () => {
-  const queryHash = '12hwg3ihkijhm';
+  const queryHash = '12fshk4151m9cn';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
@@ -1938,13 +1946,14 @@ test('gotCallback, add same got callback twice', () => {
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
+  queryManager.markGotQueriesAuthoritative();
 
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
-  const gotCallback = vi.fn<(got: boolean) => void>();
+  const gotCallback = vi.fn<GotCallback>();
   const rem1 = queryManager.addLegacy(ast, -1, gotCallback);
   queryManager.flushBatch();
   expect(gotCallback).toBeCalledTimes(1);
@@ -2265,7 +2274,7 @@ describe('update clamps TTL correctly', () => {
         desiredQueriesPatch: [
           {
             op: 'put',
-            hash: '12hwg3ihkijhm',
+            hash: '12fshk4151m9cn',
             ast: {
               table: 'issues',
               where: undefined,
@@ -2297,7 +2306,7 @@ describe('update clamps TTL correctly', () => {
         desiredQueriesPatch: [
           {
             op: 'put',
-            hash: '2l1ig6e3tnu0a',
+            hash: '0c5kpya05ymm4b',
             name: 'customQuery',
             args: [1],
             ttl: 120000, // Clamped TTL value
@@ -2329,7 +2338,7 @@ describe('update clamps TTL correctly', () => {
         desiredQueriesPatch: [
           {
             op: 'put',
-            hash: '12hwg3ihkijhm',
+            hash: '12fshk4151m9cn',
             ast: {
               table: 'issues',
               where: undefined,
@@ -2365,7 +2374,7 @@ describe('update clamps TTL correctly', () => {
         desiredQueriesPatch: [
           {
             op: 'put',
-            hash: '2l1ig6e3tnu0a',
+            hash: '0c5kpya05ymm4b',
             name: 'customQuery',
             args: [1],
             ttl: MAX_TTL_MS, // Already at max TTL
@@ -2401,5 +2410,348 @@ test('Getting the AST of custom query', () => {
   const queryID = hashOfNameAndArgs('customQuery', [1]);
   expect(queryManager.getAST(queryID)).toEqual({
     table: 'issue',
+  });
+});
+
+// Regression test for https://bugs.rocicorp.dev/p/zero/issue/3796
+// A query that is 'got' in the persisted (IndexedDB) state must NOT be reported
+// as got/complete until the server has reconciled that state on (re)connect,
+// because the query may have been evicted server-side in the meantime.
+describe('gotCallback, persisted got is not trusted until authoritative', () => {
+  const queryHash = '12fshk4151m9cn';
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+  };
+
+  function setup() {
+    const experimentalWatch = createExperimentalWatchMock();
+    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const queryManager = new QueryManager(
+      lc,
+      mutationTracker,
+      'client1',
+      schema.tables,
+      send,
+      experimentalWatch,
+      0,
+      queryChangeThrottleMs,
+      slowMaterializeThreshold,
+      onFatalError,
+    );
+    const watchCallback = experimentalWatch.mock.calls[0][0];
+    // Simulate bootstrapping from IndexedDB state S1 in which the query is got.
+    watchCallback([
+      {
+        op: 'add',
+        key: toGotQueriesKey(queryHash) as string & IndexKey,
+        newValue: 'unused',
+      },
+    ]);
+    return {queryManager, watchCallback};
+  }
+
+  test('subscribing before authoritative reports cached, then re-derives', () => {
+    const {queryManager} = setup();
+
+    // In the persisted got set, but not yet authoritative -> reported cached,
+    // never got.
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addLegacy(ast, 200, gotCallback);
+    expect(gotCallback).toBeCalledTimes(1);
+    expect(gotCallback).nthCalledWith(1, 'cached');
+
+    // First poke after connect, query is still got, so it is re-derived.
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).toBeCalledTimes(2);
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+
+  test('query evicted before authoritative is never reported got (the race)', () => {
+    const {queryManager, watchCallback} = setup();
+
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addLegacy(ast, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, 'cached');
+
+    // The catch-up poke (state S2) reveals the query was evicted server-side.
+    watchCallback([
+      {
+        op: 'del',
+        key: toGotQueriesKey(queryHash) as string & IndexKey,
+        oldValue: 'unused',
+      },
+    ]);
+
+    // The bug: becoming authoritative must NOT report the evicted query as got
+    // (previously the stale persisted got made it 'complete' with empty rows).
+    queryManager.markGotQueriesAuthoritative();
+    expect(
+      gotCallback.mock.calls.slice(1).every(([got]) => got === false),
+    ).toBe(true);
+    const callsBeforeRefetch = gotCallback.mock.calls.length;
+
+    // When the server re-gets the query (state S3) it is finally reported got.
+    watchCallback([
+      {
+        op: 'add',
+        key: toGotQueriesKey(queryHash) as string & IndexKey,
+        newValue: 'unused',
+      },
+    ]);
+    expect(gotCallback).toBeCalledTimes(callsBeforeRefetch + 1);
+    expect(gotCallback).nthCalledWith(callsBeforeRefetch + 1, true);
+  });
+
+  test('disconnect re-gates trust for new subscriptions', () => {
+    const {queryManager} = setup();
+    queryManager.markGotQueriesAuthoritative();
+
+    // After disconnect the persisted got must not be trusted again until the
+    // next connect reconciles it.
+    queryManager.clearGotQueriesAuthoritative();
+
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addLegacy(ast, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, 'cached');
+
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+});
+
+// A persisted got key is reported as 'cached' before the server has reconciled
+// the got set: the store holds the server-confirmed complete result from a
+// previous session. It never counts as got === true; only the first applied
+// poke does.
+describe('gotCallback, persisted got is cached until authoritative', () => {
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+  };
+  const nameAndArgs = {name: 'issueList', args: [1]};
+  const queryHash = hashOfNameAndArgs(nameAndArgs.name, nameAndArgs.args);
+  const gotKey = toGotQueriesKey(queryHash) as string & IndexKey;
+  const gotAdd = {op: 'add', key: gotKey, newValue: null} as const;
+
+  function setup() {
+    const experimentalWatch = createExperimentalWatchMock();
+    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const queryManager = new QueryManager(
+      lc,
+      mutationTracker,
+      'client1',
+      schema.tables,
+      send,
+      experimentalWatch,
+      0,
+      queryChangeThrottleMs,
+      slowMaterializeThreshold,
+      onFatalError,
+    );
+    const watchCallback = experimentalWatch.mock.calls[0][0];
+    return {queryManager, watchCallback};
+  }
+
+  test('got set loaded after registration: cached, then complete on first poke', () => {
+    const {queryManager, watchCallback} = setup();
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, false);
+
+    watchCallback([gotAdd]);
+    expect(gotCallback).toBeCalledTimes(2);
+    expect(gotCallback).nthCalledWith(2, 'cached');
+
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).toBeCalledTimes(3);
+    expect(gotCallback).nthCalledWith(3, true);
+  });
+
+  test('got set loaded before registration: cached synchronously at add', () => {
+    const {queryManager, watchCallback} = setup();
+    watchCallback([gotAdd]);
+
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).toBeCalledTimes(1);
+    expect(gotCallback).nthCalledWith(1, 'cached');
+
+    // A second subscriber to the same query sees the same claim.
+    const gotCallback2 = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback2);
+    expect(gotCallback2).nthCalledWith(1, 'cached');
+  });
+
+  test('a got key added by the first poke is confirmed, not cached', () => {
+    const {queryManager, watchCallback} = setup();
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, false);
+
+    // Nothing persisted from a previous session.
+    watchCallback([]);
+    // The first poke of the connection carries the got put; the watch fires
+    // while it is applied.
+    watchCallback([gotAdd]);
+    expect(gotCallback).toBeCalledTimes(1);
+
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).toBeCalledTimes(2);
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+
+  test('a got key added by another tab is not a cached claim', () => {
+    const {queryManager, watchCallback} = setup();
+    watchCallback([]);
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    watchCallback([gotAdd]);
+    expect(gotCallback.mock.calls).toEqual([[false]]);
+    // A later registration agrees: the key was not persisted by a previous
+    // session, so it is not a claim for anyone until this connection
+    // confirms it.
+    const gotCallback2 = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback2);
+    expect(gotCallback2.mock.calls).toEqual([[false]]);
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
+    expect(gotCallback2).nthCalledWith(2, true);
+  });
+
+  test('disconnecting before the first poke does not promote live keys', () => {
+    const {queryManager, watchCallback} = setup();
+    watchCallback([]);
+    // Another tab's refresh adds the key while this connection has not yet
+    // confirmed the got set.
+    watchCallback([gotAdd]);
+    queryManager.clearGotQueriesAuthoritative();
+
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback.mock.calls).toEqual([[false]]);
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+
+  test('a subscriber unregistering during dispatch does not skip the next', () => {
+    const {queryManager, watchCallback} = setup();
+    let remove = () => {};
+    const first = vi.fn<GotCallback>(got => {
+      if (got === 'cached') {
+        remove();
+      }
+    });
+    const second = vi.fn<GotCallback>();
+    remove = queryManager.addCustom(ast, nameAndArgs, 200, first);
+    queryManager.addCustom(ast, nameAndArgs, 200, second);
+
+    watchCallback([gotAdd]);
+    expect(first).nthCalledWith(2, 'cached');
+    expect(second).nthCalledWith(2, 'cached');
+  });
+
+  test('a throwing subscriber does not starve the others of the same query', () => {
+    const {queryManager, watchCallback} = setup();
+    const throwing = vi.fn<GotCallback>(got => {
+      if (got !== false) {
+        throw new Error('listener failed');
+      }
+    });
+    const other = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, throwing);
+    queryManager.addCustom(ast, nameAndArgs, 200, other);
+
+    expect(() => watchCallback([gotAdd])).toThrow('listener failed');
+    expect(other).nthCalledWith(2, 'cached');
+
+    expect(() => queryManager.markGotQueriesAuthoritative()).toThrow(
+      'listener failed',
+    );
+    expect(other).nthCalledWith(3, true);
+  });
+
+  test('a throwing got callback does not leave the persisted diff pending', () => {
+    const {queryManager, watchCallback} = setup();
+    const throwing = vi.fn<GotCallback>(got => {
+      if (got === 'cached') {
+        throw new Error('listener failed');
+      }
+    });
+    queryManager.addCustom(ast, nameAndArgs, 200, throwing);
+    const other = {name: 'other', args: []};
+    const otherKey = toGotQueriesKey(
+      hashOfNameAndArgs(other.name, other.args),
+    ) as string & IndexKey;
+    const otherCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, other, 200, otherCallback);
+
+    // The rest of the persisted diff is still applied before the error
+    // surfaces: the other key is a claim too.
+    expect(() =>
+      watchCallback([gotAdd, {op: 'add', key: otherKey, newValue: null}]),
+    ).toThrow('listener failed');
+    expect(otherCallback).nthCalledWith(2, 'cached');
+
+    // The next diff is live, not the persisted set.
+    const third = {name: 'third', args: []};
+    const thirdCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, third, 200, thirdCallback);
+    watchCallback([
+      {
+        op: 'add',
+        key: toGotQueriesKey(
+          hashOfNameAndArgs(third.name, third.args),
+        ) as string & IndexKey,
+        newValue: null,
+      },
+    ]);
+    expect(thirdCallback.mock.calls).toEqual([[false]]);
+    queryManager.markGotQueriesAuthoritative();
+    expect(thirdCallback).nthCalledWith(2, true);
+  });
+
+  test('eviction before the first poke reverts cached to not-got', () => {
+    const {queryManager, watchCallback} = setup();
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    watchCallback([gotAdd]);
+    expect(gotCallback).nthCalledWith(2, 'cached');
+
+    // The catch-up poke reveals the query was evicted server-side.
+    watchCallback([{op: 'del', key: gotKey, oldValue: null}]);
+    expect(gotCallback).toBeCalledTimes(3);
+    expect(gotCallback).nthCalledWith(3, false);
+
+    queryManager.markGotQueriesAuthoritative();
+    expect(
+      gotCallback.mock.calls.slice(2).every(([got]) => got === false),
+    ).toBe(true);
+  });
+
+  test('once authoritative, a got key is complete, not cached', () => {
+    const {queryManager, watchCallback} = setup();
+    watchCallback([]);
+    queryManager.markGotQueriesAuthoritative();
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    watchCallback([gotAdd]);
+    expect(gotCallback.mock.calls).toEqual([[false], [true]]);
+  });
+
+  test('after disconnect, a new subscription is cached again until reconciled', () => {
+    const {queryManager, watchCallback} = setup();
+    queryManager.addCustom(ast, nameAndArgs, 200);
+    watchCallback([gotAdd]);
+    queryManager.markGotQueriesAuthoritative();
+    queryManager.clearGotQueriesAuthoritative();
+
+    const gotCallback = vi.fn<GotCallback>();
+    queryManager.addCustom(ast, nameAndArgs, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, 'cached');
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
   });
 });

@@ -217,22 +217,22 @@ export async function refresh(
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
         if (newMemdagMutations.length > 0) {
-          const zeroData = await zero?.getTxData?.(newMemdagHeadHash, {
+          let zeroData = await zero?.getTxData?.(newMemdagHeadHash, {
             openLazyRead: memdagWrite,
           });
           for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
-            newMemdagHeadHash = (
-              await rebaseMutationAndPutCommit(
-                newMemdagMutations[i],
-                memdagWrite,
-                newMemdagHeadHash,
-                mutators,
-                lc,
-                newMemdagMutations[i].meta.clientID,
-                formatVersion,
-                zeroData,
-              )
-            ).chunk.hash;
+            const {result, zeroData: next} = await rebaseMutationAndPutCommit(
+              newMemdagMutations[i],
+              memdagWrite,
+              newMemdagHeadHash,
+              mutators,
+              lc,
+              newMemdagMutations[i].meta.clientID,
+              formatVersion,
+              zeroData,
+            );
+            newMemdagHeadHash = result.chunk.hash;
+            zeroData = next;
           }
         }
 

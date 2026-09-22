@@ -72,7 +72,7 @@ export function compareValues(a: Value, b: Value): number {
     );
   }
 
-  throw new Error(`Unsupported type: ${a}`);
+  throw new Error(`Unsupported type: ${typeof a}`);
 }
 
 export type NormalizedValue = Exclude<Value, undefined>;
@@ -89,11 +89,24 @@ export function normalizeUndefined(v: Value): NormalizedValue {
 export type Comparator = (r1: Row, r2: Row) => number;
 
 export function makeComparator(order: Ordering, reverse?: boolean): Comparator {
+  // A single ascending field is the common shape -- it is what every source
+  // ordered by a single-column primary key gets -- and specializing it drops
+  // the loop, the direction test and the reverse test from the hottest
+  // function in hydration.
+  if (order.length === 1 && order[0][1] === 'asc' && !reverse) {
+    const field = order[0][0];
+    return (a, b) => compareValues(a[field], b[field]);
+  }
+
+  const length = order.length;
   return (a, b) => {
-    // Skip destructuring here since it is hot code.
-    for (const ord of order) {
-      const field = ord[0];
-      const comp = compareValues(a[field], b[field]);
+    // Skip destructuring here since it is hot code. An indexed loop rather
+    // than `for...of` for the same reason: Hermes allocates an iterator and
+    // calls `next()` per element, which costs more than the comparison for an
+    // ordering this short.
+    for (let i = 0; i < length; i++) {
+      const ord = order[i];
+      const comp = compareValues(a[ord[0]], b[ord[0]]);
       if (comp !== 0) {
         const result = ord[1] === 'asc' ? comp : -comp;
         return reverse ? -result : result;

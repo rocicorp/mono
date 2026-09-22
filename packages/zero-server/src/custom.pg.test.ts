@@ -68,6 +68,17 @@ describe('makeSchemaCRUD', () => {
     type: 'user' as const,
   };
 
+  const textRepresentedScalarRow = {
+    id: '9780306406157',
+    ip: '192.168.0.1/24',
+    mac: '08:00:2b:01:02:03',
+    title: 'initial',
+  };
+  const textRepresentedScalarCanonicalRow = {
+    ...textRepresentedScalarRow,
+    id: '978-0-306-40615-7',
+  };
+
   test('insert', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);
@@ -106,6 +117,30 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'uuidAndEnum', [uuidAndEnumRow]),
         checkDb(tx, 'alternate_schema.basic', [basicRow]),
       ]);
+    });
+  });
+
+  test('insert on an existing primary key is a no-op', async () => {
+    await pg.begin(async tx => {
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
+      await crud.basic.insert({id: '1', a: 2, b: 'foo', c: true});
+      await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]);
+
+      // Re-inserting the same primary key with different values must not throw
+      // and must leave the existing row unchanged (skip-if-exists), matching the
+      // optimistic client behavior.
+      await crud.basic.insert({id: '1', a: 999, b: 'bar', c: false});
+      await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]);
+
+      // Same for a compound primary key.
+      await crud.compoundPk.insert({a: 'a', b: 1, c: 'c'});
+      await crud.compoundPk.insert({a: 'a', b: 1, c: 'different'});
+      await checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]);
     });
   });
 
@@ -157,6 +192,44 @@ describe('makeSchemaCRUD', () => {
     });
   });
 
+  test('update and upsert allow concurrent foreign key inserts', async () => {
+    await pg`
+      CREATE TABLE basic_refs (
+        id TEXT PRIMARY KEY,
+        basic_id TEXT NOT NULL REFERENCES basic(id)
+      )
+    `;
+    await pg`INSERT INTO basic (id, a, b) VALUES ('1', 1, 'one')`;
+
+    const assertAllowsForeignKeyInsert = async (
+      id: string,
+      operation: (crud: SchemaCRUD<typeof schema>) => Promise<void>,
+    ) => {
+      await pg.begin(async tx => {
+        const transaction = new Transaction(tx);
+        const crud = crudProvider(
+          transaction,
+          await getServerSchema(transaction, schema),
+        );
+        await operation(crud);
+
+        await pg.begin(async concurrent => {
+          await concurrent.unsafe(`SET LOCAL lock_timeout = '100ms'`);
+          await concurrent`
+            INSERT INTO basic_refs (id, basic_id) VALUES (${id}, '1')
+          `;
+        });
+      });
+    };
+
+    await assertAllowsForeignKeyInsert('update', crud =>
+      crud.basic.update({id: '1', b: 'updated'}),
+    );
+    await assertAllowsForeignKeyInsert('upsert', crud =>
+      crud.basic.upsert({id: '1', a: 2, b: 'upserted'}),
+    );
+  });
+
   test('insert/update/upsert with nullable array columns preserves null', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);
@@ -179,6 +252,48 @@ describe('makeSchemaCRUD', () => {
 
       await crud.arrayCases.upsert({id: '1', tags: null});
       await checkDb(tx, 'arrayCases', [{id: '1', tags: null}]);
+    });
+  });
+
+  test('insert/update/upsert/delete with text-represented scalar columns', async () => {
+    await pg.begin(async tx => {
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
+      await crud.textRepresentedScalars.insert(textRepresentedScalarRow);
+      await checkDb(tx, 'textRepresentedScalars', [
+        textRepresentedScalarCanonicalRow,
+      ]);
+
+      const updatedRow = {
+        ...textRepresentedScalarRow,
+        ip: '192.168.0.2/24',
+        mac: '08:00:2b:01:02:04',
+        title: 'updated',
+      };
+      await crud.textRepresentedScalars.update(updatedRow);
+      await checkDb(tx, 'textRepresentedScalars', [
+        {...updatedRow, id: textRepresentedScalarCanonicalRow.id},
+      ]);
+
+      const upsertedRow = {
+        ...textRepresentedScalarRow,
+        ip: '192.168.0.3/24',
+        mac: '08:00:2b:01:02:05',
+        title: 'upserted',
+      };
+      await crud.textRepresentedScalars.upsert(upsertedRow);
+      await checkDb(tx, 'textRepresentedScalars', [
+        {...upsertedRow, id: textRepresentedScalarCanonicalRow.id},
+      ]);
+
+      await crud.textRepresentedScalars.delete({
+        id: textRepresentedScalarRow.id,
+      });
+      await checkDb(tx, 'textRepresentedScalars', []);
     });
   });
 

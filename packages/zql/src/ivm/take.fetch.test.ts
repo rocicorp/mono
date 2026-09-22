@@ -14,7 +14,12 @@ import type {FetchRequest} from './operator.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import type {Stream} from './stream.ts';
 import {consume} from './stream.ts';
-import {Take, type PartitionKey} from './take.ts';
+import {
+  Take,
+  constraintContainsPartitionKey,
+  constraintMatchesPartitionKey,
+  type PartitionKey,
+} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 
 import {makeSourceChangeAdd} from './source.ts';
@@ -118,10 +123,6 @@ suite('take with no partition', () => {
           },
           "size": 3,
         },
-        "maxBound": {
-          "created": 300,
-          "id": "i3",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -189,10 +190,6 @@ suite('take with no partition', () => {
             "id": "i5",
           },
           "size": 5,
-        },
-        "maxBound": {
-          "created": 500,
-          "id": "i5",
         },
       }
     `);
@@ -277,10 +274,6 @@ suite('take with no partition', () => {
           },
           "size": 5,
         },
-        "maxBound": {
-          "created": 500,
-          "id": "i5",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -360,10 +353,6 @@ suite('take with no partition', () => {
             "id": "i1",
           },
           "size": 1,
-        },
-        "maxBound": {
-          "created": 100,
-          "id": "i1",
         },
       }
     `);
@@ -544,6 +533,50 @@ suite('take with partition', () => {
     expect(partitions[1].hydrate).toMatchInlineSnapshot(`[]`);
   });
 
+  test('superset constraint bounds fetch and getBound', () => {
+    const storage = new MemoryStorage();
+    const source = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        labelID: {type: 'string'},
+        created: {type: 'number'},
+      },
+      ['id'],
+    );
+    const input = source.connect([
+      ['created', 'asc'],
+      ['id', 'asc'],
+    ]);
+    const take = new Take(input, storage, 2, ['issueID']);
+    const sink = new Catch(take);
+
+    // Add 3 rows for partition i1
+    const r1 = {id: 'c1', issueID: 'i1', labelID: 'l1', created: 100};
+    const r2 = {id: 'c2', issueID: 'i1', labelID: 'l1', created: 200};
+    const r3 = {id: 'c3', issueID: 'i1', labelID: 'l1', created: 300};
+    consume(source.push(makeSourceChangeAdd(r1)));
+    consume(source.push(makeSourceChangeAdd(r2)));
+    consume(source.push(makeSourceChangeAdd(r3)));
+
+    // Hydrate partition i1
+    consume(sink.fetch({constraint: {issueID: 'i1'}}));
+
+    // Superset constraint {issueID: 'i1', labelID: 'l1'}
+    const supersetConstraint = {issueID: 'i1', labelID: 'l1'};
+    expect(take.getBound(supersetConstraint)).toEqual(r2);
+
+    // Fetch with superset constraint should be bounded at r2, excluding r3
+    const fetched = Array.from(
+      sink.fetch({constraint: supersetConstraint}),
+      n => (n === 'yield' ? 'yield' : (n as {row: Row}).row),
+    );
+    expect(fetched).toEqual([r1, r2]);
+  });
+
   test('less data than limit', () => {
     const {partitions} = takeTest({
       ...base,
@@ -624,11 +657,6 @@ suite('take with partition', () => {
           },
           "size": 3,
         },
-        "maxBound": {
-          "created": 300,
-          "id": "c3",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[1].hydrate).toMatchInlineSnapshot(`
@@ -708,11 +736,6 @@ suite('take with partition', () => {
           },
           "size": 2,
         },
-        "maxBound": {
-          "created": 500,
-          "id": "c5",
-          "issueID": "i2",
-        },
       }
     `);
     expect(partitions[2].hydrate).toMatchInlineSnapshot(`
@@ -788,11 +811,6 @@ suite('take with partition', () => {
           },
           "size": 3,
         },
-        "maxBound": {
-          "created": 300,
-          "id": "c3",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -867,11 +885,6 @@ suite('take with partition', () => {
             "issueID": "i2",
           },
           "size": 3,
-        },
-        "maxBound": {
-          "created": 600,
-          "id": "c6",
-          "issueID": "i2",
         },
       }
     `);
@@ -958,11 +971,6 @@ suite('take with partition', () => {
           },
           "size": 3,
         },
-        "maxBound": {
-          "created": 300,
-          "id": "c3",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -1037,11 +1045,6 @@ suite('take with partition', () => {
             "issueID": "i2",
           },
           "size": 3,
-        },
-        "maxBound": {
-          "created": 600,
-          "id": "c6",
-          "issueID": "i2",
         },
       }
     `);
@@ -1136,11 +1139,6 @@ suite('take with partition', () => {
           },
           "size": 2,
         },
-        "maxBound": {
-          "created": 100,
-          "id": "c2",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[0].hydrate).toMatchInlineSnapshot(`
@@ -1210,11 +1208,6 @@ suite('take with partition', () => {
           },
           "size": 1,
         },
-        "maxBound": {
-          "created": 200,
-          "id": "c4",
-          "issueID": "i1",
-        },
       }
     `);
     expect(partitions[1].hydrate).toMatchInlineSnapshot(`
@@ -1283,11 +1276,6 @@ suite('take with partition', () => {
             "issueID": "i2",
           },
           "size": 2,
-        },
-        "maxBound": {
-          "created": 200,
-          "id": "c4",
-          "issueID": "i1",
         },
       }
     `);
@@ -1374,11 +1362,6 @@ suite('take with partition', () => {
           },
           "size": 2,
         },
-        "maxBound": {
-          "created": 200,
-          "id": "c8",
-          "issueID": "i2",
-        },
       }
     `);
     expect(partitions[3].hydrate).toMatchInlineSnapshot(`
@@ -1403,6 +1386,114 @@ suite('take with partition', () => {
     `);
   });
 });
+
+suite(
+  'constraintMatchesPartitionKey and constraintContainsPartitionKey',
+  () => {
+    test('constraintMatchesPartitionKey requires exact key count', () => {
+      expect(constraintMatchesPartitionKey(undefined, undefined)).toBe(true);
+      expect(constraintMatchesPartitionKey({a: 1}, undefined)).toBe(false);
+      expect(constraintMatchesPartitionKey(undefined, ['a'])).toBe(false);
+      expect(constraintMatchesPartitionKey({a: 1}, ['a'])).toBe(true);
+      // Superset constraint has extra keys: must return false for exact match
+      expect(constraintMatchesPartitionKey({a: 1, b: 2}, ['a'])).toBe(false);
+      // Missing key
+      expect(constraintMatchesPartitionKey({b: 2}, ['a'])).toBe(false);
+    });
+
+    test('constraintContainsPartitionKey allows supersets', () => {
+      expect(constraintContainsPartitionKey(undefined, undefined)).toBe(false);
+      expect(constraintContainsPartitionKey({a: 1}, undefined)).toBe(false);
+      expect(constraintContainsPartitionKey(undefined, ['a'])).toBe(false);
+      expect(constraintContainsPartitionKey({a: 1}, ['a'])).toBe(true);
+      // Superset constraint: must return true
+      expect(constraintContainsPartitionKey({a: 1, b: 2}, ['a'])).toBe(true);
+      expect(constraintContainsPartitionKey({b: 2}, ['a'])).toBe(false);
+    });
+
+    test('partitioned take bounds fetch with superset constraint', () => {
+      const storage = new MemoryStorage();
+      const source = createSource(
+        lc,
+        testLogConfig,
+        'comment',
+        {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          created: {type: 'number'},
+        },
+        ['id'],
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c1', issueID: 'i1', created: 100}),
+        ),
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c2', issueID: 'i1', created: 200}),
+        ),
+      );
+      consume(
+        source.push(
+          makeSourceChangeAdd({id: 'c3', issueID: 'i1', created: 300}),
+        ),
+      );
+
+      const conn = source.connect([
+        ['created', 'asc'],
+        ['id', 'asc'],
+      ]);
+      const take = new Take(conn, storage, 2, ['issueID']);
+
+      // Initial fetch for partition {issueID: 'i1'}
+      const initialRows = [...take.fetch({constraint: {issueID: 'i1'}})];
+      expect(initialRows).toHaveLength(2);
+      expect(initialRows.map(n => (n as Node).row.id)).toEqual(['c1', 'c2']);
+
+      // Downstream join fetches with superset constraint {issueID: 'i1', id: 'c3'}
+      // c3 is beyond the bound (limit 2: c1, c2), so fetch with superset constraint should return empty
+      const supersetBeyondBound = [
+        ...take.fetch({constraint: {issueID: 'i1', id: 'c3'}}),
+      ];
+      expect(supersetBeyondBound).toHaveLength(0);
+
+      // Fetch with superset constraint for a row within the bound
+      const supersetWithinBound = [
+        ...take.fetch({constraint: {issueID: 'i1', id: 'c1'}}),
+      ];
+      expect(supersetWithinBound).toHaveLength(1);
+      expect((supersetWithinBound[0] as Node).row.id).toBe('c1');
+    });
+
+    test('partitioned take asserts that unpartitioned fetches are not allowed', () => {
+      const storage = new MemoryStorage();
+      const source = createSource(
+        lc,
+        testLogConfig,
+        'comment',
+        {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          created: {type: 'number'},
+        },
+        ['id'],
+      );
+      const conn = source.connect([
+        ['created', 'asc'],
+        ['id', 'asc'],
+      ]);
+      const take = new Take(conn, storage, 2, ['issueID']);
+
+      expect(() => [...take.fetch({})]).toThrow(
+        'Partitioned take does not allow unpartitioned fetches',
+      );
+      expect(() => [...take.fetch({constraint: {otherKey: 'val'}})]).toThrow(
+        'Partitioned take does not allow unpartitioned fetches',
+      );
+    });
+  },
+);
 
 function takeTest(t: TakeTest): TakeTestResults {
   const log: SnitchMessage[] = [];

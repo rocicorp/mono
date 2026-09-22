@@ -20,10 +20,39 @@ import {pid} from 'node:process';
 export const MESSAGE_TYPES = {
   handoff: 'handoff',
   status: 'status',
+  clientGroupStatus: 'clientGroupStatus',
   subscribe: 'subscribe',
   notify: 'notify',
   ready: 'ready',
+  backupWatermarkUpdate: 'backupWatermakUpdate',
+  profile: 'profile',
+  profileResponse: 'profileResponse',
 } as const;
+
+export type ClientGroupStatus = {
+  readonly clientGroupID: string;
+  readonly active: boolean;
+  readonly generation?: number | undefined;
+};
+
+export type ClientGroupStatusMessage = ['clientGroupStatus', ClientGroupStatus];
+
+export type ProfileRequest = {
+  readonly id: string;
+  readonly durationMs: number;
+  readonly worker?: string | undefined;
+  readonly workerIndex?: number | undefined;
+};
+
+export type ProfileResponse = {
+  readonly id: string;
+  readonly name: string;
+  readonly profile?: unknown | undefined;
+  readonly error?: string | undefined;
+};
+
+export type ProfileMessage = ['profile', ProfileRequest];
+export type ProfileResponseMessage = ['profileResponse', ProfileResponse];
 
 export type Message<Payload> = [keyof typeof MESSAGE_TYPES, Payload];
 
@@ -37,17 +66,37 @@ function getMessage<M extends Message<unknown>>(
   return null;
 }
 
+/**
+ * Subscribes the `handler` to messages of the given `type` and returns a
+ * function that unsubscribes it. Use this (rather than
+ * {@link Receiver.onMessageType()}) for handlers scoped to a request or
+ * operation rather than to the lifetime of the {@link Worker}; the
+ * `'message'` listener is otherwise retained by the Worker forever.
+ */
+export function subscribeToMessageType<M extends Message<unknown>>(
+  e: EventEmitter,
+  type: M[0],
+  handler: (msg: M[1], sendHandle?: SendHandle) => void,
+): () => void {
+  const listener = (data: unknown, sendHandle?: SendHandle) => {
+    const msg = getMessage(type, data);
+    if (msg) {
+      handler(msg, sendHandle);
+    }
+  };
+  e.on('message', listener);
+  return () => {
+    e.off('message', listener);
+  };
+}
+
 function onMessageType<M extends Message<unknown>>(
   e: EventEmitter,
   type: M[0],
   handler: (msg: M[1], sendHandle?: SendHandle) => void,
 ) {
-  return e.on('message', (data, sendHandle) => {
-    const msg = getMessage(type, data);
-    if (msg) {
-      handler(msg, sendHandle);
-    }
-  });
+  subscribeToMessageType(e, type, handler);
+  return e;
 }
 
 function onceMessageType<M extends Message<unknown>>(
@@ -154,6 +203,34 @@ export function setSingleProcessMode(enabled: boolean = true): void {
 }
 
 /**
+ * Determines whether a module loaded as a worker process entry point should
+ * start its worker.
+ *
+ * Most workers are launched via {@link childWorker}, which in single-process
+ * mode runs them in-process (no real fork) by invoking their exported
+ * `runWorker` directly; those entry points must therefore *not* self-start in
+ * single-process mode, or they would run twice.
+ *
+ * A worker launched via {@link forkChildWorker}, however, is *always* a real
+ * forked OS process — even in single-process mode — and it inherits the
+ * parent's `SINGLE_PROCESS` env. So {@link singleProcessMode} alone would
+ * wrongly suppress its startup, leaving the parent to spin re-forking a child
+ * that immediately exits. Such a forked child has a non-null
+ * {@link parentWorker} (`process.send` is defined), which is the signal to
+ * start regardless. A standalone direct launch (no parent, not single-process)
+ * also starts.
+ *
+ * @param parent The entry point's {@link parentWorker} (non-null iff forked).
+ * @param isSingleProcessMode The result of {@link singleProcessMode}.
+ */
+export function shouldStartWorker(
+  parent: Worker | null,
+  isSingleProcessMode: boolean,
+): boolean {
+  return parent !== null || !isSingleProcessMode;
+}
+
+/**
  *
  * @param modulePath Path to the module file, relative to zero-cache/src/, or an absolute file:// URL
  */
@@ -162,7 +239,7 @@ export function childWorker(
   env?: NodeJS.ProcessEnv,
   ...args: string[]
 ): Worker {
-  args.push(...process.argv.slice(2));
+  args = workerArgs(args);
 
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
@@ -180,6 +257,26 @@ export function childWorker(
       .catch(err => child.emit('error', err));
     return child;
   }
+  return forkChildWorkerWithArgs(moduleUrl, env, args);
+}
+
+export function forkChildWorker(
+  moduleUrl: URL,
+  env?: NodeJS.ProcessEnv,
+  ...args: string[]
+): Worker {
+  return forkChildWorkerWithArgs(moduleUrl, env, workerArgs(args));
+}
+
+function workerArgs(args: string[]): string[] {
+  return [...args, ...process.argv.slice(2)];
+}
+
+function forkChildWorkerWithArgs(
+  moduleUrl: URL,
+  env: NodeJS.ProcessEnv | undefined,
+  args: string[],
+): Worker {
   const child = fork(moduleUrl, args, {
     // For production / non-windows, set `detached` to `true` so that SIGINT is
     // not automatically propagated and graceful shutdown happens as intended.
@@ -232,4 +329,43 @@ export function inProcChannel(): [Worker, Worker] {
       Object.assign(worker2, {send: sendTo(worker1), kill: kill(worker1), pid}),
     ),
   ];
+}
+
+/**
+ * Creates a {@link Worker} facade that broadcasts `send()` to all provided
+ * workers and aggregates their `'message'` events into one stream.
+ *
+ * This is useful for code that expects a single Worker for IPC (e.g.
+ * `handleProfzRequest`) but needs to reach multiple child workers.
+ */
+export function broadcastWorker(workers: Worker[]): Worker {
+  const emitter = new EventEmitter();
+
+  for (const w of workers) {
+    w.on('message', (message: Serializable, sendHandle?: SendHandle) =>
+      emitter.emit('message', message, sendHandle),
+    );
+  }
+
+  const send = <M extends Message<unknown>>(
+    message: M,
+    sendHandle?: SendHandle,
+    callback?: (error: Error | null) => void,
+  ) => {
+    for (const w of workers) {
+      w.send(message, sendHandle);
+    }
+    if (callback) {
+      callback(null);
+    }
+    return true;
+  };
+
+  const kill = (signal: NodeJS.Signals = 'SIGTERM') => {
+    for (const w of workers) {
+      w.kill(signal);
+    }
+  };
+
+  return wrap(Object.assign(emitter, {send, kill, pid}));
 }

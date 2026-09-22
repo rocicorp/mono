@@ -1,3 +1,4 @@
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {randomUint64} from '../../shared/src/random-uint64.ts';
 import {
@@ -5,9 +6,10 @@ import {
   type TestDataObject,
 } from '../../shared/src/test-data.ts';
 import type {Writable} from '../../shared/src/writable.ts';
+import {getKVStoreProvider} from './get-kv-store-provider.ts';
 import {ReplicacheImpl} from './impl.ts';
 import type {IndexDefinitions} from './index-defs.ts';
-import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
+import type {StoreProvider} from './kv/store.ts';
 import type {PatchOperation} from './patch-operation.ts';
 import type {ReplicacheOptions} from './replicache-options.ts';
 import type {WriteTransaction} from './transactions.ts';
@@ -17,12 +19,33 @@ export {ReplicacheImpl};
 
 export const valSize = 1024;
 
+/**
+ * The key/value store every benchmark rep is created with. Defaults to `'idb'`
+ * so the browser perf harness is unchanged; React Native sets an
+ * expo-sqlite/op-sqlite {@link StoreProvider} (or `'mem'`) before running.
+ */
+let benchKVStore: 'mem' | 'idb' | StoreProvider | undefined = 'idb';
+
+export function setBenchKVStore(
+  kvStore: 'mem' | 'idb' | StoreProvider | undefined,
+): void {
+  benchKVStore = kvStore;
+}
+
+export function getBenchKVStore(): 'mem' | 'idb' | StoreProvider | undefined {
+  return benchKVStore;
+}
+
+function benchKVStoreProvider(): StoreProvider {
+  return getKVStoreProvider(new LogContext(), benchKVStore);
+}
+
 export class ReplicachePerfTest<
   MD extends MutatorDefs,
 > extends ReplicacheImpl<MD> {
   constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
     super(
-      {...options},
+      {...options, kvStore: options.kvStore ?? benchKVStore},
       {
         enableMutationRecovery: false,
         enableScheduledRefresh: false,
@@ -48,20 +71,44 @@ export function makeRep<MD extends MutatorDefs>(
   } as Omit<ReplicacheOptions<MD>, 'licenseKey'>);
 }
 
+/**
+ * Payload for the benchmark mutators, handed over out of band rather than as
+ * mutator arguments.
+ *
+ * A local mutation stores its arguments in the commit as `mutatorArgsJSON` so
+ * the mutation can be rebased, and `persist` then serializes that to disk.
+ * Passing the dataset as an argument therefore made every benchmark write its
+ * own test data twice — measured on device, roughly half of what
+ * `persist 1024x1000` serialized was the harness handing itself its data, not
+ * storage work. Real mutations take small arguments; these now do too.
+ *
+ * Set these outside the timed region, exactly where the data used to be
+ * generated.
+ */
+let populateValues: readonly TestDataObject[] = [];
+
+export function setPopulateValues(values: readonly TestDataObject[]): void {
+  populateValues = values;
+}
+
 export async function populate(
   tx: WriteTransaction,
-  {numKeys, randomValues}: {numKeys: number; randomValues: TestDataObject[]},
+  {numKeys}: {numKeys: number},
 ): Promise<void> {
   for (let i = 0; i < numKeys; i++) {
-    await tx.set(`key${i}`, randomValues[i]);
+    await tx.set(`key${i}`, populateValues[i]);
   }
 }
 
-export async function putMap(
-  tx: WriteTransaction,
-  map: Record<string, TestDataObject>,
-): Promise<void> {
-  for (const [key, value] of Object.entries(map)) {
+/** See {@link setPopulateValues} for why this is not a mutator argument. */
+let putMapEntries: Record<string, TestDataObject> = {};
+
+export function setPutMapEntries(map: Record<string, TestDataObject>): void {
+  putMapEntries = map;
+}
+
+export async function putMap(tx: WriteTransaction): Promise<void> {
+  for (const [key, value] of Object.entries(putMapEntries)) {
     await tx.set(key, value);
   }
 }
@@ -96,7 +143,7 @@ export async function closeAndCleanupRep(
 ): Promise<void> {
   if (rep) {
     await rep.close();
-    await dropIDBStoreWithMemFallback(rep.idbName);
+    await benchKVStoreProvider().drop(rep.idbName);
   }
 }
 

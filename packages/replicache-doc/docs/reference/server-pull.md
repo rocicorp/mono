@@ -114,9 +114,7 @@ The response body is a JSON object of the [`PullResponse`](/api/type-aliases/Pul
 
 ```ts
 export type PullResponse =
-  | PullResponseOK
-  | ClientStateNotFoundResponse
-  | VersionNotSupportedResponse;
+  PullResponseOK | ClientStateNotFoundResponse | VersionNotSupportedResponse;
 
 export type PullResponseOK = {
   cookie: Cookie;

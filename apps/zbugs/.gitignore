@@ -30,3 +30,7 @@ zero-schema.json
 *.db-shm
 *.db-wal
 *.db-wal2
+
+# rmv2 local soak (scripts/build-litestream.sh, scripts/rmv2-soak.ts)
+.litestream/
+.soak/

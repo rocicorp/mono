@@ -1,0 +1,539 @@
+import {mkdirSync} from 'node:fs';
+import {writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {inspect} from 'node:util';
+import {startSyntheticClients, type SyntheticClient} from './client.ts';
+import {
+  CloudZeroMetricsPoller,
+  type CloudZeroMetricsSummary,
+} from './cloudzero-metrics.ts';
+import {appPath, loadConfig, type BenchmarkConfig} from './config.ts';
+import {
+  connectBenchmarkDB,
+  resetBenchmarkDatabase,
+  waitForPostgres,
+} from './db.ts';
+import {OTelMetricsCollector} from './metrics.ts';
+import {
+  analyzeProfileQueries,
+  queryPlanAnalysisLogPath,
+  removeReplicaFiles,
+  startAppServer,
+  startPostgres,
+  startZeroTopology,
+  stopPostgres,
+  waitForAppServer,
+  waitForZeroCache,
+  type ProcessCommand,
+} from './processes.ts';
+import {
+  buildResult,
+  resultOutputPath,
+  sampleMetrics,
+  writeResult,
+  type BenchmarkResult,
+  type MetricSample,
+} from './results.ts';
+import {formatDuration, log, warn, sleep} from './util.ts';
+import {
+  effectiveWriteConcurrency,
+  FixedRateWriter,
+  type WriterStats,
+} from './writer.ts';
+
+async function main(): Promise<void> {
+  const config = loadConfig();
+  const cleanup = new CleanupStack();
+  const processes: ProcessCommand[] = [];
+  let clients: SyntheticClient[] = [];
+  let result: BenchmarkResult | undefined;
+  let outputPath: string | undefined;
+  let error: unknown;
+
+  const onSigint = () => {
+    warn('Interrupted. Cleaning up benchmark processes...');
+    void cleanup.run().finally(() => process.exit(130));
+  };
+  process.once('SIGINT', onSigint);
+
+  try {
+    log(
+      `zero-throughput ${config.profile}:${config.model} run ${config.runID}`,
+    );
+    log(`Results will be written to ${resultOutputPath(config)}`);
+
+    const metricsCollector = new OTelMetricsCollector();
+    await metricsCollector.start();
+    cleanup.push(() => metricsCollector.stop());
+
+    let cloudzeroPoller: CloudZeroMetricsPoller | undefined;
+    if (config.cloudzero) {
+      log(
+        `Starting CloudZero metrics poller for stack ${config.cloudzero.stackId}...`,
+      );
+      cloudzeroPoller = new CloudZeroMetricsPoller({
+        metricsUrl: config.cloudzero.metricsUrl,
+        apiKey: config.cloudzero.apiKey,
+        stackId: config.cloudzero.stackId,
+      });
+      cloudzeroPoller.start();
+      cleanup.push(async () => {
+        await cloudzeroPoller?.stop();
+      });
+    }
+
+    if (config.pg.start) {
+      log('Starting PostgreSQL...');
+      processes.push(await startPostgres());
+      if (config.pg.stopAfterRun) {
+        cleanup.push(() => stopPostgres());
+      }
+    }
+
+    log('Waiting for PostgreSQL...');
+    await waitForPostgres(config.pg.url, config.pg.readyTimeoutMs);
+    const concurrency = effectiveWriteConcurrency(config);
+    const sql = connectBenchmarkDB(
+      config.pg.url,
+      Math.max(20, concurrency * 2),
+    );
+    cleanup.push(() => sql.end({timeout: 2}));
+
+    if (config.cleanup && config.resetMode !== 'none') {
+      cleanup.push(async () => {
+        log(`Cleaning up benchmark database (${config.resetMode})...`);
+        try {
+          await Promise.race([
+            resetBenchmarkDatabase(sql, config),
+            sleep(15000).then(() => {
+              throw new Error('Database cleanup timed out after 15s');
+            }),
+          ]);
+        } catch (err) {
+          warn(`Database cleanup failed: ${String(err)}`);
+        }
+        if (config.resetMode === 'all') {
+          await removeReplicaFiles(config.zero.replicaFile);
+        }
+      });
+    }
+
+    if (config.resetMode !== 'none') {
+      log(`Resetting benchmark database (${config.resetMode})...`);
+      await resetBenchmarkDatabase(sql, config);
+      if (config.resetMode === 'all') {
+        await removeReplicaFiles(config.zero.replicaFile);
+      }
+    }
+
+    if (config.zero.start) {
+      log(`Starting app server on port ${config.appServerPort}...`);
+      const appServer = startAppServer(config);
+      processes.push(appServer);
+      cleanup.push(() => appServer.stop());
+      if (appServer.logPath !== undefined) {
+        log(`app-server logs: ${appServer.logPath}`);
+      }
+      await waitForAppServer(config.appServerPort, 30_000, appServer);
+    }
+
+    if (config.zero.start) {
+      log(
+        `Starting zero topology (${config.topology}${config.topology === 'distributed' ? `, ${config.numViewSyncers} VS, 1 RM` : ''})...`,
+      );
+      const topology = await startZeroTopology(
+        config,
+        metricsCollector.endpoint,
+      );
+      processes.push(...topology.processes);
+      cleanup.push(() => topology.stop());
+      for (const p of topology.processes) {
+        if (p.logPath !== undefined) {
+          log(`${p.name} logs: ${p.logPath}`);
+        }
+      }
+
+      log('Waiting for zero-cache instances...');
+      for (let i = 0; i < topology.readyURLs.length; i++) {
+        const url = topology.readyURLs[i];
+        const proc =
+          topology.processes.find(p => p.name === `vs-${i}`) ??
+          topology.processes[0];
+        await waitForZeroCache(url, config.zero.readyTimeoutMs, proc);
+      }
+    }
+
+    if (config.topology === 'single') {
+      log('Analyzing profile query plans...');
+      log(`query-plan logs: ${queryPlanAnalysisLogPath(config)}`);
+      try {
+        const queryPlanAnalysis = await analyzeProfileQueries(config);
+        processes.push(queryPlanAnalysis);
+      } catch (err) {
+        warn(
+          `Query plan analysis skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    log(`Starting ${config.users} synthetic clients...`);
+    clients = await startSyntheticClients(config);
+    cleanup.push(async () => {
+      await Promise.all(
+        clients.map(client => Promise.race([client.close(), sleep(2000)])),
+      );
+    });
+
+    log(
+      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s (concurrency=${concurrency}, batch=${config.batchSize})...`,
+    );
+    metricsCollector.reset();
+    cloudzeroPoller?.reset();
+    const writer = new FixedRateWriter(sql, config);
+    const samples: MetricSample[] = [];
+    const sampleStartedAtMs = Date.now();
+    let nextProgressAtMs = sampleStartedAtMs + config.progressIntervalMs;
+    const recordSample = () => {
+      const sample = sampleMetrics(
+        sampleStartedAtMs,
+        writer.highestCommittedSeq,
+        clients,
+      );
+      samples.push(sample);
+      if (config.progressIntervalMs > 0 && Date.now() >= nextProgressAtMs) {
+        printProgress(
+          sample,
+          config.durationMs,
+          config.users,
+          cloudzeroPoller?.latest,
+        );
+        nextProgressAtMs = Date.now() + config.progressIntervalMs;
+      }
+    };
+    const sampler = setInterval(recordSample, config.sampleIntervalMs);
+
+    const profiling = startSteadyStateProfiling(config);
+
+    let writerStats: WriterStats;
+    try {
+      writerStats = await writer.run(config.durationMs);
+      recordSample();
+    } finally {
+      clearInterval(sampler);
+    }
+
+    await profiling;
+
+    if (config.settleMs > 0) {
+      log(
+        `Draining pipeline (waiting up to ${config.settleMs}ms for clients to observe seq ${writer.highestCommittedSeq})...`,
+      );
+      const settleStartMs = Date.now();
+      const settleDeadline = settleStartMs + config.settleMs;
+      let lastDrainLogMs = settleStartMs;
+      let minObserved =
+        clients.length === 0
+          ? 0
+          : Math.min(...clients.map(c => c.minObservedSeq()));
+      while (Date.now() < settleDeadline) {
+        minObserved =
+          clients.length === 0
+            ? 0
+            : Math.min(...clients.map(c => c.minObservedSeq()));
+        if (minObserved >= writer.highestCommittedSeq) {
+          break;
+        }
+        if (
+          Date.now() - lastDrainLogMs >=
+          (config.progressIntervalMs || 5000)
+        ) {
+          lastDrainLogMs = Date.now();
+          const remaining = writer.highestCommittedSeq - minObserved;
+          const elapsedSec = ((Date.now() - settleStartMs) / 1000).toFixed(1);
+          log(
+            `Draining (${elapsedSec}s): observed=${minObserved}/${writer.highestCommittedSeq} (${remaining} remaining)...`,
+          );
+        }
+        await sleep(100);
+      }
+      if (minObserved >= writer.highestCommittedSeq) {
+        const drainElapsedSec = ((Date.now() - settleStartMs) / 1000).toFixed(
+          1,
+        );
+        log(
+          `Pipeline drained: all clients observed seq ${writer.highestCommittedSeq} in ${drainElapsedSec}s.`,
+        );
+      } else {
+        const remaining = writer.highestCommittedSeq - minObserved;
+        log(
+          `Pipeline drain timed out after ${config.settleMs}ms: ${remaining} sequence(s) unobserved (observed up to ${minObserved}, expected ${writer.highestCommittedSeq}).`,
+        );
+      }
+      samples.push(
+        sampleMetrics(sampleStartedAtMs, writer.highestCommittedSeq, clients),
+      );
+    }
+
+    let metricsSummary = metricsCollector.getSummary();
+    if (cloudzeroPoller) {
+      await cloudzeroPoller.stop();
+      const czSummary = cloudzeroPoller.toMetricSummary();
+      metricsSummary = {
+        ...metricsSummary,
+        replicationLagMs:
+          metricsSummary.replicationLagMs ??
+          czSummary.metricSummary.replicationLagMs ??
+          null,
+        e2eServingLagMs:
+          metricsSummary.e2eServingLagMs ??
+          czSummary.metricSummary.e2eServingLagMs ??
+          null,
+        cloudzero: czSummary.cloudzeroSummary ?? undefined,
+      };
+    }
+    result = buildResult({
+      config,
+      processes,
+      writerStats,
+      samples,
+      clients,
+      metricsSummary,
+    });
+    outputPath = await writeResult(config, result);
+    printSummary(result.summary, outputPath);
+  } catch (caught) {
+    error = caught;
+    warn(`Benchmark run failed: ${formatError(caught)}`);
+  } finally {
+    process.off('SIGINT', onSigint);
+    await cleanup.run();
+  }
+
+  if (error !== undefined) {
+    throw error;
+  }
+}
+
+class CleanupStack {
+  readonly #callbacks: (() => Promise<void>)[] = [];
+  #running = false;
+
+  push(callback: () => Promise<void>): void {
+    this.#callbacks.push(callback);
+  }
+
+  async run(): Promise<void> {
+    if (this.#running) {
+      return;
+    }
+    this.#running = true;
+    const callbacks = this.#callbacks.splice(0).reverse();
+    for (const callback of callbacks) {
+      try {
+        await callback();
+      } catch (error) {
+        warn(`Cleanup failed: ${String(error)}`);
+      }
+    }
+  }
+}
+
+function printSummary(
+  summary: ReturnType<typeof buildResult>['summary'],
+  outputPath: string,
+): void {
+  log('');
+  log(`Result: ${summary.pass ? 'PASS' : 'FAIL'}`);
+  log(
+    `Target write rate: ${summary.targetWriteRate.toFixed(2)} logical writes/s`,
+  );
+  log(
+    `Achieved write rate: ${summary.achievedWriteRate.toFixed(2)} logical writes/s`,
+  );
+  log(
+    `Active-query impact rate: ${(summary.writeImpact.affectedActiveClientGroupWriteRatio * 100).toFixed(2)}%`,
+  );
+  log(`p95 client-visible lag: ${summary.p95ClientVisibleLagMs.toFixed(2)}ms`);
+  log(`p99 client-visible lag: ${summary.p99ClientVisibleLagMs.toFixed(2)}ms`);
+  log(`max seq lag: ${summary.maxSeqLag}`);
+  log(`lag slope: ${summary.lagSlopeSeqPerSec.toFixed(2)} seq/s`);
+  if (summary.replicationLagMs) {
+    const p95Str =
+      summary.replicationLagMs.p95 !== undefined
+        ? `p95=${summary.replicationLagMs.p95.toFixed(1)}ms, `
+        : '';
+    log(
+      `RM replication lag: p50=${summary.replicationLagMs.p50.toFixed(1)}ms, ${p95Str}max=${summary.replicationLagMs.max.toFixed(1)}ms`,
+    );
+  }
+  if (summary.advancementLatencyMs) {
+    const p95Str =
+      summary.advancementLatencyMs.p95 !== undefined
+        ? `p95=${summary.advancementLatencyMs.p95.toFixed(1)}ms, `
+        : '';
+    log(
+      `IVM advance duration: p50=${summary.advancementLatencyMs.p50.toFixed(1)}ms, ${p95Str}max=${summary.advancementLatencyMs.max.toFixed(1)}ms`,
+    );
+  }
+  if (summary.e2eServingLagMs) {
+    const lag = summary.e2eServingLagMs;
+    const avgStr = lag.avg !== undefined ? `avg=${lag.avg.toFixed(1)}ms, ` : '';
+    const p75Str = lag.p75 !== undefined ? `p75=${lag.p75.toFixed(1)}ms, ` : '';
+    const p90Str = lag.p90 !== undefined ? `p90=${lag.p90.toFixed(1)}ms, ` : '';
+    const p95Str = lag.p95 !== undefined ? `p95=${lag.p95.toFixed(1)}ms, ` : '';
+    const p99Str = lag.p99 !== undefined ? `p99=${lag.p99.toFixed(1)}ms, ` : '';
+    log(
+      `E2E serving lag: ${avgStr}p50=${lag.p50.toFixed(1)}ms, ${p75Str}${p90Str}${p95Str}${p99Str}max=${lag.max.toFixed(1)}ms`,
+    );
+  }
+  if (summary.viewSyncerLagMs) {
+    const lag = summary.viewSyncerLagMs;
+    const avgStr = lag.avg !== undefined ? `avg=${lag.avg.toFixed(1)}ms, ` : '';
+    const p95Str = lag.p95 !== undefined ? `p95=${lag.p95.toFixed(1)}ms, ` : '';
+    const p99Str = lag.p99 !== undefined ? `p99=${lag.p99.toFixed(1)}ms, ` : '';
+    log(
+      `View-Syncer IVM lag: ${avgStr}p50=${lag.p50.toFixed(1)}ms, ${p95Str}${p99Str}max=${lag.max.toFixed(1)}ms`,
+    );
+  }
+  if (summary.pipelineResets !== undefined && summary.pipelineResets > 0) {
+    log(`Pipeline resets: ${summary.pipelineResets}`);
+  }
+  if (summary.cloudzero) {
+    const cz = summary.cloudzero;
+    if (cz.rmPod) {
+      log(
+        `CloudZero RM pod: cpu=${cz.rmPod.cpuCores.toFixed(3)} cores, mem=${cz.rmPod.memoryMB}MB`,
+      );
+    }
+    log(
+      `CloudZero VS (${cz.vsSummary.podCount} pods): totalCpu=${cz.vsSummary.totalCpuCores.toFixed(3)} cores (max=${cz.vsSummary.maxCpuCores.toFixed(3)}), totalMem=${cz.vsSummary.totalMemoryMB}MB, pipelines=${cz.vsSummary.totalPipelines}`,
+    );
+  }
+  if (summary.failureReasons.length > 0) {
+    log(`failure reasons: ${summary.failureReasons.join('; ')}`);
+  }
+  log(`details: ${outputPath}`);
+}
+
+function printProgress(
+  sample: MetricSample,
+  durationMs: number,
+  expectedClients: number,
+  cloudzero?: CloudZeroMetricsSummary | null | undefined,
+): void {
+  let extra = '';
+  if (cloudzero) {
+    const rmCpu = cloudzero.rmPod
+      ? `${(cloudzero.rmPod.cpuCores * 100).toFixed(0)}%`
+      : 'n/a';
+    const rmMem = cloudzero.rmPod ? `${cloudzero.rmPod.memoryMB}MB` : 'n/a';
+    const vsTotalCpu = `${(cloudzero.vsSummary.totalCpuCores * 100).toFixed(0)}%`;
+    const vsTotalMem = `${cloudzero.vsSummary.totalMemoryMB}MB`;
+    const vsPipes = cloudzero.vsSummary.totalPipelines;
+    extra = `, rm(cpu=${rmCpu}, mem=${rmMem}), vs[${cloudzero.vsSummary.podCount}](cpu=${vsTotalCpu}, mem=${vsTotalMem}, pipes=${vsPipes})`;
+  }
+  log(
+    `Progress: ${formatDuration(Math.min(sample.elapsedMs, durationMs))} / ${formatDuration(durationMs)}, committed=${sample.committedSeq}, seqLag=${sample.seqLag}, connected=${sample.connectedClients}/${expectedClients}${extra}`,
+  );
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return inspect(error);
+}
+
+async function startSteadyStateProfiling(
+  config: BenchmarkConfig,
+): Promise<void> {
+  if (!config.profileVS && !config.profileRM) {
+    return;
+  }
+
+  const warmupDelay = Math.max(1000, Math.floor(config.durationMs / 3));
+  const availableSec = Math.floor((config.durationMs - warmupDelay) / 1000);
+  if (availableSec < 1) {
+    log(
+      `Benchmark duration (${formatDuration(config.durationMs)}) too short for steady-state profiling (requires >= 1s after ${formatDuration(warmupDelay)} warmup); skipping.`,
+    );
+    return;
+  }
+
+  const durationSec = Math.min(config.profileDurationSec, availableSec);
+
+  const profileDir = appPath(config.profileDir);
+  mkdirSync(profileDir, {recursive: true});
+
+  await sleep(warmupDelay);
+
+  const targets = [
+    ...(config.profileVS
+      ? [{endpoint: 'profz', label: 'View-Syncer', prefix: 'vs'}]
+      : []),
+    ...(config.profileRM
+      ? [{endpoint: 'profrmz', label: 'RM', prefix: 'rm'}]
+      : []),
+  ];
+
+  const headers: Record<string, string> = {};
+  if (config.adminPassword) {
+    headers.authorization = `Basic ${Buffer.from(`admin:${config.adminPassword}`).toString('base64')}`;
+  }
+
+  await Promise.all(
+    targets.map(async ({endpoint, label, prefix}) => {
+      const url = `${config.cacheURL}/${endpoint}?duration=${durationSec}`;
+      try {
+        log(`Triggering ${label} CPU profile (${durationSec}s) via ${url}...`);
+        const res = await fetch(url, {headers});
+        if (!res.ok) {
+          warn(`Failed to fetch ${label} profile: HTTP ${res.status}`);
+          return;
+        }
+        const data = await res.json();
+        await unpackProfiles(data, `${config.runID}-${prefix}`, profileDir);
+      } catch (err) {
+        warn(`Error capturing ${label} profile: ${String(err)}`);
+      }
+    }),
+  );
+}
+
+async function unpackProfiles(
+  data: unknown,
+  prefix: string,
+  outDir: string,
+): Promise<void> {
+  if (typeof data !== 'object' || data === null) {
+    return;
+  }
+
+  const record = data as Record<string, unknown>;
+  // Single profile with nodes array
+  if ('nodes' in record && Array.isArray(record.nodes)) {
+    const filename = `${prefix}.cpuprofile`;
+    const outPath = join(outDir, filename);
+    await writeFile(outPath, JSON.stringify(data, null, 2));
+    log(`Saved CPU profile to ${outPath}`);
+    return;
+  }
+
+  // Multi-process bundle: { [processName]: CpuProfile }
+  for (const [name, prof] of Object.entries(record)) {
+    const filename = `${prefix}-${name}.cpuprofile`;
+    const outPath = join(outDir, filename);
+    await writeFile(outPath, JSON.stringify(prof, null, 2));
+    log(`Saved ${name} CPU profile to ${outPath}`);
+  }
+}
+
+try {
+  await main();
+  process.exit(0);
+} catch {
+  process.exit(1);
+}

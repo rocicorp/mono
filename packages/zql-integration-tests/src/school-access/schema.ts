@@ -29,7 +29,9 @@ const teacher = table('teacher')
     role: string(),
     schoolId: number().from('school_id'),
   })
-  .primaryKey('id');
+  .primaryKey('id')
+  // CREATE UNIQUE INDEX teacher_user_id_unique ON teacher (user_id)
+  .unique('userId');
 
 const teacherToCoTeacher = table('teacherToCoTeacher')
   .from('teacher_to_co_teacher')

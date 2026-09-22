@@ -20,6 +20,7 @@ import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.t
 import {mutationResultSchema} from '../../../../zero-protocol/src/mutation.ts';
 import type {
   PokePartBody,
+  PokePartMessage,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
@@ -28,6 +29,7 @@ import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {
   getLogLevel,
   wrapWithProtocolError,
@@ -75,7 +77,27 @@ export interface PokeHandler {
   end(finalVersion: CVRVersion): Promise<void>;
 }
 
-const NOOP: PokeHandler = {
+/** A {@link PokeHandler} for a single client. */
+export interface ClientPokeHandler extends PokeHandler {
+  /**
+   * Whether a patch has been sent to the client. Once one has, the poke can
+   * only be ended with a `finalVersion` that is ahead of the client's base
+   * version.
+   */
+  readonly patchesSent: boolean;
+}
+
+/**
+ * A {@link PokeHandler} for multiple clients, as returned by
+ * {@link startPoke}.
+ */
+export interface MultiPokeHandler extends PokeHandler {
+  /** Whether a patch has been sent to any of the clients. */
+  readonly patchesSent: boolean;
+}
+
+const NOOP: ClientPokeHandler = {
+  patchesSent: false,
   addPatch: () => promiseVoid,
   cancel: () => promiseVoid,
   end: () => promiseVoid,
@@ -83,29 +105,53 @@ const NOOP: PokeHandler = {
 
 /** Wraps PokeHandlers for multiple clients in a single PokeHandler. */
 export function startPoke(
+  lc: LogContext,
   clients: ClientHandler[],
   tentativeVersion: CVRVersion,
-): PokeHandler {
+): MultiPokeHandler {
   const pokers = clients.map(c => c.startPoke(tentativeVersion));
 
   // Promise.allSettled() ensures that a failed (e.g. disconnected) client
   // does not prevent other clients from receiving the pokes. However, the
   // rate (per client group) will be limited by the slowest connection.
+  //
+  // The individual pokers report their own failures (by failing the
+  // connection), so a rejection here is not expected. Log it rather than
+  // dropping it on the floor.
+  const settle = async (op: string, results: Promise<void>[]) => {
+    for (const result of await Promise.allSettled(results)) {
+      if (result.status === 'rejected') {
+        lc.error?.(`unhandled error poking client (${op})`, result.reason);
+      }
+    }
+  };
+
   return {
-    addPatch: async patch => {
-      await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
+    get patchesSent() {
+      return pokers.some(poker => poker.patchesSent);
     },
-    cancel: async () => {
-      await Promise.allSettled(pokers.map(poker => poker.cancel()));
-    },
-    end: async finalVersion => {
-      await Promise.allSettled(pokers.map(poker => poker.end(finalVersion)));
-    },
+    addPatch: patch =>
+      settle(
+        'addPatch',
+        pokers.map(poker => poker.addPatch(patch)),
+      ),
+    cancel: () =>
+      settle(
+        'cancel',
+        pokers.map(poker => poker.cancel()),
+      ),
+    end: finalVersion =>
+      settle(
+        'end',
+        pokers.map(poker => poker.end(finalVersion)),
+      ),
   };
 }
 
-// Semi-arbitrary threshold at which poke body parts are flushed.
-// When row size is being computed, that should be used as a threshold instead.
+// Soft limit on the serialized row characters accumulated in a poke part.
+// This bounds view-syncer memory and keeps legacy JSON messages reasonably
+// sized. PokeChunkEncoder separately enforces the binary frame limit in bytes.
+export const POKE_PART_FLUSH_THRESHOLD_CHARS = 1024 * 1024;
 const PART_COUNT_FLUSH_THRESHOLD = 100;
 
 /**
@@ -118,8 +164,12 @@ export class ClientHandler {
   readonly #zeroClientsTable: string;
   readonly #zeroMutationsTable: string;
   readonly #lc: LogContext;
-  readonly #downstream: Subscription<Downstream>;
+  readonly #downstream: Subscription<ViewSyncerDownstream>;
   #baseVersion: NullableCVRVersion;
+  // We will send a poke on connect even if the client is already caught up, so that it can learn its
+  // got-queries state has been reconciled with the server. After that, we will only send a poke if
+  // the client is behind.
+  #everPoked = false;
 
   readonly #pokeTime = getOrCreateLatencyHistogram(
     'sync',
@@ -146,7 +196,7 @@ export class ClientHandler {
     wsID: string,
     shard: ShardID,
     baseCookie: string | null,
-    downstream: Subscription<Downstream>,
+    downstream: Subscription<ViewSyncerDownstream>,
   ) {
     lc.debug?.('new client handler');
     this.#clientGroupID = clientGroupID;
@@ -163,8 +213,8 @@ export class ClientHandler {
     return this.#baseVersion;
   }
 
-  async #push(msg: Downstream): Promise<void> {
-    const {result} = this.#downstream.push(msg);
+  async #push(msg: Downstream, serialized?: string | undefined): Promise<void> {
+    const {result} = this.#downstream.push({message: msg, serialized});
     await result;
   }
 
@@ -181,11 +231,14 @@ export class ClientHandler {
     this.#downstream.cancel();
   }
 
-  startPoke(tentativeVersion: CVRVersion): PokeHandler {
+  startPoke(tentativeVersion: CVRVersion): ClientPokeHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
-    if (cmpVersions(this.#baseVersion, tentativeVersion) >= 0) {
+    // Force an (empty) initial poke even when already caught up; see #everPoked.
+    const forceInitialPoke = !this.#everPoked;
+    const cmp = cmpVersions(this.#baseVersion, tentativeVersion);
+    if (cmp > 0 || (cmp === 0 && !forceInitialPoke)) {
       lc.info?.(`already caught up, not sending poke.`);
       return NOOP;
     }
@@ -201,6 +254,8 @@ export class ClientHandler {
     let pokeStarted = false;
     let body: PokePartBody | undefined;
     let partCount = 0;
+    let serializedRowsLength = 0;
+
     const ensureBody = async () => {
       if (!pokeStarted) {
         await this.#push(['pokeStart', pokeStart]);
@@ -208,11 +263,14 @@ export class ClientHandler {
       }
       return (body ??= {pokeID});
     };
+
     const flushBody = async () => {
       if (body) {
-        await this.#push(['pokePart', body]);
+        const message = ['pokePart', body] satisfies PokePartMessage;
+        await this.#push(message, JSON.stringify(message));
         body = undefined;
         partCount = 0;
+        serializedRowsLength = 0;
       }
     };
 
@@ -221,26 +279,22 @@ export class ClientHandler {
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
         return;
       }
-      const body = await ensureBody();
+      const target = await ensureBody();
 
       const {type, op} = patch;
       switch (type) {
         case 'query': {
           const patches = patch.clientID
-            ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
-            : (body.gotQueriesPatch ??= []);
-          if (op === 'put') {
-            patches.push({op, hash: patch.id});
-          } else {
-            patches.push({op, hash: patch.id});
-          }
+            ? ((target.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
+            : (target.gotQueriesPatch ??= []);
+          patches.push({op, hash: patch.id});
           break;
         }
         case 'row':
           if (patch.id.table === this.#zeroClientsTable) {
-            this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
+            this.#updateLMIDs((target.lastMutationIDChanges ??= {}), patch);
           } else if (patch.id.table === this.#zeroMutationsTable) {
-            const patches = (body.mutationsPatch ??= []);
+            const patches = (target.mutationsPatch ??= []);
             if (op === 'put') {
               const row = v.parse(
                 ensureSafeJSON(patch.contents),
@@ -277,19 +331,33 @@ export class ClientHandler {
               });
             }
           } else {
-            (body.rowsPatch ??= []).push(makeRowPatch(patch));
+            const rowPatch = makeRowPatch(patch);
+            (target.rowsPatch ??= []).push(rowPatch);
+            serializedRowsLength += JSON.stringify(rowPatch).length;
           }
           break;
         default:
           unreachable(patch);
       }
 
-      if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
+      partCount++;
+      if (
+        serializedRowsLength >= POKE_PART_FLUSH_THRESHOLD_CHARS ||
+        partCount >= PART_COUNT_FLUSH_THRESHOLD
+      ) {
         await flushBody();
       }
     };
 
+    // A poke that was started must always be ended. If it isn't, the
+    // connection is left mid-poke and the *next* pokeStart fails the
+    // DownstreamSender's in-progress check, surfacing the error far from
+    // its cause. Fail the connection instead; the client reconnects and
+    // resyncs from its baseVersion.
     return {
+      get patchesSent() {
+        return pokeStarted;
+      },
       addPatch: async (patchToVersion: PatchToVersion) => {
         try {
           await addPatch(patchToVersion);
@@ -297,38 +365,51 @@ export class ClientHandler {
             this.#pokedRows.add(1);
           }
         } catch (e) {
-          this.#downstream.fail(wrapWithProtocolError(e));
+          this.fail(e);
         }
       },
 
       cancel: async () => {
-        if (pokeStarted) {
-          await this.#push(['pokeEnd', {pokeID, cookie: '', cancel: true}]);
+        try {
+          if (pokeStarted) {
+            await this.#push(['pokeEnd', {pokeID, cookie: '', cancel: true}]);
+          }
+        } catch (e) {
+          this.fail(e);
         }
       },
 
       end: async (finalVersion: CVRVersion) => {
-        const cookie = versionToCookie(finalVersion);
-        if (!pokeStarted) {
-          if (cmpVersions(this.#baseVersion, finalVersion) === 0) {
-            return; // Nothing changed and nothing was sent.
+        try {
+          const cookie = versionToCookie(finalVersion);
+          if (!pokeStarted) {
+            if (
+              cmpVersions(this.#baseVersion, finalVersion) === 0 &&
+              !forceInitialPoke
+            ) {
+              return; // Nothing changed and nothing was sent.
+            }
+            await this.#push(['pokeStart', pokeStart]);
+          } else if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
+            // Sanity check: If the poke was started, the finalVersion
+            // must be > #baseVersion.
+            throw new Error(
+              `Patches were sent but finalVersion ${cookie} is not ` +
+                `greater than baseVersion ` +
+                `${versionToNullableCookie(this.#baseVersion)}`,
+            );
           }
-          await this.#push(['pokeStart', pokeStart]);
-        } else if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
-          // Sanity check: If the poke was started, the finalVersion
-          // must be > #baseVersion.
-          throw new Error(
-            `Patches were sent but finalVersion ${finalVersion} is ` +
-              `not greater than baseVersion ${this.#baseVersion}`,
-          );
-        }
-        await flushBody();
-        await this.#push(['pokeEnd', {pokeID, cookie}]);
-        this.#baseVersion = finalVersion;
+          await flushBody();
+          await this.#push(['pokeEnd', {pokeID, cookie}]);
+          this.#baseVersion = finalVersion;
+          this.#everPoked = true;
 
-        const elapsed = performance.now() - start;
-        this.#pokeTransactions.add(1);
-        this.#pokeTime.recordMs(elapsed);
+          const elapsed = performance.now() - start;
+          this.#pokeTransactions.add(1);
+          this.#pokeTime.recordMs(elapsed);
+        } catch (e) {
+          this.fail(e);
+        }
       },
     };
   }
@@ -359,7 +440,10 @@ export class ClientHandler {
 
   sendInspectResponse(lc: LogContext, response: InspectDownBody): void {
     lc.debug?.('sending inspect response', response);
-    this.#downstream.push(['inspect', response]);
+    this.#downstream.push({
+      message: ['inspect', response],
+      serialized: undefined,
+    });
   }
 
   #updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {

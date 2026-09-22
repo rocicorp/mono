@@ -1,6 +1,20 @@
 import {readdirSync} from 'node:fs';
 import {defineConfig} from 'vitest/config';
 
+// Electron-hosted terminals (VSCode's integrated terminal, Cursor, Claude
+// Code, ...) leak ELECTRON_RUN_AS_NODE=1 into spawned shells. node-gyp-build
+// treats the mere *presence* of that var as proof the process is Electron
+// (see node-gyp-build.js's isElectron(), which checks
+// `process.env.ELECTRON_RUN_AS_NODE` directly, without also requiring
+// `process.versions.electron` to be set) — so it looks for an Electron-ABI
+// prebuild of native deps like @rocicorp/zero-sqlite3, which isn't
+// installed, and fails with a confusing "No native build was found" error
+// across every test that touches SQLite. This must run before Vitest spawns
+// its worker pool (workers inherit process.env at fork time), and doesn't
+// affect genuine Electron test runs, which are still detected via the
+// (unmodified) process.versions.electron check.
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 const {TEST_PG_MODE} = process.env;
 
 // Find all vitest.config*.ts files up to depth 2 from repo root, skipping node_modules.
@@ -16,8 +30,15 @@ function* getProjects(): Iterable<string> {
 
     // Process files in this directory first
     const fileNames = entries.filter(e => e.isFile()).map(e => e.name);
-    const configNames = fileNames.filter(name =>
-      /^vitest\.config.*\.ts$/.test(name),
+    const configNames = fileNames.filter(
+      name =>
+        /^vitest\.config.*\.ts$/.test(name) &&
+        // Drop bench configs up front — those are run separately via
+        // `pnpm run bench`. They must not count towards `hasSuffixed` below,
+        // or a package whose only suffixed config is a bench one (e.g.
+        // zero-client) would have its base config suppressed by a config that
+        // is then itself skipped, silently contributing no projects at all.
+        !name.includes('.bench'),
     );
     const hasSuffixed = configNames.some(name =>
       /^vitest\.config\.[^.]+\.ts$/.test(name),
@@ -28,8 +49,6 @@ function* getProjects(): Iterable<string> {
       if (basePath === '' && name === 'vitest.config.ts') continue;
       // If any suffixed config exists in this dir, exclude the base config
       if (name === 'vitest.config.ts' && hasSuffixed) continue;
-      // Skip bench configs — those are run separately via `pnpm run bench`
-      if (name.includes('.bench')) continue;
       yield `${basePath}${name}`;
     }
 

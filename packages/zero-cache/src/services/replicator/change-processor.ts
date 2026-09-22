@@ -1,9 +1,11 @@
+import {constants as bufferConstants} from 'node:buffer';
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
+import {mapEntries} from '../../../../shared/src/objects.ts';
 import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
 import {
   createLiteIndexStatement,
@@ -12,15 +14,17 @@ import {
 } from '../../db/create.ts';
 import {
   computeZqlSpecs,
-  listIndexes,
   listTables,
   type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
 import {
+  isArrayColumn,
+  isEnumColumn,
   mapPostgresToLite,
   mapPostgresToLiteColumn,
   mapPostgresToLiteIndex,
 } from '../../db/pg-to-lite.ts';
+import type {ColumnSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
@@ -56,6 +60,7 @@ import type {
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
+import {BackfillingTracker} from './schema/backfilling.ts';
 import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
@@ -66,11 +71,24 @@ import {TableMetadataTracker} from './schema/table-metadata.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
+const BIND_VALUE_TOO_BIG_ERROR =
+  'The bound string, buffer, or bigint is too big';
+const MAX_SQLITE_BIND_BYTES = Math.min(
+  bufferConstants.MAX_LENGTH,
+  bufferConstants.MAX_STRING_LENGTH,
+);
+
 export type CommitResult = {
   watermark: string;
   completedBackfill: DownloadStatus | undefined;
   schemaUpdated: boolean;
   changeLogUpdated: boolean;
+  /**
+   * Millisecond epoch at which the transaction committed upstream, if the
+   * ChangeSource reported one. Propagated to ViewSyncers as the origin
+   * timestamp of the end-to-end serving lag measurement.
+   */
+  upstreamCommitTimeMs?: number | undefined;
 };
 
 /**
@@ -88,6 +106,7 @@ export class ChangeProcessor {
   readonly #db: StatementRunner;
   readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
+  readonly #backfilling: BackfillingTracker;
   readonly #mode: ChangeProcessorMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
@@ -108,6 +127,7 @@ export class ChangeProcessor {
     this.#db = db;
     this.#changeLog = new ChangeLog(db.db);
     this.#tableMetadata = new TableMetadataTracker(db.db);
+    this.#backfilling = new BackfillingTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
   }
@@ -115,11 +135,13 @@ export class ChangeProcessor {
   #fail(lc: LogContext, err: unknown) {
     if (!this.#failure) {
       let failureError = err;
-      try {
-        this.#currentTx?.abort(lc); // roll back any pending transaction.
-      } catch (rollbackError) {
+      const rollbackErrors = [attempt(() => this.#currentTx?.abort(lc))].filter(
+        e => e !== undefined,
+      );
+
+      if (rollbackErrors.length) {
         const combinedError = new Error(
-          `Message processing failed and rollback also failed: operation error = ${String(err)}; rollback error = ${String(rollbackError)}`,
+          `Message processing failed and rollback also failed: operation error = ${String(err)}; rollback error = ${rollbackErrors.map(String).join('; ')}`,
         );
         combinedError.cause = err;
         failureError = combinedError;
@@ -185,6 +207,7 @@ export class ChangeProcessor {
           this.#mode,
           this.#changeLog,
           this.#tableMetadata,
+          this.#backfilling,
           this.#tableSpecs,
           commitVersion,
           jsonFormat,
@@ -231,15 +254,16 @@ export class ChangeProcessor {
     }
 
     if (msg.tag === 'commit') {
-      // Undef this.#currentTx to allow the assembly of the next transaction.
-      this.#currentTx = null;
-
       assert(watermark, 'watermark is required for commit messages');
-      return tx.processCommit(msg, watermark);
+      const result = tx.processCommit(msg, watermark);
+      // Clear only after a successful commit so #fail can roll back a commit
+      // path that throws before SQLite has committed.
+      this.#currentTx = null;
+      return result;
     }
 
     if (msg.tag === 'rollback') {
-      this.#currentTx?.abort(lc);
+      tx.abort(lc);
       this.#currentTx = null;
       return null;
     }
@@ -327,6 +351,7 @@ class TransactionProcessor {
   readonly #version: LexiVersion;
   readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
+  readonly #backfilling: BackfillingTracker;
   readonly #tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>;
   readonly #jsonFormat: JSONFormat;
   readonly #columnMetadata: ColumnMetadataStore;
@@ -341,6 +366,7 @@ class TransactionProcessor {
     mode: ChangeProcessorMode,
     changeLog: ChangeLog,
     tableMetadata: TableMetadataTracker,
+    backfilling: BackfillingTracker,
     tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
@@ -351,14 +377,11 @@ class TransactionProcessor {
 
     switch (mode) {
       case 'serving':
-        // Although the Replicator / Incremental Syncer is the only writer of the replica,
-        // a `BEGIN CONCURRENT` transaction is used to allow View Syncers to simulate
-        // (i.e. and `ROLLBACK`) changes on historic snapshots of the database for the
-        // purpose of IVM).
-        //
-        // This TransactionProcessor is the only logic that will actually
-        // `COMMIT` any transactions to the replica.
-        db.beginConcurrent();
+        // This is the only transaction that commits to the serving replica.
+        // Snapshotters use BEGIN CONCURRENT for private changes that are
+        // always rolled back, while BEGIN IMMEDIATE lets this writer spill
+        // dirty pages during large transactions.
+        db.beginImmediate();
         break;
       case 'backup':
         // For the backup-replicator (i.e. replication-manager), there are no View Syncers
@@ -379,6 +402,7 @@ class TransactionProcessor {
     this.#lc = lc.withContext('version', commitVersion);
     this.#changeLog = changeLog;
     this.#tableMetadata = tableMetadata;
+    this.#backfilling = backfilling;
     this.#tableSpecs = tableSpecs;
     // The column_metadata table is guaranteed to exist since the
     // replica-schema.ts migration to v8.
@@ -508,19 +532,46 @@ class TransactionProcessor {
     const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
     const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
 
-    const {changes} = this.#db.run(
-      `
-      UPDATE ${id(table)}
-        SET ${setExprs.join(',')}
-        WHERE ${conds.join(' AND ')}
-      `,
-      [...Object.values(row), ...Object.values(currKey)],
-    );
+    try {
+      const {changes} = this.#db.run(
+        `
+        UPDATE ${id(table)}
+          SET ${setExprs.join(',')}
+          WHERE ${conds.join(' AND ')}
+        `,
+        [...Object.values(row), ...Object.values(currKey)],
+      );
 
-    // If the UPDATE did not affect any rows, perform an UPSERT of the
-    // new row for resumptive replication.
-    if (changes === 0) {
-      this.#upsert(table, row);
+      // If the UPDATE did not affect any rows, perform an UPSERT of the
+      // new row for resumptive replication.
+      if (changes === 0) {
+        this.#upsert(table, row);
+      }
+    } catch (e) {
+      if (
+        !(e instanceof RangeError) ||
+        e.message !== BIND_VALUE_TOO_BIG_ERROR
+      ) {
+        throw e;
+      }
+
+      const binding = [...Object.entries(row), ...Object.entries(currKey)]
+        .map(
+          ([column, value]) =>
+            [column, oversizedValueDescription(value)] as const,
+        )
+        .find(([, description]) => description);
+      const relationOid =
+        'relationOid' in update.relation &&
+        typeof update.relation.relationOid === 'number'
+          ? ` relationOid=${update.relation.relationOid}`
+          : '';
+      const error = new Error(
+        `Oversized SQLite update binding: tx=${this.#version}${relationOid} table=${update.relation.schema}.${update.relation.name} column=${binding?.[0] ?? 'unknown'}${binding?.[1] ? ` ${binding[1]}` : ''}`,
+        {cause: e},
+      );
+      error.name = 'OversizedUpdateBindingError';
+      throw error;
     }
   }
 
@@ -559,6 +610,7 @@ class TransactionProcessor {
     if (create.metadata) {
       this.#tableMetadata.setUpstreamMetadata(create.spec, create.metadata);
     }
+    this.#backfilling.apply(create);
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createLiteTableStatement(table));
 
@@ -572,26 +624,24 @@ class TransactionProcessor {
       );
     }
 
-    if (
-      Object.keys(create.backfill ?? {}).length ===
-      Object.keys(create.spec.columns).length
-    ) {
-      this.#reloadTableSpecs();
-    } else {
-      // Make the table visible immediately unless all of the columns are
-      // being backfilled. In the backfill case, the version bump will happen
-      // with the backfill is complete.
-      this.#logResetOp(table.name);
-    }
+    this.#logResetOp(table.name);
     this.#lc.info?.(create.tag, table.name);
   }
 
   processTableMetadata(msg: TableUpdateMetadata) {
     this.#tableMetadata.setUpstreamMetadata(msg.table, msg.new);
+    // Inert today: the fold's only op for this tag is `upsert-metadata`, which
+    // the line above is the replica's interpreter of. Called anyway so that
+    // every site that hands a schema change to one cookie tracker hands it to
+    // both -- an exception here would be a schema change the shared fold has an
+    // opinion about and this store never sees, which is the drift the fold
+    // exists to make impossible.
+    this.#backfilling.apply(msg);
   }
 
   processRenameTable(rename: TableRename) {
     this.#tableMetadata.rename(rename.old, rename.new);
+    this.#backfilling.apply(rename);
 
     const oldName = liteTableName(rename.old);
     const newName = liteTableName(rename.new);
@@ -609,6 +659,7 @@ class TransactionProcessor {
     if (msg.tableMetadata) {
       this.#tableMetadata.setUpstreamMetadata(msg.table, msg.tableMetadata);
     }
+    this.#backfilling.apply(msg);
     const table = liteTableName(msg.table);
     const {name} = msg.column;
     const spec = mapPostgresToLiteColumn(table, msg.column);
@@ -630,50 +681,97 @@ class TransactionProcessor {
   }
 
   processUpdateColumn(msg: ColumnUpdate) {
+    // A no-op unless this is a rename, which is the only part of a column
+    // update that moves the backfill cookie.
+    this.#backfilling.apply(msg);
+
     const table = liteTableName(msg.table);
     let oldName = msg.old.name;
     const newName = msg.new.name;
 
-    // update-column can ignore defaults because it does not change the values
-    // in existing rows.
-    //
-    // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-DESC-SET-DROP-DEFAULT
-    //
-    // "The new default value will only apply in subsequent INSERT or UPDATE
-    //  commands; it does not cause rows already in the table to change."
-    //
-    // This allows support for _changing_ column defaults to any expression,
-    // since it does not affect what the replica needs to do.
-    const oldSpec = mapPostgresToLiteColumn(table, msg.old, 'ignore-default');
-    const newSpec = mapPostgresToLiteColumn(table, msg.new, 'ignore-default');
+    const storageTypesDiffer = differentStorageTypes(
+      msg.old.spec,
+      msg.new.spec,
+    );
 
-    // The only updates that are relevant are the column name and the data type.
-    if (oldName === newName && oldSpec.dataType === newSpec.dataType) {
-      this.#lc.info?.(msg.tag, 'no thing to update', oldSpec, newSpec);
+    // If neither the column name nor the SQLite data type changes, only the
+    // upstream metadata needs to be updated. This includes changes such as a
+    // varchar character limit and nullability, which SQLite does not enforce
+    // but a freshly built replica still records.
+    if (oldName === newName && !storageTypesDiffer) {
+      this.#columnMetadata.update(
+        table,
+        msg.old.name,
+        msg.new.name,
+        msg.new.spec,
+      );
+      if (Boolean(msg.old.spec.notNull) !== Boolean(msg.new.spec.notNull)) {
+        this.#bumpVersions(msg.table);
+      }
+      this.#lc.info?.(msg.tag, 'updated metadata only', msg.old, msg.new);
       return;
     }
-    // If the data type changes, we have to make a new column with the new data type
-    // and copy the values over.
-    if (oldSpec.dataType !== newSpec.dataType) {
-      // Remember (and drop) the indexes that reference the column.
-      const indexes = listIndexes(this.#db.db).filter(
-        idx => idx.tableName === table && oldName in idx.columns,
+    // Storage type changes require a new column so that SQLite uses the new
+    // representation for existing and future values.
+    if (storageTypesDiffer) {
+      // update-column can ignore defaults because it does not change the values
+      // in existing rows.
+      //
+      // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-DESC-SET-DROP-DEFAULT
+      //
+      // "The new default value will only apply in subsequent INSERT or UPDATE
+      //  commands; it does not cause rows already in the table to change."
+      //
+      // This allows support for _changing_ column defaults to any expression,
+      // since it does not affect what the replica needs to do.
+      const newLiteSpec = mapPostgresToLiteColumn(
+        table,
+        msg.new,
+        'ignore-default',
       );
-      const stmts = indexes.map(idx => `DROP INDEX IF EXISTS ${id(idx.name)};`);
-      const tmpName = `tmp.${newName}`;
-      stmts.push(`
-        ALTER TABLE ${id(table)} ADD ${id(tmpName)} ${liteColumnDef(newSpec)};
-        UPDATE ${id(table)} SET ${id(tmpName)} = ${id(oldName)};
-        ALTER TABLE ${id(table)} DROP ${id(oldName)};
-        `);
-      for (const idx of indexes) {
-        // Re-create the indexes to reference the new column.
-        idx.columns[tmpName] = idx.columns[oldName];
-        delete idx.columns[oldName];
-        stmts.push(createLiteIndexStatement(idx));
+      if (oldName !== newName) {
+        // Rename the column in place first so that SQLite rewrites every
+        // reference to it in the table's index definitions, including the
+        // WHERE clauses of partial indexes.
+        this.#db.db.exec(
+          `ALTER TABLE ${id(table)} RENAME ${id(oldName)} TO ${id(newName)}`,
+        );
+        oldName = newName;
       }
+      const tableSpec = must(
+        listTables(this.#db.db, false, false).find(
+          tableSpec => tableSpec.name === table,
+        ),
+      );
+      // Recreating the table drops its indexes, so capture their DDL to
+      // replay afterwards. Auto-indexes (PRIMARY KEY) have no DDL and are
+      // recreated by the CREATE TABLE statement itself.
+      const indexDDL = this.#db.db
+        .prepare(
+          `SELECT sql FROM sqlite_master
+             WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL
+             ORDER BY rowid`,
+        )
+        .all<{sql: string}>(table)
+        .map(({sql}) => sql);
+      const tmpTable = `tmp.${table}`;
+      const columns = Object.keys(tableSpec.columns);
+      const stmts = [
+        createLiteTableStatement({
+          ...tableSpec,
+          name: tmpTable,
+          columns: mapEntries(tableSpec.columns, (column, spec) => [
+            column,
+            column === newName ? {...newLiteSpec, pos: spec.pos} : spec,
+          ]),
+        }),
+        `INSERT INTO ${id(tmpTable)} (${columns.map(id).join(',')})
+         SELECT ${columns.map(id).join(',')} FROM ${id(table)};`,
+        `DROP TABLE ${id(table)};`,
+        `ALTER TABLE ${id(tmpTable)} RENAME TO ${id(table)};`,
+        ...indexDDL.map(sql => `${sql};`),
+      ];
       this.#db.db.exec(stmts.join(''));
-      oldName = tmpName;
     }
     if (oldName !== newName) {
       this.#db.db.exec(
@@ -700,6 +798,7 @@ class TransactionProcessor {
 
     // Delete from metadata table
     this.#columnMetadata.deleteColumn(table, column);
+    this.#backfilling.apply(msg);
 
     this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, column);
@@ -707,6 +806,7 @@ class TransactionProcessor {
 
   processDropTable(drop: TableDrop) {
     this.#tableMetadata.drop(drop.id);
+    this.#backfilling.apply(drop);
 
     const name = liteTableName(drop.id);
     this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
@@ -724,17 +824,7 @@ class TransactionProcessor {
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
     // having a unique index), so reset pipelines to refresh table schemas.
-    // However, the reset is not necessary if the index is for a table
-    // that is not yet visible due to backfilling.
-    const tableSpec = must(this.#tableSpecs.get(index.tableName));
-    if (
-      (tableSpec.backfilling ?? []).length ===
-      Object.entries(tableSpec.columns).length - 1 // don't count _0_version
-    ) {
-      this.#reloadTableSpecs();
-    } else {
-      this.#logResetOp(index.tableName);
-    }
+    this.#logResetOp(index.tableName);
     this.#lc.info?.(create.tag, index.name);
   }
 
@@ -856,7 +946,8 @@ class TransactionProcessor {
 
   #completedBackfill: DownloadStatus | undefined;
 
-  processBackfillCompleted({relation, columns, status}: BackfillCompleted) {
+  processBackfillCompleted(msg: BackfillCompleted) {
+    const {relation, columns, status} = msg;
     const tableName = liteTableName(relation);
     const rowKeyCols = relation.rowKey.columns;
     const cols = [...rowKeyCols, ...columns];
@@ -865,6 +956,7 @@ class TransactionProcessor {
     for (const col of cols) {
       columnMetadata.clearBackfilling(tableName, col);
     }
+    this.#backfilling.apply(msg);
     // Given that new columns are being exposed for every row in the table, bump the
     // row version for all rows.
     this.#bumpVersions(relation);
@@ -914,13 +1006,29 @@ class TransactionProcessor {
       completedBackfill: this.#completedBackfill,
       schemaUpdated: this.#schemaChanged,
       changeLogUpdated: this.#numChangeLogEntries > 0,
+      upstreamCommitTimeMs: commit.commitTimeMs,
     };
   }
 
   abort(lc: LogContext) {
     lc.info?.(`aborting transaction ${this.#version}`);
     this.#db.rollback();
+    // A schema change in the transaction reloaded the table specs, which now
+    // describe the schema that the rollback undid. Clearing them makes the
+    // next transaction reload them from the database.
+    this.#tableSpecs.clear();
   }
+}
+
+function differentStorageTypes(
+  oldSpec: ColumnSpec,
+  newSpec: ColumnSpec,
+): boolean {
+  return (
+    oldSpec.dataType !== newSpec.dataType ||
+    isEnumColumn(oldSpec) !== isEnumColumn(newSpec) ||
+    isArrayColumn(oldSpec) !== isArrayColumn(newSpec)
+  );
 }
 
 function getBackfilledColumns(
@@ -931,6 +1039,37 @@ function getBackfilledColumns(
     return undefined; // common case
   }
   return backfilling.filter(col => col in row);
+}
+
+function oversizedValueDescription(value: LiteValueType): string | undefined {
+  if (typeof value === 'bigint') {
+    return BigInt.asIntN(64, value) !== value
+      ? 'valueType=bigint fitsInt64=false'
+      : undefined;
+  }
+
+  const sizeBytes =
+    typeof value === 'string'
+      ? Buffer.byteLength(value)
+      : value instanceof Uint8Array
+        ? value.byteLength
+        : undefined;
+  if (sizeBytes !== undefined && sizeBytes > MAX_SQLITE_BIND_BYTES) {
+    const valueType = typeof value === 'string' ? 'string' : 'buffer';
+    return `valueType=${valueType} sizeBytes=${sizeBytes} limitBytes=${MAX_SQLITE_BIND_BYTES}`;
+  }
+
+  return undefined;
+}
+
+/** Runs `fn`, returning its error rather than throwing it. */
+function attempt(fn: () => void): unknown {
+  try {
+    fn();
+    return undefined;
+  } catch (e) {
+    return e ?? new Error('rollback failed');
+  }
 }
 
 function ensureError(err: unknown): Error {

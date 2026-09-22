@@ -73,6 +73,10 @@ function buildNormalizedQuery(
                       t.whereExists(
                         'school',
                         s =>
+                          // Known limitation: the expression-builder form of
+                          // `where` pins `userId` at runtime — the server does
+                          // honor this hint — but the type cannot see through
+                          // `ExpressionFactory`, so it reads as unpinned.
                           s.whereExists(
                             'teachers',
                             st =>
@@ -82,7 +86,11 @@ function buildNormalizedQuery(
                                   cmp('role', '=', 'school-administrator'),
                                 ),
                               ),
-                            {flip: true, scalar: true},
+                            {
+                              flip: true,
+                              // @ts-expect-error see above
+                              scalar: true,
+                            },
                           ),
                         {flip: true},
                       ),
@@ -105,6 +113,8 @@ function buildNormalizedQuery(
                               g.whereExists(
                                 'schools',
                                 ds =>
+                                  // The expression-builder form is not tracked;
+                                  // see above.
                                   ds.whereExists(
                                     'teachers',
                                     dt =>
@@ -114,7 +124,11 @@ function buildNormalizedQuery(
                                           cmp('role', '=', 'administrator'),
                                         ),
                                       ),
-                                    {flip: true, scalar: true},
+                                    {
+                                      flip: true,
+                                      // @ts-expect-error see above
+                                      scalar: true,
+                                    },
                                   ),
                                 {flip: true},
                               ),

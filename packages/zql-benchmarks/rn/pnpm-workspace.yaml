@@ -1,0 +1,8 @@
+# Intentionally empty, and intentionally present.
+#
+# This app is nested inside the mono pnpm workspace but is not a member of it
+# (pnpm-workspace.yaml at the repo root globs a single path segment). Without
+# this file, `pnpm install` run from here walks up, reinstalls the entire
+# monorepo, and installs none of this app's dependencies. Declaring a workspace
+# root here stops that walk so the install stays local.
+packages: []

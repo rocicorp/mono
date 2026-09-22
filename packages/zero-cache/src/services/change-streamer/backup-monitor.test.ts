@@ -1,315 +1,207 @@
-import {resolver} from '@rocicorp/resolver';
-import nock from 'nock';
-import {beforeAll, beforeEach, describe, expect, test, vi} from 'vitest';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {DbFile} from '../../test/lite.ts';
-import type {Subscription} from '../../types/subscription.ts';
-import {initReplicationState} from '../replicator/schema/replication-state.ts';
-import {BackupMonitor} from './backup-monitor.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {Subscription} from '../../types/subscription.ts';
+import {BackupMonitor, type BackedUpWatermark} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
-import type {SnapshotMessage} from './snapshot.ts';
 
 describe('change-streamer/backup-monitor', () => {
-  const scheduled: string[] = [];
-  const changeStreamer = {
-    scheduleCleanup: (watermark: string) => scheduled.push(watermark),
-    getChangeLogState: () =>
-      Promise.resolve({
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      }),
-  };
-  let metricsResponse = 'unconfigured';
+  let watermarks: Subscription<BackedUpWatermark>;
+  let trackBackupWatermark: ReturnType<typeof vi.fn>;
+  let changeStreamer: ChangeStreamerService;
   let monitor: BackupMonitor;
-  let replica: DbFile;
-
-  function setMetricsResponse(watermark: string, timestamp: string) {
-    // Sample response from prometheus metrics handler
-    metricsResponse = `# HELP litestream_db_size The current size of the real DB
-# TYPE litestream_db_size gauge
-litestream_db_size{db="/tmp/zbugs-sync-replica.db"} 3.183935488e+09
-# HELP litestream_replica_progress The last replicated watermark and time of replication
-# TYPE litestream_replica_progress gauge
-litestream_replica_progress{db="/tmp/zbugs-sync-replica.db",name="file",watermark="${watermark}"} ${timestamp}
-# HELP litestream_replica_validation_total The number of validations performed
-# TYPE litestream_replica_validation_total counter
-litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",status="error"} 0
-litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",status="ok"} 0`;
-  }
-
-  beforeAll(() => {
-    replica = new DbFile('backup_monitor_test');
-    initReplicationState(
-      replica.connect(createSilentLogContext()),
-      ['zero_pub'],
-      '123',
-    );
-
-    return () => replica.delete();
-  });
 
   beforeEach(() => {
-    const lc = createSilentLogContext();
-
-    vi.useFakeTimers();
-    scheduled.splice(0);
-
+    watermarks = Subscription.create<BackedUpWatermark>();
+    trackBackupWatermark = vi.fn();
+    changeStreamer = {
+      trackBackupWatermark,
+    } as unknown as ChangeStreamerService;
     monitor = new BackupMonitor(
-      lc,
-      replica.path,
-      's3://foo/bar',
-      'http://localhost:4850/metrics',
-      changeStreamer as unknown as ChangeStreamerService,
-      100_000, // 100 seconds
+      createSilentLogContext(),
+      watermarks,
+      changeStreamer,
+      '/tmp/backup-monitor-test-replica-does-not-exist.db',
     );
-
-    nock('http://localhost:4850')
-      .persist()
-      .get('/metrics')
-      .reply(200, () => metricsResponse);
-
-    return () => {
-      nock.abortPendingRequests();
-      nock.cleanAll();
-      vi.useRealTimers();
-    };
   });
 
-  function getFirstMessage(
-    sub: Subscription<SnapshotMessage>,
-  ): Promise<SnapshotMessage> {
-    const {promise, resolve} = resolver<SnapshotMessage>();
-    void (async function () {
-      for await (const msg of sub) {
-        resolve(msg);
-        // To simulate an open connection, do not exit the loop.
-      }
-    })();
-    return promise;
+  function backedUp(watermark: string, ms = 0): BackedUpWatermark {
+    return {watermark, writeTimeMs: ms, backupTimeMs: ms};
   }
 
-  test('schedules overdue cleanup', async () => {
-    setMetricsResponse('618ocqq8', '1.74545644476593e+09');
+  test('firstBackupReceived stays pending until the first watermark arrives', async () => {
+    const run = monitor.run();
+    let resolved = false;
+    void monitor.firstBackupReceived().then(() => (resolved = true));
 
-    await monitor.checkWatermarksAndScheduleCleanup();
+    // Give run() a chance to start iterating; it should still be waiting.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(trackBackupWatermark).not.toHaveBeenCalled();
 
-    expect(scheduled).toEqual(['618ocqq8']);
+    watermarks.push(backedUp('01'));
+
+    await monitor.firstBackupReceived();
+    expect(resolved).toBe(true);
+    expect(trackBackupWatermark).toHaveBeenCalledExactlyOnceWith('01');
+
+    watermarks.cancel();
+    await run;
   });
 
-  test('schedules new cleanup at the right time', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
-    const nowSeconds = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', nowSeconds);
+  test('forwards watermarks to the changeStreamer, in order, skipping redundant watermarks', async () => {
+    const run = monitor.run();
 
-    await monitor.checkWatermarksAndScheduleCleanup();
+    watermarks.push(backedUp('01', 1000));
+    watermarks.push(backedUp('01', 1234)); // duplicate suppressed
+    await vi.waitFor(() =>
+      expect(trackBackupWatermark).toHaveBeenCalledTimes(1),
+    );
 
-    vi.setSystemTime(time + 99_999);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
+    watermarks.push(backedUp('02'));
+    watermarks.push(backedUp('03'));
+    watermarks.push(backedUp('03', 2345)); // duplicate suppressed
+    watermarks.push(backedUp('02')); // ignored earlier watermarks
+    await vi.waitFor(() =>
+      expect(trackBackupWatermark).toHaveBeenCalledTimes(3),
+    );
 
-    vi.setSystemTime(time + 100_000);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
+    expect(trackBackupWatermark.mock.calls).toEqual([['01'], ['02'], ['03']]);
+
+    watermarks.cancel();
+    await run;
   });
 
-  test('drops obsolete watermarks', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
+  test('firstBackupReceived only reflects the first watermark, not later ones', async () => {
+    const run = monitor.run();
 
-    const t1 = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618ocqq8', t1);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
+    watermarks.push(backedUp('01'));
+    await monitor.firstBackupReceived();
 
-    vi.setSystemTime(time + 10_000);
-    const t2 = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', t2);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
+    watermarks.push(backedUp('02'));
+    await vi.waitFor(() =>
+      expect(trackBackupWatermark).toHaveBeenCalledTimes(2),
+    );
+    // Still resolves to the same (void) promise; no error / re-resolution issue.
+    await monitor.firstBackupReceived();
 
-    vi.setSystemTime(time + 110_000);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
+    watermarks.cancel();
+    await run;
   });
 
-  test('only keeps one reservation per id', async () => {
-    const sub1 = monitor.startSnapshotReservation('foo-bar');
-    expect(await getFirstMessage(sub1)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-    expect(sub1.active).toBe(true);
+  /**
+   * A new backup destination starts empty and fills by re-uploading the local
+   * LTX chain, so the first watermarks read back out of it are real but far
+   * behind the replica. The gate must wait for coverage, or the task serves
+   * against a backup that does not cover it and demotes restoring
+   * view-syncers to Postgres catchup.
+   */
+  describe('coverage gate', () => {
+    function makeReplica(stateVersion: string): string {
+      const file = path.join(
+        tmpdir(),
+        `backup-monitor-coverage-${stateVersion}-${Math.random()
+          .toString(36)
+          .slice(2)}.db`,
+      );
+      const db = new Database(createSilentLogContext(), file);
+      db.exec(/*sql*/ `
+        CREATE TABLE "_zero.replicationState" (
+          stateVersion TEXT NOT NULL,
+          writeTimeMs INTEGER NOT NULL,
+          lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+        );
+      `);
+      db.prepare(
+        /*sql*/ `INSERT INTO "_zero.replicationState" (stateVersion, writeTimeMs) VALUES (?, ?)`,
+      ).run(stateVersion, 1000);
+      db.close();
+      return file;
+    }
 
-    const sub2 = monitor.startSnapshotReservation('bar-foo');
-    expect(await getFirstMessage(sub2)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-    expect(sub1.active).toBe(true);
-    expect(sub2.active).toBe(true);
+    function monitorFor(replicaFile: string) {
+      return new BackupMonitor(
+        createSilentLogContext(),
+        watermarks,
+        changeStreamer,
+        replicaFile,
+      );
+    }
 
-    const sub3 = monitor.startSnapshotReservation('bar-foo');
-    expect(await getFirstMessage(sub3)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-    expect(sub1.active).toBe(true);
-    expect(sub2.active).toBe(false);
-    expect(sub3.active).toBe(true);
+    test('does not resolve on a watermark behind the replica', async () => {
+      const monitor = monitorFor(makeReplica('05'));
+      const run = monitor.run();
+      let resolved = false;
+      void monitor.firstBackupReceived().then(() => (resolved = true));
+
+      // Mid-backfill readings: real watermarks, but behind the replica.
+      watermarks.push(backedUp('01'));
+      watermarks.push(backedUp('03'));
+      await vi.waitFor(() =>
+        expect(trackBackupWatermark).toHaveBeenCalledTimes(2),
+      );
+
+      // Tracked for the purge floor, but the gate is still closed.
+      expect(trackBackupWatermark.mock.calls).toEqual([['01'], ['03']]);
+      expect(resolved).toBe(false);
+
+      watermarks.push(backedUp('05'));
+      await monitor.firstBackupReceived();
+      expect(resolved).toBe(true);
+
+      watermarks.cancel();
+      await run;
+    });
+
+    test('resolves on a watermark past the replica', async () => {
+      const monitor = monitorFor(makeReplica('05'));
+      const run = monitor.run();
+
+      watermarks.push(backedUp('09'));
+      await monitor.firstBackupReceived();
+
+      watermarks.cancel();
+      await run;
+    });
+
+    test('stays resolved once covered, even if later watermarks are tracked', async () => {
+      const monitor = monitorFor(makeReplica('05'));
+      const run = monitor.run();
+
+      watermarks.push(backedUp('05'));
+      await monitor.firstBackupReceived();
+
+      watermarks.push(backedUp('06'));
+      await vi.waitFor(() =>
+        expect(trackBackupWatermark).toHaveBeenCalledTimes(2),
+      );
+      await monitor.firstBackupReceived();
+
+      watermarks.cancel();
+      await run;
+    });
   });
 
-  test('pauses cleanup during reservation', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
-    const nowSeconds = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', nowSeconds);
+  test('stop() cancels the watermark source and run() completes', async () => {
+    const run = monitor.run();
 
-    await monitor.checkWatermarksAndScheduleCleanup();
+    watermarks.push(backedUp('01'));
+    await vi.waitFor(() =>
+      expect(trackBackupWatermark).toHaveBeenCalledTimes(1),
+    );
 
-    const sub = monitor.startSnapshotReservation('foo-bar');
-    expect(await getFirstMessage(sub)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-
-    vi.setSystemTime(time + 100_000);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    monitor.endReservation('foo-bar');
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
+    await monitor.stop();
+    await run;
   });
 
-  test('extends cleanup delay due to reservation', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
-    const sub = monitor.startSnapshotReservation('boo-far');
-    expect(await getFirstMessage(sub)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
+  test('run() completes when the watermark source is canceled without any backups', async () => {
+    const run = monitor.run();
+    watermarks.cancel();
+    await run;
 
-    vi.setSystemTime(time + 50_000);
-    const nowSeconds = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', nowSeconds);
-
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 125_000); // Reservation was held of 125 secs.
-    monitor.endReservation('boo-far');
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    // No cleanup should be scheduled, even though 100 seconds passed,
-    // as the delay should have been increased to 125 seconds.
-    vi.setSystemTime(time + 174_999);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 175_000);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
-  });
-
-  test('does not extend cleanup delay on prematurely terminated reservation', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
-    const sub = monitor.startSnapshotReservation('boo-far');
-    expect(await getFirstMessage(sub)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-
-    vi.setSystemTime(time + 50_000);
-    const nowSeconds = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', nowSeconds);
-
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    // Hold the reservation for 125 secs but terminate unexpectedly.
-    // This should *not* result in increasing the cleanup delay.
-    vi.setSystemTime(time + 125_000);
-    sub.cancel();
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 149_999);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 150_000); // delay should still be 100 secs
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
-  });
-
-  test('aborts in-flight fetch on stop', async () => {
-    nock.cleanAll();
-    const {promise: requestReceived, resolve: signalRequestReceived} =
-      resolver<void>();
-    const {promise: allowResponse, resolve: letResponseThrough} =
-      resolver<void>();
-
-    setMetricsResponse('618ocqq8', '1.74545644476593e+09');
-
-    nock('http://localhost:4850')
-      .get('/metrics')
-      .reply(200, async () => {
-        signalRequestReceived();
-        await allowResponse;
-        return metricsResponse;
-      });
-
-    const checkPromise = monitor.checkWatermarksAndScheduleCleanup();
-
-    // Wait until the fetch is in-flight before aborting.
-    await requestReceived;
-
-    // Aborting the signal by stopping the monitor should cause the
-    // in-flight fetch to reject with an AbortError, which is handled
-    // gracefully (no warning logged, no cleanup scheduled).
-    const stopPromise = monitor.stop();
-
-    // Unblock the nock response handler so it doesn't hang.
-    letResponseThrough();
-
-    await checkPromise;
-    await stopPromise;
-
-    // Since the fetch was aborted, no watermarks were processed.
-    expect(scheduled).toEqual([]);
+    expect(trackBackupWatermark).not.toHaveBeenCalled();
   });
 });

@@ -1,20 +1,20 @@
 import type {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {
   listIndexes,
+  type ReplicaIndexSpec,
   listTables,
   type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
-import type {LiteIndexSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
-import {DEL_OP, SET_OP} from './schema/change-log.ts';
+import {DEL_OP, RESET_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   getSubscriptionState,
@@ -25,6 +25,7 @@ import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
 describe('replicator/change-processor', () => {
   let lc: LogContext;
   let servingReplica: Database;
+  let servingRunner: StatementRunner;
   let servingProcessor: ChangeProcessor;
   let backupReplica: Database;
   let backupProcessor: ChangeProcessor;
@@ -33,10 +34,11 @@ describe('replicator/change-processor', () => {
     lc = createSilentLogContext();
     servingReplica = new Database(lc, ':memory:');
     initReplicationState(servingReplica, ['zero_data'], '02');
+    servingRunner = new StatementRunner(servingReplica);
     servingProcessor = new ChangeProcessor(
-      new StatementRunner(servingReplica),
+      servingRunner,
       'serving',
-      (_, err) => {
+      (_, err: unknown) => {
         throw err;
       },
     );
@@ -45,7 +47,7 @@ describe('replicator/change-processor', () => {
     backupProcessor = new ChangeProcessor(
       new StatementRunner(backupReplica),
       'backup',
-      (_, err) => {
+      (_, err: unknown) => {
         throw err;
       },
     );
@@ -57,7 +59,9 @@ describe('replicator/change-processor', () => {
     downstream: ChangeStreamData[];
     data: Record<string, Record<string, unknown>[]>;
     tableSpecs?: LiteTableSpecWithReplicationStatus[];
-    indexSpecs?: LiteIndexSpec[];
+    indexSpecs?: ReplicaIndexSpec[];
+    // Expected `sqlite_master.sql` for named indexes.
+    indexDDL?: Record<string, string>;
     expectedTablesInBackupReplicatorChangeLog?: string[];
   };
 
@@ -73,6 +77,25 @@ describe('replicator/change-processor', () => {
   const fooBarBaz = new ReplicationMessages({foo: 'id', bar: 'id', baz: 'id'});
   const tables = new ReplicationMessages({transaction: 'column'});
   const bff = new ReplicationMessages({bff: ['b', 'a', 'c']});
+
+  test('starts serving transactions with BEGIN IMMEDIATE', () => {
+    const beginImmediate = vi.spyOn(servingRunner, 'beginImmediate');
+    const beginConcurrent = vi.spyOn(servingRunner, 'beginConcurrent');
+
+    servingProcessor.processMessage(lc, [
+      'begin',
+      issues.begin(),
+      {commitWatermark: '03'},
+    ]);
+    servingProcessor.processMessage(lc, [
+      'commit',
+      issues.commit(),
+      {watermark: '03'},
+    ]);
+
+    expect(beginImmediate).toHaveBeenCalledOnce();
+    expect(beginConcurrent).not.toHaveBeenCalled();
+  });
 
   const cases: Case[] = [
     {
@@ -1658,6 +1681,9 @@ describe('replicator/change-processor', () => {
       setup: `
         CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        INSERT INTO "_zero.column_metadata"
+          (table_name, column_name, upstream_type, is_not_null, is_enum, is_array)
+          VALUES ('foo', 'nolz', 'TEXT', 0, 0, 0);
         INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
@@ -1737,7 +1763,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 3,
+              pos: 2,
             },
             ['_0_version']: {
               characterMaximumLength: null,
@@ -1745,7 +1771,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 2,
+              pos: 3,
             },
           },
           backfilling: [],
@@ -1766,6 +1792,9 @@ describe('replicator/change-processor', () => {
       setup: `
         CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        INSERT INTO "_zero.column_metadata"
+          (table_name, column_name, upstream_type, is_not_null, is_enum, is_array)
+          VALUES ('foo', 'nolz', 'TEXT', 0, 0, 0);
         INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
@@ -1848,7 +1877,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 3,
+              pos: 2,
             },
             ['_0_version']: {
               characterMaximumLength: null,
@@ -1856,7 +1885,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 2,
+              pos: 3,
             },
           },
           backfilling: [],
@@ -2071,7 +2100,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 3,
+              pos: 2,
             },
             ['_0_version']: {
               characterMaximumLength: null,
@@ -2079,7 +2108,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 2,
+              pos: 3,
             },
           },
           backfilling: [],
@@ -2181,7 +2210,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 3,
+              pos: 2,
             },
             ['_0_version']: {
               characterMaximumLength: null,
@@ -2189,7 +2218,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 2,
+              pos: 3,
             },
           },
           backfilling: [],
@@ -2222,6 +2251,7 @@ describe('replicator/change-processor', () => {
       setup: `
         CREATE TABLE foo(id INT8, numburr TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        CREATE INDEX foo_present ON foo (id) WHERE numburr IS NOT NULL;
         INSERT INTO foo(id, numburr, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
@@ -2301,7 +2331,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 3,
+              pos: 2,
             },
             ['_0_version']: {
               characterMaximumLength: null,
@@ -2309,7 +2339,7 @@ describe('replicator/change-processor', () => {
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
-              pos: 2,
+              pos: 3,
             },
           },
           backfilling: [],
@@ -2323,7 +2353,18 @@ describe('replicator/change-processor', () => {
           unique: true,
           columns: {id: 'ASC'},
         },
+        {
+          tableName: 'foo',
+          name: 'foo_present',
+          unique: false,
+          columns: {id: 'ASC'},
+          partial: true,
+        },
       ],
+      indexDDL: {
+        foo_present:
+          'CREATE INDEX foo_present ON foo (id) WHERE "number" IS NOT NULL',
+      },
     },
     {
       name: 'drop table',
@@ -2803,6 +2844,14 @@ describe('replicator/change-processor', () => {
         ],
         ['_zero.changeLog2']: [
           {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '0e',
+            stateVersion: '0e',
+            table: 'bff',
+          },
+          {
             backfillingColumnVersions:
               '{"a":"101","b":"101","c":"101","d":"101","e":"101"}',
             op: 's',
@@ -3217,6 +3266,14 @@ describe('replicator/change-processor', () => {
         ],
         ['_zero.changeLog2']: [
           {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '0e',
+            stateVersion: '0e',
+            table: 'bff',
+          },
+          {
             backfillingColumnVersions:
               '{"a":"101","b":"101","c":"101","d":"101","e":"101"}',
             op: 's',
@@ -3570,6 +3627,14 @@ describe('replicator/change-processor', () => {
             backfillingColumnVersions: '{}',
             op: 'r',
             pos: -1n,
+            rowKey: '0e',
+            stateVersion: '0e',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
             rowKey: '123.01',
             stateVersion: '123.01',
             table: 'bff',
@@ -3635,6 +3700,13 @@ describe('replicator/change-processor', () => {
         }
         if (c.indexSpecs) {
           expect(listIndexes(replica)).toEqual(c.indexSpecs);
+        }
+        for (const [name, ddl] of Object.entries(c.indexDDL ?? {})) {
+          expect(
+            replica
+              .prepare(`SELECT sql FROM sqlite_master WHERE name = ?`)
+              .get<{sql: string}>(name)?.sql,
+          ).toBe(ddl);
         }
       }
     });
@@ -3758,6 +3830,110 @@ describe('replicator/change-processor-errors', () => {
     expect(replica.inTransaction).toBe(true);
     processor.abort(lc);
     expect(replica.inTransaction).toBe(false);
+  });
+
+  // A rollback message ends a transaction that the stream interrupted. When
+  // that transaction had changed the schema, the processor kept the table
+  // specs of the schema the rollback undid, so the replayed transaction failed
+  // on a table or column that, as far as it knew, no longer existed.
+  test('a rolled back schema change leaves the table specs as they were', () => {
+    const failures: unknown[] = [];
+    const processor = createChangeProcessor(replica, (_, err) =>
+      failures.push(err),
+    );
+    const bar = new ReplicationMessages({bar: 'id'});
+
+    processor.processMessage(lc, [
+      'begin',
+      bar.begin(),
+      {commitWatermark: '0a'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      bar.createTable({
+        schema: 'public',
+        name: 'bar',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          value: {pos: 1, dataType: 'text'},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, ['commit', bar.commit(), {watermark: '0a'}]);
+
+    // Interrupted: a rename, then the rollback the change-streamer sends.
+    processor.processMessage(lc, [
+      'begin',
+      bar.begin(),
+      {commitWatermark: '0b'},
+    ]);
+    processor.processMessage(lc, ['data', bar.renameTable('bar', 'baz')]);
+    processor.processMessage(lc, ['rollback', {tag: 'rollback'}]);
+
+    // Interrupted: a dropped column, then the rollback.
+    processor.processMessage(lc, [
+      'begin',
+      bar.begin(),
+      {commitWatermark: '0b'},
+    ]);
+    processor.processMessage(lc, ['data', bar.dropColumn('bar', 'value')]);
+    processor.processMessage(lc, ['rollback', {tag: 'rollback'}]);
+
+    // The replayed transaction writes to the schema as it still is.
+    processor.processMessage(lc, [
+      'begin',
+      bar.begin(),
+      {commitWatermark: '0b'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      bar.insert('bar', {id: 1, value: 'kept'}),
+    ]);
+    processor.processMessage(lc, ['commit', bar.commit(), {watermark: '0b'}]);
+
+    expect(failures).toEqual([]);
+    expectTables(replica, {
+      bar: [{id: 1, value: 'kept', ['_0_version']: '0b'}],
+    });
+  });
+
+  test('wraps oversized update binding errors with context', () => {
+    const failures: unknown[] = [];
+    const processor = new ChangeProcessor(
+      new StatementRunner(replica),
+      'backup',
+      (_, error) => failures.push(error),
+    );
+    const update = messages.update('foo', {id: 1, big: 1n << 63n});
+    const relation = {
+      ...update.relation,
+      relationOid: 42,
+    } as typeof update.relation & {relationOid: number};
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      {
+        ...update,
+        relation,
+      },
+    ]);
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      name: 'OversizedUpdateBindingError',
+      message:
+        'Oversized SQLite update binding: tx=0e relationOid=42 table=public.foo column=big valueType=bigint fitsInt64=false',
+      cause: {
+        name: 'RangeError',
+        message: 'The bound string, buffer, or bigint is too big',
+      },
+    });
   });
 
   test('preserves original sqlite auto-rollback error', () => {
@@ -4129,6 +4305,97 @@ describe('replicator/column-metadata-integration', () => {
       isBackfilling: false,
     });
   });
+
+  test.each([
+    {from: false, to: true},
+    {from: true, to: false},
+  ])(
+    'update column nullability from $from to $to without rebuilding the SQLite schema',
+    ({from, to}) => {
+      const messages = new ReplicationMessages({foo: 'id'});
+
+      processor.processMessage(lc, [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '0d'},
+      ]);
+      processor.processMessage(lc, [
+        'data',
+        messages.createTable({
+          schema: 'public',
+          name: 'foo',
+          columns: {
+            id: {pos: 0, dataType: 'int8'},
+            value: {pos: 1, dataType: 'text', notNull: from},
+          },
+          primaryKey: ['id'],
+        }),
+      ]);
+      processor.processMessage(lc, [
+        'data',
+        messages.createIndex({
+          schema: 'public',
+          tableName: 'foo',
+          name: 'foo_value_id_idx',
+          columns: {value: 'ASC', id: 'ASC'},
+          unique: false,
+        }),
+      ]);
+      processor.processMessage(lc, [
+        'data',
+        messages.insert('foo', {id: 1, value: 'one'}),
+      ]);
+      processor.processMessage(lc, [
+        'commit',
+        messages.commit(),
+        {watermark: '0d'},
+      ]);
+
+      const sqliteSchema = replica.prepare(
+        `SELECT name, rootpage, sql FROM sqlite_master
+         WHERE name IN ('foo', 'foo_value_id_idx') ORDER BY name`,
+      );
+      const schemaBeforeUpdate = sqliteSchema.all();
+
+      processor.processMessage(lc, [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '0e'},
+      ]);
+      processor.processMessage(lc, [
+        'data',
+        messages.updateColumn(
+          'foo',
+          {name: 'value', spec: {pos: 1, dataType: 'text', notNull: from}},
+          {name: 'value', spec: {pos: 1, dataType: 'text', notNull: to}},
+        ),
+      ]);
+      processor.processMessage(lc, [
+        'commit',
+        messages.commit(),
+        {watermark: '0e'},
+      ]);
+
+      expect(sqliteSchema.all()).toEqual(schemaBeforeUpdate);
+      expect(replica.prepare('SELECT id, value FROM foo').all()).toEqual([
+        {id: 1, value: 'one'},
+      ]);
+      expect(
+        must(ColumnMetadataStore.getInstance(replica)).getColumn(
+          'foo',
+          'value',
+        ),
+      ).toMatchObject({isNotNull: to});
+      expect(
+        replica
+          .prepare(
+            `SELECT stateVersion, "table", op FROM "_zero.changeLog2"
+             WHERE stateVersion = '0e'`,
+          )
+          .all(),
+      ).toContainEqual({stateVersion: '0e', table: 'foo', op: RESET_OP});
+    },
+  );
 
   test('drop column deletes metadata', () => {
     const messages = new ReplicationMessages({foo: 'id'});

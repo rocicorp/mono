@@ -33,6 +33,7 @@ type TxData = {
   ivmSources: IVMSourceBranch;
   token: string | undefined;
   context: unknown;
+  fork: () => TxData;
 };
 
 export class ZeroRep implements ZeroOption {
@@ -64,7 +65,7 @@ export class ZeroRep implements ZeroOption {
     const diffs: InternalDiffOperation[] = [];
     await withRead(store, async dagRead => {
       const read = await readFromHash(hash, dagRead, FormatVersion.Latest);
-      for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX)) {
+      for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX, true)) {
         if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
           break;
         }
@@ -78,6 +79,12 @@ export class ZeroRep implements ZeroOption {
     this.#store = store;
 
     this.#context.processChanges(undefined, hash, diffs);
+    // Pipelines for queries materialized before this point were deferred so
+    // the replica above was loaded into the sources without fanning out to
+    // them. Build and hydrate them now that the sources are populated,
+    // yielding between pipelines so the app stays responsive. Replicache is
+    // not ready until this returns so no changes arrive in the meantime.
+    await this.#context.hydratePendingPipelines();
   }
 
   getTxData = (
@@ -93,12 +100,15 @@ export class ZeroRep implements ZeroOption {
 
     return this.#ivmMain
       .forkToHead(must(this.#store), desiredHead, readOptions)
-      .then(branch => ({
-        ivmSources: branch,
-        token: fromReplicacheAuthToken(this.#auth),
-        context: this.#context,
-      }));
+      .then(branch => this.#makeTxData(branch));
   };
+
+  #makeTxData = (branch: IVMSourceBranch): TxData => ({
+    ivmSources: branch,
+    token: fromReplicacheAuthToken(this.#auth),
+    context: this.#context,
+    fork: () => this.#makeTxData(branch.fork()),
+  });
 
   advance = (expectedHash: Hash, newHash: Hash, diffs: InternalDiff): void => {
     this.#context.processChanges(expectedHash, newHash, diffs);

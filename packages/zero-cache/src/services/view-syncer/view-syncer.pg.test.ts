@@ -7,6 +7,7 @@ import {
 } from '../../../../shared/src/logging-test-utils.ts';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import {type AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {TransformResponseBody} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -22,6 +23,16 @@ import type {
 } from '../../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import {
+  clientSchemaFrom,
+  createSchema,
+} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  number,
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.ts';
+import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
@@ -33,6 +44,7 @@ import type {
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
@@ -43,11 +55,16 @@ import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {ClientHandler} from './client-handler.ts';
 import type {ConnectionValidation} from './connection-context-manager.ts';
 import {CVRStore} from './cvr-store.ts';
-import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
+import {
+  CVRConfigDrivenUpdater,
+  CVRQueryDrivenUpdater,
+  CVRUpdater,
+} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
-import {PipelineDriver} from './pipeline-driver.ts';
+import {type RowChange, PipelineDriver} from './pipeline-driver.ts';
 import {formatSignature, rowIDSignatureUnit} from './row-set-signature.ts';
 import type {RowID} from './schema/types.ts';
+import {ResetPipelinesSignal} from './snapshotter.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   app2Messages,
@@ -125,7 +142,7 @@ describe('view-syncer/service', () => {
     activeClients?: string[],
   ) => {
     queue: Queue<Downstream>;
-    source: Source<Downstream>;
+    source: Source<ViewSyncerDownstream>;
   };
   let setTimeoutFn: Mock<typeof setTimeout>;
   let customQueryTransformer: CustomQueryTransformer | undefined;
@@ -1294,26 +1311,26 @@ describe('view-syncer/service', () => {
             "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 51,
+            "protocolVersion": 53,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
               ],
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -1584,26 +1601,26 @@ describe('view-syncer/service', () => {
             "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 51,
+            "protocolVersion": 53,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
               ],
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -2262,26 +2279,26 @@ describe('view-syncer/service', () => {
             "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 51,
+            "protocolVersion": 53,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
               ],
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -2481,26 +2498,26 @@ describe('view-syncer/service', () => {
             "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 51,
+            "protocolVersion": 53,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
               ],
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -2584,6 +2601,432 @@ describe('view-syncer/service', () => {
           ],
         ]
       `);
+    });
+
+    test('does not re-transform custom queries across pipeline resets (e.g. advancement-timeout)', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+            {
+              id: 'custom-2',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-2',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      // First client connection transformed custom queries once for auth validation
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate an advancement-timeout pipeline reset on the next replica advance
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal(
+            'Advancement exceeded timeout',
+            'advancement-timeout',
+          );
+        });
+
+      // Mutate a row and trigger advance -> throws ResetPipelinesSignal -> resets pipelines -> rehydrates
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      // Advance again with another mutation so the rehydrated pipelines advance normally and poke the client
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      // Verify advance was called and threw the signal on the first attempt
+      expect(advanceSpy).toHaveBeenCalled();
+
+      // Verify that transform was NOT called again during pipeline reset rehydration!
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('re-transforms custom queries when reset is caused by permissions-change', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate a permissions-change pipeline reset
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal(
+            'Permissions changed',
+            'permissions-change',
+          );
+        });
+
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+
+      // Verify that transform WAS called again because permissions changed!
+      expect(transformSpy).toHaveBeenCalledTimes(2);
+    });
+
+    test('does not re-transform custom queries across scalar-subquery resets and preserves reactive monitoring', async () => {
+      const scalarQuery: AST = {
+        table: 'issues',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['issueID'],
+            },
+            subquery: {
+              table: 'comments',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'id'},
+                right: {type: 'literal', value: '1'},
+              },
+            },
+          },
+        },
+      };
+
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: scalarQuery,
+              transformationHash: 'hash-scalar-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Mutate comment '1' issueID from '1' to '2':
+      // The companion pipeline detects the scalar value change and throws ResetPipelinesSignal with 'scalar-subquery'.
+      replicator.processTransaction(
+        '101',
+        messages.update('comments', {id: '1', issueID: '2', text: 'comment 1'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      // Advance again with another transaction so rehydrated pipelines advance normally and poke the client
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      // Verify that transform was NOT called again during scalar-subquery pipeline reset rehydration!
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Verify companion monitor is still active and reactive:
+      // Mutating comment '1' issueID again from '2' to '3' triggers scalar monitoring again!
+      replicator.processTransaction(
+        '103',
+        messages.update('comments', {id: '1', issueID: '3', text: 'comment 1'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      // Another transaction so rehydrated pipelines advance
+      replicator.processTransaction(
+        '104',
+        messages.delete('issues', {id: '4'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      // Still no external transform call!
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not re-transform custom queries across truncation resets', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate a truncation reset
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal('Table was truncated', 'truncation');
+        });
+
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('resets pipelines when a schema change lands before hydration', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      // A client schema without `issues.json`, so that dropping the column
+      // upstream is not a client-visible schema error.
+      const {clientSchema} = clientSchemaFrom(
+        createSchema({
+          tables: [
+            table('issues')
+              .columns({
+                id: string(),
+                title: string(),
+                owner: string(),
+                parent: string(),
+                big: number(),
+              })
+              .primaryKey('id'),
+          ],
+        }),
+      );
+      const client = connect(
+        SYNC_CONTEXT,
+        [{op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']}],
+        clientSchema,
+      );
+      await nextPoke(client);
+
+      // Land a schema change between init() and the first hydration, which
+      // is where advanceWithoutDiff() moves the snapshot to head. The table
+      // specs computed at init() still list the dropped column.
+      const advanceWithoutDiff = PipelineDriver.prototype.advanceWithoutDiff;
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advanceWithoutDiff')
+        .mockImplementationOnce(function (this: PipelineDriver) {
+          replicator.processTransaction(
+            '101',
+            messages.dropColumn('issues', 'json'),
+          );
+          return advanceWithoutDiff.call(this);
+        });
+      using resetSpy = vi.spyOn(PipelineDriver.prototype, 'reset');
+
+      stateChanges.push({state: 'version-ready'});
+      const poke = await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+      expect(resetSpy).toHaveBeenCalledTimes(1);
+      // Hydration completed against the new schema.
+      expect(poke.map(([type]) => type)).toEqual([
+        'pokeStart',
+        'pokePart',
+        'pokeEnd',
+      ]);
+      expect(poke[1]).toMatchObject([
+        'pokePart',
+        {
+          gotQueriesPatch: [{hash: 'custom-1', op: 'put'}],
+          rowsPatch: expect.arrayContaining([
+            expect.objectContaining({tableName: 'issues', op: 'put'}),
+          ]),
+        },
+      ]);
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not re-transform custom queries across schema-change resets', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate a schema-change reset
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal(
+            'schema for table issues has changed',
+            'schema-change',
+          );
+        });
+
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('re-transforms custom queries on reset when deprecated client queries exist', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'client-1', ast: COMMENTS_QUERY},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate an advancement-timeout reset
+      using advanceSpy = vi
+        .spyOn(PipelineDriver.prototype, 'advance')
+        .mockImplementationOnce(() => {
+          throw new ResetPipelinesSignal(
+            'Advancement exceeded timeout',
+            'advancement-timeout',
+          );
+        });
+
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      replicator.processTransaction(
+        '102',
+        messages.delete('issues', {id: '3'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(advanceSpy).toHaveBeenCalled();
+      // Because a deprecated client query was present, full wipe reset occurs and transform is called again
+      expect(transformSpy).toHaveBeenCalledTimes(2);
     });
 
     test('retransforms custom queries when opaque auth refreshes', async () => {
@@ -4221,6 +4664,7 @@ describe('view-syncer/service', () => {
 
     // Perform an unrelated transaction that does not affect any queries.
     // This should not result in a poke.
+    await vi.waitFor(() => expect(vs.servedVersion).toBe('01'));
     replicator.processTransaction(
       '101',
       messages.insert('users', {
@@ -4230,6 +4674,12 @@ describe('view-syncer/service', () => {
     );
     stateChanges.push({state: 'version-ready'});
     await expectNoPokes(client);
+
+    // ... but the client group *is* current as of '101'. The CVR version does
+    // not move (nothing was written), so servedVersion has to track the replica
+    // version that was advanced to. Otherwise sync.serving_lag_stats and
+    // sync.e2e_serving_lag would report the growing time since '01' as lag.
+    await vi.waitFor(() => expect(vs.servedVersion).toBe('101'));
 
     // Then, a relevant change should bump the client from '01' directly to '123'.
     replicator.processTransaction(
@@ -4807,6 +5257,114 @@ describe('view-syncer/service', () => {
     }
   });
 
+  test('same-hash rehydrate during deleteClients forces a version bump', async () => {
+    pruneIssues('3', '4', '5');
+
+    const ttl = 5000;
+    const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2, ttl},
+    ]);
+    const {queue: client2, source: connectSource2} = connectWithQueueAndSource(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY, ttl}],
+    );
+
+    await nextPoke(client1);
+    await nextPoke(client2);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(client1);
+    await nextPoke(client1);
+    await nextPoke(client2);
+    await nextPoke(client2);
+
+    expect(await loadStoredSig('query-hash1')).toEqual(
+      expectedIssuesSig(issueRowID('1'), issueRowID('2')),
+    );
+
+    const originalQueries = PipelineDriver.prototype.queries;
+    const queriesSpy = vi
+      .spyOn(PipelineDriver.prototype, 'queries')
+      .mockImplementation(function (this: PipelineDriver) {
+        const queries = originalQueries.call(this);
+        const filtered = new Map(queries);
+        filtered.delete('query-hash1');
+        return filtered;
+      });
+    const originalAddQuery = PipelineDriver.prototype.addQuery;
+    const addQuerySpy = vi
+      .spyOn(PipelineDriver.prototype, 'addQuery')
+      .mockImplementation(function (
+        this: PipelineDriver,
+        ...args: Parameters<PipelineDriver['addQuery']>
+      ) {
+        const [, queryID] = args;
+        if (queryID !== 'query-hash1') {
+          return originalAddQuery.call(this, ...args);
+        }
+
+        const changes: RowChange[] = [
+          {
+            type: ChangeType.ADD,
+            queryID,
+            table: 'issues',
+            rowKey: {id: '2'},
+            row: {
+              id: '2',
+              title: 'parent issue bar',
+              owner: '101',
+              parent: null,
+              big: -9007199254740991,
+              json: null,
+              _0_version: '01',
+            },
+          },
+          {
+            type: ChangeType.ADD,
+            queryID,
+            table: 'issues',
+            rowKey: {id: '6'},
+            row: {
+              id: '6',
+              title: 'row C',
+              owner: '100',
+              parent: null,
+              big: 0,
+              json: null,
+              _0_version: '01',
+            },
+          },
+        ];
+        return changes;
+      });
+
+    connectSource2.cancel();
+    try {
+      await vs.deleteClients(SYNC_CONTEXT, [
+        'deleteClients',
+        {clientIDs: ['bar']},
+      ]);
+
+      const rowsPoke = await drainUntilRowsPatchOrQuiet(client1, 1000);
+      expect(rowsPoke).toBeDefined();
+
+      const {puts, dels} = rowOpsFor(rowsPoke!, 'issues');
+      expect(dels.map(p => p.id.id)).toEqual(['1']);
+      expect(puts.map(p => p.value.id)).toEqual(['6']);
+
+      if (!rowsPoke!.some(([cmd]) => cmd === 'deleteClients')) {
+        expect(await client1.dequeue()).toEqual([
+          'deleteClients',
+          {clientIDs: ['bar']},
+        ]);
+      }
+    } finally {
+      addQuerySpy.mockRestore();
+      queriesSpy.mockRestore();
+    }
+  });
+
   test('rowSetSignature match on rehydration: no re-execution, no row-diff poke', async () => {
     pruneIssues('3', '4', '5');
 
@@ -4968,14 +5526,19 @@ describe('view-syncer/service', () => {
       // deployment would see a spurious re-send of every row.
       expect(await drainUntilRowsPatchOrQuiet(queue)).toBeUndefined();
 
-      // The sig *does* get initialized on this cycle — but through
-      // CVRQueryDrivenUpdater.flush's opportunistic pass over all queries
-      // (triggered by the normal add of internal queries on restart), not
-      // through drift re-execution. That's the intended "sigs get initialized
-      // whenever they next re-execute via the normal path" behavior.
-      expect(await loadStoredSig('query-hash1')).toEqual(
-        expectedIssuesSig(issueRowID('2'), issueRowID('6')),
-      );
+      // The sig stays uninitialized. Nothing re-executes on this restart:
+      // every query re-hashes to its stored transformationHash and is hydrated
+      // as unchanged, which does not go through CVRQueryDrivenUpdater and its
+      // opportunistic sig pass. It gets initialized whenever the query next
+      // re-executes for a real reason (transformation hash change, etc.).
+      //
+      // This assertion used to expect the sig to be written here — but only
+      // because normalization passed condition objects through with whatever
+      // key order they arrived with, and Postgres jsonb reorders keys, so the
+      // internal queries spuriously hash-mismatched on every restart and
+      // dragged hydration through the updater path. Now that normalization is
+      // canonical, the spurious re-execution (and this side effect) is gone.
+      expect(await loadStoredSig('query-hash1')).toBeNull();
     } finally {
       await cleanup();
     }
@@ -5867,6 +6430,110 @@ describe('view-syncer/service', () => {
     } satisfies ErrorBody);
   });
 
+  test('resets pipelines when a reloaded CVR was advanced by another task', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // Hydrated at replica version '01'.
+
+    // Another task takes over the client group, adds a query, and hydrates
+    // it at a version this task's replica has not reached yet.
+    const otherStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD,
+      'some-other-task-id',
+      serviceID,
+      ON_FAILURE,
+    );
+    const otherConnectTime = Date.now();
+    const otherTTLClock = ttlClockFromNumber(otherConnectTime);
+    const configUpdater = new CVRConfigDrivenUpdater(
+      otherStore,
+      await otherStore.load(lc, otherConnectTime),
+      SHARD,
+    );
+    configUpdater.putDesiredQueries(SYNC_CONTEXT.clientID, [
+      {hash: 'query-hash2', ast: USERS_QUERY},
+    ]);
+    const {cvr: otherCVR} = await configUpdater.flush(
+      lc,
+      otherConnectTime,
+      otherConnectTime,
+      otherTTLClock,
+    );
+    const queryUpdater = new CVRQueryDrivenUpdater(
+      otherStore,
+      otherCVR,
+      '07',
+      REPLICA_VERSION,
+    );
+    queryUpdater.trackQueries(
+      lc,
+      [{id: 'query-hash2', transformationHash: 'other-hash'}],
+      [],
+    );
+    await queryUpdater.deleteUnreferencedRows(lc);
+    await queryUpdater.flush(
+      lc,
+      otherConnectTime,
+      otherConnectTime,
+      otherTTLClock,
+    );
+    // Wait for the fire-and-forget takeover to happen.
+    await vi.waitFor(async () =>
+      expect(await getCVROwner()).toBe('some-other-task-id'),
+    );
+    await sleep(5); // The next connection must be newer than the takeover.
+
+    // A client that synced with the other task connects here. It is ahead of
+    // this task's cached CVR, which fails the connection and drops the cache.
+    const client2 = connect(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2', baseCookie: '07'},
+      [],
+    );
+    await expect(client2.dequeue()).rejects.toMatchObject({
+      errorBody: {kind: ErrorKind.InvalidConnectionRequestBaseCookie},
+    });
+
+    // The next command reloads the CVR at '07' while the pipelines are
+    // still at '01'. This must not fail the connection.
+    await vs.deleteClients(SYNC_CONTEXT, [
+      'deleteClients',
+      {clientIDs: ['no-such-client']},
+    ]);
+    expect(await client.dequeue()).toEqual([
+      'deleteClients',
+      {clientIDs: ['no-such-client']},
+    ]);
+    await expectNoPokes(client);
+    expect(
+      logSink.messages.some(
+        ([level, , args]) =>
+          level === 'info' &&
+          String(args[0]).startsWith(
+            'resetting pipelines: pipelines@01 are behind reloaded cvr@07',
+          ),
+      ),
+    ).toBe(true);
+
+    // Once the replica catches up, the pipelines are rehydrated from the CVR.
+    const db = new StatementRunner(replica);
+    updateReplicationWatermark(db, '07');
+    stateChanges.push({state: 'version-ready'});
+    await vi.waitFor(() =>
+      expect(
+        logSink.messages.some(
+          ([level, , args]) =>
+            level === 'info' && String(args[0]).startsWith('init pipelines@07'),
+        ),
+      ).toBe(true),
+    );
+    expect(logSink.messages.filter(([level]) => level === 'error')).toEqual([]);
+  });
+
   test('clean up operator storage on close', async () => {
     const storage = operatorStorage.createStorage();
     storage.set('foo', 'bar');
@@ -5910,6 +6577,28 @@ describe('view-syncer/service', () => {
     // until that interval elapses.
     await viewSyncerDone;
     expect(drainCoordinator.nextDrainTime).toBeGreaterThan(now);
+  });
+
+  test('readyState() releases its drain listener once initialized', async () => {
+    // run() is waiting on readyState() until the first client initializes.
+    expect(drainCoordinator.drainListenerCount).toBe(1);
+
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desired queries
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // hydration, from the run loop
+
+    // The coordinator outlives the view-syncer, so it must not keep a
+    // reference to it after initialization.
+    expect(drainCoordinator.drainListenerCount).toBe(0);
+  });
+
+  test('a drain requested before initialization stops the view-syncer', async () => {
+    drainCoordinator.drainNextIn(0);
+    await viewSyncerDone;
+    expect(drainCoordinator.drainListenerCount).toBe(0);
   });
 
   test('retracting an exists relationship', async () => {
@@ -6192,6 +6881,7 @@ describe('view-syncer/service', () => {
     ]);
 
     await flushStarted;
+    const timersScheduledBeforeStop = setTimeoutFn.mock.calls.length;
     const stopPromise = vs.stop();
     flushReleased = true;
     allowFlush.resolve();
@@ -6201,6 +6891,13 @@ describe('view-syncer/service', () => {
     expect(failSpy).not.toHaveBeenCalled();
     expect(destroySpy).toHaveBeenCalled();
     expect(destroyCalledAfterRelease).toBe(true);
+
+    // The in-flight update flushes the CVR after the view-syncer has been
+    // stopped. It must not re-arm any timers (e.g. the ttlClock interval),
+    // which would outlive the service, retain it, and keep updating the CVR.
+    expect(
+      setTimeoutFn.mock.calls.slice(timersScheduledBeforeStop),
+    ).toHaveLength(0);
   });
 
   // Regression test: a client that disconnects before initConnection's async
@@ -6284,5 +6981,79 @@ describe('view-syncer/service', () => {
 
     // Verify that #cleanup ran (pipelines destroyed).
     expect(destroySpy).toHaveBeenCalled();
+  });
+
+  // Regression test: a ViewSyncer is created as soon as a client connects to
+  // its client group, but it is only initialized by the client's
+  // `initConnection` message. If that message never arrived (e.g. the socket
+  // closed during connection setup), run() blocked on readyState() forever
+  // and nothing scheduled the idle shutdown, leaving a zombie service in the
+  // ServiceRunner. The fix schedules the idle-shutdown check when run()
+  // starts.
+  test('view-syncer run completes when no client ever initializes it', async () => {
+    const destroySpy = vi.spyOn(PipelineDriver.prototype, 'destroy');
+
+    // Use fake timers starting from *now* so that advancing past the
+    // keepalive window (DEFAULT_KEEPALIVE_MS = 5000, set at construction
+    // time using real Date.now()) works correctly.
+    vi.setSystemTime(vi.getRealSystemTime());
+
+    // No client connects. The idle-shutdown check must still have been
+    // scheduled when run() started.
+    expect(setTimeoutFn).toHaveBeenCalled();
+
+    // Advance time past the keepalive window so that
+    // #checkForShutdownConditionsInLock returns true, and fire all pending
+    // timer callbacks (setTimeout is mocked).
+    vi.setSystemTime(Date.now() + 6000);
+    for (const call of setTimeoutFn.mock.calls) {
+      call[0]();
+    }
+    await sleep(100);
+
+    // Fire any newly scheduled callbacks (shutdown may reschedule).
+    vi.setSystemTime(Date.now() + 6000);
+    for (const call of setTimeoutFn.mock.calls) {
+      call[0]();
+    }
+    await sleep(100);
+
+    // Without the fix, viewSyncerDone would never resolve here.
+    const timeout = sleep(5000).then(() => 'timeout' as const);
+    const result = await Promise.race([
+      viewSyncerDone.then(() => 'done' as const),
+      timeout,
+    ]);
+    expect(result).toBe('done');
+
+    // Verify that #cleanup ran (pipelines destroyed).
+    expect(destroySpy).toHaveBeenCalled();
+  });
+
+  test('stopping before the shutdown check fires clears the pending timer', async () => {
+    // Hand out a recognizable handle for timers scheduled from here on, so
+    // that clearing the pending shutdown timer can be observed.
+    const handle = {} as unknown as NodeJS.Timeout;
+    setTimeoutFn.mockReturnValue(handle);
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      // A client connects and disconnects, which schedules the shutdown
+      // check (without firing it).
+      const {source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      ]);
+      source.cancel();
+      await sleep(100);
+      expect(setTimeoutFn).toHaveBeenCalled();
+
+      // Stopping the view-syncer before the check fires must clear the
+      // pending timer, which would otherwise retain the service until it
+      // fired after teardown.
+      await vs.stop();
+      await viewSyncerDone;
+      expect(clearTimeoutSpy.mock.calls.some(([t]) => t === handle)).toBe(true);
+    } finally {
+      clearTimeoutSpy.mockRestore();
+    }
   });
 });

@@ -1,5 +1,7 @@
+import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
+import {promiseOrAbort} from '../../../shared/src/promise-race.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import {type Result, Subscription} from './subscription.ts';
 
@@ -627,5 +629,299 @@ describe('types/subscription', () => {
       pipeline: true,
     });
     expect(subWithCoalesceAndPipeline.pipeline).not.toBeUndefined();
+  });
+
+  describe('signal', () => {
+    test('other resolves first, subscription remains active', async () => {
+      const sub = Subscription.create<number>();
+      const other = resolver<string>();
+
+      const raced = promiseOrAbort(other.promise, sub.signal);
+      other.resolve('foo');
+
+      expect(await raced).toBe('foo');
+      expect(sub.active).toBe(true);
+    });
+
+    test('other rejects first', async () => {
+      const sub = Subscription.create<number>();
+      const other = resolver<string>();
+
+      const raced = promiseOrAbort(other.promise, sub.signal);
+      other.reject(new Error('other-boom'));
+
+      await expect(raced).rejects.toThrow('other-boom');
+      expect(sub.active).toBe(true);
+    });
+
+    test('cancel wins over a never-settling other', async () => {
+      const sub = Subscription.create<number>();
+      const never = new Promise<string>(() => {});
+
+      const raced = promiseOrAbort(never, sub.signal);
+      sub.cancel();
+
+      await expect(raced).rejects.toThrow('canceled');
+    });
+
+    test('fail wins over a never-settling other, rejecting with the error', async () => {
+      const sub = Subscription.create<number>();
+      const never = new Promise<string>(() => {});
+
+      const raced = promiseOrAbort(never, sub.signal);
+      sub.fail(new Error('sub-boom'));
+
+      await expect(raced).rejects.toThrow('sub-boom');
+    });
+
+    test('end (with no queued messages) resolves doneOr', async () => {
+      const sub = Subscription.create<number>();
+      const never = new Promise<string>(() => {});
+
+      const raced = promiseOrAbort(never, sub.signal);
+      sub.end(); // no queued messages => immediate cancel
+
+      await expect(raced).rejects.toThrow('canceled');
+    });
+
+    test('already-canceled subscription resolves immediately', async () => {
+      const sub = Subscription.create<number>();
+      sub.cancel();
+
+      const never = new Promise<string>(() => {});
+      await expect(promiseOrAbort(never, sub.signal)).rejects.toThrow(
+        'canceled',
+      );
+    });
+
+    test('already-failed subscription rejects immediately', async () => {
+      const sub = Subscription.create<number>();
+      sub.fail(new Error('already-boom'));
+
+      const never = new Promise<string>(() => {});
+      await expect(promiseOrAbort(never, sub.signal)).rejects.toThrow(
+        'already-boom',
+      );
+    });
+
+    test('repeated races do not accumulate abort listeners', async () => {
+      const sub = Subscription.create<number>();
+
+      // Each race resolves via `other`; the abort listener must be removed in
+      // the `finally` so listeners don't accumulate on the shared signal
+      // (the whole point of doneOr over Promise.race with a long-lived done
+      // promise, see https://github.com/nodejs/node/issues/17469).
+      for (let i = 0; i < 100; i++) {
+        const other = resolver<number>();
+        const raced = promiseOrAbort(other.promise, sub.signal);
+        other.resolve(i);
+        expect(await raced).toBe(i);
+      }
+
+      // The subscription still terminates cleanly afterwards.
+      const raced = promiseOrAbort(new Promise<number>(() => {}), sub.signal);
+      sub.cancel();
+      await expect(raced).rejects.toThrow('canceled');
+    });
+  });
+
+  describe('pipelineBatched', () => {
+    test('eagerly drains multiple queued messages up to maxBatch', async () => {
+      const consumed = new Set<number>();
+      const cleanup = vi.fn();
+      const results: Promise<Result>[] = [];
+
+      const sub = Subscription.create<number>({
+        cleanup,
+        consumed: m => consumed.add(m),
+      });
+
+      for (let i = 0; i < 10; i++) {
+        results.push(sub.push(i).result);
+      }
+
+      const batched = sub.pipelineBatched(5);
+      assert(batched, 'must support batched pipeline');
+
+      const batches: number[][] = [];
+      for await (const {values, consumed: signalConsumed} of batched) {
+        batches.push(values);
+        signalConsumed();
+        if (batches.length === 2) {
+          break;
+        }
+      }
+
+      expect(batches).toEqual([
+        [0, 1, 2, 3, 4],
+        [5, 6, 7, 8, 9],
+      ]);
+      expect(consumed).toEqual(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+      for (const r of results) {
+        expect(await r).toBe('consumed');
+      }
+    });
+
+    test('yields single messages as they arrive when queue is empty', async () => {
+      const sub = Subscription.create<number>();
+      const batched = sub.pipelineBatched(10);
+      assert(batched, 'must support batched pipeline');
+
+      const it = batched[Symbol.asyncIterator]();
+
+      const nextPromise = it.next();
+      sub.push(42);
+
+      const res = await nextPromise;
+      expect(res.done).toBe(false);
+      expect(res.value?.values).toEqual([42]);
+      res.value?.consumed();
+    });
+
+    test('cleanup on cancel with pending batch', async () => {
+      const cleanup = vi.fn();
+      const sub = Subscription.create<number>({cleanup});
+      const results: Promise<Result>[] = [];
+      for (let i = 0; i < 5; i++) {
+        results.push(sub.push(i).result);
+      }
+
+      const batched = sub.pipelineBatched(3);
+      assert(batched, 'must support batched pipeline');
+
+      const it = batched[Symbol.asyncIterator]();
+      const first = await it.next();
+      expect(first.value?.values).toEqual([0, 1, 2]);
+
+      // Cancel before consuming first batch
+      sub.cancel();
+
+      for (const r of results) {
+        expect(await r).toBe('unconsumed');
+      }
+      expect(cleanup).toHaveBeenCalledWith([0, 1, 2, 3, 4], undefined);
+    });
+
+    test('validates maxBatch is a positive integer', () => {
+      const sub = Subscription.create<number>();
+      expect(() => sub.pipelineBatched(0)).toThrow(/positive integer/);
+      expect(() => sub.pipelineBatched(-5)).toThrow(/positive integer/);
+      expect(() => sub.pipelineBatched(1.5)).toThrow(/positive integer/);
+      expect(() => sub.pipelineBatched(NaN)).toThrow(/positive integer/);
+    });
+  });
+
+  test('pipeline cancel cleanup ignores already dequeued entries', async () => {
+    const consumed: number[] = [];
+    const cleanup = vi.fn();
+    const results: Promise<Result>[] = [];
+
+    const subscription = Subscription.create<number>({
+      cleanup,
+      consumed: m => consumed.push(m),
+    });
+    for (let i = 0; i < 1500; i++) {
+      results.push(subscription.push(i).result);
+    }
+
+    assert(
+      subscription.pipeline,
+      'Expected subscription pipeline to be defined',
+    );
+    const iterator = subscription.pipeline[Symbol.asyncIterator]();
+
+    for (let i = 0; i < 1200; i++) {
+      const next = await iterator.next();
+      assert(!next.done, 'Expected next subscription entry');
+      expect(next.value.value).toBe(i);
+      next.value.consumed();
+      expect(await results[i]).toBe('consumed');
+    }
+
+    const current = await iterator.next();
+    assert(!current.done, 'Expected current subscription entry');
+    expect(current.value.value).toBe(1200);
+    expect(subscription.queued).toBe(299);
+
+    subscription.cancel();
+    expect(await iterator.next()).toEqual({value: undefined, done: true});
+
+    for (let i = 1200; i < 1500; i++) {
+      expect(await results[i]).toBe('unconsumed');
+    }
+    expect(consumed).toEqual(Array.from({length: 1200}, (_, i) => i));
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual(
+      Array.from({length: 300}, (_, i) => i + 1200),
+    );
+  });
+
+  test('end drains queued messages after many dequeues', async () => {
+    const consumed: number[] = [];
+    const cleanup = vi.fn();
+    const results: Promise<Result>[] = [];
+
+    const subscription = Subscription.create<number>({
+      cleanup,
+      consumed: m => consumed.push(m),
+    });
+    for (let i = 0; i < 1500; i++) {
+      results.push(subscription.push(i).result);
+    }
+
+    const received: number[] = [];
+    for await (const m of subscription) {
+      received.push(m);
+      if (m === 1199) {
+        subscription.end();
+      }
+    }
+
+    expect(received).toEqual(Array.from({length: 1500}, (_, i) => i));
+    expect(consumed).toEqual(received);
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual([]);
+    for (const result of results) {
+      expect(await result).toBe('consumed');
+    }
+  });
+
+  test('coalesces the last message after the queue wraps repeatedly', async () => {
+    const subscription = Subscription.create<number>({
+      coalesce: (curr, prev) => curr + prev,
+      pipeline: true,
+    });
+    assert(subscription.pipeline, 'expected pipeline to be enabled');
+    const iterator = subscription.pipeline[Symbol.asyncIterator]();
+
+    for (let i = 0; i < 64; i++) {
+      const first = subscription.push(i);
+      const second = subscription.push(i + 1);
+      expect(await first.result).toBe('coalesced');
+      const next = await iterator.next();
+      assert(!next.done, 'expected a coalesced message');
+      expect(next.value.value).toBe(2 * i + 1);
+      next.value.consumed();
+      expect(await second.result).toBe('consumed');
+      expect(subscription.queued).toBe(0);
+    }
+
+    subscription.end();
+    expect(await iterator.next()).toEqual({value: undefined, done: true});
+  });
+
+  test('cleanup observes the pending queue before it is cleared', () => {
+    let queuedDuringCleanup = 0;
+    const subscription = Subscription.create<number>({
+      cleanup: () => {
+        queuedDuringCleanup = subscription.queued;
+      },
+    });
+    subscription.push(1);
+    subscription.push(2);
+    subscription.cancel();
+
+    expect(queuedDuringCleanup).toBe(2);
+    expect(subscription.queued).toBe(0);
   });
 });

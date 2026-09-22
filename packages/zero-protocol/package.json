@@ -16,15 +16,15 @@
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
-    "compare-utf8": "^0.2.0"
+    "compare-utf8": "^0.2.3"
   },
   "devDependencies": {
     "fast-check": "^3.18.0",
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.65.0",
     "shared": "workspace:*",
-    "typescript": "~6.0.2",
-    "vitest": "^4.1.6",
+    "typescript": "~7.0.2",
+    "vitest": "^5.0.0",
     "zero-types": "workspace:*"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.11.0"
 }

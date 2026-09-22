@@ -171,6 +171,30 @@ describe('string arg packing', () => {
       `);
     });
 
+    test('text-represented scalar type', () => {
+      expect(
+        formatPgInternalConvert(
+          sql`SELECT * FROM "foo" WHERE "isbn" = ${sqlConvertColumnArg(
+            {
+              isArray: false,
+              isEnum: false,
+              type: 'isbn13',
+            },
+            '9780306406157',
+            false,
+            true,
+          )}`,
+        ),
+      ).toMatchInlineSnapshot(`
+        {
+          "text": "SELECT * FROM "foo" WHERE "isbn" = $1::text::isbn13",
+          "values": [
+            "9780306406157",
+          ],
+        }
+      `);
+    });
+
     test('boolean type', () => {
       expect(
         formatPgInternalConvert(
@@ -584,6 +608,26 @@ describe('string arg packing', () => {
           "text": "INSERT INTO "foo" VALUES ($1::text::text)",
           "values": [
             "two",
+          ],
+        }
+      `);
+    });
+
+    test('insert text-represented scalar type', () => {
+      expect(
+        formatPgInternalConvert(
+          sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+            {isArray: false, isEnum: false, type: 'macaddr'},
+            '08:00:2b:01:02:03',
+            false,
+            false,
+          )})`,
+        ),
+      ).toMatchInlineSnapshot(`
+        {
+          "text": "INSERT INTO "foo" VALUES ($1::text::macaddr)",
+          "values": [
+            "08:00:2b:01:02:03",
           ],
         }
       `);

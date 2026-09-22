@@ -3969,7 +3969,6 @@ test('IS and IS NOT comparisons against null', () => {
   `);
 });
 
-// eslint-disable-next-line eslint-plugin-jest/expect-expect -- assertions in check() helper
 test('constant/literal expression', () => {
   const source = createSource(
     lc,

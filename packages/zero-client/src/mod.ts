@@ -24,6 +24,17 @@ export type {
   ReadonlyJSONValue,
 } from '../../shared/src/json.ts';
 export type {MaybePromise} from '../../shared/src/types.ts';
+export {
+  ANYONE_CAN,
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+  NOBODY_CAN,
+} from '../../zero-permissions/src/permissions.ts';
+export type {
+  AssetPermissions,
+  PermissionRule,
+  PermissionsConfig,
+} from '../../zero-permissions/src/permissions.ts';
 export type {
   AnalyzeQueryResult,
   PlanDebugEventJSON,
@@ -83,17 +94,6 @@ export type {
   Policy as CompiledPermissionsPolicy,
   Rule as CompiledPermissionsRule,
 } from '../../zero-schema/src/compiled-permissions.ts';
-export {
-  ANYONE_CAN,
-  ANYONE_CAN_DO_ANYTHING,
-  definePermissions,
-  NOBODY_CAN,
-} from '../../zero-permissions/src/permissions.ts';
-export type {
-  AssetPermissions,
-  PermissionRule,
-  PermissionsConfig,
-} from '../../zero-permissions/src/permissions.ts';
 export {type TableSchema} from '../../zero-schema/src/table-schema.ts';
 export type {
   SchemaValue,
@@ -159,7 +159,6 @@ export {
   type MutatorDefinition,
 } from '../../zql/src/mutate/mutator.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
-export {InputValidationError} from '../../zql/src/query/validate-input.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ColumnRef,
@@ -217,6 +216,7 @@ export type {
 } from '../../zql/src/query/schema-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
+export {InputValidationError} from '../../zql/src/query/validate-input.ts';
 export {ConnectionStatus} from './client/connection-status.ts';
 export type {
   Connection,
@@ -230,6 +230,7 @@ export type {
   CustomMutatorImpl,
   MakeCustomMutatorInterface,
   MakeCustomMutatorInterfaces,
+  MutatorResult,
   MutatorResultDetails,
   MutatorResultErrorDetails,
   MutatorResultSuccessDetails,

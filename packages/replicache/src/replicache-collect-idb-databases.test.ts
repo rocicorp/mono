@@ -1,5 +1,4 @@
 import {expect, test, vi} from 'vitest';
-import {sleep} from '../../shared/src/sleep.ts';
 import {initReplicacheTesting, replicacheForTesting} from './test-util.ts';
 
 initReplicacheTesting();
@@ -36,14 +35,17 @@ test('collect IDB databases', async () => {
   await vi.advanceTimersByTimeAsync(5 * MINUTES);
   await rep3.close();
 
-  // Restore real timers and wait a few ms to let the idb state "flush"
+  // Restore real timers and wait for the IDB deletion to finish.
   vi.useRealTimers();
-  await sleep(500);
-
-  expect(await getDatabases()).toEqual([
-    'collect-idb-databases-2',
-    'collect-idb-databases-3',
-  ]);
+  await vi.waitFor(
+    async () => {
+      expect(await getDatabases()).toEqual([
+        'collect-idb-databases-2',
+        'collect-idb-databases-3',
+      ]);
+    },
+    {timeout: 5_000},
+  );
 
   async function getDatabases() {
     function parseName(idbName: string | undefined): string | undefined {

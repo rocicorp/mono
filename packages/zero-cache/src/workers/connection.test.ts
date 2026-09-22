@@ -8,12 +8,138 @@ import {
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {
+  LAST_POKE_PART_PROTOCOL_VERSION,
+  POKE_CHUNK_MESSAGE_TYPE,
+  POKE_CHUNK_PROTOCOL_VERSION,
+  type PokeChunk,
+  type PokeEndMessage,
+  type PokePartMessage,
+  type PokeStartMessage,
+} from '../../../zero-protocol/src/poke.ts';
+import {MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from '../../../zero-protocol/src/protocol-version.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
-import {send, sendError, type WebSocketLike} from './connection.ts';
+import {
+  DownstreamSender,
+  parseUpstreamMessage,
+  send,
+  sendError,
+  WEBSOCKET_SEND_TIMEOUT_MS,
+  type WebSocketLike,
+} from './connection.ts';
+
+function uninspectableAST() {
+  return new Proxy(
+    {},
+    {
+      get() {
+        throw new Error('AST was inspected');
+      },
+      ownKeys() {
+        throw new Error('AST was inspected');
+      },
+    },
+  );
+}
+
+describe('parseUpstreamMessage', () => {
+  test.each(['initConnection', 'changeDesiredQueries'] as const)(
+    'rejects a legacy query in %s without inspecting its AST',
+    messageType => {
+      expect(() =>
+        parseUpstreamMessage(
+          [
+            messageType,
+            {
+              desiredQueriesPatch: [
+                {
+                  op: 'put',
+                  hash: 'query-hash',
+                  ast: uninspectableAST(),
+                },
+              ],
+            },
+          ],
+          false,
+        ),
+      ).toThrow(
+        'Legacy queries are disabled by this Zero server. This client must use custom queries instead of sending query ASTs directly. To temporarily restore compatibility, set ZERO_ALLOW_LEGACY_QUERIES=true on zero-cache.',
+      );
+    },
+  );
+
+  test.each(['ast', 'value'] as const)(
+    'leaves an inspector analyze-query %s unparsed',
+    field => {
+      expect(() =>
+        parseUpstreamMessage(
+          [
+            'inspect',
+            {
+              id: 'inspect-1',
+              op: 'analyze-query',
+              [field]: uninspectableAST(),
+            },
+          ],
+          false,
+        ),
+      ).not.toThrow();
+    },
+  );
+
+  test('accepts a custom query when legacy queries are disabled', () => {
+    const message = [
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {
+            op: 'put',
+            hash: 'query-hash',
+            name: 'issuesByAssignee',
+            args: ['user-1'],
+          },
+        ],
+      },
+    ];
+
+    expect(parseUpstreamMessage(message, false)).toEqual(message);
+  });
+
+  test.each([
+    {
+      message: [
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {
+              op: 'put',
+              hash: 'query-hash',
+              ast: {table: 'issues'},
+            },
+          ],
+        },
+      ],
+    },
+  ])('accepts a legacy query when enabled', ({message}) => {
+    expect(parseUpstreamMessage(message, true)).toEqual(message);
+  });
+});
 
 class MockSocket implements WebSocketLike {
   readyState: WebSocket['readyState'] = WebSocket.OPEN;
-  send(_data: string, _cb?: (err?: Error) => void) {}
+  readonly sent: (string | PokeChunk)[] = [];
+  readonly autoComplete: boolean;
+
+  constructor(autoComplete = false) {
+    this.autoComplete = autoComplete;
+  }
+
+  send(data: string | PokeChunk, cb?: (err?: Error) => void) {
+    this.sent.push(typeof data === 'string' ? data : data.slice());
+    if (this.autoComplete) {
+      cb?.();
+    }
+  }
 }
 
 describe('send', () => {
@@ -46,9 +172,153 @@ describe('send', () => {
     const callback = () => {};
     ws.readyState = WebSocket.OPEN;
     send(lc, ws, data, callback);
-    expect(sendSpy).toHaveBeenCalledWith(JSON.stringify(data), callback);
+    expect(sendSpy).toHaveBeenCalledWith(
+      JSON.stringify(data),
+      expect.any(Function),
+    );
+  });
+
+  test('fails a stalled websocket send after the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const callback = vi.fn();
+      send(lc, ws, data, callback);
+
+      await vi.advanceTimersByTimeAsync(WEBSOCKET_SEND_TIMEOUT_MS);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      const error = callback.mock.calls[0]![0] as ProtocolErrorWithLevel;
+      expect(error).toBeInstanceOf(ProtocolErrorWithLevel);
+      expect(error.errorBody).toEqual({
+        kind: ErrorKind.Internal,
+        message: `WebSocket send timed out after ${WEBSOCKET_SEND_TIMEOUT_MS} ms`,
+        origin: ErrorOrigin.ZeroCache,
+      });
+      expect(error.logLevel).toBe('info');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('invokes the callback only once when a timed-out send later completes', async () => {
+    vi.useFakeTimers();
+    try {
+      let sendCallback: ((err?: Error) => void) | undefined;
+      ws.send = (_data, callback) => {
+        sendCallback = callback;
+      };
+      const callback = vi.fn();
+      send(lc, ws, data, callback);
+
+      await vi.advanceTimersByTimeAsync(WEBSOCKET_SEND_TIMEOUT_MS);
+      sendCallback?.();
+
+      expect(callback).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('reuses an already serialized downstream message', () => {
+    using sendSpy = vi.spyOn(ws, 'send');
+    const callback = () => {};
+    const serialized = '["pong", {"cached": true}]';
+
+    send(lc, ws, data, callback, serialized);
+
+    expect(sendSpy).toHaveBeenCalledWith(serialized, expect.any(Function));
   });
 });
+
+describe('DownstreamSender poke compatibility', () => {
+  const lc = createSilentLogContext();
+  const pokeStart = [
+    'pokeStart',
+    {pokeID: '01', baseCookie: null},
+  ] satisfies PokeStartMessage;
+  const pokePart = [
+    'pokePart',
+    {pokeID: '01', rowsPatch: [{op: 'clear'}]},
+  ] satisfies PokePartMessage;
+  const pokeEnd = [
+    'pokeEnd',
+    {pokeID: '01', cookie: '01'},
+  ] satisfies PokeEndMessage;
+
+  test.each([
+    MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
+    LAST_POKE_PART_PROTOCOL_VERSION,
+  ])(
+    'keeps sending JSON pokePart messages to protocol version %i',
+    async protocolVersion => {
+      const ws = new MockSocket(true);
+      const sender = new DownstreamSender(lc, ws, protocolVersion);
+
+      await sendWithBackpressure(sender, pokeStart);
+      await sendWithBackpressure(sender, pokePart);
+      await sendWithBackpressure(sender, pokeEnd);
+
+      expect(ws.sent).toEqual([
+        JSON.stringify(pokeStart),
+        JSON.stringify(pokePart),
+        JSON.stringify(pokeEnd),
+      ]);
+    },
+  );
+
+  test('sends binary poke chunks only to clients at the cutoff', async () => {
+    const ws = new MockSocket(true);
+    const sender = new DownstreamSender(lc, ws, POKE_CHUNK_PROTOCOL_VERSION);
+
+    await sendWithBackpressure(sender, pokeStart);
+    await sendWithBackpressure(sender, pokePart);
+    await sendWithBackpressure(sender, pokeEnd);
+
+    expect(ws.sent).toHaveLength(3);
+    expect(ws.sent[0]).toBe(JSON.stringify(pokeStart));
+    expect(ws.sent[1]).toBeInstanceOf(Uint8Array);
+    const chunk = ws.sent[1] as PokeChunk;
+    expect(chunk[0]).toBe(POKE_CHUNK_MESSAGE_TYPE);
+    expect(new TextDecoder().decode(chunk.subarray(1))).toBe(
+      '[{"pokeID":"01","rowsPatch":[{"op":"clear"}]}]',
+    );
+    expect(ws.sent[2]).toBe(JSON.stringify(pokeEnd));
+  });
+
+  test('fails a stalled binary send after the websocket timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const ws = new MockSocket();
+      const sender = new DownstreamSender(lc, ws, POKE_CHUNK_PROTOCOL_VERSION);
+
+      sender.send(pokeStart, 'ignore-backpressure');
+      await sendWithBackpressure(sender, pokePart);
+      const pokeEndPromise = sendWithBackpressure(sender, pokeEnd);
+      const rejection = expect(pokeEndPromise).rejects.toMatchObject({
+        errorBody: {
+          kind: ErrorKind.Internal,
+          message: `WebSocket send timed out after ${WEBSOCKET_SEND_TIMEOUT_MS} ms`,
+          origin: ErrorOrigin.ZeroCache,
+        },
+        logLevel: 'info',
+      });
+
+      await vi.advanceTimersByTimeAsync(WEBSOCKET_SEND_TIMEOUT_MS);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+function sendWithBackpressure(
+  sender: DownstreamSender,
+  downstream: Downstream,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sender.send(downstream, error => (error ? reject(error) : resolve()));
+  });
+}
 
 describe('sendError', () => {
   let sink: TestLogSink;

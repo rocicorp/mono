@@ -1,13 +1,33 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {Source} from '../../types/streams.ts';
-import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
+import type {PreSerialized, Sized, Source} from '../../types/streams.ts';
+import {
+  changeStreamDataSchema,
+  type ChangeStreamData,
+} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
 import * as ErrorType from './error-type-enum.ts';
+import type {SnapshotMessage} from './snapshot.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
+
+export type ChangeTag = ChangeStreamData[1]['tag'];
+
+/**
+ * Internally all downstream messages (not just commits) are given a watermark.
+ * These are used for internal ordering while replaying stored changes and
+ * filtering changes already seen by a subscriber.
+ *
+ * Only commit watermarks are exposed to subscribers. The JSON string is the
+ * canonical serialization shared by storage and live forwarding.
+ */
+export type WatermarkedChange = [
+  watermark: string,
+  tag: ChangeTag,
+  json: string,
+];
 
 /**
  * The ChangeStreamer is the component between replicators ("subscribers")
@@ -47,9 +67,10 @@ export interface ChangeStreamer {
   /**
    * Subscribes to changes based on the supplied subscriber `ctx`,
    * which indicates the watermark at which the subscriber is up to
-   * date.
+   * date. Each result contains parsed, validated data and its approximate
+   * serialized transport size.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>>;
+  subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>>;
 }
 
 // v1: v0.18
@@ -59,7 +80,7 @@ export interface ChangeStreamer {
 //     subscription is valid (i.e. starting at the requested watermark).
 // v3: v0.20
 //   - Adds the "taskID" to the subscription context, and support for
-//     the BackupMonitor-mediated "/snapshot" request.
+//     the backup monitor-mediated "/snapshot" request.
 // v4: v0.25
 //   - Adds the "replicaVersion" and "minWatermark" fields to the "/snapshot"
 //     status request so that a subscriber can verify whether its replica,
@@ -75,6 +96,12 @@ export interface ChangeStreamer {
 //   - Adds support for `backfill` messages
 // v6: v1.0.1  (backwards compatible, no version change)
 //   - Adds lag reporting to status messages
+// v6: (backwards compatible, no version change)
+//   - Adds the optional `commitTimeMs` field to `commit` messages, carrying
+//     the upstream commit timestamp for end-to-end serving lag measurement.
+//     The stream is parsed in 'passthrough' mode, so an older peer ignores the
+//     field, and a newer peer treats its absence (including in changes
+//     replayed from the Change DB) as "no commit time reported".
 
 export const PROTOCOL_VERSION = 6;
 
@@ -88,7 +115,7 @@ export type SubscriberContext = {
    * Task ID. This is used to link the request with a preceding snapshot
    * reservation.
    */
-  taskID: string | null; // TODO: Make required when v3 is min.
+  taskID: string;
 
   /**
    * Subscriber id. This is only used for debugging.
@@ -122,6 +149,18 @@ export type SubscriberContext = {
    * are safe to purge from the Storer.
    */
   initial: boolean;
+
+  /**
+   * Legacy topology hint retained on the wire. It no longer affects local
+   * routing: the change-streamer writes the SQLite log itself, so no
+   * subscriber's ACK advances its head or releases its catchup barrier.
+   */
+  logsChangeStream: boolean;
+
+  /**
+   * Whether the subscriber supports batched WebSocket frames.
+   */
+  wsBatched?: boolean | undefined;
 };
 
 /**
@@ -194,23 +233,37 @@ export function errorTypeToReadableName(val: ErrorType) {
  */
 export type Downstream = v.Infer<typeof downstreamSchema>;
 
+/** A downstream message and its approximate serialized transport size. */
+export type SizedDownstream = Sized<Downstream>;
+
 export interface ChangeStreamerService
   extends Omit<ChangeStreamer, 'subscribe'>, Service {
   /**
    * The server-side interface overrides `subscribe()` to return a stream
-   * of already-stringified {@link Downstream} payloads.
+   * of already-stringified {@link Downstream} payloads or pre-serialized Buffers.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<string>>;
+  subscribe(ctx: SubscriberContext): Promise<Source<string | PreSerialized>>;
 
   /**
-   * Notifies the change streamer of a watermark that has been backed up,
-   * indicating that changes before the watermark can be purged if active
-   * subscribers have progressed beyond the watermark.
+   * Starts a snapshot reservation to preserve change-log entries while
+   * a soon-to-be-subscriber downloads the current replica backup. Once
+   * the change-streamer knows that a backup is available
+   * (via {@link trackBackupWatermark}), it sends a confirmation
+   * SnapshotMessage and reserves the corresponding entries in the change-log
+   * until the client with that `taskID` subscribes, or if the snapshot
+   * connection terminates.
    */
-  scheduleCleanup(watermark: string): void;
+  startSnapshotReservation(taskID: string): Promise<Source<SnapshotMessage>>;
 
-  getChangeLogState(): Promise<{
-    replicaVersion: string;
-    minWatermark: string;
-  }>;
+  /**
+   * Informs the change-streamer of the watermark up to which the replica has
+   * been backed up. This serves two purposes:
+   * - It serves as the maximum watermark up to which the change-log can be
+   *   purged. Note that the change-streamer also takes into account the
+   *   positions of its subscribers and snapshot reservations when purging
+   *   changes in the change-log.
+   * - In RMv2, this ACK's the upstream change-source to allow its buffer of
+   *   changes (e.g. the replication_slot) to advance.
+   */
+  trackBackupWatermark(watermark: string): void;
 }

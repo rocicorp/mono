@@ -1,0 +1,72 @@
+name: JS Test Shards
+
+# Reusable workflow that runs the vitest suite split into shards. Called once
+# per test mode from js.yml; each call shows up as one grouped job ("Test no PG",
+# "Test PG 18", ...) whose shards are the children.
+
+on:
+  workflow_call:
+    inputs:
+      pg-mode:
+        description: Value for TEST_PG_MODE (nopg, pg-15, pg-16, ...)
+        required: true
+        type: string
+      shards:
+        description: JSON array of shard indices, 1-based (e.g. "[1, 2, 3]")
+        required: false
+        type: string
+        default: '[1, 2, 3, 4]'
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    name: Shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.shards) }}
+    env:
+      TEST_PG_MODE: ${{ inputs.pg-mode }}
+      SHARD: ${{ matrix.shard }}
+      SHARDS: ${{ inputs.shards }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 100
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          restore-keys: |
+            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
+      - run: pnpm install --frozen-lockfile
+      - if: inputs.pg-mode == 'nopg'
+        uses: ./.github/actions/playwright-install
+      - name: Compute shard count
+        run: echo "SHARD_COUNT=$(jq length <<< "$SHARDS")" >> "$GITHUB_ENV"
+      - name: Run tests
+        if: inputs.pg-mode == 'nopg'
+        run: pnpm run test --shard="$SHARD/$SHARD_COUNT"
+      # PG tests are retried because the Postgres-backed suites are flakier.
+      - name: Run tests
+        if: inputs.pg-mode != 'nopg'
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: pnpm run test --shard="$SHARD/$SHARD_COUNT"

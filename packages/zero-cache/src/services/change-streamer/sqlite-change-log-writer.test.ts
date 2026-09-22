@@ -1,0 +1,603 @@
+import {existsSync} from 'node:fs';
+import {LogContext} from '@rocicorp/logger';
+import {afterEach, describe, expect, test} from 'vitest';
+import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
+import {DbFile} from '../../test/lite.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {
+  EMPTY_COOKIE_SET,
+  readCookies,
+  type CookieSet,
+} from '../replicator/change-log-cookies.ts';
+import {
+  CHANGE_LOG_STREAM_TABLE,
+  MAX_RECONCILE_TRUNCATE_BYTES,
+  MAX_RECONCILE_TRUNCATE_ROWS,
+  changeLogFileName,
+  deleteChangeLogDB,
+  openChangeLogDB,
+  readChangeLogHead,
+  type ChangeLogIdentity,
+  type ChangeLogResumePoint,
+} from '../replicator/change-log-db.ts';
+import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {serializeChangeStreamData} from './change-log-codec.ts';
+import {SQLiteChangeLogWriter} from './sqlite-change-log-writer.ts';
+
+const messages = new ReplicationMessages({foo: 'id'});
+
+const IDENTITY: ChangeLogIdentity = {
+  epoch: null,
+  generation: '01',
+  replicaID: 'replica-id',
+};
+
+const files: DbFile[] = [];
+
+afterEach(() => {
+  let file: DbFile | undefined;
+  while ((file = files.pop())) {
+    deleteChangeLogDB(file.path);
+    file.delete();
+  }
+});
+
+/**
+ * What the stream loop hands the writer: the watermark it resumes from and the
+ * cookie set that belongs to it, both read from Postgres in one snapshot.
+ */
+function resumeAt(
+  resumeWatermark: string,
+  cookies: CookieSet = EMPTY_COOKIE_SET,
+) {
+  return {resumeWatermark, cookies};
+}
+
+function setup(
+  name: string,
+  resumeWatermark = '02',
+  shadowValidationPercent = 100,
+) {
+  const sink = new TestLogSink();
+  const lc = new LogContext('debug', undefined, sink);
+  const file = new DbFile(name);
+  files.push(file);
+  const commits: string[] = [];
+  let disabled = 0;
+  let rebuilt = 0;
+  const writer = new SQLiteChangeLogWriter(lc, {
+    replicaFile: file.path,
+    identity: IDENTITY,
+    onCommit: watermark => commits.push(watermark),
+    onDisabled: () => disabled++,
+    onRebuilt: () => rebuilt++,
+    now: () => 1_700_000_000_000,
+    shadowValidationPercent,
+  });
+  writer.reconcile(resumeAt(resumeWatermark));
+  return {
+    lc,
+    sink,
+    file,
+    writer,
+    commits,
+    disabledCount: () => disabled,
+    rebuiltCount: () => rebuilt,
+    head: () => {
+      using db = openChangeLogDB(lc, file.path, {readonly: true});
+      return readChangeLogHead(db);
+    },
+    /** Read through a second connection, i.e. what is durable. */
+    cookies: (): CookieSet => {
+      using db = openChangeLogDB(lc, file.path, {readonly: true});
+      return readCookies(db);
+    },
+    errors: () =>
+      sink.messages
+        .filter(([level]) => level === 'error')
+        .map(([, , args]) => String(args[0])),
+    [Symbol.dispose]() {
+      writer.close();
+    },
+  };
+}
+
+/** Drives a whole transaction through the writer, as the stream loop does. */
+function transaction(
+  writer: SQLiteChangeLogWriter,
+  watermark: string,
+  ...data: ChangeStreamData[]
+) {
+  const write = (change: ChangeStreamData) =>
+    writer.write(change, serializeChangeStreamData(change));
+  write(['begin', messages.begin(), {commitWatermark: watermark}]);
+  data.forEach(write);
+  write(['commit', messages.commit(), {watermark}]);
+}
+
+describe('change-streamer/sqlite-change-log-writer', () => {
+  test('appends transactions and reports each new head', () => {
+    using fixture = setup('change-log-writer-append');
+
+    transaction(fixture.writer, '04', [
+      'data',
+      messages.insert('foo', {id: 'one'}),
+    ]);
+    transaction(fixture.writer, '06', [
+      'data',
+      messages.insert('foo', {id: 'two'}),
+    ]);
+
+    expect(fixture.commits).toEqual(['04', '06']);
+    expect(fixture.head()).toBe('06');
+    expect(fixture.writer.state()).toMatchObject({
+      sqliteHead: '06',
+      receivedHead: '06',
+      headLag: 0,
+      invariantFailures: 0,
+      hashMatches: 2,
+      hashMismatches: 0,
+      hashUnpaired: 0,
+    });
+  });
+
+  test('can skip rollout-only shadow validation', () => {
+    using fixture = setup('change-log-writer-no-shadow-validation', '02', 0);
+
+    transaction(fixture.writer, '04', [
+      'data',
+      messages.insert('foo', {id: 'one'}),
+    ]);
+
+    expect(fixture.head()).toBe('04');
+    expect(fixture.writer.state()).toMatchObject({
+      sqliteHead: '04',
+      receivedHead: '04',
+      hashMatches: 0,
+      hashMismatches: 0,
+      hashUnpaired: 0,
+    });
+  });
+
+  test('an upstream rollback leaves no rows', () => {
+    using fixture = setup('change-log-writer-rollback');
+
+    fixture.writer.write(
+      ['begin', messages.begin(), {commitWatermark: '04'}],
+      serializeChangeStreamData([
+        'begin',
+        messages.begin(),
+        {commitWatermark: '04'},
+      ]),
+    );
+    const rollback: ChangeStreamData = ['rollback', {tag: 'rollback'}];
+    fixture.writer.write(rollback, serializeChangeStreamData(rollback));
+
+    expect(fixture.head()).toBe('02');
+    expect(fixture.commits).toEqual([]);
+    expect(fixture.writer.enabled).toBe(true);
+  });
+
+  // §3.7: nothing in the log is not either already durable in the replica's
+  // backup or re-derivable from the slot, so a write failure must cost catchup
+  // reach rather than the shard's replication.
+  test('a write error disables the writer, deletes the file, and keeps going', () => {
+    using fixture = setup('change-log-writer-fail-soft');
+    // Pulls the table out from under the writer's prepared statements, which is
+    // an error the file's contents cannot explain -- the shape a full disk or an
+    // I/O error takes.
+    {
+      using other = openChangeLogDB(fixture.lc, fixture.file.path, {
+        readonly: false,
+      });
+      other.exec(`DROP TABLE "${CHANGE_LOG_STREAM_TABLE}"`);
+    }
+
+    transaction(fixture.writer, '04');
+
+    expect(fixture.writer.enabled).toBe(false);
+    expect(fixture.disabledCount()).toBe(1);
+    expect(existsSync(changeLogFileName(fixture.file.path))).toBe(false);
+    expect(fixture.errors().join('\n')).toContain(
+      'error writing to the SQLite change log',
+    );
+    // The generic policy, not the carve-out: a dropped table is not a missed
+    // truncate-above, so it must not be reported as an invariant failure.
+    expect(fixture.errors().join('\n')).not.toContain('violated a constraint');
+
+    // Replication continues: further writes are no-ops rather than throws, and
+    // nothing recreates the file.
+    expect(() => transaction(fixture.writer, '06')).not.toThrow();
+    fixture.writer.reconcile(resumeAt('06'));
+    expect(existsSync(changeLogFileName(fixture.file.path))).toBe(false);
+    expect(fixture.writer.enabled).toBe(false);
+  });
+
+  // The carve-out that keeps fail-soft from hiding the bug class 7I introduces:
+  // a missed truncate-above is a constraint violation on the writer's plain
+  // INSERT, which is otherwise indistinguishable from a lost cache.
+  test('a constraint violation is counted as an invariant failure', () => {
+    using fixture = setup('change-log-writer-constraint');
+    // A transaction the log already holds, i.e. what reconciliation should have
+    // truncated before the stream re-delivered it.
+    {
+      using other = openChangeLogDB(fixture.lc, fixture.file.path, {
+        readonly: false,
+      });
+      other
+        .prepare(/*sql*/ `
+          INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
+            ("watermark", "pos", "tag", "estimatedBytes", "change")
+            VALUES ('04', 0, 'begin', 0, '{"tag":"begin"}')
+        `)
+        .run();
+    }
+
+    transaction(fixture.writer, '04');
+
+    expect(fixture.errors().join('\n')).toContain(
+      'violated a constraint, which means a transaction above the resume ' +
+        'watermark was not truncated',
+    );
+    // Reported before failing soft, so the invariant failure is not absorbed.
+    expect(fixture.writer.enabled).toBe(false);
+    expect(existsSync(changeLogFileName(fixture.file.path))).toBe(false);
+  });
+
+  test('abort discards an interrupted transaction', () => {
+    using fixture = setup('change-log-writer-abort');
+
+    const begin: ChangeStreamData = [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '04'},
+    ];
+    fixture.writer.write(begin, serializeChangeStreamData(begin));
+    fixture.writer.abort();
+
+    expect(fixture.head()).toBe('02');
+    expect(fixture.commits).toEqual([]);
+    expect(fixture.writer.enabled).toBe(true);
+
+    // The reconnected stream reconciles and re-delivers as if the interrupted
+    // transaction had never arrived.
+    fixture.writer.reconcile(resumeAt('02'));
+    transaction(fixture.writer, '04');
+    expect(fixture.head()).toBe('04');
+    expect(fixture.commits).toEqual(['04']);
+  });
+
+  // The stream loop aborts whenever it believes a transaction is open, which
+  // includes the window between the commit-row write and its own bookkeeping --
+  // so an abort can arrive after the log already committed, and must be a
+  // no-op rather than a fail-soft.
+  test('abort with no open transaction is a no-op', () => {
+    using fixture = setup('change-log-writer-abort-idle');
+
+    transaction(fixture.writer, '04');
+    fixture.writer.abort();
+
+    expect(fixture.writer.enabled).toBe(true);
+    expect(fixture.head()).toBe('04');
+    expect(fixture.errors()).toEqual([]);
+  });
+
+  test('a failure to open the log disables the writer without throwing', () => {
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, sink);
+    const writer = new SQLiteChangeLogWriter(lc, {
+      // A directory that does not exist: a bad path is an environment problem,
+      // not a corrupt file, so it is not rebuilt through.
+      replicaFile: '/nonexistent-directory/replica.db',
+      identity: IDENTITY,
+    });
+
+    expect(() => writer.reconcile(resumeAt('02'))).not.toThrow();
+    expect(writer.enabled).toBe(false);
+    expect(
+      sink.messages
+        .filter(([level]) => level === 'error')
+        .map(([, , args]) => String(args[0]))
+        .join('\n'),
+    ).toContain('error reconciling the SQLite change log');
+  });
+
+  test('reconciling per connection truncates and re-accepts a re-delivery', () => {
+    using fixture = setup('change-log-writer-reconnect');
+
+    transaction(fixture.writer, '04', [
+      'data',
+      messages.insert('foo', {id: 'one'}),
+    ]);
+    transaction(fixture.writer, '06', [
+      'data',
+      messages.insert('foo', {id: 'two'}),
+    ]);
+    expect(fixture.head()).toBe('06');
+
+    // The stream reconnects and resumes below the head.
+    fixture.writer.reconcile(resumeAt('04'));
+    expect(fixture.head()).toBe('04');
+
+    transaction(fixture.writer, '06', [
+      'data',
+      messages.insert('foo', {id: 'two again'}),
+    ]);
+    expect(fixture.head()).toBe('06');
+    expect(fixture.writer.enabled).toBe(true);
+    expect(fixture.writer.state()?.invariantFailures).toBe(0);
+  });
+
+  test('oversized reconciliation replaces the log instead of deleting synchronously', () => {
+    using fixture = setup('change-log-writer-bounded-reconcile');
+
+    const insertSuffix = (rows: number, estimatedBytes: number) => {
+      using other = openChangeLogDB(fixture.lc, fixture.file.path, {
+        readonly: false,
+      });
+      const insert = other.prepare(/*sql*/ `
+        INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
+          ("watermark", "pos", "tag", "estimatedBytes", "change")
+          VALUES ('04', ?, 'insert', ?, '{"tag":"insert"}')
+      `);
+      other.transaction(() => {
+        for (let pos = 0; pos < rows; pos++) {
+          insert.run(pos, estimatedBytes);
+        }
+      });
+    };
+
+    // Too many small rows: the decision scans at most one row past the cap.
+    insertSuffix(MAX_RECONCILE_TRUNCATE_ROWS + 1, 1);
+    fixture.writer.reconcile(resumeAt('02'));
+    expect(fixture.head()).toBe('02');
+    expect(fixture.rebuiltCount()).toBe(1);
+
+    // One enormous row is bounded independently of the row count.
+    insertSuffix(1, MAX_RECONCILE_TRUNCATE_BYTES + 1);
+    fixture.writer.reconcile(resumeAt('02'));
+    expect(fixture.head()).toBe('02');
+    expect(fixture.rebuiltCount()).toBe(2);
+
+    // Rebuilding the disposable cache does not disable the stream writer.
+    transaction(fixture.writer, '04');
+    expect(fixture.writer.enabled).toBe(true);
+    expect(fixture.head()).toBe('04');
+  });
+
+  describe('the cookie jar', () => {
+    const createTable: ChangeStreamData = [
+      'data',
+      {
+        tag: 'create-table',
+        spec: {schema: 'my', name: 'foo', columns: {}},
+        metadata: {rowKey: {columns: ['id']}},
+        backfill: {a: {fooID: 1}},
+      },
+    ];
+
+    test('a schema change moves the cookies and is counted', () => {
+      using fixture = setup('change-log-writer-cookies');
+
+      expect(fixture.writer.state()).toMatchObject({
+        cookieMutations: 0,
+        cookieRows: {tableMetadata: 0, backfilling: 0},
+      });
+
+      transaction(fixture.writer, '04', createTable);
+
+      expect(fixture.cookies()).toEqual({
+        tableMetadata: [
+          {schema: 'my', table: 'foo', metadata: {rowKey: {columns: ['id']}}},
+        ],
+        backfilling: [
+          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+        ],
+      });
+      expect(fixture.writer.state()).toMatchObject({
+        cookieMutations: 2,
+        cookieRows: {tableMetadata: 1, backfilling: 1},
+      });
+
+      // A transaction with no schema change neither moves nor re-counts them.
+      transaction(fixture.writer, '06', [
+        'data',
+        messages.insert('foo', {id: 'one'}),
+      ]);
+      expect(fixture.writer.state()).toMatchObject({cookieMutations: 2});
+    });
+
+    test('an interrupted transaction discards its cookies with its rows', () => {
+      using fixture = setup('change-log-writer-cookies-abort');
+
+      const begin: ChangeStreamData = [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '04'},
+      ];
+      fixture.writer.write(begin, serializeChangeStreamData(begin));
+      fixture.writer.write(createTable, serializeChangeStreamData(createTable));
+      fixture.writer.abort();
+
+      expect(fixture.head()).toBe('02');
+      expect(fixture.cookies()).toEqual({tableMetadata: [], backfilling: []});
+      expect(fixture.writer.state()).toMatchObject({cookieMutations: 0});
+      expect(fixture.writer.enabled).toBe(true);
+    });
+
+    /**
+     * What Postgres holds at the watermark a reconnect resumes from: a backfill
+     * that is still in flight there, on a table the log's own head has never
+     * heard of. Deliberately disjoint from what {@link createTable} folds, so
+     * that "installed the anchor's set" and "kept its own" cannot both pass.
+     */
+    const pgCookies: CookieSet = {
+      tableMetadata: [
+        {
+          schema: 'my',
+          table: 'bar',
+          metadata: {rowKey: {columns: ['barID']}},
+        },
+      ],
+      backfilling: [
+        {schema: 'my', table: 'bar', column: 'z', backfill: {barID: 9}},
+      ],
+    };
+
+    // Invariant 17: the cookie set is only meaningful paired with the watermark
+    // it was folded to, and a truncation moves that watermark. What the log
+    // folded above the resume point is not rolled back by deleting those rows,
+    // so it is replaced wholesale rather than rewound.
+    test('a reconcile that truncates installs the resume point’s cookies', () => {
+      using fixture = setup('change-log-writer-cookies-reconcile');
+
+      transaction(fixture.writer, '04', createTable);
+      expect(fixture.writer.state()).toMatchObject({
+        cookieRows: {tableMetadata: 1, backfilling: 1},
+      });
+
+      // The stream reconnects below the head, so the transaction that carried
+      // the cookies is truncated away and Postgres' set takes its place.
+      fixture.writer.reconcile(resumeAt('02', pgCookies));
+
+      expect(fixture.cookies()).toEqual(pgCookies);
+      expect(fixture.writer.state()).toMatchObject({
+        cookieRows: {tableMetadata: 1, backfilling: 1},
+      });
+
+      // And the log keeps folding onto it rather than from scratch: 'my.foo'
+      // is re-delivered by the resumed stream, 'my.bar' is still backfilling.
+      transaction(fixture.writer, '04', createTable);
+      expect(fixture.cookies()).toEqual({
+        tableMetadata: [
+          ...pgCookies.tableMetadata,
+          {schema: 'my', table: 'foo', metadata: {rowKey: {columns: ['id']}}},
+        ],
+        backfilling: [
+          ...pgCookies.backfilling,
+          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+        ],
+      });
+    });
+
+    // The other half of invariant 17: a wipe discards the cookie tables with
+    // the buffer, so the anchor's set is all that is left to seed them with.
+    test('a reconcile that reseeds installs the resume point’s cookies', () => {
+      using fixture = setup('change-log-writer-cookies-reseed');
+
+      transaction(fixture.writer, '04', createTable);
+
+      // A resume watermark the log neither holds nor can be truncated to, i.e.
+      // what a restored replica leaves behind. The log is wiped and reseeded.
+      fixture.writer.reconcile(resumeAt('08', pgCookies));
+
+      expect(fixture.head()).toBe('08');
+      expect(fixture.cookies()).toEqual(pgCookies);
+      expect(fixture.writer.state()).toMatchObject({
+        cookieRows: {tableMetadata: 1, backfilling: 1},
+      });
+    });
+
+    test('a reconcile that changes nothing leaves the cookies alone', () => {
+      using fixture = setup('change-log-writer-cookies-noop');
+
+      transaction(fixture.writer, '04', createTable);
+      const folded = fixture.cookies();
+
+      // The anchor's set is Postgres' as of '04', which the log has already
+      // folded for itself. Nothing moved, so nothing is replaced -- and the
+      // disjoint `pgCookies` proves it is not written on this path.
+      fixture.writer.reconcile(resumeAt('04', pgCookies));
+
+      expect(fixture.cookies()).toEqual(folded);
+    });
+
+    /**
+     * When Postgres is disabled, a valid log supplies its own resume point. A
+     * new or invalid log uses the replica seed.
+     *
+     * `noSeed` throws if a valid log incorrectly reads the replica seed.
+     */
+    describe('resuming from the log itself', () => {
+      const replicaSeed = resumeAt('03', pgCookies);
+      const noSeed = (): ChangeLogResumePoint => {
+        throw new Error('the seed must not be consulted');
+      };
+
+      test('a log it may keep resumes from its own head and cookies', () => {
+        using fixture = setup('change-log-writer-from-log-warm');
+
+        transaction(fixture.writer, '04', createTable);
+        const folded = fixture.cookies();
+
+        expect(fixture.writer.reconcileFromLog(noSeed)).toEqual({
+          resumeWatermark: '04',
+          cookies: folded,
+        });
+        // The log already uses its own head and cookies, so reconciliation does
+        // not change it.
+        expect(fixture.head()).toBe('04');
+        expect(fixture.cookies()).toEqual(folded);
+      });
+
+      test('a log left by another replica is seeded from the replica', () => {
+        using fixture = setup('change-log-writer-from-log-identity');
+        transaction(fixture.writer, '04', createTable);
+        fixture.writer.close();
+
+        // A reused volume can contain a log from a different replica.
+        const other = new SQLiteChangeLogWriter(fixture.lc, {
+          replicaFile: fixture.file.path,
+          identity: {...IDENTITY, replicaID: 'a-different-replica'},
+          now: () => 1_700_000_000_000,
+        });
+        try {
+          expect(other.reconcileFromLog(() => replicaSeed)).toEqual(
+            replicaSeed,
+          );
+          // The fixture uses `pgCookies` as the replica seed. This assertion
+          // makes sure that the seed supplied the cookies.
+          expect(fixture.cookies()).toEqual(pgCookies);
+          expect(fixture.head()).toBe('03');
+        } finally {
+          other.close();
+        }
+      });
+
+      test('a log created here and now is seeded from the replica', () => {
+        const sink = new TestLogSink();
+        const lc = new LogContext('debug', undefined, sink);
+        const file = new DbFile('change-log-writer-from-log-cold');
+        files.push(file);
+        const writer = new SQLiteChangeLogWriter(lc, {
+          replicaFile: file.path,
+          identity: IDENTITY,
+          now: () => 1_700_000_000_000,
+        });
+        try {
+          // A restore starts without a log, so reconciliation uses the replica
+          // seed.
+          expect(writer.reconcileFromLog(() => replicaSeed)).toEqual(
+            replicaSeed,
+          );
+        } finally {
+          writer.close();
+        }
+      });
+
+      test('a disabled writer supplies no resume point at all', () => {
+        using fixture = setup('change-log-writer-from-log-disabled');
+
+        // A write failure deletes the log and disables the writer. The caller
+        // then uses the replica resume point.
+        fixture.writer.write(
+          ['data', {tag: 'insert'} as never],
+          'not a transaction',
+        );
+        expect(fixture.disabledCount()).toBe(1);
+
+        expect(fixture.writer.reconcileFromLog(noSeed)).toBeUndefined();
+      });
+    });
+  });
+});

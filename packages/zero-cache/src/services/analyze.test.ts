@@ -20,6 +20,7 @@ import {runAst} from './run-ast.ts';
 
 // Mock the runAst function
 vi.mock('./run-ast.ts', () => ({
+  MAX_ANALYZE_ROWS: 1000,
   runAst: vi.fn(),
 }));
 
@@ -136,6 +137,7 @@ describe('analyzeQuery', () => {
         tableSpecs: expect.any(Map),
         host: expect.objectContaining({
           debug: expect.any(Object),
+          enableNotExists: true,
           getSource: expect.any(Function),
           createStorage: expect.any(Function),
           decorateSourceInput: expect.any(Function),

@@ -485,6 +485,55 @@ describe('view-syncer/cvr-store', () => {
     );
   });
 
+  describe('no-op flush of a stale CVR', () => {
+    // Another view-syncer advances the CVR from 03 to 04 after this one
+    // loaded it, and this one then writes a row record that matches what is
+    // already in the CVR. The write is pruned, so the flush has nothing to do.
+    async function loadStaleWithNoopWrite() {
+      const cvr = await store.load(lc, CONNECT_TIME);
+      expect(cvr.version).toEqual({stateVersion: '03'});
+      await db`UPDATE "roze_1/cvr".instances SET version = '04'`;
+      store.putRowRecord({
+        id: {schema: '', table: 'issues', rowKey: {id: '6'}},
+        rowVersion: '01',
+        patchVersion: {stateVersion: '02'},
+        refCounts: {foo: 1},
+      });
+      return cvr;
+    }
+
+    test('is not checked by default', async () => {
+      const cvr = await loadStaleWithNoopWrite();
+      expect(await store.flush(lc, cvr.version, cvr, CONNECT_TIME)).toBe(null);
+    });
+
+    test('detects concurrent modification with verifyNoop', async () => {
+      const cvr = await loadStaleWithNoopWrite();
+      await expect(
+        store.flush(lc, cvr.version, cvr, CONNECT_TIME, true),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[ConcurrentModificationException: CVR has been concurrently modified. Expected 03, got 04]`,
+      );
+    });
+
+    test('detects wrong owner with verifyNoop', async () => {
+      const cvr = await store.load(lc, CONNECT_TIME);
+      await db`UPDATE "roze_1/cvr".instances SET owner = 'other-task', "grantedAt" = ${
+        CONNECT_TIME + 1
+      }`;
+      await expect(
+        store.flush(lc, cvr.version, cvr, CONNECT_TIME, true),
+      ).rejects.toThrow(OwnershipError);
+    });
+
+    test('passes with verifyNoop when the CVR is current', async () => {
+      const cvr = await store.load(lc, CONNECT_TIME);
+      expect(await store.flush(lc, cvr.version, cvr, CONNECT_TIME, true)).toBe(
+        null,
+      );
+    });
+  });
+
   const DEFERRED_ROW_LIMIT = 5;
 
   test('deferred row updates', async () => {

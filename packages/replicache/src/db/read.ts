@@ -1,3 +1,4 @@
+import '../process-env.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {BTreeRead} from '../btree/read.ts';
 import type {Read as DagRead} from '../dag/store.ts';
@@ -99,7 +100,10 @@ export function readIndexesForRead(
   dagRead: DagRead,
   formatVersion: FormatVersion,
 ): Map<string, IndexRead> {
-  const m = new Map();
+  const m: Map<string, IndexRead> = new Map();
+  if (process.env.DISABLE_REPLICACHE_INDEXES) {
+    return m;
+  }
   for (const index of commit.indexes) {
     m.set(
       index.definition.name,

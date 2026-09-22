@@ -31,19 +31,11 @@ type SourceWithPendingQueue<T> = Source<T> & {
   queued: number;
 };
 
-export async function subscribe(
-  lc: LogContext,
+export function createReplicationSessionFor(
   db: PostgresDB,
-  slot: string,
-  publications: string[],
-  lsn: bigint,
-  retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
-  applicationName = 'zero-replicator',
-): Promise<{
-  messages: SourceWithPendingQueue<StreamMessage>;
-  acks: Sink<bigint>;
-}> {
-  const session = postgres(
+  applicationName: string,
+) {
+  return postgres(
     defu(
       {
         max: 1,
@@ -62,6 +54,22 @@ export async function subscribe(
       db.options as unknown as Options<Record<string, PostgresType>>,
     ),
   );
+}
+
+export async function subscribe(
+  lc: LogContext,
+  db: PostgresDB,
+  slot: string,
+  publications: string[],
+  lsn: bigint,
+  retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
+  applicationName = 'zero-replicator',
+  inboundTimeoutOverrideMs?: number | undefined,
+): Promise<{
+  messages: SourceWithPendingQueue<StreamMessage>;
+  acks: Sink<bigint>;
+}> {
+  const session = createReplicationSessionFor(db, applicationName);
 
   // Postgres will send keepalives before timing out a wal_sender. It is possible that
   // these keepalives are not received if there is back-pressure in the replication
@@ -74,10 +82,22 @@ export async function subscribe(
   >`SELECT EXTRACT(EPOCH FROM (setting || unit)::interval) * 1000 
         AS "walSenderTimeoutMs" FROM pg_settings
         WHERE name = 'wal_sender_timeout'`.simple();
-  const manualKeepaliveTimeout = Math.floor(walSenderTimeoutMs * 0.75);
+  const {
+    enabled: livenessEnabled,
+    manualKeepaliveTimeout,
+    inboundTimeoutMs,
+    timerIntervalMs,
+  } = computeLivenessTimings(walSenderTimeoutMs, inboundTimeoutOverrideMs);
   lc.info?.(
-    `wal_sender_timeout: ${walSenderTimeoutMs}ms. ` +
-      `Ensuring manual keepalives at least every ${manualKeepaliveTimeout}ms`,
+    livenessEnabled
+      ? `wal_sender_timeout: ${walSenderTimeoutMs}ms. ` +
+          `Ensuring manual keepalives at least every ${manualKeepaliveTimeout}ms. ` +
+          `Inbound timeout: ${inboundTimeoutMs}ms` +
+          (inboundTimeoutMs === walSenderTimeoutMs * 2
+            ? ''
+            : ' (configured override)')
+      : `wal_sender_timeout is disabled (0); skipping manual keepalives and ` +
+          `inbound liveness detection.`,
   );
 
   const [readable, writable] = await startReplicationStream(
@@ -95,13 +115,49 @@ export async function subscribe(
     lastAckTime = Date.now();
   }
 
-  const livenessTimer = setInterval(() => {
-    const now = Date.now();
-    if (now - lastAckTime > manualKeepaliveTimeout) {
-      sendAck(0n);
-      lc.debug?.(`sent manual keepalive`);
-    }
-  }, manualKeepaliveTimeout / 5);
+  // Tear down the readable to force a reconnect if the inbound half of the
+  // connection goes silent (our outbound acks keep flowing into the void,
+  // neither side errors, and the change-source would otherwise sit there
+  // forever). See computeLivenessTimings for the derivation of these
+  // thresholds — and why the whole timer is disabled when wal_sender_timeout
+  // is 0.
+  let lastReceivedTime = Date.now();
+
+  const livenessTimer = livenessEnabled
+    ? setInterval(() => {
+        const now = Date.now();
+        if (now - lastAckTime > manualKeepaliveTimeout) {
+          sendAck(0n);
+          lc.debug?.(`sent manual keepalive`);
+        }
+        const sinceLastReceived = now - lastReceivedTime;
+        const {resetWindow, timedOut} = evaluateInboundLiveness({
+          sinceLastReceived,
+          inboundTimeoutMs,
+          queued: messages.queued,
+        });
+        if (resetWindow) {
+          // Downstream back-pressure is preventing us from consuming (and thus
+          // receiving) upstream messages. Keep the inbound window fresh so that
+          // when the backlog finally drains we grant a full inboundTimeoutMs
+          // before concluding the connection is dead — otherwise a long stall
+          // would leave lastReceivedTime stale and fire this watchdog on the
+          // first post-drain tick, tearing down a healthy connection.
+          lastReceivedTime = now;
+        } else if (timedOut && !readable.destroyed) {
+          lc.warn?.(
+            `no message received from ${db.options.host} in ${sinceLastReceived}ms ` +
+              `(> inbound timeout ${inboundTimeoutMs}ms). Destroying ` +
+              `replication stream to force reconnect.`,
+          );
+          readable.destroy(
+            new Error(
+              `replication stream inbound timeout after ${sinceLastReceived}ms`,
+            ),
+          );
+        }
+      }, timerIntervalMs)
+    : undefined;
 
   let destroyed = false;
   const typeParsers = await getTypeParsers(db, {returnJsonAsString: true});
@@ -133,7 +189,10 @@ export async function subscribe(
   pipe({
     source: readable,
     sink: messages,
-    parse: buffer => parseStreamMessage(lc, buffer, parser),
+    parse: buffer => {
+      lastReceivedTime = Date.now();
+      return parseStreamMessage(lc, buffer, parser);
+    },
     // Allow a small buffer of messages to be queued in the subscription so
     // that the change-source loop can check the queue to determine if more
     // messages are immediately available.
@@ -144,6 +203,110 @@ export async function subscribe(
     messages,
     acks: {push: sendAck},
   };
+}
+
+/**
+ * Derives the timings for the replication liveness timer from the server's
+ * `wal_sender_timeout` (in milliseconds).
+ *
+ * Postgres treats `wal_sender_timeout = 0` as "disabled": it will neither
+ * terminate an idle wal sender nor emit the periodic keepalives it otherwise
+ * sends at roughly `wal_sender_timeout / 2`. Every timing below is derived from
+ * that interval, so a disabled timeout disables the liveness machinery entirely
+ * (`enabled: false`). Otherwise the derived thresholds would all collapse to 0,
+ * inverting the intended meaning: the inbound watchdog would fire on the very
+ * first tick and destroy the stream, while the timer itself would busy-spin at
+ * a 0ms interval — together producing a continuous reconnect storm.
+ *
+ * An `inboundTimeoutOverrideMs` (when positive) replaces the default
+ * `2x wal_sender_timeout` inbound threshold. The two timeouts protect
+ * different parties with asymmetric false-positive costs: `wal_sender_timeout`
+ * is the server reaping dead clients (a false positive there costs a cheap
+ * reconnect), while the inbound watchdog tears down the stream and replays the
+ * in-flight transaction — expensive, and self-defeating when the wal sender is
+ * legitimately silent for long stretches (e.g. decoding through WAL from
+ * unpublished tables, or assembling a large transaction that pgoutput only
+ * sends at commit). Operators who don't own the server setting (e.g. managed
+ * or operator-provisioned Postgres with an aggressive cluster-wide
+ * `wal_sender_timeout`) can widen the client-side fuse independently.
+ *
+ * The override has no effect when `wal_sender_timeout` is disabled (0): the
+ * server then sends no periodic keepalives, so inbound silence is normal even
+ * on an idle healthy connection and any silence-based watchdog would
+ * false-positive.
+ *
+ * https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT
+ */
+export function computeLivenessTimings(
+  walSenderTimeoutMs: number,
+  inboundTimeoutOverrideMs?: number | undefined,
+): {
+  enabled: boolean;
+  manualKeepaliveTimeout: number;
+  inboundTimeoutMs: number;
+  timerIntervalMs: number;
+} {
+  // Guard with `!(x > 0)` so that 0, negative, and NaN values all disable the
+  // timer rather than producing degenerate (zero / NaN) thresholds.
+  if (!(walSenderTimeoutMs > 0)) {
+    return {
+      enabled: false,
+      manualKeepaliveTimeout: 0,
+      inboundTimeoutMs: 0,
+      timerIntervalMs: 0,
+    };
+  }
+  // Send a manual keepalive if nothing has been sent in the last 75% of the
+  // wal_sender_timeout, so Postgres never times us out under back-pressure.
+  const manualKeepaliveTimeout = Math.floor(walSenderTimeoutMs * 0.75);
+  return {
+    enabled: true,
+    manualKeepaliveTimeout,
+    // Force a reconnect after 2x wal_sender_timeout — i.e. two consecutive
+    // missed keepalives — without any inbound message, to avoid spurious
+    // reconnects from a single delayed keepalive (PG scheduling jitter under
+    // load, our own event-loop stalls, etc.). A 0 / negative / NaN override
+    // falls back to the default rather than degenerating the threshold.
+    inboundTimeoutMs:
+      inboundTimeoutOverrideMs !== undefined && inboundTimeoutOverrideMs > 0
+        ? inboundTimeoutOverrideMs
+        : walSenderTimeoutMs * 2,
+    // Poll at 1/5th of the manual keepalive interval.
+    timerIntervalMs: manualKeepaliveTimeout / 5,
+  };
+}
+
+/**
+ * Pure decision for the inbound-liveness watchdog, given the time since the
+ * last inbound message, the timeout threshold, and the number of messages
+ * currently queued downstream (see {@link SourceWithPendingQueue.queued}).
+ *
+ * A non-empty downstream queue means we have received data we haven't yet
+ * consumed: the reason we aren't receiving *more* is our own back-pressure, not
+ * upstream silence. In that case we `resetWindow` (treat the backlog as
+ * liveness evidence) rather than counting the stall against the connection.
+ * This both suppresses false timeouts during back-pressure and — crucially —
+ * keeps `lastReceivedTime` fresh so the drain transition (queue emptying after
+ * a long stall) doesn't fire the watchdog against a stale timestamp on the very
+ * next tick.
+ *
+ * Only when the queue is empty (consumption has caught up, so reading — and
+ * thus keepalives — should be flowing again) does an over-threshold gap
+ * indicate a genuinely dead inbound half.
+ */
+export function evaluateInboundLiveness({
+  sinceLastReceived,
+  inboundTimeoutMs,
+  queued,
+}: {
+  sinceLastReceived: number;
+  inboundTimeoutMs: number;
+  queued: number;
+}): {resetWindow: boolean; timedOut: boolean} {
+  if (queued > 0) {
+    return {resetWindow: true, timedOut: false};
+  }
+  return {resetWindow: false, timedOut: sinceLastReceived > inboundTimeoutMs};
 }
 
 /**
@@ -204,6 +367,60 @@ async function startReplicationStream(
   throw new Error(
     `exceeded max attempts (${maxAttempts}) to start the Postgres stream`,
   );
+}
+
+/**
+ * Starts a "dummy" replication session for the specified `slot` which:
+ * * does not consume any records
+ * * keeps the session alive by sending status messages at the starting LSN
+ *
+ * This essentially reserves the replication slot for this process by marking
+ * it as "active" in pg_replication_slots, allowing replication slot cleanup
+ * logic to distinguish a new-but-initializing replication slot from one that
+ * has been abandoned / orphaned.
+ *
+ * When initialization (e.g. initial-sync) has finished, the server should take
+ * over the replication slot using pg_terminate_backend, which will close the
+ * session.
+ *
+ * Note that caller should not close the supplied `session`, as that will
+ * also terminate the dummy replication session.
+ */
+export async function keepSlotActiveUntilTakenOver(
+  lc: LogContext,
+  session: postgres.Sql,
+  slot: string,
+  dummyPublication: string,
+  lsn: bigint,
+) {
+  const [readable, writeable] = await startReplicationStream(
+    lc,
+    session,
+    slot,
+    [dummyPublication],
+    lsn,
+    1,
+  );
+  lc.info?.(`keeping ${slot} active until taken over ...`);
+  // Send periodic status messages upstream to indicate that the session is
+  // alive, but keep the confirmed_flush_lsn at the initial lsn.
+  const keepalive = setInterval(() => writeable.write(makeAck(lsn)), 10_000);
+
+  readable.on('close', async () => {
+    lc.info?.(`released initial reservation of ${slot}`);
+    clearInterval(keepalive);
+    try {
+      await session.end();
+      lc.info?.(`ended session`);
+    } catch (e) {
+      lc.warn?.(`error ending session`, e);
+    }
+  });
+  readable.once('error', e => {
+    lc.info?.(`closing replication session to ${session.options.host}`, e);
+    readable.destroy();
+  });
+  return readable;
 }
 
 function parseStreamMessage(
