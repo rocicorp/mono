@@ -284,9 +284,13 @@ export function applyChangeInternal<M extends Mutate>(
       if (singular) {
         const oldEntry = getOptionalSingularEntry(parentEntry, relationship);
         if (oldEntry !== undefined) {
-          // Duplicate add: increment refCount
+          // Duplicate add: increment refCount. Compare the raw (encoded) row
+          // when the schema has codecs: the entry's own fields are decoded.
           assert(
-            schema.compareRows(oldEntry, change.node.row) === 0,
+            schema.compareRows(
+              oldEntry[encodedRowSymbol] ?? (oldEntry as unknown as Row),
+              change.node.row,
+            ) === 0,
             `Singular relationship '${relationship}' should not have multiple rows. You may need to declare this relationship with the \`many\` helper instead of the \`one\` helper in your schema.`,
           );
 
@@ -588,8 +592,12 @@ function applyEdit<M extends Mutate>(
   // row back-pointer used by binary search. It must track the schema, not
   // whether decoding copied: an edit that nulls every codec column decodes to
   // the same object, and `existing` may still carry the previous raw row.
-  const decodedRow = decodeRowFields(change.node.row, schema);
-  const encodedRowProp = columnsHaveCodecs(schema.columns)
+  const {columns} = schema;
+  const hasCodecs = columnsHaveCodecs(columns);
+  const decodedRow = hasCodecs
+    ? decodeRowFields(change.node.row, columns)
+    : change.node.row;
+  const encodedRowProp = hasCodecs
     ? {[encodedRowSymbol]: change.node.row}
     : undefined;
   // In-place edit is safe when fully mutating or when `existing` was already
@@ -877,8 +885,9 @@ function makeNewMetaEntry(
 ): MutableMetaEntry {
   // Decode codec columns; when the schema has codecs the raw row is kept as a
   // back-pointer so binary search compares stored values.
-  const decodedRow = decodeRowFields(row, schema);
-  const hasCodecs = columnsHaveCodecs(schema.columns);
+  const {columns} = schema;
+  const hasCodecs = columnsHaveCodecs(columns);
+  const decodedRow = hasCodecs ? decodeRowFields(row, columns) : row;
   if (withIDs) {
     return track({
       ...decodedRow,

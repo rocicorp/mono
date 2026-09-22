@@ -555,15 +555,16 @@ export function defineQueryWithType() {
  * defineQuery overloads but with Schema and Context pre-bound.
  */
 type TypedDefineQuery<TSchema extends Schema, TContext> = {
-  // Without validator
-  <
-    TArgs extends ReadonlyJSONValue | undefined,
-    TReturn,
-    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
-      string,
-  >(
-    queryFn: QueryDefinitionFunction<TTable, TArgs, TReturn, TContext>,
-  ): QueryDefinition<TTable, TArgs, TArgs, TReturn, TContext>;
+  // Signature order matters:
+  // - The validator signature must precede the codec one. Standard Schema
+  //   implementations such as Zod 4 also expose `.decode()` / `.encode()`, so
+  //   they would otherwise resolve to the codec signature at the type level
+  //   (the runtime already prefers the validator path).
+  // - The codec signature must not be the last one. When it is, TypeScript's
+  //   variance measurement for this generic alias degrades `Query`'s schema
+  //   parameter, letting legacy queries type-check against a `Zero` whose
+  //   schema has `enableLegacyQueries: false` (see the enableLegacyQueries
+  //   test in zero-client's custom.test.ts).
 
   // With validator
   <
@@ -576,6 +577,28 @@ type TypedDefineQuery<TSchema extends Schema, TContext> = {
     validator: StandardSchemaV1<TInput, TOutput>,
     queryFn: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
   ): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext>;
+
+  // With codec
+  <
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput,
+    TReturn,
+    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+      string,
+  >(
+    codec: Codec<TInput, TOutput>,
+    queryFn: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
+  ): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext, TOutput>;
+
+  // Without validator
+  <
+    TArgs extends ReadonlyJSONValue | undefined,
+    TReturn,
+    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+      string,
+  >(
+    queryFn: QueryDefinitionFunction<TTable, TArgs, TReturn, TContext>,
+  ): QueryDefinition<TTable, TArgs, TArgs, TReturn, TContext>;
 };
 
 // ----------------------------------------------------------------------------

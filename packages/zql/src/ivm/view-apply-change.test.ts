@@ -2992,5 +2992,74 @@ describe('applyChange', () => {
       });
       expect((root[''] as Entry[]).map(e => e.id)).toEqual(['b']);
     });
+
+    test('singular relationship duplicate add compares the raw row', () => {
+      // A `one()` relationship sorted by a codec column. The duplicate-add
+      // check compares the existing entry against the incoming raw row; it
+      // must use the entry's raw back-pointer, since the entry's own field
+      // holds a Date while the incoming row holds a number.
+      const parentSchema: SourceSchema = {
+        tableName: 'event',
+        columns: {id: {type: 'string'}},
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {
+          latest: {
+            ...codecSchema,
+            sort: [
+              ['createdAt', 'desc'],
+              ['id', 'asc'],
+            ],
+            compareRows: makeComparator([
+              ['createdAt', 'desc'],
+              ['id', 'asc'],
+            ]),
+          },
+        },
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      };
+      const parentFormat: Format = {
+        singular: false,
+        relationships: {latest: {singular: true, relationships: {}}},
+      };
+      const child = {row: {id: 'c1', createdAt: 1000}, relationships: {}};
+
+      let root: Entry = {'': []};
+      root = applyChange(
+        root,
+        {
+          type: 'add',
+          node: {row: {id: 'e1'}, relationships: {latest: [child]}},
+        },
+        parentSchema,
+        '',
+        parentFormat,
+        WITH_IDS,
+        NO_MUTATE,
+      );
+      // The same child row reaches the relationship a second time.
+      root = applyChange(
+        root,
+        {
+          type: 'child',
+          node: {row: {id: 'e1'}},
+          child: {
+            relationshipName: 'latest',
+            change: {type: 'add', node: child},
+          },
+        },
+        parentSchema,
+        '',
+        parentFormat,
+        WITH_IDS,
+        NO_MUTATE,
+      );
+
+      const latest = (root[''] as Entry[])[0].latest as Entry;
+      expect((latest.createdAt as unknown as Date).getTime()).toBe(1000);
+      expect((latest as {[refCountSymbol]?: number})[refCountSymbol]).toBe(2);
+    });
   });
 });

@@ -9,7 +9,11 @@ import {
 import type {Codec} from '../../../zero-types/src/schema-value.ts';
 import {createBuilder} from './create-builder.ts';
 import {asQueryInternals} from './query-internals.ts';
-import {addContextToQuery, defineQueries} from './query-registry.ts';
+import {
+  addContextToQuery,
+  defineQueries,
+  defineQueryWithType,
+} from './query-registry.ts';
 import {defineQuery} from './query-registry.ts';
 
 const schema = createSchema({
@@ -161,4 +165,52 @@ test('codec query: the callable accepts the decoded type', () => {
     queries.byTime({at: 1});
   };
   void _rejectsEncoded;
+});
+
+test('defineQueryWithType accepts a codec', () => {
+  const defineAppQuery = defineQueryWithType<typeof schema, {userID: string}>();
+  const queries = defineQueries({
+    byTime: defineAppQuery(argsCodec, ({args, ctx}) => {
+      expectTypeOf(args).toEqualTypeOf<DecodedArgs>();
+      expectTypeOf(ctx).toEqualTypeOf<{userID: string}>();
+      return builder.event.where('at', '=', args.at.getTime());
+    }),
+  });
+  expectTypeOf(queries.byTime).parameter(0).toEqualTypeOf<DecodedArgs>();
+
+  const query = addContextToQuery(queries.byTime({at: new Date(9)}), {
+    userID: 'u',
+  });
+  expect(asQueryInternals(query).ast).toMatchObject({
+    where: {right: {type: 'literal', value: 9}},
+  });
+});
+
+test('defineQueryWithType: a validator with decode/encode resolves as a validator (type level)', () => {
+  // Guards the signature order in TypedDefineQuery: a Zod-4-style schema
+  // structurally satisfies Codec, so the validator signature must win and the
+  // call site must be typed as the raw input, not the decoded output.
+  const zodLike: StandardSchemaV1<EncodedArgs, DecodedArgs> & {
+    decode: (v: EncodedArgs) => DecodedArgs;
+    encode: (v: DecodedArgs) => EncodedArgs;
+  } = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: value => ({value: {at: new Date((value as EncodedArgs).at)}}),
+    },
+    'decode': ({at}) => ({at: new Date(at)}),
+    'encode': ({at}) => ({at: at.getTime()}),
+  };
+  const defineAppQuery = defineQueryWithType<typeof schema, {userID: string}>();
+  const def = defineAppQuery(zodLike, ({args}) => {
+    expectTypeOf(args).toEqualTypeOf<DecodedArgs>();
+    return builder.event.where('at', '=', args.at.getTime());
+  });
+  expect(def.validator).toBe(zodLike);
+  expect(def.codec).toBeUndefined();
+
+  const queries = defineQueries({byTime: def});
+  // Call site takes the (validated) input type, not the decoded type.
+  expectTypeOf(queries.byTime).parameter(0).toEqualTypeOf<EncodedArgs>();
 });

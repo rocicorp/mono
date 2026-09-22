@@ -1,9 +1,11 @@
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Format} from '../../../zero-types/src/format.ts';
 import {
   getCodec,
   type SchemaValue,
 } from '../../../zero-types/src/schema-value.ts';
-import type {SourceSchema} from './schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 
 /**
  * Whether any column in a `columns` record carries a codec, memoized per
@@ -40,8 +42,10 @@ export function columnsHaveCodecs(
  *
  * `null`/`undefined` values are passed through without invoking `decode`.
  */
-export function decodeRowFields(row: Row, schema: SourceSchema): Row {
-  const {columns} = schema;
+export function decodeRowFields(
+  row: Row,
+  columns: Record<string, SchemaValue>,
+): Row {
   if (!columnsHaveCodecs(columns)) {
     return row;
   }
@@ -56,6 +60,73 @@ export function decodeRowFields(row: Row, schema: SourceSchema): Row {
     }
   }
   return (result ?? row) as Row;
+}
+
+/**
+ * Decodes the codec columns of a fully materialized query result (the shape
+ * produced by `tx.run()` / `query.run()`: a row or an array of rows, with
+ * related rows nested under their relationship alias). The IVM views decode
+ * as entries are built, but results that come straight from SQL (the server
+ * side `tx.run()`) never pass through a view, so this walks the result tree
+ * using the query's AST and format instead. Returns the input unchanged when
+ * no table in the tree carries a codec.
+ */
+export function decodeQueryResult(
+  result: unknown,
+  ast: AST,
+  format: Format,
+  schema: Schema,
+): unknown {
+  // oxlint-disable-next-line eqeqeq
+  if (result == null) {
+    return result;
+  }
+  if (Array.isArray(result)) {
+    let copy: unknown[] | undefined;
+    for (let i = 0; i < result.length; i++) {
+      const decoded = decodeQueryResult(result[i], ast, format, schema);
+      if (decoded !== result[i]) {
+        copy ??= [...result];
+        copy[i] = decoded;
+      }
+    }
+    return copy ?? result;
+  }
+
+  const columns = schema.tables[ast.table]?.columns;
+  const row = result as Row;
+  let decoded: Record<string, unknown> | undefined =
+    columns && columnsHaveCodecs(columns)
+      ? (decodeRowFields(row, columns) as Record<string, unknown>)
+      : undefined;
+  if (decoded === row) {
+    decoded = undefined;
+  }
+
+  for (const related of ast.related ?? []) {
+    const alias = related.subquery.alias;
+    if (alias === undefined || !(alias in row)) {
+      continue;
+    }
+    const childFormat = format.relationships[alias];
+    if (childFormat === undefined) {
+      continue;
+    }
+    // A hidden relationship is a junction edge: the materialized rows under
+    // `alias` belong to the far table, i.e. the nested subquery.
+    const childAST = related.hidden
+      ? related.subquery.related?.[0]?.subquery
+      : related.subquery;
+    if (childAST === undefined) {
+      continue;
+    }
+    const child = decodeQueryResult(row[alias], childAST, childFormat, schema);
+    if (child !== row[alias]) {
+      decoded ??= {...row};
+      decoded[alias] = child;
+    }
+  }
+  return decoded ?? row;
 }
 
 /**

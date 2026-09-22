@@ -4,6 +4,7 @@ import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Format} from '../../zero-types/src/format.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
+import {decodeQueryResult} from '../../zql/src/ivm/codec.ts';
 import type {Queryable} from '../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../zql/src/query/query.ts';
 
@@ -34,5 +35,13 @@ export async function executePostgresQuery<TReturn>(
     return undefined as unknown as HumanReadable<TReturn>;
   }
 
-  return extractZqlResult(pgArrayResult) as HumanReadable<TReturn>;
+  // Rows come straight from SQL, so codec columns are still in their stored
+  // form; decode them so server-side `tx.run()` sees the same app-typed
+  // values (e.g. `Date`) as the client's IVM views.
+  return decodeQueryResult(
+    extractZqlResult(pgArrayResult),
+    ast,
+    format,
+    schema,
+  ) as HumanReadable<TReturn>;
 }
