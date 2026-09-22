@@ -16,6 +16,7 @@ import {
   POKE_PART_FLUSH_THRESHOLD_CHARS,
   startPoke,
   type Patch,
+  type PatchToVersion,
   type PokeHandler,
 } from './client-handler.ts';
 
@@ -412,6 +413,41 @@ describe('view-syncer/client-handler', () => {
     ]);
   });
 
+  test('patchesSent only counts patches a client accepted', async () => {
+    const {subscription} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const patch = (toVersion: string): PatchToVersion => ({
+      toVersion: {stateVersion: toVersion},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'foo'}},
+        contents: {id: 'foo'},
+      },
+    });
+
+    // No clients.
+    const none = startPoke(lc, [], {stateVersion: '123'});
+    await none.addPatch(patch('123'));
+    expect(none.patchesSent).toBe(false);
+
+    // Client is already at or past the patch's version.
+    const pokers = startPoke(lc, [handler], {stateVersion: '123'});
+    await pokers.addPatch(patch('121'));
+    expect(pokers.patchesSent).toBe(false);
+
+    await pokers.addPatch(patch('123'));
+    expect(pokers.patchesSent).toBe(true);
+  });
+
   test('poke that cannot be ended fails the connection', async () => {
     const {subscription, close} = createSubscription();
     const handler = new ClientHandler(
@@ -425,6 +461,7 @@ describe('view-syncer/client-handler', () => {
     );
 
     const pokers = startPoke(lc, [handler], {stateVersion: '123'});
+    expect(pokers.patchesSent).toBe(false);
     await pokers.addPatch({
       toVersion: {stateVersion: '123'},
       patch: {
@@ -434,6 +471,7 @@ describe('view-syncer/client-handler', () => {
         contents: {id: 'foo'},
       },
     });
+    expect(pokers.patchesSent).toBe(true);
     // Patches were sent, but the CVR flush was a no-op so the final version
     // does not advance past the client's baseCookie.
     await pokers.end({stateVersion: '121'});
@@ -442,7 +480,9 @@ describe('view-syncer/client-handler', () => {
 
     // The connection is failed rather than being left mid-poke, which would
     // make the *next* pokeStart fail the DownstreamSender's in-progress check.
-    expect(String(err)).toMatch(/Patches were sent but finalVersion/);
+    expect(String(err)).toMatch(
+      'Patches were sent but finalVersion 121 is not greater than baseVersion 121',
+    );
     expect(received[0]).toEqual([
       'pokeStart',
       {pokeID: '123', baseCookie: '121'},

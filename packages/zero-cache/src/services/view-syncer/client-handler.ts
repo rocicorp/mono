@@ -77,7 +77,27 @@ export interface PokeHandler {
   end(finalVersion: CVRVersion): Promise<void>;
 }
 
-const NOOP: PokeHandler = {
+/** A {@link PokeHandler} for a single client. */
+export interface ClientPokeHandler extends PokeHandler {
+  /**
+   * Whether a patch has been sent to the client. Once one has, the poke can
+   * only be ended with a `finalVersion` that is ahead of the client's base
+   * version.
+   */
+  readonly patchesSent: boolean;
+}
+
+/**
+ * A {@link PokeHandler} for multiple clients, as returned by
+ * {@link startPoke}.
+ */
+export interface MultiPokeHandler extends PokeHandler {
+  /** Whether a patch has been sent to any of the clients. */
+  readonly patchesSent: boolean;
+}
+
+const NOOP: ClientPokeHandler = {
+  patchesSent: false,
   addPatch: () => promiseVoid,
   cancel: () => promiseVoid,
   end: () => promiseVoid,
@@ -88,7 +108,7 @@ export function startPoke(
   lc: LogContext,
   clients: ClientHandler[],
   tentativeVersion: CVRVersion,
-): PokeHandler {
+): MultiPokeHandler {
   const pokers = clients.map(c => c.startPoke(tentativeVersion));
 
   // Promise.allSettled() ensures that a failed (e.g. disconnected) client
@@ -107,6 +127,9 @@ export function startPoke(
   };
 
   return {
+    get patchesSent() {
+      return pokers.some(poker => poker.patchesSent);
+    },
     addPatch: patch =>
       settle(
         'addPatch',
@@ -208,7 +231,7 @@ export class ClientHandler {
     this.#downstream.cancel();
   }
 
-  startPoke(tentativeVersion: CVRVersion): PokeHandler {
+  startPoke(tentativeVersion: CVRVersion): ClientPokeHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
@@ -332,6 +355,9 @@ export class ClientHandler {
     // its cause. Fail the connection instead; the client reconnects and
     // resyncs from its baseVersion.
     return {
+      get patchesSent() {
+        return pokeStarted;
+      },
       addPatch: async (patchToVersion: PatchToVersion) => {
         try {
           await addPatch(patchToVersion);
@@ -368,8 +394,9 @@ export class ClientHandler {
             // Sanity check: If the poke was started, the finalVersion
             // must be > #baseVersion.
             throw new Error(
-              `Patches were sent but finalVersion ${finalVersion} is ` +
-                `not greater than baseVersion ${this.#baseVersion}`,
+              `Patches were sent but finalVersion ${cookie} is not ` +
+                `greater than baseVersion ` +
+                `${versionToNullableCookie(this.#baseVersion)}`,
             );
           }
           await flushBody();
