@@ -425,6 +425,7 @@ describe('view-syncer/client-handler', () => {
     );
 
     const pokers = startPoke(lc, [handler], {stateVersion: '123'});
+    expect(pokers.patchesAdded).toBe(false);
     await pokers.addPatch({
       toVersion: {stateVersion: '123'},
       patch: {
@@ -434,6 +435,7 @@ describe('view-syncer/client-handler', () => {
         contents: {id: 'foo'},
       },
     });
+    expect(pokers.patchesAdded).toBe(true);
     // Patches were sent, but the CVR flush was a no-op so the final version
     // does not advance past the client's baseCookie.
     await pokers.end({stateVersion: '121'});
@@ -442,7 +444,9 @@ describe('view-syncer/client-handler', () => {
 
     // The connection is failed rather than being left mid-poke, which would
     // make the *next* pokeStart fail the DownstreamSender's in-progress check.
-    expect(String(err)).toMatch(/Patches were sent but finalVersion/);
+    expect(String(err)).toMatch(
+      'Patches were sent but finalVersion 121 is not greater than baseVersion 121',
+    );
     expect(received[0]).toEqual([
       'pokeStart',
       {pokeID: '123', baseCookie: '121'},

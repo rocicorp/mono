@@ -1479,7 +1479,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return ttlClock;
   }
 
-  #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
+  /**
+   * @param patchesPoked Whether patches computed against the updater's CVR
+   *     have already been poked to clients. If so, the CVR is checked to be
+   *     current even when the flush has nothing to write: another
+   *     view-syncer may have already committed identical rows at a newer
+   *     version, which would otherwise leave this one poking from a stale
+   *     CVR whose version it cannot advance.
+   */
+  #flushUpdater(
+    lc: LogContext,
+    updater: CVRUpdater,
+    patchesPoked = false,
+  ): Promise<CVRSnapshot> {
     return startAsyncSpan(tracer, 'vs.#flushUpdater', () =>
       this.#runPriorityOp(lc, 'flushing cvr', async () => {
         const now = Date.now();
@@ -1489,6 +1501,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#lastConnectTime,
           now,
           ttlClock,
+          patchesPoked,
         );
 
         if (flushed) {
@@ -3184,7 +3197,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = await this.#flushUpdater(lc, updater);
+      this.#cvr = await this.#flushUpdater(lc, updater, pokers.patchesAdded);
       if (budgetEvictedQueryIDs.length > 0) {
         this.#scheduleExpireEviction(lc, this.#cvr);
       }
@@ -3473,7 +3486,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'advancement state missing',
       );
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = await this.#flushUpdater(lc, updater);
+      this.#cvr = await this.#flushUpdater(lc, updater, pokers.patchesAdded);
       const finalVersion = this.#cvr.version;
 
       // Signal clients to commit.

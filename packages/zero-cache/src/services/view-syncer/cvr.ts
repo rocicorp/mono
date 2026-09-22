@@ -180,11 +180,16 @@ export class CVRUpdater {
     return this._cvr.version;
   }
 
+  /**
+   * @param verifyNoop Check that the original CVR is still current even if
+   *     there is nothing to write. See {@link CVRStore.flush}.
+   */
   async flush(
     lc: LogContext,
     lastConnectTime: number,
     lastActive: number,
     ttlClock: TTLClock,
+    verifyNoop = false,
   ): Promise<{
     cvr: CVRSnapshot;
     flushed: CVRFlushStats | false;
@@ -196,6 +201,7 @@ export class CVRUpdater {
       this._orig.version,
       this._cvr,
       lastConnectTime,
+      verifyNoop,
     );
     if (!flushed) {
       return {cvr: this._orig, flushed: false};
@@ -927,6 +933,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     lastConnectTime: number,
     lastActive: number,
     ttlClock: TTLClock,
+    verifyNoop = false,
   ): Promise<{cvr: CVRSnapshot; flushed: CVRFlushStats | false}> {
     if (this.#rowSetSignature) {
       // Persist the per-query row-set signature for any query whose
@@ -947,7 +954,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         this._cvrStore.updateRowSetSignature(queryID, hex);
       }
     }
-    return super.flush(lc, lastConnectTime, lastActive, ttlClock);
+    return super.flush(lc, lastConnectTime, lastActive, ttlClock, verifyNoop);
   }
 
   /**

@@ -77,6 +77,18 @@ export interface PokeHandler {
   end(finalVersion: CVRVersion): Promise<void>;
 }
 
+/**
+ * A {@link PokeHandler} for multiple clients, as returned by
+ * {@link startPoke}.
+ */
+export interface MultiPokeHandler extends PokeHandler {
+  /**
+   * Whether any patch has been added. Once one has, the poke can only be
+   * ended with a `finalVersion` that is ahead of the clients' base version.
+   */
+  readonly patchesAdded: boolean;
+}
+
 const NOOP: PokeHandler = {
   addPatch: () => promiseVoid,
   cancel: () => promiseVoid,
@@ -88,8 +100,9 @@ export function startPoke(
   lc: LogContext,
   clients: ClientHandler[],
   tentativeVersion: CVRVersion,
-): PokeHandler {
+): MultiPokeHandler {
   const pokers = clients.map(c => c.startPoke(tentativeVersion));
+  let patchesAdded = false;
 
   // Promise.allSettled() ensures that a failed (e.g. disconnected) client
   // does not prevent other clients from receiving the pokes. However, the
@@ -107,11 +120,16 @@ export function startPoke(
   };
 
   return {
-    addPatch: patch =>
-      settle(
+    get patchesAdded() {
+      return patchesAdded;
+    },
+    addPatch: patch => {
+      patchesAdded = true;
+      return settle(
         'addPatch',
         pokers.map(poker => poker.addPatch(patch)),
-      ),
+      );
+    },
     cancel: () =>
       settle(
         'cancel',
@@ -368,8 +386,9 @@ export class ClientHandler {
             // Sanity check: If the poke was started, the finalVersion
             // must be > #baseVersion.
             throw new Error(
-              `Patches were sent but finalVersion ${finalVersion} is ` +
-                `not greater than baseVersion ${this.#baseVersion}`,
+              `Patches were sent but finalVersion ${cookie} is not ` +
+                `greater than baseVersion ` +
+                `${versionToNullableCookie(this.#baseVersion)}`,
             );
           }
           await flushBody();
