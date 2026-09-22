@@ -1,5 +1,6 @@
 import {readdirSync} from 'node:fs';
 import {defineConfig} from 'vitest/config';
+import {DurationSequencer} from './packages/shared/src/tool/duration-sequencer.ts';
 
 // Electron-hosted terminals (VSCode's integrated terminal, Cursor, Claude
 // Code, ...) leak ELECTRON_RUN_AS_NODE=1 into spawned shells. node-gyp-build
@@ -89,5 +90,9 @@ const projects = [...getProjects()].filter(filterTestName);
 export default defineConfig({
   test: {
     projects,
+    sequence: {
+      // Balance `--shard` runs by expected duration. See test-durations.json.
+      sequencer: DurationSequencer,
+    },
   },
 });

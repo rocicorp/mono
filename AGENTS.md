@@ -118,6 +118,7 @@ const user = table('user')
 - Test files automatically discovered by the root vitest config
 - Prefer `test` over `it` for consistency
 - Coverage is run with `v8` - use the `--coverage` flag to help write tests
+- CI splits tests into shards balanced by expected duration using `test-durations.json` at the repo root. When you add a slow test file, or a file's duration changes a lot, regenerate the entries with `pnpm run update-test-durations` (usage in `scripts/src/update-test-durations.ts`)
 
 ### Import Patterns
 

@@ -9,6 +9,7 @@
     "dev": "turbo run dev",
     "test": "vitest run",
     "test:watch": "vitest",
+    "update-test-durations": "node scripts/src/update-test-durations.ts",
     "lint": "oxlint --quiet --type-aware",
     "fmt": "oxfmt",
     "format": "oxfmt",
