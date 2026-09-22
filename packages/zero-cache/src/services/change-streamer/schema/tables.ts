@@ -279,7 +279,11 @@ export async function ensureReplicationConfig(
             lc.info?.(
               'ensureReplicationConfig blocked, terminating lock holders',
             );
-            await terminateChangeDBLockHolders(lc, db, shard);
+            try {
+              await terminateChangeDBLockHolders(lc, db, shard);
+            } catch (e) {
+              lc.warn?.('error terminating lock holders', e);
+            }
             if (!done) {
               scheduleTerminate();
             }
