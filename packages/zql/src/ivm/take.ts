@@ -252,9 +252,21 @@ export class Take implements Operator, TakeBoundProvider {
 
     if (change[ChangeIndex.TYPE] === ChangeType.ADD) {
       if (takeState.size < this.#limit) {
+        if (this.#dirtyPartitions.has(takeStateKey)) {
+          if (
+            takeState.bound === undefined ||
+            compareRows(change[ChangeIndex.NODE].row, takeState.bound) >= 0
+          ) {
+            return;
+          }
+        }
+        const nextSize = takeState.size + 1;
+        if (nextSize === this.#limit) {
+          this.#dirtyPartitions.delete(takeStateKey);
+        }
         this.#setTakeState(
           takeStateKey,
-          takeState.size + 1,
+          nextSize,
           takeState.bound === undefined ||
             compareRows(takeState.bound, change[ChangeIndex.NODE].row) < 0
             ? change[ChangeIndex.NODE].row
