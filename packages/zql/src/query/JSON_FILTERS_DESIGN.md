@@ -237,26 +237,21 @@ json-vs-relationship, no indices).
 
 ### 5.3 In-memory evaluation (`zql/src/builder/filter.ts`)
 
-A `readColumn(row, ref)` helper; in `createPredicate`, a `'json'` left ref navigates
-into the column value before the existing null-guard + comparator. As implemented, a
-path miss (missing key, or a null/undefined intermediate) coalesces to `null` — JSON
-has no `undefined`, and this matches SQLite `json_extract` so `IS NULL` agrees on
-client and replica (§5.6/§5.7):
+A `readColumn(row, ref)` helper navigates a `'json'` left ref into the column value
+before the comparator. Navigation is **strict** (`valueAtPath`): a number segment
+indexes an array and a string segment reads an own key of a plain object; any other
+step — wrong segment kind, missing key, scalar/null intermediate, a string's
+characters, `length`, an inherited member like `constructor` — yields `null`. JSON
+has no `undefined`, so absence collapses to `null`, matching SQLite `json_extract`
+(§5.6/§5.7).
 
-```ts
-function readColumn(row, ref: ColumnReference | JsonPathReference): Value {
-  if (ref.type === 'column') return row[ref.name]; // plain reads unchanged
-  let v: Value = row[ref.value.name];
-  for (const seg of ref.path) {
-    if (v === null || v === undefined) return null;
-    v = (v as Record<string | number, Value>)[seg];
-  }
-  return v === undefined ? null : v;
-}
-```
-
-No new comparator (reuses `createPredicateImpl`). `IS`/`IS NOT` handle null/missing;
-`LIKE`/`ILIKE` work for free on string leaves.
+Comparison against a JSON leaf is **type-strict and never throws**: `createPredicate`
+checks the leaf's runtime type against the literal's (`jsonLiteralType`) before
+calling the operator implementation — a mismatch is a non-match for a positive
+operator and a match for a negated one (`!=`, `NOT IN`, `NOT LIKE`, `NOT ILIKE`).
+This is what keeps `compareValues` (which throws on mixed types) and the LIKE
+matcher (which asserts a string) off user data. An empty `IN` list never matches; an
+empty `NOT IN` matches every non-null leaf. `IS`/`IS NOT` are already strict (`===`).
 
 **Correctness-critical:** `constraint.ts:extractColumn` extracts only `'column'`
 refs; a `'json'` ref falls through to `undefined` — otherwise
@@ -266,13 +261,24 @@ as **non-index-backed** (scan).
 
 ### 5.4 SQLite compile (`zqlite/src/query-builder.ts`)
 
-`valuePositionToSQL` `'json'` case: emit
-`json_extract(<ident>, '$.<seg>...')` (object key → `.key` with escaping; array
-index → `[i]`). Use `json_extract` (not `->>`) for portability — `->>`/`->` need
-SQLite 3.38+, `json_extract` is universal. RHS already coerces via
-`toSQLiteType(v, getJsType(v))` keyed on the literal's JS type — exactly right for a
-dynamically-typed leaf. `IN`:
-`json_extract(col,'$.p') IN (SELECT value FROM json_each(?))`.
+`jsonPathConditionToSQL` compiles a `'json'` left operand type-strictly, mirroring
+the in-memory predicate: the extraction is gated on `json_type()` —
+`CASE WHEN json_type(col, path) IN ('text') THEN json_extract(col, path) END` for a
+string literal (`'integer','real'` for a number, `'true','false'` for a boolean) — so
+a leaf of another JSON type is NULL, a non-match. A bare `json_extract` would not be
+strict: SQLite returns booleans as 1/0, orders any TEXT above any number (`'n/a' > 5`
+is true) and coerces numbers for LIKE. Negated operators get an explicit
+`CASE WHEN leaf IS NULL THEN 0 WHEN json_type(...) IN (...) THEN <cmp> ELSE 1 END`,
+and an empty `NOT IN` compiles to `leaf IS NOT NULL` (bare `NULL NOT IN ()` is TRUE).
+A `null` literal (`IS NULL`) uses the raw extraction so a missing key and a JSON null
+both read as NULL.
+
+The path string (`$."key"[i]`) is built by `jsonPathExpr`, which emits object keys as
+JSON string literals (`JSON.stringify`): SQLite reads a quoted label with JSON
+escapes, so `"` and `\` in a key must be backslash-escaped — SQL-style `""` doubling
+is not understood. `json_extract` (not `->>`) for portability. The RHS literal is
+coerced by `toSQLiteType(v, getJsType(v))`; `IN` uses
+`(SELECT value FROM json_each(?))`.
 
 ### 5.5 Postgres compile (`z2s/src/compiler.ts`)
 
@@ -333,20 +339,21 @@ Three evaluators must agree: JS `===`/`<`, SQLite `json_extract`, PG `jsonb`.
   to the same outcome (use `#>>`, which maps JSON null → SQL NULL like missing); both
   → non-match for value ops, match for `IS NULL`. Document it.
 - **object/array leaf:** out of scope v1 (scalar leaves only).
-- **mixed-type comparisons:** the equality family (`= != IN NOT IN IS IS NOT`) is
-  type-strict on all three engines — a leaf of another JSON type is never equal
-  (JS `42 !== '42'`; SQLite integer ≠ text; Postgres via the `jsonb_typeof` gate,
-  §5.5). **Decision:** ordering across types (`'3' < 5`) is the caller's problem —
-  JS coerces, SQLite orders by storage class, Postgres (gated) never matches — and
-  is not made consistent; typed `json<T>()` steers callers within one type.
+- **mixed-type comparisons:** every comparison is type-strict on all three engines —
+  a leaf whose JSON type differs from the literal's is never equal: a non-match for
+  a positive operator (including ordering and LIKE) and a match for a negated one,
+  and never an error (JS via the `jsonLiteralType` check, §5.3; SQLite via the
+  `json_type` gate, §5.4; Postgres via the `jsonb_typeof` gate, §5.5). Ordering
+  across types (`'3' < 5`) is therefore simply a non-match everywhere rather than
+  engine-specific; typed `json<T>()` steers callers within one type.
 - **index vs key segments:** a `number` segment is an array index and a `string`
-  segment is an object key. SQLite applies this statically (`$[i]` vs `$."k"`)
-  while JS and Postgres resolve by the container's runtime type, so a
-  numeric-looking string on an array (`'1'`) matches on JS/PG but is `NULL` on
-  SQLite. Not normalized — the JSON shape type is erased at runtime, so `json()`
-  can't tell an index from a key; typed columns enforce the rule via
-  `ValidJsonPath` (an array step admits only `number`), and untyped paths are the
-  caller's responsibility.
+  segment is an object key — strictly, on the client and the replica: SQLite
+  applies it syntactically (`$[i]` vs `$."k"`) and the in-memory reader enforces the
+  same rule, so a numeric-looking string on an array (`'1'`) is `null` on both.
+  Postgres `#>>` resolves by the container's runtime type and remains lenient there
+  (it also reads a string `'-1'` as an index from the end) — a documented caveat for
+  untyped paths; typed columns enforce the rule via `ValidJsonPath` (an array step
+  admits only `number`).
 
 The in-memory predicate now coalesces a path miss (missing key / null intermediate)
 to `null` so `IS NULL` matches both a missing key and a JSON null — identical to the
