@@ -378,6 +378,12 @@ Three evaluators must agree: JS `===`/`<`, SQLite `json_extract`, PG `jsonb`.
   the others yield null. Typed columns enforce the kind statically via
   `ValidJsonPath` (an array step admits only `number`; an object step only its
   string keys, with a `Record<number, …>` key written in its string form).
+- **numeric limits (known, not guarded):** SQLite compares JSON integers as exact
+  int64 while JavaScript and the Postgres `double precision` cast round to
+  doubles, so equality above 2^53 can differ; a jsonb number beyond double range
+  makes the Postgres cast throw; and for duplicate object keys SQLite reads the
+  first while `JSON.parse` and Postgres keep the last. None arise from
+  well-formed application data, so they are documented rather than guarded.
 
 The in-memory predicate now coalesces a path miss (missing key / null intermediate)
 to `null` so `IS NULL` matches both a missing key and a JSON null — identical to the
