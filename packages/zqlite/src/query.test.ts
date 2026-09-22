@@ -234,6 +234,23 @@ test('json path filter', async () => {
   ).toEqual(['j2']);
 });
 
+test('json path: negative or fractional array index throws at build time', () => {
+  // The engines disagree on negative indices (Postgres `#>>` counts from the
+  // end; JS/SQLite yield null), so the builder rejects them up front. `as
+  // number` sidesteps the compile-time check for a literal to exercise the
+  // runtime one.
+  expect(() =>
+    newQuery(schema, 'user').where(({cmp, json}) =>
+      cmp(json('metadata', 'altContacts', -1 as number), '=', 'x'),
+    ),
+  ).toThrow(/non-negative integer/);
+  expect(() =>
+    newQuery(schema, 'user').where(({cmp, json}) =>
+      cmp(json('metadata', 'altContacts', 1.5 as number), '=', 'x'),
+    ),
+  ).toThrow(/non-negative integer/);
+});
+
 test('null compare', async () => {
   let query = newQuery(schema, 'issue').where('ownerId', 'IS', null);
   let rows = await queryDelegate.run(query);

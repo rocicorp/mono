@@ -190,6 +190,19 @@ type JsonKeysOf<T> =
  * unconstrained. As with {@link ValueAtPath}, `T` must be concrete (see that
  * type's note) — `json` resolves the column type at its call site before this runs.
  */
+/**
+ * `true` for a negative numeric literal segment (e.g. `-1`). A numeric segment is
+ * an array index and must be non-negative — the engines disagree on negative
+ * indices (Postgres counts from the end; JavaScript/SQLite yield null) — so
+ * {@link ValidJsonPath} rejects one at compile time when it is a literal. A
+ * non-literal `number` is checked at runtime by `json()` instead.
+ */
+type IsNegativeIndexLiteral<H> = H extends number
+  ? `${H}` extends `-${string}`
+    ? true
+    : false
+  : false;
+
 export type ValidJsonPath<
   T,
   P extends readonly (string | number)[],
@@ -199,7 +212,10 @@ export type ValidJsonPath<
       infer H,
       ...infer R extends readonly (string | number)[],
     ]
-    ? readonly [JsonKeysOf<T>, ...ValidJsonPath<JsonStep<T, H>, R, DR>]
+    ? readonly [
+        IsNegativeIndexLiteral<H> extends true ? never : JsonKeysOf<T>,
+        ...ValidJsonPath<JsonStep<T, H>, R, DR>,
+      ]
     : P
   : P; // past supported depth — leave the rest unconstrained
 

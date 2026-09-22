@@ -69,10 +69,29 @@ const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
   name: v.string(),
 });
 
+/**
+ * A numeric JSON path segment is an array index and must be a non-negative
+ * integer. Negative indices are rejected because the engines disagree on them:
+ * Postgres `#>>` counts from the end, while JavaScript and SQLite yield null.
+ */
+export function isValidJsonPathIndex(index: number): boolean {
+  return Number.isInteger(index) && index >= 0;
+}
+
 const jsonPathReferenceSchema: v.Type<JsonPathReference> = v.readonlyObject({
   type: v.literal('json'),
   value: columnReferenceSchema,
-  path: v.readonlyArray(v.union(v.string(), v.number())),
+  path: v.readonlyArray(
+    v.union(
+      v.string(),
+      v
+        .number()
+        .assert(
+          isValidJsonPathIndex,
+          'expected a non-negative integer array index',
+        ),
+    ),
+  ),
 });
 
 /**

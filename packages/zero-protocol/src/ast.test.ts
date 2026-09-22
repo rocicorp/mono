@@ -690,7 +690,7 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toEqual('1o4i9x5jr78yy');
+  expect(hash).toEqual('322yvdcmkwmnt');
   expect(PROTOCOL_VERSION).toBe(52);
 });
 
@@ -735,4 +735,27 @@ test('json path column reference: hashing and name mapping', () => {
     },
     right: {type: 'literal', value: 'x'},
   });
+});
+
+test('json path: numeric segments must be non-negative integer indices', () => {
+  const ast = (path: (string | number)[]): AST => ({
+    table: 'issue',
+    where: {
+      type: 'simple',
+      op: '=',
+      left: {type: 'json', value: {type: 'column', name: 'metadata'}, path},
+      right: {type: 'literal', value: 'x'},
+    },
+  });
+  // Accepted: object keys and non-negative integer array indices.
+  expect(() => astSchema.parse(ast(['tags', 0, 'a']))).not.toThrow();
+  // Rejected at the wire boundary (a hand-built AST can't bypass the builder's
+  // check): a negative index would mean "from the end" on Postgres but null on
+  // the client/SQLite, and a fractional index is not an index at all.
+  expect(() => astSchema.parse(ast(['tags', -1]))).toThrow(
+    /non-negative integer/,
+  );
+  expect(() => astSchema.parse(ast(['tags', 1.5]))).toThrow(
+    /non-negative integer/,
+  );
 });

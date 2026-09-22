@@ -117,7 +117,8 @@ export type JsonPathReference = {
   readonly value: ColumnReference;
   /**
    * JSON navigation within the column's value, applied left-to-right.
-   * Object keys (string) and array indices (number).
+   * Object keys (string) and array indices (number; non-negative integers —
+   * see §11, "Negative / fractional array indices").
    */
   readonly path: readonly (string | number)[];
 };
@@ -488,6 +489,13 @@ deploy contract.
 ## 11. Open questions
 
 Resolved during Phase 1:
+
+- **Negative / fractional array indices:** rejected. The engines disagree on a
+  negative index (Postgres `#>>` counts from the end; JS/SQLite yield null), and a
+  fractional one is not an index, so a numeric segment must be a non-negative
+  integer — enforced at compile time for a literal (`ValidJsonPath`), at build time
+  in `json()`, and at the wire boundary (`astSchema`, so a hand-built AST can't
+  bypass the builder). ✅
 
 - **API shape (Q1):** explicit `eb.json(col, ...path)` accessor. ✅
 - **Array-index segments:** included in Phase 1 (segments are `string | number`). ✅

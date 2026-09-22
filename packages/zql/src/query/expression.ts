@@ -2,6 +2,7 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {
+  isValidJsonPathIndex,
   toStaticParam,
   type ColumnReference,
   type Condition,
@@ -66,6 +67,14 @@ function makeColumnRef(
   name: string,
   path: readonly (string | number)[],
 ): ColumnRef {
+  for (const seg of path) {
+    if (typeof seg === 'number' && !isValidJsonPathIndex(seg)) {
+      throw new Error(
+        `Invalid JSON path segment ${seg} in json('${name}', ...): a numeric ` +
+          'segment is an array index and must be a non-negative integer',
+      );
+    }
+  }
   const column: ColumnReference = {type: 'column', name};
   const ref: ColumnReference | JsonPathReference =
     path.length > 0 ? {type: 'json', value: column, path} : column;
