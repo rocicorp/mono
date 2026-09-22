@@ -215,7 +215,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg-version: [18, 17, 16, 15]
+        # The four Postgres versions are ~75% of this workflow's runner time,
+        # and a pull request almost never breaks one version without breaking
+        # the newest. Pull requests therefore test against 18 only, and the
+        # full matrix runs in the merge queue and on main.
+        #
+        # This is safe because merging goes through a required merge queue, so
+        # every commit is tested against all four versions before it lands --
+        # the cost of a version-specific break is a rejected merge queue entry
+        # instead of a red main. Only the gathering "Test" job is a required
+        # check, so a shorter matrix does not leave a required check unreported.
+        # The conditional picks between two strings rather than two arrays, so
+        # it does not depend on how an array is coerced to a boolean.
+        pg-version: ${{ fromJSON(github.event_name == 'pull_request' && '[18]' || '[18, 17, 16, 15]') }}
     uses: ./.github/workflows/js-test-shards.yml
     with:
       pg-mode: pg-${{ matrix.pg-version }}
