@@ -1153,6 +1153,9 @@ export class PipelineDriver {
         tableSpec.zqlSpec,
         primaryKey,
         () => this.#shouldYield(),
+        // Pipelines only read tables through their connections, and the
+        // sources are moved to the next snapshot after every advancement.
+        {skipUnobservableChanges: true},
       );
       this.#lc.debug?.(`created TableSource for ${tableName}`);
       return source;
