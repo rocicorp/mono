@@ -65,12 +65,16 @@ jobs:
       # editing shared/src/must.ts selects 439 of the 929 no-PG files, while a
       # leaf selects a handful.
       #
-      # Two things the module graph cannot see, so both fall back to the full
-      # suite: dependency and build config (a lockfile bump affects tests that
-      # import nothing new), and anything a test reads at runtime rather than
-      # imports. merge_group and pushes to main always run everything, which is
-      # the backstop for the latter -- a miss costs a red merge queue entry
-      # rather than a broken main.
+      # What the module graph cannot see, and so falls back to the full suite:
+      # dependency and build config (a lockfile bump affects tests that import
+      # nothing new), and vitest's own globalSetup and setupFiles, which no test
+      # file imports -- editing zero-cache/test/pg-17.ts otherwise selects none
+      # of the 97 pg-17 files.
+      #
+      # That leaves anything a test reads at runtime rather than importing.
+      # merge_group and pushes to main always run everything, which is the
+      # backstop -- a miss costs a red merge queue entry rather than a broken
+      # main.
       - name: Select tests
         env:
           EVENT: ${{ github.event_name }}
@@ -79,13 +83,20 @@ jobs:
           if [ "$EVENT" = pull_request ]; then
             # HEAD^1 is the base branch tip: pull_request builds check out the
             # merge commit, whose first parent is the base.
-            if ! changed=$(git diff --name-only HEAD^1 2>&1); then
+            # The pattern below has to keep covering whatever the vitest
+            # configs declare as globalSetup or setupFiles, since nothing
+            # imports those: today that is packages/zero-cache/test/ and
+            # setup.ts, found with
+            #   grep -rn 'setupFiles\|globalSetup' --include='vitest.config*.ts'
+            #
+            # stderr is discarded rather than captured, so that a warning on a
+            # successful run cannot end up in the list being matched as a path.
+            if ! changed=$(git diff --name-only HEAD^1 2>/dev/null); then
               # Deeper than the fetch, or not a merge commit. Rather than fail,
               # fall back to the behaviour we are trying to optimise.
-              echo "Cannot diff against the base commit, running the full suite:"
-              echo "$changed"
+              echo 'Cannot diff against the base commit: running the full suite.'
             elif printf '%s\n' "$changed" | grep -qE \
-              '(^|/)(package\.json|tsconfig[^/]*\.json|vitest\.config[^/]*\.ts)$|^(pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$|^\.github/'
+              '(^|/)(package\.json|tsconfig[^/]*\.json|vitest\.config[^/]*\.ts|setup\.ts|[^/]*-setup\.ts)$|^(pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$|^\.github/|^packages/zero-cache/test/'
             then
               echo 'Dependency or config change: running the full suite.'
             else
