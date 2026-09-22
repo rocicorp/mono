@@ -33,20 +33,35 @@ function readColumn(row: Row, ref: ColumnReference | JsonPathReference): Value {
 }
 
 /**
- * Navigates into a JSON value following `path`. A null/undefined encountered
- * partway through the path, or a missing key at the end, yields `null`. See
- * {@link readColumn} for why absence is treated as null.
+ * Navigates into a JSON value following `path`, strictly: a `number` segment
+ * indexes an array and a `string` segment reads an own property of a plain
+ * object — never a string's characters, an array's `length`, or an inherited
+ * member such as `constructor`. Any other step (a null/undefined or scalar
+ * intermediate, a segment of the wrong kind, a missing key) yields `null`.
+ *
+ * This is the rule SQLite `json_extract` applies (`$[i]` is array-only and
+ * `$."k"` is object-only, anything else is NULL), so the client and the replica
+ * it syncs from agree. See {@link readColumn} for why absence is treated as
+ * null.
  */
 function valueAtPath(value: Value, path: readonly (string | number)[]): Value {
-  let v = value;
+  let v: Value = value;
   for (const seg of path) {
-    // oxlint-disable-next-line eqeqeq
-    if (v == null) {
+    if (v === null || typeof v !== 'object') {
       return null;
     }
-    v = (v as Record<string | number, Value>)[seg];
+    if (Array.isArray(v)) {
+      if (typeof seg !== 'number') {
+        return null;
+      }
+      v = v[seg];
+    } else if (typeof seg === 'string' && Object.hasOwn(v, seg)) {
+      v = (v as Record<string, Value>)[seg];
+    } else {
+      return null;
+    }
   }
-  return v === undefined ? null : v;
+  return v ?? null;
 }
 
 export type NoSubqueryCondition =
@@ -121,6 +136,30 @@ export function createPredicate(
     return () => result;
   }
 
+  if (left.type === 'json') {
+    // A JSON leaf is dynamically typed, unlike a schema-typed column, so the
+    // comparison is type-strict: a leaf whose JSON type differs from the
+    // literal's is never equal — a non-match for a positive operator and a
+    // match for a negated one — and never an error. This mirrors the
+    // `json_type` / `jsonb_typeof` gates in the SQLite and Postgres backends,
+    // and keeps `compareValues` and the LIKE matcher (which assume operands of
+    // one type) from throwing on user data.
+    const literalType = jsonLiteralType(right.value);
+    const negated = negatedOps.has(condition.op);
+    return (row: Row) => {
+      const lhs = readColumn(row, left);
+      if (lhs === null || lhs === undefined) {
+        return false;
+      }
+      // An empty IN/NOT IN list has no type to be strict about: `IN ()` never
+      // matches and `NOT IN ()` always does (for a non-null leaf).
+      if (literalType === undefined || typeof lhs !== literalType) {
+        return negated;
+      }
+      return impl(lhs);
+    };
+  }
+
   return (row: Row) => {
     const lhs = readColumn(row, left);
     if (lhs === null || lhs === undefined) {
@@ -128,6 +167,34 @@ export function createPredicate(
     }
     return impl(lhs);
   };
+}
+
+const negatedOps: ReadonlySet<SimpleOperator> = new Set([
+  '!=',
+  'NOT LIKE',
+  'NOT ILIKE',
+  'NOT IN',
+]);
+
+/**
+ * The JS type a JSON leaf must have to be compared against `literal` (for an
+ * `IN`/`NOT IN` list, the type of its first element); `undefined` for an empty
+ * list.
+ */
+function jsonLiteralType(
+  literal: NonNullValue | readonly NonNullValue[],
+): 'string' | 'number' | 'boolean' | undefined {
+  const v = Array.isArray(literal) ? literal[0] : literal;
+  switch (typeof v) {
+    case 'string':
+      return 'string';
+    case 'number':
+      return 'number';
+    case 'boolean':
+      return 'boolean';
+    default:
+      return undefined;
+  }
 }
 
 function createIsPredicate(
