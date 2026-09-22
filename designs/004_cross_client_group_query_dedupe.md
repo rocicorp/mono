@@ -107,8 +107,8 @@ code that enforces it today and what sharing needs instead.
 | 2   | Pipelines keyed by the client's query ID | `PipelineDriver.#pipelines`, `RowChange.queryID`, and CVR `refCounts` keyed by query hash.                                                                                    | A registry keyed by `(clientSchemaKey, transformationHash)` whose entries hold subscribers as `(clientGroupID, queryID)` pairs. A multimap: two query IDs in one group can transform to the same AST.   |
 | 3   | One output per pipeline                  | `input.setOutput` feeds one `Streamer.accumulate` call tagged with the query ID.                                                                                              | Fan out after the `Streamer` at the `RowChange` level, one batch per subscriber with its own query IDs substituted. No change inside the operator graph.                                                 |
 | 4   | Advance loop and lock per view-syncer    | Each service gets its own `Subscription<ReplicaState>`. `#advancePipelines` does advance, CVR update, flush, and poke in one locked pass.                                    | A worker-level advancer with one subscription moves each unique pipeline to version V once. Each subscriber applies the diff to its CVR at V under its own lock. The diff for V is buffered until consumed. |
-| 5   | Reset semantics per driver               | `ResetPipelinesSignal` tears down the whole driver. The advancement budget is the group's total hydration time. `#resetPipelinesIfBehindCVR` resets when a reloaded CVR is ahead. | Budget per shared pipeline, as in 003. A reset rehydrates once for all subscribers. The behind-CVR case becomes a per-subscriber catchup, not a teardown.                                                |
-| 6   | Late joiners hydrate from SQLite         | A group hydrates each query itself and reconciles against its CVR through `trackQueries`, `received`, and `deleteUnreferencedRows`.                                          | A joiner needs the existing pipeline's current row set at its version: re-fetch the top operator, or a materialized row set per pipeline. The CVR reconciles against it through the same updater path.   |
+| 5   | Reset semantics per driver               | `ResetPipelinesSignal` tears down the whole driver. The advancement budget is the group's total hydration time. `#resetPipelinesIfBehindCVR` resets when a reloaded CVR is ahead. | Budget per shared pipeline, as in 003. A reset rehydrates once for all subscribers. The behind-CVR case parks the subscriber until the shared head reaches its CVR version, then joins it as a late joiner. |
+| 6   | Late joiners hydrate from SQLite         | A group hydrates each query itself and reconciles against its CVR through `trackQueries`, `received`, and `deleteUnreferencedRows`.                                          | A joiner needs the pipeline's current footprint at its version: rows plus per-query occurrence counts, from a re-fetch of the top operator or a cache. Snapshot and subscribe are one atomic step, and the CVR reconciles through the same updater path. |
 | 7   | Worker assignment by load                | `SyncerAssigner` picks the least-loaded worker with a hash tie-break. Queries are unknown at connect time.                                                                    | Nothing for a first cut. Dedup is per sync worker. Cross-worker sharing means a separate pipeline tier with diffs over IPC.                                                                              |
 
 Coupling 4 is where advance dedup comes from. Coupling 6 is where hydration
@@ -222,22 +222,53 @@ diff, not the pipeline.
 
 ```text
 ViewSyncer C wants (key, queryID)
-  if registry has key at version V
-    rows = pipeline.currentRowSet()        re-fetch top operator, or cached footprint
-    reconcile C's CVR against rows         trackQueries, received, deleteUnreferencedRows
-    add C as subscriber                    C receives diffs from V+1 on
+  if registry has key
+    under the advancer's exclusion         no advance runs inside this block
+      V = pipeline.version
+      footprint = pipeline.footprint()     rows, versions, occurrence counts per query
+      register C as PENDING at V           diffs after V are retained for C from here
+    run C's group pass at V                group version barrier, below
+      drain C's other subscriptions to V
+      reconcile C's CVR against footprint  trackQueries, received, deleteUnreferencedRows
+      flush once at V
+    activate C                             C drains its retained diffs from V+1 on
+    on failure: discard C's pending registration and retained diffs
   else
     lease a hydration connection at V0
     build and hydrate the pipeline
     replay change log V0..V on it alone    row cache makes this cheap
-    register at V, add C as subscriber
+    register at V, then join as above
 ```
+
+**The snapshot and the registration are one atomic step.** Reconciliation
+awaits Postgres. If the advancer could reach V+1 between reading the
+footprint at V and adding C as a subscriber, that diff would never be
+retained for C and C would miss it permanently. So the footprint read and
+the pending registration happen together under the same mutual exclusion
+that today keeps `addQuery` and `#advance` apart. From that point every diff
+after V is retained for C, and C drains the retained diffs when it activates.
+A re-fetch of a live operator has the same requirement for a different
+reason: an advance mid-traversal would corrupt operator state. The re-fetch
+runs inside the exclusion, so the shared advance waits for it as it waits for
+a hydration today.
+
+**The footprint is rows with counts, not a set.** `Streamer.#streamNodes`
+recurses into every relationship of every node, so a child row reached
+through two parents is emitted twice for one query. `#processChanges`
+increments `refCounts[queryID]` once per ADD, and `mergeRefCounts` sums. The
+CVR therefore holds that child at count 2, and removing one parent later
+brings it to 1, not 0. A cache that stored unique rows would initialize the
+count to 1, and the first parent removal would delete the child from the
+client. The footprint is defined as, for each row, its version and its
+occurrence count per query, including related rows. A re-fetch of the top
+operator through the `Streamer` produces exactly that. A cached footprint has
+to store it.
 
 The reconcile step is the existing `CVRQueryDrivenUpdater` path. It already
 takes a full row stream for an executed query and computes the puts, deletes,
 and refcount changes against whatever the CVR currently holds. Feeding it the
-pipeline's current row set instead of a fresh hydration is the whole change
-on the CVR side.
+footprint instead of a fresh hydration is the change on the CVR side. The
+ordering around it is the barrier below.
 
 Hydration on a leased connection is the part that does not exist today. The
 driver asserts that hydration and advancement never overlap because both use
@@ -246,6 +277,36 @@ group would stall every group's advance. The pool decouples them: hydrate at
 whatever version the leased connection sees, then catch that one pipeline up
 to the shared head by replaying the change log through it alone, exactly as
 `#advance` does today for a whole driver.
+
+### Group version barrier
+
+A client group's CVR has one version. `CVRQueryDrivenUpdater` takes a single
+`stateVersion` in its constructor and moves the whole CVR to it. Suppose a
+slow group holds a retained diff for query A at V-1 and attaches query B at
+the shared head V. Reconciling B alone would flush the CVR at V while A's
+rows are still at V-1, and clients would receive cookie V for a view that is
+not consistent at V. The group lock serializes the writes but does not fix
+the order.
+
+The rule: all of a group's CVR work is a sequence of locked passes, each at
+one version, and each pass applies everything the group has through that
+version before it flushes.
+
+```text
+group pass at V
+  for each active subscription: apply retained diffs through V
+  for each pending join pinned at V: reconcile against its footprint at V
+  for each removal or retransform pinned at V: removeTrackedQueries, drop its diffs
+  flush once at V; poke
+```
+
+Joins, removals, and retransforms are enqueued as operations pinned at a
+version and ordered against the retained diffs in that queue. A join pinned
+at V cannot run in a pass below V, and a pass at V cannot run until the
+group's retained diffs reach V. A retransform is a removal of the old
+pipeline key plus a join of the new one, pinned at the same version. Retained
+diffs for a removed query are discarded, since `removeTrackedQueries` already
+produces the deletes.
 
 ### Resets
 
@@ -260,9 +321,17 @@ changes. Under sharing they rehydrate each unique pipeline once instead of
 once per group, which makes a reset storm like the one in 003 cheaper by the
 dedup factor.
 
-`#resetPipelinesIfBehindCVR` handles a CVR reloaded ahead of the pipelines.
-With a shared registry that is a per-subscriber catchup through the same
-reconcile step as a late joiner, not a teardown.
+`#resetPipelinesIfBehindCVR` handles a CVR reloaded ahead of the pipelines:
+another instance flushed the group at a version this worker's replica has
+not reached. The shared pipeline's footprint is then older than the CVR, and
+reconciling against it would move the CVR backwards. The updater forbids
+this: its constructor asserts `stateVersion >= cvr.version.stateVersion`,
+and that assertion stays. Under sharing this case is a quarantine, not a
+reconcile. The subscriber is parked with no updater constructed until the
+shared head reaches at least its CVR version, and then it joins as a late
+joiner at that head with its boundary established there. That is what
+`#maybeHydratePipelines` does today when it returns early on a replica
+behind the CVR, minus the teardown.
 
 ### What stays per client group
 
@@ -302,9 +371,21 @@ reconcile step as a late joiner, not a teardown.
   slow-subscriber collapse the fan-out investigation measured on the
   replication side.
 
-- **Multimap correctness.** Two query IDs in one client group that share a
-  transformation hash must each get their refcount bumped from one pipeline's
-  output. Missing this leaves a row the client never deletes.
+- **Join boundary races.** The footprint read and the pending registration
+  must be one step under the advancer's exclusion, and the group pass that
+  reconciles the join must not run below the join's pinned version. Either
+  gap loses a diff for the joiner, and the loss is silent until a client
+  shows a stale row. The two tests under Testing exist for these two gaps.
+
+- **Refcount errors.** Three ways to get the CVR's per-query counts wrong.
+  A cached footprint that stores unique rows instead of occurrence counts
+  under-counts a child reached through two parents. Two query IDs in one
+  client group that share a transformation hash must each get their count
+  bumped from one pipeline's output. Retained diffs applied in the wrong
+  order relative to a join double-count or skip. The failure mode in every
+  case is a row the client never deletes, or deletes early. The Postgres
+  tests should compare exact counts against the pipeline's output, not the
+  set of rows with a positive count.
 
 - **Read-only derivation is unproven under the pg suites.** The conflict
   probe in `Snapshotter`'s `Diff` reads the prev connection that
@@ -323,7 +404,7 @@ with step 2.
 | 1    | Land read-only IVM derivation from `mlaw/flow-control`.                                                                                                 | Run the pg view-syncer suites in deferred mode.     | Nothing yet. Enables step 2.                                                                     | `deferIvmWrites`, exists |
 | 2    | Shared snapshot pair and one advance pass per worker. All drivers advance on the same diff. Hydration moves to leased connections and replays to head. | Step 1.                                             | One change-log scan per version instead of one per group. Two SQLite connections per worker.    | new                      |
 | 3    | Pipeline registry keyed by `(clientSchemaKey, transformationHash)` with refcounted subscribers and a bounded per-subscriber diff buffer.                 | Step 2. A week of `shared-advance-eligibility` data. | The per-group IVM advance for every duplicated pipeline. This is the measured 1-versus-50 win.    | new                      |
-| 4    | Cached footprint for late joiners. A group whose query already runs reconciles its CVR against the pipeline's current row set instead of hydrating.     | Step 3.                                             | Duplicate hydrations on reconnect and on new tabs.                                               | new                      |
+| 4    | Cached footprint for late joiners. A group whose query already runs reconciles its CVR against the pipeline's footprint, rows with occurrence counts, instead of hydrating. | Step 3.                                             | Duplicate hydrations on reconnect and on new tabs.                                               | new                      |
 
 Step 2 is worth shipping alone. It removes duplicated change-log scans
 without changing any CVR semantics, and it forces the hydration-versus-advance
@@ -341,22 +422,39 @@ step 2.
   the change log is scanned once per version regardless of group count. The
   advance bench, 1 versus 50 drivers, should be flat in step 2 for the
   scan portion and flat overall after step 3.
-- Step 3: for every subscriber after each advance, the set of rows with a
-  positive refcount for its query equals the shared pipeline's row set. This
-  is the same oracle 003 uses for a rebuilt query. Cover the multimap case
-  with two query IDs in one group sharing a hash.
+- Step 3: for every subscriber after each advance, the refcount of its query
+  on every row equals the occurrence count in the shared pipeline's output.
+  Exact counts, not the set of rows with a positive count. Cover the multimap
+  case with two query IDs in one group sharing a hash.
+- Step 3, join boundary: suspend a group's reconciliation on its Postgres
+  await, advance the shared pipeline past the join version, then resume. The
+  joiner must receive the retained diff after activation, and the assertion
+  is on exact counts at the new version.
+- Step 3, group barrier: a group with query A retained at V-1 attaches
+  query B at V. The flush that lands B is at V and contains A's diff for V.
+  Clients receive one poke at V, never a cookie V with A at V-1.
+- Step 3, behind-CVR: reload a CVR flushed at a version ahead of the local
+  replica. No updater is constructed, the subscriber is parked, and it joins
+  once the shared head reaches the CVR version.
 - Step 4: a joiner whose CVR is at V-k for small k receives exactly the
   puts and deletes a fresh hydration would have produced, and never sees a
-  row at a version older than V.
+  row at a version older than V. Then, with a child row reachable through
+  two parents, remove one parent: the child stays with count 1. A footprint
+  that stored unique rows fails this test.
 
 ## Open questions
 
 - **Buffer or backpressure.** When a subscriber falls behind on consuming
   diffs: keep buffering, evict the subscriber to a catchup path, or stall the
   pipeline?
-- **Footprint memory.** A materialized row set per unique pipeline costs
-  result size times unique pipelines. Re-fetching the top operator costs
-  SQLite reads per joiner instead. Which one, or a size threshold that picks.
+- **Footprint memory.** A materialized footprint per unique pipeline stores
+  rows, versions, and per-query occurrence counts, so it costs result size
+  times unique pipelines. Re-fetching the top operator costs SQLite reads per
+  joiner and holds the shared advance for the traversal. Which one, or a
+  size threshold that picks.
+- **Retention bound for pending joiners.** A join whose reconciliation is
+  slow retains every diff after its version. This is the same buffer as the
+  slow-subscriber case, with the same bound-and-policy question.
 - **Hydration concurrency.** How many leased hydration connections per
   worker, and whether a hydration in progress delays the shared advance or
   runs fully off the advance path with a replay at the end.
