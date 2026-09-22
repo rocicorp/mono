@@ -113,6 +113,8 @@ export class Cap implements Operator {
     // rather than scanning the partition and filtering.
     for (const pk of capState.pks) {
       const pkConstraint = deserializePKToConstraint(pk, this.#primaryKey);
+      // Preserve req.constraint (the partition key) so upstream partitioned
+      // operators (e.g. Take) retain their partition scope and do not throw.
       const constraint = req.constraint
         ? {...req.constraint, ...pkConstraint}
         : pkConstraint;

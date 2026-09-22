@@ -228,11 +228,13 @@ describe('user -> reading -> works -> covers', () => {
       };
       const {on, off} = runWithAndWithoutPushdown(t);
 
-      // One `child` change per reading of w1, and one parent lookup each.
+      // With partitionMap in Join, reading:join(works) indexes resident
+      // parents by junction key, so even without static pushdown only the
+      // 1 resident reading (u0) is pushed/fetched rather than all readers.
       expect(childPushes(on.log, '.reading:join(works)')).toBe(1);
       expect(fetches(on.log, ':source(user)')).toBe(1);
-      expect(childPushes(off.log, '.reading:join(works)')).toBe(readers);
-      expect(fetches(off.log, ':source(user)')).toBe(readers);
+      expect(childPushes(off.log, '.reading:join(works)')).toBe(1);
+      expect(fetches(off.log, ':source(user)')).toBe(1);
 
       expect(rowsReadByPushes(t)).toEqual({
         '.reading.works:source(works)': 1,
@@ -243,13 +245,36 @@ describe('user -> reading -> works -> covers', () => {
         rowsReadByPushes({...t, disableCorrelatedPredicatePushdown: true}),
       ).toEqual({
         '.reading.works:source(works)': 1,
-        '.reading:source(reading)': readers,
+        '.reading:source(reading)': 1,
         ':source(user)': 1,
       });
 
       expect(on.pushes).toHaveLength(1);
     },
   );
+
+  test('a reading of another user stops at the source', () => {
+    const {on, off} = runWithAndWithoutPushdown({
+      sources,
+      sourceContents: {
+        user: [{userID: 'u0'}],
+        reading: [{id: 'r0', userID: 'u0', workID: 'w1'}],
+        works: [{id: 'w1'}],
+        covers: [{id: 'c1', workID: 'w1'}],
+      },
+      ast,
+      format,
+      pushes: [
+        [
+          'reading',
+          makeSourceChangeAdd({id: 'r1', userID: 'u1', workID: 'w1'}),
+        ],
+      ],
+    });
+    expect(on.log).toEqual([]);
+    expect(off.log).not.toEqual([]);
+    expect(on.pushes).toEqual([]);
+  });
 });
 
 describe('posts.where(id, 42).related(comments)', () => {
@@ -498,10 +523,13 @@ describe('issue.where(id).related(comments.limit().related(creator))', () => {
       '.comments:source(comment)': 1,
       ':source(issue)': 1,
     });
+    // With partitionMap in Join, comments:join(creator) indexes resident
+    // comments for u1 (only comment z on i1), so even without static pushdown
+    // only 1 comment is read instead of scanning all comments by u1.
     expect(
       rowsReadByPushes({...t, disableCorrelatedPredicatePushdown: true}),
     ).toEqual({
-      '.comments:source(comment)': 20,
+      '.comments:source(comment)': 1,
       ':source(issue)': 1,
     });
     expect(on.data).toMatchInlineSnapshot(`
@@ -719,11 +747,14 @@ describe('user.where(userID).related(reading.related(shelf)), all on userID', ()
     expect(on.log).toEqual([]);
     expect(off.log).not.toEqual([]);
     expect(on.pushes).toEqual([]);
-    // Without the pass, the push fetches u1's readings, and then the user.
+    // Without the pass, the push is emitted by shelf into the pipeline
+    // (off.log is non-empty), but reading:join(shelf)'s partitionMap knows
+    // u1 is not resident, avoiding any source fetch. With the pass, shelf
+    // filters at the source, so on.log is completely empty.
     expect(rowsReadByPushes(t)).toEqual({});
     expect(
       rowsReadByPushes({...t, disableCorrelatedPredicatePushdown: true}),
-    ).toEqual({'.reading:source(reading)': 1, ':source(user)': 0});
+    ).toEqual({});
   });
 
   test('a shelf of the pinned user arrives', () => {
@@ -953,14 +984,13 @@ describe('user.related(reading.where(workID).related(works.related(covers)))', (
     expect(on.log).toEqual([]);
     expect(off.log).not.toEqual([]);
     expect(on.pushes).toEqual([]);
-    // Without the pass, the push fetches w2, and then the readings of w2.
+    // Without the pass, the push enters the pipeline (off.log is non-empty),
+    // but works:join(covers)'s partitionMap knows w2 is not resident, avoiding
+    // any source fetch. With the pass, covers filters at the source (on.log is []).
     expect(rowsReadByPushes(t)).toEqual({});
     expect(
       rowsReadByPushes({...t, disableCorrelatedPredicatePushdown: true}),
-    ).toEqual({
-      '.reading.works:source(works)': 1,
-      '.reading:source(reading)': 0,
-    });
+    ).toEqual({});
   });
 
   test('a cover of the pinned work arrives under every reader', () => {

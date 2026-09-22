@@ -94,11 +94,10 @@ export class Take implements Operator, TakeBoundProvider {
   }
 
   getBound(constraint?: Constraint): Row | undefined {
-    if (this.#partitionKey && constraint) {
-      if (!constraintContainsPartitionKey(constraint, this.#partitionKey)) {
-        return undefined;
-      }
-    } else if (this.#partitionKey && !constraint) {
+    if (
+      this.#partitionKey &&
+      !constraintContainsPartitionKey(constraint, this.#partitionKey)
+    ) {
       return undefined;
     }
     const takeStateKey = getTakeStateKey(this.#partitionKey, constraint);
