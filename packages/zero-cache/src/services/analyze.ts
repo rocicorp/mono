@@ -76,6 +76,10 @@ export async function analyzeQuery(
       host: {
         debug: new Debug(vendedRows, MAX_ANALYZE_ROWS),
         enableNotExists: true,
+        // Mirror production, as with the planner above.
+        disableCorrelatedPredicatePushdown:
+          config.enableCorrelatedPredicatePushdown === false,
+        enablePlannerAwarePushdown: config.enablePlannerAwarePushdown !== false,
         getSource(tableName: string) {
           return getOrInsertComputed(tables, tableName, tableName => {
             const tableSpec = mustGetTableSpec(tableSpecs, tableName);

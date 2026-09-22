@@ -108,6 +108,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     this.#replica = replica;
     this.#cgStorage = writeAuthzStorage.createClientGroupStorage(cgID);
     this.#builderDelegate = {
+      disableCorrelatedPredicatePushdown:
+        config.enableCorrelatedPredicatePushdown === false,
       getSource: name => this.#getSource(name),
       createStorage: () => this.#cgStorage.createStorage(),
       decorateSourceInput: input => input,

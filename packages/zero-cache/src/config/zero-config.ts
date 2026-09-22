@@ -619,6 +619,30 @@ export const zeroOptions = {
     ],
   },
 
+  enableCorrelatedPredicatePushdown: {
+    type: v.boolean().default(true),
+    desc: [
+      `Copy a query's equality conditions on a relationship's join columns`,
+      `into the related subquery. This reduces the rows that are read when a`,
+      `change is pushed through the query.`,
+      ``,
+      `This is a kill switch. It will be removed.`,
+    ],
+    hidden: true,
+  },
+
+  enablePlannerAwarePushdown: {
+    type: v.boolean().default(true),
+    desc: [
+      `Copy the conditions of correlated predicate pushdown before the query`,
+      `planner runs instead of after, so that the planner can use them. This`,
+      `can change the plans that the planner picks.`,
+      ``,
+      `Has no effect when correlated predicate pushdown is off.`,
+    ],
+    hidden: true,
+  },
+
   enableQueryCovering: {
     type: v.boolean().default(true),
     desc: [
