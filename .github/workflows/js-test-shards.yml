@@ -59,9 +59,54 @@ jobs:
         uses: ./.github/actions/playwright-install
       - name: Compute shard count
         run: echo "SHARD_COUNT=$(jq length <<< "$SHARDS")" >> "$GITHUB_ENV"
+      # On a pull request, run only the test files reachable from what changed.
+      # Vitest resolves this from the module graph rather than from paths, so a
+      # change to a widely imported module still fans out to every dependent --
+      # editing shared/src/must.ts selects 439 of the 929 no-PG files, while a
+      # leaf selects a handful.
+      #
+      # Two things the module graph cannot see, so both fall back to the full
+      # suite: dependency and build config (a lockfile bump affects tests that
+      # import nothing new), and anything a test reads at runtime rather than
+      # imports. merge_group and pushes to main always run everything, which is
+      # the backstop for the latter -- a miss costs a red merge queue entry
+      # rather than a broken main.
+      - name: Select tests
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          since=''
+          if [ "$EVENT" = pull_request ]; then
+            # HEAD^1 is the base branch tip: pull_request builds check out the
+            # merge commit, whose first parent is the base.
+            if ! changed=$(git diff --name-only HEAD^1 2>&1); then
+              # Deeper than the fetch, or not a merge commit. Rather than fail,
+              # fall back to the behaviour we are trying to optimise.
+              echo "Cannot diff against the base commit, running the full suite:"
+              echo "$changed"
+            elif printf '%s\n' "$changed" | grep -qE \
+              '(^|/)(package\.json|tsconfig[^/]*\.json|vitest\.config[^/]*\.ts)$|^(pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$|^\.github/'
+            then
+              echo 'Dependency or config change: running the full suite.'
+            else
+              since='HEAD^1'
+              echo 'Running tests affected by this pull request.'
+            fi
+          fi
+          echo "CHANGED_SINCE=$since" >> "$GITHUB_ENV"
       - name: Run tests
         if: inputs.pg-mode == 'nopg'
-        run: pnpm run test --shard="$SHARD/$SHARD_COUNT"
+        # Branching rather than interpolating a flag string, so that the
+        # arguments never depend on word splitting.
+        run: |
+          if [ -n "$CHANGED_SINCE" ]; then
+            # A shard can legitimately end up with no files once the set is
+            # narrowed, which is not a failure.
+            pnpm run test --shard="$SHARD/$SHARD_COUNT" \
+              --changed "$CHANGED_SINCE" --passWithNoTests
+          else
+            pnpm run test --shard="$SHARD/$SHARD_COUNT"
+          fi
       # PG tests are retried because the Postgres-backed suites are flakier.
       - name: Run tests
         if: inputs.pg-mode != 'nopg'
@@ -69,4 +114,10 @@ jobs:
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: pnpm run test --shard="$SHARD/$SHARD_COUNT"
+          command: |
+            if [ -n "$CHANGED_SINCE" ]; then
+              pnpm run test --shard="$SHARD/$SHARD_COUNT" \
+                --changed "$CHANGED_SINCE" --passWithNoTests
+            else
+              pnpm run test --shard="$SHARD/$SHARD_COUNT"
+            fi
