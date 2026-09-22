@@ -61,7 +61,17 @@ const literalReferenceSchema: v.Type<LiteralReference> = v.readonlyObject({
     v.number(),
     v.boolean(),
     v.null(),
-    v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
+    // An IN / NOT IN list is homogeneous: the engines compare a JSON path leaf
+    // against the type of the list's first element (see `jsonLiteralType`),
+    // and a mixed list would cast-fail on Postgres while silently dropping
+    // elements elsewhere. Typed builders never produce one; reject it at the
+    // wire so a hand-built AST cannot either.
+    v
+      .readonlyArray(v.union(v.string(), v.number(), v.boolean()))
+      .assert(
+        list => list.every(e => typeof e === typeof list[0]),
+        'expected a list of values of one type',
+      ),
   ),
 });
 const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
@@ -70,15 +80,79 @@ const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
 });
 
 /**
- * A numeric JSON path segment is an array index and must be a non-negative
- * safe integer. Negative indices are rejected because the engines disagree on
- * them (Postgres `#>>` counts from the end, while JavaScript and SQLite yield
- * null); values beyond `Number.MAX_SAFE_INTEGER` are rejected because they
- * stringify in exponent form (`1e21` → `"1e+21"`), which SQLite rejects as a
- * bad JSON path — a query error rather than a non-match.
+ * Upper bound for an array-index segment. SQLite parses a `$[i]` index as an
+ * unsigned 32-bit integer (larger values silently wrap), and the Postgres `->`
+ * operator takes an `int4`, so anything above this is not a usable index on
+ * every engine.
+ */
+export const MAX_JSON_PATH_INDEX = 2 ** 31 - 1;
+
+/**
+ * A numeric JSON path segment is an array index and must be an integer in
+ * `[0, MAX_JSON_PATH_INDEX]`. Negative indices are rejected because the engines
+ * disagree on them (Postgres counts from the end, while JavaScript and SQLite
+ * yield null); larger values are rejected because SQLite wraps them modulo
+ * 2^32 (silently addressing another element) and Postgres cannot take them as
+ * an `int4` operand.
  */
 export function isValidJsonPathIndex(index: number): boolean {
-  return Number.isSafeInteger(index) && index >= 0;
+  return Number.isInteger(index) && index >= 0 && index <= MAX_JSON_PATH_INDEX;
+}
+
+/**
+ * The JS type a JSON leaf must have to be compared against `literal` —
+ * `'string' | 'number' | 'boolean'` — or `undefined` for `null` and for an
+ * empty list. For an `IN`/`NOT IN` list, the type of its first element (lists
+ * are homogeneous: enforced by the builder's types, by `cmp()` and at the
+ * wire). Shared by the in-memory predicate, the SQLite pushdown and the
+ * Postgres compiler so the type-strict rule cannot drift between engines.
+ */
+export function jsonLiteralType(
+  literal: LiteralValue,
+): 'string' | 'number' | 'boolean' | undefined {
+  const v = Array.isArray(literal) ? literal[0] : literal;
+  switch (typeof v) {
+    case 'string':
+      return 'string';
+    case 'number':
+      return 'number';
+    case 'boolean':
+      return 'boolean';
+    default:
+      return undefined;
+  }
+}
+
+const negatedOperators: ReadonlySet<SimpleOperator> = new Set([
+  '!=',
+  'NOT LIKE',
+  'NOT ILIKE',
+  'NOT IN',
+]);
+
+/**
+ * The operators under which a JSON leaf of a *different* type than the literal
+ * is a match (it is "not equal"); under every other operator a mismatch is a
+ * non-match. `IS NOT` is not listed: `IS`/`IS NOT` are null-safe equality and
+ * already yield the strict answer.
+ */
+export function isNegatedOperator(op: SimpleOperator): boolean {
+  return negatedOperators.has(op);
+}
+
+const likeOperators: ReadonlySet<SimpleOperator> = new Set([
+  'LIKE',
+  'NOT LIKE',
+  'ILIKE',
+  'NOT ILIKE',
+]);
+
+/**
+ * The pattern-matching operators, which compare text and therefore require a
+ * string leaf whatever the literal's type.
+ */
+export function isLikeOperator(op: SimpleOperator): boolean {
+  return likeOperators.has(op);
 }
 
 /**
@@ -414,6 +488,9 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
 interface ASTTransform {
   tableName(orig: string): string;
   columnName(origTable: string, origColumn: string): string;
+  // The column wrapped by a JSON path reference. A mapper that knows column
+  // types rejects a column that is not a json column here.
+  jsonColumnName(origTable: string, origColumn: string): string;
   related(subqueries: CorrelatedSubquery[]): readonly CorrelatedSubquery[];
   where(cond: Condition): Condition | undefined;
   // conjunction or disjunction, called when traversing the return value of where()
@@ -475,17 +552,17 @@ function transformWhere(
   transform: ASTTransform,
 ): Condition {
   // Name mapping functions (e.g. to server names)
-  const {columnName} = transform;
+  const {columnName, jsonColumnName} = transform;
   const condValue = (c: ConditionValue): ConditionValue => {
     switch (c.type) {
       case 'column':
         return {...c, name: columnName(table, c.name)};
       case 'json':
-        // The column name maps client->server; the path is data and is
-        // preserved as-is.
+        // The column name maps client->server (and is validated to be a json
+        // column); the path is data and is preserved as-is.
         return {
           ...c,
-          value: {...c.value, name: columnName(table, c.value.name)},
+          value: {...c.value, name: jsonColumnName(table, c.value.name)},
         };
       default:
         return c;
@@ -526,6 +603,7 @@ const normalizeCache = new WeakMap<AST, Required<AST>>();
 const NORMALIZE_TRANSFORM: ASTTransform = {
   tableName: t => t,
   columnName: (_, c) => c,
+  jsonColumnName: (_, c) => c,
   related: sortedRelated,
   where: flattened,
   conditions: c => c.sort(cmpCondition),
@@ -544,6 +622,7 @@ export function mapAST(ast: AST, mapper: NameMapper) {
   return transformAST(ast, {
     tableName: table => mapper.tableName(table),
     columnName: (table, col) => mapper.columnName(table, col),
+    jsonColumnName: (table, col) => mapper.jsonColumnName(table, col),
     related: r => r,
     where: w => w,
     conditions: c => c,
@@ -558,6 +637,7 @@ export function mapCondition(
   return transformWhere(cond, table, {
     tableName: table => mapper.tableName(table),
     columnName: (table, col) => mapper.columnName(table, col),
+    jsonColumnName: (table, col) => mapper.jsonColumnName(table, col),
     related: r => r,
     where: w => w,
     conditions: c => c,
