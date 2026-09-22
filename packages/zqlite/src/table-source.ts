@@ -21,6 +21,7 @@ import {
   type NoSubqueryCondition as StrictNoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
+import {ConnectionIndex} from '../../zql/src/ivm/connection-index.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
@@ -60,6 +61,19 @@ type Statements = {
 
 let eventCount = 0;
 
+export type TableSourceOptions = {
+  /**
+   * When set, a pushed change that the filters of every connection reject
+   * is neither pushed nor applied to the backing table, on the grounds that
+   * no connection can observe it. This departs from the `Source.push`
+   * contract (a push commits the change to the source), so it is only
+   * appropriate when the caller does not read the table through any other
+   * path and replaces the table's contents afterwards, as the view-syncer's
+   * pipeline driver does when it advances to the next snapshot.
+   */
+  skipUnobservableChanges?: boolean | undefined;
+};
+
 /**
  * A source that is backed by a SQLite table.
  *
@@ -77,6 +91,9 @@ let eventCount = 0;
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
   readonly #connections: Connection[] = [];
+  // Indexes #connections by the static equality constraints in their filters
+  // so that a push can cheaply skip rows that no connection could accept.
+  readonly #connectionIndex = new ConnectionIndex<Connection>();
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
@@ -85,6 +102,7 @@ export class TableSource implements Source {
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
   readonly #shouldYield: () => boolean;
+  readonly #skipUnobservableChanges: boolean;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
   #pushEpoch = 0;
@@ -103,6 +121,7 @@ export class TableSource implements Source {
     columns: Record<string, SchemaValue>,
     primaryKey: PrimaryKey,
     shouldYield = () => false,
+    options: TableSourceOptions = {},
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
@@ -112,6 +131,7 @@ export class TableSource implements Source {
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
     this.#shouldYield = shouldYield;
+    this.#skipUnobservableChanges = options.skipUnobservableChanges ?? false;
 
     const primaryKeyStr = JSON.stringify(primaryKey.toSorted());
     assert(
@@ -250,6 +270,7 @@ export class TableSource implements Source {
         const idx = this.#connections.indexOf(connection);
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
+        this.#connectionIndex.remove(connection);
       },
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
@@ -275,6 +296,7 @@ export class TableSource implements Source {
     }
 
     this.#connections.push(connection);
+    this.#connectionIndex.add(connection, transformedFilters.filters);
     return input;
   }
 
@@ -423,7 +445,19 @@ export class TableSource implements Source {
     }
   }
 
-  genPush(change: SourceChange) {
+  *genPush(change: SourceChange): Stream<'yield' | undefined> {
+    if (
+      this.#skipUnobservableChanges &&
+      !this.#connectionIndex.mayAcceptChange(change)
+    ) {
+      // No connection can observe this row, so only a REMOVE needs to be
+      // applied to the snapshot.
+      if (change[SourceChangeIndex.TYPE] === ChangeType.REMOVE) {
+        this.#writeChange(change);
+      }
+      return;
+    }
+
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -431,7 +465,7 @@ export class TableSource implements Source {
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
 
-    return genPushAndWriteWithSplitEdit(
+    yield* genPushAndWriteWithSplitEdit(
       this.#connections,
       change,
       exists,
