@@ -57,9 +57,17 @@ One new admin endpoint family, `/plannerz`, on the zero-dispatcher, next to
 `/statz`. It uses the same basic-auth check and the same "open the replica
 read-only, then close it" pattern.
 
-The name is open for discussion. `/statz?group=planner` would also work, but
-the second route takes a POST body and returns a different kind of output, so a
-separate path is cleaner.
+We chose a separate path over a new `/statz` group, because the second route
+takes a POST body and returns a different kind of output.
+
+**No table scans by default.** Phase 1 reads only the catalog, `sqlite_stat*`,
+and config, so its cost doesn't depend on table size. Phase 2 is plan-only by
+default and reads no user table either; running the query is opt-in (§2.2).
+
+Column facts that stat1 doesn't have, such as the NULL fraction, true distinct
+counts, or the most common value's frequency, are out of scope. Computing them
+means reading a whole table or index, in the main process, on an admin request.
+Better statistics come from F1, off the serving path.
 
 ### Phase 1: `GET /plannerz` returns a static stats bundle
 
@@ -172,44 +180,76 @@ fetch, lookup overcount), so the LLM's guess can differ from what Zero runs.
 Request:
 
 ```jsonc
-{ "ast": { ... } }                          // or:
-{ "name": "issueList", "args": [ ... ] }    // custom query, resolved via the API server
+{ "ast": { ... } }
 ```
 
-Response: a subset of `AnalyzeQueryResult`:
+**Plan-only is the default.** The route plans the query and explains it, but
+does not run it. Running it is opt-in with `?execute=true`. Plan-only keeps the
+route's cost independent of table size, which is the same rule phase 1 follows:
+executing a query with a bad plan can read a whole large table, because the
+1000-row cap bounds the rows _returned_, not the rows _read_.
 
-- `joinPlans` (always on): attempts, connection costs, the selected plan, and
-  flip patterns.
-- `sqlitePlans`: EXPLAIN QUERY PLAN for each generated statement. These are
-  parameterized SQL strings with `?`, so no values appear.
-- `readRowCountsByQuery`, `dbScansByQuery`, `syncedRowCount`, `elapsed`, `warnings`.
-- **Removed every time**: `syncedRows`, `vendedRows`, `readRows`.
+#### 2.1 Plan-only mode (default)
 
-Implementation notes:
+`buildPipeline` runs the planner and creates the sources, but nothing fetches,
+so no table is read. What comes back:
 
-- Reuse `analyzeQuery` with `syncedRows=false`, `vendedRows=false`, and
-  `joinPlans=true`. Then delete the row fields, so that a future change to
-  `analyzeQuery` defaults can't leak rows.
-- `clientSchema`: today it comes from the CVR. Over HTTP there's no client
-  group, so build it from the replica's `tableSpecs`, which cover every
-  syncable table. It needs a small adapter.
-- Named queries: `inspectorDelegate.transformCustomQuery` needs a
-  `ConnectionContext` for auth. Option A: accept only an AST in v1. The LLM can
-  get ASTs with the existing `transform-query` CLI or `query.ast`. Option B:
-  forward an `X-Zero-User-Authorization` header to the API server.
-  **Recommendation: A first.**
-- Permissions: follow the inspector. Apply legacy permissions if they're
-  present. Custom queries already have permissions applied by the API
-  transform.
-- **Load**: this runs on the dispatcher, which is the main process. The time
-  slices yield, but a bad query still does up to 1000 rows per table of IVM
-  work, plus SQLite scans. Allow one analyze at a time (return 429 when busy),
-  and add a wall-clock timeout. A later **plan-only mode** could build the
-  pipeline and planner and run EXPLAIN without hydrating. That is cheaper and
-  enough for most rewrite advice. Track it as P2b.
+- `joinPlans`: every attempt, the connection costs, the selected plan, and the
+  flip pattern. This is the planner's own reasoning, from `AccumulatorDebugger`.
+- `sqlitePlans`: EXPLAIN QUERY PLAN per generated statement, plus the
+  scanstatus row estimate the cost model already computed for it. The cost
+  model in `zqlite/src/sqlite-cost-model.ts` builds and prepares this SQL
+  today and then throws it away, so this needs a recording hook on it.
+- `warnings`, and the permissions-transformed query (`afterPermissions`) when
+  permissions apply.
+
+There are **no measured row counts** in this mode, only estimates. The response
+says so in a `mode` field, so the LLM doesn't read an estimate as a measurement.
+
+One exception to "reads nothing": `resolveSimpleScalarSubqueries` executes each
+`{scalar: true}` subquery while building the pipeline. Those have `limit: 1`, so
+the cost is bounded.
+
+#### 2.2 Execute mode (`?execute=true`)
+
+This is the current inspector behavior: it hydrates the query, capped at
+`MAX_ANALYZE_ROWS` (1000) rows per table. It adds the measured
+`readRowCountsByQuery`, `dbScansByQuery`, `syncedRowCount` and `elapsed`, which
+is what you want when the estimates look wrong. The docs and the `about` text
+should say it runs the query against the replica.
+
+Guards, in this mode only: one analyze at a time (return 429 when busy), and a
+wall-clock timeout.
+
+#### 2.3 Both modes
+
+- **Rows are never returned.** `syncedRows`, `vendedRows` and `readRows` are
+  deleted from the result unconditionally, so a later change to the
+  `analyzeQuery` defaults can't leak them.
+- SQL strings are parameterized with `?`, so no values appear in them.
 - Audit `joinPlans` constraint payloads and `warnings` for literal values
   before shipping. The caller's own AST literals are fine, since the caller
   sent them.
+
+Implementation notes:
+
+- Execute mode reuses `analyzeQuery` with `syncedRows=false`,
+  `vendedRows=false`, `joinPlans=true`. Plan-only needs a sibling function that
+  shares the setup (specs, cost model, permissions) and stops after
+  `buildPipeline`.
+- `clientSchema`: today it comes from the CVR. Over HTTP there's no client
+  group, so build it from the replica's `tableSpecs`, which cover every
+  syncable table. It needs a small adapter.
+- **AST only.** The request body is `{ast}`. Named queries (`{name, args}`) are
+  out of scope for now, because `inspectorDelegate.transformCustomQuery` needs
+  a `ConnectionContext` for auth. The LLM can get ASTs with the existing
+  `transform-query` CLI or `query.ast`. Later, named queries could forward an
+  `X-Zero-User-Authorization` header to the API server. See F4.
+- Permissions: follow the inspector. Apply legacy permissions if they're
+  present. Custom queries already have permissions applied by the API
+  transform.
+- The planner must run the same way it does in production: honor
+  `enableQueryPlanner` and the pushdown flags, as `services/analyze.ts` does.
 
 ### Phase 3: packaging for LLMs (optional)
 
@@ -244,8 +284,12 @@ Implementation notes:
 - No stats yet (fresh replica, stat tables missing) returns
   `statsQuality.stat1Present=false` and no error.
 - Internal tables are left out.
-- Phase 2: a zbugs-style AST returns `joinPlans` and `sqlitePlans`, with no
-  row fields.
+- Phase 2 plan-only: a zbugs-style AST returns `joinPlans` and `sqlitePlans`
+  with no row fields, and reads no user table. Pin the "reads nothing" part by
+  counting reads, for example with a `TableSource` spy or by asserting that the
+  fetch path is never entered.
+- Phase 2 execute mode: same AST with `?execute=true` adds measured row counts,
+  and still has no row fields.
 - Manual eval: point Claude at zbugs plus a local `/plannerz` and see whether
   the advice is correct.
 
@@ -259,17 +303,21 @@ Implementation notes:
     to the view-syncers. stat1 and stat4 are ordinary writable tables.
   - (c) An admin-triggered `POST /plannerz/reanalyze`.
 
+  (b) and (c) are full scans of every index, so they must not run on a
+  view-syncer that is serving clients. (c) is only acceptable if it runs
+  against a copy. (a) is bounded by the limit.
+
   Measure the planner's plan changes on zbugs with full stats before choosing.
   Once stat4 exists, the redaction in §1.2 stops being theoretical.
 
-- F2: plan-only analyze (P2b).
 - F3: an MCP wrapper (phase 3).
+- F4: named queries (`{name, args}`) in `/plannerz/analyze`, with user auth
+  forwarded to the API server.
 
-## Open questions
+## Decisions
 
-1. Name: `/plannerz` or a new `/statz` group?
-2. Phase 2 named queries: AST-only in v1 (my recommendation), or forward user
-   auth?
-3. Should phase 1 add any column-level info that needs a scan, such as NULL
-   fraction on indexed columns? That is "gathering data". I'd leave it out and
-   rely on F1 instead.
+1. Name: `/plannerz` (2026-09-22).
+2. `/plannerz/analyze` accepts only an AST for now. Named queries are F4.
+3. No table or index scans to gather column statistics (see Design).
+4. `/plannerz/analyze` is plan-only by default; running the query is opt-in
+   with `?execute=true` (2026-09-22).
