@@ -251,11 +251,6 @@ export function buildJoinConstraint(
   return constraint;
 }
 
-export type PartitionEntry = {
-  readonly constraint: Record<string, Value>;
-  readonly pks: Set<string>;
-};
-
 // Test seam with a widened record type — canonicalValue handles bigint
 // at runtime (zqlite's safeIntegers) but `Value` doesn't list it.
 export function canonicalKeyForTest(

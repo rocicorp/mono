@@ -2506,7 +2506,28 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`{}`);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          ".issues:join(comments)": {
+            "j 3 si1 su1": {
+              "constraint": {
+                "ownerID": "u1",
+              },
+              "pks": [
+                "si1",
+              ],
+            },
+            "j 3 si2 su1": {
+              "constraint": {
+                "ownerID": "u1",
+              },
+              "pks": [
+                "si2",
+              ],
+            },
+          },
+        }
+      `);
 
       expect(pushes).toMatchInlineSnapshot(`
         [
@@ -3002,7 +3023,20 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".comments:join(revisions)": {
+          "j 3 sc1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "sc1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3134,7 +3168,20 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".comments:join(revisions)": {
+          "j 3 sc1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "sc1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3256,7 +3303,20 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".comments:join(revisions)": {
+          "j 3 sc1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "sc1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3357,7 +3417,20 @@ suite('push one:many:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".comments:join(revisions)": {
+          "j 3 sc1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "sc1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3570,7 +3643,20 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".issueLabels:join(labels)": {
+          "j 3 sl1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "si1 sl1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3700,7 +3786,20 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".issueLabels:join(labels)": {
+          "j 3 sl1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "si1 sl1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3917,7 +4016,28 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".issueLabels:join(labels)": {
+          "j 3 sl1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "si1 sl1",
+            ],
+          },
+          "j 3 sl1 si2": {
+            "constraint": {
+              "issueID": "i2",
+            },
+            "pks": [
+              "si2 sl1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -7509,7 +7629,36 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".owner:join(state)": {
+          "j 3 ss0 su0": {
+            "constraint": {
+              "id": "u0",
+            },
+            "pks": [
+              "su0",
+            ],
+          },
+          "j 3 ss0 su1": {
+            "constraint": {
+              "id": "u1",
+            },
+            "pks": [
+              "su1",
+            ],
+          },
+          "j 3 ss1 su2": {
+            "constraint": {
+              "id": "u2",
+            },
+            "pks": [
+              "su2",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -9726,7 +9875,45 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".ownerByName:join(state)": {
+          "j 3 ss0 sAaron": {
+            "constraint": {
+              "name": "Aaron",
+            },
+            "pks": [
+              "su2",
+              "su3",
+            ],
+          },
+          "j 3 ss1 sAaron": {
+            "constraint": {
+              "name": "Aaron",
+            },
+            "pks": [
+              "su1",
+            ],
+          },
+          "j 3 ss1 sArv": {
+            "constraint": {
+              "name": "Arv",
+            },
+            "pks": [
+              "su4",
+            ],
+          },
+          "j 3 ss1 sFritz": {
+            "constraint": {
+              "name": "Fritz",
+            },
+            "pks": [
+              "su0",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {

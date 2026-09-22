@@ -770,6 +770,7 @@ function applyCorrelatedSubQuery(
   );
 
   const joinName = `${name}:join(${sq.subquery.alias})`;
+  const trackPartitions = !fromCondition;
   const join = new Join({
     parent: end,
     child,
@@ -780,7 +781,11 @@ function applyCorrelatedSubQuery(
     system: sq.system ?? 'client',
     parentPartitionKey: fromCondition ? undefined : parentPartitionKey,
     boundProvider,
-    trackPartitions: !fromCondition,
+    trackPartitions,
+    storage:
+      trackPartitions && parentPartitionKey
+        ? delegate.createStorage(joinName)
+        : undefined,
   });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);
