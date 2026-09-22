@@ -116,7 +116,8 @@ class Footprint {
 
 const trace: string[] = [];
 afterAll(() => {
-  if (process.env.TRACE_OUT) writeFileSync(process.env.TRACE_OUT, trace.join('\n'));
+  if (process.env.TRACE_OUT)
+    writeFileSync(process.env.TRACE_OUT, trace.join('\n'));
 });
 function run(data: Data, pushes: [string, SourceChange][] = []) {
   const sources = makeSources(data);

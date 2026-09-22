@@ -91,6 +91,9 @@ export function* pushAccumulatedChanges(
   fanOutChangeType: ChangeType,
   mergeRelationships: (existing: Change, incoming: Change) => Change,
   addEmptyRelationships: (change: Change) => Change,
+  // Relationships a branch adds (a flipped join's witnesses). Only the union
+  // fan has any; the filter fan passes nothing and behaves as before.
+  isBranchRel?: (name: string) => boolean,
 ): Stream<'yield'> {
   if (accumulatedPushes.length === 0) {
     // It is possible for no forks to pass along the push.
@@ -169,6 +172,48 @@ export function* pushAccumulatedChanges(
       const removeChange = candidatesToPush.get(ChangeType.REMOVE);
       let editChange = candidatesToPush.get(ChangeType.EDIT);
 
+      // The row stays downstream (a branch kept the edit, or it moved from
+      // one branch to another). Branches it left take their witnesses with
+      // them; branches it entered bring theirs. An edit syncs one row, so
+      // those must travel as child changes around it.
+      if (isBranchRel && (editChange || (addChange && removeChange))) {
+        if (removeChange) {
+          yield* pushWitnessDeltas(
+            removeChange[ChangeIndex.NODE],
+            ChangeType.REMOVE,
+            isBranchRel,
+            output,
+            pusher,
+          );
+        }
+        const strip = (n: Node): Node => ({
+          row: n.row,
+          relationships: Object.fromEntries(
+            Object.entries(n.relationships).filter(([k]) => !isBranchRel(k)),
+          ),
+        });
+        yield* output.push(
+          addEmptyRelationships(
+            editChange ??
+              makeEditChange(
+                strip(must(addChange)[ChangeIndex.NODE]),
+                strip(must(removeChange)[ChangeIndex.NODE]),
+              ),
+          ),
+          pusher,
+        );
+        if (addChange) {
+          yield* pushWitnessDeltas(
+            addChange[ChangeIndex.NODE],
+            ChangeType.ADD,
+            isBranchRel,
+            output,
+            pusher,
+          );
+        }
+        return;
+      }
+
       // If an `edit` is present, it supersedes `add` and `remove`
       // as it semantically represents both.
       if (editChange) {
@@ -236,7 +281,27 @@ export function* pushAccumulatedChanges(
       // If any branch preserved the original child change, that takes precedence over all other changes.
       const childChange = candidatesToPush.get(ChangeType.CHILD);
       if (childChange) {
+        const left = candidatesToPush.get(ChangeType.REMOVE);
+        const entered = candidatesToPush.get(ChangeType.ADD);
+        if (isBranchRel && left) {
+          yield* pushWitnessDeltas(
+            left[ChangeIndex.NODE],
+            ChangeType.REMOVE,
+            isBranchRel,
+            output,
+            pusher,
+          );
+        }
         yield* output.push(childChange, pusher);
+        if (isBranchRel && entered) {
+          yield* pushWitnessDeltas(
+            entered[ChangeIndex.NODE],
+            ChangeType.ADD,
+            isBranchRel,
+            output,
+            pusher,
+          );
+        }
         return;
       }
 
@@ -256,6 +321,42 @@ export function* pushAccumulatedChanges(
     }
     default:
       fanOutChangeType satisfies never;
+  }
+}
+
+/**
+ * The row stays downstream, but it gained (`ADD`) or lost (`REMOVE`) every
+ * witness in `node`'s branch relationships. One child change per witness.
+ */
+export function* pushWitnessDeltas(
+  node: Node,
+  type: ChangeType.ADD | ChangeType.REMOVE,
+  isBranchRel: (name: string) => boolean,
+  output: Output,
+  pusher: InputBase,
+): Stream<'yield'> {
+  for (const [relationshipName, children] of Object.entries(
+    node.relationships,
+  )) {
+    if (!isBranchRel(relationshipName)) {
+      continue;
+    }
+    for (const child of children()) {
+      if (child === 'yield') {
+        yield child;
+        continue;
+      }
+      yield* output.push(
+        makeChildChange(node, {
+          relationshipName,
+          change:
+            type === ChangeType.ADD
+              ? makeAddChange(child)
+              : makeRemoveChange(child),
+        }),
+        pusher,
+      );
+    }
   }
 }
 

@@ -58,7 +58,10 @@ function check(issues: I[], want: number[], flip: boolean) {
   const q = () =>
     newQuery(schema, 'issue')
       .where(({or, cmp, exists}) =>
-        or(cmp('x', '=', 1), exists('project', p => p, {flip})),
+        or(
+          cmp('x', '=', 1),
+          exists('project', p => p, {flip}),
+        ),
       )
       .orderBy('ord', 'asc')
       .orderBy('id', 'asc')
