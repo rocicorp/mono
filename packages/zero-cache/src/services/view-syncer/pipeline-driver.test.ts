@@ -875,6 +875,49 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toEqual([]);
   });
 
+  // Clients can query comments with an empty issue-ID list. Opposite sort
+  // orders make these distinct queries that can coexist in a client group.
+  // Removing the first query must not remove index state needed to destroy
+  // the second (nor when the first query was the last one with a nonempty
+  // IN list on that column).
+  test.each([
+    {name: 'another empty IN query', firstIssueIDs: []},
+    {name: 'the last nonempty IN query', firstIssueIDs: ['3']},
+  ])('removes an empty IN query after $name', ({firstIssueIDs}) => {
+    pipelines.init(clientSchema);
+    const firstQuery: AST = {
+      table: 'comments',
+      orderBy: [['id', 'desc']],
+      where: {
+        type: 'simple',
+        op: 'IN',
+        left: {type: 'column', name: 'issueID'},
+        right: {type: 'literal', value: firstIssueIDs},
+      },
+    };
+    const emptyQuery: AST = {
+      table: 'comments',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'simple',
+        op: 'IN',
+        left: {type: 'column', name: 'issueID'},
+        right: {type: 'literal', value: []},
+      },
+    };
+    expect([
+      ...pipelines.addQuery('hash1', 'queryID1', firstQuery, startTimer()),
+    ]).toEqual([]);
+    expect([
+      ...pipelines.addQuery('hash2', 'queryID2', emptyQuery, startTimer()),
+    ]).toEqual([]);
+    expect(pipelines.queries().size).toBe(2);
+    pipelines.removeQuery('queryID1');
+    expect([...pipelines.queries().keys()]).toEqual(['queryID2']);
+    pipelines.removeQuery('queryID2');
+    expect(pipelines.queries().size).toBe(0);
+  });
+
   test('failed scalar subquery resolution tears down earlier companions', () => {
     pipelines.init(clientSchema);
     const scalar =
