@@ -41,6 +41,12 @@ export type PartitionKey = PrimaryKey;
 
 type DirtyPartitionState = {
   constraint: Constraint | undefined;
+  /**
+   * The active bound before any removals in this push cycle reduced the partition
+   * size below limit. Upstream operators (like TakeGate) consult getBound() during
+   * Phase 1 to cap child pushes. Preserving lastBound prevents TakeGate from prematurely
+   * opening (becoming unbounded) while the partition has an unresolved deficit.
+   */
   lastBound: Row | undefined;
 };
 
@@ -110,6 +116,8 @@ export class Take implements Operator, TakeBoundProvider {
     const takeStateKey = getTakeStateKey(this.#partitionKey, constraint);
     const dirty = this.#dirtyPartitions.get(takeStateKey);
     if (dirty) {
+      // While dirty in Phase 1, return the bound prior to any removals so upstream
+      // operators (e.g. TakeGate) remain capped rather than unbounding during push.
       return dirty.lastBound;
     }
     const takeState = this.#storage.get(takeStateKey);
@@ -386,6 +394,9 @@ export class Take implements Operator, TakeBoundProvider {
             ? takeState.bound
             : beforeBoundNode?.row;
       if (!this.#dirtyPartitions.has(takeStateKey)) {
+        // Snapshot the pre-removal bound on the first removal that dirties this
+        // partition. Subsequent getBound() calls throughout Phase 1 will return
+        // this bound to keep upstream TakeGate bounded until Phase 2 refills deficits.
         this.#dirtyPartitions.set(takeStateKey, {
           constraint,
           lastBound: takeState.bound,
