@@ -136,6 +136,25 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   }
 
   /**
+   * Dynamically adds a function that is called when the Subscription
+   * terminates. This will be called immediately if the Subscription is
+   * already closed.
+   *
+   * Unlike the `cleanup` handler specified in the Subscription options,
+   * this a close handler can be added to an existing Subscription object
+   * thereby avoiding a cyclic dependency, and allowing Subscription
+   * receivers to add their own cleanup logic.
+   */
+  addCloseHandler(onClose: (reason?: unknown) => void): this {
+    if (this.signal.aborted) {
+      onClose(this.signal.reason);
+    } else {
+      this.signal.addEventListener('abort', () => onClose(this.signal.reason));
+    }
+    return this;
+  }
+
+  /**
    * Pushes the next message to be consumed, and returns a `result` that resolves to the
    * eventual {@link Result} of the `value`.
    *
