@@ -480,11 +480,11 @@ describe('change-streamer/schema/tables', () => {
     // Wait for all blockers to have acquired their read locks.
     await Promise.all(readyPromises);
 
-    // Wrap setTimeout to capture the scheduled delay and fire quickly (10ms).
+    // Wrap setTimeout to capture the scheduled delay and fire immediately.
     let scheduledMs: number | undefined;
     const shortSetTimeout = ((fn: () => void, ms: number) => {
       scheduledMs = ms;
-      return setTimeout(fn, 10);
+      return setTimeout(fn, 0);
     }) as typeof setTimeout;
 
     // The connection doing the TRUNCATE needs application_name =
@@ -497,6 +497,16 @@ describe('change-streamer/schema/tables', () => {
       database,
       connection: {['application_name']: CHANGE_STREAMER_APP_NAME},
     }) as unknown as PostgresDB;
+
+    // Open spare pool connections so that the first terminate check runs
+    // before the TRUNCATE is waiting on its lock. This exercises the retry
+    // of the terminate check (which would otherwise hang forever).
+    await Promise.all(
+      Array.from(
+        {length: 3},
+        () => (truncateConn as unknown as postgres.Sql)`SELECT pg_sleep(0.05)`,
+      ),
+    );
 
     try {
       // ensureReplicationConfig will TRUNCATE (different replicaVersion),
