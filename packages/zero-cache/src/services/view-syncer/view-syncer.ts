@@ -3197,7 +3197,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = await this.#flushUpdater(lc, updater, pokers.patchesAdded);
+      this.#cvr = await this.#flushUpdater(lc, updater, pokers.patchesSent);
       if (budgetEvictedQueryIDs.length > 0) {
         this.#scheduleExpireEviction(lc, this.#cvr);
       }
@@ -3486,7 +3486,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'advancement state missing',
       );
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = await this.#flushUpdater(lc, updater, pokers.patchesAdded);
+      this.#cvr = await this.#flushUpdater(lc, updater, pokers.patchesSent);
       const finalVersion = this.#cvr.version;
 
       // Signal clients to commit.

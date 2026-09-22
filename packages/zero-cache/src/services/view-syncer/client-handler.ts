@@ -77,19 +77,27 @@ export interface PokeHandler {
   end(finalVersion: CVRVersion): Promise<void>;
 }
 
+/** A {@link PokeHandler} for a single client. */
+export interface ClientPokeHandler extends PokeHandler {
+  /**
+   * Whether a patch has been sent to the client. Once one has, the poke can
+   * only be ended with a `finalVersion` that is ahead of the client's base
+   * version.
+   */
+  readonly patchesSent: boolean;
+}
+
 /**
  * A {@link PokeHandler} for multiple clients, as returned by
  * {@link startPoke}.
  */
 export interface MultiPokeHandler extends PokeHandler {
-  /**
-   * Whether any patch has been added. Once one has, the poke can only be
-   * ended with a `finalVersion` that is ahead of the clients' base version.
-   */
-  readonly patchesAdded: boolean;
+  /** Whether a patch has been sent to any of the clients. */
+  readonly patchesSent: boolean;
 }
 
-const NOOP: PokeHandler = {
+const NOOP: ClientPokeHandler = {
+  patchesSent: false,
   addPatch: () => promiseVoid,
   cancel: () => promiseVoid,
   end: () => promiseVoid,
@@ -102,7 +110,6 @@ export function startPoke(
   tentativeVersion: CVRVersion,
 ): MultiPokeHandler {
   const pokers = clients.map(c => c.startPoke(tentativeVersion));
-  let patchesAdded = false;
 
   // Promise.allSettled() ensures that a failed (e.g. disconnected) client
   // does not prevent other clients from receiving the pokes. However, the
@@ -120,16 +127,14 @@ export function startPoke(
   };
 
   return {
-    get patchesAdded() {
-      return patchesAdded;
+    get patchesSent() {
+      return pokers.some(poker => poker.patchesSent);
     },
-    addPatch: patch => {
-      patchesAdded = true;
-      return settle(
+    addPatch: patch =>
+      settle(
         'addPatch',
         pokers.map(poker => poker.addPatch(patch)),
-      );
-    },
+      ),
     cancel: () =>
       settle(
         'cancel',
@@ -226,7 +231,7 @@ export class ClientHandler {
     this.#downstream.cancel();
   }
 
-  startPoke(tentativeVersion: CVRVersion): PokeHandler {
+  startPoke(tentativeVersion: CVRVersion): ClientPokeHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
@@ -350,6 +355,9 @@ export class ClientHandler {
     // its cause. Fail the connection instead; the client reconnects and
     // resyncs from its baseVersion.
     return {
+      get patchesSent() {
+        return pokeStarted;
+      },
       addPatch: async (patchToVersion: PatchToVersion) => {
         try {
           await addPatch(patchToVersion);
