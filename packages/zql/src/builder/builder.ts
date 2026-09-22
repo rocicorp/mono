@@ -33,6 +33,7 @@ import {Join} from '../ivm/join.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
+import {TakeGate, type TakeBoundProvider} from '../ivm/take-gate.ts';
 import {Take} from '../ivm/take.ts';
 import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
@@ -302,7 +303,7 @@ function buildPipelineInternal(
   queryID: string,
   name: string,
   partitionKey?: CompoundKey,
-  isNonFlippedExistsChild?: boolean | undefined,
+  isNonFlippedExistsChild?: boolean,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -369,6 +370,14 @@ function buildPipelineInternal(
     end = delegate.decorateInput(skip, `${name}:skip)`);
   }
 
+  let takeGate: TakeGate | undefined;
+  if (ast.limit !== undefined && !useCap) {
+    const takeGateName = `${name}:take-gate`;
+    takeGate = new TakeGate(end);
+    delegate.addEdge(end, takeGate);
+    end = delegate.decorateInput(takeGate, takeGateName);
+  }
+
   for (const csqCondition of csqConditions) {
     // flipped EXISTS are handled in applyWhere
     if (!csqCondition.flip) {
@@ -388,12 +397,14 @@ function buildPipelineInternal(
         end,
         name,
         true,
+        undefined,
+        takeGate,
       );
     }
   }
 
   if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
-    end = applyWhere(end, ast.where, delegate, name);
+    end = applyWhere(end, ast.where, delegate, name, partitionKey, takeGate);
   }
 
   if (ast.limit !== undefined) {
@@ -422,6 +433,10 @@ function buildPipelineInternal(
       );
       delegate.addEdge(end, take);
       end = delegate.decorateInput(take, takeName);
+      takeGate?.setBoundProvider(take);
+      if (takeGate) {
+        take.setTakeGate(takeGate);
+      }
     }
   }
 
@@ -432,7 +447,15 @@ function buildPipelineInternal(
       byAlias.set(csq.subquery.alias ?? '', csq);
     }
     for (const csq of byAlias.values()) {
-      end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, false);
+      end = applyCorrelatedSubQuery(
+        csq,
+        delegate,
+        queryID,
+        end,
+        name,
+        false,
+        partitionKey,
+      );
     }
   }
 
@@ -444,6 +467,8 @@ function applyWhere(
   condition: Condition,
   delegate: BuilderDelegate,
   name: string,
+  parentPartitionKey?: CompoundKey,
+  boundProvider?: TakeBoundProvider,
 ): Input {
   if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
     return buildFilterPipeline(
@@ -454,7 +479,14 @@ function applyWhere(
     );
   }
 
-  return applyFilterWithFlips(input, condition, delegate, name);
+  return applyFilterWithFlips(
+    input,
+    condition,
+    delegate,
+    name,
+    parentPartitionKey,
+    boundProvider,
+  );
 }
 
 function applyFilterWithFlips(
@@ -462,6 +494,8 @@ function applyFilterWithFlips(
   condition: Condition,
   delegate: BuilderDelegate,
   name: string,
+  parentPartitionKey?: CompoundKey,
+  boundProvider?: TakeBoundProvider,
 ): Input {
   let end = input;
   assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
@@ -486,7 +520,14 @@ function applyFilterWithFlips(
       }
       assert(withFlipped.length > 0, 'Impossible to have no flips here');
       for (const cond of withFlipped) {
-        end = applyFilterWithFlips(end, cond, delegate, name);
+        end = applyFilterWithFlips(
+          end,
+          cond,
+          delegate,
+          name,
+          parentPartitionKey,
+          boundProvider,
+        );
       }
       break;
     }
@@ -518,7 +559,16 @@ function applyFilterWithFlips(
       }
 
       for (const cond of withFlipped) {
-        branches.push(applyFilterWithFlips(end, cond, delegate, name));
+        branches.push(
+          applyFilterWithFlips(
+            end,
+            cond,
+            delegate,
+            name,
+            parentPartitionKey,
+            boundProvider,
+          ),
+        );
       }
 
       const ufi = new UnionFanIn(ufo, branches);
@@ -550,6 +600,8 @@ function applyFilterWithFlips(
         ),
         hidden: sq.hidden ?? false,
         system: sq.system ?? 'client',
+        parentPartitionKey,
+        boundProvider,
       });
       delegate.addEdge(end, flippedJoin);
       delegate.addEdge(child, flippedJoin);
@@ -698,6 +750,8 @@ function applyCorrelatedSubQuery(
   end: Input,
   name: string,
   fromCondition: boolean,
+  parentPartitionKey?: CompoundKey,
+  boundProvider?: TakeBoundProvider,
 ) {
   // TODO: we only omit the join if the CSQ if from a condition since
   // we want to create an empty array for `related` fields that are `limit(0)`
@@ -724,6 +778,9 @@ function applyCorrelatedSubQuery(
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
     system: sq.system ?? 'client',
+    parentPartitionKey: fromCondition ? undefined : parentPartitionKey,
+    boundProvider,
+    trackPartitions: !fromCondition,
   });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);
