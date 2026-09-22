@@ -435,7 +435,7 @@ test('json path filter: string leaf equality', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text END) = $3::text::text
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text END) = $3::text::text
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
@@ -444,6 +444,37 @@ test('json path filter: string leaf equality', () => {
         "string",
         "high",
       ],
+    }
+  `);
+});
+
+test('json path filter: IN with a null list is constant-false', () => {
+  // The predicate is constant-false for a null list; the generic forms would
+  // assert (IN) or, via the empty-list rule, match every non-null leaf (NOT IN).
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: 'NOT IN',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: null},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE false
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [],
     }
   `);
 });
@@ -470,7 +501,7 @@ test('json path filter: empty NOT IN excludes null and missing leaves', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[]) IS NOT NULL
+        WHERE ("jsonTable_0"."metadata" ->> $1::text::text) IS NOT NULL
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
@@ -506,7 +537,7 @@ test('json path filter: negated comparison is type-strict but keeps mismatched l
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE (CASE WHEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[]) IS NULL THEN false WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text != $3::text::text ELSE true END)
+        WHERE (CASE COALESCE(jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text), 'null') WHEN 'null' THEN false WHEN $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text != $3::text::text ELSE true END)
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
@@ -539,13 +570,12 @@ test('json path filter: nested path + array index, numeric ordering', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text,$2::text::text]::text[]) = $3::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text,$2::text::text]::text[])::double precision END) > $4::text::double precision
+        WHERE (CASE WHEN jsonb_typeof(("jsonTable_0"."metadata" -> $1::text::text) -> 0) = $2::text::text THEN (("jsonTable_0"."metadata" -> $1::text::text) ->> 0)::double precision END) > $3::text::double precision
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
       "values": [
         "scores",
-        "0",
         "number",
         "10",
       ],
@@ -575,7 +605,7 @@ test('json path filter: IN', () => {
         FROM "jsonTable" AS "jsonTable_0"
         WHERE 
         (
-          (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text END) = ANY 
+          (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text END) = ANY 
           (ARRAY(
               SELECT value::text FROM jsonb_array_elements_text($3::text::jsonb)
             ))
@@ -612,7 +642,7 @@ test('json path filter: ILIKE', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text END) ILIKE $3::text::text
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text END) ILIKE $3::text::text
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
@@ -645,7 +675,7 @@ test('json path filter: IS NULL collapses missing key and JSON null', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[]) IS NOT DISTINCT FROM $2
+        WHERE ("jsonTable_0"."metadata" ->> $1::text::text) IS NOT DISTINCT FROM $2
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
@@ -677,7 +707,7 @@ test('json path filter: boolean leaf equality', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::boolean END) = $3::text::boolean
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::boolean END) = $3::text::boolean
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",

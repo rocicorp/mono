@@ -56,6 +56,8 @@ const docsTable = table('docsTable')
   .columns({
     id: string(),
     metadata: json(),
+    // A json<T[]>() column backed by a native Postgres array, not json/jsonb.
+    labels: json<string[]>().optional(),
   })
   .primaryKey('id');
 
@@ -96,6 +98,7 @@ const serverSchema: ServerSchema = {
   docs: {
     id: {type: 'text', isArray: false, isEnum: false},
     metadata: {type: 'jsonb', isArray: false, isEnum: false},
+    labels: {type: 'text', isArray: true, isEnum: false},
   },
 };
 
@@ -145,15 +148,16 @@ describe('compiler with PostgreSQL', () => {
 
       CREATE TABLE docs (
         id TEXT PRIMARY KEY,
-        metadata JSONB NOT NULL
+        metadata JSONB NOT NULL,
+        labels TEXT[]
       );
 
-      INSERT INTO docs (id, metadata) VALUES
-        ('row1', '{"priority":"high","count":3,"flagged":true,"nested":{"zip":"94110"},"tags":["a","b"]}'),
-        ('row2', '{"priority":"low","count":10,"flagged":false}'),
-        ('row3', '{"priority":null}'),
-        ('row4', '{}'),
-        ('row5', '{"priority":42,"count":"n/a","flagged":{"v":true},"tags":"not-an-array"}');
+      INSERT INTO docs (id, metadata, labels) VALUES
+        ('row1', '{"priority":"high","count":3,"flagged":true,"nested":{"zip":"94110"},"tags":["a","b"]}', ARRAY['x', 'y']),
+        ('row2', '{"priority":"low","count":10,"flagged":false}', ARRAY[]::TEXT[]),
+        ('row3', '{"priority":null}', NULL),
+        ('row4', '{}', NULL),
+        ('row5', '{"priority":42,"count":"n/a","flagged":{"v":true},"tags":"not-an-array"}', NULL);
     `);
   });
 
@@ -223,17 +227,23 @@ describe('compiler with PostgreSQL', () => {
     ]);
   });
 
-  // JSON path filters compiled to `#>>` extraction, executed against real
-  // Postgres. Seed data (see beforeAll):
+  // JSON path filters compiled to typed `->` navigation plus `->>` extraction,
+  // executed against real Postgres. Seed data (see beforeAll):
   //   row1 {priority:'high', count:3, flagged:true, nested:{zip:'94110'}, tags:['a','b']}
   //   row2 {priority:'low',  count:10, flagged:false}
   //   row3 {priority:null}            -- explicit JSON null
   //   row4 {}                         -- missing key
   //   row5 {priority:42, count:'n/a', flagged:{v:true}, tags:'not-an-array'}
   //                                   -- wrong JSON type at every path
+  // and the native TEXT[] column `labels`: row1 ['x','y'], row2 [], others NULL.
   const jsonRef = (...path: (string | number)[]): JsonPathReference => ({
     type: 'json',
     value: {type: 'column', name: 'metadata'},
+    path,
+  });
+  const labelsRef = (...path: (string | number)[]): JsonPathReference => ({
+    type: 'json',
+    value: {type: 'column', name: 'labels'},
     path,
   });
 
@@ -334,6 +344,16 @@ describe('compiler with PostgreSQL', () => {
       'row2',
       'row5',
     ]);
+    // A null list is constant-false for IN and NOT IN alike.
+    expect(await queryDocIds('NOT IN', jsonRef('priority'), null)).toEqual([]);
+    expect(await queryDocIds('IN', jsonRef('priority'), null)).toEqual([]);
+    // Segments are strict on Postgres too (`->` with a typed operand): a
+    // string segment never indexes an array — not even '-1' — and a number
+    // never reads an object key.
+    expect(await queryDocIds('=', jsonRef('tags', '0'), 'a')).toEqual([]);
+    expect(await queryDocIds('=', jsonRef('tags', '-1'), 'b')).toEqual([]);
+    expect(await queryDocIds('=', jsonRef('nested', 0), '94110')).toEqual([]);
+    expect(await queryDocIds('=', jsonRef('tags', 0), 'a')).toEqual(['row1']);
     // IS NOT has no null guard, matching JS `lhs !== rhs`.
     expect(await queryDocIds('IS NOT', jsonRef('priority'), '42')).toEqual([
       'row1',
@@ -370,7 +390,7 @@ describe('compiler with PostgreSQL', () => {
   });
 
   test('json path filter: IS NULL collapses missing key and JSON null', async () => {
-    // row3 has an explicit JSON null, row4 is missing the key entirely; `#>>`
+    // row3 has an explicit JSON null, row4 is missing the key entirely; `->>`
     // maps both to SQL NULL, matching SQLite/in-memory semantics.
     expect(await queryDocIds('IS', jsonRef('priority'), null)).toEqual([
       'row3',
@@ -379,6 +399,31 @@ describe('compiler with PostgreSQL', () => {
     expect(await queryDocIds('IS NOT', jsonRef('priority'), null)).toEqual([
       'row1',
       'row2',
+      'row5',
+    ]);
+  });
+
+  test('json path filter: native array column (to_jsonb)', async () => {
+    // `labels` is TEXT[], not json: the compiler wraps it in to_jsonb() so a
+    // number segment indexes it like a JSON array.
+    expect(await queryDocIds('=', labelsRef(0), 'x')).toEqual(['row1']);
+    expect(await queryDocIds('=', labelsRef(1), 'y')).toEqual(['row1']);
+    expect(await queryDocIds('=', labelsRef(1), 'x')).toEqual([]);
+    expect(await queryDocIds('!=', labelsRef(0), 'z')).toEqual(['row1']);
+    // A string segment is a key, never an index — also on a native array.
+    expect(await queryDocIds('=', labelsRef('0'), 'x')).toEqual([]);
+    // Out of range, an empty array and a NULL column all read as SQL NULL.
+    expect(await queryDocIds('IS', labelsRef(2), null)).toEqual([
+      'row1',
+      'row2',
+      'row3',
+      'row4',
+      'row5',
+    ]);
+    expect(await queryDocIds('IS', labelsRef(0), null)).toEqual([
+      'row2',
+      'row3',
+      'row4',
       'row5',
     ]);
   });
