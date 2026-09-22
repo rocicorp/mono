@@ -1327,7 +1327,7 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
 });
 
 describe('pushes rejected by every connection', () => {
-  function setup() {
+  function setup(options = {skipUnobservableChanges: true}) {
     const db = new Database(lc, ':memory:');
     db.exec(/* sql */ `
       CREATE TABLE foo (id TEXT PRIMARY KEY, owner TEXT, n INTEGER);
@@ -1340,6 +1340,8 @@ describe('pushes rejected by every connection', () => {
       'foo',
       {id: {type: 'string'}, owner: {type: 'string'}, n: {type: 'number'}},
       ['id'],
+      undefined,
+      options,
     );
     const read = db.prepare('SELECT id, owner, n FROM foo ORDER BY id');
     const outputted: Change[] = [];
@@ -1437,6 +1439,22 @@ describe('pushes rejected by every connection', () => {
       }),
     ]);
     expect(read.all()).toEqual([{id: 'r3', owner: 'bob', n: 3}]);
+  });
+
+  test('are still written by default', () => {
+    const {source, read, outputted, connect} = setup({
+      skipUnobservableChanges: false,
+    });
+    connect('alice');
+
+    consume(source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})));
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([{id: 'r1', owner: 'carol', n: 1}]);
+    expect(() =>
+      consume(
+        source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})),
+      ),
+    ).toThrow('Row already exists');
   });
 
   test('an unfiltered connection disables the skip', () => {

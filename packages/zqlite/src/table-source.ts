@@ -61,6 +61,19 @@ type Statements = {
 
 let eventCount = 0;
 
+export type TableSourceOptions = {
+  /**
+   * When set, a pushed change that the filters of every connection reject
+   * is neither pushed nor applied to the backing table, on the grounds that
+   * no connection can observe it. This departs from the `Source.push`
+   * contract (a push commits the change to the source), so it is only
+   * appropriate when the caller does not read the table through any other
+   * path and replaces the table's contents afterwards, as the view-syncer's
+   * pipeline driver does when it advances to the next snapshot.
+   */
+  skipUnobservableChanges?: boolean | undefined;
+};
+
 /**
  * A source that is backed by a SQLite table.
  *
@@ -89,6 +102,7 @@ export class TableSource implements Source {
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
   readonly #shouldYield: () => boolean;
+  readonly #skipUnobservableChanges: boolean;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
   #pushEpoch = 0;
@@ -107,6 +121,7 @@ export class TableSource implements Source {
     columns: Record<string, SchemaValue>,
     primaryKey: PrimaryKey,
     shouldYield = () => false,
+    options: TableSourceOptions = {},
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
@@ -116,6 +131,7 @@ export class TableSource implements Source {
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
     this.#shouldYield = shouldYield;
+    this.#skipUnobservableChanges = options.skipUnobservableChanges ?? false;
 
     const primaryKeyStr = JSON.stringify(primaryKey.toSorted());
     assert(
@@ -430,7 +446,10 @@ export class TableSource implements Source {
   }
 
   *genPush(change: SourceChange): Stream<'yield' | undefined> {
-    if (!this.#connectionIndex.mayAcceptChange(change)) {
+    if (
+      this.#skipUnobservableChanges &&
+      !this.#connectionIndex.mayAcceptChange(change)
+    ) {
       // No connection can observe this row, so only a REMOVE needs to be
       // applied to the snapshot.
       if (change[SourceChangeIndex.TYPE] === ChangeType.REMOVE) {
