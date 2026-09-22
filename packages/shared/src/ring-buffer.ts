@@ -35,6 +35,11 @@ export class RingBuffer<T> {
     this.#size++;
   }
 
+  /** Returns the front element without removing it, or `undefined` if empty. */
+  first(): T | undefined {
+    return this.#size === 0 ? undefined : this.#buffer[this.#head];
+  }
+
   /** Returns the last element, or `undefined` if empty. */
   last(): T | undefined {
     return this.#size === 0
