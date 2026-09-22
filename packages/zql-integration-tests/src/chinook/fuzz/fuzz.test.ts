@@ -10,6 +10,7 @@ import {describe, expect, test} from 'vitest';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import {pushDownCorrelatedPredicates} from '../../../../zql/src/builder/correlated-predicate-pushdown.ts';
 import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
 import {makeSourceChangeAdd} from '../../../../zql/src/ivm/source.ts';
 import {consume} from '../../../../zql/src/ivm/stream.ts';
@@ -23,9 +24,12 @@ import {
   AXES,
   axisIndex,
   EXISTS_VALS,
+  FILTER_VALS,
   FLIP_VALS,
   hasText,
   LIMIT_VALS,
+  N_AXES,
+  pinOf,
   pkOf,
   relsOf,
   tables,
@@ -107,10 +111,10 @@ describe('coverage', () => {
     }
     expect(cov.fraction()).toBe(1);
     expect(cov.missed()).toEqual([]);
-    // Far smaller than the full cross-product (16·7·4·3·4·2 = 10752) …
+    // Far smaller than the full cross-product (18·7·4·3·4·2 = 12096) …
     expect(rows.length).toBeLessThan(200);
-    // … but at least the largest single-pair domain product (filter·exists = 16·7).
-    expect(rows.length).toBeGreaterThanOrEqual(16 * 7);
+    // … but at least the largest single-pair domain product (filter·exists = 18·7).
+    expect(rows.length).toBeGreaterThanOrEqual(18 * 7);
   });
 
   test('observe marks every t-subset; total is the realizable pairwise tuple count', () => {
@@ -878,6 +882,75 @@ describe('random-yield interleave', () => {
       checked += 1;
     }
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+// ── join-column pins (the shape correlated predicate pushdown rewrites) ───────────────
+
+/**
+ * Whether correlated predicate pushdown copies a condition into a subquery of `q`. The
+ * pass returns its input when it copies nothing.
+ */
+function pushdownRewrites(q: AnyQuery): boolean {
+  const ast = asQueryInternals(q).ast;
+  return (
+    pushDownCorrelatedPredicates(
+      ast,
+      t => schema.tables[t as keyof typeof schema.tables].columns,
+    ) !== ast
+  );
+}
+
+describe('join-column pins', () => {
+  test('pin literals are present values of the join column', () => {
+    expect(pinOf('track')).toEqual({col: 'albumId', eq: 10, in: [10, 11]});
+    // Only one supportRepId is present, so `IN` has one value.
+    expect(pinOf('customer')).toEqual({col: 'supportRepId', eq: 2, in: [2]});
+    // The boss has no manager, so the first non-null value is used.
+    expect(pinOf('employee')?.eq).toBe(1);
+    expect(pinOf('playlistTrack')).toBeUndefined(); // no relationship
+  });
+
+  test('a pin filter is copied into the gate on every table with a relationship', () => {
+    for (const table of tables()) {
+      for (const [fv, ev] of [
+        ['pin_eq', 'exists_top'],
+        ['pin_in', 'exists_or'],
+        ['pin_eq', 'not_exists_and'],
+      ] as const) {
+        const row = new Array<number>(N_AXES).fill(0);
+        row[axisIndex('filter')] = FILTER_VALS.indexOf(fv);
+        row[axisIndex('exists')] = EXISTS_VALS.indexOf(ev);
+        const res = decorate(table, row, data);
+        if (relsOf(table).length === 0) {
+          expect(res).toBeNull();
+          continue;
+        }
+        expect(pushdownRewrites(must(res)[0]), `${table} ${fv} ${ev}`).toBe(
+          true,
+        );
+      }
+    }
+  });
+
+  test('swarm and tail generate pins that the pass copies into a child', () => {
+    const r = rng(0xbeef);
+    let swarm = 0;
+    for (let i = 0; i < 400; i++) {
+      const res = swarmGen(r, Mask.random(r), data);
+      if (res && pushdownRewrites(res[0])) {
+        swarm += 1;
+      }
+    }
+    let tail = 0;
+    for (let i = 0; i < 300; i++) {
+      const res = tailGen(r, tailBounds());
+      if (res && pushdownRewrites(res[0])) {
+        tail += 1;
+      }
+    }
+    expect(swarm).toBeGreaterThan(20);
+    expect(tail).toBeGreaterThan(30);
   });
 });
 

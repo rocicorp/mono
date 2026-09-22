@@ -1,10 +1,11 @@
 // oxlint-disable no-console
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 import {hydrate} from '../../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
-import {mapAST} from '../../../zero-protocol/src/ast.ts';
+import {mapAST, type SimpleCondition} from '../../../zero-protocol/src/ast.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -13,6 +14,7 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../../../zql/src/builder/builder.ts';
+import {pushDownCorrelatedPredicates} from '../../../zql/src/builder/correlated-predicate-pushdown.ts';
 import {
   Debug,
   runtimeDebugFlags,
@@ -502,22 +504,29 @@ export async function createPlannerInfrastructure(config: {
     useIndexedDb = false,
     maxEstimatedCost?: number,
   ): PlanAttemptResult[] {
-    // Get the query AST
-    const ast = mapAST(
-      completeOrdering(
-        asQueryInternals(query).ast,
-        tableName => schema.tables[tableName].primaryKey,
-      ),
-      mapper,
-    );
-
     // Select the cost model and delegate based on which database to use
     const selectedCostModel = useIndexedDb ? indexedCostModel : costModel;
     const selectedDelegate = useIndexedDb ? indexedDelegate : delegates.sqlite;
 
+    // Get the query AST, with correlated predicates pushed down as
+    // buildPipeline does before planning.
+    const pushed = new Set<SimpleCondition>();
+    const ast = pushDownCorrelatedPredicates(
+      mapAST(
+        completeOrdering(
+          asQueryInternals(query).ast,
+          tableName => schema.tables[tableName].primaryKey,
+        ),
+        mapper,
+      ),
+      tableName =>
+        must(selectedDelegate.getSource(tableName)).tableSchema.columns,
+      pushed,
+    );
+
     // Plan with debugger to collect all attempts
     const planDebugger = new AccumulatorDebugger();
-    planQuery(ast, selectedCostModel, planDebugger);
+    planQuery(ast, selectedCostModel, planDebugger, undefined, pushed);
 
     // Get all completed plan attempts
     const planCompleteEvents = planDebugger.getEvents('plan-complete');
@@ -544,7 +553,13 @@ export async function createPlannerInfrastructure(config: {
       selectedDelegate.mapAst = undefined;
 
       // Rebuild the plan graph for this attempt
-      const plans = buildPlanGraph(ast, selectedCostModel, true);
+      const plans = buildPlanGraph(
+        ast,
+        selectedCostModel,
+        true,
+        undefined,
+        pushed,
+      );
 
       // Restore the exact plan state from the snapshot
       plans.plan.restorePlanningSnapshot(planEvent.planSnapshot);
@@ -558,7 +573,8 @@ export async function createPlannerInfrastructure(config: {
       selectedDelegate.debug = debug;
 
       try {
-        // Build pipeline
+        // Build pipeline. The AST is already pushed, and the pass does not
+        // change an AST that it already pushed.
         const pipeline = buildPipeline(
           astWithFlips,
           selectedDelegate,

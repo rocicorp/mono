@@ -120,6 +120,10 @@ const options = {
   },
   app: appOptions,
   shard: shardOptions,
+  // Read from the same env var as zero-cache, so the analysis matches what
+  // the server runs.
+  enableCorrelatedPredicatePushdown:
+    zeroOptions.enableCorrelatedPredicatePushdown,
   log: {
     ...logOptions,
     level: logLevel.default('error'),
@@ -206,6 +210,8 @@ const tableSpecs = computeZqlSpecs(lc, db, {includeBackfillingColumns: false});
 class AnalyzeQueryDelegate extends QueryDelegateBase {
   readonly debug = debug;
   readonly defaultQueryComplete = true;
+  readonly disableCorrelatedPredicatePushdown =
+    !config.enableCorrelatedPredicatePushdown;
 
   getSource(serverTableName: string): Source | undefined {
     return getOrInsertComputed(sources, serverTableName, serverTableName => {

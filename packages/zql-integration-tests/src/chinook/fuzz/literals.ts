@@ -23,7 +23,7 @@ import type {
   SimpleOperator,
 } from '../../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../../zero-protocol/src/data.ts';
-import {type FilterVal, type Roles, rolesOf} from './axes.ts';
+import {type FilterVal, pinOf, type Roles, rolesOf} from './axes.ts';
 
 /** `column <op> literal` — the only simple-condition shape the generator emits. */
 export function simple(
@@ -162,8 +162,9 @@ function compareRows(a: Row, b: Row, orderBy: Ordering): number {
 
 /**
  * Build the root `where` condition for a {@link FilterVal} on `table`, using its tuned
- * value roles. `null` ⇒ no filter (`'none'`) **or** the value needs a text column the
- * table lacks (callers gate on `filterRealizable` first, so in practice only `'none'`).
+ * value roles (or, for `pin_*`, its {@link pinOf} join column). `null` ⇒ no filter
+ * (`'none'`) **or** the value needs a text column or a relationship the table lacks
+ * (callers gate on `filterRealizable` first, so in practice only `'none'`).
  */
 export function filterCondition(table: string, v: FilterVal): Condition | null {
   const r: Roles = rolesOf(table);
@@ -228,5 +229,13 @@ export function filterCondition(table: string, v: FilterVal): Condition | null {
             ],
           }
         : null;
+    case 'pin_eq': {
+      const pin = pinOf(table);
+      return pin ? simple(pin.col, '=', pin.eq) : null;
+    }
+    case 'pin_in': {
+      const pin = pinOf(table);
+      return pin ? simple(pin.col, 'IN', pin.in) : null;
+    }
   }
 }

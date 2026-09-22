@@ -12,6 +12,8 @@ import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
 import type {
   AST,
+  Condition,
+  CorrelatedSubquery,
   CorrelatedSubqueryCondition,
 } from '../../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
@@ -29,6 +31,7 @@ import {
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import {listTables} from '../../db/lite-tables.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
@@ -3018,5 +3021,241 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     expect(() => changes()).toThrowError(ResetPipelinesSignal);
+  });
+
+  describe('correlated predicate pushdown', () => {
+    type Connection = {
+      readonly table: string;
+      readonly filters: Condition | undefined;
+    };
+
+    /** Records the table and the filter of each source connection made from now on. */
+    function recordConnections(): Connection[] {
+      const connections: Connection[] = [];
+      const connect = TableSource.prototype.connect;
+      vi.spyOn(TableSource.prototype, 'connect').mockImplementation(function (
+        this: TableSource,
+        ...args: Parameters<TableSource['connect']>
+      ) {
+        connections.push({table: this.tableSchema.name, filters: args[1]});
+        return connect.apply(this, args);
+      });
+      return connections;
+    }
+
+    function filtersOf(connections: Connection[], table: string) {
+      return connections.filter(c => c.table === table).map(c => c.filters);
+    }
+
+    function eq(column: string, value: string): Condition {
+      return {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: column},
+        right: {type: 'literal', value},
+      };
+    }
+
+    /** Replaces `pipelines` with a driver built with `config`. */
+    function usePipelines(config: Partial<ZeroConfig> | undefined) {
+      const storage = new Database(lc, ':memory:');
+      storage.prepare(CREATE_STORAGE_TABLE).run();
+      pipelines = new PipelineDriver(
+        lc,
+        testLogConfig,
+        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        new DatabaseStorage(storage).createClientGroupStorage(
+          'foo-client-group',
+        ),
+        'pipeline-driver.test.ts',
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+        false,
+        config as ZeroConfig | undefined,
+      );
+    }
+
+    const CHANGE_TYPES = {
+      [ChangeType.ADD]: 'ADD',
+      [ChangeType.REMOVE]: 'REMOVE',
+      [ChangeType.EDIT]: 'EDIT',
+    };
+
+    function summary(changes: Iterable<RowChange | 'yield'>): string[] {
+      const out: string[] = [];
+      for (const c of changes) {
+        if (c !== 'yield') {
+          const key = Object.values(c.rowKey).join(',');
+          out.push(`${CHANGE_TYPES[c.type]} ${c.table} ${key}`);
+        }
+      }
+      return out;
+    }
+
+    const COMMENTS: CorrelatedSubquery = {
+      system: 'client',
+      correlation: {parentField: ['id'], childField: ['issueID']},
+      subquery: {
+        table: 'comments',
+        alias: 'comments',
+        orderBy: [['id', 'asc']],
+      },
+    };
+
+    const PUSHDOWN_CONFIGS = [
+      ['default', undefined, true],
+      ['on', {enableCorrelatedPredicatePushdown: true}, true],
+      ['off', {enableCorrelatedPredicatePushdown: false}, false],
+    ] as const;
+
+    test.each(PUSHDOWN_CONFIGS)(
+      'the flag reaches hydration and the scalar resolver (%s)',
+      (_, config, pushed) => {
+        usePipelines(config);
+        const connections = recordConnections();
+        pipelines.init(clientSchema);
+
+        // The scalar gate is pinned on the issueLabels primary key and nests
+        // an EXISTS on labels, so the pass pushes `id = '1'` into the labels
+        // connection that the scalar resolver builds. The gate resolves to
+        // `id = '1'` on issues, so the pass pushes `issueID = '1'` into the
+        // related comments connection that hydration builds.
+        const results = pipelines.addQuery(
+          'hash-pushdown',
+          'queryPushdown',
+          {
+            table: 'issues',
+            orderBy: [['id', 'asc']],
+            where: {
+              type: 'correlatedSubquery',
+              op: 'EXISTS',
+              scalar: true,
+              related: {
+                correlation: {parentField: ['id'], childField: ['issueID']},
+                subquery: {
+                  table: 'issueLabels',
+                  orderBy: [
+                    ['issueID', 'asc'],
+                    ['labelID', 'asc'],
+                  ],
+                  where: {
+                    type: 'and',
+                    conditions: [
+                      eq('issueID', '1'),
+                      eq('labelID', '1'),
+                      {
+                        type: 'correlatedSubquery',
+                        op: 'EXISTS',
+                        related: {
+                          correlation: {
+                            parentField: ['labelID'],
+                            childField: ['id'],
+                          },
+                          subquery: {
+                            table: 'labels',
+                            alias: 'labels',
+                            orderBy: [['id', 'asc']],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+            related: [COMMENTS],
+          },
+          startTimer(),
+        );
+
+        expect(summary(results)).toEqual([
+          'ADD issues 1',
+          'ADD comments 10',
+          'ADD issueLabels 1,1',
+        ]);
+        expect(filtersOf(connections, 'labels')).toEqual([
+          pushed ? eq('id', '1') : undefined,
+        ]);
+        expect(filtersOf(connections, 'comments')).toEqual([
+          pushed ? eq('issueID', '1') : undefined,
+        ]);
+      },
+    );
+
+    test.each(PUSHDOWN_CONFIGS)(
+      'a literal pushed from a scalar gate follows the row behind it (%s)',
+      (_, config, pushed) => {
+        usePipelines(config);
+        const connections = recordConnections();
+        pipelines.init(clientSchema);
+
+        // Comment '10' resolves the gate to `id = '1'`, and the pass copies
+        // that literal into the related comments as `issueID = '1'`.
+        const query: AST = {
+          ...ISSUES_WITH_SCALAR_SUBQUERY,
+          related: [COMMENTS],
+        };
+        const hydrate = () =>
+          summary(
+            pipelines.addQuery(
+              'hash-scalar-related',
+              'queryScalarRelated',
+              query,
+              startTimer(),
+            ),
+          );
+
+        expect(hydrate()).toEqual([
+          'ADD issues 1',
+          'ADD comments 10',
+          'ADD comments 10',
+        ]);
+        // The first comments connection is the scalar resolver's `id = '10'`.
+        expect(filtersOf(connections, 'comments')).toEqual([
+          eq('id', '10'),
+          pushed ? eq('issueID', '1') : undefined,
+        ]);
+
+        replicator.processTransaction(
+          '134',
+          messages.insert('comments', {id: '11', issueID: '1', upvotes: 0}),
+          messages.insert('comments', {id: '23', issueID: '3', upvotes: 0}),
+          messages.update('comments', {id: '20', issueID: '2', upvotes: 2}),
+        );
+        expect(summary(changes())).toEqual(['ADD comments 11']);
+
+        // Moving comment '10' to issue '2' changes the resolved literal. The
+        // driver asks to be reset, and the view-syncer then hydrates again.
+        replicator.processTransaction(
+          '135',
+          messages.update('comments', {id: '10', issueID: '2', upvotes: 0}),
+        );
+        expect(() => changes()).toThrowError(ResetPipelinesSignal);
+        pipelines.reset(clientSchema);
+        pipelines.advanceWithoutDiff();
+        connections.length = 0;
+
+        expect(hydrate()).toEqual([
+          'ADD issues 2',
+          'ADD comments 10',
+          'ADD comments 20',
+          'ADD comments 21',
+          'ADD comments 22',
+          'ADD comments 10',
+        ]);
+        expect(filtersOf(connections, 'comments')).toEqual([
+          eq('id', '10'),
+          pushed ? eq('issueID', '2') : undefined,
+        ]);
+
+        replicator.processTransaction(
+          '136',
+          messages.insert('comments', {id: '12', issueID: '1', upvotes: 0}),
+          messages.insert('comments', {id: '24', issueID: '2', upvotes: 0}),
+        );
+        expect(summary(changes())).toEqual(['ADD comments 24']);
+      },
+    );
   });
 });

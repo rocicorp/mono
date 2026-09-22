@@ -17,7 +17,7 @@
  *    covers and `coverage.ts` measures: `filter × exists × order × limit × start`. Each
  *    axis value is self-contained, so the covering array needs no inter-axis constraint
  *    solver — the only realizability gate is per-table (a text filter needs a text
- *    column; an EXISTS needs an outgoing relationship).
+ *    column; an EXISTS or a join-column pin needs an outgoing relationship).
  *
  * **Known-inert axes dropped vs the Rust port** (design §8): the Rust `select` axis
  * (mono ZQL has no projection — the AST returns all columns).
@@ -27,6 +27,7 @@ import {must} from '../../../../shared/src/must.ts';
 import type {ValueType} from '../../../../zero-types/src/schema-value.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {schema as typedSchema} from '../schema.ts';
+import {miniData} from './mini.ts';
 
 // The concrete chinook schema, read through the generic `Schema` interface so the
 // reader functions can index it by dynamic (string) table/column/relationship names.
@@ -47,13 +48,16 @@ export type Col = {
  * One outgoing relationship: the child table it reaches, its cardinality, and whether
  * it is a **junction** (a hidden two-hop, e.g. `track.playlists`). The relationship
  * *name* is what the fluent builder lowers (`.related(name)` / `.whereExists(name)`),
- * so we never need the correlation keys here.
+ * so the builder supplies the correlation keys. Only the parent's join columns are
+ * kept, so a root filter can pin one (the pinned-push lane).
  */
 export type Rel = {
   readonly name: string;
   readonly child: string;
   readonly card: Card;
   readonly junction: boolean;
+  /** The parent's join columns (the first hop's `sourceField`). */
+  readonly parentField: readonly string[];
 };
 
 /** All modeled (client) table names, in schema declaration order. */
@@ -85,6 +89,7 @@ export function relsOf(table: string): Rel[] {
   const rels = schema.relationships[table] ?? {};
   return Object.entries(rels).map(([name, conns]) => {
     const chain = conns as ReadonlyArray<{
+      sourceField: readonly string[];
       destSchema: string;
       cardinality: Card;
     }>;
@@ -95,6 +100,7 @@ export function relsOf(table: string): Rel[] {
       // A junction (multi-hop) is always plural; a single hop carries its own card.
       card: chain.length > 1 ? 'many' : chain[0].cardinality,
       junction: chain.length > 1,
+      parentField: chain[0].sourceField,
     };
   });
 }
@@ -275,8 +281,18 @@ export const FILTER_VALS = [
   'and2',
   'or2',
   'and_or',
+  'pin_eq',
+  'pin_in',
 ] as const;
 export type FilterVal = (typeof FILTER_VALS)[number];
+
+/**
+ * Whether a filter value pins the join column of the table's first relationship (see
+ * {@link pinOf}), so it is unrealizable on a table with no relationship.
+ */
+export function filterIsPin(v: FilterVal): boolean {
+  return v === 'pin_eq' || v === 'pin_in';
+}
 
 /** Whether a filter value needs a text column (so it is unrealizable on a textless table). */
 export function filterNeedsText(v: FilterVal): boolean {
@@ -291,7 +307,55 @@ export function filterNeedsText(v: FilterVal): boolean {
 
 /** Whether filter value `v` is realizable on `table` (the only per-table gate). */
 export function filterRealizable(table: string, v: FilterVal): boolean {
+  if (filterIsPin(v)) {
+    return pinOf(table) !== undefined;
+  }
   return !filterNeedsText(v) || hasText(table);
+}
+
+// ── join-column pins (the shape correlated predicate pushdown rewrites) ───────────────
+
+/** The literals to pin `table.col` with. */
+export type Pin = {
+  readonly col: string;
+  /** For `=`: the value in the first {@link miniData} row that has one. */
+  readonly eq: string | number;
+  /** For `IN`: {@link eq} and the smallest other present value, if there is one. */
+  readonly in: readonly (string | number)[];
+};
+
+/**
+ * A pin on `table.col`, with literals from the {@link miniData}. `eq` comes from the
+ * first seed row, which is the root row the four-phase push history churns. `undefined`
+ * if the column is null in every row.
+ *
+ * A pin on a relationship's join column is the shape that correlated predicate pushdown
+ * copies into the child, and on down a chain that correlates on the same column.
+ */
+export function pinOn(table: string, col: string): Pin | undefined {
+  const rows = miniData[table] ?? [];
+  const eq = rows.map(r => r[col]).find(v => v !== null && v !== undefined);
+  if (typeof eq !== 'string' && typeof eq !== 'number') {
+    return undefined;
+  }
+  const others = rows
+    .map(r => r[col])
+    .filter(
+      (v): v is string | number =>
+        (typeof v === 'string' || typeof v === 'number') && v !== eq,
+    )
+    .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return {col, eq, in: others.length > 0 ? [eq, others[0]] : [eq]};
+}
+
+/**
+ * The `pin_*` filter target of `table`: the join column of its first relationship, which
+ * is also the relationship an `exists` gate uses (`cover.ts`), so the gate's subquery
+ * gets the copied pin. `undefined` if the table has no relationship.
+ */
+export function pinOf(table: string): Pin | undefined {
+  const col = relsOf(table)[0]?.parentField[0];
+  return col === undefined ? undefined : pinOn(table, col);
 }
 
 export const EXISTS_VALS = [

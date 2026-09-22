@@ -59,6 +59,7 @@ export type PushTest = {
   pushes: Pushes;
   fetchOnPush?: boolean | undefined;
   enableNotExists?: boolean | undefined;
+  disableCorrelatedPredicatePushdown?: boolean | undefined;
 };
 
 export function runPushTest(t: PushTest) {
@@ -74,6 +75,7 @@ export function runPushTest(t: PushTest) {
       sources,
       true,
       t.enableNotExists,
+      t.disableCorrelatedPredicatePushdown,
     );
     const pipeline = buildPipeline(t.ast, builderDelegate, 'query-id');
 
