@@ -52,6 +52,21 @@ describe('RingBuffer', () => {
     expect(buf.drain()).toEqual([42]);
   });
 
+  test('first peeks at the front element across wraps', () => {
+    const buf = new RingBuffer<number>(16);
+    expect(buf.first()).toBeUndefined();
+    for (let i = 0; i < 40; i++) {
+      buf.push(i);
+      buf.push(i + 100);
+      expect(buf.first()).toBe(i);
+      expect(buf.shift()).toBe(i);
+      expect(buf.first()).toBe(i + 100);
+      expect(buf.shift()).toBe(i + 100);
+      expect(buf.first()).toBeUndefined();
+    }
+    expect(buf.size).toBe(0);
+  });
+
   test('push and shift in FIFO order', () => {
     const buf = new RingBuffer<string>();
     buf.push('a');
