@@ -1,6 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.ts';
 
+type DrainListener = () => void;
+
 // The target (additional) utilization to impose on the server
 // that receives the drained connections.
 const TARGET_UTILIZATION = 0.6;
@@ -29,13 +31,36 @@ const TARGET_UTILIZATION = 0.6;
  * for the next elective or forced drain.
  */
 export class DrainCoordinator {
-  readonly #draining = resolver<'draining'>();
+  #draining = false;
+  readonly #drainListeners = new Set<DrainListener>();
   #nextDrainTime = 0;
   #timeout = resolver();
   #timeoutID: NodeJS.Timeout | undefined;
 
-  get draining(): Promise<'draining'> {
-    return this.#draining.promise;
+  /**
+   * Calls `listener` once draining has started (immediately if it already
+   * has) and returns a function that unsubscribes it.
+   *
+   * This is a subscription rather than a Promise so that a caller that stops
+   * caring (e.g. a view-syncer that finished initializing) can let go of it.
+   * A reaction attached to a Promise that may never settle would otherwise
+   * be retained by the coordinator for the lifetime of the server, once per
+   * view-syncer ever created.
+   */
+  onDraining(listener: DrainListener): () => void {
+    if (this.#draining) {
+      listener();
+      return () => {};
+    }
+    this.#drainListeners.add(listener);
+    return () => {
+      this.#drainListeners.delete(listener);
+    };
+  }
+
+  // Exposed for testing.
+  get drainListenerCount() {
+    return this.#drainListeners.size;
   }
 
   shouldDrain() {
@@ -43,7 +68,14 @@ export class DrainCoordinator {
   }
 
   drainNextIn(interval: number) {
-    this.#draining.resolve('draining');
+    if (!this.#draining) {
+      this.#draining = true;
+      const listeners = [...this.#drainListeners];
+      this.#drainListeners.clear();
+      for (const listener of listeners) {
+        listener();
+      }
+    }
     // Increase the timeout between drains to give the receiving
     // server space to perform normal processing.
     interval /= TARGET_UTILIZATION;

@@ -20,7 +20,7 @@ describe('Debug.rowVended', () => {
     bench(
       `record ${rowCount} rows in one query bucket`,
       () => {
-        const debug = new Debug();
+        const debug = new Debug(true);
         debug.initQuery(TABLE, QUERY);
 
         for (let i = 0; i < rowCount; i++) {

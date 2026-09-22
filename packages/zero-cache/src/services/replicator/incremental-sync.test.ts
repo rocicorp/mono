@@ -13,21 +13,29 @@ import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../zero-events/src/index.ts';
+import type {ReplicationStatusEvent} from '../../../../zero-events/src/status.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import {StatementRunner} from '../../db/statements.ts';
 import {initEventSinkForTesting} from '../../observability/events.ts';
 import {DbFile, expectTables, initDB} from '../../test/lite.ts';
+import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {orTimeoutWith} from '../../types/timeout.ts';
 import {
   PROTOCOL_VERSION,
   type Downstream,
+  type SizedDownstream,
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import * as ErrorType from '../change-streamer/error-type-enum.ts';
+import {deleteChangeLogDB} from './change-log-db.ts';
+import type {CommitResult} from './change-processor.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
+import {ReplicatorService} from './replicator.ts';
 import {
   createReplicationStateTables,
+  getReplicationState,
   initReplicationState,
 } from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
@@ -45,10 +53,10 @@ describe('replicator/incremental-sync', () => {
   let worker: ThreadWriteWorkerClient;
   let syncer: IncrementalSyncer;
   let syncing: Promise<void> | undefined;
-  let downstream: Subscription<Downstream>;
+  let downstream: Subscription<SizedDownstream, Downstream>;
   let eventSink: ZeroEvent[];
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
+    (ctx: SubscriberContext) => Promise<Source<SizedDownstream>>
   >;
 
   beforeEach(async () => {
@@ -58,7 +66,7 @@ describe('replicator/incremental-sync', () => {
     mainDb.pragma('journal_mode = wal');
     createReplicationStateTables(mainDb);
 
-    downstream = Subscription.create();
+    downstream = new Subscription({}, data => ({data, size: 1}));
     eventSink = [];
     initEventSinkForTesting(
       eventSink,
@@ -94,11 +102,80 @@ describe('replicator/incremental-sync', () => {
     await syncing?.catch(() => {});
     await worker?.stop();
     mainDb?.close();
+    deleteChangeLogDB(dbFile.path);
     dbFile?.delete();
+  });
+
+  test('a commit is durable before it is acked', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID']});
+
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    initDB(
+      mainDb,
+      `
+    CREATE TABLE issues(
+      issueID INTEGER,
+      _0_version TEXT,
+      PRIMARY KEY(issueID)
+    );
+      `,
+    );
+
+    // The change-streamer reads an ACK as proof that the commit is on disk:
+    // the SQLite catchup barrier waits on it, and #purgeOldChanges deletes on
+    // the strength of it. Sample the replica at the moment the ACK fires --
+    // it must never be behind the commit being acked. Batching commits or
+    // making the write async would break both callers here.
+    const replica = new StatementRunner(mainDb);
+    const acked: {watermark: string; stateVersion: string}[] = [];
+    downstream = new Subscription<SizedDownstream, Downstream>(
+      {
+        consumed: message => {
+          if (message[0] === 'commit') {
+            acked.push({
+              watermark: message[2].watermark,
+              stateVersion: getReplicationState(replica).stateVersion,
+            });
+          }
+        },
+      },
+      data => ({data, size: 1}),
+    );
+    subscribeFn.mockResolvedValue(downstream);
+
+    syncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+
+    for (const change of [
+      ['status', {tag: 'status'}],
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 123})],
+      ['commit', issues.commit(), {watermark: '06'}],
+
+      ['begin', issues.begin(), {commitWatermark: '08'}],
+      ['data', issues.insert('issues', {issueID: 456})],
+      ['commit', issues.commit(), {watermark: '08'}],
+    ] satisfies Downstream[]) {
+      downstream.push(change);
+      if (change[0] === 'commit') {
+        await Promise.race([versionReady.next(), syncing]);
+      }
+    }
+
+    // The ACK of a commit fires when the consumer moves past it, which is one
+    // message later, so wait for both rather than assuming they have landed.
+    await vi.waitFor(() => expect(acked).toHaveLength(2));
+    expect(acked).toEqual([
+      {watermark: '06', stateVersion: '06'},
+      {watermark: '08', stateVersion: '08'},
+    ]);
   });
 
   test('replicates transactions', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    const processMessages = vi.spyOn(worker, 'processMessages');
 
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
 
@@ -135,14 +212,24 @@ describe('replicator/incremental-sync', () => {
       replicaVersion: '02',
       watermark: '02',
       initial: true,
+      logsChangeStream: false,
     });
+
+    const firstBegin = [
+      'begin',
+      issues.begin(),
+      {commitWatermark: '06'},
+    ] satisfies Downstream;
 
     for (const change of [
       ['status', {tag: 'status'}],
-      ['begin', issues.begin(), {commitWatermark: '06'}],
+      firstBegin,
       ['data', issues.insert('issues', {issueID: 123, bool: true})],
       ['data', issues.insert('issues', {issueID: 456, bool: false})],
       ['commit', issues.commit(), {watermark: '06'}],
+
+      ['begin', issues.begin(), {commitWatermark: '08'}],
+      ['rollback', issues.rollback()],
 
       ['begin', issues.begin(), {commitWatermark: '0b'}],
       [
@@ -310,7 +397,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 57344,
+            "replicaSize": 65536,
             "tables": [
               {
                 "columns": [
@@ -380,6 +467,14 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
+    expect(processMessages).toHaveBeenCalledTimes(3);
+    expect(processMessages.mock.calls.flatMap(([batch]) => batch)).toHaveLength(
+      11,
+    );
+    expect(processMessages).toHaveBeenNthCalledWith(
+      1,
+      expect.arrayContaining([firstBegin]),
+    );
   });
 
   test('replicates schema changes', async () => {
@@ -413,6 +508,7 @@ describe('replicator/incremental-sync', () => {
       replicaVersion: '09',
       watermark: '09',
       initial: true,
+      logsChangeStream: false,
     });
 
     for (const change of [
@@ -453,7 +549,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 57344,
+            "replicaSize": 65536,
             "tables": [
               {
                 "columns": [
@@ -507,7 +603,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 65536,
+            "replicaSize": 73728,
             "tables": [
               {
                 "columns": [
@@ -547,6 +643,145 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
+  });
+
+  test('publishes index creation progress', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID']});
+
+    initReplicationState(mainDb, ['zero_data'], '09', {}, false);
+    initDB(
+      mainDb,
+      `
+    CREATE TABLE issues(
+      issueID INTEGER PRIMARY KEY,
+      title TEXT,
+      owner TEXT,
+      _0_version TEXT
+    );
+      `,
+    );
+
+    syncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
+
+    const index = (name: string, column: string) =>
+      issues.createIndex({
+        schema: 'public',
+        tableName: 'issues',
+        name,
+        columns: {[column]: 'ASC'},
+        unique: false,
+      });
+
+    for (const change of [
+      ['begin', issues.begin(), {commitWatermark: '110'}],
+      ['data', index('issues_title', 'title')],
+      ['data', index('issues_owner', 'owner')],
+      ['commit', issues.commit(), {watermark: '110'}],
+    ] satisfies Downstream[]) {
+      downstream.push(change);
+      if (change[0] === 'commit') {
+        await Promise.race([versionReady.next(), syncing]);
+      }
+    }
+
+    const statuses = eventSink.map(e => {
+      const {description, state} = e as ReplicationStatusEvent;
+      const status = state?.indexingStatus;
+      return {
+        description,
+        indexingStatus: status && {
+          ...status,
+          elapsedMs: expect.any(Number),
+          completedMs: expect.any(Number),
+        },
+      };
+    });
+    expect(statuses).toEqual([
+      {description: 'Replicating from 09', indexingStatus: undefined},
+      {
+        description: 'Creating index issues_title on issues',
+        indexingStatus: {
+          name: 'issues_title',
+          table: 'issues',
+          columns: ['title'],
+          unique: false,
+          index: 1,
+          totalIndexes: undefined,
+          elapsedMs: expect.any(Number),
+          completedMs: expect.any(Number),
+          done: false,
+        },
+      },
+      {
+        description: 'Created index issues_title on issues',
+        indexingStatus: expect.objectContaining({
+          name: 'issues_title',
+          index: 1,
+          done: true,
+        }),
+      },
+      {
+        description: 'Creating index issues_owner on issues',
+        indexingStatus: expect.objectContaining({
+          name: 'issues_owner',
+          columns: ['owner'],
+          index: 2,
+          done: false,
+        }),
+      },
+      {
+        description: 'Created index issues_owner on issues',
+        indexingStatus: expect.objectContaining({
+          name: 'issues_owner',
+          index: 2,
+          done: true,
+        }),
+      },
+      {description: 'Schema updated', indexingStatus: undefined},
+    ]);
+
+    expect(
+      mainDb
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'issues_%' ORDER BY name`,
+        )
+        .all(),
+    ).toEqual([{name: 'issues_owner'}, {name: 'issues_title'}]);
+  });
+
+  test('publishes and rejects fatal replication errors', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID']});
+
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    const replicator = new ReplicatorService(
+      lc,
+      TASK_ID,
+      REPLICA_ID,
+      'backup',
+      {subscribe: subscribeFn.mockResolvedValue(downstream)},
+      worker,
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+    );
+    syncing = replicator.run();
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
+
+    downstream.push([
+      'data',
+      issues.insert('issues', {issueID: 123, big: 456}),
+    ]);
+
+    await expect(syncing).rejects.toThrow(
+      'Received message outside of transaction',
+    );
+    expect(eventSink.at(-1)).toMatchObject({
+      status: 'ERROR',
+      stage: 'Replicating',
+      description: 'Replication stopped because the replica writer failed',
+    });
   });
 
   async function noNotification(
@@ -590,6 +825,7 @@ describe('replicator/incremental-sync', () => {
       replicaVersion: '09',
       watermark: '09',
       initial: true,
+      logsChangeStream: false,
     });
 
     const next = versionReady.next();
@@ -622,13 +858,20 @@ describe('replicator/incremental-sync', () => {
           rowValues: [[1, 'hello']],
         },
       ],
-      ['commit', issues.commit(), {watermark: '110.01'}],
     ] satisfies Downstream[]) {
       downstream.push(change);
     }
+    const incompleteBackfillCommit = downstream.push([
+      'commit',
+      issues.commit(),
+      {watermark: '110.01'},
+    ]).result;
 
     // Ensure no notifications have been published.
     await noNotification(next);
+
+    // Wait for the commit to be processed before inspecting the replica.
+    expect(await incompleteBackfillCommit).toBe('consumed');
 
     // And that row versions have not changed, even for backfilled rows.
     const issuesDump = mainDb.prepare(/*sql*/ `SELECT * FROM issues`);
@@ -776,6 +1019,7 @@ describe('replicator/incremental-sync', () => {
 
   test('shut down on change-streamer error message', async () => {
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    const processMessages = vi.spyOn(worker, 'processMessages');
 
     const syncing = syncer.run();
 
@@ -786,5 +1030,44 @@ describe('replicator/incremental-sync', () => {
 
     // Should stop / resolve
     await syncing;
+    expect(processMessages).not.toHaveBeenCalled();
+  });
+
+  test('stop() interrupts a run loop stuck on an in-flight processMessages', async () => {
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+
+    // Simulates a processMessages() call that never resolves on its own -- as
+    // happens when the write worker is paused inside LitestreamCheckpointer's
+    // WAL-drain poll (see litestream-checkpointer.test.ts for that piece in
+    // isolation) -- until abort() interrupts it. Mocked here at the
+    // WriteWorkerClient boundary so this test doesn't depend on a real
+    // worker thread or litestream process; it only exercises whether
+    // IncrementalSyncer actually calls abort() when asked to stop.
+    const {promise: stuck, resolve: unstick} = resolver<CommitResult | null>();
+    const processMessages = vi
+      .spyOn(worker, 'processMessages')
+      .mockReturnValue(stuck);
+    const abort = vi.spyOn(worker, 'abort').mockImplementation(() => {
+      unstick(null);
+    });
+
+    const issues = new ReplicationMessages({issues: ['issueID']});
+    const localSyncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+
+    downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
+    downstream.push(['commit', issues.commit(), {watermark: '06'}]);
+    await vi.waitFor(() => expect(processMessages).toHaveBeenCalled());
+
+    syncer.stop(lc);
+    expect(abort).toHaveBeenCalled();
+
+    // Without stop() calling abort() to interrupt the stuck call, this would
+    // hang forever rather than resolving.
+    expect(await orTimeoutWith(localSyncing, 1000, 'timed-out')).not.toBe(
+      'timed-out',
+    );
   });
 });

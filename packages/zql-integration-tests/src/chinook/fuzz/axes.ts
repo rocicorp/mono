@@ -14,22 +14,20 @@
  *    generalized to all 11 tables). These are the one hand-authored piece; they are
  *    pinned against the schema by `axes.test.ts`.
  * 3. The formal **decoration axes** ({@link AXES}) the t-wise covering array (L1)
- *    covers and `coverage.ts` measures: `filter × exists × order × limit`. Each axis
- *    value is self-contained, so the covering array needs no inter-axis constraint
+ *    covers and `coverage.ts` measures: `filter × exists × order × limit × start`. Each
+ *    axis value is self-contained, so the covering array needs no inter-axis constraint
  *    solver — the only realizability gate is per-table (a text filter needs a text
- *    column; an EXISTS needs an outgoing relationship).
+ *    column; an EXISTS or a join-column pin needs an outgoing relationship).
  *
  * **Known-inert axes dropped vs the Rust port** (design §8): the Rust `select` axis
- * (mono ZQL has no projection — the AST returns all columns) and the `start` (keyset
- * paging) axis (z2s does not compile `start`, so the Postgres oracle silently ignores
- * it — it cannot validate paging, and every `start` case would diverge spuriously).
- * Re-add `start` here if z2s gains keyset support.
+ * (mono ZQL has no projection — the AST returns all columns).
  */
 
 import {must} from '../../../../shared/src/must.ts';
 import type {ValueType} from '../../../../zero-types/src/schema-value.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {schema as typedSchema} from '../schema.ts';
+import {miniData} from './mini.ts';
 
 // The concrete chinook schema, read through the generic `Schema` interface so the
 // reader functions can index it by dynamic (string) table/column/relationship names.
@@ -50,13 +48,16 @@ export type Col = {
  * One outgoing relationship: the child table it reaches, its cardinality, and whether
  * it is a **junction** (a hidden two-hop, e.g. `track.playlists`). The relationship
  * *name* is what the fluent builder lowers (`.related(name)` / `.whereExists(name)`),
- * so we never need the correlation keys here.
+ * so the builder supplies the correlation keys. Only the parent's join columns are
+ * kept, so a root filter can pin one (the pinned-push lane).
  */
 export type Rel = {
   readonly name: string;
   readonly child: string;
   readonly card: Card;
   readonly junction: boolean;
+  /** The parent's join columns (the first hop's `sourceField`). */
+  readonly parentField: readonly string[];
 };
 
 /** All modeled (client) table names, in schema declaration order. */
@@ -88,6 +89,7 @@ export function relsOf(table: string): Rel[] {
   const rels = schema.relationships[table] ?? {};
   return Object.entries(rels).map(([name, conns]) => {
     const chain = conns as ReadonlyArray<{
+      sourceField: readonly string[];
       destSchema: string;
       cardinality: Card;
     }>;
@@ -98,6 +100,7 @@ export function relsOf(table: string): Rel[] {
       // A junction (multi-hop) is always plural; a single hop carries its own card.
       card: chain.length > 1 ? 'many' : chain[0].cardinality,
       junction: chain.length > 1,
+      parentField: chain[0].sourceField,
     };
   });
 }
@@ -278,8 +281,18 @@ export const FILTER_VALS = [
   'and2',
   'or2',
   'and_or',
+  'pin_eq',
+  'pin_in',
 ] as const;
 export type FilterVal = (typeof FILTER_VALS)[number];
+
+/**
+ * Whether a filter value pins the join column of the table's first relationship (see
+ * {@link pinOf}), so it is unrealizable on a table with no relationship.
+ */
+export function filterIsPin(v: FilterVal): boolean {
+  return v === 'pin_eq' || v === 'pin_in';
+}
 
 /** Whether a filter value needs a text column (so it is unrealizable on a textless table). */
 export function filterNeedsText(v: FilterVal): boolean {
@@ -294,7 +307,55 @@ export function filterNeedsText(v: FilterVal): boolean {
 
 /** Whether filter value `v` is realizable on `table` (the only per-table gate). */
 export function filterRealizable(table: string, v: FilterVal): boolean {
+  if (filterIsPin(v)) {
+    return pinOf(table) !== undefined;
+  }
   return !filterNeedsText(v) || hasText(table);
+}
+
+// ── join-column pins (the shape correlated predicate pushdown rewrites) ───────────────
+
+/** The literals to pin `table.col` with. */
+export type Pin = {
+  readonly col: string;
+  /** For `=`: the value in the first {@link miniData} row that has one. */
+  readonly eq: string | number;
+  /** For `IN`: {@link eq} and the smallest other present value, if there is one. */
+  readonly in: readonly (string | number)[];
+};
+
+/**
+ * A pin on `table.col`, with literals from the {@link miniData}. `eq` comes from the
+ * first seed row, which is the root row the four-phase push history churns. `undefined`
+ * if the column is null in every row.
+ *
+ * A pin on a relationship's join column is the shape that correlated predicate pushdown
+ * copies into the child, and on down a chain that correlates on the same column.
+ */
+export function pinOn(table: string, col: string): Pin | undefined {
+  const rows = miniData[table] ?? [];
+  const eq = rows.map(r => r[col]).find(v => v !== null && v !== undefined);
+  if (typeof eq !== 'string' && typeof eq !== 'number') {
+    return undefined;
+  }
+  const others = rows
+    .map(r => r[col])
+    .filter(
+      (v): v is string | number =>
+        (typeof v === 'string' || typeof v === 'number') && v !== eq,
+    )
+    .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return {col, eq, in: others.length > 0 ? [eq, others[0]] : [eq]};
+}
+
+/**
+ * The `pin_*` filter target of `table`: the join column of its first relationship, which
+ * is also the relationship an `exists` gate uses (`cover.ts`), so the gate's subquery
+ * gets the copied pin. `undefined` if the table has no relationship.
+ */
+export function pinOf(table: string): Pin | undefined {
+  const col = relsOf(table)[0]?.parentField[0];
+  return col === undefined ? undefined : pinOn(table, col);
 }
 
 export const EXISTS_VALS = [
@@ -314,6 +375,26 @@ export type OrderVal = (typeof ORDER_VALS)[number];
 export const LIMIT_VALS = ['none', 'small', 'large'] as const;
 export type LimitVal = (typeof LIMIT_VALS)[number];
 
+export const START_VALS = [
+  'none',
+  'mid_exclusive',
+  'mid_inclusive',
+  'null_exclusive',
+] as const;
+export type StartVal = (typeof START_VALS)[number];
+
+/**
+ * How an EXISTS gate is **planned**: `none` leaves the builder's default lowering (a
+ * semi-join), `flip` forces a `FlippedJoin`. `flip` is a plan choice the oracle ignores,
+ * so it must never change the answer — but it changes the *operator graph*: an OR
+ * containing a flipped gate is the only thing that makes `builder.ts` construct a
+ * `UnionFanOut`/`UnionFanIn` pair. Without this axis, no fan-in ever appears in a
+ * covering-array query, and every interaction with `limit` (`Take` over `UnionFanIn`),
+ * `start`, or `order` is invisible to t-wise coverage.
+ */
+export const FLIP_VALS = ['none', 'flip'] as const;
+export type FlipVal = (typeof FLIP_VALS)[number];
+
 /** One formal axis: a name + its ordered value-token domain. */
 export type AxisSpec = {
   readonly name: string;
@@ -330,6 +411,8 @@ export const AXES: readonly AxisSpec[] = [
   {name: 'exists', values: EXISTS_VALS},
   {name: 'order', values: ORDER_VALS},
   {name: 'limit', values: LIMIT_VALS},
+  {name: 'start', values: START_VALS},
+  {name: 'flip', values: FLIP_VALS},
 ];
 
 export const N_AXES = AXES.length;
@@ -341,4 +424,60 @@ export function axisIndex(name: string): number {
     throw new Error(`unknown axis ${name}`);
   }
   return i;
+}
+
+// ── the one inter-axis constraint (exists x flip) ─────────────────────────────────────
+
+/**
+ * `flip` is only meaningful on a **positive** EXISTS gate: with no gate there is nothing
+ * to flip, and a flipped NOT EXISTS (anti-join) is not a supported plan — the same
+ * restriction `flip.ts` applies to flip-invariance.
+ *
+ * This is the **only** inter-axis constraint in the space. The covering-array builder and
+ * the coverage report both consult it, so unrealizable cells are never generated and never
+ * counted in the denominator — otherwise the "100% pairwise" gate could never be met.
+ */
+export function flipRealizable(ev: ExistsVal, fv: FlipVal): boolean {
+  return fv === 'none' || ev.startsWith('exists');
+}
+
+/**
+ * Whether a t-tuple (a list of `[axisIndex, valueIndex]`) is structurally realizable.
+ * Only constrained when the tuple pins **both** `exists` and `flip`; a tuple that pins
+ * just one of them is realizable, since the other axis is free to take a compatible
+ * value in some row.
+ */
+export function tupleRealizable(
+  tuple: ReadonlyArray<readonly [number, number]>,
+): boolean {
+  const ei = axisIndex('exists');
+  const fi = axisIndex('flip');
+  let e: number | undefined;
+  let f: number | undefined;
+  for (const [a, v] of tuple) {
+    if (a === ei) {
+      e = v;
+    } else if (a === fi) {
+      f = v;
+    }
+  }
+  if (e === undefined || f === undefined) {
+    return true;
+  }
+  return flipRealizable(EXISTS_VALS[e], FLIP_VALS[f]);
+}
+
+/**
+ * Whether a partial assignment (`null` = not yet chosen) violates the constraint. Used by
+ * the greedy fill so it never commits to an unrealizable pair.
+ */
+export function assignmentRealizable(
+  row: ReadonlyArray<number | null>,
+): boolean {
+  const e = row[axisIndex('exists')];
+  const f = row[axisIndex('flip')];
+  if (e === null || e === undefined || f === null || f === undefined) {
+    return true;
+  }
+  return flipRealizable(EXISTS_VALS[e], FLIP_VALS[f]);
 }

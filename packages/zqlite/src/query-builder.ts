@@ -32,6 +32,7 @@ export function buildSelectQuery(
   reverse: boolean | undefined,
   start: Start | undefined,
   multiConstraints?: readonly MultiConstraint[] | undefined,
+  fetchFilters?: NoSubqueryCondition | undefined,
 ) {
   let query = sql`SELECT ${sql.join(
     Object.keys(columns).map(c => sql.ident(c)),
@@ -54,6 +55,10 @@ export function buildSelectQuery(
 
   if (filters) {
     constraints.push(filtersToSQL(filters));
+  }
+
+  if (fetchFilters) {
+    constraints.push(filtersToSQL(fetchFilters));
   }
 
   if (constraints.length > 0) {
@@ -218,6 +223,16 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
     return likeConditionToSQL(filter);
   }
 
+  if (
+    (op === 'IS' || op === 'IS NOT') &&
+    filter.right.type === 'literal' &&
+    filter.right.value === null
+  ) {
+    return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
+      op,
+    )} NULL`;
+  }
+
   return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
     filter.op,
   )} ${valuePositionToSQL(filter.right)}`;
@@ -293,6 +308,12 @@ function nullableAwareEquality(
   value: unknown,
   columnType: SchemaValue,
 ): SQLQuery {
+  if (value === null) {
+    // A NULL bound value proves the column is nullable regardless of the
+    // column metadata, and `=` never matches NULL — `IS` selects the NULL
+    // tie-break group a cursor anchored on a NULL value needs.
+    return sql`${sql.ident(field)} IS NULL`;
+  }
   // Use = instead of IS for non-nullable columns to enable better
   // index usage in SQLite.
   return columnType.optional === true
@@ -306,6 +327,10 @@ function nullableAwareRangeComparison(
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery {
+  if (value === null) {
+    return operator === '>' ? sql`${sql.ident(field)} IS NOT NULL` : sql`FALSE`;
+  }
+
   // For non-nullable columns, skip IS NULL checks to avoid breaking
   // SQLite's MULTI-INDEX OR optimization, which falls back to a full
   // table scan when any OR branch involves NULL.
@@ -317,9 +342,35 @@ function nullableAwareRangeComparison(
     return comparison;
   }
 
+  // The bound is non-NULL here. NULLs sort before every non-NULL value, so
+  // `>` already excludes them and needs no guard, while `<` must admit the
+  // NULL group explicitly — a bare `col < ?` would silently drop NULL rows
+  // from a backward walk.
   return operator === '>'
-    ? sql`(${value} IS NULL OR ${comparison})`
+    ? comparison
     : sql`(${sql.ident(field)} IS NULL OR ${comparison})`;
+}
+
+function sargableLeadingStartBound(
+  field: string,
+  value: unknown,
+  operator: '>' | '<',
+  columnType: SchemaValue,
+): SQLQuery | undefined {
+  // A NULL bound value proves the column is nullable regardless of the
+  // column metadata, and a bare range bound is not sound there: `col >= NULL`
+  // is never true, so instead of being redundant it would annihilate the
+  // whole start constraint. A nullable column also cannot use a `<` bound,
+  // because the start constraint must retain the NULL group. For `>`, NULLs
+  // sort before the non-NULL bound, so `col >= value` remains sound.
+  if (value === null || (columnType.optional === true && operator === '<')) {
+    return undefined;
+  }
+
+  const inclusiveOperator = operator === '>' ? '>=' : '<=';
+  return sql`${sql.ident(field)} ${sql.__dangerous__rawValue(
+    inclusiveOperator,
+  )} ${value}`;
 }
 
 /**
@@ -346,6 +397,7 @@ function gatherStartConstraints(
 ): SQLQuery {
   const constraints: SQLQuery[] = [];
   const {row: from, basis} = start;
+  let leadingBound: SQLQuery | undefined;
 
   for (let i = 0; i < order.length; i++) {
     const group: SQLQuery[] = [];
@@ -353,9 +405,20 @@ function gatherStartConstraints(
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         const columnType = columnTypes[iField];
-        const constraintValue = toSQLiteType(from[iField], columnType.type);
+        const constraintValue = toSQLiteType(
+          from[iField] ?? null,
+          columnType.type,
+        );
         const operator =
           iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
+        if (i === 0) {
+          leadingBound = sargableLeadingStartBound(
+            iField,
+            constraintValue,
+            operator,
+            columnType,
+          );
+        }
         group.push(
           nullableAwareRangeComparison(
             iField,
@@ -367,7 +430,7 @@ function gatherStartConstraints(
       } else {
         const [jField] = order[j];
         const columnType = columnTypes[jField];
-        const value = toSQLiteType(from[jField], columnType.type);
+        const value = toSQLiteType(from[jField] ?? null, columnType.type);
         group.push(nullableAwareEquality(jField, value, columnType));
       }
     }
@@ -379,7 +442,7 @@ function gatherStartConstraints(
       sql`(${sql.join(
         order.map(([field]) => {
           const columnType = columnTypes[field];
-          const value = toSQLiteType(from[field], columnType.type);
+          const value = toSQLiteType(from[field] ?? null, columnType.type);
           return nullableAwareEquality(field, value, columnType);
         }),
         sql` AND `,
@@ -387,5 +450,8 @@ function gatherStartConstraints(
     );
   }
 
-  return sql`(${sql.join(constraints, sql` OR `)})`;
+  const lexicographicStart = sql`(${sql.join(constraints, sql` OR `)})`;
+  return leadingBound === undefined
+    ? lexicographicStart
+    : sql`(${leadingBound} AND ${lexicographicStart})`;
 }

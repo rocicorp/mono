@@ -19,11 +19,10 @@
     "@rocicorp/logger": "^6.1.0"
   },
   "devDependencies": {
-    "@vitest/runner": "^4.1.6",
-    "oxfmt": "^0.45.0",
-    "vitest": "^4.1.6",
+    "oxfmt": "^0.65.0",
+    "vitest": "^5.0.0",
     "zero-cache": "workspace:*",
     "zero-server": "workspace:*"
   },
-  "packageManager": "pnpm@11.5.3"
+  "packageManager": "pnpm@11.11.0"
 }

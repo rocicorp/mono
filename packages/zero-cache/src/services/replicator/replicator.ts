@@ -4,7 +4,10 @@ import type {Source} from '../../types/streams.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
-import type {ReplicationStatusPublisher} from './replication-status.ts';
+import {
+  publishReplicationError,
+  type ReplicationStatusPublisher,
+} from './replication-status.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
@@ -20,6 +23,22 @@ export type ReplicaState = {
    * Millisecond epoch when `watermark` became ready to read from the replica.
    */
   readonly replicaReadyTimeMs?: number | undefined;
+
+  /**
+   * Millisecond epoch at which the transaction behind `watermark` committed
+   * *upstream*, as reported by the ChangeSource. Unlike `replicaReadyTimeMs`,
+   * which is stamped locally when the change lands in the replica, this is the
+   * origin of the whole pipeline, so `now - upstreamCommitTimeMs` at the point
+   * the change is poked to clients is the end-to-end serving lag.
+   *
+   * Note that this crosses a clock domain: it comes from the upstream
+   * database, whereas it is subtracted from the local clock in the ViewSyncer.
+   * The existing `zero.replication.total_lag` metric spans the same boundary.
+   *
+   * Undefined when the ChangeSource does not report a commit time, and for the
+   * initial "current state is ready" notification.
+   */
+  readonly upstreamCommitTimeMs?: number | undefined;
 
   // Used in tests to verify behavior when additional information
   // is ferried in the future. Not set in production.
@@ -66,6 +85,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #incrementalSyncer: IncrementalSyncer;
+  readonly #shouldPublishErrors: boolean;
   readonly #worker: WriteWorkerClient;
   #runPromise: Promise<void> | undefined;
 
@@ -83,6 +103,7 @@ export class ReplicatorService implements Replicator, Service {
       .withContext('component', 'replicator')
       .withContext('serviceID', this.id);
     this.#worker = worker;
+    this.#shouldPublishErrors = statusPublisher !== null;
 
     this.#incrementalSyncer = new IncrementalSyncer(
       this.#lc,
@@ -100,7 +121,16 @@ export class ReplicatorService implements Replicator, Service {
   }
 
   run() {
-    this.#runPromise = this.#incrementalSyncer.run();
+    this.#runPromise = this.#incrementalSyncer.run().catch(async error => {
+      if (this.#shouldPublishErrors) {
+        await publishReplicationError(
+          this.#lc,
+          'Replicating',
+          'Replication stopped because the replica writer failed',
+        );
+      }
+      throw error;
+    });
     return this.#runPromise;
   }
 
@@ -111,7 +141,7 @@ export class ReplicatorService implements Replicator, Service {
   async stop() {
     this.#incrementalSyncer.stop(this.#lc);
     // Wait for the syncer's run loop to finish so that any in-flight
-    // worker.processMessage() call completes and clears #pending
+    // worker.processMessages() call completes and clears #pending
     // before we send the 'stop' message to the worker.
     await this.#runPromise;
     await this.#worker.stop();

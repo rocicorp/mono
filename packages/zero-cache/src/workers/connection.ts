@@ -14,15 +14,27 @@ import {
   type ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
 import {
+  POKE_CHUNK_PROTOCOL_VERSION,
+  type PokeChunk,
+  type PokeEndMessage,
+  type PokePartMessage,
+} from '../../../zero-protocol/src/poke.ts';
+import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
-import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
+import {
+  upstreamSchemaWithUnparsedAnalyzeQuery,
+  type UpstreamWithUnparsedAnalyzeQuery,
+} from '../../../zero-protocol/src/up.ts';
+import {getOrCreateCounter} from '../observability/metrics.ts';
+import type {ViewSyncerDownstream} from '../types/downstream.ts';
 import {
   ProtocolErrorWithLevel,
   getLogLevel,
   wrapWithProtocolError,
 } from '../types/error-with-level.ts';
+import {PokeChunkEncoder} from '../types/poke-chunk.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
 
@@ -40,14 +52,67 @@ export type HandlerResult =
     }
   | StreamResult;
 
-export type StreamResult = {
-  type: 'stream';
-  source: 'viewSyncer' | 'pusher';
-  stream: Source<Downstream>;
-};
+export type StreamResult =
+  | {
+      type: 'stream';
+      source: 'viewSyncer';
+      stream: Source<ViewSyncerDownstream>;
+    }
+  | {
+      type: 'stream';
+      source: 'pusher';
+      stream: Source<Downstream>;
+    };
 
 export interface MessageHandler {
-  handleMessage(msg: Upstream): Promise<HandlerResult[]>;
+  handleMessage(
+    msg: UpstreamWithUnparsedAnalyzeQuery,
+  ): Promise<HandlerResult[]>;
+}
+
+function hasOwn(value: unknown, property: string): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.hasOwn(value, property)
+  );
+}
+
+function containsLegacyQuery(message: unknown): boolean {
+  if (!Array.isArray(message)) {
+    return false;
+  }
+
+  const body = message[1];
+  if (typeof body !== 'object' || body === null) {
+    return false;
+  }
+
+  if (
+    message[0] !== 'initConnection' &&
+    message[0] !== 'changeDesiredQueries'
+  ) {
+    return false;
+  }
+
+  const patch = body['desiredQueriesPatch'];
+  return (
+    Array.isArray(patch) && patch.some(operation => hasOwn(operation, 'ast'))
+  );
+}
+
+const LEGACY_QUERIES_DISABLED_MESSAGE =
+  'Legacy queries are disabled by this Zero server. This client must use custom queries instead of sending query ASTs directly. To temporarily restore compatibility, set ZERO_ALLOW_LEGACY_QUERIES=true on zero-cache.';
+
+// Exported for testing purposes.
+export function parseUpstreamMessage(
+  value: unknown,
+  allowLegacyQueries: boolean,
+): UpstreamWithUnparsedAnalyzeQuery {
+  if (!allowLegacyQueries && containsLegacyQuery(value)) {
+    throw new Error(LEGACY_QUERIES_DISABLED_MESSAGE);
+  }
+  return valita.parse(value, upstreamSchemaWithUnparsedAnalyzeQuery);
 }
 
 // Ensures that a downstream message is sent at least every interval, sending a
@@ -62,6 +127,9 @@ export interface MessageHandler {
 // replication stream (which can similarly be back-pressured):
 // https://github.com/rocicorp/mono/blob/f98cb369a2dbb15650328859c732db358f187ef0/packages/zero-cache/src/services/change-source/pg/logical-replication/stream.ts#L21
 const DOWNSTREAM_MSG_INTERVAL_MS = 6_000;
+export const WEBSOCKET_SEND_TIMEOUT_MS = 10_000;
+const PROTOCOL_VERSION_ATTRIBUTE = 'protocol.version';
+const EVENT_TYPE_ATTRIBUTE = 'event.type';
 
 /**
  * Represents a connection between the client and server.
@@ -78,9 +146,16 @@ export class Connection {
   readonly #lc: LogContext;
   readonly #onClose: () => void;
   readonly #messageHandler: MessageHandler;
+  readonly #allowLegacyQueries: boolean;
+  readonly #downstreamSender: DownstreamSender;
   readonly #downstreamMsgTimer: NodeJS.Timeout | undefined;
+  readonly #webSocketErrors = getOrCreateCounter(
+    'sync',
+    'websocket.errors',
+    'Client WebSocket error events.',
+  );
 
-  #viewSyncerOutboundStream: Source<Downstream> | undefined;
+  #viewSyncerOutboundStream: Source<ViewSyncerDownstream> | undefined;
   #pusherOutboundStream: Source<Downstream> | undefined;
   #closed = false;
 
@@ -88,11 +163,13 @@ export class Connection {
     lc: LogContext,
     connectParams: ConnectParams,
     ws: WebSocket,
+    allowLegacyQueries: boolean,
     messageHandler: MessageHandler,
     onClose: () => void,
   ) {
     const {clientGroupID, clientID, wsID, protocolVersion} = connectParams;
     this.#messageHandler = messageHandler;
+    this.#allowLegacyQueries = allowLegacyQueries;
 
     this.#ws = ws;
     this.#wsID = wsID;
@@ -103,6 +180,11 @@ export class Connection {
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
+    this.#downstreamSender = new DownstreamSender(
+      this.#lc,
+      ws,
+      protocolVersion,
+    );
     this.#lc.debug?.('new connection');
     this.#onClose = onClose;
 
@@ -184,7 +266,7 @@ export class Connection {
     let msg;
     try {
       const value = JSON.parse(data);
-      msg = valita.parse(value, upstreamSchema);
+      msg = parseUpstreamMessage(value, this.#allowLegacyQueries);
     } catch (e) {
       const errorBody = {
         kind: ErrorKind.InvalidMessage,
@@ -238,7 +320,15 @@ export class Connection {
             this.#pusherOutboundStream = result.stream;
             break;
         }
-        this.#proxyOutbound(result.stream);
+        if (result.source === 'viewSyncer') {
+          this.#proxyOutbound(result.stream, (downstream, callback) =>
+            this.send(downstream.message, callback, downstream.serialized),
+          );
+        } else {
+          this.#proxyOutbound(result.stream, (downstream, callback) =>
+            this.send(downstream, callback),
+          );
+        }
         break;
       }
       case 'transient': {
@@ -251,12 +341,23 @@ export class Connection {
 
   #handleClose = (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
+    if (!wasClean) {
+      this.#recordWebSocketError('unclean_close');
+    }
     this.close('WebSocket close event', {code, reason, wasClean});
   };
 
   #handleError = (e: ErrorEvent) => {
+    this.#recordWebSocketError('error_event');
     this.#lc.warn?.('WebSocket error event', e.message, e.error);
   };
+
+  #recordWebSocketError(eventType: string) {
+    this.#webSocketErrors.add(1, {
+      [PROTOCOL_VERSION_ATTRIBUTE]: this.#protocolVersion,
+      [EVENT_TYPE_ATTRIBUTE]: eventType,
+    });
+  }
 
   #proxyInbound() {
     pipeline(
@@ -273,7 +374,13 @@ export class Connection {
     );
   }
 
-  #proxyOutbound(outboundStream: Source<Downstream>) {
+  #proxyOutbound<T>(
+    outboundStream: Source<T>,
+    sendMessage: (
+      downstream: T,
+      callback: (err?: Error | null) => void,
+    ) => void,
+  ) {
     // Note: createWebSocketStream() is avoided here in order to control
     //       exception handling with #closeWithThrown(). If the Writable
     //       from createWebSocketStream() were instead used, exceptions
@@ -283,8 +390,8 @@ export class Connection {
       Readable.from(outboundStream),
       new Writable({
         objectMode: true,
-        write: (downstream: Downstream, _encoding, callback) =>
-          this.send(downstream, callback),
+        write: (downstream: T, _encoding, callback) =>
+          sendMessage(downstream, callback),
       }),
       e =>
         e
@@ -320,9 +427,10 @@ export class Connection {
   send(
     data: Downstream,
     callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+    serialized?: string | undefined,
   ) {
     this.#lastDownstreamMsgTime = Date.now();
-    return send(this.#lc, this.#ws, data, callback);
+    this.#downstreamSender.send(data, callback, serialized);
   }
 
   sendError(errorBody: ErrorBody, thrown?: unknown) {
@@ -331,7 +439,7 @@ export class Connection {
 }
 
 export type WebSocketLike = Pick<WebSocket, 'readyState'> & {
-  send(data: string, cb?: (err?: Error) => void): void;
+  send(data: string | PokeChunk, cb?: (err?: Error) => void): void;
 };
 
 // Exported for testing purposes.
@@ -340,12 +448,31 @@ export function send(
   ws: WebSocketLike,
   data: Downstream,
   callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  serialized?: string | undefined,
 ) {
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(
-      JSON.stringify(data),
-      callback === 'ignore-backpressure' ? undefined : callback,
-    );
+    serialized ??= JSON.stringify(data);
+    if (callback === 'ignore-backpressure') {
+      ws.send(serialized);
+      return;
+    }
+
+    let completed = false;
+    const timer = setTimeout(() => {
+      complete(webSocketSendTimeoutError());
+    }, WEBSOCKET_SEND_TIMEOUT_MS);
+    timer.unref();
+
+    const complete = (error?: Error | null) => {
+      if (completed) {
+        return;
+      }
+      completed = true;
+      clearTimeout(timer);
+      callback(error);
+    };
+
+    ws.send(serialized, complete);
   } else {
     lc.debug?.(`Dropping outbound message on ws (state: ${ws.readyState})`, {
       dropped: data,
@@ -363,6 +490,178 @@ export function send(
       );
     }
   }
+}
+
+/**
+ * Sends downstream messages in the format supported by a connection's sync
+ * protocol version. Keep version forks contained here so the view-syncer can
+ * continue producing one canonical poke representation.
+ *
+ * Exported for compatibility testing.
+ */
+export class DownstreamSender {
+  readonly #lc: LogContext;
+  readonly #ws: WebSocketLike;
+  readonly #protocolVersion: number;
+  #pokeChunkEncoder: PokeChunkEncoder | undefined;
+
+  constructor(lc: LogContext, ws: WebSocketLike, protocolVersion: number) {
+    this.#lc = lc;
+    this.#ws = ws;
+    this.#protocolVersion = protocolVersion;
+  }
+
+  send(
+    data: Downstream,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+    serialized?: string | undefined,
+  ): void {
+    if (this.#protocolVersion >= POKE_CHUNK_PROTOCOL_VERSION) {
+      switch (data[0]) {
+        case 'pokeStart':
+          assert(
+            this.#pokeChunkEncoder === undefined,
+            'cannot start a poke while another poke is in progress',
+          );
+          this.#pokeChunkEncoder = new PokeChunkEncoder();
+          break;
+        case 'pokePart':
+          this.#sendPokePart(data, callback, serialized);
+          return;
+        case 'pokeEnd':
+          this.#sendPokeEnd(data, callback);
+          return;
+      }
+    }
+    send(this.#lc, this.#ws, data, callback, serialized);
+  }
+
+  #sendPokePart(
+    pokePart: PokePartMessage,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+    serialized?: string | undefined,
+  ): void {
+    const encoder = this.#pokeChunkEncoder;
+    assert(encoder, 'pokePart received without a pokeStart');
+
+    serialized ??= JSON.stringify(pokePart);
+    assert(
+      serialized.startsWith(POKE_PART_PREFIX) && serialized.endsWith(']'),
+      'invalid serialized pokePart',
+    );
+    void encoder
+      .addPatch(serialized.slice(POKE_PART_PREFIX.length, -1), chunk =>
+        sendBinary(this.#lc, this.#ws, chunk),
+      )
+      .then(
+        () => invokeCallback(callback),
+        error => invokeCallback(callback, toError(error)),
+      );
+  }
+
+  #sendPokeEnd(
+    pokeEnd: PokeEndMessage,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  ): void {
+    const encoder = this.#pokeChunkEncoder;
+    assert(encoder, 'pokeEnd received without a pokeStart');
+    this.#pokeChunkEncoder = undefined;
+
+    if (pokeEnd[1].cancel) {
+      encoder.cancel();
+      send(this.#lc, this.#ws, pokeEnd, callback);
+      return;
+    }
+
+    void encoder
+      .finish(chunk => sendBinary(this.#lc, this.#ws, chunk))
+      .then(() => sendAsync(this.#lc, this.#ws, pokeEnd))
+      .then(
+        () => invokeCallback(callback),
+        error => invokeCallback(callback, toError(error)),
+      );
+  }
+}
+
+const POKE_PART_PREFIX = '["pokePart",';
+
+function sendAsync(
+  lc: LogContext,
+  ws: WebSocketLike,
+  data: Downstream,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    send(lc, ws, data, error => (error ? reject(error) : resolve()));
+  });
+}
+
+function sendBinary(
+  lc: LogContext,
+  ws: WebSocketLike,
+  chunk: PokeChunk,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (ws.readyState !== WebSocket.OPEN) {
+      const error = webSocketClosedError();
+      lc.debug?.(
+        `Dropping outbound binary message on ws (state: ${ws.readyState})`,
+      );
+      reject(error);
+      return;
+    }
+    let completed = false;
+    const timer = setTimeout(
+      () => complete(webSocketSendTimeoutError()),
+      WEBSOCKET_SEND_TIMEOUT_MS,
+    );
+    timer.unref();
+
+    const complete = (error?: Error | null) => {
+      if (completed) {
+        return;
+      }
+      completed = true;
+      clearTimeout(timer);
+      error ? reject(error) : resolve();
+    };
+
+    ws.send(chunk, complete);
+  });
+}
+
+function invokeCallback(
+  callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  error?: Error,
+): void {
+  if (callback !== 'ignore-backpressure') {
+    callback(error);
+  }
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function webSocketClosedError(): ProtocolErrorWithLevel {
+  return new ProtocolErrorWithLevel(
+    {
+      kind: ErrorKind.Internal,
+      message: 'WebSocket closed',
+      origin: ErrorOrigin.ZeroCache,
+    },
+    'info',
+  );
+}
+
+function webSocketSendTimeoutError(): ProtocolErrorWithLevel {
+  return new ProtocolErrorWithLevel(
+    {
+      kind: ErrorKind.Internal,
+      message: `WebSocket send timed out after ${WEBSOCKET_SEND_TIMEOUT_MS} ms`,
+      origin: ErrorOrigin.ZeroCache,
+    },
+    'info',
+  );
 }
 
 export function sendError(

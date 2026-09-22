@@ -1,3 +1,4 @@
+import {existsSync, writeFileSync} from 'node:fs';
 import {gunzipSync} from 'node:zlib';
 import {getLocal, type Mockttp} from 'mockttp';
 import {expect, vi} from 'vitest';
@@ -6,13 +7,18 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {must} from '../../../shared/src/must.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {publishCriticalEvent} from '../observability/events.ts';
-import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
+import {initializePostgresChangeSource} from '../services/change-source/pg/change-source-init.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {ensureReplicationConfig} from '../services/change-streamer/schema/tables.ts';
 import type * as LifeCycle from '../services/life-cycle.ts';
 import type * as LitestreamCommands from '../services/litestream/commands.ts';
+import {
+  changeLogFileName,
+  deleteChangeLogDB,
+} from '../services/replicator/change-log-db.ts';
 import {replicationStatusError} from '../services/replicator/replication-status.ts';
 import {getSubscriptionState} from '../services/replicator/schema/replication-state.ts';
+import type {SingletonService} from '../services/service.ts';
 import {getConnectionURI, test, type PgTest} from '../test/db.ts';
 import {DbFile} from '../test/lite.ts';
 import {ConfigurationError} from '../types/configuration-error.ts';
@@ -33,7 +39,13 @@ vi.mock('../services/life-cycle.ts', async importOriginal => {
   return {
     ...actual,
     exitAfter: vi.fn(),
-    runUntilKilled: vi.fn().mockResolvedValue(undefined),
+    // Some services (e.g. the BackupMonitor) may need to be started
+    // in order to signal readiness.
+    runUntilKilled: (
+      _lc: object,
+      _parent: object,
+      ...services: SingletonService[]
+    ) => services.map(svc => svc.run()),
   };
 });
 
@@ -200,7 +212,20 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
     await ensureReplicationConfig(lc, upstream, subscriptionState, shard, true);
 
     await initialSource.stop();
-    await upstream`SELECT pg_drop_replication_slot(${oldSlot})`;
+    await upstream`
+      SELECT pg_terminate_backend(active_pid) FROM pg_replication_slots
+        WHERE slot_name = ${oldSlot}`;
+    await vi.waitFor(
+      () => upstream`SELECT pg_drop_replication_slot(${oldSlot})`,
+    );
+
+    // The auto-reset resyncs the replica at a new replicaVersion, so the
+    // change log written beside the old one must not survive it. Asserted here
+    // rather than in a test of its own because this is the only scenario that
+    // reaches the AutoResetSignal retry, and reaching it costs a full sync.
+    const changeLog = changeLogFileName(replicaFile.path);
+    writeFileSync(changeLog, '');
+    writeFileSync(`${changeLog}-wal2`, '');
 
     const [worker, parent] = inProcChannel();
     const ready = new Promise<void>(resolve => {
@@ -258,8 +283,12 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
     `;
     expect(liveSlots[0].slot).toBe(oldSlot); // same slot name
     expect(liveSlots[0].id).not.toBe(oldID); // was reused for new replica
+
+    expect(existsSync(changeLog)).toBe(false);
+    expect(existsSync(`${changeLog}-wal2`)).toBe(false);
   } finally {
     await initialSource?.stop().catch(() => {});
+    deleteChangeLogDB(replicaFile.path);
     replicaFile.delete();
     await testDBs.drop(upstream);
   }

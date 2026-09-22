@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -137,7 +138,16 @@ export async function runSchemaMigrations(
 
     log.info?.(`Running ${debugName} at schema v${codeVersion}`);
   } catch (e) {
-    log.error?.('Error in ensureSchemaMigrated', e);
+    if (e instanceof AbortError) {
+      // AbortErrors (e.g. AutoResetSignal) are not failures. They are the
+      // expected mechanism for signaling that the schema is not initialized
+      // (or otherwise needs a reset) so that the caller can backtrack and
+      // resync. Logging them at `error` would trip error-based alerting for a
+      // normal, self-healing path.
+      log.warn?.('Schema requires reset; resync will follow', e);
+    } else {
+      log.error?.('Error in ensureSchemaMigrated', e);
+    }
     throw e;
   } finally {
     void log.flush();

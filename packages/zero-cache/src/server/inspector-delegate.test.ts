@@ -162,6 +162,30 @@ describe('InspectorDelegate', () => {
       expect(d.isAuthenticated(clientID)).toBe(false);
     });
 
+    test('clearAuthenticated with an owner only releases that owner', () => {
+      vi.mocked(isDevelopmentMode).mockReturnValue(false);
+      const d = new InspectorDelegate(undefined);
+      const clientID = 'client-owned';
+      const previous = {};
+      const replacement = {};
+
+      d.setAuthenticated(clientID, previous);
+      d.setAuthenticated(clientID, replacement);
+      expect(d.isAuthenticated(clientID)).toBe(true);
+
+      // The previous owner shutting down must not revoke the replacement.
+      d.clearAuthenticated(clientID, previous);
+      expect(d.isAuthenticated(clientID)).toBe(true);
+
+      d.clearAuthenticated(clientID, replacement);
+      expect(d.isAuthenticated(clientID)).toBe(false);
+
+      // Without an owner the authentication is cleared regardless.
+      d.setAuthenticated(clientID, replacement);
+      d.clearAuthenticated(clientID);
+      expect(d.isAuthenticated(clientID)).toBe(false);
+    });
+
     test('authentication state is shared across InspectorDelegate instances', () => {
       vi.mocked(isDevelopmentMode).mockReturnValue(false);
       const d1 = new InspectorDelegate(undefined);

@@ -20,13 +20,6 @@ export function* take<T>(stream: Stream<T>, limit: number): Stream<T> {
   }
 }
 
-export function first<T>(stream: Stream<T>): T | undefined {
-  const it = stream[Symbol.iterator]();
-  const {value} = it.next();
-  it.return?.();
-  return value;
-}
-
 export function consume<T>(stream: Stream<T>): void {
   // Required to prevent some minifiers (e.g. Terser) from removing this empty loop
   for (const _ of stream);

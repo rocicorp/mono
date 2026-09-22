@@ -6,14 +6,14 @@ import {drizzle as drizzlePostgresJs} from 'drizzle-orm/postgres-js';
 import {Kysely, PostgresDialect} from 'kysely';
 import {Client, Pool, type PoolClient} from 'pg';
 import type {ExpectStatic} from 'vitest';
-import {afterEach, beforeEach, describe, expectTypeOf, test} from 'vitest';
+import {afterEach, beforeEach, describe, expectTypeOf, test, vi} from 'vitest';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
 import {nanoid} from '../../../zero-client/src/util/nanoid.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
-import type {ZQLDatabase} from '../zql-database.ts';
+import {ZQLDatabase} from '../zql-database.ts';
 import {zeroDrizzle, type DrizzleTransaction} from './drizzle.ts';
 import {zeroKysely, type KyselyTransaction} from './kysely.ts';
 import {zeroNodePg} from './pg.ts';
@@ -297,6 +297,32 @@ async function exerciseRollback<WrappedTransaction>(
   expect(wrappedInsertAfterRollback).toHaveLength(0);
 }
 
+/**
+ * Verifies that `zql.run(...)` returns the correct result without calling
+ * `connection.transaction`. The read is issued from a fresh `ZQLDatabase`
+ * over the same connection so that the one-time server schema lookup also
+ * goes through the connection-level `query`.
+ */
+async function exerciseRunWithoutTransaction<WrappedTransaction>(
+  zql: ZQLDatabase<typeof schema, WrappedTransaction>,
+  expect: ExpectStatic,
+) {
+  const newUser = getRandomUser();
+  await zql.transaction(
+    tx => tx.mutate.user.insert(newUser),
+    mockTransactionInput,
+  );
+
+  const coldZql = new ZQLDatabase(zql.connection, schema);
+  const transactionSpy = vi.spyOn(coldZql.connection, 'transaction');
+
+  const result = await coldZql.run(builder.user.where('id', '=', newUser.id));
+
+  expect(result[0]?.name).toEqual(newUser.name);
+  expect(result[0]?.id).toEqual(newUser.id);
+  expect(transactionSpy).not.toHaveBeenCalled();
+}
+
 describe('node-postgres', () => {
   test('querying', async ({expect}) => {
     const clients = [nodePgClient, nodePgPoolClient, nodePgPool];
@@ -360,6 +386,15 @@ describe('node-postgres', () => {
       );
     }
   });
+
+  test('run() does not open a transaction', async ({expect}) => {
+    const clients = [nodePgClient, nodePgPoolClient, nodePgPool];
+
+    for (const client of clients) {
+      const zql = zeroNodePg(schema, client);
+      await exerciseRunWithoutTransaction(zql, expect);
+    }
+  });
 });
 
 describe('postgres-js', () => {
@@ -407,6 +442,11 @@ describe('postgres-js', () => {
         `,
       expect,
     );
+  });
+
+  test('run() does not open a transaction', async ({expect}) => {
+    const zql = zeroPostgresJS(schema, postgresJsClient);
+    await exerciseRunWithoutTransaction(zql, expect);
   });
 });
 
@@ -462,6 +502,11 @@ describe('prisma', () => {
         }),
       expect,
     );
+  });
+
+  test('run() does not open a transaction', async ({expect}) => {
+    const zql = zeroPrisma(schema, prismaClient);
+    await exerciseRunWithoutTransaction(zql, expect);
   });
 });
 
@@ -547,6 +592,11 @@ describe('kysely', () => {
       (tx, user) => tx.insertInto('user').values(user).execute(),
       expect,
     );
+  });
+
+  test('run() does not open a transaction', async ({expect}) => {
+    const zql = zeroKysely(schema, kyselyClient);
+    await exerciseRunWithoutTransaction(zql, expect);
   });
 
   test('type portability', () => {
@@ -719,6 +769,15 @@ describe('drizzle and node-postgres', () => {
     }
   });
 
+  test('run() does not open a transaction', async ({expect}) => {
+    const clients = [pool, client, poolClient];
+
+    for (const drizzleClient of clients) {
+      const zql = zeroDrizzle(schema, drizzleClient);
+      await exerciseRunWithoutTransaction(zql, expect);
+    }
+  });
+
   test('type portability - inferred types should not reference internal drizzle paths', () => {
     function getZQL() {
       return zeroDrizzle(schema, client);
@@ -851,6 +910,11 @@ describe('drizzle and postgres-js', () => {
       (tx, user) => tx.insert(drizzleSchema.user).values(user),
       expect,
     );
+  });
+
+  test('run() does not open a transaction', async ({expect}) => {
+    const zql = zeroDrizzle(schema, client);
+    await exerciseRunWithoutTransaction(zql, expect);
   });
 
   test('type portability', () => {

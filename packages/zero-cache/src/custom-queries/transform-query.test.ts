@@ -200,6 +200,7 @@ describe('CustomQueryTransformer', () => {
   function expectLastTransformFetch(
     queries: Iterable<CustomQueryRecord>,
     options: Parameters<typeof expectContext>[0] = {},
+    operation: 'query' | 'validate_auth' = 'query',
   ) {
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
       expect.anything(),
@@ -208,6 +209,7 @@ describe('CustomQueryTransformer', () => {
       expectContext(options),
       mockShard,
       transformRequest(queries),
+      {operation},
     );
   }
 
@@ -280,7 +282,7 @@ describe('CustomQueryTransformer', () => {
           right: {type: 'literal', value: 123},
         },
       },
-      transformationHash: '2q4jya9umt1i2',
+      transformationHash: '0nk90730537eai',
     },
     {
       id: 'query2',
@@ -293,7 +295,7 @@ describe('CustomQueryTransformer', () => {
           right: {type: 'literal', value: 'user123'},
         },
       },
-      transformationHash: 'ofy7rz1vol9y',
+      transformationHash: '04pjys20c16bgz',
     },
   ];
 
@@ -370,7 +372,7 @@ describe('CustomQueryTransformer', () => {
     const transformer = makeTransformer();
     const result = await transformer.validate(headerOptions, undefined);
 
-    expectLastTransformFetch([]);
+    expectLastTransformFetch([], {}, 'validate_auth');
     expect(result).toEqual({
       kind: 'QueryResponse',
       validation: serverValidated('user-123'),
@@ -873,5 +875,28 @@ describe('CustomQueryTransformer', () => {
       message: expect.stringContaining('string error thrown'),
       queryIDs: ['query1'],
     });
+  });
+
+  test('destroy stops the cache cleanup interval and is safe to use after', async () => {
+    mockFetchFromAPIServer.mockResolvedValue(
+      queryResponseMessage(mockQueryResponses, 'user-123'),
+    );
+
+    const transformer = new CustomQueryTransformer(lc, mockShard);
+    await transformer.transform(makeContext(), mockQueries);
+    expect(vi.getTimerCount()).toBe(1);
+
+    transformer.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+
+    // destroy is idempotent.
+    transformer.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+
+    // Use after destroy (e.g. by the InspectorDelegate racing view-syncer
+    // teardown) does not throw and does not restart the cleanup interval.
+    const result = await transformer.transform(makeContext(), mockQueries);
+    expect(result.kind).toBe('success');
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

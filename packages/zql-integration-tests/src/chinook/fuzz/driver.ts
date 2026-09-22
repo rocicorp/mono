@@ -18,7 +18,11 @@ import {expect} from 'vitest';
 import {astToZQL} from '../../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../../ast-to-zql/src/format.ts';
 import {must} from '../../../../shared/src/must.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {
+  AST,
+  LiteralValue,
+  SimpleOperator,
+} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {NameMapper} from '../../../../zero-schema/src/name-mapper.ts';
 import {makeServerTransaction} from '../../../../zero-server/src/custom.ts';
@@ -35,6 +39,7 @@ import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {mapResultToClientNames} from '../../../../zqlite/src/test/source-factory.ts';
 import {type Delegates, runAndCompare} from '../../helpers/runner.ts';
 import {schema} from '../schema.ts';
+import {pinOn, relOf} from './axes.ts';
 import type {CostModel} from './cost.ts';
 import {
   applyLimit,
@@ -47,18 +52,23 @@ import {
   rowLabel,
 } from './cover.ts';
 import {Coverage} from './coverage.ts';
-import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
+import {
+  flipAssignments,
+  flippableExistsCount,
+  flipVariants,
+  setFlips,
+} from './flip.ts';
 import type {Data} from './literals.ts';
 import {mutate} from './mutate.ts';
-import {type Mutation, pushForSkeleton} from './push.ts';
+import {
+  fourPhase,
+  type Mutation,
+  pushForSkeleton,
+  queryTables,
+} from './push.ts';
 import type {Regression} from './regressions.ts';
 import {rng} from './rng.ts';
-import {
-  buildScalar,
-  hasScalarSubquery,
-  resolveScalarForIvm,
-  scalarCandidates,
-} from './scalar.ts';
+import {scalarizableExistsCount, setScalars} from './scalar.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {enumerate, label, lower, type Skeleton} from './skeleton.ts';
 import {Mask, swarmGen} from './swarm.ts';
@@ -94,6 +104,23 @@ export type Report = {
   readonly failures: Array<[string, string]>;
 };
 
+/** One generated hydrate/query case, independent of the execution target. */
+export type QueryCase = {
+  readonly label: string;
+  readonly query: AnyQuery;
+};
+
+/** One generated mutation-maintenance case, independent of the execution target. */
+export type PushCase = QueryCase & {
+  readonly mutations: readonly Mutation[];
+};
+
+/** A target-specific checker for a generated query case. */
+export type QueryCaseChecker = (
+  query: AnyQuery,
+  label: string,
+) => Promise<void>;
+
 /** Run `fn` (a parity assert), returning its error message on failure (truncated). */
 export async function capture(fn: () => Promise<void>): Promise<string | null> {
   try {
@@ -103,6 +130,199 @@ export async function capture(fn: () => Promise<void>): Promise<string | null> {
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
     return msg.slice(0, 1500);
   }
+}
+
+/**
+ * Run generated query cases through a target-provided checker. This is the shared
+ * concentric-ring harness: the corpus is generated once, and each ring supplies only
+ * the layer-specific comparison implementation.
+ */
+export async function checkQueryCases(
+  cases: readonly QueryCase[],
+  check: QueryCaseChecker,
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  for (const c of cases) {
+    const msg = await capture(() => check(c.query, c.label));
+    if (msg) {
+      failures.push([c.label, msg]);
+    }
+  }
+  return {total: cases.length, failures};
+}
+
+/** The L0 structural skeleton corpus as target-independent query cases. */
+export function skeletonQueryCases(
+  skels: readonly Skeleton[],
+): readonly QueryCase[] {
+  return skels.map(s => ({label: label(s), query: lower(s)}));
+}
+
+/**
+ * The L1 decoration corpus as target-independent query cases.
+ *
+ * Strength defaults to **3**. Pairwise is not enough once `flip` is an axis: the shapes
+ * that matter are 3-way — a flipped gate must sit *inside an OR* (that is what makes
+ * `builder.ts` construct the `UnionFanOut`/`UnionFanIn` pair) *and* carry a `limit` (to
+ * put a `Take` above the fan-in). At `t=2` the greedy cover realizes
+ * `flip x exists_or x limit` in zero rows; at `t=3`, in 19.
+ */
+export function l1QueryCases(
+  data: Data,
+  t = 3,
+): {
+  readonly cases: readonly QueryCase[];
+  readonly coverage: Coverage;
+} {
+  const rows = greedyCover(t);
+  const coverage = new Coverage(t);
+  const cases: QueryCase[] = [];
+
+  for (const row of rows) {
+    for (const root of decoratableRoots()) {
+      const res = decorate(root, row, data);
+      if (!res) {
+        continue;
+      }
+      cases.push({
+        label: `L1|${root}|${rowLabel(row)}`,
+        query: res[0],
+      });
+      coverage.observe(row);
+    }
+  }
+
+  for (const [parent, rel] of childDecorationPairs()) {
+    for (const row of rows) {
+      const res = decorateChild(parent, rel, row, data);
+      if (!res) {
+        continue;
+      }
+      cases.push({
+        label: `L1|${parent}.${rel}|${rowLabel(row)}`,
+        query: res[0],
+      });
+      coverage.observe(row);
+    }
+  }
+
+  return {cases, coverage};
+}
+
+/** The L2 swarm corpus as target-independent query cases. */
+export function swarmQueryCases(
+  data: Data,
+  seed: number,
+  nMasks: number,
+  perMask: number,
+): readonly QueryCase[] {
+  const r = rng(seed);
+  const cases: QueryCase[] = [];
+  for (let mi = 0; mi < nMasks; mi++) {
+    const mask = Mask.random(r);
+    for (let qi = 0; qi < perMask; qi++) {
+      const res = swarmGen(r, mask, data);
+      if (!res) {
+        continue;
+      }
+      cases.push({
+        label: `swarm|seed${seed}|m${mi}q${qi}`,
+        query: res[0],
+      });
+    }
+  }
+  return cases;
+}
+
+/** The L3 mutation-from-corpus cases as target-independent query cases. */
+export function mutationQueryCases(
+  corpus: readonly Skeleton[],
+  seed: number,
+): readonly QueryCase[] {
+  const r = rng(seed);
+  return corpus.map(s => {
+    const baseAst = asQueryInternals(lower(s)).ast;
+    const mutated = mutate(r, baseAst);
+    return {label: `mutate|${label(s)}`, query: wrapAst(mutated)};
+  });
+}
+
+/** The L4 random-tail generated cases after cost gating. */
+export type TailCases = {
+  readonly cases: readonly QueryCase[];
+  readonly generated: number;
+  readonly gated: number;
+};
+
+export function tailQueryCases(
+  cost: CostModel,
+  seed: number,
+  n: number,
+  bounds: DeepBounds = tailBounds(),
+): TailCases {
+  const r = rng(seed);
+  const cases: QueryCase[] = [];
+  let generated = 0;
+  let gated = 0;
+  for (let i = 0; i < n; i++) {
+    const res = tailGen(r, bounds);
+    if (!res) {
+      continue;
+    }
+    generated += 1;
+    const ast = asQueryInternals(res[0]).ast;
+    if (cost.tooExpensive(ast)) {
+      gated += 1;
+      continue;
+    }
+    cases.push({label: `tail|seed${seed}|${i}`, query: res[0]});
+  }
+  return {cases, generated, gated};
+}
+
+/** Flip-invariance variants as target-independent query cases. */
+export function flipQueryCases(
+  skels: readonly Skeleton[],
+  maxFlips = 4,
+): readonly QueryCase[] {
+  const cases: QueryCase[] = [];
+  for (const s of skels) {
+    const base = asQueryInternals(lower(s)).ast;
+    const k = flippableExistsCount(base);
+    if (k === 0 || k > maxFlips) {
+      continue;
+    }
+    for (const bits of flipAssignments(k)) {
+      cases.push({
+        label: `flip|${label(s)}|${bits.map(b => (b ? 1 : 0)).join('')}`,
+        query: wrapAst(setFlips(base, bits)),
+      });
+    }
+  }
+  return cases;
+}
+
+/** Scalar-invariance variants as target-independent query cases. */
+export function scalarQueryCases(
+  skels: readonly Skeleton[],
+  maxScalars = 4,
+): readonly QueryCase[] {
+  const cases: QueryCase[] = [];
+  for (const s of skels) {
+    const base = asQueryInternals(lower(s)).ast;
+    const k = scalarizableExistsCount(base);
+    if (k === 0 || k > maxScalars) {
+      continue;
+    }
+    // The same `{false, true}^k` enumeration flip-invariance uses.
+    for (const bits of flipAssignments(k)) {
+      cases.push({
+        label: `scalar|${label(s)}|${bits.map(b => (b ? 1 : 0)).join('')}`,
+        query: wrapAst(setScalars(base, bits)),
+      });
+    }
+  }
+  return cases;
 }
 
 /** Whether `ast` (re-wrapped as a query) still diverges from the oracle. */
@@ -162,12 +382,19 @@ export async function checkL0Hydrate(
   delegates: Delegates,
   skels: readonly Skeleton[],
 ): Promise<Report> {
+  return await checkHydrateCases(delegates, skeletonQueryCases(skels));
+}
+
+async function checkHydrateCases(
+  delegates: Delegates,
+  cases: readonly QueryCase[],
+): Promise<Report> {
   const failures: Array<[string, string]> = [];
   const budget = {remaining: SHRINK_BUDGET};
-  for (const s of skels) {
-    await checkHydrate(delegates, lower(s), label(s), failures, budget);
+  for (const c of cases) {
+    await checkHydrate(delegates, c.query, c.label, failures, budget);
   }
-  return {total: skels.length, failures};
+  return {total: cases.length, failures};
 }
 
 /**
@@ -180,53 +407,10 @@ export async function checkL0Hydrate(
  */
 export async function checkL1(
   delegates: Delegates,
+  data: Data,
 ): Promise<{report: Report; coverage: Coverage}> {
-  const rows = greedyCover(2);
-  const cov = new Coverage(2);
-  const failures: Array<[string, string]> = [];
-  const budget = {remaining: SHRINK_BUDGET};
-  let total = 0;
-
-  // Root decorations: each covering-array row × each decoratable root.
-  for (const row of rows) {
-    for (const root of decoratableRoots()) {
-      const res = decorate(root, row);
-      if (!res) {
-        continue;
-      }
-      total += 1;
-      await checkHydrate(
-        delegates,
-        res[0],
-        `L1|${root}|${rowLabel(row)}`,
-        failures,
-        budget,
-      );
-      cov.observe(row);
-    }
-  }
-
-  // Child decorations: each row lowered onto a NESTED collection (per-parent refill,
-  // child sort position) — the parity surface the root-only pass misses.
-  for (const [parent, rel] of childDecorationPairs()) {
-    for (const row of rows) {
-      const res = decorateChild(parent, rel, row);
-      if (!res) {
-        continue;
-      }
-      total += 1;
-      await checkHydrate(
-        delegates,
-        res[0],
-        `L1|${parent}.${rel}|${rowLabel(row)}`,
-        failures,
-        budget,
-      );
-      cov.observe(row);
-    }
-  }
-
-  return {report: {total, failures}, coverage: cov};
+  const {cases, coverage} = l1QueryCases(data);
+  return {report: await checkHydrateCases(delegates, cases), coverage};
 }
 
 // ── the randomized layers (L2 swarm / L3 mutation / L4 random tail) ────────────────────
@@ -239,32 +423,15 @@ export async function checkL1(
  */
 export async function checkSwarm(
   delegates: Delegates,
+  data: Data,
   seed: number,
   nMasks: number,
   perMask: number,
 ): Promise<Report> {
-  const r = rng(seed);
-  const failures: Array<[string, string]> = [];
-  const budget = {remaining: SHRINK_BUDGET};
-  let total = 0;
-  for (let mi = 0; mi < nMasks; mi++) {
-    const mask = Mask.random(r);
-    for (let qi = 0; qi < perMask; qi++) {
-      const res = swarmGen(r, mask);
-      if (!res) {
-        continue;
-      }
-      total += 1;
-      await checkHydrate(
-        delegates,
-        res[0],
-        `swarm|seed${seed}|m${mi}q${qi}`,
-        failures,
-        budget,
-      );
-    }
-  }
-  return {total, failures};
+  return await checkHydrateCases(
+    delegates,
+    swarmQueryCases(data, seed, nMasks, perMask),
+  );
 }
 
 /**
@@ -277,21 +444,7 @@ export async function checkMutate(
   corpus: readonly Skeleton[],
   seed: number,
 ): Promise<Report> {
-  const r = rng(seed);
-  const failures: Array<[string, string]> = [];
-  const budget = {remaining: SHRINK_BUDGET};
-  for (const s of corpus) {
-    const baseAst = asQueryInternals(lower(s)).ast;
-    const mutated = mutate(r, baseAst);
-    await checkHydrate(
-      delegates,
-      wrapAst(mutated),
-      `mutate|${label(s)}`,
-      failures,
-      budget,
-    );
-  }
-  return {total: corpus.length, failures};
+  return await checkHydrateCases(delegates, mutationQueryCases(corpus, seed));
 }
 
 /** The L4 random-tail outcome — the gated (too-expensive, skipped) count reported, not
@@ -316,33 +469,12 @@ export async function checkTail(
   n: number,
   bounds: DeepBounds = tailBounds(),
 ): Promise<TailReport> {
-  const r = rng(seed);
-  const failures: Array<[string, string]> = [];
-  const budget = {remaining: SHRINK_BUDGET};
-  let generated = 0;
-  let gated = 0;
-  let total = 0;
-  for (let i = 0; i < n; i++) {
-    const res = tailGen(r, bounds);
-    if (!res) {
-      continue;
-    }
-    generated += 1;
-    const ast = asQueryInternals(res[0]).ast;
-    if (cost.tooExpensive(ast)) {
-      gated += 1; // static gate: skip + count, never run
-      continue;
-    }
-    total += 1;
-    await checkHydrate(
-      delegates,
-      res[0],
-      `tail|seed${seed}|${i}`,
-      failures,
-      budget,
-    );
-  }
-  return {report: {total, failures}, generated, gated};
+  const {cases, generated, gated} = tailQueryCases(cost, seed, n, bounds);
+  return {
+    report: await checkHydrateCases(delegates, cases),
+    generated,
+    gated,
+  };
 }
 
 // ── flip-invariance (plan-choice invariance of EXISTS gates) ──────────────────────────
@@ -360,27 +492,7 @@ export async function checkFlipInvariance(
   skels: readonly Skeleton[],
   maxFlips = 4,
 ): Promise<Report> {
-  const failures: Array<[string, string]> = [];
-  const budget = {remaining: SHRINK_BUDGET};
-  let total = 0;
-  for (const s of skels) {
-    const base = asQueryInternals(lower(s)).ast;
-    const k = flippableExistsCount(base);
-    if (k === 0 || k > maxFlips) {
-      continue;
-    }
-    for (const bits of flipAssignments(k)) {
-      total += 1;
-      await checkHydrate(
-        delegates,
-        wrapAst(setFlips(base, bits)),
-        `flip|${label(s)}|${bits.map(b => (b ? 1 : 0)).join('')}`,
-        failures,
-        budget,
-      );
-    }
-  }
-  return {total, failures};
+  return await checkHydrateCases(delegates, flipQueryCases(skels, maxFlips));
 }
 
 // ── the four-phase push protocol (per-step parity) ────────────────────────────────────
@@ -478,6 +590,121 @@ async function pushWalk(
   }
 }
 
+/** Push-maintenance cases generated from skeletons, independent of the target. */
+export function pushCases(
+  data: Data,
+  skels: readonly Skeleton[],
+  n: number,
+): readonly PushCase[] {
+  const cases: PushCase[] = [];
+  for (const s of skels) {
+    const mutations = pushForSkeleton(data, s, n);
+    if (mutations.length === 0) {
+      continue;
+    }
+    cases.push({
+      label: `push|${label(s)}`,
+      query: lower(s),
+      mutations,
+    });
+  }
+  return cases;
+}
+
+/** Top-N push-maintenance cases generated from skeletons, independent of the target. */
+export function decoratedPushCases(
+  data: Data,
+  skels: readonly Skeleton[],
+  n: number,
+): readonly PushCase[] {
+  const cases: PushCase[] = [];
+  for (const s of skels) {
+    const mutations = pushForSkeleton(data, s, n);
+    if (mutations.length === 0) {
+      continue;
+    }
+    cases.push({
+      label: `decpush|${label(s)}`,
+      query: applyLimit(applyOrder(lower(s), s.table, 'asc1'), 'small'),
+      mutations,
+    });
+  }
+  return cases;
+}
+
+/**
+ * Push cases whose root `where` pins the join column of the root's first relationship,
+ * with `=` on one present value or `IN` on two. Correlated predicate pushdown copies such
+ * a pin into the child, and on down a chain that correlates on the same column, so these
+ * are the queries it rewrites. Every table in the query is mutated, so pushes cross the
+ * copied filter both from the parent side and from the child side.
+ *
+ * Each pinned query is also run under every flip assignment of its EXISTS gates (up to
+ * `maxFlips` gates). In production the planner can flip a pinned EXISTS child, and a
+ * flipped child is where the copied pin matters most: it is the only thing that limits
+ * the outer loop's read of the child.
+ */
+export function pinnedPushCases(
+  data: Data,
+  skels: readonly Skeleton[],
+  n: number,
+  maxFlips = 4,
+): readonly PushCase[] {
+  const cases: PushCase[] = [];
+  for (const s of skels) {
+    if (s.children.length === 0) {
+      continue;
+    }
+    const pin = pinOn(
+      s.table,
+      must(relOf(s.table, s.children[0].rel)).parentField[0],
+    );
+    if (!pin) {
+      continue;
+    }
+    const base = lower(s);
+    const mutations = [...queryTables(asQueryInternals(base).ast)].flatMap(t =>
+      fourPhase(data, t, n),
+    );
+    const pins: Array<[string, SimpleOperator, LiteralValue]> = [
+      ['eq', '=', pin.eq],
+      ['in', 'IN', pin.in],
+    ];
+    for (const [tag, op, value] of pins) {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      const pinned: AnyQuery = (base as any).where(pin.col, op, value);
+      for (const [suffix, query] of queryFlipVariants(pinned, maxFlips)) {
+        cases.push({
+          label: `pinpush|${tag}|${label(s)}${suffix}`,
+          query,
+          mutations,
+        });
+      }
+    }
+  }
+  return cases;
+}
+
+/**
+ * Check per-step push parity for each case inside a rolled-back transaction, collecting
+ * every failure.
+ */
+export async function checkPushCases(
+  transact: Transact,
+  cases: readonly PushCase[],
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  for (const c of cases) {
+    const msg = await capture(() =>
+      transact(d => pushWalk(d, c.query, c.mutations)),
+    );
+    if (msg) {
+      failures.push([c.label, msg]);
+    }
+  }
+  return {total: cases.length, failures};
+}
+
 /**
  * **Push sweep:** lower each skeleton, generate its four-phase push history (root +
  * deepest leaf), and check per-step push parity inside a rolled-back transaction. `n`
@@ -491,21 +718,16 @@ export async function checkPushWalk(
   n: number,
 ): Promise<Report> {
   const failures: Array<[string, string]> = [];
-  let total = 0;
-  for (const s of skels) {
-    const mutations = pushForSkeleton(data, s, n);
-    if (mutations.length === 0) {
-      continue;
-    }
-    total += 1;
+  const cases = pushCases(data, skels, n);
+  for (const c of cases) {
     const msg = await capture(() =>
-      transact(d => pushWalk(d, lower(s), mutations)),
+      transact(d => pushWalk(d, c.query, c.mutations)),
     );
     if (msg) {
-      failures.push([`push|${label(s)}`, msg]);
+      failures.push([c.label, msg]);
     }
   }
-  return {total, failures};
+  return {total: cases.length, failures};
 }
 
 /**
@@ -525,22 +747,16 @@ export async function checkDecoratedPush(
   n: number,
 ): Promise<Report> {
   const failures: Array<[string, string]> = [];
-  let total = 0;
-  for (const s of skels) {
-    const mutations = pushForSkeleton(data, s, n);
-    if (mutations.length === 0) {
-      continue;
-    }
-    total += 1;
-    const topN = applyLimit(applyOrder(lower(s), s.table, 'asc1'), 'small');
+  const cases = decoratedPushCases(data, skels, n);
+  for (const c of cases) {
     const msg = await capture(() =>
-      transact(d => pushWalk(d, topN, mutations)),
+      transact(d => pushWalk(d, c.query, c.mutations)),
     );
     if (msg) {
-      failures.push([`decpush|${label(s)}`, msg]);
+      failures.push([c.label, msg]);
     }
   }
-  return {total, failures};
+  return {total: cases.length, failures};
 }
 
 /**
@@ -564,29 +780,132 @@ export async function checkYield(
   skels: readonly Skeleton[],
   n: number,
   seed: number,
+  maxFlips = 2,
 ): Promise<Report> {
   const failures: Array<[string, string]> = [];
   let total = 0;
   let idx = 0;
   for (const s of skels) {
-    const i = idx++;
-    // Per-skeleton deterministic yield stream so a failure replays from (seed, index).
-    const r = rng((seed ^ Math.imul(i + 1, 0x9e3779b9)) >>> 0);
-    const wrap = createRandomYieldWrapper(() => r.float(), YIELD_P);
-    const query = lower(s);
     const mutations = pushForSkeleton(data, s, n);
+    for (const [suffix, query] of yieldPlanVariants(s, maxFlips)) {
+      const i = idx++;
+      // Per-variant deterministic yield stream so a failure replays from (seed, index).
+      const r = rng((seed ^ Math.imul(i + 1, 0x9e3779b9)) >>> 0);
+      const wrap = createRandomYieldWrapper(() => r.float(), YIELD_P);
+      total += 1;
+      const msg = await capture(() =>
+        transact(
+          d =>
+            mutations.length > 0
+              ? pushWalk(d, query, mutations)
+              : runAndCompare(schema, d, query, undefined),
+          wrap,
+        ),
+      );
+      if (msg) {
+        failures.push([`yield|${label(s)}${suffix}`, msg]);
+      }
+    }
+  }
+  return {total, failures};
+}
+
+/**
+ * The plan variants a skeleton contributes to the yield lane: the builder's default
+ * lowering, plus **every** flip assignment of its positive EXISTS gates.
+ *
+ * Flips are not cosmetic here. A flipped gate is the only thing that makes `builder.ts`
+ * construct a `UnionFanOut`/`UnionFanIn` pair, so without them the yield lane never
+ * interleaves a fetch or push through a fan-in at all — the operator whose maintenance
+ * fetch is the one that has to survive a `'yield'`. The flip-invariance lane enumerates
+ * the same assignments but only *hydrates* them; this is where they meet pushes.
+ */
+function yieldPlanVariants(
+  s: Skeleton,
+  maxFlips: number,
+): Array<[string, AnyQuery]> {
+  return queryFlipVariants(lower(s), maxFlips);
+}
+
+/**
+ * `query` as lowered, plus **every** other flip assignment of its positive EXISTS gates
+ * (only `query` when it has none, or more than `maxFlips`). The planner only ever changes
+ * flips, so these are all the plans it can produce for `query`.
+ */
+function queryFlipVariants(
+  query: AnyQuery,
+  maxFlips: number,
+): Array<[string, AnyQuery]> {
+  const ast = asQueryInternals(query).ast;
+  return [
+    ['', query],
+    ...flipVariants(ast, maxFlips).map(
+      ([suffix, flippedAst]): [string, AnyQuery] => [
+        suffix,
+        wrapAst(flippedAst),
+      ],
+    ),
+  ];
+}
+
+/**
+ * The L1 cases that build a **`Take` above a `UnionFanIn`**: a flipped EXISTS gate (the
+ * only thing that makes `builder.ts` construct a `UnionFanOut`/`UnionFanIn` pair) sitting
+ * under a `limit`. This is a 3-way axis interaction (`flip` x `exists_*_or` x `limit`), so
+ * it exists in the corpus only at `t >= 3`.
+ */
+export function fanInTakeCases(
+  cases: readonly QueryCase[],
+): readonly QueryCase[] {
+  return cases.filter(c => {
+    const ast = asQueryInternals(c.query).ast;
+    return (
+      ast.limit !== undefined &&
+      JSON.stringify(ast.where ?? null).includes('"flip":true')
+    );
+  });
+}
+
+/**
+ * **Random-yield push sweep over decorated L1 cases.**
+ *
+ * {@link checkYield} runs *skeletons* — structure only, no decorations — so it never has a
+ * `limit`, hence never a `Take`. {@link checkFlipInvariance} enumerates flips but only
+ * hydrates. Neither lane can reach a `Take` sitting above a `UnionFanIn` while a `'yield'`
+ * interrupts a maintenance fetch mid-push, which is exactly where that pair breaks.
+ *
+ * This lane closes that cell: decorated cases (so `limit` is real), filtered to the ones
+ * that actually build the fan-in, driven through the four-phase push walk with both IVM
+ * sources yield-wrapped. `max` caps the fan-out so it stays a per-PR cost.
+ */
+export async function checkYieldPush(
+  transact: Transact,
+  data: Data,
+  cases: readonly QueryCase[],
+  n: number,
+  seed: number,
+  max = 48,
+): Promise<Report> {
+  const selected = fanInTakeCases(cases).slice(0, max);
+  const failures: Array<[string, string]> = [];
+  let total = 0;
+  for (let i = 0; i < selected.length; i++) {
+    const c = selected[i];
+    const r = rng((seed ^ Math.imul(i + 1, 0x27d4eb2f)) >>> 0);
+    const wrap = createRandomYieldWrapper(() => r.float(), YIELD_P);
+    const ast = asQueryInternals(c.query).ast;
+    // Mutate both sides of the gate: parent pushes drive the fan-out, child pushes drive
+    // the flipped join's own push path into the fan-in.
+    const mutations = [...queryTables(ast)].flatMap(t => fourPhase(data, t, n));
+    if (mutations.length === 0) {
+      continue;
+    }
     total += 1;
     const msg = await capture(() =>
-      transact(
-        d =>
-          mutations.length > 0
-            ? pushWalk(d, query, mutations)
-            : runAndCompare(schema, d, query, undefined),
-        wrap,
-      ),
+      transact(d => pushWalk(d, c.query, mutations), wrap),
     );
     if (msg) {
-      failures.push([`yield|${label(s)}`, msg]);
+      failures.push([`yieldPush|${c.label}`, msg]);
     }
   }
   return {total, failures};
@@ -638,57 +957,21 @@ export async function checkYieldTail(
 }
 
 /**
- * **Scalar-subquery sweep:** for every one-hop relationship, build a PK-constrained (hence
- * *simple*) scalar subquery and check that the production split agrees with the oracle — the
- * original `scalar: true` AST through z2s (`parentField = (SELECT childField … LIMIT 1)`)
- * vs the IVM over the **pre-resolved** AST (`parentField = <literal>`, the transform
- * zero-cache's pipeline-driver applies via {@link resolveSimpleScalarSubqueries}).
- *
- * `rawRows` (client-named) backs the synchronous scalar executor; it must match the data
- * loaded into the oracle so both sides pick the same row. A candidate whose subquery fails
- * to resolve (would leave the base IVM treating `scalar` as a plain EXISTS — a generation
- * regression, not an engine bug) is reported, not silently passed.
+ * **Scalar-invariance sweep:** `scalar` is a plan hint every engine in the differential is
+ * free to ignore, so all `2^k` scalar assignments of an EXISTS-bearing skeleton must agree
+ * with the oracle — hence with each other. Unlike the old lane, gates are *not* pinned to a
+ * unique key first: an undecorated skeleton gate is unpinned, which is exactly the space
+ * where z2s used to decorrelate unsoundly.
  */
-export async function checkScalar(
+export async function checkScalarInvariance(
   delegates: Delegates,
-  rawRows: Record<string, readonly Row[]>,
-  data: Data,
+  skels: readonly Skeleton[],
+  maxScalars = 4,
 ): Promise<Report> {
-  const failures: Array<[string, string]> = [];
-  let total = 0;
-  for (const cand of scalarCandidates()) {
-    const q = buildScalar(cand, data);
-    if (!q) {
-      continue; // empty child table — no present PK to constrain
-    }
-    total += 1;
-    const lbl = `scalar|${cand.table}.${cand.rel}`;
-    const msg = await capture(async () => {
-      const ast = asQueryInternals(q).ast;
-      const resolved = resolveScalarForIvm(ast, rawRows);
-      if (hasScalarSubquery(resolved)) {
-        throw new Error(
-          `scalar subquery did not resolve (would diverge spuriously) for ${lbl}`,
-        );
-      }
-      const resolvedQuery = wrapAst(resolved);
-      // Oracle runs the ORIGINAL scalar AST (z2s); the IVM runs the RESOLVED one.
-      const pgResult = await delegates.pg.run(q);
-      const sqliteResult = mapResultToClientNames(
-        await delegates.sqlite.run(resolvedQuery),
-        schema,
-        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        ast.table as any,
-      );
-      const memoryResult = await delegates.memory.run(resolvedQuery);
-      expect(memoryResult).toEqualPg(pgResult);
-      expect(sqliteResult).toEqualPg(pgResult);
-    });
-    if (msg) {
-      failures.push([lbl, msg]);
-    }
-  }
-  return {total, failures};
+  return await checkHydrateCases(
+    delegates,
+    scalarQueryCases(skels, maxScalars),
+  );
 }
 
 /**

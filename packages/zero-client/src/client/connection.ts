@@ -12,6 +12,10 @@ import {ConnectionStatus} from './connection-status.ts';
 /**
  * The current connection state of the Zero instance. One of the following states:
  *
+ * - `initializing`: The client is loading its local store. Nothing has been
+ *   sent to the server yet, so time spent here depends on the device and the
+ *   amount of local data, not on the network. Entered once, when the Zero
+ *   instance is created, and followed by `connecting`.
  * - `connecting`: The client is actively trying to connect every 5 seconds.
  * - `disconnected`: The client is now in an "offline" state. It will continue
  *   to try to connect every 5 seconds.
@@ -24,6 +28,9 @@ import {ConnectionStatus} from './connection-status.ts';
  *   a terminal state, and a new Zero instance must be created to reconnect.
  */
 export type ConnectionState =
+  | {
+      name: 'initializing';
+    }
   | {
       name: 'disconnected';
       reason: string;
@@ -197,6 +204,10 @@ export class ConnectionSource
 
   #mapConnectionManagerState(state: ConnectionManagerState): ConnectionState {
     switch (state.name) {
+      case ConnectionStatus.Initializing:
+        return {
+          name: 'initializing',
+        };
       case ConnectionStatus.Closed:
         return {
           name: 'closed',

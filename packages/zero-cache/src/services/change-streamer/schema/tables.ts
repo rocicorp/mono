@@ -143,6 +143,10 @@ function createTables(shard: ShardID) {
   );
 }
 
+interface PurgeLock {
+  release(): Promise<void>;
+}
+
 export async function setupCDCTables(
   lc: LogContext,
   db: postgres.TransactionSql,
@@ -168,7 +172,9 @@ export async function ensureReplicationConfig(
   >,
   shard: ShardID,
   autoReset: boolean,
+  purgeLock?: PurgeLock,
   setTimeoutFn: typeof setTimeout = setTimeout,
+  pgChangeLogEnabled = true,
 ) {
   const {publications, replicaVersion, watermark} = subscriptionState;
   const replicaConfig = {publications, replicaVersion};
@@ -209,6 +215,10 @@ export async function ensureReplicationConfig(
           `Data in cdc tables @${replicaVersion} is incompatible ` +
             `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
         );
+        // Release any purge lock held by the caller; the changeLog is
+        // incompatible with the replica and needs to be truncated.
+        void purgeLock?.release();
+
         // Note: The order of TRUNCATE matters. The replicationState table is
         //       truncated before the changeLog table, in order to acquire
         //       (exclusive) locks on the tables in the same order that the
@@ -221,7 +231,9 @@ export async function ensureReplicationConfig(
         needsTruncate = true;
         stmts.push(
           sql`TRUNCATE TABLE ${sql(schema)}."replicationState"`,
-          sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
+          ...(pgChangeLogEnabled
+            ? [sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`]
+            : []),
           sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
           sql`TRUNCATE TABLE ${sql(schema)}."tableMetadata"`,
           sql`TRUNCATE TABLE ${sql(schema)}."backfilling"`,
@@ -230,18 +242,20 @@ export async function ensureReplicationConfig(
     }
     // Initialize (or re-initialize TRUNCATED) tables
     if (results.length === 0 || needsTruncate) {
-      // The storer uses the earliest changeLog entry as the safe watermark
-      // from which subscribers can be resumed. These initial entries ensure
-      // that subscribers can start from a freshly synced replica, even if
-      // new changes have been replicated and not purged from the changeLog.
+      // When enabled, the PG storer uses the earliest changeLog entry as the
+      // safe watermark from which subscribers can be resumed. These initial
+      // entries ensure that subscribers can start from a freshly synced
+      // replica, even if new changes have been replicated and not purged.
       //
       // TODO: Replace this with an explicit `firstWatermark` column in the
       //       change db.
       const watermark = replicaConfig.replicaVersion;
-      const initialTx: FullChangeLogEntry[] = [
-        {watermark, pos: 0, change: {tag: 'begin'}},
-        {watermark, pos: 1, change: {tag: 'commit'}},
-      ];
+      const initialTx: FullChangeLogEntry[] = pgChangeLogEnabled
+        ? [
+            {watermark, pos: 0, change: {tag: 'begin'}},
+            {watermark, pos: 1, change: {tag: 'commit'}},
+          ]
+        : [];
 
       stmts.push(
         sql`INSERT INTO ${sql(schema)}."replicationConfig" ${sql(replicaConfig)}`,
@@ -256,16 +270,30 @@ export async function ensureReplicationConfig(
         // The TRUNCATE statements require ACCESS EXCLUSIVE locks, which may
         // be blocked by old storer catchup reads. Race against a timeout
         // that terminates the blocking backends if the TRUNCATE takes too
-        // long.
-        const timer = setTimeoutFn(async () => {
-          lc.info?.(
-            'ensureReplicationConfig blocked, terminating lock holders',
-          );
-          await terminateChangeDBLockHolders(lc, db, shard);
-        }, LOCK_HOLDER_TERMINATE_TIMEOUT_MS);
+        // long. The check is repeated until the statements complete, since
+        // the TRUNCATE may not yet be waiting on a lock when the timer fires.
+        let done = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const scheduleTerminate = () => {
+          timer = setTimeoutFn(async () => {
+            lc.info?.(
+              'ensureReplicationConfig blocked, terminating lock holders',
+            );
+            try {
+              await terminateChangeDBLockHolders(lc, db, shard);
+            } catch (e) {
+              lc.warn?.('error terminating lock holders', e);
+            }
+            if (!done) {
+              scheduleTerminate();
+            }
+          }, LOCK_HOLDER_TERMINATE_TIMEOUT_MS);
+        };
+        scheduleTerminate();
         try {
           return await Promise.all(stmts);
         } finally {
+          done = true;
           clearTimeout(timer);
         }
       }

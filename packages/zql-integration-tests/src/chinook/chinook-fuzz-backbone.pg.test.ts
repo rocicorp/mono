@@ -10,7 +10,7 @@
  * - **L0** — every bounded-exhaustive skeleton (depth ≤ 2) hydrates identically through
  *   the IVM memory + sqlite views and the Postgres oracle (z2s).
  * - **L1** — the pairwise covering array of decorations (filter × exists × order ×
- *   limit), lowered onto every decoratable root and onto nested child collections,
+ *   limit × start), lowered onto every decoratable root and onto nested child collections,
  *   hydrates identically — and the realized assignments reach **100% pairwise** coverage
  *   (the design's headline backbone gate).
  * - **Push** — every single-level (depth ≤ 1) skeleton, driven through the four-phase
@@ -30,9 +30,14 @@ import {
   checkFlipInvariance,
   checkL0Hydrate,
   checkL1,
+  checkPushCases,
   checkPushWalk,
   checkYield,
+  checkYieldPush,
+  fanInTakeCases,
+  l1QueryCases,
   panicIfFailed,
+  pinnedPushCases,
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
@@ -67,15 +72,15 @@ test(
 );
 
 test(
-  'L1 — pairwise covering array: 100% coverage + hydrate-equal over mini',
+  'L1 — 3-way covering array: 100% coverage + hydrate-equal over mini',
   async () => {
-    const {report, coverage} = await checkL1(harness.delegates);
+    const {report, coverage} = await checkL1(harness.delegates, data);
     console.log(
       `L1 backbone: ${report.total} cases, ${coverage.summary()}, ${report.failures.length} failures`,
     );
     expect(
       coverage.fraction(),
-      `pairwise coverage incomplete (${coverage.summary()}); missed: ${JSON.stringify(
+      `t-wise coverage incomplete (${coverage.summary()}); missed: ${JSON.stringify(
         coverage.missed(),
       )}`,
     ).toBe(1);
@@ -94,6 +99,27 @@ test(
     const report = await checkPushWalk(harness.transact, data, skels, 1);
     console.log(
       `Push backbone (D≤1): ${report.total} cases, ${report.failures.length} failures`,
+    );
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+test(
+  'Pinned push — a root filter on a join column, every flip plan, four-phase per-step parity over mini (D≤2)',
+  async () => {
+    // The root pins the join column of its first relationship, which is the shape that
+    // correlated predicate pushdown rewrites. D≤2 so the copied filter also sits in the
+    // middle of a chain, where a leaf push fetches through it. Every flip assignment runs
+    // too, since those are the plans the planner can pick in production.
+    const skels = enumerate({depth: 2, related: 1, exists: 1});
+    const cases = pinnedPushCases(data, skels, 1);
+    expect(cases.filter(c => c.label.includes('|flip')).length).toBeGreaterThan(
+      0,
+    );
+    const report = await checkPushCases(harness.transact, cases);
+    console.log(
+      `Pinned push backbone (D≤2): ${report.total} cases, ${report.failures.length} failures`,
     );
     panicIfFailed(report, 12);
   },
@@ -156,6 +182,35 @@ test(
     );
     console.log(
       `Random-yield backbone (D≤1): ${report.total} cases, ${report.failures.length} failures`,
+    );
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+test(
+  'Random-yield push — Take over UnionFanIn survives interleaved maintenance fetches',
+  async () => {
+    // The cell no other lane reaches. `checkYield` runs decoration-free skeletons, so it
+    // never carries a `limit` (hence never a `Take`); `checkFlipInvariance` enumerates
+    // flips but only hydrates. A `Take` sitting above a `UnionFanIn` while a `'yield'`
+    // interrupts a maintenance fetch mid-push is a 3-way axis interaction
+    // (`flip` x `exists_*_or` x `limit`) that only exists in the corpus at t >= 3.
+    const {cases} = l1QueryCases(data);
+    const selected = fanInTakeCases(cases);
+    expect(
+      selected.length,
+      'no L1 case builds a Take over a UnionFanIn — the flip axis or t=3 regressed',
+    ).toBeGreaterThan(0);
+    const report = await checkYieldPush(
+      harness.transact,
+      data,
+      cases,
+      1,
+      YIELD_SEED,
+    );
+    console.log(
+      `Random-yield push (fan-in+take): ${report.total}/${selected.length} selected, ${report.failures.length} failures`,
     );
     panicIfFailed(report, 12);
   },

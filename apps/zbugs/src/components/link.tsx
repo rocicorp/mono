@@ -8,6 +8,7 @@ export type Props = {
   title?: string | undefined;
   state?: ZbugsHistoryState | undefined;
   eventName?: string | undefined;
+  tabIndex?: number | undefined;
 };
 
 /**
@@ -15,10 +16,11 @@ export type Props = {
  * We like mousedown here at Rocicorp.
  */
 export const Link = memo(
-  ({children, href, className, title, state, eventName}: Props) => (
+  ({children, href, className, title, state, eventName, tabIndex}: Props) => (
     <a
       href={href}
       title={title}
+      tabIndex={tabIndex}
       data-zbugs-history-state={JSON.stringify(state)}
       data-zbugs-event-name={eventName}
       className={className}

@@ -3,13 +3,15 @@ import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {must} from '../../../../shared/src/must.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
   streamIn,
+  streamInWithSize,
   streamOut,
   streamOutStringified,
   type Source,
@@ -17,20 +19,20 @@ import {
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
-import {HttpService} from '../http-service.ts';
-import type {BackupMonitor} from './backup-monitor.ts';
+import {HttpService, type Options as HttpOptions} from '../http-service.ts';
+import {handleProfzRequest} from '../profz.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
   type ChangeStreamer,
   type ChangeStreamerService,
-  type Downstream,
+  type SizedDownstream,
   type SubscriberContext,
 } from './change-streamer.ts';
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
 import {snapshotMessageSchema, type SnapshotMessage} from './snapshot.ts';
 
-const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
+const MIN_SUPPORTED_PROTOCOL_VERSION = 4;
 
 const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
 const CHANGES_PATH_PATTERN = '/replication/:version/changes';
@@ -39,10 +41,10 @@ const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
-type Options = {
-  port: number;
-  keepaliveTimeoutMs: number | undefined;
+type Options = HttpOptions & {
   startupDelayMs: number;
+  config?: Pick<NormalizedZeroConfig, 'adminPassword'> | undefined;
+  getProfileWorker?: (() => Promise<Worker>) | undefined;
 };
 
 export class ChangeStreamerHttpServer extends HttpService {
@@ -50,14 +52,12 @@ export class ChangeStreamerHttpServer extends HttpService {
   readonly #lc: LogContext;
   readonly #opts: Options;
   readonly #changeStreamer: ChangeStreamerService;
-  readonly #backupMonitor: BackupMonitor | null;
 
   constructor(
     lc: LogContext,
     opts: Options,
     parent: Worker,
     changeStreamer: ChangeStreamerService,
-    backupMonitor: BackupMonitor | null,
   ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
@@ -67,6 +67,18 @@ export class ChangeStreamerHttpServer extends HttpService {
         SNAPSHOT_PATH_PATTERN,
         {websocket: true},
         this.#reserveSnapshot,
+      );
+
+      fastify.get('/profz', (req, res) =>
+        handleProfzRequest(
+          lc,
+          opts.config ?? {adminPassword: undefined},
+          req,
+          res,
+          opts.getProfileWorker,
+          undefined,
+          'change-streamer',
+        ),
       );
 
       installWebSocketReceiver<'snapshot' | 'changes'>(
@@ -80,14 +92,6 @@ export class ChangeStreamerHttpServer extends HttpService {
     this.#lc = lc;
     this.#opts = opts;
     this.#changeStreamer = changeStreamer;
-    this.#backupMonitor = backupMonitor;
-  }
-
-  #getBackupMonitor() {
-    return must(
-      this.#backupMonitor,
-      'replication-manager is not configured with a ZERO_LITESTREAM_BACKUP_URL',
-    );
   }
 
   // Called when receiving a web socket via the main dispatcher handoff.
@@ -111,7 +115,8 @@ export class ChangeStreamerHttpServer extends HttpService {
     }
   };
 
-  readonly #reserveSnapshot = (ws: WebSocket, req: RequestHeaders) => {
+  readonly #reserveSnapshot = async (ws: WebSocket, req: RequestHeaders) => {
+    this.#ensureChangeStreamerStarted('incoming snapshot reservation');
     try {
       const url = new URL(
         req.url ?? '',
@@ -123,7 +128,7 @@ export class ChangeStreamerHttpServer extends HttpService {
         throw new Error('Missing taskID in snapshot request');
       }
       const downstream =
-        this.#getBackupMonitor().startSnapshotReservation(taskID);
+        await this.#changeStreamer.startSnapshotReservation(taskID);
       void streamOut(this._lc, downstream, ws);
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
@@ -138,12 +143,9 @@ export class ChangeStreamerHttpServer extends HttpService {
       }
 
       const downstream = await this.#changeStreamer.subscribe(ctx);
-      if (ctx.initial && ctx.taskID && this.#backupMonitor) {
-        // Now that the change-streamer knows about the subscriber and watermark,
-        // end the reservation to safely resume scheduling cleanup.
-        this.#backupMonitor.endReservation(ctx.taskID);
-      }
-      void streamOutStringified(this._lc, downstream, ws);
+      void streamOutStringified(this._lc, downstream, ws, {
+        batched: ctx.wsBatched,
+      });
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
@@ -151,9 +153,11 @@ export class ChangeStreamerHttpServer extends HttpService {
 
   #changeStreamerStarted = false;
 
-  #ensureChangeStreamerStarted(reason: string) {
+  #ensureChangeStreamerStarted(reason?: string) {
     if (!this.#changeStreamerStarted && this._state.shouldRun()) {
-      this.#lc.info?.(`starting ChangeStreamerService: ${reason}`);
+      this.#lc.info?.(
+        `starting ChangeStreamerService ${reason ? `(${reason})` : ''}`,
+      );
       void this.#changeStreamer
         .run()
         .catch(e =>
@@ -166,14 +170,32 @@ export class ChangeStreamerHttpServer extends HttpService {
   }
 
   protected override _onStart(): void {
-    const {startupDelayMs} = this.#opts;
-    this._state.setTimeout(
-      () =>
-        this.#ensureChangeStreamerStarted(
-          `startup delay elapsed (${startupDelayMs} ms)`,
-        ),
-      startupDelayMs,
-    );
+    const {startupDelayMs, readinessGate = promiseVoid} = this.#opts;
+    if (startupDelayMs === 0) {
+      // In RMv2, there is no need to delay starting the change streamer
+      // because RM startup is non-disruptive.
+      this.#ensureChangeStreamerStarted();
+    } else {
+      // In RMv1, starting the change-streamer forcibly shuts down the
+      // previous change-streamer, causing view-syncers to reconnect.
+      // If this replication-manager has just started, the routing layer may
+      // not have registered it with DNS, as that only happens after it
+      // confirms health checks. To minimize downtime, the takeover is
+      // delayed for the configured startupDelayMs _after_ beginning to
+      // advertise readiness.
+      void readinessGate.then(() => {
+        this.#lc.info?.(
+          `waiting ${startupDelayMs}ms before taking over the change log`,
+        );
+        this._state.setTimeout(
+          () =>
+            this.#ensureChangeStreamerStarted(
+              `startup delay elapsed (${startupDelayMs} ms)`,
+            ),
+          startupDelayMs,
+        );
+      });
+    }
   }
 
   protected override async _onStop(): Promise<void> {
@@ -232,13 +254,13 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     return streamIn(this.#lc, ws, snapshotMessageSchema);
   }
 
-  async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
+  async subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>> {
     const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
-    const params = getParams(ctx);
+    const params = getParams({wsBatched: true, ...ctx});
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamIn(this.#lc, ws, downstreamSchema);
+    return streamInWithSize(this.#lc, ws, downstreamSchema);
   }
 }
 
@@ -252,11 +274,16 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   return {
     protocolVersion,
     id: params.get('id', true),
-    taskID: params.get('taskID', false),
+    taskID: params.get('taskID', true),
     mode: params.get('mode', false) === 'backup' ? 'backup' : 'serving',
     replicaVersion: params.get('replicaVersion', true),
     watermark: params.get('watermark', true),
     initial: params.getBoolean('initial'),
+    // Absent for subscribers that predate the parameter, which is the safe
+    // default: the barrier falls back to polling rather than waiting on an
+    // ACK that would never be attributed to a writer.
+    logsChangeStream: params.getBoolean('logsChangeStream'),
+    wsBatched: params.getBoolean('wsBatched'),
   };
 }
 
@@ -282,14 +309,18 @@ function checkProtocolVersion(pathname: string): number {
 // This is called from the client-side (i.e. the replicator).
 function getParams(ctx: SubscriberContext): URLSearchParams {
   // The protocolVersion is hard-coded into the CHANGES_PATH.
-  const {protocolVersion, ...stringParams} = ctx;
+  const {protocolVersion, wsBatched, ...stringParams} = ctx;
   assert(
     protocolVersion === PROTOCOL_VERSION,
     `replicator should be setting protocolVersion to ${PROTOCOL_VERSION}`,
   );
-  return new URLSearchParams({
+  const params = new URLSearchParams({
     ...stringParams,
-    taskID: ctx.taskID ? ctx.taskID : '',
     initial: ctx.initial ? 'true' : 'false',
+    logsChangeStream: ctx.logsChangeStream ? 'true' : 'false',
   });
+  if (wsBatched) {
+    params.set('wsBatched', 'true');
+  }
+  return params;
 }

@@ -1,7 +1,10 @@
 import {deleteDB, type IDBPDatabase, openDB} from 'idb/with-async-ittr';
 // @ts-ignore Invalid module when using node16 module resolution.
 import xbytes from 'xbytes';
-import type {Bencher, Benchmark} from '../benchmark.ts';
+import type {
+  Bencher,
+  Benchmark,
+} from '../../../../tools/rn-bench/src/benchmark.ts';
 import {randomData, type RandomDataType} from '../data.ts';
 
 function benchmarkIDBReadGetAll(opts: {

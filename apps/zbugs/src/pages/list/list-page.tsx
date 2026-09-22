@@ -1,27 +1,34 @@
-import {useZeroVirtualizer} from '@rocicorp/zero-virtual/react';
+import {
+  rowAttributes,
+  useZeroVirtualizer,
+  type VirtualRow,
+} from '@rocicorp/zero-virtual/react';
 import {useQuery, useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
 import React, {
+  memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import {toast} from 'react-toastify';
 import {useDebouncedCallback} from 'use-debounce';
 import {useParams, useSearch} from 'wouter';
 import {must} from '../../../../../packages/shared/src/must.ts';
+import {mutators} from '../../../shared/mutators.ts';
 import {
   queries,
+  type Issue,
   type IssueRowSort,
   type ListContext,
 } from '../../../shared/queries.ts';
 import InfoIcon from '../../assets/images/icon-info.svg?react';
 import {Button} from '../../components/button.tsx';
+import {Confirm} from '../../components/confirm.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
 import {Link} from '../../components/link.tsx';
@@ -32,7 +39,8 @@ import {useElementSize} from '../../hooks/use-element-size.ts';
 import {useHash} from '../../hooks/use-hash.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useWouterPermalinkState} from '../../hooks/use-wouter-permalink-state.ts';
+import {useWouterScrollState} from '../../hooks/use-wouter-scroll-state.ts';
+import {isPrimaryMouseButton} from '../../is-primary-mouse-button.ts';
 import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
@@ -43,7 +51,178 @@ import {getIDFromString} from '../issue/get-id.tsx';
 import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
 
 let firstRowRendered = false;
+function markFirstRowRendered() {
+  if (firstRowRendered === false) {
+    mark('first issue row rendered');
+    firstRowRendered = true;
+  }
+}
+
 export const ITEM_SIZE = 56;
+
+type RowProps = {
+  item: VirtualRow<Issue>;
+  sortField: 'created' | 'modified';
+  permalinkID: string | null;
+  projectName: string;
+  listContext: ListContext;
+  isLoggedIn: boolean;
+  /** When true the row shows a checkbox and shifts over to make room for it. */
+  selectMode: boolean;
+  /** The ID of the logged in user, used to decide which rows can be selected. */
+  currentUserID: string | undefined;
+  /** True when the current user may delete any issue (crew / sandbox). */
+  canDeleteAny: boolean;
+  selected: boolean;
+  onToggleSelected: (id: string) => void;
+};
+
+const EMPTY_SELECTION: ReadonlySet<string> = new Set();
+
+// Hoisted to module scope (not defined inside `ListPage`) so its component
+// identity is stable across `ListPage` renders. A component defined during
+// render has a new function identity each render, which makes React remount
+// the entire row subtree — churning DOM that the virtualizer measures and
+// anchors. `memo` additionally skips re-rendering rows whose props are
+// unchanged.
+const Row = memo(function Row({
+  item,
+  sortField,
+  permalinkID,
+  projectName,
+  listContext,
+  isLoggedIn,
+  selectMode,
+  currentUserID,
+  canDeleteAny,
+  selected,
+  onToggleSelected,
+}: RowProps) {
+  const {index, key, row: issue} = item;
+  if (issue === undefined) {
+    return (
+      <div
+        className={classNames('row', 'skeleton-shimmer')}
+        {...rowAttributes(index, key)}
+      ></div>
+    );
+  }
+
+  markFirstRowRendered();
+
+  const timestamp = sortField === 'modified' ? issue.modified : issue.created;
+  const canDelete = canDeleteAny || issue.creatorID === currentUserID;
+
+  // In select mode the row itself is the focusable, toggleable thing: the
+  // whole row, checkbox included, toggles on mousedown like everything else in
+  // this UI, and space on the focused row does the same. Links navigate on a
+  // window-level mousedown (see useSoftNav), so stopping propagation here is
+  // what keeps the title and label pills from navigating away and dropping
+  // the selection. Modifier or non-primary clicks are left alone so "open in
+  // new tab" still works.
+  const toggle = () => {
+    if (canDelete) {
+      onToggleSelected(issue.id);
+    }
+  };
+
+  const onRowMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!selectMode || !isPrimaryMouseButton(e.nativeEvent)) {
+      return;
+    }
+    e.stopPropagation();
+    // Also stops the browser moving focus to whatever was under the pointer.
+    e.preventDefault();
+    e.currentTarget.focus();
+    toggle();
+  };
+
+  const onRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!selectMode || e.key !== ' ') {
+      return;
+    }
+    // Stops useSoftNav treating this as a click on a link, and the checkbox
+    // from toggling itself a second time.
+    e.stopPropagation();
+    e.preventDefault();
+    toggle();
+  };
+
+  // The mousedown already toggled; suppress the checkbox's native click toggle.
+  const onSelectAreaClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+  };
+
+  return (
+    <div
+      className={classNames(
+        'row',
+        issue.modified > (issue.viewState?.viewed ?? 0) && isLoggedIn
+          ? 'unread'
+          : null,
+        {
+          // TODO(arv): Extract into something cleaner
+          'permalink':
+            issue.id === permalinkID || String(issue.shortID) === permalinkID,
+          'select-mode': selectMode,
+          'not-selectable': selectMode && !canDelete,
+          selected,
+        },
+      )}
+      title={
+        selectMode && !canDelete
+          ? 'You can only delete issues you created'
+          : undefined
+      }
+      // The row is the only focusable thing in select mode so tab, j/k and
+      // space all act on the row rather than the link or checkbox inside it.
+      tabIndex={selectMode ? 0 : undefined}
+      role={selectMode ? 'option' : undefined}
+      aria-selected={selectMode ? selected : undefined}
+      onMouseDown={onRowMouseDown}
+      onKeyDown={onRowKeyDown}
+      {...rowAttributes(index, key)}
+    >
+      {selectMode ? (
+        <label className="issue-select-area" onClick={onSelectAreaClick}>
+          <input
+            type="checkbox"
+            className="issue-select"
+            checked={selected}
+            disabled={!canDelete}
+            readOnly
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+        </label>
+      ) : null}
+      <IssueLink
+        className={classNames('issue-title', {'issue-closed': !issue.open})}
+        issue={{projectName, id: issue.id, shortID: issue.shortID}}
+        title={issue.title}
+        listContext={listContext}
+        tabIndex={selectMode ? -1 : undefined}
+      >
+        {issue.title}
+      </IssueLink>
+      <div className="issue-taglist">
+        {issue.labels.map(label => (
+          <Link
+            key={label.id}
+            className="pill label"
+            href={`?label=${label.name}`}
+            tabIndex={selectMode ? -1 : undefined}
+          >
+            {label.name}
+          </Link>
+        ))}
+      </div>
+      <div className="issue-timestamp">
+        <RelativeTime timestamp={timestamp} />
+      </div>
+    </div>
+  );
+});
 
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
@@ -72,6 +251,59 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const project = projects.find(
     p => p.lowerCaseName === projectName.toLocaleLowerCase(),
   );
+
+  const currentUserID = login.loginState?.decoded.sub;
+  const [crewUser] = useQuery(currentUserID && queries.crewUser(currentUserID));
+  const canDeleteAny = Boolean(
+    import.meta.env.VITE_PUBLIC_SANDBOX || crewUser !== undefined,
+  );
+
+  const [selectModeState, setSelectModeState] = useState(false);
+  const selectMode = selectModeState && currentUserID !== undefined;
+  const [selectedIDs, setSelectedIDs] =
+    useState<ReadonlySet<string>>(EMPTY_SELECTION);
+  const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
+
+  const toggleSelectMode = useCallback(() => {
+    setSelectModeState(prev => !prev);
+    setSelectedIDs(EMPTY_SELECTION);
+  }, []);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectModeState(false);
+    setSelectedIDs(EMPTY_SELECTION);
+  }, []);
+
+  const onToggleSelected = useCallback((id: string) => {
+    setSelectedIDs(prev => {
+      const next = new Set(prev);
+      if (!next.delete(id)) {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const deleteSelected = async () => {
+    const ids = [...selectedIDs];
+    if (ids.length === 0) {
+      return;
+    }
+    // TODO: Implement undo - https://github.com/rocicorp/undo
+    const result = z.mutate(mutators.issue.deleteMany(ids));
+    const clientResult = await result.client;
+    if (clientResult.type === 'error') {
+      const toastID = 'delete-issues-failed';
+      toast(
+        <ToastContent toastID={toastID}>
+          Failed to delete issues: {clientResult.error.message}
+        </ToastContent>,
+        {toastId: toastID, containerId: 'bottom'},
+      );
+      return;
+    }
+    exitSelectMode();
+  };
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator') ?? null;
@@ -146,6 +378,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
     [projectName, search, title, listContextParams],
   );
 
+  // A different list (filters, sort, project, user) means the selected rows
+  // may no longer be visible, so drop the selection rather than deleting
+  // things the user can't see.
+  useEffect(() => {
+    setSelectedIDs(EMPTY_SELECTION);
+  }, [listContextParams, currentUserID]);
+
   const {setListContext} = useListContext();
   useEffect(() => {
     setListContext(listContext);
@@ -163,18 +402,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
     navigate(`#issue-${id}`);
   };
 
-  const [permalinkState, setPermalinkState] =
-    useWouterPermalinkState<IssueRowSort>();
+  const [scrollState, setScrollState] = useWouterScrollState<IssueRowSort>();
+
+  const queryOptions = textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE;
 
   const {
-    virtualizer,
-    rowAt,
+    items,
+    spaceBefore,
+    spaceAfter,
     complete,
     rowsEmpty,
     permalinkNotFound,
     estimatedTotal,
     total,
-  } = useZeroVirtualizer({
+  } = useZeroVirtualizer<typeof listContextParams, Issue, IssueRowSort>({
     estimateSize: () => ITEM_SIZE,
     getScrollElement: () => listRef.current,
     getRowKey: row => row.id,
@@ -182,27 +423,28 @@ export function ListPage({onReady}: {onReady: () => void}) {
     listContextParams,
     permalinkID,
 
-    getPageQuery: (
-      limit: number,
-      start: IssueRowSort | null,
-      dir: 'forward' | 'backward',
-    ) =>
-      queries.issueListV2({
+    getPageQuery: ({limit, start, dir}) => ({
+      query: queries.issueListV2({
         listContext: listContextParams,
         limit,
         start,
         dir,
         inclusive: start === null,
       }),
+      options: queryOptions,
+    }),
 
-    getSingleQuery: (id: string) => {
+    getSingleQuery: ({id}) => {
       // Allow short ID too.
       const {idField, idValue} = getIDFromString(id);
-      return queries.listIssueByID({
-        idField,
-        idValue,
-        listContext: listContextParams,
-      });
+      return {
+        query: queries.listIssueByID({
+          idField,
+          idValue,
+          listContext: listContextParams,
+        }),
+        options: queryOptions,
+      };
     },
 
     toStartRow: row => ({
@@ -211,10 +453,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
       created: row.created,
     }),
 
-    options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
-
-    permalinkState,
-    onPermalinkStateChange: setPermalinkState,
+    scrollState,
+    onScrollStateChange: setScrollState,
   });
 
   useEffect(() => {
@@ -245,6 +485,84 @@ export function ListPage({onReady}: {onReady: () => void}) {
       preload(z, projectName);
     }
   }, [complete, z, projectName]);
+
+  // Keyboard navigation in select mode: j/k move focus to the next/previous
+  // row. The row itself handles space (see Row), so the focused row is the
+  // cursor and there is no separate cursor state.
+  useEffect(() => {
+    if (!selectMode || deleteConfirmationShown) {
+      return;
+    }
+
+    const focusRow = (scrollElement: HTMLElement, index: number) => {
+      const el = scrollElement.querySelector<HTMLElement>(
+        `[data-vrow-index="${index}"]`,
+      );
+      if (el) {
+        el.focus();
+        return;
+      }
+      // Not rendered yet. Rows are fixed height, so scroll it into view and
+      // focus it once the virtualizer has rendered it.
+      const top = index * ITEM_SIZE;
+      const bottom = top + ITEM_SIZE;
+      if (top < scrollElement.scrollTop) {
+        scrollElement.scrollTop = top;
+      } else if (
+        bottom >
+        scrollElement.scrollTop + scrollElement.clientHeight
+      ) {
+        scrollElement.scrollTop = bottom - scrollElement.clientHeight;
+      }
+      requestAnimationFrame(() => {
+        scrollElement
+          .querySelector<HTMLElement>(`[data-vrow-index="${index}"]`)
+          ?.focus();
+      });
+    };
+
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (
+        (e.key !== 'j' && e.key !== 'k') ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.tagName === 'INPUT')
+      ) {
+        return;
+      }
+      const scrollElement = listRef.current;
+      if (!scrollElement) {
+        return;
+      }
+      const focusedRow = target?.closest<HTMLElement>('.row[data-vrow-index]');
+      let next: number;
+      if (focusedRow && scrollElement.contains(focusedRow)) {
+        next = Number(focusedRow.dataset.vrowIndex) + (e.key === 'j' ? 1 : -1);
+      } else {
+        // Nothing focused in the list: start from the first visible row.
+        next = Math.floor(scrollElement.scrollTop / ITEM_SIZE);
+      }
+      const lastIndex = Math.max(0, (total ?? estimatedTotal) - 1);
+      next = Math.max(0, Math.min(next, lastIndex));
+      e.preventDefault();
+      focusRow(scrollElement, next);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [selectMode, deleteConfirmationShown, total, estimatedTotal]);
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;
@@ -293,70 +611,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setForceSearchMode(false);
       navigate(removeParam(qs, 'q'));
     }
-  };
-
-  const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const issue = rowAt(index);
-    if (issue === undefined) {
-      return (
-        <div
-          className={classNames('row', 'skeleton-shimmer')}
-          style={{
-            ...style,
-          }}
-        ></div>
-      );
-    }
-
-    if (firstRowRendered === false) {
-      mark('first issue row rendered');
-      firstRowRendered = true;
-    }
-
-    const timestamp = sortField === 'modified' ? issue.modified : issue.created;
-    return (
-      <div
-        key={issue.id}
-        className={classNames(
-          'row',
-          issue.modified > (issue.viewState?.viewed ?? 0) &&
-            login.loginState !== undefined
-            ? 'unread'
-            : null,
-          {
-            // TODO(arv): Extract into something cleaner
-            permalink:
-              issue.id === permalinkID || String(issue.shortID) === permalinkID,
-          },
-        )}
-        style={{
-          ...style,
-        }}
-      >
-        <IssueLink
-          className={classNames('issue-title', {'issue-closed': !issue.open})}
-          issue={{projectName, id: issue.id, shortID: issue.shortID}}
-          title={issue.title}
-          listContext={listContext}
-        >
-          {issue.title}
-        </IssueLink>
-        <div className="issue-taglist">
-          {issue.labels.map(label => (
-            <Link
-              key={label.id}
-              className="pill label"
-              href={`?label=${label.name}`}
-            >
-              {label.name}
-            </Link>
-          ))}
-        </div>
-        <div className="issue-timestamp">
-          <RelativeTime timestamp={timestamp} />
-        </div>
-      </div>
-    );
   };
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
@@ -462,45 +716,89 @@ export function ListPage({onReady}: {onReady: () => void}) {
         ></Button>
       </div>
       <div className="list-view-filter-container">
-        <span className="filter-label">Filtered by:</span>
-        <div className="set-filter-container">
-          {Array.from(qs.entries(), ([key, val]) => {
-            if (key === 'label' || key === 'creator' || key === 'assignee') {
-              return (
-                <span
-                  className={classNames('pill', {
-                    label: key === 'label',
-                    user: key === 'creator' || key === 'assignee',
-                  })}
-                  onMouseDown={onDeleteFilter}
-                  data-key={key}
-                  data-value={val}
-                  key={key + '-' + val}
-                >
-                  {key}: {val}
-                </span>
-              );
-            }
-            return null;
-          })}
-        </div>
-        <Filter projectName={projectName} onSelect={onFilter} />
-        <div className="sort-control-container">
+        {currentUserID !== undefined ? (
           <Button
             enabledOffline
-            className="sort-control"
-            eventName="Toggle sort type"
-            onAction={toggleSortField}
-          >
-            {sortField === 'modified' ? 'Modified' : 'Created'}
-          </Button>
-          <Button
-            enabledOffline
-            className={classNames('sort-direction', sortDirection)}
-            eventName="Toggle sort direction"
-            onAction={toggleSortDirection}
+            className={classNames('select-toggle', {active: selectMode})}
+            eventName="Toggle issue selection"
+            onAction={toggleSelectMode}
+            title={selectMode ? 'Done selecting' : 'Select issues'}
+            aria-label={selectMode ? 'Done selecting' : 'Select issues'}
+            aria-pressed={selectMode}
           ></Button>
-        </div>
+        ) : null}
+        {selectMode ? (
+          <>
+            <span className="bulk-action-count">
+              {selectedIDs.size.toLocaleString()} selected
+            </span>
+            <div className="edit-buttons">
+              <Button
+                className="delete-button"
+                eventName="Delete selected issues"
+                disabled={selectedIDs.size === 0}
+                onAction={() => setDeleteConfirmationShown(true)}
+              >
+                Delete
+              </Button>
+              <Button
+                className="cancel-button"
+                enabledOffline
+                eventName="Cancel issue selection"
+                onAction={exitSelectMode}
+              >
+                Cancel
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="filter-icon" aria-hidden="true"></span>
+            <span className="filter-label">Filtered by:</span>
+            <div className="set-filter-container">
+              {Array.from(qs.entries(), ([key, val]) => {
+                if (
+                  key === 'label' ||
+                  key === 'creator' ||
+                  key === 'assignee'
+                ) {
+                  return (
+                    <span
+                      className={classNames('pill', {
+                        label: key === 'label',
+                        user: key === 'creator' || key === 'assignee',
+                      })}
+                      onMouseDown={onDeleteFilter}
+                      data-key={key}
+                      data-value={val}
+                      key={key + '-' + val}
+                    >
+                      {key}: {val}
+                    </span>
+                  );
+                }
+                return null;
+              })}
+            </div>
+            <Filter projectName={projectName} onSelect={onFilter} />
+            <div className="sort-control-container">
+              <Button
+                enabledOffline
+                className="sort-control"
+                eventName="Toggle sort type"
+                onAction={toggleSortField}
+              >
+                {sortField === 'modified' ? 'Modified' : 'Created'}
+              </Button>
+              <Button
+                enabledOffline
+                className={classNames('sort-direction', sortDirection)}
+                eventName="Toggle sort direction"
+                onAction={toggleSortDirection}
+              ></Button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
@@ -513,17 +811,21 @@ export function ListPage({onReady}: {onReady: () => void}) {
             }}
             ref={listRef}
           >
-            <div
-              className="virtual-list"
-              style={{height: virtualizer.getTotalSize()}}
-            >
-              {virtualizer.getVirtualItems().map(virtualRow => (
+            <div style={{paddingTop: spaceBefore, paddingBottom: spaceAfter}}>
+              {items.map(item => (
                 <Row
-                  key={virtualRow.key + ''}
-                  index={virtualRow.index}
-                  style={{
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
+                  key={item.key}
+                  item={item}
+                  sortField={sortField}
+                  permalinkID={permalinkID}
+                  projectName={projectName}
+                  listContext={listContext}
+                  isLoggedIn={login.loginState !== undefined}
+                  selectMode={selectMode}
+                  currentUserID={currentUserID}
+                  canDeleteAny={canDeleteAny}
+                  selected={selectedIDs.has(item.row?.id ?? '')}
+                  onToggleSelected={onToggleSelected}
                 />
               ))}
             </div>
@@ -535,6 +837,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
         onDismiss={() => {
           Cookies.set('onboardingDismissed', 'true', {expires: 365});
           setShowOnboarding(false);
+        }}
+      />
+      <Confirm
+        isOpen={deleteConfirmationShown}
+        title="Delete Issues"
+        text={`Really delete ${selectedIDs.size.toLocaleString()} ${
+          selectedIDs.size === 1 ? 'issue' : 'issues'
+        }?`}
+        okButtonLabel="Delete"
+        onClose={ok => {
+          if (ok) {
+            void deleteSelected();
+          }
+          setDeleteConfirmationShown(false);
         }}
       />
     </>

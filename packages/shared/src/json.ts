@@ -107,9 +107,16 @@ export function deepEqual(
   // We use for-in loops instead of for of Object.keys() to make sure deepEquals
   // does not allocate any objects.
 
+  // The behavior we want is that property values that are undefined are treated
+  // as if they do not exist. For example, the following two values are
+  // considered equal:
+  // ```
+  // deepEqual({a: undefined}, {})
+  // ```
+
   let aSize = 0;
   for (const key in a) {
-    if (hasOwn(a, key)) {
+    if (hasOwn(a, key) && a[key] !== undefined) {
       if (!deepEqual(a[key], b[key])) {
         return false;
       }
@@ -119,7 +126,7 @@ export function deepEqual(
 
   let bSize = 0;
   for (const key in b) {
-    if (hasOwn(b, key)) {
+    if (hasOwn(b, key) && b[key] !== undefined) {
       bSize++;
     }
   }

@@ -54,7 +54,7 @@ import type {
   SourceInput,
 } from './source.ts';
 import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
-import type {Stream} from './stream.ts';
+import {consume, type Stream} from './stream.ts';
 
 export type Overlay = {
   epoch: number;
@@ -69,7 +69,6 @@ export type Overlays = {
 type Index = {
   comparator: Comparator;
   data: BTreeSet<Row>;
-  usedBy: Set<Connection>;
 };
 
 export type Connection = {
@@ -120,7 +119,6 @@ export class MemorySource implements Source {
     this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
       comparator,
       data: primaryIndexData ?? new BTreeSet<Row>(comparator),
-      usedBy: new Set(),
     });
   }
 
@@ -207,6 +205,13 @@ export class MemorySource implements Source {
     assert(idx !== -1, 'Connection not found');
     this.#connections.splice(idx, 1);
 
+    // Indexes deliberately hold no reference back to the connections that use
+    // them. They used to, to support deleting an index once its last user went
+    // away. That deletion is gone (see below) but the `usedBy` set outlived it,
+    // so an index kept every `Connection` — and through its `input` and
+    // `output`, the whole torn-down pipeline — reachable for as long as the
+    // source lived.
+    //
     // TODO: We used to delete unused indexes here. But in common cases like
     // navigating into issue detail pages it caused a ton of constantly
     // building and destroying indexes.
@@ -222,13 +227,12 @@ export class MemorySource implements Source {
     return index;
   }
 
-  #getOrCreateIndex(sort: Ordering, usedBy: Connection): Index {
+  #getOrCreateIndex(sort: Ordering): Index {
     const key = JSON.stringify(sort);
     const index = this.#indexes.get(key);
     // Future optimization could use existing index if it's the same just sorted
     // in reverse of needed.
     if (index) {
-      index.usedBy.add(usedBy);
       return index;
     }
 
@@ -244,7 +248,7 @@ export class MemorySource implements Source {
     const rows = toSorted(this.#getPrimaryIndex().data, comparator);
     const data = BTreeSet.fromSorted(comparator, rows);
 
-    const newIndex = {comparator, data, usedBy: new Set([usedBy])};
+    const newIndex = {comparator, data};
     this.#indexes.set(key, newIndex);
     return newIndex;
   }
@@ -275,8 +279,19 @@ export class MemorySource implements Source {
       ? (r1, r2) => compareRows(r2, r1)
       : compareRows;
 
+    const reqFilter = req.filter;
+    const connFilterCondition = conn.filters?.condition;
+    const mergedFilterCondition: NoSubqueryCondition | undefined =
+      connFilterCondition && reqFilter
+        ? {type: 'and', conditions: [connFilterCondition, reqFilter]}
+        : (connFilterCondition ?? reqFilter);
+    const mergedFilterPredicate = mergePredicates(
+      conn.filters?.predicate,
+      reqFilter,
+    );
+
     const pkConstraint = primaryKeyConstraintFromFilters(
-      conn.filters?.condition,
+      mergedFilterCondition,
       this.#primaryKey,
     );
     // The primary key constraint will be more limiting than the constraint
@@ -302,7 +317,7 @@ export class MemorySource implements Source {
       indexSort.push(...requestedSort);
     }
 
-    const index = this.#getOrCreateIndex(indexSort, conn);
+    const index = this.#getOrCreateIndex(indexSort);
     const {data, comparator: compare} = index;
     // Avoid allocating a new closure when not reversing (the common case).
     const indexComparator: Comparator = req.reverse
@@ -353,7 +368,7 @@ export class MemorySource implements Source {
     // a large amount of per-row generator-resume overhead on the hottest path.
     const overlayActive =
       this.#overlay && conn.lastPushedEpoch >= this.#overlay.epoch;
-    if (!overlayActive && !req.start && !conn.filters) {
+    if (!overlayActive && !req.start && !conn.filters && !req.filter) {
       const {constraint} = req;
       for (const row of rowsIterable) {
         if (constraint && !constraintMatchesRow(constraint, row)) {
@@ -383,7 +398,16 @@ export class MemorySource implements Source {
       // not yet yielded add overlay will be yielded when the first row
       // not matching the constraint is reached.
       indexComparator,
-      conn.filters?.predicate,
+      // `startAt` is `req.start.row`, a bound in the connection's sort order,
+      // so it must be compared in that order -- not `indexComparator`, which
+      // with a constraint leads with the constraint keys. The two agree only
+      // when the overlay row and `startAt` share those key values; they do not
+      // for `#fetchMulti`'s per-value sub-fetches, which pin one primary key
+      // while still carrying the caller's connection-sort `start`. Comparing
+      // there by the constraint key dropped the in-flight overlay and served
+      // pre-push data. Same distinction #4926 drew for `generateWithStart`.
+      connectionComparator,
+      mergedFilterPredicate,
     );
 
     const withConstraint = generateWithConstraint(
@@ -395,8 +419,8 @@ export class MemorySource implements Source {
       req.constraint,
     );
 
-    yield* conn.filters
-      ? generateWithFilter(withConstraint, conn.filters.predicate)
+    yield* mergedFilterPredicate
+      ? generateWithFilter(withConstraint, mergedFilterPredicate)
       : withConstraint;
   }
 
@@ -459,6 +483,39 @@ export class MemorySource implements Source {
     }
   }
 
+  /**
+   * Pushes an add for each of `rows`.
+   *
+   * When the source holds no rows and nothing is connected to it (loading the
+   * replica at startup) there is no output to notify and no secondary index to
+   * keep in step, so the primary index is built bottom-up in O(N) (plus a sort
+   * when `rows` are not already in primary key order) rather than doing one
+   * tree insert, and one trip through the push machinery, per row.
+   *
+   * `rows` may be sorted in place. Rows must have distinct primary keys.
+   */
+  pushAdds(rows: Row[]): void {
+    const index = this.#getPrimaryIndex();
+    const canBulkLoad =
+      this.#connections.length === 0 &&
+      this.#indexes.size === 1 &&
+      index.data.size === 0;
+    if (!canBulkLoad) {
+      for (const row of rows) {
+        consume(this.push(makeSourceChangeAdd(row)));
+      }
+      return;
+    }
+    const {comparator} = index;
+    // The check is not redundant with the sort. V8's TimSort is O(N) on sorted
+    // input but Hermes' sort is not adaptive: always sorting doubled the load
+    // time of an already ordered 180k row replica on Android (343ms -> 672ms).
+    if (!isAscending(rows, comparator)) {
+      rows.sort(comparator);
+    }
+    index.data = BTreeSet.fromSorted(comparator, rows);
+  }
+
   *push(change: SourceChange): Stream<'yield'> {
     for (const result of this.genPush(change)) {
       if (result === 'yield') {
@@ -467,13 +524,13 @@ export class MemorySource implements Source {
     }
   }
 
-  *genPush(change: SourceChange) {
+  genPush(change: SourceChange) {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
     const exists = (row: Row) => data.has(row);
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
-    yield* genPushAndWriteWithSplitEdit(
+    return genPushAndWriteWithSplitEdit(
       this.#connections,
       change,
       exists,
@@ -523,6 +580,20 @@ export class MemorySource implements Source {
       }
     }
   }
+}
+
+function mergePredicates(
+  connPredicate: ((row: Row) => boolean) | undefined,
+  reqFilter: NoSubqueryCondition | undefined,
+): ((row: Row) => boolean) | undefined {
+  if (!reqFilter) {
+    return connPredicate;
+  }
+  const reqPredicate = createPredicate(reqFilter);
+  if (!connPredicate) {
+    return reqPredicate;
+  }
+  return row => connPredicate(row) && reqPredicate(row);
 }
 
 function* generateWithConstraint(
@@ -715,17 +786,26 @@ export function* generateWithStart(
  * @param constraint - constraint that was applied to the rowIterator and should
  * also be applied to the overlay.
  * @param overlay - the overlay values to splice in
- * @param compare - the comparator to use to find the position for the overlay
+ * @param compare - the comparator to use to find the position for the overlay.
+ * Must order rows the same way `rows` is ordered. For `MemorySource` that is
+ * *index* order, which leads with the constraint keys.
+ * @param startAtCompare - the comparator for `startAt`, which is a bound in the
+ * *connection's* sort order. Only the same as `compare` when the stream's order
+ * happens to be the connection's -- true for `TableSource` (SQL does the
+ * ordering) but not for a constrained `MemorySource` fetch. Conflating the two
+ * is what #4926 fixed for `generateWithStart`; this parameter is the same
+ * distinction for the overlay's own `startAt` pruning.
  */
-export function* generateWithOverlay(
+export function generateWithOverlay(
   startAt: Row | undefined,
   rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
   lastPushedEpoch: number,
   compare: Comparator,
+  startAtCompare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
-  multiConstraints?: readonly MultiConstraint[] | undefined,
+  multiConstraints?: readonly MultiConstraint[],
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
@@ -735,20 +815,22 @@ export function* generateWithOverlay(
     startAt,
     constraint,
     overlayToApply,
-    compare,
+    startAtCompare,
     filterPredicate,
     multiConstraints,
   );
-  yield* generateWithOverlayInner(rows, overlays, compare);
+  return generateWithOverlayInner(rows, overlays, compare);
 }
 
 function computeOverlays(
   startAt: Row | undefined,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
-  compare: Comparator,
+  // Only ever used for `overlaysForStartAt`, so this is the *connection*-order
+  // comparator, not the one used to splice the overlay into the row stream.
+  startAtCompare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
-  multiConstraints?: readonly MultiConstraint[] | undefined,
+  multiConstraints?: readonly MultiConstraint[],
 ): Overlays {
   let overlays: Overlays = {
     add: undefined,
@@ -776,7 +858,7 @@ function computeOverlays(
   }
 
   if (startAt) {
-    overlays = overlaysForStartAt(overlays, startAt, compare);
+    overlays = overlaysForStartAt(overlays, startAt, startAtCompare);
   }
 
   if (constraint) {
@@ -905,14 +987,14 @@ export function* generateWithOverlayInner(
  * No `startAt` or comparator needed. Injects remove/old-edit rows eagerly
  * at the start, and suppresses add/new-edit rows inline by PK match.
  */
-export function* generateWithOverlayUnordered(
+export function generateWithOverlayUnordered(
   rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
   lastPushedEpoch: number,
   primaryKey: PrimaryKey,
   filterPredicate?: (row: Row) => boolean,
-  multiConstraints?: readonly MultiConstraint[] | undefined,
+  multiConstraints?: readonly MultiConstraint[],
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
@@ -946,7 +1028,7 @@ export function* generateWithOverlayUnordered(
   if (filterPredicate) {
     overlays = overlaysForFilterPredicate(overlays, filterPredicate);
   }
-  yield* generateWithOverlayInnerUnordered(rows, overlays, primaryKey);
+  return generateWithOverlayInnerUnordered(rows, overlays, primaryKey);
 }
 
 export function* generateWithOverlayInnerUnordered(
@@ -994,6 +1076,15 @@ type MinValue = typeof minValue;
 const maxValue = Symbol('max-value');
 type MaxValue = typeof maxValue;
 
+function isAscending(rows: Row[], comparator: Comparator): boolean {
+  for (let i = 1; i < rows.length; i++) {
+    if (comparator(rows[i - 1], rows[i]) > 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function makeBoundComparator(sort: Ordering): Comparator {
   // Pre-extract the first two keys/directions to avoid per-call array access.
   // All paths share one function literal (single SFI) so the BTree comparator call site
@@ -1037,14 +1128,14 @@ function compareBounds(a: Bound, b: Bound): number {
   return compareValues(a, b);
 }
 
-function* generateRows(
+function generateRows(
   data: BTreeSet<Row>,
   scanStart: RowBound | undefined,
   reverse: boolean | undefined,
 ) {
-  yield* data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
-    scanStart as Row | undefined,
-  );
+  return reverse
+    ? data.valuesFromReversed(scanStart as Row | undefined)
+    : data.valuesFrom(scanStart as Row | undefined);
 }
 
 export function stringify(change: SourceChange) {
@@ -1081,7 +1172,7 @@ export function* mergeSortedStreams(
   // True while iterators[i] hasn't yet returned `done`. The finally
   // block uses this to skip already-exhausted streams when propagating
   // `.return()`.
-  const active: boolean[] = new Array(iterators.length).fill(true);
+  const active = Array.from({length: iterators.length}).fill(true) as boolean[];
 
   // Min-heap of entries; `idx` tells us which stream to refill from
   // after the entry's row is emitted.
@@ -1121,7 +1212,7 @@ export function* mergeSortedStreams(
   // Returns the Node, or `undefined` once the stream is exhausted.
   const pullNext = function* (
     idx: number,
-  ): Generator<'yield', Node | undefined, undefined> {
+  ): IterableIterator<'yield', Node | undefined, undefined> {
     while (true) {
       const r = iterators[idx].next();
       if (r.done) {

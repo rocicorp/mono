@@ -13,6 +13,7 @@ import {
 import * as v from '../../../../../shared/src/valita.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import type {StatementRunner} from '../../../db/statements.ts';
+import {CREATE_BACKFILLING_TABLE} from './backfilling.ts';
 import {CREATE_CHANGELOG_SCHEMA} from './change-log.ts';
 import {CREATE_COLUMN_METADATA_TABLE} from './column-metadata.ts';
 import {ZERO_VERSION_COLUMN_NAME} from './constants.ts';
@@ -62,14 +63,15 @@ const CREATE_REPLICATION_STATE_SCHEMA =
   /*sql*/ `
   CREATE TABLE "_zero.replicationState" (
     stateVersion TEXT NOT NULL,
-    writeTimeMs INTEGER,
+    writeTimeMs INTEGER NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
   ` +
   CREATE_CHANGELOG_SCHEMA +
   CREATE_RUNTIME_EVENTS_TABLE +
   CREATE_COLUMN_METADATA_TABLE +
-  CREATE_TABLE_METADATA_TABLE;
+  CREATE_TABLE_METADATA_TABLE +
+  CREATE_BACKFILLING_TABLE;
 
 const stringArray = v.array(v.string());
 
@@ -196,13 +198,24 @@ export function getSubscriptionStateAndContext(
 export function updateReplicationWatermark(
   db: StatementRunner,
   watermark: string,
+  writeTimeMs?: number | undefined,
 ) {
-  db.run(
-    /*sql*/ `
-    UPDATE "_zero.replicationState" 
-      SET stateVersion=?, writeTimeMs=unixepoch('subsec') * 1000`,
-    watermark,
-  );
+  if (writeTimeMs === undefined) {
+    db.run(
+      /*sql*/ `
+      UPDATE "_zero.replicationState"
+        SET stateVersion=?, writeTimeMs=unixepoch('subsec') * 1000`,
+      watermark,
+    );
+  } else {
+    db.run(
+      /*sql*/ `
+      UPDATE "_zero.replicationState"
+        SET stateVersion=?, writeTimeMs=?`,
+      watermark,
+      writeTimeMs,
+    );
+  }
 }
 
 export function getReplicationState(db: StatementRunner): ReplicationState {

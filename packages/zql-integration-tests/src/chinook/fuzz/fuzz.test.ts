@@ -10,29 +10,55 @@ import {describe, expect, test} from 'vitest';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import {pushDownCorrelatedPredicates} from '../../../../zql/src/builder/correlated-predicate-pushdown.ts';
 import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
-import {makeSourceChangeAdd} from '../../../../zql/src/ivm/source.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../../../zql/src/ivm/source.ts';
 import {consume} from '../../../../zql/src/ivm/stream.ts';
 import {RandomYieldSource} from '../../../../zql/src/ivm/test/random-yield-source.ts';
 import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
+import {newStaticQuery} from '../../../../zql/src/query/static-query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
 import {schema} from '../schema.ts';
-import {hasText, pkOf, relsOf, tables} from './axes.ts';
+import {
+  AXES,
+  axisIndex,
+  EXISTS_VALS,
+  FILTER_VALS,
+  FLIP_VALS,
+  hasText,
+  LIMIT_VALS,
+  N_AXES,
+  pinOf,
+  pkOf,
+  relsOf,
+  tables,
+} from './axes.ts';
 import {CostModel} from './cost.ts';
 import {
+  applyLimit,
+  applyOrder,
   decorate,
   decorateChild,
   decoratableRoots,
   greedyCover,
 } from './cover.ts';
 import {Coverage, tags} from './coverage.ts';
-import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
+import {
+  flipAssignments,
+  flippableExistsCount,
+  flipVariants,
+  setFlips,
+} from './flip.ts';
 import {Data} from './literals.ts';
 import {RELATIONS, transform} from './metamorphic.ts';
 import {miniData} from './mini.ts';
 import {mutate} from './mutate.ts';
-import {fourPhase, pushForSkeleton} from './push.ts';
+import {fourPhase, pushForQuery, pushForSkeleton} from './push.ts';
 import {
   loadRegressions,
   parseRegression,
@@ -42,11 +68,9 @@ import {
 } from './regressions.ts';
 import {rng} from './rng.ts';
 import {
-  buildScalar,
   hasScalarSubquery,
-  makeScalarExecutor,
-  resolveScalarForIvm,
-  scalarCandidates,
+  scalarizableExistsCount,
+  setScalars,
 } from './scalar.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {
@@ -55,6 +79,7 @@ import {
   enumerate,
   label,
   lower,
+  lowerOr,
   nExists,
   nRelated,
   type Skeleton,
@@ -98,24 +123,71 @@ describe('coverage', () => {
     }
     expect(cov.fraction()).toBe(1);
     expect(cov.missed()).toEqual([]);
-    // Far smaller than the full cross-product (16·7·4·3 = 1344) …
+    // Far smaller than the full cross-product (18·7·4·3·4·2 = 12096) …
     expect(rows.length).toBeLessThan(200);
-    // … but at least the largest single-pair domain product (filter·exists = 16·7).
-    expect(rows.length).toBeGreaterThanOrEqual(16 * 7);
+    // … but at least the largest single-pair domain product (filter·exists = 18·7).
+    expect(rows.length).toBeGreaterThanOrEqual(18 * 7);
   });
 
-  test('observe marks every t-subset; total is the pairwise tuple count', () => {
+  test('observe marks every t-subset; total is the realizable pairwise tuple count', () => {
     const cov = new Coverage(2);
     expect(cov.hitCount()).toBe(0);
-    // domains [16,7,4,3] ⇒ Σ over the 6 axis-pairs of dom_i·dom_j = 285.
-    const total = cov.total();
-    expect(total).toBe(16 * 7 + 16 * 4 + 16 * 3 + 7 * 4 + 7 * 3 + 4 * 3);
-    cov.observe([0, 0, 0, 0]); // one assignment hits C(4,2) = 6 pairwise tuples
-    expect(cov.hitCount()).toBe(6);
-    cov.observe([1, 1, 1, 1]); // a fully-different assignment adds 6 fresh tuples
-    expect(cov.hitCount()).toBe(12);
-    cov.observe([0, 0, 0, 0]); // re-observing is idempotent
-    expect(cov.hitCount()).toBe(12);
+    // Pairwise total is Σ over axis-pairs of dom_i·dom_j …
+    const domains = AXES.map(a => a.values.length);
+    const gross = domains
+      .flatMap((d, i) => domains.slice(i + 1).map(e => d * e))
+      .reduce((acc, n) => acc + n, 0);
+    // … minus the structurally unrealizable exists×flip cells: `flip=flip` is only
+    // meaningful on a positive gate, so it pairs with none of the 4 non-positive
+    // `exists` values (`none` + the three `not_exists_*`).
+    const unrealizable = EXISTS_VALS.filter(
+      e => !e.startsWith('exists'),
+    ).length;
+    expect(unrealizable).toBe(4);
+    expect(cov.total()).toBe(gross - unrealizable);
+
+    const pairCount = (AXES.length * (AXES.length - 1)) / 2;
+    const zeros = new Array(AXES.length).fill(0);
+    const ones = new Array(AXES.length).fill(1);
+    cov.observe(zeros); // one assignment hits C(N_AXES,2) tuples
+    expect(cov.hitCount()).toBe(pairCount);
+    cov.observe(ones); // a fully-different assignment adds fresh tuples
+    expect(cov.hitCount()).toBe(pairCount * 2);
+    cov.observe(zeros); // re-observing is idempotent
+    expect(cov.hitCount()).toBe(pairCount * 2);
+  });
+
+  test('the flip axis is covered and never pairs with a non-positive gate', () => {
+    const rows = greedyCover(2);
+    const ei = axisIndex('exists');
+    const fi = axisIndex('flip');
+    const flipped = rows.filter(r => FLIP_VALS[r[fi]] === 'flip');
+    expect(flipped.length).toBeGreaterThan(0);
+    for (const r of flipped) {
+      expect(
+        EXISTS_VALS[r[ei]].startsWith('exists'),
+        `flip=flip paired with exists=${EXISTS_VALS[r[ei]]}`,
+      ).toBe(true);
+    }
+  });
+
+  test('strength 3 is what reaches the flip×or×limit shape', () => {
+    // A flipped gate only builds a UnionFanOut/FanIn when it sits inside an OR, and a
+    // Take only sits above that fan-in when the query is limited. That is a 3-way
+    // interaction, so pairwise does not guarantee it — this pins why `l1QueryCases`
+    // defaults to t=3.
+    const ei = axisIndex('exists');
+    const fi = axisIndex('flip');
+    const li = axisIndex('limit');
+    const hits = (t: number) =>
+      greedyCover(t).filter(
+        r =>
+          FLIP_VALS[r[fi]] === 'flip' &&
+          EXISTS_VALS[r[ei]] === 'exists_or' &&
+          LIMIT_VALS[r[li]] !== 'none',
+      ).length;
+    expect(hits(2)).toBe(0);
+    expect(hits(3)).toBeGreaterThan(0);
   });
 });
 
@@ -171,7 +243,7 @@ describe('L1 covering array', () => {
     const delegate = memoryDelegate();
     const rows = greedyCover(2);
     for (const r of rows) {
-      const res = decorate('track', r);
+      const res = decorate('track', r, data);
       expect(res, `track could not realize ${r}`).not.toBeNull();
       await hydrates(delegate, res![0]);
     }
@@ -183,7 +255,7 @@ describe('L1 covering array', () => {
     const cov = new Coverage(2);
     for (const r of rows) {
       for (const root of decoratableRoots()) {
-        const res = decorate(root, r);
+        const res = decorate(root, r, data);
         if (!res) {
           continue; // unrealizable on this root (text filter on a textless table)
         }
@@ -199,7 +271,7 @@ describe('L1 covering array', () => {
     const rows = greedyCover(2);
     let realized = 0;
     for (const r of rows) {
-      const res = decorateChild('album', 'tracks', r);
+      const res = decorateChild('album', 'tracks', r, data);
       if (!res) {
         continue;
       }
@@ -225,6 +297,9 @@ describe('data-driven literals', () => {
     const comps = data.values('track', 'composer');
     expect(comps.length).toBeGreaterThan(0);
     expect(comps.every(v => v !== null)).toBe(true);
+    const start = data.startRow('track', [['milliseconds', 'asc']]);
+    expect(start?.id).toBeDefined();
+    expect(start?.milliseconds).toBeDefined();
   });
 
   test('text-filter realizability tracks the presence of a text column', () => {
@@ -399,7 +474,7 @@ describe('swarm (L2)', () => {
     let made = 0;
     for (let i = 0; i < 400; i++) {
       const mask = Mask.random(r);
-      const res = swarmGen(r, mask);
+      const res = swarmGen(r, mask, data);
       if (!res) {
         continue; // unrealizable pick (text filter on a textless table) — retry
       }
@@ -414,13 +489,14 @@ describe('swarm (L2)', () => {
 
   test('a disabled axis is pinned to its baseline (none)', () => {
     // Every axis off, no nesting ⇒ a bare decorated root: every axis at value 0 = none.
-    const mask = new Mask([false, false, false, false], false);
-    const res = swarmGen(rng(1), mask);
+    const mask = new Mask([false, false, false, false, false], false);
+    const res = swarmGen(rng(1), mask, data);
     expect(res).not.toBeNull();
     const ast = asQueryInternals(res![0]).ast;
     expect(ast.where).toBeUndefined();
     expect(ast.orderBy ?? []).toHaveLength(0);
     expect(ast.limit).toBeUndefined();
+    expect(ast.start).toBeUndefined();
     expect(ast.related ?? []).toHaveLength(0);
   });
 });
@@ -705,64 +781,87 @@ describe('regressions', () => {
   });
 });
 
-// ── scalar subqueries (production resolve mirror) ─────────────────────────────────────
+// ── scalar subqueries (scalar-invariance axis) ────────────────────────────────────────
 
 describe('scalar subqueries', () => {
-  test('candidates are one-hop (no junctions) with a single-col-PK child', () => {
-    const cands = scalarCandidates();
-    expect(cands.length).toBeGreaterThan(0);
-    for (const c of cands) {
-      expect(relsOf(c.table).find(r => r.name === c.rel)?.junction).toBe(false);
-      expect(pkOf(c.child)).toEqual([c.childPk]);
-    }
-  });
-
-  test('a built gate carries scalar:true and the resolver rewrites it to a literal =', async () => {
-    const delegate = memoryDelegate();
-    let checked = 0;
-    for (const c of scalarCandidates()) {
-      const q = buildScalar(c, data);
-      if (!q) {
+  test('the count matches the gates setScalars actually marks', () => {
+    let covered = 0;
+    for (const s of enumerate({depth: 2, related: 1, exists: 2})) {
+      const ast = asQueryInternals(lower(s)).ast;
+      const k = scalarizableExistsCount(ast);
+      if (k === 0) {
+        expect(hasScalarSubquery(setScalars(ast, []))).toBe(false);
         continue;
       }
-      const ast = asQueryInternals(q).ast;
-      // The raw gate is a scalar correlated subquery …
-      expect(hasScalarSubquery(ast), `${c.table}.${c.rel} not scalar`).toBe(
-        true,
-      );
-      // … which the production resolver rewrites away to a plain comparison …
-      const resolved = resolveScalarForIvm(ast, miniData);
+      covered += 1;
+      // All-on marks every gate; all-off leaves none set.
       expect(
-        hasScalarSubquery(resolved),
-        `unresolved scalar for ${c.table}.${c.rel}`,
-      ).toBe(false);
-      expect(resolved.where?.type).toBe('simple');
-      // … and the resolved query hydrates through the IVM.
-      await hydrates(delegate, wrapAst(resolved));
-      checked += 1;
+        hasScalarSubquery(setScalars(ast, Array(k).fill(true))),
+        `${label(s)} not marked`,
+      ).toBe(true);
+      expect(hasScalarSubquery(setScalars(ast, Array(k).fill(false)))).toBe(
+        false,
+      );
     }
-    expect(checked).toBeGreaterThan(0);
+    expect(covered).toBeGreaterThan(0);
   });
 
-  test('the executor returns the childField of the constrained row', () => {
-    // album.tracks: SELECT track.albumId WHERE track.id = <mid> ⇒ that track's albumId
-    // (childField ≠ the constrained PK — the non-trivial direction).
-    const c = must(
-      scalarCandidates().find(x => x.table === 'album' && x.rel === 'tracks'),
-      'album.tracks candidate missing',
+  test('junction wrappers are not marked — the builder puts scalar on the inner hop', () => {
+    // `playlist.tracks` is a two-hop junction. `{scalar: true}` through the builder lands
+    // on the second hop, so the wrapper must not be counted as a markable gate.
+    const junctionRel = must(
+      relsOf('playlist').find(r => r.junction),
+      'playlist has no junction relationship',
     );
-    const mid = data.pkMid('track');
-    const wantRow = must(miniData.track.find(r => r.id === mid));
-    const gate = must(asQueryInternals(must(buildScalar(c, data))).ast.where);
+    const viaBuilder = asQueryInternals(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (newStaticQuery(schema, 'playlist') as any).whereExists(
+        junctionRel.name,
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        (q: any) => q,
+        {scalar: true},
+      ),
+    ).ast;
+    const gate = must(viaBuilder.where);
     expect(gate.type).toBe('correlatedSubquery');
     if (gate.type !== 'correlatedSubquery') {
       return;
     }
-    const childField = gate.related.correlation.childField[0];
-    expect(childField).toBe('albumId');
-    expect(
-      makeScalarExecutor(miniData)(gate.related.subquery, childField),
-    ).toBe(wantRow.albumId);
+    // The wrapper itself is unmarked by the builder …
+    expect(gate.scalar).toBeUndefined();
+    // … and setScalars agrees: one markable gate (the inner hop), not two.
+    const bare = asQueryInternals(
+      lower({
+        table: 'playlist',
+        children: [
+          {
+            rel: junctionRel.name,
+            kind: 'exists',
+            sub: {table: junctionRel.child, children: []},
+          },
+        ],
+      }),
+    ).ast;
+    expect(scalarizableExistsCount(bare)).toBe(1);
+  });
+
+  test('marking a gate scalar leaves hydration unchanged', async () => {
+    const delegate = memoryDelegate();
+    let checked = 0;
+    for (const s of enumerate({depth: 1, related: 0, exists: 1})) {
+      const ast = asQueryInternals(lower(s)).ast;
+      const k = scalarizableExistsCount(ast);
+      if (k === 0) {
+        continue;
+      }
+      const marked = setScalars(ast, Array(k).fill(true));
+      expect(hasScalarSubquery(marked)).toBe(true);
+      const before = await delegate.run(wrapAst(ast));
+      const after = await delegate.run(wrapAst(marked));
+      expect(after, `${label(s)} changed under scalar`).toEqual(before);
+      checked += 1;
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });
 
@@ -798,6 +897,75 @@ describe('random-yield interleave', () => {
   });
 });
 
+// ── join-column pins (the shape correlated predicate pushdown rewrites) ───────────────
+
+/**
+ * Whether correlated predicate pushdown copies a condition into a subquery of `q`. The
+ * pass returns its input when it copies nothing.
+ */
+function pushdownRewrites(q: AnyQuery): boolean {
+  const ast = asQueryInternals(q).ast;
+  return (
+    pushDownCorrelatedPredicates(
+      ast,
+      t => schema.tables[t as keyof typeof schema.tables].columns,
+    ) !== ast
+  );
+}
+
+describe('join-column pins', () => {
+  test('pin literals are present values of the join column', () => {
+    expect(pinOf('track')).toEqual({col: 'albumId', eq: 10, in: [10, 11]});
+    // Only one supportRepId is present, so `IN` has one value.
+    expect(pinOf('customer')).toEqual({col: 'supportRepId', eq: 2, in: [2]});
+    // The boss has no manager, so the first non-null value is used.
+    expect(pinOf('employee')?.eq).toBe(1);
+    expect(pinOf('playlistTrack')).toBeUndefined(); // no relationship
+  });
+
+  test('a pin filter is copied into the gate on every table with a relationship', () => {
+    for (const table of tables()) {
+      for (const [fv, ev] of [
+        ['pin_eq', 'exists_top'],
+        ['pin_in', 'exists_or'],
+        ['pin_eq', 'not_exists_and'],
+      ] as const) {
+        const row = new Array<number>(N_AXES).fill(0);
+        row[axisIndex('filter')] = FILTER_VALS.indexOf(fv);
+        row[axisIndex('exists')] = EXISTS_VALS.indexOf(ev);
+        const res = decorate(table, row, data);
+        if (relsOf(table).length === 0) {
+          expect(res).toBeNull();
+          continue;
+        }
+        expect(pushdownRewrites(must(res)[0]), `${table} ${fv} ${ev}`).toBe(
+          true,
+        );
+      }
+    }
+  });
+
+  test('swarm and tail generate pins that the pass copies into a child', () => {
+    const r = rng(0xbeef);
+    let swarm = 0;
+    for (let i = 0; i < 400; i++) {
+      const res = swarmGen(r, Mask.random(r), data);
+      if (res && pushdownRewrites(res[0])) {
+        swarm += 1;
+      }
+    }
+    let tail = 0;
+    for (let i = 0; i < 300; i++) {
+      const res = tailGen(r, tailBounds());
+      if (res && pushdownRewrites(res[0])) {
+        tail += 1;
+      }
+    }
+    expect(swarm).toBeGreaterThan(20);
+    expect(tail).toBeGreaterThan(30);
+  });
+});
+
 // ── sanity: relationships read from the schema ────────────────────────────────────────
 
 test('schema graph exposes junction + self-join relationships', () => {
@@ -808,4 +976,100 @@ test('schema graph exposes junction + self-join relationships', () => {
   expect(
     relsOf('employee').find(r => r.name === 'reportsToEmployee')?.child,
   ).toBe('employee');
+});
+
+/**
+ * The decorated-push cases the in-memory lane walks. Each skeleton is lowered with its
+ * root gates ANDed ({@link lower}) and, when it has any, ORed with a simple root filter
+ * ({@link lowerOr}); each lowering gets a root `orderBy` + small `limit` and runs under
+ * the builder's plan plus every flip assignment of its gates. The push history covers
+ * every table the query touches ({@link pushForQuery}).
+ *
+ * Each dimension closes a gap an earlier version of this lane had, and each one hid a
+ * `Take` push bug: the OR is what puts a fan-in under the `Take`, the flip is the only
+ * thing that builds a `UnionFanIn`, mutating every table sends one source change through
+ * two connections (the self-join, two paths to one table), and depth 2 is what nests an
+ * EXISTS gate under another.
+ */
+function decoratedPushLaneCases(skels: readonly Skeleton[], n: number) {
+  const cases: Array<{
+    label: string;
+    query: AnyQuery;
+    mutations: ReturnType<typeof pushForQuery>;
+  }> = [];
+  for (const s of skels) {
+    const shapes: Array<[string, AnyQuery]> = [['and', lower(s)]];
+    if (s.children.some(c => c.kind !== 'related')) {
+      shapes.push(['or', lowerOr(s)]);
+    }
+    for (const [shape, lowered] of shapes) {
+      const base = applyLimit(applyOrder(lowered, s.table, 'asc1'), 'small');
+      const ast = asQueryInternals(base).ast;
+      const mutations = pushForQuery(data, s, ast, n);
+      if (mutations.length === 0) {
+        continue;
+      }
+      const plans: Array<[string, AnyQuery]> = [
+        ['', base],
+        ...flipVariants(ast, 2).map(([suffix, flipped]): [string, AnyQuery] => [
+          suffix,
+          wrapAst(flipped),
+        ]),
+      ];
+      for (const [suffix, query] of plans) {
+        cases.push({
+          label: `decpush|${shape}|${label(s)}${suffix}`,
+          query,
+          mutations,
+        });
+      }
+    }
+  }
+  return cases;
+}
+
+describe('decorated push memory parity', () => {
+  test('all decpush cases', async () => {
+    const skels = enumerate({depth: 2, related: 1, exists: 2});
+    const cases = decoratedPushLaneCases(skels, 1);
+    // One line per failing case: the first step that diverged from a fresh hydrate.
+    const failures: string[] = [];
+    for (const c of cases) {
+      const delegate = memoryDelegate();
+      const memView = delegate.materialize(c.query);
+      // `null` checks the hydration; each later step checks a mutation.
+      const steps = [null, ...c.mutations];
+      try {
+        for (let i = 0; i < steps.length; i++) {
+          const m = steps[i];
+          if (m) {
+            const src = must(delegate.getSource(m.table));
+            if (m.kind === 'remove') {
+              consume(src.push(makeSourceChangeRemove(m.row)));
+            } else if (m.kind === 'add') {
+              consume(src.push(makeSourceChangeAdd(m.row)));
+            } else if (m.kind === 'edit') {
+              consume(src.push(makeSourceChangeEdit(m.row, m.old)));
+            }
+          }
+          const expected = await delegate.run(c.query);
+          try {
+            expect(memView.data).toEqual(expected);
+          } catch {
+            failures.push(
+              `${c.label}: ${m ? `step ${i - 1} (${m.kind} on ${m.table})` : 'hydrate'}`,
+            );
+            break;
+          }
+        }
+      } catch (e: unknown) {
+        failures.push(
+          `${c.label}: threw ${e instanceof Error ? e.message : String(e)}`,
+        );
+      } finally {
+        memView.destroy();
+      }
+    }
+    expect(failures).toEqual([]);
+  }, 60_000);
 });

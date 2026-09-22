@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -17,7 +18,7 @@ import type {JWTAuth} from '../auth/auth.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
-import {runAst} from './run-ast.ts';
+import {MAX_ANALYZE_ROWS, runAst} from './run-ast.ts';
 import {TimeSliceTimer} from './view-syncer/view-syncer.ts';
 
 const TIME_SLICE_LAP_THRESHOLD_MS = 200;
@@ -71,28 +72,29 @@ export async function analyzeQuery(
       permissions,
       costModel,
       planDebugger,
+      maxSyncedRowsPerTable: MAX_ANALYZE_ROWS,
       host: {
-        debug: new Debug(),
+        debug: new Debug(vendedRows, MAX_ANALYZE_ROWS),
+        enableNotExists: true,
+        // Mirror production, as with the planner above.
+        disableCorrelatedPredicatePushdown:
+          config.enableCorrelatedPredicatePushdown === false,
+        enablePlannerAwarePushdown: config.enablePlannerAwarePushdown !== false,
         getSource(tableName: string) {
-          let source = tables.get(tableName);
-          if (source) {
-            return source;
-          }
+          return getOrInsertComputed(tables, tableName, tableName => {
+            const tableSpec = mustGetTableSpec(tableSpecs, tableName);
+            const {primaryKey} = tableSpec.tableSpec;
 
-          const tableSpec = mustGetTableSpec(tableSpecs, tableName);
-          const {primaryKey} = tableSpec.tableSpec;
-
-          source = new TableSource(
-            lc,
-            config.log,
-            db,
-            tableName,
-            tableSpec.zqlSpec,
-            primaryKey,
-            shouldYield,
-          );
-          tables.set(tableName, source);
-          return source;
+            return new TableSource(
+              lc,
+              config.log,
+              db,
+              tableName,
+              tableSpec.zqlSpec,
+              primaryKey,
+              shouldYield,
+            );
+          });
         },
         createStorage() {
           return new MemoryStorage();

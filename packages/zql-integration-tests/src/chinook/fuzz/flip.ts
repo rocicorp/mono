@@ -79,3 +79,21 @@ export function flipAssignments(k: number): boolean[][] {
   }
   return out;
 }
+
+/**
+ * Every **non-default** flip plan of `ast` — each `{false, true}^k` assignment of its `k`
+ * positive EXISTS gates except all-false (the builder's own lowering) — with a label
+ * suffix (`|flip01`). Empty when `k` is 0 or exceeds `maxFlips`.
+ */
+export function flipVariants(ast: AST, maxFlips: number): Array<[string, AST]> {
+  const k = flippableExistsCount(ast);
+  if (k === 0 || k > maxFlips) {
+    return [];
+  }
+  return flipAssignments(k)
+    .filter(bits => bits.some(b => b))
+    .map(bits => [
+      `|flip${bits.map(b => (b ? 1 : 0)).join('')}`,
+      setFlips(ast, bits),
+    ]);
+}

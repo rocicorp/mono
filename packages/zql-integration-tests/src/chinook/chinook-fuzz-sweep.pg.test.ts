@@ -25,6 +25,7 @@
 import {expect, test} from 'vitest';
 import '../helpers/comparePg.ts';
 import {bootstrap} from '../helpers/runner.ts';
+import {pkOf} from './fuzz/axes.ts';
 import {CostModel} from './fuzz/cost.ts';
 import {
   checkMutate,
@@ -32,6 +33,7 @@ import {
   checkTail,
   panicIfFailed,
 } from './fuzz/driver.ts';
+import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
 import {enumerate} from './fuzz/skeleton.ts';
 import {schema} from './schema.ts';
@@ -40,6 +42,7 @@ const TIMEOUT_MS = 120_000;
 
 /** The repro key (design §9). Override-able for replay if a regression is found. */
 const SEED = 0x00c0ffee;
+const data = new Data(miniData, pkOf);
 
 const harness = await bootstrap({
   suiteName: 'chinook_fuzz_sweep',
@@ -52,7 +55,7 @@ console.log(`══ chinook-fuzz sweep ══  seed = ${SEED}`);
 test(
   'L2 swarm — masked-random queries hydrate-equal over mini',
   async () => {
-    const report = await checkSwarm(harness.delegates, SEED, 16, 4);
+    const report = await checkSwarm(harness.delegates, data, SEED, 16, 4);
     console.log(
       `swarm: ${report.total} cases, ${report.failures.length} failures`,
     );

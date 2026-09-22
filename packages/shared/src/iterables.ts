@@ -125,3 +125,34 @@ export function some<T>(
   }
   return false;
 }
+
+class EmptyIteratorWithReturn<T>
+  // oxlint-disable-next-line typescript/no-explicit-any
+  implements IterableIterator<any, T, any>, IteratorReturnResult<T>
+{
+  readonly value: T;
+  readonly done = true;
+
+  constructor(value: T) {
+    this.value = value;
+  }
+
+  [Symbol.iterator]() {
+    return this;
+  }
+
+  next() {
+    return this;
+  }
+}
+
+// oxlint-disable-next-line typescript/no-explicit-any
+export const emptyIterator: IterableIterator<any, undefined, any> =
+  new EmptyIteratorWithReturn(undefined);
+
+export function makeEmptyIteratorWithReturn<T>(
+  value: T,
+  // oxlint-disable-next-line typescript/no-explicit-any
+): IterableIterator<any, T, any> {
+  return new EmptyIteratorWithReturn(value);
+}

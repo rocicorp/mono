@@ -1,8 +1,21 @@
 import {LogContext} from '@rocicorp/logger';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type MockInstance,
+  test,
+  vi,
+} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {
+  AST,
+  Condition,
+  CorrelatedSubquery,
+  CorrelatedSubqueryCondition,
+} from '../../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
@@ -17,6 +30,8 @@ import {
 } from '../../../../zqlite/src/database-storage.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {TableSource} from '../../../../zqlite/src/table-source.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import {listTables} from '../../db/lite-tables.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
@@ -150,8 +165,33 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     dbFile.delete();
   });
+
+  /**
+   * Spies on the `destroy` of every source connection made from now on, so a
+   * test can check that a pipeline built for a query was torn down. The
+   * `failFetchOf` connection (1-based) throws when fetched.
+   */
+  function trackSourceConnections(failFetchOf?: number): MockInstance[] {
+    const destroys: MockInstance[] = [];
+    const connect = TableSource.prototype.connect;
+    vi.spyOn(TableSource.prototype, 'connect').mockImplementation(function (
+      this: TableSource,
+      ...args: Parameters<TableSource['connect']>
+    ) {
+      const input = connect.apply(this, args);
+      destroys.push(vi.spyOn(input, 'destroy'));
+      if (destroys.length === failFetchOf) {
+        vi.spyOn(input, 'fetch').mockImplementation(() => {
+          throw new Error('simulated fetch failure');
+        });
+      }
+      return input;
+    });
+    return destroys;
+  }
 
   const issues = table('issues')
     .columns({
@@ -693,6 +733,218 @@ describe('view-syncer/pipeline-driver', () => {
     });
   });
 
+  test('logs query pipeline lifecycle', () => {
+    logSink.messages.length = 0;
+    lc = new LogContext(
+      'info',
+      {
+        taskID: 'task-a',
+        worker: 'syncer',
+        workerIndex: 2,
+        component: 'view-syncer',
+        clientGroupID: 'foo-client-group',
+        instance: 'view-syncer-instance',
+      },
+      logSink,
+    );
+
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    pipelines = new PipelineDriver(
+      lc,
+      testLogConfig,
+      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+      shardID,
+      new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
+      'foo-client-group',
+      new InspectorDelegate(undefined),
+      () => 200 /** yield threshold */,
+    );
+    pipelines.init(clientSchema);
+
+    [
+      ...pipelines.addQuery(
+        'transformation-hash-1',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        NO_TIME_ADVANCEMENT_TIMER,
+      ),
+    ];
+    [
+      ...pipelines.addQuery(
+        'transformation-hash-1',
+        'queryID2',
+        ISSUES_AND_COMMENTS,
+        NO_TIME_ADVANCEMENT_TIMER,
+      ),
+    ];
+    pipelines.removeQuery('queryID1');
+
+    const lifecycleContexts = logSink.messages
+      .filter(
+        ([level, context, args]) =>
+          level === 'info' &&
+          context?.zeroEvent !== undefined &&
+          args[0] === 'query pipeline lifecycle',
+      )
+      .map(([, context]) => context);
+
+    expect(lifecycleContexts.map(c => c?.zeroEvent)).toEqual([
+      'query-pipeline-hydrate-start',
+      'query-pipeline-hydrate-finish',
+      'query-pipeline-hydrate-start',
+      'query-pipeline-hydrate-finish',
+      'query-pipeline-stop',
+    ]);
+
+    const query1Start = lifecycleContexts.find(
+      c =>
+        c?.zeroEvent === 'query-pipeline-hydrate-start' &&
+        c.queryHash === 'queryID1',
+    );
+    const query1Finish = lifecycleContexts.find(
+      c =>
+        c?.zeroEvent === 'query-pipeline-hydrate-finish' &&
+        c.queryHash === 'queryID1',
+    );
+    const query1Stop = lifecycleContexts.find(
+      c => c?.zeroEvent === 'query-pipeline-stop' && c.queryHash === 'queryID1',
+    );
+    const query2Start = lifecycleContexts.find(
+      c =>
+        c?.zeroEvent === 'query-pipeline-hydrate-start' &&
+        c.queryHash === 'queryID2',
+    );
+    const query2Finish = lifecycleContexts.find(
+      c =>
+        c?.zeroEvent === 'query-pipeline-hydrate-finish' &&
+        c.queryHash === 'queryID2',
+    );
+
+    expect(query1Start).toMatchObject({
+      taskID: 'task-a',
+      worker: 'syncer',
+      workerIndex: 2,
+      component: 'view-syncer',
+      clientGroupID: 'foo-client-group',
+      instance: 'view-syncer-instance',
+      queryHash: 'queryID1',
+      transformationHash: 'transformation-hash-1',
+      hydrationReason: 'query-set-sync',
+    });
+    expect(query1Finish).toMatchObject({
+      queryHash: 'queryID1',
+      pipelineRunID: query1Start?.pipelineRunID,
+      hydrationRowCount: expect.any(Number),
+      hydrationTimeMs: expect.any(Number),
+    });
+    expect(query2Start).toMatchObject({
+      queryHash: 'queryID2',
+      transformationHash: 'transformation-hash-1',
+    });
+    expect(query2Finish).toMatchObject({
+      queryHash: 'queryID2',
+      pipelineRunID: query2Start?.pipelineRunID,
+    });
+    expect(query1Stop).toMatchObject({
+      zeroEvent: 'query-pipeline-stop',
+      queryHash: 'queryID1',
+      pipelineRunID: query1Start?.pipelineRunID,
+      stopReason: 'remove-query',
+      pipelineLifetimeMs: expect.any(Number),
+    });
+  });
+
+  test('abandoned hydration tears down its pipeline', () => {
+    pipelines.init(clientSchema);
+    const hydration = pipelines
+      .addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, startTimer())
+      [Symbol.iterator]();
+    // Consume the first row, then abandon the hydration, as a consumer that
+    // stops iterating early does.
+    expect(hydration.next().done).toBe(false);
+    hydration.return?.();
+
+    expect(pipelines.queries().has('queryID1')).toBe(false);
+    // The rows it yielded must not leave a partial signature behind.
+    expect(pipelines.rowSetSignature('queryID1')).toBeUndefined();
+
+    // The abandoned pipeline is disconnected from its sources, so a change to
+    // a table it was reading no longer produces output for it.
+    replicator.processTransaction(
+      '134',
+      messages.insert('issues', {id: '4', closed: 0}),
+    );
+    expect(changes()).toEqual([]);
+  });
+
+  // Clients can query comments with an empty issue-ID list. Opposite sort
+  // orders make these distinct queries that can coexist in a client group.
+  // Removing the first query must not remove index state needed to destroy
+  // the second (nor when the first query was the last one with a nonempty
+  // IN list on that column).
+  test.each([
+    {name: 'another empty IN query', firstIssueIDs: []},
+    {name: 'the last nonempty IN query', firstIssueIDs: ['3']},
+  ])('removes an empty IN query after $name', ({firstIssueIDs}) => {
+    pipelines.init(clientSchema);
+    const firstQuery: AST = {
+      table: 'comments',
+      orderBy: [['id', 'desc']],
+      where: {
+        type: 'simple',
+        op: 'IN',
+        left: {type: 'column', name: 'issueID'},
+        right: {type: 'literal', value: firstIssueIDs},
+      },
+    };
+    const emptyQuery: AST = {
+      table: 'comments',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'simple',
+        op: 'IN',
+        left: {type: 'column', name: 'issueID'},
+        right: {type: 'literal', value: []},
+      },
+    };
+    expect([
+      ...pipelines.addQuery('hash1', 'queryID1', firstQuery, startTimer()),
+    ]).toEqual([]);
+    expect([
+      ...pipelines.addQuery('hash2', 'queryID2', emptyQuery, startTimer()),
+    ]).toEqual([]);
+    expect(pipelines.queries().size).toBe(2);
+    pipelines.removeQuery('queryID1');
+    expect([...pipelines.queries().keys()]).toEqual(['queryID2']);
+    pipelines.removeQuery('queryID2');
+    expect(pipelines.queries().size).toBe(0);
+  });
+
+  test('failed scalar subquery resolution tears down earlier companions', () => {
+    pipelines.init(clientSchema);
+    const scalar =
+      ISSUES_WITH_SCALAR_SUBQUERY.where as CorrelatedSubqueryCondition;
+    // Two scalar subqueries: the first resolves and connects a companion
+    // pipeline to `comments`; executing the second fails at fetch time.
+    const ast: AST = {
+      ...ISSUES_WITH_SCALAR_SUBQUERY,
+      where: {type: 'and', conditions: [scalar, scalar]},
+    };
+    const destroys = trackSourceConnections(2);
+    expect(() => [
+      ...pipelines.addQuery('hash1', 'queryID1', ast, startTimer()),
+    ]).toThrow('simulated fetch failure');
+    expect(pipelines.queries().has('queryID1')).toBe(false);
+
+    // Both companions connected before the second one failed, and both
+    // connections were torn down.
+    expect(destroys).toHaveLength(2);
+    for (const destroy of destroys) {
+      expect(destroy).toHaveBeenCalledTimes(1);
+    }
+  });
+
   test('insert', () => {
     pipelines.init(clientSchema);
     [
@@ -1138,6 +1390,53 @@ describe('view-syncer/pipeline-driver', () => {
     ]).not.toThrow();
   });
 
+  test('advanceWithoutDiff picks up a schema change before hydration', () => {
+    // The client schema only covers `issues`, so dropping a `comments`
+    // column is not a client-visible schema error, but it does invalidate
+    // the table specs computed at init().
+    pipelines.init(subsetClientSchema);
+
+    // A schema change lands after init() but before the first hydration
+    // (e.g. while the view-syncer waits for the replica to catch up to
+    // the CVR). advanceWithoutDiff() does not iterate the change log diff,
+    // so it must check for the RESET op explicitly.
+    replicator.processTransaction(
+      '134',
+      messages.dropColumn('comments', 'upvotes'),
+    );
+
+    expect(() =>
+      pipelines.advanceWithoutDiff(),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ResetPipelinesSignal: schema changed between 123 and 134]`,
+    );
+
+    // After a reset at the new head, hydration uses the current specs.
+    pipelines.reset(subsetClientSchema);
+
+    expect(
+      [
+        ...pipelines.addQuery(
+          'hash1',
+          'queryID1',
+          ISSUES_AND_COMMENTS,
+          startTimer(),
+        ),
+      ]
+        .filter(
+          (change): change is RowChange =>
+            change !== 'yield' && change.table === 'comments',
+        )
+        .map(change => change.row),
+    ).toEqual([
+      // Rows of a reset table are reported at the bumped minRowVersion.
+      {_0_version: '134', id: '22', issueID: '2'},
+      {_0_version: '134', id: '21', issueID: '2'},
+      {_0_version: '134', id: '20', issueID: '2'},
+      {_0_version: '134', id: '10', issueID: '1'},
+    ]);
+  });
+
   test('reset', () => {
     pipelines.init(clientSchema);
     [
@@ -1165,7 +1464,7 @@ describe('view-syncer/pipeline-driver', () => {
     // Update one of the rows after the schema change.
     replicator.processTransaction('135', messages.update('issues', {id: '2'}));
 
-    pipelines.advanceWithoutDiff();
+    expect(() => pipelines.advanceWithoutDiff()).toThrow(ResetPipelinesSignal);
     pipelines.reset(clientSchema);
 
     expect(pipelines.queries()).toEqual(new Map());
@@ -2092,6 +2391,61 @@ describe('view-syncer/pipeline-driver', () => {
     expect(pipelines.currentVersion()).toBe('134');
   });
 
+  test('prunes unused tables when queries are removed', () => {
+    pipelines.init(clientSchema);
+
+    // Query 1 uses issues and comments
+    [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    ];
+
+    // Query 2 uses only issues
+    const ONLY_ISSUES: AST = {
+      table: 'issues',
+      orderBy: [['id', 'desc']],
+    };
+    [...pipelines.addQuery('hash2', 'queryID2', ONLY_ISSUES, startTimer())];
+
+    const advanceSpy = vi.spyOn(Snapshotter.prototype, 'advance');
+
+    // Advance 1: Both queries active -> issues and comments are both observed
+    changes();
+    const observed1 = advanceSpy.mock.calls.at(-1)?.[2];
+    expect(observed1?.has('issues')).toBe(true);
+    expect(observed1?.has('comments')).toBe(true);
+    expect(observed1?.has('labels')).toBe(false);
+
+    // Remove query 1: comments has no more connections, so it should be pruned.
+    // issues is still used by query 2.
+    pipelines.removeQuery('queryID1');
+
+    changes();
+    const observed2 = advanceSpy.mock.calls.at(-1)?.[2];
+    expect(observed2?.has('issues')).toBe(true);
+    expect(observed2?.has('comments')).toBe(false);
+
+    // Remove query 2: issues should now be pruned as well.
+    pipelines.removeQuery('queryID2');
+
+    changes();
+    const observed3 = advanceSpy.mock.calls.at(-1)?.[2];
+    expect(observed3?.has('issues')).toBe(false);
+    expect(observed3?.has('comments')).toBe(false);
+
+    // Re-adding a query on issues recreates the table source and works
+    [...pipelines.addQuery('hash2', 'queryID2', ONLY_ISSUES, startTimer())];
+    changes();
+    const observed4 = advanceSpy.mock.calls.at(-1)?.[2];
+    expect(observed4?.has('issues')).toBe(true);
+
+    advanceSpy.mockRestore();
+  });
+
   test('push fails on out of bounds numbers', () => {
     pipelines.init(clientSchema);
     [
@@ -2245,6 +2599,134 @@ describe('view-syncer/pipeline-driver', () => {
       op: '=',
       left: {type: 'literal', value: 1},
       right: {type: 'literal', value: 0},
+    });
+  });
+
+  test('scalar NOT EXISTS subquery with no matching rows', () => {
+    pipelines.init(clientSchema);
+
+    // No comment has id='nonexistent', so nothing can satisfy the correlated
+    // EXISTS — its negation holds for every issue.
+    const results = [
+      ...pipelines.addQuery(
+        'hash-scalar-not-none',
+        'queryScalarNotNone',
+        {
+          ...ISSUES_WITH_NONEXISTENT_SCALAR_SUBQUERY,
+          where: {
+            ...(ISSUES_WITH_NONEXISTENT_SCALAR_SUBQUERY.where as CorrelatedSubqueryCondition),
+            op: 'NOT EXISTS',
+          },
+        },
+        startTimer(),
+      ),
+    ];
+
+    expect(results.filter(r => r !== 'yield').map(r => r.rowKey)).toEqual([
+      {id: '1'},
+      {id: '2'},
+      {id: '3'},
+    ]);
+
+    expect(
+      pipelines.queries().get('queryScalarNotNone')?.transformedAst.where,
+    ).toEqual({
+      type: 'simple',
+      op: '=',
+      left: {type: 'literal', value: 1},
+      right: {type: 'literal', value: 1},
+    });
+  });
+
+  describe('unhonored scalar hints are reported', () => {
+    // The driver is built at 'error' by default, which swallows warnings.
+    function warningsFrom(query: AST): string[] {
+      logSink.messages.length = 0;
+      const warnLc = new LogContext('warn', undefined, logSink);
+      const storage = new Database(warnLc, ':memory:');
+      storage.prepare(CREATE_STORAGE_TABLE).run();
+      pipelines = new PipelineDriver(
+        warnLc,
+        testLogConfig,
+        new Snapshotter(warnLc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        new DatabaseStorage(storage).createClientGroupStorage(
+          'foo-client-group',
+        ),
+        'pipeline-driver.test.ts',
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+      );
+      pipelines.init(clientSchema);
+      [...pipelines.addQuery('hash-warn', 'queryWarn', query, startTimer())];
+      return logSink.messages
+        .filter(([level]) => level === 'warn')
+        .map(([, , args]) => String(args[0]));
+    }
+
+    test('an unpinned subquery warns, naming the table and its unique keys', () => {
+      const warnings = warningsFrom({
+        ...ISSUES_WITH_SCALAR_SUBQUERY,
+        where: {
+          ...(ISSUES_WITH_SCALAR_SUBQUERY.where as CorrelatedSubqueryCondition),
+          related: {
+            correlation: {parentField: ['id'], childField: ['issueID']},
+            subquery: {
+              table: 'comments',
+              // The gate survives as a real EXISTS, which needs an alias —
+              // the builder always emits one.
+              alias: 'zsubq_comments',
+              orderBy: [['id', 'asc']],
+              // `upvotes` is not unique, so this pins nothing.
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'upvotes'},
+                right: {type: 'literal', value: 0},
+              },
+            },
+          },
+        },
+      });
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchInlineSnapshot(
+        `"Ignoring {scalar: true} on the "comments" subquery of query queryWarn: it does not constrain every column of any unique key [(id)] to a literal with "=", so it is not provably limited to one row. The gate runs as a plain EXISTS."`,
+      );
+    });
+
+    test('a subquery pinned on the primary key is silent', () => {
+      expect(warningsFrom(ISSUES_WITH_SCALAR_SUBQUERY)).toEqual([]);
+    });
+
+    test('a subquery pinned on a non-primary unique index is silent', () => {
+      // `uniques` has unique indexes on both `id` and `name`. Pinning `name`
+      // is honored, which the client schema — primary keys only — could not
+      // have known. This is why the check lives here and not in the builder.
+      expect(
+        warningsFrom({
+          table: 'issues',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            scalar: true,
+            related: {
+              correlation: {parentField: ['id'], childField: ['id']},
+              subquery: {
+                table: 'uniques',
+                orderBy: [['id', 'asc']],
+                where: {
+                  type: 'simple',
+                  op: '=',
+                  left: {type: 'column', name: 'name'},
+                  right: {type: 'literal', value: 'bar'},
+                },
+              },
+            },
+          },
+        }),
+      ).toEqual([]);
     });
   });
 
@@ -2539,5 +3021,241 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     expect(() => changes()).toThrowError(ResetPipelinesSignal);
+  });
+
+  describe('correlated predicate pushdown', () => {
+    type Connection = {
+      readonly table: string;
+      readonly filters: Condition | undefined;
+    };
+
+    /** Records the table and the filter of each source connection made from now on. */
+    function recordConnections(): Connection[] {
+      const connections: Connection[] = [];
+      const connect = TableSource.prototype.connect;
+      vi.spyOn(TableSource.prototype, 'connect').mockImplementation(function (
+        this: TableSource,
+        ...args: Parameters<TableSource['connect']>
+      ) {
+        connections.push({table: this.tableSchema.name, filters: args[1]});
+        return connect.apply(this, args);
+      });
+      return connections;
+    }
+
+    function filtersOf(connections: Connection[], table: string) {
+      return connections.filter(c => c.table === table).map(c => c.filters);
+    }
+
+    function eq(column: string, value: string): Condition {
+      return {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: column},
+        right: {type: 'literal', value},
+      };
+    }
+
+    /** Replaces `pipelines` with a driver built with `config`. */
+    function usePipelines(config: Partial<ZeroConfig> | undefined) {
+      const storage = new Database(lc, ':memory:');
+      storage.prepare(CREATE_STORAGE_TABLE).run();
+      pipelines = new PipelineDriver(
+        lc,
+        testLogConfig,
+        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        new DatabaseStorage(storage).createClientGroupStorage(
+          'foo-client-group',
+        ),
+        'pipeline-driver.test.ts',
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+        false,
+        config as ZeroConfig | undefined,
+      );
+    }
+
+    const CHANGE_TYPES = {
+      [ChangeType.ADD]: 'ADD',
+      [ChangeType.REMOVE]: 'REMOVE',
+      [ChangeType.EDIT]: 'EDIT',
+    };
+
+    function summary(changes: Iterable<RowChange | 'yield'>): string[] {
+      const out: string[] = [];
+      for (const c of changes) {
+        if (c !== 'yield') {
+          const key = Object.values(c.rowKey).join(',');
+          out.push(`${CHANGE_TYPES[c.type]} ${c.table} ${key}`);
+        }
+      }
+      return out;
+    }
+
+    const COMMENTS: CorrelatedSubquery = {
+      system: 'client',
+      correlation: {parentField: ['id'], childField: ['issueID']},
+      subquery: {
+        table: 'comments',
+        alias: 'comments',
+        orderBy: [['id', 'asc']],
+      },
+    };
+
+    const PUSHDOWN_CONFIGS = [
+      ['default', undefined, true],
+      ['on', {enableCorrelatedPredicatePushdown: true}, true],
+      ['off', {enableCorrelatedPredicatePushdown: false}, false],
+    ] as const;
+
+    test.each(PUSHDOWN_CONFIGS)(
+      'the flag reaches hydration and the scalar resolver (%s)',
+      (_, config, pushed) => {
+        usePipelines(config);
+        const connections = recordConnections();
+        pipelines.init(clientSchema);
+
+        // The scalar gate is pinned on the issueLabels primary key and nests
+        // an EXISTS on labels, so the pass pushes `id = '1'` into the labels
+        // connection that the scalar resolver builds. The gate resolves to
+        // `id = '1'` on issues, so the pass pushes `issueID = '1'` into the
+        // related comments connection that hydration builds.
+        const results = pipelines.addQuery(
+          'hash-pushdown',
+          'queryPushdown',
+          {
+            table: 'issues',
+            orderBy: [['id', 'asc']],
+            where: {
+              type: 'correlatedSubquery',
+              op: 'EXISTS',
+              scalar: true,
+              related: {
+                correlation: {parentField: ['id'], childField: ['issueID']},
+                subquery: {
+                  table: 'issueLabels',
+                  orderBy: [
+                    ['issueID', 'asc'],
+                    ['labelID', 'asc'],
+                  ],
+                  where: {
+                    type: 'and',
+                    conditions: [
+                      eq('issueID', '1'),
+                      eq('labelID', '1'),
+                      {
+                        type: 'correlatedSubquery',
+                        op: 'EXISTS',
+                        related: {
+                          correlation: {
+                            parentField: ['labelID'],
+                            childField: ['id'],
+                          },
+                          subquery: {
+                            table: 'labels',
+                            alias: 'labels',
+                            orderBy: [['id', 'asc']],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+            related: [COMMENTS],
+          },
+          startTimer(),
+        );
+
+        expect(summary(results)).toEqual([
+          'ADD issues 1',
+          'ADD comments 10',
+          'ADD issueLabels 1,1',
+        ]);
+        expect(filtersOf(connections, 'labels')).toEqual([
+          pushed ? eq('id', '1') : undefined,
+        ]);
+        expect(filtersOf(connections, 'comments')).toEqual([
+          pushed ? eq('issueID', '1') : undefined,
+        ]);
+      },
+    );
+
+    test.each(PUSHDOWN_CONFIGS)(
+      'a literal pushed from a scalar gate follows the row behind it (%s)',
+      (_, config, pushed) => {
+        usePipelines(config);
+        const connections = recordConnections();
+        pipelines.init(clientSchema);
+
+        // Comment '10' resolves the gate to `id = '1'`, and the pass copies
+        // that literal into the related comments as `issueID = '1'`.
+        const query: AST = {
+          ...ISSUES_WITH_SCALAR_SUBQUERY,
+          related: [COMMENTS],
+        };
+        const hydrate = () =>
+          summary(
+            pipelines.addQuery(
+              'hash-scalar-related',
+              'queryScalarRelated',
+              query,
+              startTimer(),
+            ),
+          );
+
+        expect(hydrate()).toEqual([
+          'ADD issues 1',
+          'ADD comments 10',
+          'ADD comments 10',
+        ]);
+        // The first comments connection is the scalar resolver's `id = '10'`.
+        expect(filtersOf(connections, 'comments')).toEqual([
+          eq('id', '10'),
+          pushed ? eq('issueID', '1') : undefined,
+        ]);
+
+        replicator.processTransaction(
+          '134',
+          messages.insert('comments', {id: '11', issueID: '1', upvotes: 0}),
+          messages.insert('comments', {id: '23', issueID: '3', upvotes: 0}),
+          messages.update('comments', {id: '20', issueID: '2', upvotes: 2}),
+        );
+        expect(summary(changes())).toEqual(['ADD comments 11']);
+
+        // Moving comment '10' to issue '2' changes the resolved literal. The
+        // driver asks to be reset, and the view-syncer then hydrates again.
+        replicator.processTransaction(
+          '135',
+          messages.update('comments', {id: '10', issueID: '2', upvotes: 0}),
+        );
+        expect(() => changes()).toThrowError(ResetPipelinesSignal);
+        pipelines.reset(clientSchema);
+        pipelines.advanceWithoutDiff();
+        connections.length = 0;
+
+        expect(hydrate()).toEqual([
+          'ADD issues 2',
+          'ADD comments 10',
+          'ADD comments 20',
+          'ADD comments 21',
+          'ADD comments 22',
+          'ADD comments 10',
+        ]);
+        expect(filtersOf(connections, 'comments')).toEqual([
+          eq('id', '10'),
+          pushed ? eq('issueID', '2') : undefined,
+        ]);
+
+        replicator.processTransaction(
+          '136',
+          messages.insert('comments', {id: '12', issueID: '1', upvotes: 0}),
+          messages.insert('comments', {id: '24', issueID: '2', upvotes: 0}),
+        );
+        expect(summary(changes())).toEqual(['ADD comments 24']);
+      },
+    );
   });
 });

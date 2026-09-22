@@ -1,18 +1,28 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import {assertNotUndefined} from '../../../shared/src/asserts.ts';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
+import {chunkRefCountKey} from '../dag/key.ts';
+import {StoreImpl, WriteImpl} from '../dag/store-impl.ts';
 import type {Store} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
-import {getDeletedClients, setDeletedClients} from '../deleted-clients.ts';
+import {
+  DELETED_CLIENTS_HEAD_NAME,
+  getDeletedClients,
+  setDeletedClients,
+} from '../deleted-clients.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {getKVStoreProvider} from '../get-kv-store-provider.ts';
-import {fakeHash} from '../hash.ts';
+import {assertHash, fakeHash, newRandomHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
-import {hasMemStore} from '../kv/mem-store.ts';
+import {dropMemStore, hasMemStore, MemStore} from '../kv/mem-store.ts';
 import type {CreateStore} from '../kv/store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
-import {withRead, withWrite} from '../with-transactions.ts';
+import {
+  withRead,
+  withWrite,
+  withWriteNoImplicitCommit,
+} from '../with-transactions.ts';
 import {type ClientGroupMap, setClientGroups} from './client-groups.ts';
 import {makeClientMap, setClientsForTesting} from './clients-test-helpers.ts';
 import type {ClientMap, OnClientsDeleted} from './clients.ts';
@@ -964,4 +974,110 @@ test('dropDatabase', async () => {
 
   // deleting non-existent db fails silently.
   await dropDatabase('bonk');
+});
+
+test('a corrupt database found during collection is skipped and does not break collecting the others', async () => {
+  const kvStoreProvider = {
+    create: (name: string) => new MemStore(name),
+    drop: dropMemStore,
+  };
+  const store = new IDBDatabasesStore(kvStoreProvider.create);
+
+  const makeDb = (name: string): IndexedDBDatabase => ({
+    name,
+    replicacheName: 'app',
+    replicacheFormatVersion: FormatVersion.Latest,
+    schemaVersion: '1',
+  });
+  await store.putDatabaseForTesting(makeDb('healthy'));
+  await store.putDatabaseForTesting(makeDb('corrupt'));
+  await store.putDatabaseForTesting(makeDb('stale'));
+
+  const now = 10_000;
+  const maxAge = 1_000;
+  // healthy and corrupt each have an actively heartbeating client, so
+  // neither is collected outright; stale has none, so it is collected and
+  // its client becomes a deleted client written into the survivors.
+  for (const [name, clientID, hashSuffix, heartbeatTimestampMs] of [
+    ['healthy', 'healthyClient', 'h1', now],
+    ['corrupt', 'corruptClient', 'c1', now],
+    ['stale', 'staleClient', 's1', 0],
+  ] as const) {
+    const dagStore = new StoreImpl(
+      kvStoreProvider.create(name),
+      newRandomHash,
+      assertHash,
+    );
+    await setClientsForTesting(
+      makeClientMap({
+        [clientID]: {headHash: fakeHash(hashSuffix), heartbeatTimestampMs},
+      }),
+      dagStore,
+    );
+    await dagStore.close();
+  }
+
+  // Seed the corrupt database with an existing deleted-clients head, then
+  // corrupt its ref count directly in the kv store, the same way a real
+  // corruption would be found: the next write that moves the head away from
+  // it decrements a ref count that isn't there.
+  const corruptDagStore = new StoreImpl(
+    kvStoreProvider.create('corrupt'),
+    newRandomHash,
+    assertHash,
+  );
+  await withWrite(corruptDagStore, dagWrite =>
+    setDeletedClients(dagWrite, [
+      {clientGroupID: 'g', clientID: 'already-deleted'},
+    ]),
+  );
+  const deletedClientsHash = await withRead(corruptDagStore, read =>
+    read.getHead(DELETED_CLIENTS_HEAD_NAME),
+  );
+  assertNotUndefined(deletedClientsHash);
+  await withWriteNoImplicitCommit(corruptDagStore, async dagWrite => {
+    assert(dagWrite instanceof WriteImpl, 'Expected WriteImpl');
+    await dagWrite.kvWrite.put(chunkRefCountKey(deletedClientsHash), -1);
+    await dagWrite.commit();
+  });
+  await corruptDagStore.close();
+
+  // No hook is wired for any database here: a foreign database's own corrupt
+  // ref count is not this instance's responsibility to fix, only to not be
+  // broken by.
+  const newDagStore = (name: string, kvCreateStore: CreateStore): Store =>
+    new StoreImpl(kvCreateStore(name), newRandomHash, assertHash);
+
+  const onClientsDeleted = vi.fn<OnClientsDeleted>();
+
+  await collectIDBDatabases(
+    store,
+    now,
+    maxAge,
+    kvStoreProvider,
+    true,
+    onClientsDeleted,
+    newDagStore,
+  );
+
+  // The corrupt database is left alone (neither dropped nor updated), but
+  // collecting the others was not aborted by it.
+  expect(hasMemStore('corrupt')).toBe(true);
+  expect(Object.keys(await store.getDatabases()).sort()).toEqual([
+    'corrupt',
+    'healthy',
+  ]);
+
+  expect(onClientsDeleted).toHaveBeenCalledExactlyOnceWith([
+    {clientGroupID: 'make-client-group-id', clientID: 'staleClient'},
+  ]);
+  const healthyDagStore = new StoreImpl(
+    kvStoreProvider.create('healthy'),
+    newRandomHash,
+    assertHash,
+  );
+  expect(
+    await withRead(healthyDagStore, read => getDeletedClients(read)),
+  ).toEqual([{clientGroupID: 'make-client-group-id', clientID: 'staleClient'}]);
+  await healthyDagStore.close();
 });

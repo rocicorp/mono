@@ -1,3 +1,5 @@
+import {newArray} from '../../shared/src/arrays.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import type {Database} from './db.ts';
 
 /**
@@ -135,6 +137,7 @@ export class SQLiteStatFanout {
       SELECT il.name as index_name, ii.seqno, ii.name as column_name
       FROM pragma_index_list(?) il
       JOIN pragma_index_info(il.name) ii
+      WHERE il.partial = 0
       ORDER BY il.seq, ii.seqno
     `);
   }
@@ -375,9 +378,9 @@ export class SQLiteStatFanout {
       // Group by index name
       const indexMap = new Map<string, string[]>();
       for (const row of rows) {
-        const cols = indexMap.get(row.index_name) ?? [];
-        cols.push(row.column_name);
-        indexMap.set(row.index_name, cols);
+        getOrInsertComputed(indexMap, row.index_name, newArray).push(
+          row.column_name,
+        );
       }
 
       // Check each index for prefix match

@@ -785,6 +785,65 @@ describe('poke handler', () => {
     expect(setTimeoutStub).toHaveBeenCalledTimes(3);
   });
 
+  test('reassembles and decodes binary chunks at pokeEnd', async () => {
+    const onPokeErrorStub = vi.fn();
+    const replicachePokeStub = vi.fn();
+    const logContext = new LogContext('error');
+    const pokeHandler = new PokeHandler(
+      replicachePokeStub,
+      onPokeErrorStub,
+      'c1',
+      schema,
+      logContext,
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
+    );
+    const parts = [
+      {
+        pokeID: 'poke1',
+        lastMutationIDChanges: {c1: 7},
+        rowsPatch: [
+          {
+            op: 'put' as const,
+            tableName: 'issues',
+            value: {issue_id: 'issue1', title: '🙂 binary chunks'},
+          },
+        ],
+      },
+    ];
+    const encoded = new TextEncoder().encode(JSON.stringify(parts));
+
+    pokeHandler.handlePokeStart({pokeID: 'poke1', baseCookie: '1'});
+    // Seven-byte slices force some UTF-8 code points across chunk boundaries.
+    for (let i = 0; i < encoded.length; i += 7) {
+      pokeHandler.handlePokeChunk(encoded.subarray(i, i + 7));
+    }
+    const result = pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
+
+    expect(result).toEqual({
+      lastMutationIDChangeForSelf: 7,
+      hasRows: true,
+    });
+    expect(onPokeErrorStub).not.toHaveBeenCalled();
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
+
+    const playback = setTimeoutStub.mock.calls[0][0] as () => Promise<void>;
+    await playback();
+    expect(replicachePokeStub).toHaveBeenCalledWith({
+      baseCookie: '1',
+      pullResponse: {
+        cookie: '2',
+        lastMutationIDChanges: {c1: 7},
+        patch: [
+          {
+            op: 'put',
+            key: 'e/issue/issue1',
+            value: {id: 'issue1', title: '🙂 binary chunks'},
+          },
+        ],
+      },
+    });
+  });
+
   suite('onPokeErrors', () => {
     const cases: {
       name: string;
@@ -797,8 +856,22 @@ describe('poke handler', () => {
         },
       },
       {
+        name: 'pokeChunk before pokeStart',
+        causeError: pokeHandler => {
+          pokeHandler.handlePokeChunk(new Uint8Array([0]));
+        },
+      },
+      {
         name: 'pokeEnd before pokeStart',
         causeError: pokeHandler => {
+          pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
+        },
+      },
+      {
+        name: 'invalid UTF-8 pokeChunk',
+        causeError: pokeHandler => {
+          pokeHandler.handlePokeStart({pokeID: 'poke1', baseCookie: '1'});
+          pokeHandler.handlePokeChunk(new Uint8Array([0xff]));
           pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
         },
       },

@@ -17,6 +17,7 @@ import type {
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
@@ -26,10 +27,12 @@ import type {ConnectionValidation} from './connection-context-manager.ts';
 import {
   expectNoPokes,
   ISSUES_QUERY,
+  ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED,
   messages,
   nextPoke,
   permissions,
   permissionsAll,
+  restartViewSyncer,
   serviceID,
   setup,
   TEST_ADMIN_PASSWORD,
@@ -69,7 +72,7 @@ describe('view-syncer/service', () => {
     activeClients?: string[],
   ) => {
     queue: Queue<Downstream>;
-    source: Source<Downstream>;
+    source: Source<ViewSyncerDownstream>;
   };
 
   const SYNC_CONTEXT: SyncContext = {
@@ -87,6 +90,9 @@ describe('view-syncer/service', () => {
   let delegate: InspectorDelegate;
   let customQueryTransformer: CustomQueryTransformer | undefined;
   let clearMocks: () => void;
+  let databaseStorage: Awaited<ReturnType<typeof setup>>['databaseStorage'];
+  let config: Awaited<ReturnType<typeof setup>>['config'];
+  let setTimeoutFn: Awaited<ReturnType<typeof setup>>['setTimeoutFn'];
 
   beforeEach<PgTest>(async ({testDBs}) => {
     ({
@@ -101,6 +107,9 @@ describe('view-syncer/service', () => {
       inspectorDelegate: delegate,
       customQueryTransformer,
       clearMocks,
+      databaseStorage,
+      config,
+      setTimeoutFn,
     } = await setup(testDBs, 'view_syncer_inspect_test', permissionsAll, {
       queryFetchMode: 'empty-validation',
     }));
@@ -163,6 +172,147 @@ describe('view-syncer/service', () => {
         },
       },
     ]);
+  });
+
+  test('unchanged queries rehydrated on restart are recorded by query id', async () => {
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desired queries
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // hydrated
+    const ast = delegate.getASTForQuery('query-hash1');
+    expect(ast).toBeDefined();
+
+    await vs.stop();
+    await viewSyncerDone;
+
+    // A fresh view-syncer (with a fresh InspectorDelegate) rehydrates the
+    // gotten query as an unchanged query, which is a different code path
+    // from the initial hydration.
+    const restarted = restartViewSyncer({
+      databaseStorage,
+      replicaDbFile,
+      cvrDB,
+      config,
+      customQueryTransformer,
+      setTimeoutFn,
+    });
+    try {
+      restarted.connect({...SYNC_CONTEXT, wsID: 'ws2'}, []);
+      restarted.stateChanges.push({state: 'version-ready'});
+
+      // The inspector looks up ASTs and metrics by query id.
+      await vi.waitFor(
+        () => {
+          expect(
+            restarted.inspectorDelegate.getASTForQuery('query-hash1'),
+          ).toEqual(ast);
+        },
+        {timeout: 5_000},
+      );
+      expect(
+        restarted.inspectorDelegate.getMetricsJSONForQuery('query-hash1'),
+      ).toMatchObject({'query-hydration-server-ms': expect.any(Number)});
+    } finally {
+      await restarted.vs.stop();
+      await restarted.viewSyncerDone;
+    }
+  });
+
+  test('inspector authentication is cleared when the view-syncer shuts down', async () => {
+    delegate.clearAuthenticated(serviceID);
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {op: 'authenticate', id: 'auth-1', value: TEST_ADMIN_PASSWORD},
+    ]);
+    expect(await client.dequeue()).toEqual([
+      'inspect',
+      {id: 'auth-1', op: 'authenticated', value: true},
+    ]);
+    expect(delegate.isAuthenticated(serviceID)).toBe(true);
+
+    await vs.stop();
+    await viewSyncerDone;
+
+    expect(delegate.isAuthenticated(serviceID)).toBe(false);
+  });
+
+  test('an authenticate racing the shutdown leaves no inspector authentication behind', async () => {
+    delegate.clearAuthenticated(serviceID);
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    // Queue the authenticate on the view-syncer's lock and stop the service
+    // before it has run. The request is either rejected because the service
+    // is shutting down, or it completes before cleanup releases the
+    // authentication; in neither case may the entry outlive the service.
+    const authenticate = vs
+      .inspect(SYNC_CONTEXT, [
+        'inspect',
+        {op: 'authenticate', id: 'auth-1', value: TEST_ADMIN_PASSWORD},
+      ])
+      .then(
+        () => 'completed',
+        () => 'rejected',
+      );
+    await vs.stop();
+    await viewSyncerDone;
+
+    expect(['completed', 'rejected']).toContain(await authenticate);
+    expect(delegate.isAuthenticated(serviceID)).toBe(false);
+  });
+
+  test('a replacement view-syncer keeps its authentication when the previous one shuts down', async () => {
+    delegate.clearAuthenticated(serviceID);
+
+    // The ServiceRunner can start a replacement for the same client group
+    // while the previous service is still shutting down.
+    const replacement = restartViewSyncer({
+      databaseStorage,
+      replicaDbFile,
+      cvrDB,
+      config,
+      customQueryTransformer,
+      setTimeoutFn,
+    });
+    try {
+      const ctx = {...SYNC_CONTEXT, wsID: 'ws2'};
+      const client = replacement.connect(ctx, []);
+      await nextPoke(client);
+      replacement.stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      await replacement.vs.inspect(ctx, [
+        'inspect',
+        {op: 'authenticate', id: 'auth-2', value: TEST_ADMIN_PASSWORD},
+      ]);
+      expect(await client.dequeue()).toEqual([
+        'inspect',
+        {id: 'auth-2', op: 'authenticated', value: true},
+      ]);
+      expect(delegate.isAuthenticated(serviceID)).toBe(true);
+
+      // The previous service shutting down must not revoke it...
+      await vs.stop();
+      await viewSyncerDone;
+      expect(delegate.isAuthenticated(serviceID)).toBe(true);
+
+      // ...but the replacement's own shutdown does.
+      await replacement.vs.stop();
+      await replacement.viewSyncerDone;
+      expect(delegate.isAuthenticated(serviceID)).toBe(false);
+    } finally {
+      await replacement.vs.stop();
+      await replacement.viewSyncerDone;
+    }
   });
 
   test('inspect queries sharing a transformationHash have metrics per query id', async () => {
@@ -356,6 +506,39 @@ describe('view-syncer/service', () => {
         warnings: expect.any(Array),
       }),
     });
+  });
+
+  test('analyze-query with not exists', async () => {
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    await expectNoPokes(client);
+
+    const inspectId = 'test-analyze-query-not-exists';
+
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {
+        op: 'analyze-query',
+        id: inspectId,
+        ast: ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED,
+        options: {},
+      },
+    ]);
+
+    const msg = (await client.dequeue()) as InspectDownMessage;
+    expect(msg).toMatchObject([
+      'inspect',
+      {
+        id: inspectId,
+        op: 'analyze-query',
+        value: {
+          syncedRowCount: expect.any(Number),
+        },
+      },
+    ]);
   });
 
   test('analyze-query with options', async () => {
@@ -689,7 +872,7 @@ describe('view-syncer/service', () => {
       activeClients?: string[],
     ) => {
       queue: Queue<Downstream>;
-      source: Source<Downstream>;
+      source: Source<ViewSyncerDownstream>;
     };
     let restrictiveDelegate: InspectorDelegate;
     let restrictiveClearMocks: () => void;

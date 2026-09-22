@@ -29,6 +29,10 @@ export class NodePgConnection implements DBConnection<NodePgTransaction> {
     this.#pool = pool;
   }
 
+  query(sql: string, params: unknown[]): Promise<Row[]> {
+    return nodePgQuery(this.#pool, sql, params);
+  }
+
   async transaction<TRet>(
     fn: (tx: DBTransaction<NodePgTransaction>) => Promise<TRet>,
   ): Promise<TRet> {
@@ -76,10 +80,18 @@ export class NodePgTransactionInternal implements DBTransaction<NodePgTransactio
     );
   }
 
-  async query(sql: string, params: unknown[]): Promise<Row[]> {
-    const res = await this.wrappedTransaction.query(sql, params as unknown[]);
-    return res.rows as Row[];
+  query(sql: string, params: unknown[]): Promise<Row[]> {
+    return nodePgQuery(this.wrappedTransaction, sql, params);
   }
+}
+
+async function nodePgQuery(
+  client: NodePgTransaction,
+  sql: string,
+  params: unknown[],
+): Promise<Row[]> {
+  const res = await client.query(sql, params);
+  return res.rows as Row[];
 }
 
 /**

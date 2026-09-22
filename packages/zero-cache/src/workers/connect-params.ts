@@ -22,6 +22,7 @@ export type ConnectParams = {
   readonly httpCookie: string | undefined;
   readonly origin: string | undefined;
   readonly requestHeaders?: Readonly<Record<string, string>> | undefined;
+  readonly generation?: number | undefined;
 };
 
 /**

@@ -60,7 +60,7 @@ export class FanOut implements FilterOperator {
     }
   }
 
-  *filter(node: Node): Generator<'yield', boolean> {
+  *filter(node: Node): IterableIterator<'yield', boolean> {
     let result = false;
     for (const output of this.#outputs) {
       result = (yield* output.filter(node)) || result;

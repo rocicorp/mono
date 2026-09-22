@@ -27,11 +27,11 @@
     "@types/tmp": "^0.2.6",
     "ast-to-zql": "workspace:*",
     "otel": "workspace:*",
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.65.0",
     "pg": "^8.16.3",
     "shared": "workspace:*",
-    "typescript": "~6.0.2",
-    "vitest": "^4.1.6",
+    "typescript": "~7.0.2",
+    "vitest": "^5.0.0",
     "z2s": "workspace:*",
     "zero-cache": "workspace:*",
     "zero-protocol": "workspace:*",
@@ -41,5 +41,5 @@
     "zql": "workspace:*",
     "zqlite": "workspace:*"
   },
-  "packageManager": "pnpm@11.5.3"
+  "packageManager": "pnpm@11.11.0"
 }

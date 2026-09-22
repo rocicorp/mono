@@ -1,12 +1,36 @@
 import EventEmitter from 'node:events';
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type * as Metrics from '../observability/metrics.ts';
+
+const startupRecordMs = vi.hoisted(() => vi.fn());
+const workerStartupRecordMs = vi.hoisted(() => vi.fn());
+const logLastChanceSQLiteCorruptionDiagnostics = vi.hoisted(() => vi.fn());
+
+vi.mock('../db/sqlite-corruption.ts', () => ({
+  logLastChanceSQLiteCorruptionDiagnostics,
+}));
+
+vi.mock('../observability/metrics.ts', async importOriginal => {
+  const actual = await importOriginal<typeof Metrics>();
+  return {
+    ...actual,
+    getOrCreateHistogram: vi.fn((_category, name) => ({
+      recordMs:
+        name === 'startup_duration' ? startupRecordMs : workerStartupRecordMs,
+    })),
+  };
+});
+
 import {
   exitAfter,
   INTENTIONAL_SHUTDOWN_ERROR_CODE,
   ProcessManager,
+  recordStartupDurationMs,
   runUntilKilled,
   type WorkerType,
 } from '../services/life-cycle.ts';
@@ -70,6 +94,9 @@ describe('shutdown', () => {
   }
 
   beforeEach(async () => {
+    startupRecordMs.mockReset();
+    workerStartupRecordMs.mockReset();
+
     // For testing process.exit()
     process.env['SINGLE_PROCESS'] = '1';
 
@@ -260,9 +287,57 @@ describe('shutdown', () => {
     // sort() because order doesn't matter.
     expect(events.sort()).toEqual(expectedEvents.sort());
   });
+
+  test('exits nonzero when the final worker stops before drain', async () => {
+    const testProc = new EventEmitter();
+    const {promise: exitCode, resolve} = resolver<number>();
+    testProc.on('exit', resolve);
+    const manager = new ProcessManager(lc, testProc);
+    const [worker] = inProcChannel();
+    manager.addWorker(worker, 'user-facing', 'zero-cache');
+
+    worker.emit('close', 0, null);
+
+    expect(await exitCode).toBe(-1);
+  });
+
+  test('records worker startup duration when a worker is ready', () => {
+    const [parentPort, childPort] = inProcChannel();
+    processes.addWorker(parentPort, 'supporting', 'replicator.ts (backup)');
+
+    childPort.send(['ready', {ready: true}]);
+
+    expect(workerStartupRecordMs).toHaveBeenCalledWith(expect.any(Number), {
+      worker: 'backup_replicator',
+      type: 'supporting',
+    });
+  });
+
+  test('does not record zero-cache as a worker startup duration', () => {
+    const [parentPort, childPort] = inProcChannel();
+    processes.addWorker(parentPort, 'user-facing', 'zero-cache');
+
+    childPort.send(['ready', {ready: true}]);
+
+    expect(startupRecordMs).not.toHaveBeenCalled();
+    expect(workerStartupRecordMs).not.toHaveBeenCalled();
+  });
+
+  test('records top-level startup duration explicitly', () => {
+    recordStartupDurationMs(123);
+
+    expect(startupRecordMs).toHaveBeenCalledWith(123, {
+      component: 'dispatcher',
+    });
+  });
 });
 
 describe('exitAfter', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    logLastChanceSQLiteCorruptionDiagnostics.mockReset();
+  });
+
   test('exits 0 for configuration errors', async () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
       throw Object.assign(new Error('process.exit'), {code});
@@ -275,5 +350,64 @@ describe('exitAfter', () => {
     ).rejects.toMatchObject({code: 0});
 
     expect(exit).toHaveBeenCalledWith(0);
+  });
+
+  test('logs corruption diagnostics and flushes before a fatal exit', async () => {
+    const initialLC = createSilentLogContext();
+    const flushDone = resolver();
+    const flush = vi.fn(() => flushDone.promise);
+    const activeLC = new LogContext('debug', undefined, {
+      flush,
+      log: vi.fn(),
+    });
+    const error = Object.assign(new Error('database disk image is malformed'), {
+      code: 'SQLITE_CORRUPT',
+    });
+    let lc = initialLC;
+    const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
+      throw Object.assign(new Error('process.exit'), {code});
+    });
+
+    const exiting = exitAfter(
+      () => lc,
+      () => {
+        lc = activeLC;
+        return Promise.reject(error);
+      },
+    );
+
+    await Promise.resolve();
+
+    expect(logLastChanceSQLiteCorruptionDiagnostics).toHaveBeenCalledWith(
+      activeLC,
+      error,
+    );
+    expect(flush).toHaveBeenCalledTimes(1);
+    expect(exit).not.toHaveBeenCalled();
+
+    flushDone.resolve();
+    await expect(exiting).rejects.toMatchObject({code: -1});
+    expect(exit).toHaveBeenCalledWith(-1);
+  });
+
+  test('logs AbortErrors as warnings, not errors', async () => {
+    const log = vi.fn();
+    const lc = new LogContext('debug', undefined, {log});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
+      throw Object.assign(new Error('process.exit'), {code});
+    });
+
+    await expect(
+      exitAfter(lc, () => Promise.reject(new AbortError('Aborted'))),
+    ).rejects.toMatchObject({code: -1});
+
+    expect(exit).toHaveBeenCalledWith(-1);
+    expect(log.mock.calls.map(([level]) => level)).not.toContain('error');
+    expect(log).toHaveBeenCalledWith(
+      'warn',
+      undefined,
+      'exiting after abort: AbortError: Aborted',
+      expect.any(AbortError),
+    );
   });
 });

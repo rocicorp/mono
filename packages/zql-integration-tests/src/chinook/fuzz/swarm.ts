@@ -10,9 +10,18 @@
  * {@link decorate} / {@link decorateChild}.
  */
 
+import {must} from '../../../../shared/src/must.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
-import {AXES, N_AXES, tables} from './axes.ts';
+import {
+  AXES,
+  axisIndex,
+  FILTER_VALS,
+  filterIsPin,
+  N_AXES,
+  tables,
+} from './axes.ts';
 import {childDecorationPairs, decorate, decorateChild} from './cover.ts';
+import type {Data} from './literals.ts';
 import type {Rng} from './rng.ts';
 
 /**
@@ -47,9 +56,28 @@ export class Mask {
   }
 }
 
+/**
+ * The chance that an enabled `filter` axis draws a `pin_*` value instead of a uniform
+ * one. Only 2 of the filter values pin a join column, and correlated predicate pushdown
+ * copies the pin only into a gate, which needs the `exists` axis on too. A uniform draw
+ * seldom reaches the rewrite.
+ */
+const PIN_P = 0.5;
+
+const FILTER_AXIS = axisIndex('filter');
+const PIN_FILTERS = FILTER_VALS.flatMap((v, i) => (filterIsPin(v) ? [i] : []));
+
 /** A random axis assignment under `mask` (disabled axes forced to value 0). */
 function randomAssignment(rng: Rng, mask: Mask): number[] {
-  return AXES.map((ax, i) => (mask.on(i) ? rng.int(ax.values.length) : 0));
+  return AXES.map((ax, i) => {
+    if (!mask.on(i)) {
+      return 0;
+    }
+    if (i === FILTER_AXIS && rng.bool(PIN_P)) {
+      return must(rng.choose(PIN_FILTERS));
+    }
+    return rng.int(ax.values.length);
+  });
 }
 
 /**
@@ -57,12 +85,16 @@ function randomAssignment(rng: Rng, mask: Mask): number[] {
  * enables nesting — a decorated nested collection. `true` iff EXISTS-bearing. `null` if
  * the random pick is unrealizable on the chosen table (the caller retries / skips).
  */
-export function swarmGen(rng: Rng, mask: Mask): [AnyQuery, boolean] | null {
+export function swarmGen(
+  rng: Rng,
+  mask: Mask,
+  data: Data,
+): [AnyQuery, boolean] | null {
   const a = randomAssignment(rng, mask);
   if (mask.nest) {
     const pair = rng.choose(childDecorationPairs());
-    return pair ? decorateChild(pair[0], pair[1], a) : null;
+    return pair ? decorateChild(pair[0], pair[1], a, data) : null;
   }
   const root = rng.choose(tables());
-  return root ? decorate(root, a) : null;
+  return root ? decorate(root, a, data) : null;
 }

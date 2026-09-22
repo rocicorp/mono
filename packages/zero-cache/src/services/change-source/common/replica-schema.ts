@@ -1,13 +1,22 @@
+import {existsSync, renameSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
-import {SqliteError} from '@rocicorp/zero-sqlite3';
 import type {Database} from '../../../../../zqlite/src/db.ts';
+import {deleteLiteDB} from '../../../db/delete-lite-db.ts';
 import {listTables} from '../../../db/lite-tables.ts';
 import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
 } from '../../../db/migration-lite.ts';
+import {
+  isSQLiteCorruption,
+  logSQLiteCorruptionDiagnostics,
+} from '../../../db/sqlite-corruption.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import {
+  CREATE_BACKFILLING_TABLE,
+  populateBackfillingFromColumnMetadata,
+} from '../../replicator/schema/backfilling.ts';
 import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
@@ -20,6 +29,12 @@ export async function initReplica(
   dbPath: string,
   initialSync: (lc: LogContext, tx: Database) => Promise<void>,
 ): Promise<void> {
+  const isInitialSync = !existsSync(dbPath);
+  const migrationPath = isInitialSync ? `${dbPath}.tmp` : dbPath;
+  if (isInitialSync) {
+    deleteLiteDB(migrationPath);
+  }
+
   const setupMigration: Migration = {
     migrateSchema: (log, tx) => initialSync(log, tx),
     minSafeVersion: 1,
@@ -29,15 +44,15 @@ export async function initReplica(
     await runSchemaMigrations(
       log,
       debugName,
-      dbPath,
+      migrationPath,
       setupMigration,
       schemaVersionMigrationMap,
     );
-  } catch (e) {
-    if (e instanceof SqliteError && e.code === 'SQLITE_CORRUPT') {
-      throw new AutoResetSignal(e.message);
+    if (isInitialSync) {
+      renameSync(migrationPath, dbPath);
     }
-    throw e;
+  } catch (e) {
+    throwAutoResetForCorruption(log, debugName, migrationPath, e);
   }
 }
 
@@ -46,20 +61,40 @@ export async function upgradeReplica(
   debugName: string,
   dbPath: string,
 ) {
-  await runSchemaMigrations(
-    log,
-    debugName,
-    dbPath,
-    // setupMigration should never be invoked
-    {
-      migrateSchema: () => {
-        throw new Error(
-          'This should only be called for already synced replicas',
-        );
+  try {
+    await runSchemaMigrations(
+      log,
+      debugName,
+      dbPath,
+      // setupMigration should never be invoked
+      {
+        migrateSchema: () => {
+          throw new Error(
+            'This should only be called for already synced replicas',
+          );
+        },
       },
-    },
-    schemaVersionMigrationMap,
-  );
+      schemaVersionMigrationMap,
+    );
+  } catch (e) {
+    throwAutoResetForCorruption(log, debugName, dbPath, e);
+  }
+}
+
+function throwAutoResetForCorruption(
+  log: LogContext,
+  debugName: string,
+  dbPath: string,
+  e: unknown,
+): never {
+  if (isSQLiteCorruption(e)) {
+    logSQLiteCorruptionDiagnostics(log, debugName, dbPath, e);
+    throw new AutoResetSignal(
+      `replica database appears corrupt: ${String(e)}`,
+      {cause: e},
+    );
+  }
+  throw e;
 }
 
 export const CREATE_V6_COLUMN_METADATA_TABLE = /*sql*/ `
@@ -94,6 +129,30 @@ export const CREATE_V9_TABLE_METADATA_TABLE = /*sql*/ `
     "metadata"  TEXT NOT NULL,
     PRIMARY KEY ("schema", "table")
   );
+`;
+
+// Deliberately shadows the same names in `replicator/change-log-db.ts`: these
+// describe replica files created by pre-release v14 builds, while that module
+// describes the separate change-log database. The two are frozen apart.
+export const V14_CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
+const V14_CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
+  '_zero.changeLogStream_writeTimeMs';
+
+// The change-log stream table created by pre-release v14 builds and dropped by
+// migration 16. Retained at its old shape for migration tests only.
+export const CREATE_V14_CHANGE_LOG_STREAM = /*sql*/ `
+  CREATE TABLE "${V14_CHANGE_LOG_STREAM_TABLE}" (
+    "watermark"   TEXT NOT NULL,
+    "pos"         INTEGER NOT NULL,
+    "change"      TEXT NOT NULL,
+    "precommit"   TEXT,
+    "writeTimeMs" INTEGER,
+    PRIMARY KEY ("watermark", "pos")
+  );
+
+  CREATE INDEX "${V14_CHANGE_LOG_STREAM_WRITE_TIME_INDEX}"
+    ON "${V14_CHANGE_LOG_STREAM_TABLE}" ("writeTimeMs", "watermark")
+    WHERE "writeTimeMs" IS NOT NULL;
 `;
 
 export const schemaVersionMigrationMap: IncrementalMigrationMap = {
@@ -220,6 +279,75 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       db.exec(/*sql*/ `
         UPDATE "_zero.replicationState" 
           SET writeTimeMs = COALESCE(writeTimeMs, unixepoch('subsec') * 1000)`);
+    },
+  },
+
+  // The replica-local change log moved to its own database before v14 shipped.
+  14: {},
+
+  15: {
+    migrateSchema: (_, db) => {
+      // Make writeTimeMs NOT NULL. In SQLite the only way to do this is to
+      // create a new table, copy the data over, delete the old table, and
+      // rename. This is cheap because it's a single row table.
+      db.exec(/*sql*/ `
+        CREATE TABLE "_zero.replicationState2" (
+          stateVersion TEXT NOT NULL,
+          writeTimeMs INTEGER NOT NULL,
+          lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+        );
+
+        INSERT INTO "_zero.replicationState2" (stateVersion, writeTimeMs, lock)
+          SELECT stateVersion, writeTimeMs, lock FROM "_zero.replicationState";
+
+        DROP TABLE "_zero.replicationState";
+
+        ALTER TABLE "_zero.replicationState2" RENAME TO "_zero.replicationState";
+      `);
+    },
+  },
+
+  // The change log moved out of the replica and into its own database
+  // (`${replicaFile}-change-log`), so the replica's copy is dead weight in
+  // every file the backup ships and every follower downloads. Nothing reads it
+  // as of this version.
+  //
+  // `IF EXISTS` because fresh and post-v13 replicas never create this table.
+  // Pre-release v14 builds did, so keep their cleanup idempotent.
+  //
+  // The freed pages are reclaimed by the existing `vacuumIntervalHours`
+  // trigger in `workers/replicator.ts`; no special handling here.
+  //
+  // No `minSafeVersion`: an older zero-cache still runs against a v16 replica,
+  // and with `sqliteChangeLogMode=off` (the default) it never looks for this
+  // table. Bumping the rollback limit would turn every rollback into a hard
+  // startup failure to protect a configuration that is not enabled anywhere.
+  16: {
+    migrateSchema: (_, db) => {
+      db.exec(/*sql*/ `
+        DROP INDEX IF EXISTS "${V14_CHANGE_LOG_STREAM_WRITE_TIME_INDEX}";
+        DROP TABLE IF EXISTS "${V14_CHANGE_LOG_STREAM_TABLE}";
+      `);
+    },
+  },
+
+  // `_zero.column_metadata.backfill` records which columns are backfilling but
+  // is keyed by lite table name, which has no inverse: it cannot be turned back
+  // into the `BackfillRequest`s that a change log initialized from this replica
+  // would have to send. This table carries the upstream identity alongside the
+  // same state. See `replicator/schema/backfilling.ts`.
+  //
+  // No `minSafeVersion`: an older zero-cache runs fine against a v17 replica,
+  // since nothing at v16 reads the new table. Its writes to
+  // `column_metadata.backfill` are what `migrateData` rebuilds from when rolling
+  // forward again, so a rollback costs nothing but the re-seed.
+  17: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_BACKFILLING_TABLE);
+    },
+
+    migrateData: (lc, db) => {
+      populateBackfillingFromColumnMetadata(lc, db);
     },
   },
 };

@@ -33,6 +33,10 @@ export class PostgresJSConnection<
     this.#pg = pg;
   }
 
+  query(sql: string, params: unknown[]): Promise<Row[]> {
+    return postgresJsQuery(this.#pg, sql, params);
+  }
+
   transaction<TRet>(
     fn: (tx: DBTransaction<PostgresJsTransaction<T>>) => Promise<TRet>,
   ): Promise<TRet> {
@@ -51,7 +55,7 @@ export class PostgresJsTransactionInternal<
   }
 
   query(sql: string, params: unknown[]): Promise<Row[]> {
-    return this.wrappedTransaction.unsafe(sql, params as JSONValue[]);
+    return postgresJsQuery(this.wrappedTransaction, sql, params);
   }
 
   runQuery<TReturn>(
@@ -68,6 +72,14 @@ export class PostgresJsTransactionInternal<
       serverSchema,
     );
   }
+}
+
+function postgresJsQuery<T extends Record<string, unknown>>(
+  sql: postgres.Sql<T>,
+  text: string,
+  params: unknown[],
+): Promise<Row[]> {
+  return sql.unsafe(text, params as JSONValue[]);
 }
 
 /**

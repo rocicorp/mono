@@ -39,7 +39,7 @@ test('name mapping to server', () => {
   expect(map.tableName('comments')).toBe('comment');
   expect(map.tableName('noMappings')).toBe('noMappings');
   expect(() => map.tableName('unknown')).toThrowErrorMatchingInlineSnapshot(
-    `[Error: unknown table "unknown" ]`,
+    `[Error: unknown table "unknown"]`,
   );
 
   expect(map.columnName('issues', 'id')).toBe('id');
@@ -48,7 +48,7 @@ test('name mapping to server', () => {
   expect(() =>
     map.columnName('comments', 'unknown'),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: unknown column "unknown" of "comments" table ]`,
+    `[Error: unknown column "unknown" of "comments" table]`,
   );
 
   expect(
@@ -84,7 +84,7 @@ test('name mapping to client', () => {
   expect(map.tableName('comment')).toBe('comments');
   expect(map.tableName('noMappings')).toBe('noMappings');
   expect(() => map.tableName('unknown')).toThrowErrorMatchingInlineSnapshot(
-    `[Error: unknown table "unknown" ]`,
+    `[Error: unknown table "unknown"]`,
   );
 
   expect(map.columnName('issue', 'id')).toBe('id');
@@ -92,7 +92,7 @@ test('name mapping to client', () => {
   expect(map.columnName('noMappings', 'id')).toBe('id');
   expect(() =>
     map.columnName('comments', 'unknown'),
-  ).toThrowErrorMatchingInlineSnapshot(`[Error: unknown table "comments" ]`);
+  ).toThrowErrorMatchingInlineSnapshot(`[Error: unknown table "comments"]`);
 
   expect(
     map.row('issue', {id: 'foo', ownerId: 'bar', unknown: 'passthrough'}),

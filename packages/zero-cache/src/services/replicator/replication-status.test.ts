@@ -1,9 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {
+  IndexingProgress,
   replicationStatusError,
   replicationStatusEvent,
   ReplicationStatusPublisher,
@@ -352,5 +354,118 @@ describe('replicator/replication-status', () => {
         "type": "zero/events/status/replication/v1",
       }
     `);
+  });
+
+  test('indexing progress', () => {
+    let now = 1000;
+    const progress = new IndexingProgress(3, () => now);
+    expect(progress.status()).toBeUndefined();
+    expect(progress.state()).toEqual({});
+
+    progress.start({
+      name: 'foo_a',
+      tableName: 'foo',
+      columns: {a: 'ASC', b: 'DESC'},
+      unique: true,
+    });
+    now += 900;
+    // Time spent before the index build (e.g. reporting it) is excluded.
+    progress.restartTimer();
+    now += 250;
+    expect(progress.state()).toEqual({
+      indexingStatus: {
+        name: 'foo_a',
+        table: 'foo',
+        columns: ['a', 'b'],
+        unique: true,
+        index: 1,
+        totalIndexes: 3,
+        elapsedMs: 250,
+        completedMs: 0,
+        done: false,
+      },
+    });
+    expect(progress.finish()).toBe(250);
+    now += 1000;
+    // Elapsed time stops advancing when done.
+    expect(progress.status()).toMatchObject({
+      index: 1,
+      elapsedMs: 250,
+      completedMs: 0,
+      done: true,
+    });
+    // finish() is idempotent.
+    expect(progress.finish()).toBe(250);
+
+    progress.start({
+      name: 'bar_c',
+      tableName: 'bar',
+      columns: {c: 'ASC'},
+      unique: false,
+    });
+    now += 100;
+    expect(progress.status()).toEqual({
+      name: 'bar_c',
+      table: 'bar',
+      columns: ['c'],
+      unique: false,
+      index: 2,
+      totalIndexes: 3,
+      elapsedMs: 100,
+      completedMs: 250,
+      done: false,
+    });
+    now += 50;
+    expect(progress.finish()).toBe(150);
+    expect(progress.status()).toMatchObject({
+      index: 2,
+      elapsedMs: 150,
+      completedMs: 250,
+      done: true,
+    });
+  });
+
+  test('publishAndFlush waits for the event to be published', async () => {
+    const {promise, resolve} = resolver<void>();
+    const publish = vi.fn(() => promise);
+    const publisher = ReplicationStatusPublisher.forReplicaFile(
+      replicaFile.path,
+      publish,
+    );
+
+    let flushed = false;
+    const flushing = publisher
+      .publishAndFlush(lc, 'Indexing', 'foo', 0, undefined, 60_000)
+      .then(() => (flushed = true));
+    expect(publish).toHaveBeenCalledOnce();
+    await Promise.resolve();
+    expect(flushed).toBe(false);
+
+    resolve();
+    await flushing;
+    expect(flushed).toBe(true);
+  });
+
+  test('publishAndFlush waits at most maxWaitMs', async () => {
+    vi.useFakeTimers();
+    try {
+      const publish = vi.fn(() => new Promise<void>(() => {}));
+      const publisher = ReplicationStatusPublisher.forReplicaFile(
+        replicaFile.path,
+        publish,
+      );
+
+      let flushed = false;
+      const flushing = publisher
+        .publishAndFlush(lc, 'Indexing', 'foo', 0, undefined, 500)
+        .then(() => (flushed = true));
+      await vi.advanceTimersByTimeAsync(499);
+      expect(flushed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await flushing;
+      expect(flushed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,5 +1,6 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
+import {RingBuffer} from '../../../shared/src/ring-buffer.ts';
 import type {Sink, Source} from './streams.ts';
 
 /**
@@ -74,10 +75,11 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return new Subscription(options, publish);
   }
 
+  readonly #abortController = new AbortController();
   // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
-  readonly #consumers: Resolver<Entry<M> | null>[] = [];
+  readonly #consumers = new RingBuffer<Resolver<Entry<M> | null>>();
   // Messages waiting to be dequeued.
-  readonly #messages: (Entry<M> | 'terminus')[] = [];
+  readonly #messages = new RingBuffer<Entry<M> | 'terminus'>();
   // Messages dequeued but not yet consumed.
   readonly #consuming = new Set<Entry<M>>();
   readonly #pipelineEnabled: boolean;
@@ -85,9 +87,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   // messages can be added.
   #sentinel: 'canceled' | Error | undefined = undefined;
 
-  #coalesce: ((curr: Entry<M>, prev: Entry<M>) => M) | undefined;
-  #consumed: (prev: Entry<M>) => void;
-  #cleanup: (unconsumed: Entry<M>[], err?: Error) => void;
+  readonly #coalesceFunc: ((curr: M, prev: M) => M) | undefined;
+  readonly #consumedFunc: (prev: M) => void;
+  readonly #cleanupFunc: (unconsumed: M[], err?: Error) => void;
+
   #publish: (internal: M) => T;
 
   /**
@@ -102,33 +105,34 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       pipeline = coalesce === undefined,
     } = options;
 
-    this.#coalesce = !coalesce
-      ? undefined
-      : (curr, prev) => {
-          try {
-            return coalesce(curr.value, prev.value);
-          } finally {
-            prev.resolve('coalesced');
-          }
-        };
-
-    this.#consumed = entry => {
-      consumed(entry.value);
-      this.#consuming.delete(entry);
-      entry.resolve('consumed');
-    };
-
-    this.#cleanup = (entries, err) => {
-      cleanup(
-        entries.map(e => e.value),
-        err,
-      );
-      entries.forEach(e => e.resolve('unconsumed'));
-    };
-
+    this.#coalesceFunc = coalesce;
+    this.#consumedFunc = consumed;
+    this.#cleanupFunc = cleanup;
     this.#publish = publish;
-
     this.#pipelineEnabled = pipeline;
+  }
+
+  #coalesce(curr: Entry<M>, prev: Entry<M>): M {
+    assert(this.#coalesceFunc, 'expected a coalesce function');
+    try {
+      return this.#coalesceFunc(curr.value, prev.value);
+    } finally {
+      prev.resolve('coalesced');
+    }
+  }
+
+  #consumed(prev: Entry<M>): void {
+    this.#consumedFunc(prev.value);
+    this.#consuming.delete(prev);
+    prev.resolve('consumed');
+  }
+
+  #cleanup(entries: Entry<M>[], err?: Error) {
+    this.#cleanupFunc(
+      entries.map(e => e.value),
+      err,
+    );
+    entries.forEach(e => e.resolve('unconsumed'));
   }
 
   /**
@@ -155,17 +159,16 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     if (consumer) {
       consumer.resolve(entry);
     } else if (
-      this.#coalesce &&
-      this.#messages.length &&
-      this.#messages.at(-1) !== 'terminus'
+      this.#coalesceFunc &&
+      this.#messages.size &&
+      this.#messages.last() !== 'terminus'
     ) {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      const prev = this.#messages.at(-1)!;
-      assert(prev !== 'terminus', 'prev should not be terminus after check');
-      this.#messages[this.#messages.length - 1] = {
+      const prev = this.#messages.last();
+      assert(prev !== undefined && prev !== 'terminus', 'expected an entry');
+      this.#messages.replaceLast({
         value: this.#coalesce(entry, prev),
         resolve,
-      };
+      });
     } else {
       this.#messages.push(entry);
     }
@@ -179,12 +182,17 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
   /** The number of messages waiting to be dequeued. */
   get queued(): number {
-    return this.#messages.length;
+    return this.#messages.size;
   }
 
   /** The number of messages dequeued but not yet "consumed" */
   get consuming(): number {
     return this.#consuming.size;
+  }
+
+  /** Satisfies the Source interface. */
+  get signal() {
+    return this.#abortController.signal;
   }
 
   /**
@@ -202,7 +210,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   end() {
     if (this.#sentinel) {
       // already terminated
-    } else if (this.#messages.length === 0) {
+    } else if (this.#messages.size === 0) {
       this.cancel();
     } else {
       this.#messages.push('terminus');
@@ -231,20 +239,26 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
       this.#cleanup(
-        [...this.#consuming, ...this.#messages.filter(m => m !== 'terminus')],
+        [
+          ...this.#consuming,
+          ...this.#messages.toArray().filter(m => m !== 'terminus'),
+        ],
         sentinel instanceof Error ? sentinel : undefined,
       );
-      this.#messages.splice(0);
+      this.#messages.clear();
 
       for (
         let consumer = this.#consumers.shift();
         consumer;
         consumer = this.#consumers.shift()
       ) {
-        sentinel === 'canceled'
-          ? consumer.resolve(null)
-          : consumer.reject(sentinel);
+        if (sentinel === 'canceled') {
+          consumer.resolve(null);
+        } else {
+          consumer.reject(sentinel);
+        }
       }
+      this.#abortController.abort(sentinel);
     }
   }
 
@@ -252,6 +266,105 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return this.#pipelineEnabled
       ? {[Symbol.asyncIterator]: () => this.#pipeline()}
       : undefined;
+  }
+
+  pipelineBatched = (
+    maxBatch = 64,
+  ): AsyncIterable<{values: T[]; consumed: () => void}> | undefined => {
+    assert(
+      Number.isInteger(maxBatch) && maxBatch > 0,
+      () => `maxBatch must be a positive integer, got: ${maxBatch}`,
+    );
+    return this.#pipelineEnabled
+      ? {[Symbol.asyncIterator]: () => this.#pipelineBatched(maxBatch)}
+      : undefined;
+  };
+
+  #pipelineBatched(
+    maxBatch: number,
+  ): AsyncIterator<{values: T[]; consumed: () => void}> {
+    return {
+      next: async () => {
+        const entries: Entry<M>[] = [];
+
+        while (this.#messages.size > 0 && entries.length < maxBatch) {
+          const head = this.#messages.first();
+          if (head === 'terminus') {
+            if (entries.length > 0) {
+              break;
+            }
+            this.#messages.shift();
+            this.cancel();
+            return {value: undefined, done: true};
+          }
+          const entry = this.#messages.shift() as Entry<M>;
+          entries.push(entry);
+        }
+
+        if (entries.length > 0) {
+          for (const e of entries) {
+            this.#consuming.add(e);
+          }
+          return {
+            value: {
+              values: entries.map(e => this.#publish(e.value)),
+              consumed: () => {
+                for (const e of entries) {
+                  this.#consumed(e);
+                }
+              },
+            },
+            done: false,
+          };
+        }
+
+        if (this.#sentinel === 'canceled') {
+          return {value: undefined, done: true};
+        }
+        if (this.#sentinel) {
+          return Promise.reject(this.#sentinel);
+        }
+
+        const consumer = resolver<Entry<M> | null>();
+        this.#consumers.push(consumer);
+
+        const result = await consumer.promise;
+        if (result === null) {
+          return {value: undefined, done: true};
+        }
+
+        entries.push(result);
+
+        while (this.#messages.size > 0 && entries.length < maxBatch) {
+          if (this.#messages.first() === 'terminus') {
+            break;
+          }
+          const entry = this.#messages.shift() as Entry<M>;
+          entries.push(entry);
+        }
+
+        for (const e of entries) {
+          this.#consuming.add(e);
+        }
+
+        return {
+          value: {
+            values: entries.map(e => this.#publish(e.value)),
+            consumed: () => {
+              for (const e of entries) {
+                this.#consumed(e);
+              }
+            },
+          },
+          done: false,
+        };
+      },
+
+      return: value => {
+        this.cancel();
+        return Promise.resolve({value, done: true});
+      },
+    };
   }
 
   #pipeline(): AsyncIterator<{value: T; consumed: () => void}> {

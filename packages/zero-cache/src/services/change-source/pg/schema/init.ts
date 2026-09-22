@@ -2,7 +2,6 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {
-  getVersionHistory,
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
@@ -11,8 +10,8 @@ import type {PostgresDB} from '../../../../types/pg.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
-import {decommissionShard} from '../decommission.ts';
 import {publishedSchema} from './published.ts';
+import * as ReplicaStage from './replica-stage-enum.ts';
 import {
   getMutationsTableDefinition,
   legacyReplicationSlot,
@@ -28,9 +27,11 @@ export async function ensureShardSchema(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
+  installPartialIndexTriggers = true,
 ): Promise<void> {
   const initialSetup: Migration = {
-    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
+    migrateSchema: (lc, tx) =>
+      setupTablesAndReplication(lc, tx, shard, installPartialIndexTriggers),
     minSafeVersion: 1,
   };
   await runSchemaMigrations(
@@ -42,94 +43,29 @@ export async function ensureShardSchema(
     // The incremental migration of any existing replicas will be replaced by
     // the incoming replica being synced, so the replicaVersion here is
     // unnecessary.
-    getIncrementalMigrations(shard, 'obsolete'),
+    getIncrementalMigrations(shard, installPartialIndexTriggers),
   );
-}
-
-/**
- * Updates the schema for an existing shard.
- */
-export async function updateShardSchema(
-  lc: LogContext,
-  db: PostgresDB,
-  shard: ShardConfig,
-  replicaVersion: string,
-): Promise<void> {
-  await runSchemaMigrations(
-    lc,
-    `upstream-shard-${shard.appID}`,
-    upstreamSchema(shard),
-    db,
-    {
-      // If the expected existing shard is absent, throw an
-      // AutoResetSignal to backtrack and initial sync.
-      migrateSchema: () => {
-        throw new AutoResetSignal(
-          `upstream shard ${upstreamSchema(shard)} is not initialized`,
-        );
-      },
-    },
-    getIncrementalMigrations(shard, replicaVersion),
-  );
-
-  // The decommission check is run in updateShardSchema so that it happens
-  // after initial sync, and not when the shard schema is initially set up.
-  await decommissionLegacyShard(lc, db, shard);
 }
 
 function getIncrementalMigrations(
   shard: ShardConfig,
-  replicaVersion?: string,
+  installPartialIndexTriggers: boolean,
 ): IncrementalMigrationMap {
   const shardConfigTable = `${upstreamSchema(shard)}.shardConfig`;
 
   return {
-    4: {
+    6: {
       migrateSchema: () => {
         throw new AutoResetSignal('resetting to upgrade shard schema');
       },
-      minSafeVersion: 3,
     },
 
-    // v5: changes the upstream schema organization from "zero_{SHARD_ID}" to
-    // the "{APP_ID}_0". An incremental migration indicates that the previous
-    // SHARD_ID was "0" and the new APP_ID is "zero" (i.e. the default values
-    // for those options). In this case, the upstream format is identical, and
-    // no migration is necessary. However, the version is bumped to v5 to
-    // indicate that it was created with the {APP_ID} configuration and should
-    // not be decommissioned as a legacy shard.
+    // v7: Updates the DDL event trigger protocol to v2, and adds support for
+    //     ALTER SCHEMA x RENAME TO y
+    //     (migration logic subsumbed by v23)
 
-    6: {
-      migrateSchema: async (lc, sql) => {
-        assert(
-          replicaVersion,
-          `replicaVersion is always passed for incremental migrations`,
-        );
-        await Promise.all([
-          sql`
-          ALTER TABLE ${sql(shardConfigTable)} ADD "replicaVersion" TEXT`,
-          sql`
-          UPDATE ${sql(shardConfigTable)} SET ${sql({replicaVersion})}`,
-        ]);
-        lc.info?.(
-          `Recorded replicaVersion ${replicaVersion} in upstream shardConfig`,
-        );
-      },
-    },
-
-    // Updates the DDL event trigger protocol to v2, and adds support for
-    // ALTER SCHEMA x RENAME TO y
-    7: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(lc, sql, {...shard, publications});
-        lc.info?.(`Upgraded to v2 event triggers`);
-      },
-    },
-
-    // Adds support for non-disruptive resyncs, which tracks multiple
-    // replicas with different slot names.
+    // v8: Adds support for non-disruptive resyncs, which tracks multiple
+    //     replicas with different slot names.
     8: {
       migrateSchema: async (lc, sql) => {
         const legacyShardConfigSchema = v.object({
@@ -276,31 +212,111 @@ function getIncrementalMigrations(
         lc.info?.(`Upgraded DDL event triggers`);
       },
     },
+
+    // v24 (1.10.0):
+    // - adds the "backupPath" column for per-replica backups.
+    // - adds the "generation" column to replace "version".
+    24: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            ADD COLUMN "backupPath" TEXT;
+        `;
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            ADD COLUMN "generation" TEXT;
+        `;
+      },
+
+      migrateData: async (_, sql) => {
+        // Backfill the "generation" column to eventually replace "version"
+        await sql`
+          UPDATE ${sql(upstreamSchema(shard))}.replicas SET "generation" = "version";
+        `;
+      },
+    },
+
+    // v25 (1.10.0):
+    // - adds the "backupV5" column to signal the current semantics
+    //   of the replication slot's confirmed_flush_lsn with respect to what
+    //   has been backed up.
+    25: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            ADD COLUMN "backupV5" BOOL DEFAULT false;
+        `;
+      },
+    },
+
+    // v27 (1.11.0):
+    // - make `generation` NOT NULL and stop reading `version`
+    27: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ALTER "generation" SET NOT NULL;
+        `;
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ALTER "version" DROP NOT NULL;
+        `;
+      },
+    },
+
+    28: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ADD "epoch" INT4 DEFAULT 0;
+        `;
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas ADD "stage" INT4 DEFAULT 0;  -- ReplicaStage.InitialSync
+        `;
+
+        const metapub = metadataPublicationName(shard.appID, shard.shardNum);
+        await sql`
+          ALTER PUBLICATION ${sql(metapub)} ADD TABLE ${sql(upstreamSchema(shard))}.replicas (id);
+        `;
+        // Make sure supabase gets the ALTER PUBLICATION change
+        await sql`
+          SELECT ${sql(upstreamSchema(shard))}.update_schemas();
+        `;
+      },
+
+      migrateData: async (_, sql) => {
+        await sql`
+          UPDATE ${sql(upstreamSchema(shard))}.replicas SET "stage" = ${ReplicaStage.Replicate}
+            WHERE "subscriberContext" IS NOT NULL;
+        `;
+      },
+    },
+
+    // Note: While this is conditional, it always has to be bumped to the last version.
+    ...(installPartialIndexTriggers
+      ? {
+          // v28: Upgrade the DDL event triggers to include partial indexes in
+          // schema snapshots. Note that setupTriggers() also refreshes the
+          // stored "publishedSchema" so that the change in format does not
+          // manifest as a spurious schema change.
+          29: {
+            migrateSchema: async (lc, sql) => {
+              const [{publications}] = await sql<{publications: string[]}[]>`
+                SELECT publications FROM ${sql(shardConfigTable)}`;
+              await setupTriggers(lc, sql, {...shard, publications});
+              lc.info?.(`Upgraded DDL event triggers`);
+            },
+          },
+        }
+      : {}),
   };
 }
 
 // Referenced in tests.
 export const CURRENT_SCHEMA_VERSION = Object.keys(
-  getIncrementalMigrations({
-    appID: 'unused',
-    shardNum: 0,
-    publications: ['foo'],
-  }),
+  getIncrementalMigrations(
+    {
+      appID: 'unused',
+      shardNum: 0,
+      publications: ['foo'],
+    },
+    true,
+  ),
 ).reduce((prev, curr) => Math.max(prev, parseInt(curr)), 0);
-
-export async function decommissionLegacyShard(
-  lc: LogContext,
-  db: PostgresDB,
-  shard: ShardConfig,
-) {
-  if (shard.appID !== 'zero') {
-    // When migration from non-default shard ids, e.g. "zero_prod" => "prod_0",
-    // clean up the old "zero_prod" shard if it is pre-v5. Note that the v5
-    // check is important to guard against cleaning up a **new** "zero_0" app
-    // that coexists with the current App (with app-id === "0").
-    const versionHistory = await getVersionHistory(db, `zero_${shard.appID}`);
-    if (versionHistory !== null && versionHistory.schemaVersion < 5) {
-      await decommissionShard(lc, db, 'zero', shard.appID);
-    }
-  }
-}

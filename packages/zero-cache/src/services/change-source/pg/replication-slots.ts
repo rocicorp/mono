@@ -1,19 +1,37 @@
+import type {Readable} from 'node:stream';
 import {
   PG_CONFIGURATION_LIMIT_EXCEEDED,
   PG_INSUFFICIENT_PRIVILEGE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {runTx} from '../../../db/run-transaction';
-import {isPostgresError, type PostgresDB} from '../../../types/pg';
-import {upstreamSchema, type ShardID} from '../../../types/shards';
-import {orTimeout} from '../../../types/timeout';
-import {toStateVersionString} from './lsn';
+import {must} from '../../../../../shared/src/must.ts';
+import {runTx} from '../../../db/run-transaction.ts';
+import {PG_17} from '../../../types/pg-versions.ts';
+import {isPostgresError, type PostgresDB} from '../../../types/pg.ts';
+import {upstreamSchema, type ShardID} from '../../../types/shards.ts';
+import {orTimeout} from '../../../types/timeout.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import {
+  createReplicationSessionFor,
+  keepSlotActiveUntilTakenOver,
+} from './logical-replication/stream.ts';
+import {toBigInt, toStateVersionString} from './lsn.ts';
+import {
+  InitialSync,
+  Restore,
+  type ReplicaStage,
+} from './schema/replica-stage-enum.ts';
 import {
   createReplica,
+  getReplicaState,
+  getRestoreCandidates,
+  metadataPublicationName,
   replicationSlotExpression,
   replicationSlotPrefix,
-} from './schema/shard';
+  type BackupOptions,
+  type ReplicaState,
+} from './schema/shard.ts';
 
 // Record returned by `CREATE_REPLICATION_SLOT`
 export type ReplicationSlot = {
@@ -23,11 +41,28 @@ export type ReplicationSlot = {
   output_plugin: string;
 };
 
+export type ReplicationSlotResult<T> = {
+  slot: ReplicationSlot;
+  capturedSnapshot: T;
+  initialSession: Readable;
+  replica: ReplicaState;
+};
+
+export type ReservedSlot = {
+  slot: string;
+  reservation: Readable;
+  replica: ReplicaState;
+};
+
 export type CreateSlotSpec = {
   slotName: string;
 
-  // Note: must be false if pgVersion < PG_17. Caller must verify.
+  // Note: ignored if pgVersion < PG_17.
   failover?: boolean;
+
+  // Create a temporary slot (i.e. not persisted, and automatically
+  // cleaned up when the replication session ends).
+  temporary?: boolean;
 
   // For overriding in tests.
   lockTimeout?: number;
@@ -54,7 +89,12 @@ const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
 export async function createReplicationSlot(
   lc: LogContext,
   session: postgres.Sql,
-  {slotName, failover, lockTimeout = SERVER_LOCK_TIMEOUT_MS}: CreateSlotSpec,
+  {
+    slotName,
+    failover,
+    temporary,
+    lockTimeout = SERVER_LOCK_TIMEOUT_MS,
+  }: CreateSlotSpec,
 ): Promise<ReplicationSlot> {
   // CREATE_REPLICATION_SLOT can hang indefinitely waiting for long-running
   // transactions to finish: internally it calls SnapBuildWaitSnapshot →
@@ -73,13 +113,17 @@ export async function createReplicationSlot(
   // fires (~2h default) or the blocking transaction finishes.
   await session.unsafe(`SET lock_timeout = ${lockTimeout}`);
 
-  const createSlot = failover
-    ? session.unsafe<ReplicationSlot[]>(
-        /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput (FAILOVER)`,
-      )
-    : session.unsafe<ReplicationSlot[]>(
-        /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
-      );
+  const {pgVersion} = (
+    await session.unsafe<{pgVersion: number}[]>(`
+      SELECT current_setting('server_version_num') as "pgVersion";
+  `)
+  )[0];
+
+  const maybeTemporary = temporary ? 'TEMPORARY' : '';
+  const options = failover && pgVersion >= PG_17 ? '(FAILOVER)' : '';
+  const createSlot = session.unsafe<ReplicationSlot[]>(/*sql*/ `
+    CREATE_REPLICATION_SLOT "${slotName}" ${maybeTemporary} LOGICAL pgoutput ${options}`);
+
   const raced = await orTimeout(createSlot, CREATE_REPLICATION_SLOT_TIMEOUT_MS);
   if (raced === 'timed-out') {
     // Create slot can block indefinitely waiting for old transactions. End
@@ -121,25 +165,73 @@ export async function createReplicationSlot(
  * 2. Running replication managers (which use an earlier replica of a lower
  *    rank) will not delete the new slot during their cleanup logic, since
  *    the slot will belong to a replica of a higher rank.
+ *
+ * When the replication slot is created, `captureSnapshot` callback is first
+ * run while the snapshot at the consistent point is available. The callback
+ * must capture the snapshot in postgres (e.g. `SET TRANSACTION SNAPSHOT`)
+ * in order to use it. Once the callback completes, a placeholder replication
+ * session (i.e. that does not consume any messages) is started, in order to
+ * reserve the slot by mark it "active", effectively distinguishing the
+ * initializing session from a failed or abandoned session.
+ *
+ * Note that starting the replication session releases the initial snapshot,
+ * which is why the callback must capture it synchronously, before the
+ * replication session is started.
+ *
+ * The placeholder replication session is closed when the
+ * PostgresChangeSource takes over the slot to process the stream in earnest.
+ * It is also returned for cleanup in the case of failures (and for control
+ * in unit tests).
+ *
+ * For replica's created in the `Restore` stage, the `generation` is
+ * initialized to an empty string instead of the slot's consistent point,
+ * since the slot is not being used for initial sync. It is the
+ * responsibiliy of the caller to call {@link initRestoreReplica} when
+ * the source replica has been selected for restoring, which will carry
+ * over the `generation` and other relevant values from the source.
  */
-export async function createReplicaAndSlot(
+export async function createReplicaAndSlot<T>(
   lc: LogContext,
   sql: PostgresDB,
-  replicationSession: postgres.Sql,
+  sessionName: string,
   shard: ShardID,
+  epoch: number,
   replicaID: string,
   failover: boolean,
-): Promise<ReplicationSlot> {
+  backupOptions: BackupOptions,
+  captureSnapshot: (snapshot: string) => Promise<T>,
+  stage: ReplicaStage,
+): Promise<ReplicationSlotResult<T>> {
+  // Note: The replicationSession is closed by keepSlotActiveUntilTakenOver,
+  // and only closed in this function if an error occurrs.
+  const replicationSession = createReplicationSessionFor(sql, sessionName);
   const lockName = replicationSlotManagementLock(shard);
   const slotPoolPrefix = replicationSlotPrefix(shard);
+
   for (let first = true; ; first = false) {
     await dropUnclaimedSlots(lc, sql, shard);
+
+    let slotName: string | undefined;
     try {
       return await runTx(sql, async tx => {
         await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
 
+        if (stage === InitialSync) {
+          // With the lock acquired, ensure that only one initial sync is
+          // active at a time. getRestoreCandidates() orders its results
+          // with stage = InitialSync (and active = true) first.
+          const others = await getRestoreCandidates(lc, tx, shard, epoch);
+          if (others.length) {
+            const [{id, stage, active}] = others;
+            if (stage === InitialSync && active) {
+              throw new AutoResetSignal(
+                `another replica (${id}) is performing initial sync`,
+              );
+            }
+          }
+        }
+
         // Pick an available slotName from the slotPoolPrefix pool.
-        let slotName: string;
         const names = await tx<{name: string}[]> /*sql*/ `
           SELECT slot_name as name FROM pg_replication_slots
             WHERE slot_name LIKE ${slotPoolPrefix + '%'};
@@ -157,16 +249,34 @@ export async function createReplicaAndSlot(
           slotName,
           failover,
         });
+        const capturedSnapshot = await captureSnapshot(slot.snapshot_name);
+        const initialSession = await keepSlotActiveUntilTakenOver(
+          lc,
+          replicationSession,
+          slot.slot_name,
+          metadataPublicationName(shard.appID, shard.shardNum),
+          toBigInt(slot.consistent_point),
+        );
 
         await createReplica(
           tx,
           shard,
           replicaID,
           slot.slot_name,
-          toStateVersionString(slot.consistent_point),
+          epoch,
+          stage === InitialSync
+            ? toStateVersionString(slot.consistent_point)
+            : '', // initialized with initRestoreReplica
+          backupOptions,
+          stage,
         );
 
-        return slot;
+        const replica = must(
+          await getReplicaState(tx, shard, replicaID),
+          `replica ${replicaID} was not created`,
+        );
+
+        return {slot, capturedSnapshot, initialSession, replica};
       });
     } catch (e) {
       if (first && isPostgresError(e, PG_INSUFFICIENT_PRIVILEGE)) {
@@ -193,38 +303,121 @@ export async function createReplicaAndSlot(
             WHERE replicas.slot = slots.slot_name AND NOT slots.active`;
         continue; // then let dropUnclaimedSlots() perform its cleanup
       }
+      // Otherwise, clean up any created slot if something went wrong.
+      if (slotName) {
+        lc.warn?.(`deleting slot ${slotName} due to error`, e);
+        await replicationSession.end();
+        await sql`SELECT pg_drop_replication_slot(${slotName})`;
+      }
       throw e;
     }
   }
 }
 
 /**
- * Deletes "old" replicas (i.e. those with a lower rank than the current)
- * and attempts to drop replication slots that are not associated with any
- * replica.
- *
- * If a slot could not be dropped because there is still an active subscriber,
- * it will be reflected in the `draining` count that is returned. When there
- * are draining slots, the method should be retried until all orphaned slots
- * have been dropped.
+ * Claims an inactive slot for use by this task, opening a replication session
+ * to mark it as active. The process should follow up by taking over the slot
+ * via the PostgresChangeSource.
  */
-export async function dropOldReplicasAndSlots(
+export async function claimSlotForResumption(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
-  beforeRank: bigint,
-): Promise<{dropped: number; active: number; draining: number}> {
+  sessionName: string,
+  slot: string,
+): Promise<ReservedSlot | null> {
+  const replicationSession = createReplicationSessionFor(sql, sessionName);
+  const lockName = replicationSlotManagementLock(shard);
   const replicasTable = `${upstreamSchema(shard)}.replicas`;
-  const oldReplicas = await sql`
-    SELECT id, rank::float8, slot, version, "initialSyncContext", "subscriberContext"
-     FROM ${sql(replicasTable)} WHERE rank < ${beforeRank};
-  `;
-  if (oldReplicas.length) {
-    lc.info?.(`Deleting ${oldReplicas.length} old replica(s)`, {oldReplicas});
-    await sql`DELETE FROM ${sql(replicasTable)} WHERE rank < ${beforeRank}`;
-  }
 
-  return dropUnclaimedSlots(lc, sql, shard);
+  try {
+    const reserved = await runTx(sql, async tx => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
+
+      const replicas = await tx<
+        {slot: string; active: boolean; replicaID: string; lsn: string}[]
+      > /*sql*/ `
+      SELECT slot_name as slot, active, replica.id as "replicaID", confirmed_flush_lsn as lsn
+        FROM pg_replication_slots
+        JOIN ${tx(replicasTable)} replica on slot_name = slot
+        WHERE slot_name = ${slot};
+    `;
+      if (replicas.length === 0) {
+        lc.warn?.(`no replica found for slot ${slot}`);
+        return null;
+      }
+      const [{active, replicaID, lsn}] = replicas;
+      if (active) {
+        lc.warn?.(
+          `replica ${replicaID} for slot ${slot} is active and cannot be claimed`,
+        );
+        return null;
+      }
+      // Mark the replica as Restoring.
+      await tx`
+        UPDATE ${tx(replicasTable)} SET "stage" = ${Restore} WHERE id = ${replicaID};
+      `;
+      const replica = must(
+        await getReplicaState(tx, shard, replicaID),
+        `replica ${replicaID} disappeared`,
+      );
+
+      return {
+        slot,
+        replica,
+        reservation: await keepSlotActiveUntilTakenOver(
+          lc,
+          replicationSession,
+          slot,
+          metadataPublicationName(shard.appID, shard.shardNum),
+          toBigInt(lsn),
+        ),
+      };
+    });
+    lc.info?.(`successfully claimed slot ${slot}`);
+    return reserved;
+  } catch (e) {
+    lc.error?.(`unable to claim replication slot ${slot}`, e);
+    await replicationSession.end();
+    return null;
+  }
+}
+
+export function dropInactiveSlotsAndReplicas(
+  lc: LogContext,
+  sql: PostgresDB,
+  shard: ShardID,
+  slots: string[],
+) {
+  const lockName = replicationSlotManagementLock(shard);
+  const replicasTable = `${upstreamSchema(shard)}.replicas`;
+
+  return runTx(sql, async tx => {
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
+
+    const dropped = await tx<{slot: string; replicaID: string | null}[]>
+    /*sql*/ `
+      SELECT slot_name as slot, replica.id as "replicaID", pg_drop_replication_slot(slot_name) 
+        FROM pg_replication_slots
+        LEFT JOIN ${tx(replicasTable)} replica on slot_name = slot
+        WHERE slot_name IN ${tx(slots)} AND NOT active;
+    `;
+    if (dropped.length) {
+      lc.info?.(`dropped ${dropped.length} inactive replication slot(s)`, {
+        dropped,
+      });
+    }
+
+    const replicas = dropped
+      .map(({replicaID}) => replicaID)
+      .filter(id => id !== null);
+    if (replicas.length) {
+      // Delete replicas associated with the inactive (and now dropped) slots.
+      await tx
+      /*sql*/ `DELETE FROM ${tx(replicasTable)} WHERE id IN ${tx(replicas)}`;
+      lc.info?.(`deleted ${replicas.length} old replica(s)`, {replicas});
+    }
+  });
 }
 
 function dropUnclaimedSlots(

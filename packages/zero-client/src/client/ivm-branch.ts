@@ -23,7 +23,6 @@ import {consume} from '../../../zql/src/ivm/stream.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 
 import {
-  makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from '../../../zql/src/ivm/source.ts';
@@ -160,7 +159,7 @@ export async function initFromStore(
   const diffs: InternalDiffOperation[] = [];
   await withRead(store, async dagRead => {
     const read = await readFromHash(hash, dagRead, FormatVersion.Latest);
-    for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX)) {
+    for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX, true)) {
       if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
         break;
       }
@@ -242,9 +241,12 @@ function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
       case 'del':
         consume(source.push(makeSourceChangeRemove(diff.oldValue as Row)));
         break;
-      case 'add':
-        consume(source.push(makeSourceChangeAdd(diff.newValue as Row)));
+      case 'add': {
+        const rows = takeAddsForSource(diffs, i, name);
+        i += rows.length - 1;
+        source.pushAdds(rows);
         break;
+      }
       case 'change':
         consume(
           source.push(
@@ -254,4 +256,25 @@ function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
         break;
     }
   }
+}
+
+/**
+ * Returns the rows of the run of `add` diffs for the source `name` that starts
+ * at `start`. Diffs are ordered by key so a table's rows are contiguous.
+ */
+function takeAddsForSource(
+  diffs: NoIndexDiff,
+  start: number,
+  name: string,
+): Row[] {
+  const prefix = ENTITIES_KEY_PREFIX + name + '/';
+  const rows: Row[] = [];
+  for (let i = start; i < diffs.length; i++) {
+    const diff = diffs[i];
+    if (diff.op !== 'add' || !diff.key.startsWith(prefix)) {
+      break;
+    }
+    rows.push(diff.newValue as Row);
+  }
+  return rows;
 }

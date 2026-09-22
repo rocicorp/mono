@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {first, type Stream, take} from './stream.ts';
+import {type Stream, take} from './stream.ts';
 
 describe('take', () => {
   test('take the first n elements from the stream', () => {
@@ -18,19 +18,5 @@ describe('take', () => {
     const stream: Stream<number> = [1, 2, 3];
     const result = [...take(stream, 5)];
     expect(result).toEqual([1, 2, 3]);
-  });
-});
-
-describe('first', () => {
-  test('return the first element of the stream', () => {
-    const stream: Stream<number> = [1, 2, 3, 4, 5];
-    const result = first(stream);
-    expect(result).toBe(1);
-  });
-
-  test('return undefined if the stream is empty', () => {
-    const stream: Stream<number> = [];
-    const result = first(stream);
-    expect(result).toBeUndefined();
   });
 });

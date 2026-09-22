@@ -20,7 +20,7 @@
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {newStaticQuery} from '../../../../zql/src/query/static-query.ts';
 import {schema} from '../schema.ts';
-import {relsOf, tables} from './axes.ts';
+import {relsOf, rolesOf, tables} from './axes.ts';
 
 /** Whether a structural child is a materialized relationship or an existence gate. */
 export type ChildKind = 'related' | 'exists' | 'notExists';
@@ -123,6 +123,39 @@ export function lower(s: Skeleton): AnyQuery {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const q = newStaticQuery(schema, s.table as any) as AnyQuery;
   return applySkeleton(q, s);
+}
+
+/**
+ * Lower a skeleton with its **root** EXISTS gates ORed together with a simple filter on
+ * the root (`num >= numMid`) instead of ANDed; nested gates stay ANDed. The OR is what
+ * puts a `FanOut`/`FanIn` (or, once a gate is flipped, a `UnionFanOut`/`UnionFanIn`)
+ * under the root, and the simple branch keeps rows in the result that no gate change
+ * touches — the survivors a limited window refills with. A skeleton without root gates
+ * lowers exactly as {@link lower}.
+ */
+export function lowerOr(s: Skeleton): AnyQuery {
+  const gates = s.children.filter(c => isExists(c.kind));
+  const q = lower({
+    table: s.table,
+    children: s.children.filter(c => !isExists(c.kind)),
+  });
+  if (gates.length === 0) {
+    return q;
+  }
+  const {num, numMid} = rolesOf(s.table);
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  return (q as any).where(({or, cmp, not, exists}: any) =>
+    or(
+      cmp(num, '>=', numMid),
+      ...gates.map(child => {
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        const gate = exists(child.rel, (cq: any) =>
+          applySkeleton(cq as AnyQuery, child.sub),
+        );
+        return child.kind === 'exists' ? gate : not(gate);
+      }),
+    ),
+  );
 }
 
 function applySkeleton(q: AnyQuery, s: Skeleton): AnyQuery {

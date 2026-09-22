@@ -112,6 +112,7 @@ const nodeTypeSchema = v.union(
   v.literal('join'),
   v.literal('fan-out'),
   v.literal('fan-in'),
+  v.literal('filter'),
   v.literal('terminus'),
 );
 

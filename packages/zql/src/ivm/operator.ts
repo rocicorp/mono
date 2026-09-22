@@ -1,5 +1,6 @@
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {NoSubqueryCondition} from '../builder/filter.ts';
 import type {Change} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
@@ -79,6 +80,46 @@ export type FetchRequest = {
 
   /** Whether to fetch in reverse order of the SourceSchema's sort. */
   readonly reverse?: boolean | undefined;
+
+  /**
+   * Additional predicate the consumer wants the source/intermediate operators
+   * to apply to the fetched rows. The receiver must AND this with whatever
+   * filtering it already applies. Sources may use this to drive index
+   * selection (e.g. PK lookup) the same way they use the connection-time
+   * filter.
+   *
+   * Always a `NoSubqueryCondition` — anything passed via `req.filter` must
+   * already have had correlated subqueries stripped (see `transformFilters`).
+   *
+   * Contract:
+   * - The only operator that *introduces* `req.filter` is `FilterStart`. It
+   *   AND-merges its static condition with whatever `req.filter` it receives
+   *   and forwards the merged value upstream. No other operator should
+   *   construct a `req.filter`.
+   * - "Pass-through" fetch operators (`Skip`, `Take`, `Join`, `FlippedJoin`,
+   *   `UnionFanIn`, `UnionFanOut`) MUST preserve `req.filter` when forwarding
+   *   to their input — typically via `{...req, ...overrides}` spread. Dropping
+   *   it silently regresses predicate pushdown for queries below the
+   *   forwarding operator.
+   * - Operators that *initiate* internal fetches (e.g., `Join.#pushChildChange`,
+   *   `FlippedJoin.#pushChildChange`, `UnionFanIn.#pushInternalChange`,
+   *   `Take`'s push-time bound recomputation) construct fresh
+   *   `FetchRequest`s without `req.filter`, and that is correct: there is no
+   *   inbound consumer-side filter at those call sites. Any `FilterStart`
+   *   that sits between such an internal fetch and the source will still
+   *   apply its own condition on the way through, so the source still gets
+   *   the right WHERE.
+   * - `Cap` is *not* a pass-through: it intentionally builds fresh
+   *   `{constraint}` requests when replaying tracked PKs and drops any
+   *   incoming `req.filter`. This is sound only because `Cap`'s sole
+   *   consumer in production is a `Join`'s child fetch (see
+   *   `Join.#processParentNode` in `join.ts`), which itself never carries
+   *   `req.filter` — Join's child fetches are constructed with just
+   *   `{constraint}` derived from join keys. If `Cap` is ever wired below
+   *   something that does push a `req.filter`, this carve-out becomes a
+   *   correctness bug.
+   */
+  readonly filter?: NoSubqueryCondition | undefined;
 };
 
 export type Start = {

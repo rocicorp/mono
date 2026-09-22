@@ -112,6 +112,7 @@ export class RunningState {
     }, timeoutMs);
 
     this.#pendingTimeouts.add(timeout);
+    return timeout;
   }
 
   /**

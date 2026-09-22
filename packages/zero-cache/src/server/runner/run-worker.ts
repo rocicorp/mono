@@ -100,7 +100,7 @@ export async function runWorker(
     );
   } catch (err) {
     processes.logErrorAndExit(err, 'main');
+  } finally {
+    await processes.shutdown();
   }
-
-  await processes.done();
 }

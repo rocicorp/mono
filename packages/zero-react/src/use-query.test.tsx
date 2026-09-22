@@ -12,6 +12,7 @@ import {
 } from 'vitest';
 import type {Format} from '../../zero-types/src/format.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
+import type {TTL} from '../../zql/src/query/ttl.ts';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
   getAllViewsSizeForTesting,
@@ -39,7 +40,7 @@ function newMockQuery(query: string, singular = false): Query<string, Schema> {
   const ret = {
     [queryInternalsTag]: true,
     hash() {
-      return query;
+      return query + singular;
     },
     format: {singular},
   } as unknown as QueryImpl<string, Schema>;
@@ -53,7 +54,7 @@ function newMockQueryWithFormat(
   const ret = {
     [queryInternalsTag]: true,
     hash() {
-      return query;
+      return query + JSON.stringify(format);
     },
     format,
   } as unknown as QueryImpl<string, Schema>;
@@ -340,6 +341,86 @@ describe('ViewStore', () => {
 
       expect(view1).not.toBe(view2);
     });
+
+    test('one client’s views are destroyed without disturbing another’s', () => {
+      const viewStore = new ViewStore();
+
+      const zero1 = newMockZero('client1');
+      const view1 = viewStore.getView(
+        zero1,
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      const zero2 = newMockZero('client2');
+      const view2 = viewStore.getView(
+        zero2,
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(2);
+
+      const cleanup1 = view1.subscribeReactInternals(() => {});
+      const cleanup2 = view2.subscribeReactInternals(() => {});
+
+      cleanup1();
+      vi.advanceTimersByTime(100);
+
+      // The other client keeps its view, and asking again returns that same
+      // one rather than building a second.
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+      expect(
+        viewStore.getView(zero2, newMockQuery('query1'), true, 'forever'),
+      ).toBe(view2);
+
+      cleanup2();
+      vi.advanceTimersByTime(100);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+
+      // ...and the store still works afterwards, having dropped the per-client
+      // entry it no longer needs.
+      const view3 = viewStore.getView(
+        zero1,
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      expect(view3).not.toBe(view1);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+    });
+  });
+
+  describe('ttl', () => {
+    test('an unchanged ttl is not forwarded to the view', () => {
+      const viewStore = new ViewStore();
+      const zero = newMockZero('client1');
+
+      viewStore.getView(zero, newMockQuery('query1'), true, 1000);
+      // The wrapper materializes eagerly, so the underlying view is the one
+      // to watch: `getView` calls the wrapper's `updateTTL` either way, and
+      // what the guard changes is whether it forwards.
+      const materialized = vi.mocked(zero.materialize).mock.results[0]
+        .value as {
+        updateTTL: (ttl: TTL) => void;
+      };
+      const updateTTL = vi.spyOn(materialized, 'updateTTL');
+
+      // Same ttl, as every re-render passes: nothing to tell the view, and
+      // nothing to re-derive in the query manager.
+      viewStore.getView(zero, newMockQuery('query1'), true, 1000);
+      viewStore.getView(zero, newMockQuery('query1'), true, 1000);
+      expect(updateTTL).not.toHaveBeenCalled();
+
+      // A different ttl still propagates...
+      viewStore.getView(zero, newMockQuery('query1'), true, 2000);
+      expect(updateTTL).toHaveBeenCalledWith(2000);
+
+      // ...including a change only in how the duration is spelled.
+      updateTTL.mockClear();
+      viewStore.getView(zero, newMockQuery('query1'), true, '2s');
+      expect(updateTTL).toHaveBeenCalledWith('2s');
+    });
   });
 
   describe('singular vs plural', () => {
@@ -530,6 +611,262 @@ describe('ViewStore', () => {
 
       cleanup();
     });
+  });
+
+  describe('cached result type', () => {
+    test('plural: empty cached snapshots are shared and stable', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      listeners.forEach(cb => cb([], 'cached'));
+      const snapshot1 = view.getSnapshot();
+      expect(snapshot1).toEqual([[], {type: 'cached'}]);
+
+      listeners.forEach(cb => cb([], 'cached'));
+      const snapshot2 = view.getSnapshot();
+      expect(snapshot1).toBe(snapshot2);
+
+      listeners.forEach(cb => cb([{a: 1}], 'cached'));
+      expect(view.getSnapshot()).toEqual([[{a: 1}], {type: 'cached'}]);
+
+      listeners.forEach(cb => cb([{a: 1}], 'complete'));
+      expect(view.getSnapshot()).toEqual([[{a: 1}], {type: 'complete'}]);
+
+      cleanup();
+    });
+
+    test('singular: empty cached snapshots are shared and stable', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1', true);
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      listeners.forEach(cb => cb(undefined, 'cached'));
+      const snapshot1 = view.getSnapshot();
+      expect(snapshot1).toEqual([undefined, {type: 'cached'}]);
+
+      listeners.forEach(cb => cb(undefined, 'cached'));
+      const snapshot2 = view.getSnapshot();
+      expect(snapshot1).toBe(snapshot2);
+
+      listeners.forEach(cb => cb({a: 1}, 'cached'));
+      expect(view.getSnapshot()).toEqual([{a: 1}, {type: 'cached'}]);
+
+      listeners.forEach(cb => cb({a: 1}, 'complete'));
+      expect(view.getSnapshot()).toEqual([{a: 1}, {type: 'complete'}]);
+
+      cleanup();
+    });
+
+    test('empty cached result satisfies nonEmpty but not complete', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      // A server-confirmed empty result from a previous session is enough
+      // for suspendUntil: 'partial' to render while offline.
+      listeners.forEach(cb => cb([], 'cached'));
+      expect(view.nonEmpty).toBe(true);
+      expect(view.complete).toBe(false);
+
+      cleanup();
+    });
+
+    test('a revoked empty cached result suspends again', async () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      listeners.forEach(cb => cb([], 'cached'));
+      expect(view.nonEmpty).toBe(true);
+
+      // The got key was evicted before this connection confirmed the query.
+      listeners.forEach(cb => cb([], 'unknown'));
+      expect(view.nonEmpty).toBe(false);
+      let resolved = false;
+      void view.waitForNonEmpty().then(() => {
+        resolved = true;
+      });
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      listeners.forEach(cb => cb([{a: 1}], 'unknown'));
+      expect(view.nonEmpty).toBe(true);
+      await Promise.resolve();
+      expect(resolved).toBe(true);
+
+      cleanup();
+    });
+
+    test('cached does not satisfy complete-waiters', () => {
+      const viewStore = new ViewStore();
+      const q = newMockQuery('query1');
+      const zero = newMockZero('client1');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
+        .value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
+      };
+
+      const cleanup = view.subscribeReactInternals(() => {});
+
+      listeners.forEach(cb => cb([{a: 1}], 'cached'));
+      // 'cached' is last session's server-confirmed answer; only a
+      // confirmation on THIS connection may report complete.
+      expect(view.complete).toBe(false);
+
+      listeners.forEach(cb => cb([{a: 1}], 'complete'));
+      expect(view.complete).toBe(true);
+
+      cleanup();
+    });
+  });
+});
+
+describe('stable query identity', () => {
+  let root: Root;
+  let element: HTMLDivElement;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    element = document.createElement('div');
+    document.body.appendChild(element);
+    root = createRoot(element);
+  });
+
+  afterEach(() => {
+    document.body.removeChild(element);
+    root.unmount();
+  });
+
+  /**
+   * A named query as a call site sees it: the `CustomQuery` is a stable
+   * module-level object, and calling it allocates a fresh request each render.
+   */
+  function newMockCustomQuery() {
+    const built = newMockQuery('stable-query');
+    const fn = vi.fn(() => built);
+    const customQuery = {fn};
+    const request = (args: ReadonlyJSONValue) =>
+      ({
+        'query': customQuery,
+        args,
+        '~': 'QueryRequest',
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any;
+    return {fn, request};
+  }
+
+  function Comp({
+    n,
+    request,
+  }: {
+    n: number;
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    request: any;
+  }) {
+    useQuery(request);
+    return <div>{n}</div>;
+  }
+
+  async function render(
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    zero: any,
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    request: any,
+    n: number,
+  ) {
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp n={n} request={request} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe(String(n));
+  }
+
+  test('a request with equal args is resolved once across re-renders', async () => {
+    const {fn, request} = newMockCustomQuery();
+    const zero = newMockZero('client-stable');
+
+    await render(zero, request({id: 'a'}), 1);
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    // A fresh request object each render, meaning the same thing: the query
+    // definition -- argument validation and the builder chain -- is not run
+    // again.
+    await render(zero, request({id: 'a'}), 2);
+    await render(zero, request({id: 'a'}), 3);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  test('changing the args resolves again', async () => {
+    const {fn, request} = newMockCustomQuery();
+    const zero = newMockZero('client-stable-args');
+
+    await render(zero, request({id: 'a'}), 1);
+    await render(zero, request({id: 'b'}), 2);
+    expect(fn).toHaveBeenCalledTimes(2);
+
+    // ...and the new args are then themselves stable.
+    await render(zero, request({id: 'b'}), 3);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  test('a query toggled off and back on reuses what it had', async () => {
+    const {fn, request} = newMockCustomQuery();
+    const zero = newMockZero('client-stable-toggle');
+
+    await render(zero, request({id: 'a'}), 1);
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    await render(zero, undefined, 2);
+    await render(zero, request({id: 'a'}), 3);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  test('changing the Zero instance resolves again', async () => {
+    const {fn, request} = newMockCustomQuery();
+
+    await render(newMockZero('client-stable-z1'), request({id: 'a'}), 1);
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    // A different Zero means a different context and a different view store
+    // entry, so the cached resolution does not carry over.
+    await render(newMockZero('client-stable-z2'), request({id: 'a'}), 2);
+    expect(fn).toHaveBeenCalledTimes(2);
   });
 });
 

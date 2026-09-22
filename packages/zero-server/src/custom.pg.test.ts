@@ -120,6 +120,30 @@ describe('makeSchemaCRUD', () => {
     });
   });
 
+  test('insert on an existing primary key is a no-op', async () => {
+    await pg.begin(async tx => {
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
+      await crud.basic.insert({id: '1', a: 2, b: 'foo', c: true});
+      await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]);
+
+      // Re-inserting the same primary key with different values must not throw
+      // and must leave the existing row unchanged (skip-if-exists), matching the
+      // optimistic client behavior.
+      await crud.basic.insert({id: '1', a: 999, b: 'bar', c: false});
+      await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]);
+
+      // Same for a compound primary key.
+      await crud.compoundPk.insert({a: 'a', b: 1, c: 'c'});
+      await crud.compoundPk.insert({a: 'a', b: 1, c: 'different'});
+      await checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]);
+    });
+  });
+
   test('insert/update/upsert with missing columns', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);
@@ -166,6 +190,44 @@ describe('makeSchemaCRUD', () => {
       });
       await checkDb(tx, 'basic', [row]);
     });
+  });
+
+  test('update and upsert allow concurrent foreign key inserts', async () => {
+    await pg`
+      CREATE TABLE basic_refs (
+        id TEXT PRIMARY KEY,
+        basic_id TEXT NOT NULL REFERENCES basic(id)
+      )
+    `;
+    await pg`INSERT INTO basic (id, a, b) VALUES ('1', 1, 'one')`;
+
+    const assertAllowsForeignKeyInsert = async (
+      id: string,
+      operation: (crud: SchemaCRUD<typeof schema>) => Promise<void>,
+    ) => {
+      await pg.begin(async tx => {
+        const transaction = new Transaction(tx);
+        const crud = crudProvider(
+          transaction,
+          await getServerSchema(transaction, schema),
+        );
+        await operation(crud);
+
+        await pg.begin(async concurrent => {
+          await concurrent.unsafe(`SET LOCAL lock_timeout = '100ms'`);
+          await concurrent`
+            INSERT INTO basic_refs (id, basic_id) VALUES (${id}, '1')
+          `;
+        });
+      });
+    };
+
+    await assertAllowsForeignKeyInsert('update', crud =>
+      crud.basic.update({id: '1', b: 'updated'}),
+    );
+    await assertAllowsForeignKeyInsert('upsert', crud =>
+      crud.basic.upsert({id: '1', a: 2, b: 'upserted'}),
+    );
   });
 
   test('insert/update/upsert with nullable array columns preserves null', async () => {

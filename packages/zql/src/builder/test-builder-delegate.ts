@@ -14,15 +14,19 @@ export class TestBuilderDelegate implements BuilderDelegate {
   readonly #shouldLog: boolean;
   readonly #log: SnitchMessage[] = [];
   readonly enableNotExists: boolean;
+  readonly disableCorrelatedPredicatePushdown: boolean;
 
   constructor(
     sources: Readonly<Record<string, Source>>,
     shouldLog?: boolean,
     enableNotExists?: boolean,
+    disableCorrelatedPredicatePushdown?: boolean,
   ) {
     this.#sources = sources;
     this.#shouldLog = !!shouldLog;
     this.enableNotExists = !!enableNotExists;
+    this.disableCorrelatedPredicatePushdown =
+      !!disableCorrelatedPredicatePushdown;
   }
 
   getSource(tableName: string): Source | undefined {

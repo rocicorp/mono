@@ -1,6 +1,10 @@
-import type {LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {AbortError} from '../../../shared/src/abort-error.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../shared/src/logging-test-utils.ts';
 import type {Database as Db} from '../../../zqlite/src/db.ts';
 import {DbFile} from '../test/lite.ts';
 import {
@@ -367,5 +371,58 @@ describe('db/migration-lite', () => {
 
     expect(err).toBeDefined();
     c.verify(err);
+  });
+
+  test('AbortError is logged at warn, not error', async () => {
+    // AbortErrors (e.g. AutoResetSignal signaling that the replica needs a
+    // reset) are an expected, self-healing control-flow signal and must not be
+    // logged at `error`, which would trip error-based alerting.
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, sink);
+
+    const abort = new AbortError('replica database appears corrupt');
+    let caught: unknown;
+    try {
+      await runSchemaMigrations(
+        lc,
+        debugName,
+        dbFile.path,
+        {migrateSchema: () => Promise.reject(abort)},
+        {1: {}},
+      );
+    } catch (e) {
+      caught = e;
+    }
+
+    // The signal still propagates so the caller can resync.
+    expect(caught).toBe(abort);
+
+    const errors = sink.messages.filter(([level]) => level === 'error');
+    const warns = sink.messages.filter(([level]) => level === 'warn');
+    expect(errors).toEqual([]);
+    expect(warns.some(([, , args]) => args.includes(abort))).toBe(true);
+  });
+
+  test('non-AbortError is logged at error', async () => {
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, sink);
+
+    const err = new Error('genuine migration failure');
+    let caught: unknown;
+    try {
+      await runSchemaMigrations(
+        lc,
+        debugName,
+        dbFile.path,
+        {migrateSchema: () => Promise.reject(err)},
+        {1: {}},
+      );
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBe(err);
+    const errors = sink.messages.filter(([level]) => level === 'error');
+    expect(errors.some(([, , args]) => args.includes(err))).toBe(true);
   });
 });

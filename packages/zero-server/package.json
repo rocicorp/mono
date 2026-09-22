@@ -11,6 +11,7 @@
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
     "postinstall": "prisma generate --schema ./src/adapters/schema.test.prisma",
+    "bench:pg": "vitest run --config vitest.config.bench.pg.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:pg17": "vitest run --project='*17*'",
@@ -26,15 +27,14 @@
     "@prisma/client": "^7.7.0",
     "@standard-schema/spec": "^1.0.0",
     "@types/pg": "^8.20.0",
-    "@vitest/runner": "^4.1.6",
     "drizzle-orm": "^0.45.2",
     "kysely": "^0.28.17",
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.65.0",
     "pg": "^8.16.3",
     "postgres": "3.4.7",
     "prisma": "^7.7.0",
     "shared": "workspace:*",
-    "vitest": "^4.1.6",
+    "vitest": "^5.0.0",
     "z2s": "workspace:*",
     "zero-cache": "workspace:*",
     "zero-protocol": "workspace:*",
@@ -42,5 +42,5 @@
     "zero-types": "workspace:*",
     "zql": "workspace:*"
   },
-  "packageManager": "pnpm@11.5.3"
+  "packageManager": "pnpm@11.11.0"
 }

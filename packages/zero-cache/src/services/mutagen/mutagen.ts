@@ -49,6 +49,11 @@ export type MutationError = [
 ];
 
 export interface Mutagen extends RefCountedService {
+  /**
+   * Callers must hold a {@link ref} for the duration of a push (i.e. across
+   * all of its mutations). The service stops, closing its replica handle,
+   * when its ref count drops to zero.
+   */
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
@@ -158,8 +163,17 @@ export class MutagenService implements Mutagen, Service {
     if (this.#isStopped) {
       return this.#stopped.promise;
     }
-    this.#writeAuthorizer.destroy();
     this.#isStopped = true;
+    try {
+      this.#writeAuthorizer.destroy();
+    } catch (e) {
+      this.#lc.error?.('error destroying write authorizer storage', e);
+    } finally {
+      // The replica's statistics are maintained by the replicator, so skip
+      // the `PRAGMA optimize` that closing a writable handle would otherwise
+      // run on every client group churn.
+      this.#replica.close({optimize: false});
+    }
     this.#stopped.resolve();
     return this.#stopped.promise;
   }
@@ -182,9 +196,12 @@ export async function processMutation(
     mutation.type === MutationType.CRUD,
     'Only CRUD mutations are supported',
   );
+  // log-leak-ignore -- the mutation id, not row data
   lc = lc.withContext('mutationID', mutation.id);
   lc = lc.withContext('processMutation');
-  lc.debug?.('Process mutation start', mutation);
+  // The mutationID context set above identifies it; the mutation itself
+  // carries the row values being written.
+  lc.debug?.('Process mutation start');
 
   // Record mutation processing attempt for telemetry (regardless of success/failure)
   recordMutation('crud');
@@ -329,7 +346,9 @@ export async function processMutationWithTx(
       return await stmt.execute();
     } finally {
       const q = stmt as unknown as Query;
-      lc.debug?.(`${q.string}: ${JSON.stringify(q.parameters)}`);
+      // `q.parameters` are the bound row values -- log the parameterized
+      // statement and the parameter count, never the values themselves.
+      lc.debug?.(`${q.string} (${q.parameters.length} params)`);
     }
   }
 
@@ -388,7 +407,10 @@ export function getInsertSQL(
   tx: postgres.TransactionSql,
   create: InsertOp,
 ): postgres.PendingQuery<postgres.Row[]> {
-  return tx`INSERT INTO ${tx(create.tableName)} ${tx(create.value)}`;
+  return tx`
+    INSERT INTO ${tx(create.tableName)} ${tx(create.value)}
+    ON CONFLICT (${tx(create.primaryKey)}) DO NOTHING
+  `;
 }
 
 export function getUpsertSQL(

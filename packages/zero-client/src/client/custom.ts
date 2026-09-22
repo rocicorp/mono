@@ -201,12 +201,13 @@ export function makeReplicacheMutator<
 function assertValidRunOptions(options: RunOptions | undefined): void {
   // TODO(arv): We should enforce this with the type system too.
   assert(
-    options?.type !== 'complete',
-    'Cannot wait for complete results in custom mutations',
+    options?.type !== 'complete' && options?.type !== 'cached',
+    'Cannot wait for cached or complete results in custom mutations',
   );
 }
 
 function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
+  // The forked branch is already populated, so there is nothing to defer.
   return new ZeroContext(
     lc,
     ivmBranch,
@@ -218,5 +219,5 @@ function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
     applyViewUpdates => applyViewUpdates(),
     emptyFunction,
     assertValidRunOptions,
-  );
+  ).markPipelinesReady();
 }

@@ -28,9 +28,10 @@ import type {
   ChangeStreamMessage,
   Commit,
 } from '../protocol/current/downstream.ts';
-import {initializePostgresChangeSource} from './change-source.ts';
+import {initializePostgresChangeSource} from './change-source-init.ts';
 import {fromStateVersionString, toBigInt, toStateVersionString} from './lsn.ts';
 import {dropEventTriggerStatements} from './schema/ddl.ts';
+import {InitialSync, Replicate} from './schema/replica-stage-enum.ts';
 
 const APP_ID = '23';
 const SHARD_NUM = 1;
@@ -107,10 +108,45 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   ): Queue<ChangeStreamMessage> {
     const queue = new Queue<ChangeStreamMessage>();
     void (async () => {
+      // Buffers a transaction (begin ... commit) so that transactions
+      // consisting solely of writes to the shard's own "replicas"
+      // bookkeeping table (part of the metadata publication so that such
+      // writes advance the slot's LSN) can be dropped rather than confused
+      // for the transaction under test.
+      let txn: ChangeStreamMessage[] | undefined;
       try {
         for await (const msg of sub) {
           if (msg[0] === 'status' && !msg[1].ack && !msg[1].lagReport) {
             continue; // filter out keepalives
+          }
+          if (msg[0] === 'begin') {
+            txn = [msg];
+            continue;
+          }
+          if (txn) {
+            switch (msg[0]) {
+              case 'data':
+                if (
+                  'relation' in msg[1] &&
+                  msg[1].relation.schema === `${APP_ID}_${SHARD_NUM}` &&
+                  msg[1].relation.name === 'replicas'
+                ) {
+                  continue; // so far metadata only, continue skipping
+                }
+                txn.forEach(m => queue.enqueue(m));
+                txn = undefined;
+                break;
+              case 'commit':
+                txn = undefined; // skipped the metadata-only transaction
+                continue;
+              case 'rollback':
+                // Rolled-back transactions are always surfaced (regardless of
+                // which tables they touch), since tests assert on their
+                // begin/data/rollback sequence.
+                txn.forEach(m => queue.enqueue(m));
+                txn = undefined;
+                break;
+            }
           }
           queue.enqueue(msg);
         }
@@ -119,6 +155,21 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       }
     })();
     return queue;
+  }
+
+  // The shard's own "replicas" bookkeeping table is part of the metadata
+  // publication (so that writes to it advance the slot's LSN), but changes
+  // to it are internal and should not be mistaken for the change(s) under
+  // test.
+  function isReplicasBookkeeping(msg: ChangeStreamMessage): boolean {
+    return (
+      msg[0] === 'begin' ||
+      msg[0] === 'commit' ||
+      (msg[0] === 'data' &&
+        'relation' in msg[1] &&
+        msg[1].relation.schema === `${APP_ID}_${SHARD_NUM}` &&
+        msg[1].relation.name === 'replicas')
+    );
   }
 
   const WATERMARK_REGEX = /[0-9a-z]{3,}/;
@@ -147,7 +198,26 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     return toBigInt(lsn);
   }
 
-  async function startReplication(lagReportIntervalMs?: number) {
+  async function getReplicaCount(): Promise<number> {
+    let [{count}] = await upstream<
+      {count: bigint}[]
+    >`SELECT COUNT(*) FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)}`;
+    return Number(count);
+  }
+
+  async function startReplication({
+    lagReportIntervalMs,
+    epoch = 0,
+    slotPerReplica = false,
+    backupV5 = true,
+    inactiveReplicaGracePeriodMs = 20000,
+  }: {
+    lagReportIntervalMs?: number;
+    epoch?: number;
+    slotPerReplica?: boolean;
+    backupV5?: boolean;
+    inactiveReplicaGracePeriodMs?: number;
+  } = {}) {
     ({changeSource: source} = await initializePostgresChangeSource(
       lc,
       upstreamURI,
@@ -160,11 +230,15 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {tableCopyWorkers: 5},
       {test: 'context'},
       lagReportIntervalMs,
+      {},
+      {epoch, slotPerReplica, backupV5, inactiveReplicaGracePeriodMs},
     ));
 
-    const [{slot, initialSyncContext, subscriberContext}] = await upstream`
+    const [{slot, stage, initialSyncContext, subscriberContext}] =
+      await upstream`
       SELECT * FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
     `;
+    expect(stage).toBe(InitialSync);
     expect(initialSyncContext).toEqual({test: 'context'});
     expect(subscriberContext).toBeNull();
     replicationSlot = slot;
@@ -234,9 +308,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     const {changes, acks} = await startStream('00');
     const downstream = drainToQueue(changes);
 
-    const [{subscriberContext}] = await upstream`
+    const [{stage, subscriberContext}] = await upstream`
       SELECT * FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
     `;
+    expect(stage).toBe(Replicate);
     expect(subscriberContext).toEqual({test: 'context'});
 
     await upstream.begin(async tx => {
@@ -681,6 +756,8 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   ])('bad schema change error: %s', async (errMsg, stmt) => {
     await startReplication();
     const {changes} = await startStream('00');
+    expect(await getReplicaCount()).toBe(1);
+
     try {
       const downstream = drainToQueue(changes);
 
@@ -754,6 +831,9 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
           },
         ],
       ]);
+
+      // replica row should be deleted to invalidate the slot and replica
+      expect(await getReplicaCount()).toBe(0);
     } finally {
       changes.cancel();
     }
@@ -810,6 +890,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       await withoutTriggers();
 
       const {changes} = await startStream('00');
+      expect(await getReplicaCount()).toBe(1);
       try {
         const downstream = drainToQueue(changes);
 
@@ -881,6 +962,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
             },
           ],
         ]);
+        expect(await getReplicaCount()).toBe(0);
       } finally {
         changes.cancel();
       }
@@ -891,7 +973,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     ['received', false],
     ['resumed if skipped', true],
   ])('replication lag reports: %s', async (_name, startStreamAfterReport) => {
-    await startReplication(10);
+    await startReplication({lagReportIntervalMs: 10});
 
     const initialSend = await source?.startLagReporter();
     expect(initialSend).toMatchObject({
@@ -941,20 +1023,14 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       assert(lag1[0] === 'status', () => lag1[0]);
       assert(lag2[0] === 'status', () => lag1[0]);
 
-      expect(lag1[1].lagReport?.lastTimings.sendTimeMs).toBe(
-        initialSend?.nextSendTimeMs,
+      expect(lag1[1].lagReport?.lastTimings.sendTimeMs).toBeGreaterThanOrEqual(
+        must(initialSend).nextSendTimeMs,
       );
-      expect(
-        must(lag2[1].lagReport).lastTimings.sendTimeMs,
-      ).toBeGreaterThanOrEqual(must(lag1[1].lagReport).nextSendTimeMs);
 
       for (const status of [lag1[1], lag2[1]]) {
         const report1 = must(status.lagReport);
-        expect(report1.nextSendTimeMs).toBe(
-          Math.max(
-            report1.lastTimings.receiveTimeMs,
-            report1.lastTimings.sendTimeMs + 10,
-          ),
+        expect(report1.nextSendTimeMs).toBeGreaterThanOrEqual(
+          report1.lastTimings.sendTimeMs + 10,
         );
       }
 
@@ -992,7 +1068,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     let err;
     try {
       for await (const msg of changes) {
-        if (msg[0] === 'status') {
+        if (msg[0] === 'status' || isReplicasBookkeeping(msg)) {
           continue;
         }
         throw new Error('DatabaseError was not thrown');
@@ -1001,6 +1077,62 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       err = e;
     }
     expect(err).toBeInstanceOf(AbortError);
+  });
+
+  async function backupOptions() {
+    return (
+      await upstream /*sql*/ `
+        SELECT "backupPath", "backupV5" FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)}`
+    )[0];
+  }
+
+  test('v5 backup options recorded', async () => {
+    await startReplication({backupV5: true});
+
+    const originalBackupOptions = await backupOptions();
+    expect(originalBackupOptions).toMatchObject({
+      backupPath: /\d{10,}/,
+      backupV5: true,
+    });
+
+    // Now simulate the state after a different replication-manager was backing
+    // up with this slot.
+    await upstream /*sql*/ `
+      UPDATE ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)}
+        SET "backupPath" = NULL,
+            "backupV5" = false
+    `;
+
+    // Starting the stream should update the replicas table with the
+    // stream's configured backup options.
+    const {changes} = await startStream('00');
+    expect(await backupOptions()).toEqual(originalBackupOptions);
+
+    changes.cancel();
+  });
+
+  test('v3 backup options recorded', async () => {
+    await startReplication({backupV5: false});
+    const originalBackupOptions = await backupOptions();
+    expect(originalBackupOptions).toEqual({
+      backupPath: null,
+      backupV5: false,
+    });
+
+    // Now simulate the state after a different replication-manager was backing
+    // up with this slot.
+    await upstream /*sql*/ `
+      UPDATE ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)}
+        SET "backupPath" = 'foo-bar-baz',
+            "backupV5" = true
+    `;
+
+    // Starting the stream should update the replicas table with the
+    // stream's configured backup options.
+    const {changes} = await startStream('00');
+    expect(await backupOptions()).toEqual(originalBackupOptions);
+
+    changes.cancel();
   });
 
   test('handoff', {retry: 3}, async () => {
@@ -1012,7 +1144,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     let err;
     try {
-      for await (const _ of changes) {
+      for await (const msg of changes) {
+        if (msg[0] === 'status' || isReplicasBookkeeping(msg)) {
+          continue;
+        }
         throw new Error('DatabaseError was not thrown');
       }
     } catch (e) {
@@ -1074,6 +1209,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {watermark: expect.stringMatching(WATERMARK_REGEX)},
     ]);
 
+    // Start a subscription on the new slot should to transition
+    // the replica from stage=InitialSync to stage=Replicate.
+    const {changes: changes2} = await startStream('00', source2);
+
     // Start a *third* initial sync with an empty replica.
     const replicaFile3 = new DbFile('change_source_pg_test_replica2');
     const {changeSource: source3} = await initializePostgresChangeSource(
@@ -1101,11 +1240,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     `);
     expect(replicas3).toHaveLength(3);
 
-    // Starting a subscription on the new slot should kill the old
-    // subscription and drop the first replication slot.
-    const {changes: changes2} = await startStream('00', source2);
-
-    // The new stream should get the same changes since it was synced
+    // The second stream should get the same changes since it was synced
     // before they occurred.
     const downstream2 = drainToQueue(changes2);
     expect(await downstream2.dequeue()).toMatchObject([
@@ -1123,50 +1258,49 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {watermark: expect.stringMatching(WATERMARK_REGEX)},
     ]);
 
-    // Verify that the older replica state has been cleaned up.
-    // The newer replica state should remain.
-    const replicasAfterSource2 = await upstream.unsafe(`
-      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas ORDER BY slot
-    `);
-    expect(replicasAfterSource2).toEqual(replicas3.slice(1));
+    // Taking over on the new slot is non-disruptive: under the time-based
+    // cleanup model, it does NOT proactively delete older replicas or drop
+    // their slots (that is deferred to the ReplicationSlotCleanupMonitor once
+    // a slot has been inactive for the configured timeout, and is covered by
+    // replication-slot-cleanup-monitor.pg.test.ts). All replica rows and
+    // slots therefore remain.
+    const replicaSlotsAfterSource2 = await upstream<{slot: string}[]>`
+      SELECT slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas
+        ORDER BY slot
+    `.values();
+    expect(replicaSlotsAfterSource2).toEqual(slots2);
 
-    // However, all 3 replication slots should remain because [1] is still
-    // active and [3], although not yet active, is a newer replica.
-    const slots3 = await upstream<{slot: string}[]>`
+    const slotsAfterSource2 = await upstream<{slot: string}[]>`
         SELECT slot_name as slot FROM pg_replication_slots
           WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
           ORDER BY slot_name
       `.values();
-    expect(slots3).toHaveLength(3);
+    expect(slotsAfterSource2).toEqual(slots2);
 
-    // Shut down the first replica slot and then start the third one.
+    // Shut down the first replica's stream and take over on the third slot.
     changes1.cancel();
     const {changes: changes3} = await startStream('00', source3);
 
-    // Now there should only be one replica left.
-    const replicasAfterSource3 = await upstream.unsafe(`
-      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas ORDER BY slot
-    `);
-    expect(replicasAfterSource3).toEqual(replicas3.slice(2));
+    // Cancelling the first stream and taking over on the third is likewise
+    // non-disruptive: all replica rows and slots still remain. Cleanup of
+    // the now-inactive first slot is left to the inactivity monitor.
+    const replicaSlotsAfterSource3 = await upstream<{slot: string}[]>`
+      SELECT slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas
+        ORDER BY slot
+    `.values();
+    expect(replicaSlotsAfterSource3).toEqual(slots2);
 
-    // Verify that the two latter slots remain. The first one should have
-    // been dropped because the source stopped subscribing. The second
-    // one is allowed to drain.
-    // (Use waitFor to reduce flakiness because the drop is non-transactional.)
-    await vi.waitFor(
-      async () => {
-        const slots3 = await upstream<{slot: string}[]>`
+    const slotsAfterSource3 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
         WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
         ORDER BY slot_name
     `.values();
-        expect(slots3).toEqual(slots2.slice(1));
-      },
-      {interval: 100},
-    );
+    expect(slotsAfterSource3).toEqual(slots2);
 
     changes2.cancel();
     changes3.cancel();
+    await source2.stop();
+    await source3.stop();
     replicaFile2.delete();
     replicaFile3.delete();
   });

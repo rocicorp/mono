@@ -12,8 +12,8 @@ import {
   listIndexes,
   listTables,
   type LiteTableSpecWithReplicationStatus,
+  type ReplicaIndexSpec,
 } from './lite-tables.ts';
-import type {LiteIndexSpec} from './specs.ts';
 
 describe('lite/tables', () => {
   type Case = {
@@ -242,7 +242,7 @@ describe('lite/indexes', () => {
   type Case = {
     name: string;
     setupQuery: string;
-    expectedResult: LiteIndexSpec[];
+    expectedResult: ReplicaIndexSpec[];
   };
 
   const cases: Case[] = [
@@ -318,6 +318,34 @@ describe('lite/indexes', () => {
           tableName: 'users',
           unique: true,
           columns: {handle: 'ASC'},
+        },
+      ],
+    },
+    {
+      name: 'partial indexes',
+      setupQuery: `
+    CREATE TABLE item (
+      id TEXT PRIMARY KEY,
+      active BOOL,
+      deleted_at TEXT,
+      status TEXT
+    );
+    CREATE UNIQUE INDEX active_item ON item (status DESC)
+      WHERE active = 1 AND deleted_at IS NULL;
+    `,
+      expectedResult: [
+        {
+          name: 'active_item',
+          tableName: 'item',
+          unique: true,
+          columns: {status: 'DESC'},
+          partial: true,
+        },
+        {
+          name: 'sqlite_autoindex_item_1',
+          tableName: 'item',
+          unique: true,
+          columns: {id: 'ASC'},
         },
       ],
     },
@@ -411,21 +439,37 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": true,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": true,
               "type": "number",
             },
             "d": {
+              "optional": true,
               "type": "number",
             },
           },
         },
       ]
     `);
+  });
+
+  test('a partial unique index is not a row key', () => {
+    expect(
+      t(`
+        CREATE TABLE partial_only(id "TEXT|NOT_NULL", active BOOL);
+        CREATE UNIQUE INDEX partial_only_id ON partial_only(id)
+          WHERE active = 1;
+        CREATE TABLE full_key(id "TEXT|NOT_NULL");
+        CREATE UNIQUE INDEX full_key_id ON full_key(id);
+      `).map(({tableSpec}) => tableSpec.name),
+    ).toEqual(['full_key']);
   });
 
   test('min row version', () => {
@@ -494,15 +538,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": true,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": true,
               "type": "number",
             },
             "d": {
+              "optional": true,
               "type": "number",
             },
           },
@@ -558,9 +606,11 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": true,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "string",
             },
           },
@@ -578,7 +628,7 @@ describe('computeZqlSpec', () => {
     );
 
     expect(spec.tableSpec.columns.time_tz?.dataType).toBe('timetz|NOT_NULL');
-    expect(spec.zqlSpec.time_tz).toEqual({type: 'number'});
+    expect(spec.zqlSpec.time_tz).toEqual({type: 'number', optional: false});
   });
 
   test('text-represented scalar columns can be used as primary keys', () => {
@@ -591,9 +641,9 @@ describe('computeZqlSpec', () => {
 
     expect(spec.tableSpec.primaryKey).toEqual(['id']);
     expect(spec.zqlSpec).toEqual({
-      id: {type: 'string'},
-      ip: {type: 'string'},
-      book: {type: 'string'},
+      id: {type: 'string', optional: false},
+      ip: {type: 'string', optional: true},
+      book: {type: 'string', optional: true},
     });
   });
 
@@ -663,12 +713,15 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": false,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "string",
             },
             "d": {
+              "optional": false,
               "type": "string",
             },
           },
@@ -751,15 +804,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": false,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "string",
             },
             "c": {
+              "optional": true,
               "type": "string",
             },
             "d": {
+              "optional": false,
               "type": "string",
             },
           },
@@ -837,15 +894,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": false,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": false,
               "type": "number",
             },
             "d": {
+              "optional": false,
               "type": "number",
             },
           },
@@ -940,15 +1001,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": false,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": false,
               "type": "number",
             },
             "d": {
+              "optional": true,
               "type": "number",
             },
           },
@@ -1029,15 +1094,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": true,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": false,
               "type": "number",
             },
             "d": {
+              "optional": false,
               "type": "number",
             },
           },
@@ -1155,21 +1224,27 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "createdAt": {
+              "optional": false,
               "type": "number",
             },
             "id": {
+              "optional": false,
               "type": "string",
             },
             "name": {
+              "optional": false,
               "type": "string",
             },
             "order": {
+              "optional": false,
               "type": "number",
             },
             "title": {
+              "optional": true,
               "type": "string",
             },
             "updatedAt": {
+              "optional": false,
               "type": "number",
             },
           },
@@ -1349,9 +1424,11 @@ describe('metadata table integration', () => {
         },
         "zqlSpec": {
           "id": {
+            "optional": false,
             "type": "number",
           },
           "name": {
+            "optional": true,
             "type": "string",
           },
         },
@@ -1412,12 +1489,15 @@ describe('metadata table integration', () => {
         },
         "zqlSpec": {
           "blob": {
+            "optional": true,
             "type": "string",
           },
           "id": {
+            "optional": false,
             "type": "number",
           },
           "name": {
+            "optional": true,
             "type": "string",
           },
         },
@@ -1540,12 +1620,15 @@ describe('metadata table integration', () => {
         },
         "zqlSpec": {
           "blob": {
+            "optional": true,
             "type": "string",
           },
           "id": {
+            "optional": false,
             "type": "number",
           },
           "name": {
+            "optional": true,
             "type": "string",
           },
         },

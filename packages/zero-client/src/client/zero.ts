@@ -6,6 +6,7 @@ import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
 } from '../../../replicache/src/impl.ts';
+import type {Store as KVStore} from '../../../replicache/src/kv/store.ts';
 import {dropDatabase as dropReplicacheDatabase} from '../../../replicache/src/persist/collect-idb-databases.ts';
 import {IDBDatabasesStore} from '../../../replicache/src/persist/idb-databases-store.ts';
 import type {Puller, PullerResult} from '../../../replicache/src/puller.ts';
@@ -28,7 +29,7 @@ import {
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
-import {getErrorMessage} from '../../../shared/src/error.ts';
+import {getErrorCauses, getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -61,10 +62,11 @@ import {
   mapCRUD,
 } from '../../../zero-protocol/src/mutation.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
-import type {
-  PokeEndMessage,
-  PokePartMessage,
-  PokeStartMessage,
+import {
+  POKE_CHUNK_MESSAGE_TYPE,
+  type PokeEndMessage,
+  type PokePartMessage,
+  type PokeStartMessage,
 } from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
@@ -144,9 +146,9 @@ import {
   type ZeroError,
   getBackoffParams,
   getErrorConnectionTransition,
-  isAuthError,
   isClientError,
   isServerError,
+  isZeroError,
 } from './error.ts';
 import {
   type HTTPString,
@@ -213,6 +215,40 @@ interface TestZero {
   }) => LogOptions;
 }
 
+type ConnectAttemptControl = {
+  readonly controller: AbortController;
+  readonly connected: Resolver<void>;
+  readonly events: [date: Date, event: string][];
+
+  /**
+   * Cancels whichever phase deadline is currently running. Swapped when the
+   * attempt stops setting up locally and starts waiting for the server.
+   */
+  clearTimeout?: (() => void) | undefined;
+
+  /**
+   * The error this attempt was aborted with. Read this instead of
+   * `controller.signal.reason`: on runtimes whose `AbortController` predates
+   * the 2021 `signal.reason` spec addition (e.g. React Native's bundled
+   * `abort-controller@3` polyfill), `abort(reason)` silently discards the
+   * reason and `signal.reason` reads `undefined` — the run loop then wraps
+   * that `undefined` as a non-retryable internal error, so every retryable
+   * connect failure (e.g. `ConnectTimeout`) permanently pauses the run loop
+   * instead of retrying.
+   */
+  abortReason?: ZeroError | undefined;
+};
+
+function connectionReadyResolver(): Resolver<void> {
+  const ready = resolver<void>();
+  // A connection attempt can fail without any push, pull, or inspector
+  // currently waiting on it. The run loop handles the corresponding attempt
+  // failure; this handler prevents the optional readiness listener from
+  // becoming an unhandled rejection.
+  void ready.promise.catch(() => {});
+  return ready;
+}
+
 function asTestZero<
   S extends BaseDefaultSchema,
   MD extends CustomMutatorDefs | undefined,
@@ -250,9 +286,13 @@ export const DEFAULT_DISCONNECT_TIMEOUT_MS = 60 * 1_000;
  */
 export const CONNECT_TIMEOUT_MS = 10_000;
 
-const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
+/**
+ * Setting up active-client tracking blocks the first connect attempt. Above
+ * this, say so.
+ */
+const SLOW_ACTIVE_CLIENTS_THRESHOLD_MS = 50;
 
-const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
+const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
 const DEFAULT_QUERY_CHANGE_THROTTLE_MS = 10;
 
@@ -294,7 +334,7 @@ function onClientStateNotFoundServerReason(serverErrMsg: string) {
   return `Server could not find state needed to synchronize this client. ${serverErrMsg}`;
 }
 const ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT =
-  'The local persistent state needed to synchronize this client has been garbage collected.';
+  'The local persistent state needed to synchronize this client has been garbage collected or was found to be corrupt.';
 
 // Keep in sync with packages/replicache/src/replicache-options.ts
 export interface ReplicacheInternalAPI {
@@ -366,8 +406,30 @@ export class Zero<
    */
   #deletedClients: DeleteClientsBody | undefined;
 
-  #lastMutationIDSent: {clientID: string; id: number} =
-    NULL_LAST_MUTATION_ID_SENT;
+  /**
+   * The highest mutation ID we have sent on the current connection, for each
+   * client in our client group.
+   *
+   * The mutations we push are the client group's local commit chain, so they
+   * include mutations made by every tab in the group, not just this one. The
+   * order of that chain changes from one push to the next: when we persist our
+   * own mutations they move to the end of the chain, behind whatever the other
+   * tabs persisted in the meantime. So a mutation from another tab can end up
+   * in front of one we already sent, which means we cannot decide what to send
+   * next by remembering a single position in the chain. Remembering the last ID
+   * we sent for each client works no matter how the chain is ordered: we never
+   * skip a mutation, and we never leave a hole in a client's run of mutation
+   * IDs (the server rejects a hole as an invalid push).
+   *
+   * Cleared whenever the connection is established or torn down. The server
+   * does remember what it has processed, in a last mutation ID per client, and
+   * it ignores anything it has already applied. But we don't know which of our
+   * sends actually made it across before the socket died, so we start over and
+   * let the server drop the duplicates. The only mutations we don't resend are
+   * the ones the server has acknowledged in a poke, because those have already
+   * been rebased out of the commit chain.
+   */
+  readonly #lastMutationIDsSent: Map<ClientID, number> = new Map();
 
   #onPong: () => void = () => undefined;
 
@@ -415,12 +477,14 @@ export class Zero<
 
   #socket: WebSocket | undefined = undefined;
   #socketResolver = resolver<WebSocket>();
-  /**
-   * Utility promise that resolves when the socket transitions to connected.
-   * It rejects if we hit an error or timeout before the connected message.
-   * Used by push/pull helpers to queue work until the connection is usable.
-   */
-  #connectResolver = resolver<void>();
+
+  // Resolves when the run loop establishes a usable connection. The run loop
+  // replaces it if the attempt fails or the established connection disconnects.
+  #connectionReadyResolver = connectionReadyResolver();
+
+  // Installed and removed by the run loop so socket events and disconnects can
+  // deliver inputs to the active attempt without settling its returned promise.
+  #currentConnectAttempt: ConnectAttemptControl | undefined;
 
   #closeAbortController = new AbortController();
 
@@ -603,6 +667,12 @@ export class Zero<
       kvStore,
     };
 
+    this.#visibilityWatcher = getDocumentVisibilityWatcher(
+      getBrowserGlobal('document'),
+      hiddenTabDisconnectDelay,
+      this.#closeAbortController.signal,
+    );
+
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
@@ -626,6 +696,7 @@ export class Zero<
       batchViewUpdates,
       this.#addMetric,
       assertValidRunOptions,
+      this.#visibilityWatcher,
     );
 
     this.query = createRunnableBuilder(this.#zeroContext, schema);
@@ -679,6 +750,7 @@ export class Zero<
         this.#deleteClientsManager.onClientsDeleted([
           {clientGroupID, clientID},
         ]),
+      this.#lc,
     );
 
     const onUpdateNeededCallback = (reason: UpdateNeededReason) => {
@@ -813,18 +885,23 @@ export class Zero<
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      poke => this.#rep.poke(poke),
+      async poke => {
+        const socket = this.#socket;
+        await this.#rep.poke(poke);
+        // poke() fires the got-queries watch synchronously, so `#gotQueries` is
+        // up to date and safe to trust now that the server has caught us up.
+        // Unless the connection went away while the poke was applied: the
+        // disconnect already re-gated trust, and the next connection's first
+        // poke must be the one to restore it.
+        if (socket !== undefined && this.#socket === socket) {
+          this.#queryManager.markGotQueriesAuthoritative();
+        }
+      },
       e => this.#onPokeError(e),
       rep.clientID,
       schema,
       this.#lc,
       this.#mutationTracker,
-    );
-
-    this.#visibilityWatcher = getDocumentVisibilityWatcher(
-      getBrowserGlobal('document'),
-      hiddenTabDisconnectDelay,
-      this.#closeAbortController.signal,
     );
 
     void this.#runLoop();
@@ -850,14 +927,15 @@ export class Zero<
   }
 
   #enableRefresh(): boolean {
-    // Don't refresh if connected or connecting, unless #forceEnableRefresh to
-    // avoid receiving new snapshots from refresh before receiving the new
-    // snapshot via poke from the connection (which results in a "unexpected
-    // base cookie for poke" error).
+    // Don't refresh if connected, connecting, or about to connect, unless
+    // #forceEnableRefresh to avoid receiving new snapshots from refresh before
+    // receiving the new snapshot via poke from the connection (which results
+    // in a "unexpected base cookie for poke" error).
     return (
       this.#forceEnableRefresh ||
       (!this.#connectionManager.is(ConnectionStatus.Connected) &&
-        !this.#connectionManager.is(ConnectionStatus.Connecting))
+        !this.#connectionManager.is(ConnectionStatus.Connecting) &&
+        !this.#connectionManager.is(ConnectionStatus.Initializing))
     );
   }
 
@@ -941,8 +1019,11 @@ export class Zero<
    * This function is useful when you want to populate the cache ahead of time,
    * for example after login, to avoid a flash of loading screen on the next page.
    *
-   * Returns an object with two properties:
-   * - `complete`: a Promise that resolves when the data is loaded
+   * Returns an object with three properties:
+   * - `complete`: a Promise that resolves when the server has confirmed the
+   *   data on this connection
+   * - `cached`: a Promise that resolves as soon as the store holds a
+   *   server-confirmed result, from this connection or a previous one
    * - `cleanup`: a function that can be called to cancel the preload
    *
    * @example
@@ -970,9 +1051,10 @@ export class Zero<
   /**
    * Executes a query once and returns the results.
    *
-   * By default, waits for any pending data to sync before running the query.
-   * This ensures fresh results from the server. Use `{type: 'unknown'}` to
-   * run immediately with whatever data is available locally.
+   * By default, runs immediately with whatever data is available locally.
+   * Use `{type: 'complete'}` to wait for fresh results from the server, or
+   * `{type: 'cached'}` to accept a result the server confirmed on a previous
+   * connection when the store holds one.
    *
    * @param query - The query to execute
    * @param runOptions - Options controlling query execution
@@ -980,11 +1062,11 @@ export class Zero<
    *
    * @example
    * ```ts
-   * // Wait for server sync
+   * // Run with local data only
    * const users = await zero.run(userQuery);
    *
-   * // Run with local data only
-   * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
+   * // Wait for server sync
+   * const freshUsers = await zero.run(userQuery, {type: 'complete'});
    * ```
    */
   run<
@@ -1087,6 +1169,17 @@ export class Zero<
    */
   get idbName(): string {
     return this.#rep.idbName;
+  }
+
+  /**
+   * The KV store backing this instance of Zero. Its `kind` is the storage
+   * currently in use: `'idb'`, `'mem'`, `'op-sqlite'`, `'expo-sqlite'`, or
+   * whatever a custom store reports. An IndexedDB store that fails to open
+   * falls back to memory, so `kind` can change from `'idb'` to `'mem'` after
+   * the first read or write.
+   */
+  get kvStore(): KVStore {
+    return this.#rep.kvStore;
   }
 
   /**
@@ -1255,16 +1348,47 @@ export class Zero<
     }
   }
 
-  #onMessage = (e: MessageEvent<string>) => {
+  #onMessage = (e: MessageEvent<string | ArrayBuffer>) => {
     const lc = this.#lc;
-    lc.debug?.('received message', e.data);
+    const {data} = e;
+    lc.debug?.(
+      'received message',
+      data instanceof ArrayBuffer
+        ? {type: 'binary', byteLength: data.byteLength}
+        : data,
+    );
     if (this.closed) {
       lc.debug?.('ignoring message because already closed');
       return;
     }
 
     let downMessage: Downstream;
-    const {data} = e;
+    if (data instanceof ArrayBuffer) {
+      this.#messageCount++;
+      const message = new Uint8Array(data);
+      if (message[0] !== POKE_CHUNK_MESSAGE_TYPE) {
+        this.#disconnect(
+          lc,
+          new ClientError({
+            kind: ClientErrorKind.InvalidMessage,
+            message: `Unknown binary message type: ${String(message[0])}`,
+          }),
+        );
+        return;
+      }
+      this.#handlePokeChunk(message.subarray(1));
+      return;
+    }
+    if (typeof data !== 'string') {
+      this.#disconnect(
+        lc,
+        new ClientError({
+          kind: ClientErrorKind.InvalidMessage,
+          message: 'Invalid binary message received from server',
+        }),
+      );
+      return;
+    }
     try {
       downMessage = valita.parse(
         JSON.parse(data),
@@ -1428,7 +1552,6 @@ export class Zero<
             'large files to object storage and storing only the URL in Zero.' +
             recentMessagesInfo,
         });
-        this.#connectResolver.reject(messageTooLargeError);
         this.#disconnect(lc, messageTooLargeError);
 
         await this.#rep.disableClientGroup();
@@ -1448,7 +1571,6 @@ export class Zero<
                 message: 'WebSocket connection closed abruptly',
               },
         );
-        this.#connectResolver.reject(closeError);
         this.#disconnect(lc, closeError);
       }
     } catch (e) {
@@ -1460,7 +1582,6 @@ export class Zero<
         },
         {cause: e},
       );
-      this.#connectResolver.reject(internalError);
       this.#disconnect(lc, internalError);
     }
   };
@@ -1476,7 +1597,7 @@ export class Zero<
     // We really don't want to disconnect and reconnect a rate limited user as
     // it'll use more resources on the server
     if (kind === ErrorKind.MutationRateLimited) {
-      this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+      this.#lastMutationIDsSent.clear();
       lc.error?.(kind, 'Mutation rate limited', {message});
       return;
     }
@@ -1485,8 +1606,6 @@ export class Zero<
     const error = new ProtocolError(downMessage[1]);
     lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
-    lc.debug?.('Rejecting connect resolver due to error', error);
-    this.#connectResolver.reject(error);
     this.#disconnect(lc, error);
 
     if (kind === ErrorKind.VersionNotSupported) {
@@ -1519,9 +1638,14 @@ export class Zero<
     lc: LogContext,
     connectedMessage: ConnectedMessage,
   ): Promise<void> {
+    const attempt = must(
+      this.#currentConnectAttempt,
+      'Connected message received without an active connection attempt',
+    );
     const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
+    this.#addConnectEvent(lc, attempt, 'processing the server acknowledgement');
 
     if (this.#connectedCount === 0) {
       this.#checkConnectivity('firstConnect');
@@ -1567,7 +1691,7 @@ export class Zero<
       connectedCount: this.#connectedCount,
       proceedingConnectErrorCount,
     });
-    this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    this.#lastMutationIDsSent.clear();
 
     lc.debug?.('Resolving connect resolver');
     must(this.#socket);
@@ -1621,42 +1745,40 @@ export class Zero<
     maybeSendDeletedClients();
 
     this.#connectionManager.connected();
-    this.#connectResolver.resolve();
+    attempt.connected.resolve();
   }
 
   /**
    * Starts a new connection. This will create the WebSocket that does the HTTP
    * request to the server.
    *
-   * {@link #connect} will throw an assertion error if the
+   * {@link #connectAttempt} will throw an assertion error if the
    * {@link #connectionManager} status is not {@link ConnectionManagerState.Disconnected}
    * or {@link ConnectionManagerState.Connecting}.
    * Callers MUST check the connection status before calling this method and log
    * an error as needed.
    *
-   * The function will resolve once the socket is connected. If you need to know
-   * when a connection has been established, as in we have received the
-   * {@link ConnectedMessage}, you should await the {@link #connectResolver}
-   * promise. The {@link #connectResolver} promise rejects if an error message
-   * is received before the connected message is received or if the connection
-   * attempt times out.
+   * The returned promise resolves after receiving the {@link ConnectedMessage}
+   * and rejects if setup, the socket, or the connection handshake fails.
    */
-  async #connect(
+  async #connectAttempt(
     lc: LogContext,
     additionalConnectParams: Record<string, string> | undefined,
+    attempt: ConnectAttemptControl,
   ): Promise<void> {
     if (this.closed) {
       return;
     }
 
     assert(this.#server, 'No server provided');
+    const socketOrigin = toWSString(this.#server);
 
     // can be called from both disconnected and connecting states.
     // connecting() handles incrementing attempt counter if already connecting.
     assert(
       this.#connectionManager.is(ConnectionStatus.Disconnected) ||
         this.#connectionManager.is(ConnectionStatus.Connecting),
-      'connect() called from invalid state: ' +
+      'connectAttempt() called from invalid state: ' +
         this.#connectionManager.state.name,
     );
 
@@ -1666,7 +1788,7 @@ export class Zero<
 
     this.#connectionManager.connecting();
 
-    // connect() called but connect start time is defined. This should not
+    // connectAttempt() called but connect start time is defined. This should not
     // happen.
     assert(this.#connectStart === undefined, 'connect start time is defined');
 
@@ -1676,42 +1798,32 @@ export class Zero<
       this.#totalToConnectStart = now;
     }
 
-    if (this.closed) {
-      return;
-    }
-    this.#connectCookie = valita.parse(
+    const {signal} = attempt.controller;
+    this.#addConnectEvent(lc, attempt, 'reading the cookie');
+    const connectCookie = valita.parse(
       await this.#rep.cookie,
       nullableVersionSchema,
       'passthrough',
     );
-    if (this.closed) {
-      return;
-    }
+    this.#addConnectEvent(lc, attempt, 'reading the client group ID');
+    const clientGroupID = await this.clientGroupID;
+    this.#addConnectEvent(lc, attempt, 'initializing active clients');
+    const activeClientsManager = await this.#activeClientsManager;
 
-    // Reject connect after a timeout.
-    const timeoutID = setTimeout(() => {
-      lc.debug?.('Rejecting connect resolver due to timeout');
-      const timeoutError = new ClientError({
-        kind: ClientErrorKind.ConnectTimeout,
-        message: `Connection attempt timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds`,
-      });
-      this.#connectResolver.reject(timeoutError);
-      this.#disconnect(lc, timeoutError);
-    }, CONNECT_TIMEOUT_MS);
-    const abortHandler = () => {
-      clearTimeout(timeoutID);
-    };
-    // signal.aborted cannot be true here because we checked for `this.closed` above.
-    this.#closeAbortController.signal.addEventListener('abort', abortHandler);
+    // The run loop has already stopped waiting for this attempt if it was
+    // canceled. Do not let setup that completed late create a socket.
+    if (signal.aborted) {
+      throw attempt.abortReason;
+    }
 
     const [ws, initConnectionQueries, deletedClients] = await createSocket(
       this.#rep,
       this.#queryManager,
       this.#deleteClientsManager,
-      toWSString(this.#server),
-      this.#connectCookie,
+      socketOrigin,
+      connectCookie,
       this.clientID,
-      await this.clientGroupID,
+      clientGroupID,
       this.#clientSchema,
       this.userID,
       fromReplicacheAuthToken(this.#rep.auth),
@@ -1724,14 +1836,25 @@ export class Zero<
       this.#options.queryURL ?? this.#options.getQueriesURL,
       this.#options.queryHeaders,
       additionalConnectParams,
-      await this.#activeClientsManager,
+      activeClientsManager,
       this.#options.maxHeaderLength,
+      event => this.#addConnectEvent(lc, attempt, event),
     );
 
+    // createSocket performs asynchronous preparation before constructing the
+    // WebSocket. If the attempt was canceled during that work, the late socket
+    // still belongs to this attempt and must be closed.
+    if (signal.aborted) {
+      ws.close();
+      throw attempt.abortReason;
+    }
+
     if (this.closed) {
+      ws.close();
       return;
     }
 
+    this.#connectCookie = connectCookie;
     this.#initConnectionQueries = initConnectionQueries;
     this.#deletedClients = deletedClients;
     ws.addEventListener('message', this.#onMessage);
@@ -1740,22 +1863,96 @@ export class Zero<
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
 
-    try {
-      lc.debug?.('Waiting for connection to be acknowledged');
-      await this.#connectResolver.promise;
-      this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
-      // push any outstanding mutations on reconnect.
-      this.#rep.push().catch(() => {});
-    } finally {
-      clearTimeout(timeoutID);
-      this.#closeAbortController.signal.removeEventListener(
-        'abort',
-        abortHandler,
-      );
+    this.#addConnectEvent(
+      lc,
+      attempt,
+      'waiting for the server acknowledgement',
+    );
+    lc.debug?.('Waiting for connection to be acknowledged');
+    // Local setup is done; the rest of the wait is the server's, and gets its
+    // own budget rather than whatever the setup left over.
+    attempt.clearTimeout?.();
+    attempt.clearTimeout = this.#armConnectTimeout(lc, attempt, 'ack');
+    await attempt.connected.promise;
+    if (signal.aborted) {
+      throw attempt.abortReason;
     }
+    this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
+    // push any outstanding mutations on reconnect.
+    this.#rep.push().catch(() => {});
+  }
+
+  /**
+   * Starts the deadline for one phase of a connection attempt, and returns a
+   * function that cancels it.
+   *
+   * The two phases are measured separately because they fail for unrelated
+   * reasons. `setup` covers local work — reading the cookie, the client group
+   * ID and the active clients from IDB, then preparing and opening the socket
+   * — whose duration says nothing about whether the server is reachable.
+   * `ack` covers the wait for the server's response. Running them on one
+   * budget meant a slow cold boot spent the server's time before the socket
+   * existed, and reported a healthy server as unreachable.
+   */
+  #armConnectTimeout(
+    lc: LogContext,
+    attempt: ConnectAttemptControl,
+    phase: 'setup' | 'ack',
+  ): () => void {
+    const {signal} = attempt.controller;
+
+    // A deadline outlives the caller that armed it. The run loop stops waiting
+    // on a canceled attempt and clears whatever deadline was running, but
+    // #connectAttempt keeps going — its in-flight awaits do not all honor the
+    // abort — so it can reach the setup-to-ack handover afterwards. A timer
+    // armed at that point would have no owner left to clear it, and would
+    // disconnect whichever attempt came next. Tying it to the signal means it
+    // is cleared by any abort, whenever it happens and whoever holds it.
+    if (signal.aborted) {
+      return () => {};
+    }
+
+    const timeoutID = setTimeout(() => {
+      lc.debug?.('Connection attempt timed out');
+      this.#disconnect(
+        lc,
+        new ClientError({
+          kind: ClientErrorKind.ConnectTimeout,
+          message:
+            (phase === 'setup'
+              ? `Connection setup timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds. `
+              : `Server did not acknowledge the connection within ${CONNECT_TIMEOUT_MS / 1000} seconds. `) +
+            `Connect events: ${JSON.stringify(attempt.events)}`,
+        }),
+      );
+    }, CONNECT_TIMEOUT_MS);
+
+    const clear = () => {
+      clearTimeout(timeoutID);
+      signal.removeEventListener('abort', clear);
+    };
+    signal.addEventListener('abort', clear, {once: true});
+    return clear;
+  }
+
+  #addConnectEvent(
+    lc: LogContext,
+    attempt: ConnectAttemptControl,
+    event: string,
+  ): void {
+    attempt.events.push([new Date(), event]);
+    lc.debug?.('Connect event', event);
   }
 
   #disconnect(lc: LogContext, reason: ZeroError, closeCode?: CloseCode): void {
+    const attempt = this.#currentConnectAttempt;
+    if (attempt) {
+      // Record the reason before aborting so legacy runtimes can read it from
+      // ConnectAttemptControl.abortReason when signal.reason is unavailable.
+      attempt.abortReason = reason;
+      attempt.controller.abort();
+    }
+
     if (shouldReportConnectError(reason)) {
       this.#connectErrorCount++;
       this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
@@ -1798,6 +1995,7 @@ export class Zero<
         lc.debug?.('disconnect() called while closed');
         return;
 
+      case ConnectionStatus.Initializing:
       case ConnectionStatus.Disconnected:
       case ConnectionStatus.Connecting:
       case ConnectionStatus.NeedsAuth:
@@ -1809,8 +2007,6 @@ export class Zero<
     }
 
     this.#socketResolver = resolver();
-    lc.debug?.('Creating new connect resolver');
-    this.#connectResolver = resolver();
     this.#messageCount = 0;
     this.#connectStart = undefined; // don't reset this._totalToConnectStart
     this.#connectedAt = 0;
@@ -1819,8 +2015,9 @@ export class Zero<
     this.#socket?.removeEventListener('close', this.#onClose);
     this.#socket?.close(closeCode);
     this.#socket = undefined;
-    this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    this.#lastMutationIDsSent.clear();
     this.#pokeHandler.handleDisconnect();
+    this.#queryManager.clearGotQueriesAuthoritative();
 
     const transition = getErrorConnectionTransition(reason);
 
@@ -1862,9 +2059,22 @@ export class Zero<
     }
   }
 
+  #handlePokeChunk(chunk: Uint8Array): void {
+    this.#abortPingTimeout();
+    this.#pokeHandler.handlePokeChunk(chunk);
+  }
+
   #handlePokeEnd(_lc: LogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
-    this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
+    const result = this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
+    if (result?.hasRows) {
+      // Receiving row data indicates that the client is in a good state and
+      // can reset the reload backoff state.
+      resetBackoff();
+    }
+    if (result?.lastMutationIDChangeForSelf !== undefined) {
+      this.#lastMutationIDReceived = result.lastMutationIDChangeForSelf;
+    }
   }
 
   #onPokeError(error: unknown): void {
@@ -1916,30 +2126,29 @@ export class Zero<
     // The deprecation of pushVersion 0 predates zero-client
     assert(req.pushVersion === 1, 'Expected pushVersion 1');
     // If we are connecting we wait until we are connected.
-    await this.#connectResolver.promise;
+    await this.#connectionReadyResolver.promise;
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.(`pushing ${req.mutations.length} mutations`);
     assert(this.#socket, 'Expected socket to be connected for push');
 
     const isMutationRecoveryPush =
       req.clientGroupID !== (await this.clientGroupID);
-    const start = isMutationRecoveryPush
-      ? 0
-      : req.mutations.findIndex(
-          m =>
-            m.clientID === this.#lastMutationIDSent.clientID &&
-            m.id === this.#lastMutationIDSent.id,
-        ) + 1;
+    // A recovery push is for a different client group, so nothing has been sent
+    // for it on this connection.
+    const toSend = isMutationRecoveryPush
+      ? req.mutations
+      : req.mutations.filter(
+          m => m.id > (this.#lastMutationIDsSent.get(m.clientID) ?? 0),
+        );
     lc.debug?.(
       isMutationRecoveryPush ? 'pushing for recovery' : 'pushing',
-      req.mutations.length - start,
+      toSend.length,
       'mutations of',
       req.mutations.length,
       'mutations.',
     );
     const now = Date.now();
-    for (let i = start; i < req.mutations.length; i++) {
-      const m = req.mutations[i];
+    for (const m of toSend) {
       const timestamp = now - Math.round(performance.now() - m.timestamp);
       const zeroM =
         m.name === CRUD_MUTATION_NAME
@@ -1972,7 +2181,7 @@ export class Zero<
       ];
       this.#send(msg);
       if (!isMutationRecoveryPush) {
-        this.#lastMutationIDSent = {clientID: m.clientID, id: m.id};
+        this.#lastMutationIDsSent.set(m.clientID, m.id);
       }
     }
     return {
@@ -2010,6 +2219,39 @@ export class Zero<
     // Set initial auth from options
     const {auth} = this.#options;
     this.#setAuth(auth);
+
+    // Wait for the local work every connect attempt starts with: the replica
+    // loaded (the cookie is read once it is), the client group ID and the
+    // active clients. On a slow device with a large replica this takes tens of
+    // seconds, and none of it depends on the server, so it happens in
+    // `initializing` instead of spending the connecting window and the setup
+    // deadline of the first attempts.
+    // A local store that never finishes loading must not keep the run loop
+    // alive past close().
+    const {signal: closeSignal} = this.#closeAbortController;
+    const closed = resolver<void>();
+    const onClose = () => closed.resolve();
+    closeSignal.addEventListener('abort', onClose, {once: true});
+    try {
+      const result = await promiseRace({
+        initialized: Promise.all([
+          this.#rep.cookie,
+          this.clientGroupID,
+          this.#activeClientsManager,
+        ]),
+        closed: closed.promise,
+      });
+      if (result.key === 'closed') {
+        this.#lc.debug?.('Closed while initializing, not connecting');
+        return;
+      }
+    } catch {
+      // The first connect attempt awaits the same promises and reports the
+      // failure through the usual disconnect path.
+    } finally {
+      closeSignal.removeEventListener('abort', onClose);
+    }
+    this.#connectionManager.initialized();
 
     let backoffMs: number | undefined;
     let additionalConnectParams: Record<string, string> | undefined;
@@ -2049,8 +2291,65 @@ export class Zero<
               break;
             }
 
-            await this.#connect(lc, additionalConnectParams);
-            additionalConnectParams = undefined;
+            const ready = this.#connectionReadyResolver;
+            assert(
+              this.#currentConnectAttempt === undefined,
+              'Connection attempt already active',
+            );
+            const attempt: ConnectAttemptControl = {
+              controller: new AbortController(),
+              connected: resolver(),
+              events: [],
+            };
+            this.#currentConnectAttempt = attempt;
+            this.#addConnectEvent(lc, attempt, 'starting the connection');
+            attempt.clearTimeout = this.#armConnectTimeout(
+              lc,
+              attempt,
+              'setup',
+            );
+            const canceled = resolver<never>();
+            const abortHandler = () => canceled.reject(attempt.abortReason);
+            attempt.controller.signal.addEventListener('abort', abortHandler, {
+              once: true,
+            });
+            try {
+              try {
+                await Promise.race([
+                  this.#connectAttempt(lc, additionalConnectParams, attempt),
+                  canceled.promise,
+                ]);
+              } catch (ex) {
+                const error = isZeroError(ex)
+                  ? ex
+                  : new ClientError(
+                      {
+                        kind: ClientErrorKind.Internal,
+                        message: getErrorMessage(ex),
+                      },
+                      {cause: ex},
+                    );
+                if (!attempt.controller.signal.aborted) {
+                  this.#disconnect(lc, error);
+                }
+                ready.reject(error);
+                if (this.#connectionReadyResolver === ready) {
+                  this.#connectionReadyResolver = connectionReadyResolver();
+                }
+                throw error;
+              }
+              ready.resolve();
+              additionalConnectParams = undefined;
+            } finally {
+              attempt.clearTimeout?.();
+              attempt.controller.signal.removeEventListener(
+                'abort',
+                abortHandler,
+              );
+              if (this.#currentConnectAttempt === attempt) {
+                this.#currentConnectAttempt = undefined;
+              }
+            }
 
             throwIfConnectionError(this.#connectionManager.state);
 
@@ -2063,6 +2362,7 @@ export class Zero<
           }
 
           case ConnectionStatus.Connected: {
+            const ready = this.#connectionReadyResolver;
             // When connected we wait for whatever happens first out of:
             // - After pingTimeoutMs we send a ping
             // - We get a message
@@ -2076,38 +2376,47 @@ export class Zero<
               controller.signal,
             );
 
-            const raceResult = await promiseRace({
-              waitForPing: pingTimeoutPromise,
-              waitForPingAborted: pingTimeoutAborted,
-              tabHidden: this.#visibilityWatcher.waitForHidden(),
-              stateChange: this.#connectionManager.waitForStateChange(),
-            });
+            try {
+              const raceResult = await promiseRace({
+                waitForPing: pingTimeoutPromise,
+                waitForPingAborted: pingTimeoutAborted,
+                tabHidden: this.#visibilityWatcher.waitForHidden(),
+                stateChange: this.#connectionManager.waitForStateChange(),
+              });
 
-            switch (raceResult.key) {
-              case 'waitForPing': {
-                await this.#ping(lc);
-                break;
+              switch (raceResult.key) {
+                case 'waitForPing': {
+                  await this.#ping(lc);
+                  break;
+                }
+
+                case 'waitForPingAborted':
+                  break;
+
+                case 'tabHidden': {
+                  const hiddenError = new ClientError({
+                    kind: ClientErrorKind.Hidden,
+                    message: 'Connection closed because tab was hidden',
+                  });
+                  this.#disconnect(lc, hiddenError);
+                  break;
+                }
+
+                case 'stateChange': {
+                  throwIfConnectionError(raceResult.result);
+                  break;
+                }
+
+                default:
+                  unreachable(raceResult);
               }
-
-              case 'waitForPingAborted':
-                break;
-
-              case 'tabHidden': {
-                const hiddenError = new ClientError({
-                  kind: ClientErrorKind.Hidden,
-                  message: 'Connection closed because tab was hidden',
-                });
-                this.#disconnect(lc, hiddenError);
-                break;
+            } finally {
+              if (
+                !this.#connectionManager.is(ConnectionStatus.Connected) &&
+                this.#connectionReadyResolver === ready
+              ) {
+                this.#connectionReadyResolver = connectionReadyResolver();
               }
-
-              case 'stateChange': {
-                throwIfConnectionError(raceResult.result);
-                break;
-              }
-
-              default:
-                unreachable(raceResult);
             }
 
             break;
@@ -2134,6 +2443,7 @@ export class Zero<
             lc.info?.(
               `Run loop paused in error state. Call zero.connection.connect() to resume.`,
               currentState.reason,
+              ...getErrorCauses(currentState.reason),
             );
             const resumeResult = await promiseRace({
               connectRequest: this.#connectionManager.waitForConnectRequest(),
@@ -2149,6 +2459,10 @@ export class Zero<
             // run loop will terminate
             break;
 
+          case ConnectionStatus.Initializing:
+            // initialized() is called before the loop starts.
+            unreachable();
+
           default:
             unreachable(currentState);
         }
@@ -2156,13 +2470,29 @@ export class Zero<
         const isClientClosedError =
           isClientError(ex) && ex.kind === ClientErrorKind.ClientClosed;
 
+        const transition = getErrorConnectionTransition(ex);
+
         if (
           !this.#connectionManager.is(ConnectionStatus.Connected) &&
           !isClientClosedError
         ) {
-          const level = isAuthError(ex) ? 'warn' : 'error';
+          // Only errors that stop the run loop are logged at error. Routine
+          // reconnects (dropped sockets, timeouts, rebalances) and auth
+          // failures are expected in practice.
+          let level: LogLevel;
+          switch (transition.status) {
+            case ConnectionStatus.Error:
+              level = 'error';
+              break;
+            case ConnectionStatus.Disconnected:
+            case ConnectionStatus.Closed:
+              level = 'info';
+              break;
+            default:
+              level = 'warn';
+          }
           const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
-          lc[level]?.('Failed to connect', ex, kind, {
+          lc[level]?.('Failed to connect', ex, ...getErrorCauses(ex), kind, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
           });
@@ -2176,7 +2506,6 @@ export class Zero<
           ex,
         );
 
-        const transition = getErrorConnectionTransition(ex);
         let sleepMs: number | undefined = undefined;
         switch (transition.status) {
           case NO_STATUS_TRANSITION: {
@@ -2275,7 +2604,7 @@ export class Zero<
     }
 
     // If we are connecting we wait until we are connected.
-    await this.#connectResolver.promise;
+    await this.#connectionReadyResolver.promise;
     assert(
       this.#socket,
       'Expected socket to be connected for mutation recovery pull',
@@ -2493,7 +2822,7 @@ export class Zero<
         this.#queryManager,
         this.#zeroContext,
         async () => {
-          await this.#connectResolver.promise;
+          await this.#connectionReadyResolver.promise;
           return must(this.#socket);
         },
       ));
@@ -2598,6 +2927,7 @@ export async function createSocket(
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
   maxHeaderLength = 1024 * 8,
+  onEvent?: (event: string) => void,
 ): Promise<
   [
     WebSocket,
@@ -2605,6 +2935,7 @@ export async function createSocket(
     DeleteClientsBody | undefined,
   ]
 > {
+  onEvent?.('reading the profile ID');
   const url = await createConnectionURL(
     socketOrigin,
     clientID,
@@ -2626,9 +2957,11 @@ export async function createSocket(
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
   const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
+  onEvent?.('reading deleted clients');
   const deletedClientsArray = await deleteClientsManager.getDeletedClients();
   let deletedClients: DeleteClientsBody | undefined =
     convertDeletedClientsToBody(deletedClientsArray, clientGroupID);
+  onEvent?.('reading desired queries');
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
   const {activeClients} = activeClientsManager;
@@ -2664,15 +2997,14 @@ export async function createSocket(
   } else {
     deletedClients = undefined;
   }
-  return [
-    new WS(
-      // toString() required for RN URL polyfill.
-      url.toString(),
-      secProtocol,
-    ),
-    queriesPatch,
-    skipEmptyDeletedClients(deletedClients),
-  ];
+  onEvent?.('creating the WebSocket');
+  const socket = new WS(
+    // toString() required for RN URL polyfill.
+    url.toString(),
+    secProtocol,
+  );
+  socket.binaryType = 'arraybuffer';
+  return [socket, queriesPatch, skipEmptyDeletedClients(deletedClients)];
 }
 
 export async function createConnectionURL(
@@ -2786,12 +3118,32 @@ async function makeActiveClientsManager(
   clientID: string,
   signal: AbortSignal,
   onDelete: ActiveClientsManager['onDelete'],
+  lc: LogContext,
 ): Promise<ActiveClientsManager> {
-  const manager = await ActiveClientsManager.create(
-    await clientGroupID,
-    clientID,
-    signal,
-  );
+  // Timed from here rather than from the await in #connectAttempt: this runs
+  // at construction, in parallel with everything else, so by the time an
+  // attempt asks for it the wait is usually already over. Waiting for the
+  // client group ID is the database opening, which is timed on its own.
+  const groupID = await clientGroupID;
+  const start = performance.now();
+  const manager = await ActiveClientsManager.create(groupID, clientID, signal);
+  const elapsed = performance.now() - start;
+
+  // navigator.locks does not exist on React Native, where this falls back to
+  // an in-process stand-in that only ever sees this client. That changes both
+  // what the timing means and how much the client list can be trusted, so say
+  // which one produced the number.
+  const locks = getBrowserGlobal('navigator')?.locks ? 'native' : 'fallback';
+  if (elapsed > SLOW_ACTIVE_CLIENTS_THRESHOLD_MS) {
+    lc.warn?.(`Initializing active clients took ${Math.round(elapsed)}ms`, {
+      locks,
+    });
+  } else {
+    lc.debug?.('Initialized active clients in', Math.round(elapsed), 'ms', {
+      locks,
+    });
+  }
+
   manager.onDelete = onDelete;
   return manager;
 }

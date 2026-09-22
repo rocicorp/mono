@@ -2327,3 +2327,90 @@ test('unique relationship aliases work correctly', () => {
   const userAfter = data[0] as {all_applications: unknown[]};
   expect(userAfter.all_applications).toHaveLength(0);
 });
+
+test('holdData hides pushes until the next flush', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  consume(ms.push(makeSourceChangeAdd({a: 1, b: 'a'})));
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+  const held = view.data;
+  expect(held).toHaveLength(1);
+
+  view.holdData();
+  consume(ms.push(makeSourceChangeAdd({a: 2, b: 'b'})));
+  consume(ms.push(makeSourceChangeAdd({a: 3, b: 'c'})));
+
+  // Neither `data` nor a listener added now sees the pushes.
+  expect(view.data).toBe(held);
+  const seen: number[] = [];
+  view.addListener(entries => {
+    assertArray(entries);
+    seen.push(entries.length);
+  });
+  expect(seen).toEqual([1]);
+
+  // releaseData shows the rows without notifying; flush notifies.
+  view.releaseData();
+  expect(view.data).toHaveLength(3);
+  expect(seen).toEqual([1]);
+  view.flush();
+  expect(seen).toEqual([1, 3]);
+  // The snapshot handed out earlier was not mutated.
+  expect(held).toHaveLength(1);
+
+  // Without a hold, unflushed pushes are visible through `data` as before.
+  consume(ms.push(makeSourceChangeAdd({a: 4, b: 'd'})));
+  expect(view.data).toHaveLength(4);
+});
+
+test('holdData holds back result type changes of a clean view', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    new Promise<true>(() => {}),
+    () => {},
+  );
+  const types: ResultType[] = [];
+  view.addListener((_, type) => types.push(type));
+  expect(types).toEqual(['unknown']);
+
+  view.holdData();
+  view.markCached();
+  expect(types).toEqual(['unknown']);
+  // A listener added while held is called with the held type, not a newer
+  // one paired with the held rows.
+  const lateTypes: ResultType[] = [];
+  view.addListener((_, type) => lateTypes.push(type));
+  expect(lateTypes).toEqual(['unknown']);
+  // Releasing the data does not end the hold on notifications.
+  view.releaseData();
+  view.unmarkCached();
+  view.markCached();
+  expect(types).toEqual(['unknown']);
+  view.flush();
+  expect(types).toEqual(['unknown', 'cached']);
+  expect(lateTypes).toEqual(['unknown', 'cached']);
+
+  // Not held: notified right away, and a flush adds nothing.
+  view.unmarkCached();
+  expect(types).toEqual(['unknown', 'cached', 'unknown']);
+  view.flush();
+  expect(types).toEqual(['unknown', 'cached', 'unknown']);
+});

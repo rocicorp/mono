@@ -9,11 +9,33 @@ import {
   type AuthData,
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import {builder, ZERO_PROJECT_ID} from './schema.ts';
+import {builder} from './schema.ts';
 
-function projectIDWithDefault(projectID: string | undefined): string {
-  return projectID ?? ZERO_PROJECT_ID;
+/**
+ * Returns the projectID of the given issue. An issue ID uniquely identifies
+ * the issue, so its project is never something the caller should supply.
+ */
+async function getIssueProjectID(
+  tx: Transaction,
+  issueID: string,
+): Promise<string> {
+  const issue = await tx.run(builder.issue.where('id', issueID).one());
+  if (!issue) {
+    throw new MutationError(
+      `Issue not found`,
+      MutationErrorCode.ENTITY_NOT_FOUND,
+      issueID,
+    );
+  }
+  return issue.projectID;
 }
+
+/**
+ * @deprecated The project is derived from the issue, so this argument is
+ * ignored. It is only still accepted so that older clients that send it keep
+ * validating. TODO: Remove soon.
+ */
+const deprecatedProjectIDArg = z.optional(z.string());
 
 const addEmojiSchema = z.object({
   id: z.string(),
@@ -31,7 +53,7 @@ export const createIssueArgsSchema = z.object({
   description: z.optional(z.string()),
   created: z.number(),
   modified: z.number(),
-  projectID: z.optional(z.string()),
+  projectID: z.string(),
 });
 
 export type CreateIssueArgs = z.infer<typeof createIssueArgsSchema>;
@@ -77,7 +99,7 @@ export const mutators = defineMutators({
         const creatorID = authData.sub;
         await tx.mutate.issue.insert({
           id,
-          projectID: projectIDWithDefault(projectID),
+          projectID,
           title,
           description: description ?? '',
           created,
@@ -154,18 +176,36 @@ export const mutators = defineMutators({
       await tx.mutate.issue.delete({id});
     }),
 
+    /**
+     * Deletes several issues in one mutation. The user must be the creator of
+     * every issue (or an admin); if any check fails the whole mutation is
+     * rejected and nothing is deleted.
+     */
+    deleteMany: defineMutator(
+      z.array(z.string()),
+      async ({tx, args: ids, ctx: authData}) => {
+        assertIsLoggedIn(authData);
+        for (const id of ids) {
+          await assertIsCreatorOrAdmin(tx, authData, builder.issue, id);
+        }
+        for (const id of ids) {
+          await tx.mutate.issue.delete({id});
+        }
+      },
+    ),
+
     addLabel: defineMutator(
       z.object({
         issueID: z.string(),
         labelID: z.string(),
-        projectID: z.optional(z.string()),
+        projectID: deprecatedProjectIDArg,
       }),
-      async ({tx, args: {issueID, labelID, projectID}, ctx: authData}) => {
+      async ({tx, args: {issueID, labelID}, ctx: authData}) => {
         await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
         await tx.mutate.issueLabel.insert({
           issueID,
           labelID,
-          projectID: projectIDWithDefault(projectID),
+          projectID: await getIssueProjectID(tx, issueID),
         });
       },
     ),
@@ -262,7 +302,7 @@ export const mutators = defineMutators({
       z.object({
         id: z.string(),
         name: z.string(),
-        projectID: z.optional(z.string()),
+        projectID: z.string(),
       }),
       async ({tx, args: {id, name, projectID}, ctx: authData}) => {
         if (!isAdmin(authData)) {
@@ -276,7 +316,7 @@ export const mutators = defineMutators({
         await tx.mutate.label.insert({
           id,
           name,
-          projectID: projectIDWithDefault(projectID),
+          projectID,
         });
       },
     ),
@@ -286,13 +326,9 @@ export const mutators = defineMutators({
         issueID: z.string(),
         labelID: z.string(),
         labelName: z.string(),
-        projectID: z.optional(z.string()),
+        projectID: deprecatedProjectIDArg,
       }),
-      async ({
-        tx,
-        args: {issueID, labelID, labelName, projectID},
-        ctx: authData,
-      }) => {
+      async ({tx, args: {issueID, labelID, labelName}, ctx: authData}) => {
         if (!isAdmin(authData)) {
           throw new MutationError(
             `Only admins can create labels`,
@@ -301,16 +337,16 @@ export const mutators = defineMutators({
           );
         }
 
-        const finalProjectID = projectIDWithDefault(projectID);
+        const projectID = await getIssueProjectID(tx, issueID);
         await tx.mutate.label.insert({
           id: labelID,
           name: labelName,
-          projectID: finalProjectID,
+          projectID,
         });
         await tx.mutate.issueLabel.insert({
           issueID,
           labelID,
-          projectID: finalProjectID,
+          projectID,
         });
       },
     ),

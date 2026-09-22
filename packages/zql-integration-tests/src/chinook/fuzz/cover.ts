@@ -15,10 +15,12 @@
  */
 
 import type {Condition} from '../../../../zero-protocol/src/ast.ts';
+import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {newStaticQuery} from '../../../../zql/src/query/static-query.ts';
 import {schema} from '../schema.ts';
 import {
+  assignmentRealizable,
   AXES,
   axisIndex,
   EXISTS_VALS,
@@ -34,9 +36,14 @@ import {
   type Rel,
   relsOf,
   rolesOf,
+  FLIP_VALS,
+  type FlipVal,
+  START_VALS,
+  type StartVal,
+  tupleRealizable,
 } from './axes.ts';
 import {axisCombinations} from './coverage.ts';
-import {filterCondition, simple} from './literals.ts';
+import {type Data, filterCondition, simple} from './literals.ts';
 
 // ── the greedy covering-array builder ─────────────────────────────────────────────────
 
@@ -53,6 +60,9 @@ function allTuples(domains: readonly number[], t: number): Map<string, Tuple> {
     const sizes = combo.map(a => domains[a]);
     for (const values of cartesianLocal(sizes)) {
       const tuple = combo.map((a, i) => [a, values[i]] as const);
+      if (!tupleRealizable(tuple)) {
+        continue; // structurally impossible (exists x flip) — never a coverage goal
+      }
       out.set(tupleKey(tuple), tuple);
     }
   }
@@ -119,13 +129,28 @@ export function greedyCover(t: number): number[][] {
       let bestGain = -1;
       for (let v = 0; v < domains[axis]; v++) {
         row[axis] = v;
+        if (!assignmentRealizable(row)) {
+          continue; // would pin an impossible exists x flip pair
+        }
         const gain = coveredNow(row, uncovered);
         if (gain > bestGain) {
           bestGain = gain;
           bestV = v;
         }
       }
-      row[axis] = bestV; // value 0 (a "none") is always a valid fallback
+      if (bestGain < 0) {
+        // No value gained a tuple: fall back to the first *realizable* one. Value 0 is
+        // "none" on every axis, but "none" on `exists` is itself unrealizable when the
+        // seed already pinned flip=flip, so the constraint still has to be consulted.
+        for (let v = 0; v < domains[axis]; v++) {
+          row[axis] = v;
+          if (assignmentRealizable(row)) {
+            bestV = v;
+            break;
+          }
+        }
+      }
+      row[axis] = bestV;
     }
     const full = row.map(x => x as number);
     for (const tuple of rowTuples(full, t)) {
@@ -202,6 +227,34 @@ export function applyLimit(q: AnyQuery, lv: LimitVal): AnyQuery {
   }
 }
 
+/** Apply the `start` axis using a data-driven cursor row. */
+export function applyStart(
+  q: AnyQuery,
+  table: string,
+  sv: StartVal,
+  data: Data,
+): AnyQuery | null {
+  switch (sv) {
+    case 'none':
+      return q;
+    case 'mid_exclusive': {
+      const row = data.startRow(table, asQueryInternals(q).ast.orderBy);
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return row ? (q as any).start(row) : null;
+    }
+    case 'mid_inclusive': {
+      const row = data.startRow(table, asQueryInternals(q).ast.orderBy);
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return row ? (q as any).start(row, {inclusive: true}) : null;
+    }
+    case 'null_exclusive': {
+      const row = data.nullStartRow(table, asQueryInternals(q).ast.orderBy);
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return row ? (q as any).start(row) : null;
+    }
+  }
+}
+
 /**
  * Build the EXISTS/NOT-EXISTS `where` condition for an {@link ExistsVal} on `table`:
  * gate on `rel`, at the requested boolean position. The AND/OR positions pair the gate
@@ -216,12 +269,17 @@ export function existsCondition(
   table: string,
   rel: Rel,
   ev: ExistsVal,
+  /**
+   * Force a positive gate to lower as a `FlippedJoin` rather than a semi-join. Only a
+   * positive gate is flippable (see `flipRealizable`); a `not_exists_*` value ignores it.
+   */
+  flip = false,
 ): Condition {
   const r = rolesOf(table);
   const notExists = ev.startsWith('not_exists');
   const gate: Condition = notExists
     ? eb.not(eb.exists(rel.name))
-    : eb.exists(rel.name);
+    : eb.exists(rel.name, undefined, flip ? {flip: true} : undefined);
   switch (ev) {
     case 'exists_top':
     case 'not_exists_top':
@@ -244,6 +302,7 @@ function applyWhere(
   filterCond: Condition | null,
   gateRel: Rel | undefined,
   ev: ExistsVal,
+  flip: boolean,
 ): AnyQuery {
   if (!filterCond && !gateRel) {
     return q;
@@ -255,7 +314,7 @@ function applyWhere(
       parts.push(filterCond);
     }
     if (gateRel) {
-      parts.push(existsCondition(eb, table, gateRel, ev));
+      parts.push(existsCondition(eb, table, gateRel, ev, flip));
     }
     return parts.length === 1 ? parts[0] : eb.and(...parts);
   });
@@ -271,11 +330,14 @@ function applyDecorations(
   q: AnyQuery,
   table: string,
   a: readonly number[],
+  data: Data,
 ): AnyQuery | null {
   const fv = FILTER_VALS[a[axisIndex('filter')]] as FilterVal;
   const ev = EXISTS_VALS[a[axisIndex('exists')]] as ExistsVal;
   const ov = ORDER_VALS[a[axisIndex('order')]] as OrderVal;
   const lv = LIMIT_VALS[a[axisIndex('limit')]] as LimitVal;
+  const sv = START_VALS[a[axisIndex('start')]] as StartVal;
+  const flv = FLIP_VALS[a[axisIndex('flip')]] as FlipVal;
 
   if (!filterRealizable(table, fv)) {
     return null;
@@ -292,8 +354,13 @@ function applyDecorations(
     }
   }
 
-  let out = applyWhere(q, table, filterCond, gateRel, ev);
+  let out = applyWhere(q, table, filterCond, gateRel, ev, flv === 'flip');
   out = applyOrder(out, table, ov);
+  const started = applyStart(out, table, sv, data);
+  if (!started) {
+    return null;
+  }
+  out = started;
   out = applyLimit(out, lv);
   return out;
 }
@@ -305,11 +372,12 @@ function applyDecorations(
 export function decorate(
   table: string,
   a: readonly number[],
+  data: Data,
 ): [AnyQuery, boolean] | null {
   const ev = EXISTS_VALS[a[axisIndex('exists')]] as ExistsVal;
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const root = newStaticQuery(schema, table as any) as AnyQuery;
-  const q = applyDecorations(root, table, a);
+  const q = applyDecorations(root, table, a, data);
   return q ? [q, ev !== 'none'] : null;
 }
 
@@ -324,6 +392,7 @@ export function decorateChild(
   parent: string,
   rel: string,
   a: readonly number[],
+  data: Data,
 ): [AnyQuery, boolean] | null {
   const relInfo = relsOf(parent).find(r => r.name === rel);
   if (!relInfo) {
@@ -342,7 +411,8 @@ export function decorateChild(
   const root = (newStaticQuery(schema, parent as any) as any).related(
     rel,
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    (sub: any) => applyDecorations(sub as AnyQuery, relInfo.child, a) ?? sub,
+    (sub: any) =>
+      applyDecorations(sub as AnyQuery, relInfo.child, a, data) ?? sub,
   );
   return [root as AnyQuery, ev !== 'none'];
 }

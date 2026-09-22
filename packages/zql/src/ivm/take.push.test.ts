@@ -35,6 +35,17 @@ describe('take with no partition', () => {
               "type": "add",
             },
           ],
+          [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i4",
+              },
+              "type": "add",
+            },
+          ],
         ]
       `);
       expect(storage).toMatchInlineSnapshot(`{}`);
@@ -92,6 +103,17 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i4",
+              },
+              "type": "add",
+            },
+          ],
+          [
             ":take",
             "push",
             {
@@ -113,11 +135,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 4,
-          },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
           },
         }
       `);
@@ -188,6 +205,17 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 350,
+                "id": "i4",
+              },
+              "type": "add",
+            },
+          ],
+          [
             ":take",
             "push",
             {
@@ -208,10 +236,6 @@ describe('take with no partition', () => {
               "id": "i4",
             },
             "size": 4,
-          },
-          "maxBound": {
-            "created": 350,
-            "id": "i4",
           },
         }
       `);
@@ -277,6 +301,17 @@ describe('take with no partition', () => {
               "type": "add",
             },
           ],
+          [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 350,
+                "id": "i5",
+              },
+              "type": "add",
+            },
+          ],
         ]
       `);
       expect(storage).toMatchInlineSnapshot(`
@@ -288,11 +323,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 3,
-          },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
           },
         }
       `);
@@ -346,6 +376,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i5",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "at",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -395,11 +452,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 3,
-          },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
           },
         }
       `);
@@ -510,6 +562,32 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i5",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -557,11 +635,6 @@ describe('take with no partition', () => {
               "id": "i5",
             },
             "size": 1,
-          },
-          "maxBound": {
-            "created": 100,
-            "id": "i1",
-            "text": null,
           },
         }
       `);
@@ -653,6 +726,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 250,
+                "id": "i5",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "at",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -701,11 +801,6 @@ describe('take with no partition', () => {
               "id": "i5",
             },
             "size": 3,
-          },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
           },
         }
       `);
@@ -809,6 +904,17 @@ describe('take with no partition', () => {
               "type": "remove",
             },
           ],
+          [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
         ]
       `);
       expect(storage).toMatchInlineSnapshot(`{}`);
@@ -855,6 +961,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -862,6 +995,21 @@ describe('take with no partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -907,11 +1055,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 2,
-          },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
           },
         }
       `);
@@ -971,6 +1114,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -978,6 +1148,21 @@ describe('take with no partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1023,11 +1208,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 2,
-          },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
           },
         }
       `);
@@ -1093,6 +1273,17 @@ describe('take with no partition', () => {
               "type": "remove",
             },
           ],
+          [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 400,
+                "id": "i4",
+              },
+              "type": "remove",
+            },
+          ],
         ]
       `);
       expect(storage).toMatchInlineSnapshot(`
@@ -1104,11 +1295,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 3,
-          },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
           },
         }
       `);
@@ -1163,6 +1349,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -1170,6 +1383,21 @@ describe('take with no partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1227,11 +1455,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 3,
-          },
-          "maxBound": {
-            "created": 400,
-            "id": "i4",
-            "text": null,
           },
         }
       `);
@@ -1352,6 +1575,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -1359,6 +1609,21 @@ describe('take with no partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -1416,11 +1681,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 2,
-          },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
           },
         }
       `);
@@ -1517,6 +1777,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -1524,6 +1811,21 @@ describe('take with no partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 100,
                   "id": "i1",
@@ -1581,11 +1883,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 1,
-          },
-          "maxBound": {
-            "created": 200,
-            "id": "i2",
-            "text": null,
           },
         }
       `);
@@ -1671,6 +1968,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -1678,6 +2002,21 @@ describe('take with no partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1724,11 +2063,6 @@ describe('take with no partition', () => {
             },
             "size": 2,
           },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
-          },
         }
       `);
       expect(pushes).toMatchInlineSnapshot(`
@@ -1745,6 +2079,42 @@ describe('take with no partition', () => {
           },
         ]
       `);
+    });
+
+    test('at limit remove row at start no row after, then remove bound row', () => {
+      const {data, storage, pushes} = takeNoPartitionTest({
+        sourceRows: [
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+        ],
+        limit: 3,
+        fetchOnPush: true,
+        pushes: [
+          makeSourceChangeRemove({id: 'i1', created: 100}),
+          makeSourceChangeRemove({id: 'i3', created: 300}),
+        ],
+      });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+            Symbol(rc): 1,
+          },
+        ]
+      `);
+      expect(storage).toEqual({
+        '["take"]': {
+          bound: {created: 200, id: 'i2', text: null},
+          size: 1,
+        },
+      });
+      expect(pushes.map(p => (p as {node: {row: Row}}).node.row.id)).toEqual([
+        'i1',
+        'i3',
+      ]);
     });
 
     test('at limit remove row at end with row after', () => {
@@ -1795,6 +2165,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -1802,6 +2199,21 @@ describe('take with no partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1859,11 +2271,6 @@ describe('take with no partition', () => {
               "text": null,
             },
             "size": 3,
-          },
-          "maxBound": {
-            "created": 400,
-            "id": "i4",
-            "text": null,
           },
         }
       `);
@@ -1982,6 +2389,33 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ":source(testTable)",
             "fetch",
             {
@@ -1989,6 +2423,21 @@ describe('take with no partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ":take-gate",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -2035,11 +2484,6 @@ describe('take with no partition', () => {
             },
             "size": 2,
           },
-          "maxBound": {
-            "created": 300,
-            "id": "i3",
-            "text": null,
-          },
         }
       `);
       expect(pushes).toMatchInlineSnapshot(`
@@ -2085,6 +2529,23 @@ describe('take with no partition', () => {
         [
           [
             ":source(testTable)",
+            "push",
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "i2",
+                "text": "b",
+              },
+              "row": {
+                "created": 200,
+                "id": "i2",
+                "text": "c",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            ":take-gate",
             "push",
             {
               "oldRow": {
@@ -2166,6 +2627,23 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ":take",
               "push",
               {
@@ -2193,11 +2671,6 @@ describe('take with no partition', () => {
                 "text": "d",
               },
               "size": 4,
-            },
-            "maxBound": {
-              "created": 400,
-              "id": "i4",
-              "text": "d",
             },
           }
         `);
@@ -2279,6 +2752,23 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ":take",
               "push",
               {
@@ -2306,11 +2796,6 @@ describe('take with no partition', () => {
                 "text": "d",
               },
               "size": 4,
-            },
-            "maxBound": {
-              "created": 400,
-              "id": "i4",
-              "text": "d",
             },
           }
         `);
@@ -2387,6 +2872,23 @@ describe('take with no partition', () => {
                 "type": "edit",
               },
             ],
+            [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d2",
+                },
+                "type": "edit",
+              },
+            ],
           ]
         `);
         expect(storage).toMatchInlineSnapshot(`
@@ -2398,11 +2900,6 @@ describe('take with no partition', () => {
                 "text": "c",
               },
               "size": 3,
-            },
-            "maxBound": {
-              "created": 300,
-              "id": "i3",
-              "text": "c",
             },
           }
         `);
@@ -2462,6 +2959,23 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ":take",
               "push",
               {
@@ -2489,11 +3003,6 @@ describe('take with no partition', () => {
                 "text": "c",
               },
               "size": 3,
-            },
-            "maxBound": {
-              "created": 300,
-              "id": "i3",
-              "text": "c",
             },
           }
         `);
@@ -2569,6 +3078,23 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ":take",
               "push",
               {
@@ -2596,11 +3122,6 @@ describe('take with no partition', () => {
                 "text": "c",
               },
               "size": 3,
-            },
-            "maxBound": {
-              "created": 300,
-              "id": "i3",
-              "text": "c",
             },
           }
         `);
@@ -2677,6 +3198,38 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 550,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take-gate",
+              "fetch",
+              {
+                "constraint": undefined,
+                "start": {
+                  "basis": "at",
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+            [
               ":source(testTable)",
               "fetch",
               {
@@ -2726,11 +3279,6 @@ describe('take with no partition', () => {
                 "text": "d",
               },
               "size": 3,
-            },
-            "maxBound": {
-              "created": 400,
-              "id": "i4",
-              "text": "d",
             },
           }
         `);
@@ -2863,6 +3411,23 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 50,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ":take",
               "push",
               {
@@ -2890,11 +3455,6 @@ describe('take with no partition', () => {
                 "text": "c",
               },
               "size": 3,
-            },
-            "maxBound": {
-              "created": 300,
-              "id": "i3",
-              "text": "c",
             },
           }
         `);
@@ -2971,6 +3531,39 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "row": {
+                  "created": 250,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take-gate",
+              "fetch",
+              {
+                "constraint": undefined,
+                "reverse": true,
+                "start": {
+                  "basis": "at",
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+            [
               ":source(testTable)",
               "fetch",
               {
@@ -3021,11 +3614,6 @@ describe('take with no partition', () => {
                 "text": "d",
               },
               "size": 3,
-            },
-            "maxBound": {
-              "created": 300,
-              "id": "i3",
-              "text": "c",
             },
           }
         `);
@@ -3158,6 +3746,38 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 350,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take-gate",
+              "fetch",
+              {
+                "constraint": undefined,
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+            [
               ":source(testTable)",
               "fetch",
               {
@@ -3200,11 +3820,6 @@ describe('take with no partition', () => {
                 "text": "b2",
               },
               "size": 3,
-            },
-            "maxBound": {
-              "created": 350,
-              "id": "i2",
-              "text": "b2",
             },
           }
         `);
@@ -3281,6 +3896,38 @@ describe('take with no partition', () => {
               },
             ],
             [
+              ":take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 450,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take-gate",
+              "fetch",
+              {
+                "constraint": undefined,
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+            [
               ":source(testTable)",
               "fetch",
               {
@@ -3330,11 +3977,6 @@ describe('take with no partition', () => {
                 "text": "d",
               },
               "size": 3,
-            },
-            "maxBound": {
-              "created": 400,
-              "id": "i4",
-              "text": "d",
             },
           }
         `);
@@ -3454,6 +4096,23 @@ describe('take with no partition', () => {
             },
           ],
           [
+            ":take-gate",
+            "push",
+            {
+              "oldRow": {
+                "created": 100,
+                "id": "i1",
+                "text": "a",
+              },
+              "row": {
+                "created": 50,
+                "id": "i1",
+                "text": "a2",
+              },
+              "type": "edit",
+            },
+          ],
+          [
             ":take",
             "push",
             {
@@ -3481,11 +4140,6 @@ describe('take with no partition', () => {
               "text": "a2",
             },
             "size": 1,
-          },
-          "maxBound": {
-            "created": 100,
-            "id": "i1",
-            "text": "a",
           },
         }
       `);
@@ -3540,6 +4194,18 @@ describe('take with partition', () => {
         [
           [
             ".comments:source(comment)",
+            "push",
+            {
+              "row": {
+                "created": 150,
+                "id": "c6",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ".comments:take-gate",
             "push",
             {
               "row": {
@@ -3640,6 +4306,18 @@ describe('take with partition', () => {
             },
           ],
           [
+            ".comments:take-gate",
+            "push",
+            {
+              "row": {
+                "created": 150,
+                "id": "c6",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+          [
             ".comments:take",
             "push",
             {
@@ -3699,12 +4377,6 @@ describe('take with partition', () => {
               "text": null,
             },
             "size": 3,
-          },
-          "maxBound": {
-            "created": 500,
-            "id": "c5",
-            "issueID": "i2",
-            "text": null,
           },
         }
       `);
@@ -3820,6 +4492,37 @@ describe('take with partition', () => {
                 "issueID": "i2",
               },
               "type": "add",
+            },
+          ],
+          [
+            ".comments:take-gate",
+            "push",
+            {
+              "row": {
+                "created": 550,
+                "id": "c8",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ".comments:take-gate",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+              "reverse": true,
+              "start": {
+                "basis": "at",
+                "row": {
+                  "created": 600,
+                  "id": "c6",
+                  "issueID": "i2",
+                  "text": null,
+                },
+              },
             },
           ],
           [
@@ -3941,12 +4644,6 @@ describe('take with partition', () => {
               "issueID": "i2",
             },
             "size": 3,
-          },
-          "maxBound": {
-            "created": 600,
-            "id": "c6",
-            "issueID": "i2",
-            "text": null,
           },
         }
       `);
@@ -4216,6 +4913,18 @@ describe('take with partition', () => {
               "type": "add",
             },
           ],
+          [
+            ".comments:take-gate",
+            "push",
+            {
+              "row": {
+                "created": 550,
+                "id": "c6",
+                "issueID": "3",
+              },
+              "type": "add",
+            },
+          ],
         ]
       `);
       expect(storage).toMatchInlineSnapshot(`
@@ -4237,12 +4946,6 @@ describe('take with partition', () => {
               "text": null,
             },
             "size": 2,
-          },
-          "maxBound": {
-            "created": 500,
-            "id": "c5",
-            "issueID": "i2",
-            "text": null,
           },
         }
       `);
@@ -4281,6 +4984,18 @@ describe('take with partition', () => {
         [
           [
             ".comments:source(comment)",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ".comments:take-gate",
             "push",
             {
               "row": {
@@ -4370,6 +5085,37 @@ describe('take with partition', () => {
             },
           ],
           [
+            ".comments:take-gate",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ".comments:take-gate",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
             ".comments:source(comment)",
             "fetch",
             {
@@ -4379,6 +5125,24 @@ describe('take with partition', () => {
               "reverse": true,
               "start": {
                 "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": null,
+                },
+              },
+            },
+          ],
+          [
+            ".comments:take-gate",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "c3",
@@ -4466,12 +5230,6 @@ describe('take with partition', () => {
               "text": null,
             },
             "size": 2,
-          },
-          "maxBound": {
-            "created": 500,
-            "id": "c5",
-            "issueID": "i2",
-            "text": null,
           },
         }
       `);
@@ -4581,6 +5339,18 @@ describe('take with partition', () => {
               "type": "remove",
             },
           ],
+          [
+            ".comments:take-gate",
+            "push",
+            {
+              "row": {
+                "created": 600,
+                "id": "c6",
+                "issueID": "i3",
+              },
+              "type": "remove",
+            },
+          ],
         ]
       `);
       expect(storage).toMatchInlineSnapshot(`
@@ -4602,12 +5372,6 @@ describe('take with partition', () => {
               "text": null,
             },
             "size": 2,
-          },
-          "maxBound": {
-            "created": 500,
-            "id": "c5",
-            "issueID": "i2",
-            "text": null,
           },
         }
       `);
@@ -4655,6 +5419,25 @@ describe('take with partition', () => {
         [
           [
             ".comments:source(comment)",
+            "push",
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b",
+              },
+              "row": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b2",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            ".comments:take-gate",
             "push",
             {
               "oldRow": {
@@ -4763,6 +5546,25 @@ describe('take with partition', () => {
               },
             ],
             [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ".comments:take",
               "push",
               {
@@ -4836,12 +5638,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -4959,6 +5755,25 @@ describe('take with partition', () => {
               },
             ],
             [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ".comments:take",
               "push",
               {
@@ -5032,12 +5847,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -5149,6 +5958,25 @@ describe('take with partition', () => {
                 "type": "edit",
               },
             ],
+            [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
           ]
         `);
         expect(storage).toMatchInlineSnapshot(`
@@ -5170,12 +5998,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -5248,6 +6070,25 @@ describe('take with partition', () => {
           [
             [
               ".comments:source(comment)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
               "push",
               {
                 "oldRow": {
@@ -5339,12 +6180,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -5462,6 +6297,25 @@ describe('take with partition', () => {
               },
             ],
             [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ".comments:take",
               "push",
               {
@@ -5535,12 +6389,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -5658,6 +6506,44 @@ describe('take with partition', () => {
               },
             ],
             [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "reverse": true,
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+            [
               ".comments:source(comment)",
               "fetch",
               {
@@ -5750,12 +6636,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -5865,6 +6745,43 @@ describe('take with partition', () => {
                   "text": "b2",
                 },
                 "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 350,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "at",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
               },
             ],
             [
@@ -5988,12 +6905,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -6236,6 +7147,25 @@ describe('take with partition', () => {
               },
             ],
             [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 50,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
               ".comments:take",
               "push",
               {
@@ -6309,12 +7239,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -6424,6 +7348,44 @@ describe('take with partition', () => {
                   "text": "c2",
                 },
                 "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "reverse": true,
+                "start": {
+                  "basis": "at",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
               },
             ],
             [
@@ -6548,12 +7510,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -6789,6 +7745,43 @@ describe('take with partition', () => {
               },
             ],
             [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 250,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+            [
               ".comments:source(comment)",
               "fetch",
               {
@@ -6880,12 +7873,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -6995,6 +7982,43 @@ describe('take with partition', () => {
                   "text": "a2",
                 },
                 "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 350,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
               },
             ],
             [
@@ -7118,12 +8142,6 @@ describe('take with partition', () => {
                 "text": "e",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);
@@ -7357,6 +8375,38 @@ describe('take with partition', () => {
               },
             ],
             [
+              ".comments:take-gate",
+              "push",
+              {
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "reverse": true,
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+            [
               ".comments:source(comment)",
               "fetch",
               {
@@ -7366,6 +8416,24 @@ describe('take with partition', () => {
                 "reverse": true,
                 "start": {
                   "basis": "after",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "at",
                   "row": {
                     "created": 200,
                     "id": "c2",
@@ -7486,6 +8554,38 @@ describe('take with partition', () => {
                   "text": "a2",
                 },
                 "type": "add",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "push",
+              {
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i2",
+                  "text": "a2",
+                },
+                "type": "add",
+              },
+            ],
+            [
+              ".comments:take-gate",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i2",
+                },
+                "reverse": true,
+                "start": {
+                  "basis": "at",
+                  "row": {
+                    "created": 500,
+                    "id": "c5",
+                    "issueID": "i2",
+                    "text": "e",
+                  },
+                },
               },
             ],
             [
@@ -7610,12 +8710,6 @@ describe('take with partition', () => {
                 "text": "d",
               },
               "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
             },
           }
         `);

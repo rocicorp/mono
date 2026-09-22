@@ -345,10 +345,10 @@ function createMutator<
   >;
 }
 
-export function* iterateMutators(
+export function iterateMutators(
   registry: AnyMutatorRegistry,
 ): Iterable<AnyMutator> {
-  yield* iterateLeaves(registry, isMutator);
+  return iterateLeaves(registry, isMutator);
 }
 
 /**

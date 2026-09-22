@@ -1,3 +1,4 @@
+import {getOrInsertComputed} from '../../../packages/shared/src/map.ts';
 import type {Schema} from '../../../packages/zero-types/src/schema.ts';
 import type {FilterInput} from '../../../packages/zql/src/ivm/filter-operators.ts';
 import {MemorySource} from '../../../packages/zql/src/ivm/memory-source.ts';
@@ -37,19 +38,14 @@ export class VizDelegate extends QueryDelegateBase<undefined> {
   }
 
   getSource(name: string) {
-    const existing = this.#sources.get(name);
-    if (existing) {
-      return existing;
-    }
-
-    const tableSchema = this.#schema.tables[name];
-    const newSource = new MemorySource(
-      name,
-      tableSchema.columns,
-      tableSchema.primaryKey,
-    );
-    this.#sources.set(name, newSource);
-    return newSource;
+    return getOrInsertComputed(this.#sources, name, name => {
+      const tableSchema = this.#schema.tables[name];
+      return new MemorySource(
+        name,
+        tableSchema.columns,
+        tableSchema.primaryKey,
+      );
+    });
   }
 
   decorateInput(input: Input, name: string): Input {

@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {ChangeIndex} from './change-index.ts';
@@ -111,7 +112,12 @@ export class Cap implements Operator {
     // PK-based point lookups: fetch each tracked row by its PK directly,
     // rather than scanning the partition and filtering.
     for (const pk of capState.pks) {
-      const constraint = deserializePKToConstraint(pk, this.#primaryKey);
+      const pkConstraint = deserializePKToConstraint(pk, this.#primaryKey);
+      // Preserve req.constraint (the partition key) so upstream partitioned
+      // operators (e.g. Take) retain their partition scope and do not throw.
+      const constraint = req.constraint
+        ? {...req.constraint, ...pkConstraint}
+        : pkConstraint;
       for (const inputNode of this.#input.fetch({constraint})) {
         if (inputNode === 'yield') {
           yield inputNode;
@@ -257,7 +263,7 @@ export class Cap implements Operator {
     }
   }
 
-  *#pushEditChange(change: EditChange): Stream<'yield'> {
+  #pushEditChange(change: EditChange): Stream<'yield'> {
     assert(
       !this.#partitionKeyComparator ||
         this.#partitionKeyComparator(
@@ -272,7 +278,7 @@ export class Cap implements Operator {
     );
     const capState = this.#storage.get(capStateKey);
     if (!capState) {
-      return;
+      return emptyArray;
     }
 
     const oldPK = serializePK(
@@ -287,9 +293,10 @@ export class Cap implements Operator {
         const pks = capState.pks.map(p => (p === oldPK ? newPK : p));
         this.#storage.set(capStateKey, {size: capState.size, pks});
       }
-      yield* this.#output.push(change, this);
+      return this.#output.push(change, this);
     }
     // If not in our set, drop
+    return emptyArray;
   }
 
   destroy(): void {

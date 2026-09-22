@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16.2-alpine
+    shm_size: 1g
+    user: postgres
+    restart: always
+    ports:
+      - 6436:5432
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: password
+    command: |
+      postgres
+      -c wal_level=logical
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c hot_standby=on
+      -c hot_standby_feedback=on
+    healthcheck:
+      test: 'pg_isready -U user --dbname=postgres'
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - zero_throughput_pgdata:/var/lib/postgresql/data
+
+volumes:
+  zero_throughput_pgdata:
+    driver: local

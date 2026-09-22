@@ -1,0 +1,40 @@
+name: Go
+
+on:
+  push:
+    branches: [main]
+    paths: [go/**, .github/workflows/go.yml]
+  pull_request:
+    branches: [main]
+    paths: [go/**, .github/workflows/go.yml]
+  merge_group:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: go
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+      - name: Vet
+        run: make vet
+      - name: Test
+        run: make test
+      - name: Build
+        run: make build

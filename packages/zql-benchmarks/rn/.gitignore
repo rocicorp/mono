@@ -1,0 +1,9 @@
+node_modules/
+.expo/
+android/
+ios/
+# Copied in by `pnpm --filter zql-benchmarks run perf:rn`; generated from
+# src/rn.ts by tool/build-rn.ts.
+benchmarks.js
+benchmarks.js.map
+benchmarks.d.ts

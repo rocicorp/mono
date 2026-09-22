@@ -2,7 +2,7 @@ import {pid} from 'node:process';
 import type {MessagePort} from 'node:worker_threads';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
+import {WebSocket, WebSocketServer, type ServerOptions} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -13,7 +13,12 @@ import {
 import {resolveAuth, type Auth, type ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
-import {getOrCreateGauge} from '../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateGauge,
+  getOrCreateNativeHistogram,
+  getOrCreateUpDownCounter,
+} from '../observability/metrics.ts';
 import {
   recordConnectionAttempted,
   recordConnectionSuccess,
@@ -31,7 +36,7 @@ import type {
 import type {ConnectionContextManager} from '../services/view-syncer/connection-context-manager.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
-import type {Worker} from '../types/processes.ts';
+import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import type {Subscription} from '../types/subscription.ts';
 import {installWebSocketReceiver} from '../types/websocket-handoff.ts';
 import type {ConnectParams} from './connect-params.ts';
@@ -50,7 +55,7 @@ export type ReplicaReadyState = {
 
 export type ServingLagViewSyncer = Pick<
   ViewSyncer,
-  'createdAtMs' | 'servedVersion'
+  'createdAtMs' | 'servedVersion' | 'servingLagEligible'
 >;
 
 export type ServingLagStats = {
@@ -63,7 +68,88 @@ export type ServingLagStats = {
   readonly maxMs: number;
 };
 
+type ServingLagDistribution = ServingLagStats & {
+  readonly lagsMs: readonly number[];
+};
+
+export type PipelineDedupViewSyncer = Pick<
+  ViewSyncer,
+  'pipelineHashes' | 'clientSchemaKey'
+>;
+
+export type PipelineDedupStats = {
+  readonly clientTotal: number;
+  readonly internalTotal: number;
+  // (clientSchemaKey, transformationHash) -> occurrence count across client
+  // groups, for client/custom queries.
+  readonly clientHashes: ReadonlyMap<
+    string,
+    {count: number; queryName: string | undefined}
+  >;
+  readonly internalUnique: number;
+  readonly clientSchemas: number;
+};
+
+export function computePipelineDedupStats(
+  viewSyncers: Iterable<PipelineDedupViewSyncer>,
+): PipelineDedupStats {
+  let clientTotal = 0;
+  let internalTotal = 0;
+  const clientHashes = new Map<
+    string,
+    {count: number; queryName: string | undefined}
+  >();
+  const internalHashes = new Set<string>();
+  const schemaKeys = new Set<string>();
+  let vsIndex = 0;
+  for (const vs of viewSyncers) {
+    const schemaKey = vs.clientSchemaKey;
+    if (schemaKey !== undefined) {
+      schemaKeys.add(schemaKey);
+    }
+    // Without a client schema the pipeline's dedup identity is unknown, so key
+    // it uniquely per view-syncer; otherwise schema-less pipelines from
+    // unrelated client groups would collapse under a shared `undefined/<hash>`
+    // key and overstate deduplication.
+    const dedupSchemaKey = schemaKey ?? `#vs${vsIndex}`;
+    vsIndex++;
+    for (const {
+      transformationHash,
+      internal,
+      queryName,
+    } of vs.pipelineHashes()) {
+      // Pipelines only share when both the client schema (which determines
+      // row keys) and the transformed AST are identical.
+      const key = `${dedupSchemaKey}/${transformationHash}`;
+      if (internal) {
+        internalTotal++;
+        internalHashes.add(key);
+      } else {
+        clientTotal++;
+        const entry = clientHashes.get(key);
+        if (entry) {
+          entry.count++;
+        } else {
+          clientHashes.set(key, {count: 1, queryName});
+        }
+      }
+    }
+  }
+  return {
+    clientTotal,
+    internalTotal,
+    clientHashes,
+    internalUnique: internalHashes.size,
+    clientSchemas: schemaKeys.size,
+  };
+}
+
 export const MAX_REPLICA_READY_STATES = 10_000;
+const VIEW_SYNCER_LAG_SAMPLE_INTERVAL_MS = 60_000;
+const SHARED_ADVANCE_ELIGIBILITY_LOG_INTERVAL_MS = 5 * 60_000;
+
+const PROTOCOL_VERSION_ATTRIBUTE = 'protocol.version';
+const FAILURE_REASON_ATTRIBUTE = 'reason';
 
 function boundReplicaReadyStates(
   replicaReadyStates: ReplicaReadyState[],
@@ -157,16 +243,20 @@ function percentileNearestRank(
   return sortedValues[index];
 }
 
-export function computeServingLagStatsMs(
+function computeServingLagDistributionMs(
   now: number,
   replicaReadyStates: ReplicaReadyState[],
   viewSyncers: Iterable<ServingLagViewSyncer>,
-): ServingLagStats {
+): ServingLagDistribution {
   const lags: number[] = [];
   let laggingClientGroups = 0;
   let firstNeededIndex = replicaReadyStates.length;
 
   for (const viewSyncer of viewSyncers) {
+    if (!viewSyncer.servingLagEligible) {
+      continue;
+    }
+
     const firstUnservedIndex = findFirstUnservedIndex(
       replicaReadyStates,
       viewSyncer,
@@ -193,11 +283,36 @@ export function computeServingLagStatsMs(
   return {
     activeClientGroups: lags.length,
     laggingClientGroups,
+    // The percentile fields are for the legacy serving_lag_stats gauge.
+    // The native view_syncer_lag histogram records lagsMs and computes
+    // percentiles in Prometheus/AMP.
     minMs: lags[0] ?? 0,
     p50Ms: percentileNearestRank(lags, 50),
     p75Ms: percentileNearestRank(lags, 75),
     p99Ms: percentileNearestRank(lags, 99),
     maxMs: lags.at(-1) ?? 0,
+    lagsMs: lags,
+  };
+}
+
+export function computeServingLagStatsMs(
+  now: number,
+  replicaReadyStates: ReplicaReadyState[],
+  viewSyncers: Iterable<ServingLagViewSyncer>,
+): ServingLagStats {
+  const distribution = computeServingLagDistributionMs(
+    now,
+    replicaReadyStates,
+    viewSyncers,
+  );
+  return {
+    activeClientGroups: distribution.activeClientGroups,
+    laggingClientGroups: distribution.laggingClientGroups,
+    minMs: distribution.minMs,
+    p50Ms: distribution.p50Ms,
+    p75Ms: distribution.p75Ms,
+    p99Ms: distribution.p99Ms,
+    maxMs: distribution.maxMs,
   };
 }
 
@@ -249,6 +364,8 @@ export class Syncer implements SingletonService {
   readonly #mutagens: ServiceRunner<Mutagen & Service> | undefined;
   readonly #pushers: ServiceRunner<Pusher & Service> | undefined;
   readonly #connections = new Map<string, Connection>();
+  readonly #pendingConnections = new Map<string, number>();
+  readonly #clientGroupGenerations = new Map<string, number>();
   readonly #drainCoordinator = new DrainCoordinator();
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
@@ -256,8 +373,41 @@ export class Syncer implements SingletonService {
   readonly #config: ZeroConfig;
   readonly #validateLegacyJWT: ValidateLegacyJWT | undefined;
   readonly #replicaReadyStates: ReplicaReadyState[] = [];
-  #servingLagStatsCache: ServingLagStats | undefined;
-  #servingLagStatsCacheClearQueued = false;
+  readonly #webSocketOpenConnections = getOrCreateUpDownCounter(
+    'sync',
+    'websocket.open_connections',
+    'Open client WebSocket connections.',
+  );
+  readonly #webSocketConnectionAttempts = getOrCreateCounter(
+    'sync',
+    'websocket.connection_attempts',
+    'Client WebSocket connection attempts.',
+  );
+  readonly #webSocketConnectionSuccesses = getOrCreateCounter(
+    'sync',
+    'websocket.connection_successes',
+    'Client WebSocket connections successfully initialized.',
+  );
+  readonly #webSocketConnectionFailures = getOrCreateCounter(
+    'sync',
+    'websocket.connection_failures',
+    'Client WebSocket connection attempts that failed before initialization.',
+  );
+  readonly #viewSyncerLag = getOrCreateNativeHistogram(
+    'sync',
+    'view_syncer_lag',
+    {
+      description:
+        'Lag from replica-ready change to ViewSyncer output for active ' +
+        'client groups. A change is output after IVM advancement, CVR flush, ' +
+        'and pokeEnd.',
+      unit: 's',
+    },
+  );
+  #servingLagDistributionCache: ServingLagDistribution | undefined;
+  #servingLagDistributionCacheClearQueued = false;
+  #viewSyncerLagSampleInterval: ReturnType<typeof setInterval> | undefined;
+  #eligibilityLogInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
     lc: LogContext,
@@ -287,10 +437,25 @@ export class Syncer implements SingletonService {
     subscribeTo(lc, parent);
 
     this.#lc = lc;
+    this.#parent = parent;
     this.#viewSyncers = new ServiceRunner(
       lc,
       id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
+      id => {
+        if ((this.#pendingConnections.get(id) ?? 0) === 0) {
+          const generation = this.#clientGroupGenerations.get(id);
+          this.#parent.send<ClientGroupStatusMessage>([
+            'clientGroupStatus',
+            {
+              clientGroupID: id,
+              active: false,
+              ...(generation !== undefined ? {generation} : {}),
+            },
+          ]);
+          this.#clientGroupGenerations.delete(id);
+        }
+      },
     );
     if (mutagenFactory) {
       this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
@@ -306,14 +471,33 @@ export class Syncer implements SingletonService {
         p => p.hasRefs(),
       );
     }
-    this.#parent = parent;
     this.#wss = new WebSocketServer(getWebSocketServerOptions(config));
 
     installWebSocketReceiver(
       lc,
       this.#wss,
-      this.#createConnection,
+      this.#receiveConnection,
       this.#parent,
+      params => {
+        this.#releasePending(params.clientGroupID, params.generation);
+      },
+      params => {
+        this.#pendingConnections.set(
+          params.clientGroupID,
+          (this.#pendingConnections.get(params.clientGroupID) ?? 0) + 1,
+        );
+        if (params.generation !== undefined) {
+          const current = this.#clientGroupGenerations.get(
+            params.clientGroupID,
+          );
+          if (current === undefined || params.generation > current) {
+            this.#clientGroupGenerations.set(
+              params.clientGroupID,
+              params.generation,
+            );
+          }
+        }
+      },
     );
 
     setActiveClientGroupsGetter(() => this.#viewSyncers.size);
@@ -348,24 +532,24 @@ export class Syncer implements SingletonService {
       result.observe(total);
     });
 
-    getOrCreateGauge('sync', 'serving-lag', {
+    getOrCreateGauge('sync', 'serving_lag', {
       description:
         'Maximum time active ViewSyncer client groups have had unserved ' +
         'replica changes. A change is served after IVM advancement, CVR flush, ' +
         'and pokeEnd.',
       unit: 'millisecond',
     }).addCallback(result => {
-      result.observe(this.#computeServingLagStats().maxMs);
+      result.observe(this.#computeServingLagDistribution().maxMs);
     });
 
-    getOrCreateGauge('sync', 'serving-lag-stats', {
+    getOrCreateGauge('sync', 'serving_lag_stats', {
       description:
         'Distribution of time active ViewSyncer client groups have had ' +
         'unserved replica changes. A change is served after IVM advancement, ' +
         'CVR flush, and pokeEnd.',
       unit: 'millisecond',
     }).addCallback(result => {
-      const stats = this.#computeServingLagStats();
+      const stats = this.#computeServingLagDistribution();
       result.observe(stats.minMs, {stat: 'min'});
       result.observe(stats.p50Ms, {stat: 'p50'});
       result.observe(stats.p75Ms, {stat: 'p75'});
@@ -375,32 +559,107 @@ export class Syncer implements SingletonService {
 
     getOrCreateGauge(
       'sync',
-      'serving-lagging-client-groups',
+      'serving_lagging_client_groups',
       'Number of active client groups with unserved replica changes',
     ).addCallback(result => {
-      result.observe(this.#computeServingLagStats().laggingClientGroups);
+      result.observe(this.#computeServingLagDistribution().laggingClientGroups);
     });
+
+    getOrCreateGauge(
+      'sync',
+      'pipelines_total',
+      'Query pipelines across all client groups on this worker, by query ' +
+        'type. The ratio to sync.pipelines_unique is the dedup factor ' +
+        'available to shared pipeline advancement.',
+    ).addCallback(result => {
+      const stats = this.#computePipelineDedupStats();
+      result.observe(stats.clientTotal, {type: 'client'});
+      result.observe(stats.internalTotal, {type: 'internal'});
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'pipelines_unique',
+      'Distinct (clientSchema, transformationHash) pipelines across all ' +
+        'client groups on this worker, by query type',
+    ).addCallback(result => {
+      const stats = this.#computePipelineDedupStats();
+      result.observe(stats.clientHashes.size, {type: 'client'});
+      result.observe(stats.internalUnique, {type: 'internal'});
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'client_schemas',
+      'Distinct client schemas across all client groups on this worker',
+    ).addCallback(result => {
+      result.observe(this.#computePipelineDedupStats().clientSchemas);
+    });
+
+    this.#viewSyncerLagSampleInterval = setInterval(
+      () => this.#recordViewSyncerLagSamples(),
+      VIEW_SYNCER_LAG_SAMPLE_INTERVAL_MS,
+    );
+    this.#viewSyncerLagSampleInterval.unref?.();
+
+    this.#eligibilityLogInterval = setInterval(
+      () => this.#logSharedAdvanceEligibility(),
+      SHARED_ADVANCE_ELIGIBILITY_LOG_INTERVAL_MS,
+    );
+    this.#eligibilityLogInterval.unref?.();
   }
 
-  #computeServingLagStats(): ServingLagStats {
-    if (this.#servingLagStatsCache) {
-      return this.#servingLagStatsCache;
+  #computeServingLagDistribution(): ServingLagDistribution {
+    if (this.#servingLagDistributionCache) {
+      return this.#servingLagDistributionCache;
     }
 
-    const stats = computeServingLagStatsMs(
+    const distribution = computeServingLagDistributionMs(
       Date.now(),
       this.#replicaReadyStates,
       this.#viewSyncers.getServices(),
     );
-    this.#servingLagStatsCache = stats;
-    if (!this.#servingLagStatsCacheClearQueued) {
-      this.#servingLagStatsCacheClearQueued = true;
+    this.#servingLagDistributionCache = distribution;
+    if (!this.#servingLagDistributionCacheClearQueued) {
+      this.#servingLagDistributionCacheClearQueued = true;
       queueMicrotask(() => {
-        this.#servingLagStatsCache = undefined;
-        this.#servingLagStatsCacheClearQueued = false;
+        this.#servingLagDistributionCache = undefined;
+        this.#servingLagDistributionCacheClearQueued = false;
       });
     }
-    return stats;
+    return distribution;
+  }
+
+  #recordViewSyncerLagSamples(): void {
+    const {lagsMs} = this.#computeServingLagDistribution();
+    for (const lagMs of lagsMs) {
+      this.#viewSyncerLag.recordMs(lagMs);
+    }
+  }
+
+  #computePipelineDedupStats(): PipelineDedupStats {
+    return computePipelineDedupStats(this.#viewSyncers.getServices());
+  }
+
+  #logSharedAdvanceEligibility(): void {
+    const stats = this.#computePipelineDedupStats();
+    if (stats.clientTotal === 0) {
+      return;
+    }
+    const unique = stats.clientHashes.size;
+    const topDuplicated = [...stats.clientHashes.entries()]
+      .filter(([, {count}]) => count > 1)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 10)
+      .map(([key, {count, queryName}]) => ({key, count, queryName}));
+    this.#lc.info?.('shared-advance-eligibility', {
+      clientPipelines: stats.clientTotal,
+      uniqueClientPipelines: unique,
+      dedupFactor: Number((stats.clientTotal / Math.max(unique, 1)).toFixed(2)),
+      internalPipelines: stats.internalTotal,
+      clientSchemas: stats.clientSchemas,
+      topDuplicated,
+    });
   }
 
   #recordReplicaReadyState(state: ReplicaState): void {
@@ -426,6 +685,34 @@ export class Syncer implements SingletonService {
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
+    const metricAttributes = {
+      [PROTOCOL_VERSION_ATTRIBUTE]: params.protocolVersion,
+    };
+    let connectionResultRecorded = false;
+    const recordConnectionFailure = (reason: string) => {
+      if (connectionResultRecorded) {
+        return;
+      }
+      connectionResultRecorded = true;
+      this.#webSocketConnectionFailures.add(1, {
+        ...metricAttributes,
+        [FAILURE_REASON_ATTRIBUTE]: reason,
+      });
+    };
+    const recordConnectionSuccessMetric = () => {
+      if (connectionResultRecorded) {
+        return;
+      }
+      connectionResultRecorded = true;
+      this.#webSocketConnectionSuccesses.add(1, metricAttributes);
+    };
+
+    this.#webSocketConnectionAttempts.add(1, metricAttributes);
+    this.#webSocketOpenConnections.add(1, metricAttributes);
+    ws.once('close', () => {
+      this.#webSocketOpenConnections.add(-1, metricAttributes);
+    });
+
     this.#lc.debug?.(
       'creating connection',
       params.clientGroupID,
@@ -450,6 +737,7 @@ export class Syncer implements SingletonService {
       const hasExactlyOneTokenOption = tokenOptions.length === 1;
       const hasCustomEndpoints = hasPushOrMutate && hasQueries;
       if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+        recordConnectionFailure('configuration');
         throw new Error(
           'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
             JSON.stringify(tokenOptions) +
@@ -486,11 +774,28 @@ export class Syncer implements SingletonService {
             errorKind: e.message,
           },
         );
+        recordConnectionFailure('auth');
         sendError(this.#lc, ws, e.errorBody);
         ws.close(3000, e.errorBody.message);
         return;
       }
+      recordConnectionFailure('internal');
       throw e;
+    }
+
+    // Resolving auth can take a while (e.g. a remote JWKS fetch), during
+    // which the client may have disconnected. A Connection created for a
+    // closed socket never receives the 'close' event and is thus never
+    // cleaned up, leaking its timer, its registrations in the connection
+    // context manager and its refs on the mutagen and pusher services.
+    if (ws.readyState !== WebSocket.OPEN) {
+      this.#lc.debug?.('websocket closed while resolving auth', {
+        clientGroupID,
+        clientID,
+        readyState: ws.readyState,
+      });
+      recordConnectionFailure('closed_during_auth');
+      return;
     }
 
     const viewSyncer = this.#viewSyncers.getService(clientGroupID);
@@ -513,6 +818,7 @@ export class Syncer implements SingletonService {
           'Client groups are pinned to a single userID. Connection userID does not match existing client group userID.',
         origin: ErrorOrigin.ZeroCache,
       });
+      recordConnectionFailure('user_mismatch');
       sendError(this.#lc, ws, error.errorBody);
       ws.close(3000, error.message);
       return;
@@ -545,6 +851,7 @@ export class Syncer implements SingletonService {
         this.#lc,
         params,
         ws,
+        this.#config.allowLegacyQueries,
         new SyncerWsMessageHandler(
           this.#lc,
           params,
@@ -568,6 +875,7 @@ export class Syncer implements SingletonService {
         },
       );
     } catch (e) {
+      recordConnectionFailure('internal');
       connContextManager.closeConnection({clientID, wsID: params.wsID});
       mutagen?.unref();
       pusher?.unref();
@@ -576,7 +884,12 @@ export class Syncer implements SingletonService {
 
     this.#connections.set(clientID, connection);
 
-    connection.init() && recordConnectionSuccess();
+    if (connection.init()) {
+      recordConnectionSuccessMetric();
+      recordConnectionSuccess();
+    } else {
+      recordConnectionFailure('protocol_version');
+    }
 
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
@@ -589,6 +902,39 @@ export class Syncer implements SingletonService {
       );
     }
   };
+
+  readonly #receiveConnection = async (
+    ws: WebSocket,
+    params: ConnectParams,
+  ) => {
+    try {
+      await this.#createConnection(ws, params);
+    } finally {
+      this.#releasePending(params.clientGroupID, params.generation);
+    }
+  };
+
+  #releasePending(clientGroupID: string, generation: number | undefined): void {
+    const remaining = (this.#pendingConnections.get(clientGroupID) ?? 1) - 1;
+    if (remaining <= 0) {
+      this.#pendingConnections.delete(clientGroupID);
+      if (!this.#viewSyncers.hasService(clientGroupID)) {
+        const gen =
+          this.#clientGroupGenerations.get(clientGroupID) ?? generation;
+        this.#parent.send<ClientGroupStatusMessage>([
+          'clientGroupStatus',
+          {
+            clientGroupID,
+            active: false,
+            ...(gen !== undefined ? {generation: gen} : {}),
+          },
+        ]);
+        this.#clientGroupGenerations.delete(clientGroupID);
+      }
+    } else {
+      this.#pendingConnections.set(clientGroupID, remaining);
+    }
+  }
 
   run() {
     return this.#stopped.promise;
@@ -622,6 +968,8 @@ export class Syncer implements SingletonService {
   }
 
   stop() {
+    clearInterval(this.#viewSyncerLagSampleInterval);
+    clearInterval(this.#eligibilityLogInterval);
     this.#wss.close();
     this.#stopped.resolve();
     return promiseVoid;

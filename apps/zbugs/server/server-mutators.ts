@@ -83,12 +83,14 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
         z.object({
           issueID: z.string(),
           labelID: z.string(),
+          // Deprecated and ignored; see mutators.issue.addLabel.
+          // TODO: Remove soon.
           projectID: z.optional(z.string()),
         }),
-        async ({tx, args: {issueID, labelID, projectID}, ctx: authData}) => {
+        async ({tx, args: {issueID, labelID}, ctx: authData}) => {
           await mutators.issue.addLabel.fn({
             tx,
-            args: {issueID, labelID, projectID},
+            args: {issueID, labelID},
             ctx: authData,
           });
 

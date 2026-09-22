@@ -1,41 +1,55 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
+import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
-import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
-import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
+import {initializePostgresChangeSource} from '../services/change-source/pg/change-source-init.ts';
 import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cleanup-monitor-factory.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
-import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {PurgeLocker} from '../services/change-streamer/storer.ts';
-import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
-  BackupNotFoundException,
-  restoreReplica,
-} from '../services/litestream/commands.ts';
+  exitAfter,
+  ProcessManager,
+  runUntilKilled,
+} from '../services/life-cycle.ts';
+import {startReplicaBackupProcess} from '../services/litestream/commands.ts';
+import {
+  changeLogFileName,
+  deleteChangeLogDB,
+} from '../services/replicator/change-log-db.ts';
 import {
   replicationStatusError,
   ReplicationStatusPublisher,
 } from '../services/replicator/replication-status.ts';
+import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
 import {connectPgClient} from '../types/pg.ts';
 import {
+  broadcastWorker,
+  childWorker,
   parentWorker,
   singleProcessMode,
+  type ProfileResponseMessage,
   type Worker,
 } from '../types/processes.ts';
+import {installProfileHandler} from '../types/profiler.ts';
 import {getShardConfig} from '../types/shards.ts';
+import type {ReplicaFileMode} from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
+import {REPLICATOR_URL} from './worker-urls.ts';
 
 // Default LogContext, overridden in runWorker
 let lc = new LogContext('info', {}, consoleLogSink);
@@ -45,7 +59,7 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
   ...argv: string[]
 ): Promise<void> {
-  const workerStartTime = Date.now();
+  installProfileHandler(parent, 'change-streamer');
   const config = getNormalizedZeroConfig({env, argv});
   const {
     taskID,
@@ -55,13 +69,27 @@ export default async function runWorker(
       protocol,
       startupDelayMs,
       backPressureLimitHeapProportion,
-      flowControlConsensusPaddingSeconds,
+      flowControlConsensusTimeoutProportion,
+      flowControlSlowSubscriberGracePeriodSeconds,
+      pgChangeLogEnabled,
+      sqliteChangeLogMode,
+      sqliteChangeLogReadPercent,
+      sqliteChangeLogColdReadPercent,
+      sqliteChangeLogComparePercent,
+      sqliteChangeLogRetentionMs,
+      sqliteChangeLogReadBatchRows,
+      sqliteChangeLogPurgeBatchRows,
+      sqliteChangeLogBarrierTimeoutMs,
     },
+    autoReset,
+    replicationLag,
+    litestream,
     upstream,
     change,
     replica,
     initialSync,
     keepaliveTimeoutMs,
+    sqliteCorruptionChecks,
   } = config;
 
   startOtelAuto(
@@ -70,58 +98,89 @@ export default async function runWorker(
     0,
   );
   lc = createLogContext(config, 'change-streamer');
+  registerSQLiteCorruptionDiagnosticTarget(
+    {
+      debugName: 'change-streamer replica',
+      dbPath: replica.file,
+    },
+    sqliteCorruptionChecks,
+  );
   initEventSink(lc, config);
 
-  // Kick off DB connection warmup in the background.
+  // Startup-time client used for for change-streamer initialization
+  // and handoff / takeover. Steady-state clients are managed by the
+  // change-streamer (Storer) implementation.
   const changeDB = await connectPgClient(
     lc,
     change.db,
-    'change-streamer',
-    {
-      max: change.maxConns,
-    },
+    'change-streamer-init',
+    {max: 5},
     {sendStringAsJson: true},
   );
   void warmupConnections(lc, changeDB, 'change').catch(() => {});
 
-  const {autoReset, replicationLag} = config;
   const shard = getShardConfig(config);
 
-  // Ensure the change DB schema is initialized/up-to-date, then acquire
-  // a lock to prevent change-lock purges. This ensures that (this)
-  // change-streamer will be able to resume from the backup.
+  // Ensure the change DB schema is initialized/up-to-date.
   await initChangeStreamerSchema(lc, changeDB, shard);
-  let purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
 
-  // Restore from litestream if the change-log has entries.
-  if (purgeLock) {
-    try {
-      await restoreReplica(lc, config, purgeLock);
-    } catch (e) {
-      // If the restore failed, e.g. due to a corrupt or missing backup, the
-      // replication-manager recovers by re-syncing.
-      const log = e instanceof BackupNotFoundException ? 'warn' : 'error';
-      lc[log]?.(
-        `error restoring backup. resyncing the replica: ${String(e)}`,
-        e,
-      );
-
-      // The purgeLock must be released if the backup could not be restored,
-      // or it will otherwise prevent the change-db update after the resync
-      // completes.
-      await purgeLock.release();
-      purgeLock = null;
-    }
-  }
+  // When restoring from litestream, acquire a lock to prevent change-log
+  // purges. This ensures that (this) change-streamer will be able to resume
+  // from the backup.
+  let purgeLock =
+    pgChangeLogEnabled && litestream.backupURL && litestream.executable
+      ? await new PurgeLocker(lc, shard, changeDB).acquire()
+      : null;
+  const restoreOptions = {litestream, constraints: purgeLock ?? undefined};
 
   let changeStreamer: ChangeStreamerService | undefined;
+  let backupURL: string | undefined;
 
   const context = getServerContext(config);
+  const sqliteChangeLogEnabled = sqliteChangeLogMode !== 'off';
+  // The modes are cumulative, so `serve` implies `compare`.
+  const sqliteChangeLogComparing =
+    sqliteChangeLogMode === 'compare' || sqliteChangeLogMode === 'serve';
+  if (sqliteChangeLogEnabled) {
+    const changeLogFile = changeLogFileName(replica.file);
+    registerSQLiteCorruptionDiagnosticTarget(
+      {
+        debugName: 'change-streamer change-log',
+        dbPath: changeLogFile,
+      },
+      sqliteCorruptionChecks,
+    );
+    // The log's bytes are accounted for in the process that writes them. This
+    // is local disk only — the log is excluded from the litestream backup — and
+    // it is a whole-database total, because a table that left the replica left
+    // through its wal: the replica's footprint is what shrank and this is where
+    // it went.
+    getOrCreateGauge('replica', 'sqlite_change_log.file_bytes', {
+      description:
+        `The SQLite change log's total on-disk footprint: its main db file ` +
+        `plus its wal sidecars.`,
+      unit: 'By',
+    }).addCallback(async o =>
+      o.observe(await sqliteFileBytes(lc, changeLogFile)),
+    );
+  }
 
+  let waitForFirstBackupBeforeServing = false;
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
-      const {changeSource, subscriptionState} =
+      const {
+        pgReplicationEpoch: epoch,
+        pgReplicationSlotPerReplica: slotPerReplica,
+        pgResumeOrphanedSlotGracePeriodMs: inactiveReplicaGracePeriodMs,
+      } = upstream;
+      const {
+        changeSource,
+        subscriptionState,
+        destinationBackupURL,
+        replicaID,
+        waitForBackupBeforeServing,
+      } =
         upstream.type === 'pg'
           ? await initializePostgresChangeSource(
               lc,
@@ -131,9 +190,19 @@ export default async function runWorker(
               {
                 ...initialSync,
                 replicationSlotFailover: upstream.pgReplicationSlotFailover,
+                installPartialIndexTriggers: upstream.pgPartialIndexTriggers,
               },
               context,
               replicationLag.reportIntervalMs,
+              restoreOptions,
+              {
+                epoch,
+                slotPerReplica,
+                inactiveReplicaGracePeriodMs,
+                backupV5: litestream.backupUsingV5,
+              },
+              purgeLock,
+              upstream.pgStreamInboundTimeoutMs,
             )
           : await initializeCustomChangeSource(
               lc,
@@ -141,6 +210,7 @@ export default async function runWorker(
               shard,
               replica.file,
               context,
+              restoreOptions,
             );
 
       const replicationStatusPublisher =
@@ -156,16 +226,80 @@ export default async function runWorker(
         changeSource,
         replicationStatusPublisher,
         subscriptionState,
+        destinationBackupURL
+          ? {
+              backupURL: destinationBackupURL,
+              litestreamVersion: litestream.backupUsingV5 ? 'v5' : 'legacy',
+              replicaFile: replica.file,
+            }
+          : null,
         purgeLock,
         autoReset ?? false,
         {
+          pgChangeLogEnabled,
           backPressureLimitHeapProportion,
-          flowControlConsensusPaddingSeconds,
+          flowControlConsensusTimeoutProportion,
+          flowControlSlowSubscriberGracePeriodMs:
+            flowControlSlowSubscriberGracePeriodSeconds > 0
+              ? flowControlSlowSubscriberGracePeriodSeconds * 1000
+              : undefined,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
+          sqliteCatchup: {
+            changeLogFile: changeLogFileName(replica.file),
+            readBatchRows: sqliteChangeLogReadBatchRows,
+            barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
+          },
+          // The presence of these options is the writer's gate. This process
+          // performs the restore and the initial sync, so the replica's
+          // identity is in hand at the moment the log is opened.
+          sqliteChangeLogWriter: sqliteChangeLogEnabled
+            ? {
+                replicaFile: replica.file,
+                identity: {
+                  // RMv2 supplies the epoch; until then the generation and the
+                  // replica ID are the whole of the identity.
+                  epoch: null,
+                  generation: subscriptionState.replicaVersion,
+                  replicaID,
+                },
+              }
+            : undefined,
+          // The purge scheduler shares the writer's gate -- mode, not the
+          // read path -- because `write` mode, with no read selector at all,
+          // is the configuration it ships in.
+          sqliteChangeLogPurge: sqliteChangeLogEnabled
+            ? {
+                retentionMs: sqliteChangeLogRetentionMs,
+                batchRows: sqliteChangeLogPurgeBatchRows,
+              }
+            : undefined,
+          // Compare mode runs both advisory checks. Postgres remains authoritative.
+          sqliteChangeLogCompare:
+            pgChangeLogEnabled && sqliteChangeLogComparing
+              ? {
+                  replicaFile: replica.file,
+                  comparePercent: sqliteChangeLogComparePercent,
+                  retentionMs: sqliteChangeLogRetentionMs,
+                  readBatchRows: sqliteChangeLogReadBatchRows,
+                }
+              : undefined,
+          // Slice 11 lands dark by default: serve mode constructs the stable
+          // router, while readPercent=0 keeps every catchup on PG and emits
+          // eligibility metrics before any canary traffic is enabled.
+          sqliteChangeLogServe:
+            sqliteChangeLogMode === 'serve'
+              ? {
+                  readPercent: sqliteChangeLogReadPercent,
+                  coldReadPercent: sqliteChangeLogColdReadPercent,
+                  retentionMs: sqliteChangeLogRetentionMs,
+                }
+              : undefined,
         },
         setTimeout,
       );
+      backupURL = destinationBackupURL;
+      waitForFirstBackupBeforeServing = waitForBackupBeforeServing;
       break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
@@ -173,6 +307,12 @@ export default async function runWorker(
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.
         deleteLiteDB(replica.file);
+        // The change log carries the identity of the replica it was written
+        // beside, and the retry performs a fresh initial sync with a new
+        // replicaVersion. Reconciliation would catch that on its own (as
+        // 'identity-mismatch') but only after the writer opened a file that is
+        // known here to be garbage.
+        deleteChangeLogDB(replica.file);
         // Release the purge lock before retrying. This is safe because the
         // purge lock exists to preserve change-log entries so the new
         // change-streamer can resume from the backup replica's watermark.
@@ -200,57 +340,117 @@ export default async function runWorker(
   // impossible: upstream must have advanced in order for replication to be stuck.
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
-  // Perform any upgrades to the replica in case it was restored from an
-  // earlier version. Note that this upgrade is done by the replicator worker
-  // as well (in both the replication-manager and the view-syncer), but the
-  // change-streamer independently reads the replica, and it is fine run the
-  // upgrade logic redundantly since it is idempotent.
-  await upgradeReplica(lc, 'change-streamer-init', replica.file);
+  const processes = new ProcessManager(lc, parent);
+  const profileSubWorkers: Worker[] = [];
+  if (backupURL) {
+    lc.info?.('setting up backup to', backupURL);
+    litestream.backupURL = backupURL;
+    const {promise: backupStarted, resolve} = resolver();
+
+    // Start a backup replicator and corresponding litestream backup process.
+    const backupReplicator = processes
+      .addWorker(
+        childWorker(REPLICATOR_URL, env, 'backup' satisfies ReplicaFileMode),
+        'supporting',
+        'backup-replicator',
+      )
+      // Wait for the replicator's first message (i.e. "ready") before starting
+      // litestream backup in order to avoid contending on the sqlite lock
+      // when the replicator first prepares the db file.
+      .once('message', () => {
+        processes.addSubprocess(
+          startReplicaBackupProcess(lc, litestream, replica.file),
+          'supporting',
+          'litestream',
+        );
+        resolve();
+      });
+    profileSubWorkers.push(backupReplicator);
+    // Relay profileResponse messages from backup-replicator up to parent
+    backupReplicator.onMessageType<ProfileResponseMessage>(
+      'profileResponse',
+      res => parent.send(['profileResponse', res]),
+    );
+    await backupStarted;
+  }
 
   const backupMonitor = createBackupCleanupMonitor({
     lc,
     config,
     replicaFile: replica.file,
     changeStreamer,
-    // The time between when the zero-cache was started to when the
-    // change-streamer is ready to start serves as the initial delay for
-    // watermark cleanup (as it either includes a similar replica
-    // restoration/preparation step, or an initial-sync, which
-    // generally takes longer).
-    //
-    // Consider: Also account for permanent volumes?
-    initialCleanupDelayMs: Date.now() - workerStartTime,
-    env,
   });
-  const monitor =
-    backupMonitor ?? new ReplicaMonitor(lc, replica.file, changeStreamer);
+
+  let readinessGate = promiseVoid;
+  if (waitForFirstBackupBeforeServing) {
+    const start = performance.now();
+    lc.info?.(`awaiting initial backup ...`);
+
+    readinessGate = backupMonitor.firstBackupReceived().then(() => {
+      const elapsed = performance.now() - start;
+      lc.info?.(`initial backup confirmed after ${elapsed.toFixed(2)}ms`);
+    });
+  }
+
+  // Create the broadcast facade once: each broadcastWorker() adds permanent
+  // 'message' forwarders to every sub worker, so creating one per /profz
+  // request would leak a forwarder per request.
+  const profileWorker =
+    profileSubWorkers.length > 0
+      ? broadcastWorker(profileSubWorkers)
+      : undefined;
+  const getProfileWorker = profileWorker
+    ? () => Promise.resolve(profileWorker)
+    : undefined;
 
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
-    {port, keepaliveTimeoutMs, startupDelayMs},
+    {
+      port,
+      keepaliveTimeoutMs,
+      // The startup delay is only relevant for RMv1, and is disabled for RMv2.
+      startupDelayMs: upstream.pgReplicationSlotPerReplica ? 0 : startupDelayMs,
+      readinessGate,
+      config,
+      getProfileWorker,
+    },
     parent,
     changeStreamer,
-    backupMonitor,
   );
 
-  parent.send(['ready', {ready: true}]);
+  void readinessGate.then(() => parent.send(['ready', {ready: true}]));
 
   // Note: The changeStreamer itself is not started here; it is started by the
-  //       changeStreamerWebServer.
-  return runUntilKilled(lc, parent, changeStreamerWebServer, monitor);
+  //       changeStreamerWebServer after a delay to ensure that routing
+  //       routing elements have registered the server before the
+  //       change-streamer takes over the replication slot.
+  // TODO: Remove this delay and start the changeStreamer normally here once
+  //       transitioned to RMv2, since changeStreamer startup will no longer
+  //       disrupt an existing task.
+  try {
+    await runUntilKilled(lc, parent, changeStreamerWebServer, backupMonitor);
+  } catch (err) {
+    processes.logErrorAndExit(err, 'change-streamer');
+  } finally {
+    await processes.shutdown();
+  }
 }
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(lc, () =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)).catch(
-      async e => {
+  void exitAfter(
+    () => lc,
+    () =>
+      runWorker(
+        must(parentWorker),
+        process.env,
+        ...process.argv.slice(2),
+      ).catch(async e => {
         await publishCriticalEvent(
           lc,
           replicationStatusError(lc, 'Initializing', e),
         );
         throw e;
-      },
-    ),
+      }),
   );
 }

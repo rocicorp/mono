@@ -1,4 +1,4 @@
-import type {Benchmark} from '../benchmark.ts';
+import type {Benchmark} from '../../../../tools/rn-bench/src/benchmark.ts';
 import {randomString} from '../data.ts';
 
 export function benchmarks(): Benchmark[] {

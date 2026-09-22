@@ -42,6 +42,25 @@ const columns = {
 
 const lc = createSilentLogContext();
 
+test('a partial unique index cannot satisfy the row-key assertion', () => {
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    CREATE TABLE partial_key (id TEXT, active INTEGER);
+    CREATE UNIQUE INDEX partial_key_id ON partial_key(id) WHERE active = 1;
+  `);
+  expect(
+    () =>
+      new TableSource(
+        lc,
+        testLogConfig,
+        db,
+        'partial_key',
+        {id: {type: 'string'}, active: {type: 'boolean'}},
+        ['id'],
+      ),
+  ).toThrow('does not have a UNIQUE index');
+});
+
 describe('fetching from a table source', () => {
   type Foo = {id: string; a: number; b: number; c: number};
   const allRows: Foo[] = [];
@@ -210,6 +229,176 @@ describe('fetching from a table source', () => {
         return r.row;
       }),
     ).toEqual(expectedRows);
+  });
+});
+
+describe('fetching across a NULL-sorted cursor region', () => {
+  // SQLite sorts NULLs first, so rows with a NULL sort value form the head
+  // of the walk. A cursor anchored in that region must continue exactly
+  // where the IVM comparator says it continues — `col > NULL` matched
+  // nothing, so the continuation silently came back empty — and a backward
+  // walk from a non-NULL anchor must admit the NULL group that sorts before
+  // it. The NULL-bound forms hold with or without `optional` metadata (the
+  // bound value itself proves nullability); admitting the NULL group below a
+  // non-NULL bound relies on a truthful `optional` flag, which the replica
+  // specs now derive from the upstream NOT NULL constraint.
+  type Bar = {id: string; a: number | null};
+  const barColumns = {
+    id: {type: 'string'},
+    a: {type: 'number', optional: true},
+  } as const;
+  const bareBarColumns = {
+    id: {type: 'string'},
+    a: {type: 'number'},
+  } as const;
+  const barOrder = [
+    ['a', 'asc'],
+    ['id', 'asc'],
+  ] as const;
+  // Declared in comparator order: the NULL group first (tie-broken by id),
+  // then the non-NULL values.
+  const allRows: Bar[] = [
+    {id: '01', a: null},
+    {id: '02', a: null},
+    {id: '03', a: null},
+    {id: '04', a: 1},
+    {id: '05', a: 2},
+    {id: '06', a: 3},
+  ];
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(/* sql */ `CREATE TABLE bar (id TEXT PRIMARY KEY, a);`);
+  const stmt = db.prepare(/* sql */ `INSERT INTO bar (id, a) VALUES (?, ?);`);
+  for (const row of allRows) {
+    stmt.run(row.id, row.a);
+  }
+
+  test('the declared row order is the IVM comparator order', () => {
+    expect(allRows.toSorted(makeComparator(barOrder))).toEqual(allRows);
+  });
+
+  test.each([
+    {
+      name: 'start `after` a NULL-sorted row continues through the NULL group into the non-NULL rows',
+      fetchArgs: {
+        constraint: undefined,
+        start: {row: allRows[1], basis: 'after'},
+      },
+      expectedRows: allRows.slice(2),
+    },
+    {
+      name: 'start `after` a NULL-sorted row needs no optional metadata — the bound value proves nullability',
+      columns: bareBarColumns,
+      fetchArgs: {
+        constraint: undefined,
+        start: {row: allRows[1], basis: 'after'},
+      },
+      expectedRows: allRows.slice(2),
+    },
+    {
+      name: 'start `at` a NULL-sorted row includes the anchor row',
+      fetchArgs: {
+        constraint: undefined,
+        start: {row: allRows[1], basis: 'at'},
+      },
+      expectedRows: allRows.slice(1),
+    },
+    {
+      name: 'reverse start `after` a NULL-sorted row walks the strictly-before rows',
+      fetchArgs: {
+        constraint: undefined,
+        start: {row: allRows[1], basis: 'after'},
+        reverse: true,
+      },
+      expectedRows: allRows.slice(0, 1),
+    },
+    {
+      name: 'reverse start `after` a non-NULL row admits the NULL group that sorts before it',
+      fetchArgs: {
+        constraint: undefined,
+        start: {row: allRows[4], basis: 'after'},
+        reverse: true,
+      },
+      expectedRows: allRows.slice(0, 4).toReversed(),
+    },
+  ] as const)('$name', ({fetchArgs, expectedRows, ...testCase}) => {
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'bar',
+      'columns' in testCase ? testCase.columns : barColumns,
+      ['id'],
+    );
+    const c = source.connect(barOrder);
+    const out = new Catch(c);
+    c.setOutput(out);
+    const rows = out.fetch(fetchArgs);
+    expect(
+      rows.map(r => {
+        assert(r !== 'yield', 'Expected row result, not yield');
+        return r.row;
+      }),
+    ).toEqual(expectedRows);
+  });
+
+  test('a NULL in a later sort key continues through the rest of its tie-break group', () => {
+    // The anchor's leading key is non-NULL; only the second sort key is NULL.
+    // The continuation must cover the remaining rows of the leading-key group
+    // (its NULL tie-break siblings first, then its non-NULL ones) before
+    // moving on — previously `b > NULL` and `b = NULL` matched nothing, so
+    // every remaining row of the group was silently dropped and the walk
+    // jumped straight to the next leading-key value.
+    type Baz = {id: string; a: number; b: string | null};
+    const bazColumns = {
+      id: {type: 'string'},
+      a: {type: 'number'},
+      b: {type: 'string'},
+    } as const;
+    const bazOrder = [
+      ['a', 'asc'],
+      ['b', 'asc'],
+      ['id', 'asc'],
+    ] as const;
+    // Declared in comparator order.
+    const bazRows: Baz[] = [
+      {id: 'x1', a: 1, b: null},
+      {id: 'x2', a: 1, b: null},
+      {id: 'x3', a: 1, b: null},
+      {id: 'y1', a: 1, b: 'p'},
+      {id: 'z1', a: 2, b: 'r'},
+    ];
+    const bazDb = new Database(createSilentLogContext(), ':memory:');
+    bazDb.exec(/* sql */ `CREATE TABLE baz (id TEXT PRIMARY KEY, a, b);`);
+    const insert = bazDb.prepare(
+      /* sql */ `INSERT INTO baz (id, a, b) VALUES (?, ?, ?);`,
+    );
+    for (const row of bazRows) {
+      insert.run(row.id, row.a, row.b);
+    }
+
+    expect(bazRows.toSorted(makeComparator(bazOrder))).toEqual(bazRows);
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      bazDb,
+      'baz',
+      bazColumns,
+      ['id'],
+    );
+    const c = source.connect(bazOrder);
+    const out = new Catch(c);
+    c.setOutput(out);
+    const rows = out.fetch({
+      constraint: undefined,
+      start: {row: bazRows[1], basis: 'after'},
+    });
+    expect(
+      rows.map(r => {
+        assert(r !== 'yield', 'Expected row result, not yield');
+        return r.row;
+      }),
+    ).toEqual(bazRows.slice(2));
   });
 });
 
@@ -989,7 +1178,7 @@ test('debug.recordExplain captures the plan SQLite picked for the real bindings'
     ['id'],
   );
 
-  const debug = new Debug();
+  const debug = new Debug(false);
   const input = source.connect([['id', 'asc']], undefined, undefined, debug);
 
   // Drain the iterator with a constraint that uses the email index.
@@ -1045,7 +1234,7 @@ test('captured plan diverges from substituted-literal plan when bindings affect 
     right: {type: 'literal', value: 'name_5%'},
   } as const;
 
-  const debug = new Debug();
+  const debug = new Debug(false);
   const input = source.connect([['id', 'asc']], likeFilter, undefined, debug);
 
   [...input.fetch({})];
@@ -1135,4 +1324,192 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
   } finally {
     Statement.prototype.iterate = origIterate;
   }
+});
+
+describe('pushes rejected by every connection', () => {
+  function setup(options = {skipUnobservableChanges: true}) {
+    const db = new Database(lc, ':memory:');
+    db.exec(/* sql */ `
+      CREATE TABLE foo (id TEXT PRIMARY KEY, owner TEXT, n INTEGER);
+      CREATE UNIQUE INDEX foo_n ON foo(n);
+    `);
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'foo',
+      {id: {type: 'string'}, owner: {type: 'string'}, n: {type: 'number'}},
+      ['id'],
+      undefined,
+      options,
+    );
+    const read = db.prepare('SELECT id, owner, n FROM foo ORDER BY id');
+    const outputted: Change[] = [];
+    const output = {
+      push: function* (change: Change) {
+        outputted.push(change);
+      },
+    };
+    const connect = (owner: string) => {
+      const input = source.connect([['id', 'asc']], {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'owner'},
+        right: {type: 'literal', value: owner},
+      });
+      input.setOutput(output);
+      return input;
+    };
+    return {db, source, read, outputted, connect};
+  }
+
+  test('skips the write and the exists check', () => {
+    const {source, read, outputted, connect} = setup();
+    connect('alice');
+    connect('bob');
+
+    // Rejected by every connection: not written, not pushed.
+    consume(source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})));
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([]);
+
+    // A remove of a row that is not in the snapshot would normally throw
+    // ("Row not found"); the exists check is skipped and the DELETE is a
+    // no-op.
+    consume(
+      source.push(makeSourceChangeRemove({id: 'r1', owner: 'carol', n: 1})),
+    );
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([]);
+
+    // An edit between two rejected rows is neither written nor pushed.
+    consume(
+      source.push(
+        makeSourceChangeEdit(
+          {id: 'r1', owner: 'dave', n: 2},
+          {id: 'r1', owner: 'carol', n: 1},
+        ),
+      ),
+    );
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([]);
+
+    // Accepted by a connection: written and pushed as usual.
+    consume(source.push(makeSourceChangeAdd({id: 'r2', owner: 'alice', n: 3})));
+    expect(outputted).toEqual([
+      makeAddChange({
+        relationships: {},
+        row: {id: 'r2', owner: 'alice', n: 3},
+      }),
+    ]);
+    expect(read.all()).toEqual([{id: 'r2', owner: 'alice', n: 3}]);
+    outputted.length = 0;
+
+    // An edit out of the accepted set is pushed (as a remove) and written.
+    consume(
+      source.push(
+        makeSourceChangeEdit(
+          {id: 'r2', owner: 'carol', n: 3},
+          {id: 'r2', owner: 'alice', n: 3},
+        ),
+      ),
+    );
+    expect(outputted).toEqual([
+      makeRemoveChange({
+        relationships: {},
+        row: {id: 'r2', owner: 'alice', n: 3},
+      }),
+    ]);
+    expect(read.all()).toEqual([{id: 'r2', owner: 'carol', n: 3}]);
+    outputted.length = 0;
+
+    // Now rejected: a remove is not pushed but is still deleted from the
+    // snapshot, so that a subsequent insert of a row displacing it on a
+    // unique key does not violate the unique index.
+    consume(
+      source.push(makeSourceChangeRemove({id: 'r2', owner: 'carol', n: 3})),
+    );
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([]);
+    consume(source.push(makeSourceChangeAdd({id: 'r3', owner: 'bob', n: 3})));
+    expect(outputted).toEqual([
+      makeAddChange({
+        relationships: {},
+        row: {id: 'r3', owner: 'bob', n: 3},
+      }),
+    ]);
+    expect(read.all()).toEqual([{id: 'r3', owner: 'bob', n: 3}]);
+  });
+
+  test('are still written by default', () => {
+    const {source, read, outputted, connect} = setup({
+      skipUnobservableChanges: false,
+    });
+    connect('alice');
+
+    consume(source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})));
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([{id: 'r1', owner: 'carol', n: 1}]);
+    expect(() =>
+      consume(
+        source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})),
+      ),
+    ).toThrow('Row already exists');
+  });
+
+  test('an unfiltered connection disables the skip', () => {
+    const {source, read, outputted, connect} = setup();
+    connect('alice');
+    const unfiltered = source.connect([['id', 'asc']]);
+    unfiltered.setOutput({
+      push: function* () {},
+    });
+
+    consume(source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})));
+    expect(outputted).toEqual([]);
+    expect(read.all()).toEqual([{id: 'r1', owner: 'carol', n: 1}]);
+    expect(() =>
+      consume(
+        source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})),
+      ),
+    ).toThrow('Row already exists');
+
+    // Destroying the unfiltered connection re-enables the skip.
+    unfiltered.destroy();
+    consume(source.push(makeSourceChangeAdd({id: 'r2', owner: 'carol', n: 2})));
+    expect(read.all()).toEqual([{id: 'r1', owner: 'carol', n: 1}]);
+  });
+
+  test('a connection whose subquery conditions were dropped still counts', () => {
+    const {source, read, connect} = setup();
+    connect('alice');
+    // `owner = 'bob' AND EXISTS(...)`: the EXISTS is dropped from the source
+    // filters, leaving `owner = 'bob'` as a necessary condition.
+    const input = source.connect([['id', 'asc']], {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'owner'},
+          right: {type: 'literal', value: 'bob'},
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['id'], childField: ['fooID']},
+            subquery: {table: 'bar', orderBy: [['id', 'asc']]},
+          },
+        },
+      ],
+    });
+    input.setOutput({push: function* () {}});
+    expect(input.fullyAppliedFilters).toBe(false);
+
+    consume(source.push(makeSourceChangeAdd({id: 'r1', owner: 'carol', n: 1})));
+    expect(read.all()).toEqual([]);
+    consume(source.push(makeSourceChangeAdd({id: 'r2', owner: 'bob', n: 2})));
+    expect(read.all()).toEqual([{id: 'r2', owner: 'bob', n: 2}]);
+  });
 });

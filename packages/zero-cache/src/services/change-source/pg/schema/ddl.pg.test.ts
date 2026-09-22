@@ -107,7 +107,9 @@ describe('change-source/tables/ddl', () => {
     `;
 
   // For zero_all, zero_sum
-  const DDL_START: Omit<DdlStartEvent, 'context'> = {
+  const DDL_START: Omit<DdlStartEvent, 'context'> & {
+    schema: NonNullable<DdlStartEvent['schema']>;
+  } = {
     type: 'ddlStart',
     version: 1,
     event: {tag: 'UNUSED'},
@@ -427,6 +429,35 @@ describe('change-source/tables/ddl', () => {
             schema: 'pub',
             tableName: 'foo',
             unique: false,
+          }),
+        },
+      },
+    ],
+    [
+      'create partial index',
+      `CREATE UNIQUE INDEX foo_live_index on pub.foo (name) WHERE description IS NOT NULL`,
+      {
+        context: {
+          query:
+            'CREATE UNIQUE INDEX foo_live_index on pub.foo (name) WHERE description IS NOT NULL',
+        },
+        type: 'ddlUpdate',
+        version: 1,
+        event: {tag: 'CREATE INDEX'},
+        schema: {
+          tables: DDL_START.schema.tables,
+          indexes: inserted(DDL_START.schema.indexes, 3, {
+            columns: {name: 'ASC'},
+            name: 'foo_live_index',
+            schema: 'pub',
+            tableName: 'foo',
+            // Partial indexes are always reported as non-unique.
+            unique: false,
+            predicate: {
+              type: 'null-test',
+              column: 'description',
+              op: 'IS NOT NULL',
+            },
           }),
         },
       },
@@ -1349,6 +1380,62 @@ describe('change-source/tables/ddl', () => {
     },
   );
 
+  test('partial index events are readable by versions that predate them', async () => {
+    const query = `CREATE UNIQUE INDEX foo_live_index on pub.foo (name) WHERE description IS NOT NULL`;
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO pub.boo(id) VALUES('1')`;
+      await tx.unsafe(query);
+    });
+
+    const messages = await expectReplicationMessagesToMatchObject([
+      {tag: 'begin'},
+      {tag: 'relation'},
+      {tag: 'insert'},
+      {tag: 'message', prefix: 'zap/0/ddl'},
+      {tag: 'message', prefix: 'zap/0/ddl'},
+      {tag: 'commit'},
+    ]);
+    const raw = JSON.parse(
+      new TextDecoder().decode((messages[4] as MessageMessage).content),
+    );
+
+    // The event format is unchanged by partial index support: the index is
+    // reported as non-unique, with its predicate in a separate field ...
+    expect(raw.version).toBe(1);
+    expect(
+      raw.schema.indexes.find(
+        (idx: {name: string}) => idx.name === 'foo_live_index',
+      ),
+    ).toMatchObject({unique: false, predicateSQL: '(description IS NOT NULL)'});
+
+    // ... so that a zero-cache that predates partial indexes (which parses
+    // events in 'passthrough' mode and ignores the predicate) creates a
+    // harmless full, non-unique index rather than a UNIQUE one.
+    const legacyEventSchema = v.object({
+      version: v.literal(1),
+      schema: v.object({
+        indexes: v.array(
+          v.object({
+            schema: v.string(),
+            tableName: v.string(),
+            name: v.string(),
+            unique: v.boolean(),
+            columns: v.record(v.string()),
+          }),
+        ),
+      }),
+    });
+    const legacy = v.parse(raw, legacyEventSchema, 'passthrough');
+    expect(
+      legacy.schema.indexes.find(idx => idx.name === 'foo_live_index'),
+    ).toMatchObject({
+      schema: 'pub',
+      tableName: 'foo',
+      unique: false,
+      columns: {name: 'ASC'},
+    });
+  });
+
   test.each([
     [
       'COMMENT',
@@ -1673,6 +1760,80 @@ describe('change-source/tables/ddl', () => {
       schema: {tables: [], indexes: []},
       event: {tag: 'UNKNOWN'},
     });
+  });
+
+  // Events from future versions of the upstream functions may report the
+  // columns created in the transaction that emitted the event.
+  test('parse ddlUpdateEvent with newColumns', () => {
+    const ddlUpdateEvent: DdlUpdateEvent = {
+      type: 'ddlUpdate',
+      version: 1,
+      context: {query: 'ALTER TABLE pub.foo ADD bar text'},
+      schema: {tables: [], indexes: []},
+      event: {tag: 'ALTER TABLE'},
+      newColumns: {'12345': [4, 7]},
+    };
+    expect(v.parse(ddlUpdateEvent, ddlUpdateEventSchema)).toEqual(
+      ddlUpdateEvent,
+    );
+    expect(
+      v.parse({...ddlUpdateEvent, newColumns: null}, ddlUpdateEventSchema),
+    ).toEqual({...ddlUpdateEvent, newColumns: null});
+
+    const {newColumns: _, ...withoutNewColumns} = ddlUpdateEvent;
+    expect(v.parse(withoutNewColumns, ddlUpdateEventSchema)).toEqual(
+      withoutNewColumns,
+    );
+  });
+
+  // Protocol v2 (planned): ddlStart events without a schema change are
+  // context-only. This release does not emit them yet, but must parse them
+  // so that the release that does can be rolled back to this one.
+  test('parse context-only ddlStartEvent', () => {
+    const contextOnlyDdlStartEvent: DdlStartEvent = {
+      type: 'ddlStart',
+      version: 2,
+      context: {query: 'REFRESH MATERIALIZED VIEW CONCURRENTLY foo'},
+      event: {tag: 'CREATE TABLE'},
+    };
+    const parsed = v.parse(contextOnlyDdlStartEvent, ddlStartEventSchema);
+    expect(parsed).toMatchObject(contextOnlyDdlStartEvent);
+    expect(parsed.schema).toBeUndefined();
+    expect(parsed.previousSchema).toBeUndefined();
+  });
+
+  test('REFRESH MATERIALIZED VIEW CONCURRENTLY emits only no-op ddlStart events', async () => {
+    await upstream.unsafe(/*sql*/ `
+      CREATE MATERIALIZED VIEW pub.mat AS SELECT id FROM pub.foo;
+      CREATE UNIQUE INDEX mat_id_key ON pub.mat (id);
+    `);
+
+    const query = 'REFRESH MATERIALIZED VIEW CONCURRENTLY pub.mat';
+    await upstream.unsafe(query);
+
+    // Marker transaction to bound the message scan.
+    await upstream`INSERT INTO pub.boo(id) VALUES('refresh-done')`;
+
+    const ddlEvents: DdlStartEvent[] = [];
+    for (;;) {
+      const msg = await messages.dequeue();
+      if (msg.tag === 'insert') {
+        break;
+      }
+      if (msg.tag === 'message') {
+        // parseDDLStartEvent() fails if a ddlUpdate event was emitted.
+        ddlEvents.push(parseDDLStartEvent(msg));
+      }
+    }
+
+    // The CREATE UNIQUE INDEX (on the unpublished materialized view) and
+    // the internal CREATE/ALTER/DROP TABLE sub-commands of the REFRESH
+    // each emit a no-op ddlStart event, and no ddlUpdate events.
+    expect(ddlEvents.length).toBeGreaterThan(1);
+    expect(ddlEvents.map(e => e.context.query)).toContain(query);
+    for (const event of ddlEvents) {
+      expect(event).toMatchObject({type: 'ddlStart', previousSchema: null});
+    }
   });
 });
 

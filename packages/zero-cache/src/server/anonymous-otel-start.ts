@@ -12,12 +12,12 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
 import type {LogContext} from '@rocicorp/logger';
-import {h64} from '../../../shared/src/hash.js';
+import {h64} from '../../../shared/src/hash.ts';
 import {
   getServerVersion,
   getZeroConfig,
   type ZeroConfig,
-} from '../config/zero-config.js';
+} from '../config/zero-config.ts';
 import {setupOtelDiagnosticLogger} from './otel-diag-logger.ts';
 
 export type ActiveUsers = {

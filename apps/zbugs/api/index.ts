@@ -18,6 +18,7 @@ import {nanoid} from 'nanoid';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {must} from '../../../packages/shared/src/must.ts';
 import {dbProvider, sql} from '../server/db.ts';
+import {registerMachineRoutes} from '../server/machine-routes.ts';
 import {createServerMutators} from '../server/server-mutators.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {queries} from '../shared/queries.ts';
@@ -293,6 +294,8 @@ fastify.get<{
       `OK! You are unsubscribed from <a href="https://bugs.rocicorp.dev/issue/${shortID}">${issue.title}</a>.`,
     );
 });
+
+registerMachineRoutes(fastify, maybeVerifyAuth);
 
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,

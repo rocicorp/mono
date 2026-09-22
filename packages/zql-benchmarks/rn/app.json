@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "zql-perf",
+    "slug": "zql-benchmarks-rn",
+    "version": "1.0.0",
+    "ios": {
+      "bundleIdentifier": "dev.rocicorp.zqlperfrn"
+    },
+    "android": {
+      "package": "dev.rocicorp.zqlperfrn"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}

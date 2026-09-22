@@ -8,12 +8,15 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   ClientHandler,
   ensureSafeJSON,
+  POKE_PART_FLUSH_THRESHOLD_CHARS,
   startPoke,
   type Patch,
+  type PatchToVersion,
   type PokeHandler,
 } from './client-handler.ts';
 
@@ -27,15 +30,19 @@ describe('view-syncer/client-handler', () => {
   function createSubscription() {
     const received: Downstream[] = [];
     const unconsumed: Downstream[] = [];
-    const subscription = Subscription.create<Downstream>({
-      cleanup: msgs => unconsumed.push(...msgs),
+    const serialized = new Map<Downstream, string>();
+    const subscription = Subscription.create<ViewSyncerDownstream>({
+      cleanup: msgs => unconsumed.push(...msgs.map(msg => msg.message)),
     });
     let err: Error | undefined;
     const {promise: loopDone, resolve: onDone} = resolver();
     void (async function () {
       try {
-        for await (const msg of subscription) {
-          received.push(msg);
+        for await (const {message, serialized: encoded} of subscription) {
+          received.push(message);
+          if (encoded !== undefined) {
+            serialized.set(message, encoded);
+          }
         }
       } catch (e) {
         err = e instanceof Error ? e : new Error(String(e));
@@ -49,7 +56,7 @@ describe('view-syncer/client-handler', () => {
       close: async () => {
         subscription.cancel();
         await loopDone;
-        return {received: [...received, ...unconsumed], err};
+        return {received: [...received, ...unconsumed], serialized, err};
       },
     };
   }
@@ -166,7 +173,7 @@ describe('view-syncer/client-handler', () => {
       ),
     ];
 
-    let pokers = startPoke(handlers, poke1Version);
+    let pokers = startPoke(lc, handlers, poke1Version);
     await pokers.addPatch({
       toVersion: {stateVersion: '11z', configVersion: 1},
       patch: {
@@ -271,13 +278,20 @@ describe('view-syncer/client-handler', () => {
     await pokers.end(poke1Version);
 
     // Now send another (empty) poke with everyone at the same baseCookie.
-    pokers = startPoke(handlers, poke2Version);
+    pokers = startPoke(lc, handlers, poke2Version);
     await pokers.end(poke2Version);
 
     const results = await Promise.all(subscriptions.map(sub => sub.close()));
 
-    // Client 1 was already caught up. Only gets the second poke.
+    // Client 1 was already caught up, but a freshly connected client is always
+    // sent an initial (here empty) poke so it can learn its persisted got state
+    // has been reconciled with the server. It then gets the second poke.
     expect(results[0].received).toEqual([
+      [
+        'pokeStart',
+        {pokeID: '121', baseCookie: '121'},
+      ] satisfies PokeStartMessage,
+      ['pokeEnd', {pokeID: '121', cookie: '121'}] satisfies PokeEndMessage,
       [
         'pokeStart',
         {pokeID: '123', baseCookie: '121'},
@@ -369,6 +383,185 @@ describe('view-syncer/client-handler', () => {
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
+  });
+
+  test('freshly connected, caught-up client still gets an initial empty poke', async () => {
+    const version = {stateVersion: '123'};
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '123', // already caught up to the poke version
+      subscription,
+    );
+
+    // First poke: caught up, but forced because it is the client's first poke.
+    await startPoke(lc, [handler], version).end(version);
+    // Second poke at the same version: now a true no-op, nothing is sent.
+    await startPoke(lc, [handler], version).end(version);
+
+    const {received} = await close();
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {pokeID: '123', baseCookie: '123'},
+      ] satisfies PokeStartMessage,
+      ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
+    ]);
+  });
+
+  test('patchesSent only counts patches a client accepted', async () => {
+    const {subscription} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const patch = (toVersion: string): PatchToVersion => ({
+      toVersion: {stateVersion: toVersion},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'foo'}},
+        contents: {id: 'foo'},
+      },
+    });
+
+    // No clients.
+    const none = startPoke(lc, [], {stateVersion: '123'});
+    await none.addPatch(patch('123'));
+    expect(none.patchesSent).toBe(false);
+
+    // Client is already at or past the patch's version.
+    const pokers = startPoke(lc, [handler], {stateVersion: '123'});
+    await pokers.addPatch(patch('121'));
+    expect(pokers.patchesSent).toBe(false);
+
+    await pokers.addPatch(patch('123'));
+    expect(pokers.patchesSent).toBe(true);
+  });
+
+  test('poke that cannot be ended fails the connection', async () => {
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+
+    const pokers = startPoke(lc, [handler], {stateVersion: '123'});
+    expect(pokers.patchesSent).toBe(false);
+    await pokers.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'foo'}},
+        contents: {id: 'foo'},
+      },
+    });
+    expect(pokers.patchesSent).toBe(true);
+    // Patches were sent, but the CVR flush was a no-op so the final version
+    // does not advance past the client's baseCookie.
+    await pokers.end({stateVersion: '121'});
+
+    const {received, err} = await close();
+
+    // The connection is failed rather than being left mid-poke, which would
+    // make the *next* pokeStart fail the DownstreamSender's in-progress check.
+    expect(String(err)).toMatch(
+      'Patches were sent but finalVersion 121 is not greater than baseVersion 121',
+    );
+    expect(received[0]).toEqual([
+      'pokeStart',
+      {pokeID: '123', baseCookie: '121'},
+    ] satisfies PokeStartMessage);
+  });
+
+  test('flushes poke parts at the patch-count threshold', async () => {
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+
+    for (let i = 0; i < 101; i++) {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: `small-${i}`}},
+          contents: {id: `small-${i}`},
+        },
+      });
+    }
+    await poker.end({stateVersion: '123'});
+
+    const {received} = await close();
+    const pokeParts = received.filter(message => message[0] === 'pokePart');
+    expect(pokeParts).toHaveLength(2);
+    expect((pokeParts[0]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(
+      100,
+    );
+    expect((pokeParts[1]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(1);
+  });
+
+  test('uses a soft serialized-row character threshold', async () => {
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+
+    for (let i = 0; i < 3; i++) {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: `large-${i}`}},
+          contents: {id: `large-${i}`, value: 'x'.repeat(600_000)},
+        },
+      });
+    }
+    await poker.end({stateVersion: '123'});
+
+    const {received, serialized} = await close();
+    const pokeParts = received.filter(message => message[0] === 'pokePart');
+    expect(pokeParts).toHaveLength(2);
+    for (const pokePart of pokeParts) {
+      const encoded = serialized.get(pokePart);
+      expect(encoded).toBe(JSON.stringify(pokePart));
+    }
+    expect((pokeParts[0]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(2);
+    expect((pokeParts[1]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(1);
+    expect(serialized.get(pokeParts[0]!)?.length).toBeGreaterThan(
+      POKE_PART_FLUSH_THRESHOLD_CHARS,
+    );
   });
 
   describe('mutation results', () => {

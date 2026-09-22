@@ -9,8 +9,8 @@
  * `lower(skeleton)`'s AST). A `where`/`order`/`limit` twist needs no correlation, so it
  * splices directly; an `AddExists` twist DOES need correlation keys, so it borrows them
  * from a throwaway builder query ({@link existsConditionFor}) — the same path L1 uses —
- * rather than hand-rolling them. (The `start` twist is dropped: z2s does not compile
- * `start`, so it is an inert axis here — see `axes.ts`.)
+ * rather than hand-rolling them. (The `start` twist is still separate; it needs a
+ * data-driven cursor row to avoid mostly-vacuous mutations.)
  */
 
 import {must} from '../../../../shared/src/must.ts';

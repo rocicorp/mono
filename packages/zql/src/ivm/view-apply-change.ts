@@ -1,10 +1,10 @@
 import {
   assert,
-  assertArray,
   assertNumber,
   unreachable,
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {decodeRowFields} from './codec.ts';
@@ -107,18 +107,17 @@ export interface RefCountMap {
 /**
  * Get child nodes from a relationship, handling both lazy (Node) and expanded (ExpandedNode).
  */
-function* getChildNodes(
+function getChildNodes(
   node: ViewNode,
   relationship: string,
-): Generator<ViewNode> {
+): Iterable<ViewNode> {
   const children = node.relationships[relationship];
   if (Array.isArray(children)) {
     // ExpandedNode: already an array
-    yield* children;
-  } else {
-    // Node: lazy generator function
-    yield* skipYields(children());
+    return children;
   }
+  // Node: lazy generator function
+  return skipYields(children());
 }
 
 type Mutate = boolean;
@@ -778,12 +777,36 @@ function binarySearch(
   target: Row,
   comparator: Comparator,
 ): number {
-  let low = 0;
   let high = view.length - 1;
+  if (high < 0) {
+    return ~0;
+  }
+
+  // Probe the last entry before searching. Hydration feeds the view rows in
+  // the query's sort order, so every insert belongs at the end and the plain
+  // search spends log2(n) comparisons to rediscover that -- about eleven per
+  // row for a view of a couple of thousand. Row comparison is the single
+  // largest cost in hydration on Hermes, so collapsing those eleven to one is
+  // worth the one extra comparison this costs when the row does land inside
+  // the view, which is a single push rather than a bulk load.
+  // MetaEntry has all Row props; comparator only reads string keys.
+  // Use the raw encoded row back-pointer when present (codec schemas), so the
+  // probe compares stored values even when the entry holds decoded ones.
+  const last = comparator(
+    view[high][encodedRowSymbol] ?? (view[high] as unknown as Row),
+    target,
+  );
+  if (last < 0) {
+    return ~(high + 1);
+  }
+  if (last === 0) {
+    return high;
+  }
+
+  let low = 0;
+  high -= 1;
   while (low <= high) {
     const mid = (low + high) >>> 1;
-    // Use the raw encoded row (back-pointer) so the comparator sees stored
-    // values even when the entry holds decoded (app-typed) values.
     // Use the raw encoded row back-pointer when present (codec schemas),
     // otherwise the entry's own fields are already the raw stored values.
     const comparison = comparator(
@@ -838,7 +861,9 @@ function getChildEntryList<M extends Mutate>(
   relationship: string,
 ): MetaEntryList<M> {
   const view = parentEntry[relationship];
-  assertArray(view);
+  // `relationship` is a string key, so a name colliding with a column would
+  // put a row value here; the message must not repeat it back.
+  assert(Array.isArray(view), 'expected relationship array');
   return view as MetaEntryList<M>;
 }
 
@@ -899,7 +924,10 @@ function setRefCount<M extends Mutate>(
     (entry as MutableMetaEntry)[refCountSymbol] = count;
     return entry;
   }
-  return track({...entry, [refCountSymbol]: count});
+  return track({
+    ...entry,
+    [refCountSymbol]: count,
+  });
 }
 
 function arrayWith<M extends Mutate, T>(
@@ -926,10 +954,13 @@ function setProperty<
   value: V,
 ): MutableMetaEntry & {[P in K]: V} {
   if (mutate || owns(parentEntry)) {
-    (parentEntry as {[P in K]: V})[key] = value;
+    assignProperty(parentEntry as {[P in K]: V}, key, value);
     return parentEntry as MutableMetaEntry & {[P in K]: V};
   }
-  return track({...parentEntry, [key]: value});
+  return track({
+    ...parentEntry,
+    [key]: value,
+  }) as MutableMetaEntry & {[P in K]: V};
 }
 
 const setRelation: <M extends Mutate>(

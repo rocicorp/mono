@@ -66,6 +66,28 @@ describe('services/runner', () => {
     expect(s1).not.toBe(s2);
   });
 
+  test('replacement created during teardown stays tracked', async () => {
+    const s1 = runner.getService('foo');
+    // The instance becomes invalid (e.g. its last ref was dropped) but is
+    // still running its (async) shutdown.
+    s1.valid = false;
+    const s2 = runner.getService('foo');
+    expect(s2).not.toBe(s1);
+
+    // The old instance finishes shutting down after the replacement was
+    // created under the same id.
+    s1.resolver.resolve();
+    await sleep(1);
+
+    // The replacement must still be the tracked instance.
+    expect(runner.getService('foo')).toBe(s2);
+    expect([...runner.getServices()]).toContain(s2);
+
+    s2.resolver.resolve();
+    await sleep(1);
+    expect([...runner.getServices()]).not.toContain(s2);
+  });
+
   // Models the zombie ViewSyncer scenario: a service whose run() blocks on
   // an unresolved initialization promise should be cleaned up when that
   // promise is rejected (e.g. when all clients disconnect before
@@ -106,5 +128,42 @@ describe('services/runner', () => {
 
     expect(runCompleted).toBe(true);
     expect(zombieRunner.size).toBe(0);
+  });
+
+  test('onStop callback', async () => {
+    const stopped: string[] = [];
+
+    const callbackRunner = new ServiceRunner<TestService>(
+      createSilentLogContext(),
+      (id: string) => new TestService(id),
+      (s: TestService) => s.valid,
+      id => stopped.push(id),
+    );
+
+    expect(callbackRunner.hasService('foo')).toBe(false);
+    const s1 = callbackRunner.getService('foo');
+    expect(callbackRunner.hasService('foo')).toBe(true);
+    expect(stopped).toEqual([]);
+
+    // Stopping service triggers onStop
+    s1.resolver.resolve();
+    await sleep(1);
+    expect(callbackRunner.hasService('foo')).toBe(false);
+    expect(stopped).toEqual(['foo']);
+
+    // Replace before stop: s2 becomes invalid and s3 is created
+    const s2 = callbackRunner.getService('foo');
+    s2.valid = false;
+    const s3 = callbackRunner.getService('foo');
+
+    // Old s2 stops; because it was replaced, onStop should NOT fire for s2
+    s2.resolver.resolve();
+    await sleep(1);
+    expect(stopped).toEqual(['foo']);
+
+    // When s3 stops, onStop fires
+    s3.resolver.resolve();
+    await sleep(1);
+    expect(stopped).toEqual(['foo', 'foo']);
   });
 });

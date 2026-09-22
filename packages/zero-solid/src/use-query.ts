@@ -149,12 +149,16 @@ export function useQuery<
     return asQueryInternals(query);
   });
 
-  const hash = createMemo(
-    () => qi()?.hash() + JSON.stringify(qi()?.format ?? null) + zero().clientID,
-  );
+  // Undefined rather than the string `undefined` + the client id: this feeds
+  // the guard below, and concatenating a missing hash produced a string that
+  // was never equal to undefined, leaving that guard unreachable.
+  const hash = createMemo(() => {
+    const internals = qi();
+    return internals === undefined
+      ? undefined
+      : internals.hash() + zero().clientID;
+  });
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
-
-  const initialTTL = ttl();
 
   const view = createMemo(() => {
     // Depend on hash instead of query to avoid recreating the view when the
@@ -178,7 +182,13 @@ export function useQuery<
       untrackedQuery,
       createSolidViewFactory(setState, refetch),
       {
-        ttl: initialTTL,
+        // Untracked: a ttl change updates the live view through the effect
+        // below, and depending on it here would tear the view down and build
+        // a new one instead. Read at materialize time rather than once at
+        // setup, so a view built later -- because the query changed -- gets
+        // the ttl in effect by then rather than the one this hook started
+        // with.
+        ttl: untrack(ttl),
       },
     );
 

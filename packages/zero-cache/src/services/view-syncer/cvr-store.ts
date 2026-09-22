@@ -22,6 +22,10 @@ import {clampTTL, DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateLatencyHistogram,
+} from '../../observability/metrics.ts';
 import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
@@ -71,6 +75,10 @@ export type CVRFlushStats = {
 };
 
 let flushCounter = 0;
+
+const RESULT_ATTRIBUTE = 'result';
+const ERROR_KIND_ATTRIBUTE = 'error.kind';
+const CVR_FLUSH_TYPE_ATTRIBUTE = 'flush.type';
 
 /**
  * Convert TTL/timestamp values for both old (seconds-based) and new (ms-based) columns.
@@ -196,6 +204,21 @@ export class CVRStore {
   );
   readonly #forceUpdates = new CustomKeySet<RowID>(rowIDString);
   readonly #rowCache: RowRecordCache;
+  readonly #cvrLoads = getOrCreateCounter(
+    'sync',
+    'cvr.load_attempts',
+    'CVR load attempts, labeled by result.',
+  );
+  readonly #cvrLoadTime = getOrCreateLatencyHistogram(
+    'sync',
+    'cvr.load_duration',
+    'Time to load a CVR.',
+  );
+  readonly #cvrFlushes = getOrCreateCounter(
+    'sync',
+    'cvr.flush_attempts',
+    'CVR flush attempts, labeled by result and flush.type.',
+  );
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
   #rowCount: number = 0;
@@ -249,25 +272,42 @@ export class CVRStore {
   }
 
   load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
+    const start = performance.now();
     return startAsyncSpan(tracer, 'cvr.load', async () => {
-      let err: RowsVersionBehindError | undefined;
-      for (let i = 0; i < this.#maxLoadAttempts; i++) {
-        if (i > 0) {
-          await sleep(this.#loadAttemptIntervalMs);
+      try {
+        let err: RowsVersionBehindError | undefined;
+        for (let i = 0; i < this.#maxLoadAttempts; i++) {
+          if (i > 0) {
+            await sleep(this.#loadAttemptIntervalMs);
+          }
+          const result = await this.#load(lc, lastConnectTime);
+          if (result instanceof RowsVersionBehindError) {
+            lc.info?.(`attempt ${i + 1}: ${String(result)}`);
+            err = result;
+            continue;
+          }
+          this.#recordLoad(performance.now() - start, {
+            [RESULT_ATTRIBUTE]: 'success',
+          });
+          return result;
         }
-        const result = await this.#load(lc, lastConnectTime);
-        if (result instanceof RowsVersionBehindError) {
-          lc.info?.(`attempt ${i + 1}: ${String(result)}`);
-          err = result;
-          continue;
-        }
-        return result;
+        assert(err, 'Expected error to be set after retry loop exhausted');
+        throw new ClientNotFoundError(
+          `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+        );
+      } catch (e) {
+        this.#recordLoad(performance.now() - start, {
+          [RESULT_ATTRIBUTE]: 'error',
+          [ERROR_KIND_ATTRIBUTE]: cvrErrorKind(e),
+        });
+        throw e;
       }
-      assert(err, 'Expected error to be set after retry loop exhausted');
-      throw new ClientNotFoundError(
-        `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
-      );
     });
+  }
+
+  #recordLoad(elapsedMs: number, attributes: Record<string, string>) {
+    this.#cvrLoads.add(1, attributes);
+    this.#cvrLoadTime.recordMs(elapsedMs, attributes);
   }
 
   async #load(
@@ -983,12 +1023,33 @@ export class CVRStore {
   ): Promise<void> {
     const start = Date.now();
     lc.debug?.('checking cvr version and ownership');
+    const expected = versionString(expectedCurrentVersion);
+
+    if (expected === EMPTY_CVR_VERSION.stateVersion) {
+      // SELECT FOR UPDATE cannot lock a row that does not exist. Ensure that
+      // new CVRs have a row before taking the lock so concurrent first flushes
+      // serialize on the primary key. After a conflicting insert commits, the
+      // SELECT below sees its version and rejects the stale writer.
+      await tx`
+        INSERT INTO ${this.#cvr('instances')} (
+          "clientGroupID",
+          "version",
+          "lastActive"
+        )
+        VALUES (
+          ${this.#id},
+          ${EMPTY_CVR_VERSION.stateVersion},
+          to_timestamp(0)
+        )
+        ON CONFLICT ("clientGroupID") DO NOTHING
+      `;
+    }
+
     const result = await tx<
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
     >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
         FOR UPDATE`;
-    const expected = versionString(expectedCurrentVersion);
     const {version, owner, grantedAt} =
       result.length > 0
         ? result[0]
@@ -1013,6 +1074,7 @@ export class CVRStore {
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
+    verifyNoop: boolean,
   ): Promise<CVRFlushStats | null> {
     const stats: CVRFlushStats = {
       instances: 0,
@@ -1052,6 +1114,24 @@ export class CVRStore {
       this.#pendingQueryPartialUpdates.size === 0 &&
       this.#pendingDesireUpdates.size === 0
     ) {
+      if (verifyNoop) {
+        // Nothing to write, but the caller has already acted on the CVR
+        // (e.g. poked patches computed against it), so it still needs to know
+        // whether the CVR is current. Otherwise a stale view-syncer whose
+        // writes happen to match what another view-syncer already committed
+        // never learns that it is behind.
+        await runTx(
+          this.#db,
+          tx =>
+            this.#checkVersionAndOwnership(
+              lc,
+              tx,
+              expectedCurrentVersion,
+              lastConnectTime,
+            ),
+          {mode: Mode.READ_COMMITTED},
+        );
+      }
       return null;
     }
     // Note: The CVR instance itself is only updated if there are material
@@ -1188,11 +1268,19 @@ export class CVRStore {
     return this.#rowCount;
   }
 
+  /**
+   * Flushes pending writes, checking that `expectedCurrentVersion` is still
+   * the current version of the CVR and that this task still owns it.
+   *
+   * If there is nothing to write, the flush is a no-op and no check is done,
+   * unless `verifyNoop` is set.
+   */
   async flush(
     lc: LogContext,
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
+    verifyNoop = false,
   ): Promise<CVRFlushStats | null> {
     const start = performance.now();
     lc = lc.withContext('cvrFlushID', flushCounter++);
@@ -1202,6 +1290,7 @@ export class CVRStore {
         expectedCurrentVersion,
         cvr,
         lastConnectTime,
+        verifyNoop,
       );
       if (stats) {
         const elapsed = performance.now() - start;
@@ -1211,8 +1300,17 @@ export class CVRStore {
         );
         this.#rowCache.recordSyncFlushStats(stats, elapsed);
       }
+      this.#cvrFlushes.add(1, {
+        [RESULT_ATTRIBUTE]: 'success',
+        [CVR_FLUSH_TYPE_ATTRIBUTE]: stats ? 'sync' : 'noop',
+      });
       return stats;
     } catch (e) {
+      this.#cvrFlushes.add(1, {
+        [RESULT_ATTRIBUTE]: 'error',
+        [CVR_FLUSH_TYPE_ATTRIBUTE]: 'sync',
+        [ERROR_KIND_ATTRIBUTE]: cvrErrorKind(e),
+      });
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();
       throw e;
@@ -1367,6 +1465,22 @@ export class InvalidClientSchemaError extends ProtocolErrorWithLevel {
       {cause},
     );
   }
+}
+
+function cvrErrorKind(e: unknown): string {
+  if (e instanceof ClientNotFoundError) {
+    return 'client_not_found';
+  }
+  if (e instanceof ConcurrentModificationException) {
+    return 'concurrent_modification';
+  }
+  if (e instanceof OwnershipError) {
+    return 'ownership';
+  }
+  if (e instanceof InvalidClientSchemaError) {
+    return 'invalid_client_schema';
+  }
+  return 'error';
 }
 
 export class RowsVersionBehindError extends Error {

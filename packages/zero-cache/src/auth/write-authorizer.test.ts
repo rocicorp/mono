@@ -1,4 +1,4 @@
-import {beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -16,6 +16,7 @@ import {
   DatabaseStorage,
 } from '../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../services/replicator/schema/table-metadata.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
@@ -745,4 +746,80 @@ describe('table name validation', () => {
       ]),
     ).toThrow("Table 'invalid_table' is not a valid table.");
   });
+});
+
+describe('correlated predicate pushdown', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // The row query pins `foo.id`, and this rule's EXISTS correlates on it, so
+  // the pass copies the pin into the `bar` connection as `fooID = <id>`.
+  const allowIfBarExists = [
+    'allow',
+    {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        correlation: {parentField: ['id'], childField: ['fooID']},
+        subquery: {table: 'bar', alias: 'bar', orderBy: [['id', 'asc']]},
+      },
+    },
+  ] satisfies Rule;
+
+  test.each([
+    ['default', undefined, true],
+    ['on', true, true],
+    ['off', false, false],
+  ] as const)(
+    'the flag reaches policy checks (%s)',
+    async (_, enabled, pushed) => {
+      replica.exec(/*sql*/ `
+      INSERT INTO foo (id, a) VALUES ('3', 'a');
+      CREATE TABLE bar (id TEXT PRIMARY KEY, "fooID" TEXT);
+      INSERT INTO bar (id, "fooID") VALUES ('b1', '1');
+      INSERT INTO bar (id, "fooID") VALUES ('b2', '2');
+      `);
+      setPermissions({tables: {foo: {row: {delete: [allowIfBarExists]}}}});
+      const connect = vi.spyOn(TableSource.prototype, 'connect');
+
+      const authorizer = new WriteAuthorizerImpl(
+        lc,
+        enabled === undefined
+          ? zeroConfig
+          : {...zeroConfig, enableCorrelatedPredicatePushdown: enabled},
+        replica,
+        'the_app',
+        'cg',
+        writeAuthzStorage,
+      );
+      const canDelete = (id: string) =>
+        authorizer.canPreMutation({sub: '1'}, [
+          {op: 'delete', primaryKey: ['id'], tableName: 'foo', value: {id}},
+        ]);
+
+      expect(await canDelete('1')).toBe(true);
+      expect(await canDelete('3')).toBe(false);
+
+      const barFilters = connect.mock.calls
+        .filter(
+          (_, i) =>
+            (connect.mock.contexts[i] as TableSource).tableSchema.name ===
+            'bar',
+        )
+        .map(([, filters]) => filters);
+      expect(barFilters).toEqual(
+        ['1', '3'].map(id =>
+          pushed
+            ? {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'fooID'},
+                right: {type: 'literal', value: id},
+              }
+            : undefined,
+        ),
+      );
+    },
+  );
 });

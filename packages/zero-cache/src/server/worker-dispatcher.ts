@@ -1,20 +1,23 @@
 import type {LogContext} from '@rocicorp/logger';
 import UrlPattern from 'url-pattern';
 import {assert} from '../../../shared/src/asserts.ts';
-import {h32} from '../../../shared/src/hash.ts';
-import {getOrCreateGauge} from '../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateGauge,
+} from '../observability/metrics.ts';
 import {RunningState} from '../services/running-state.ts';
 import type {Service} from '../services/service.ts';
 import type {IncomingMessageSubset} from '../types/http.ts';
-import type {Worker} from '../types/processes.ts';
+import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import {installWebSocketHandoff} from '../types/websocket-handoff.ts';
 import {getConnectParams} from '../workers/connect-params.ts';
+import {SyncerAssigner} from './syncer-assigner.ts';
 
 export class WorkerDispatcher implements Service {
   readonly id = 'worker-dispatcher';
   readonly #lc: LogContext;
-
   readonly #state = new RunningState(this.id);
+  readonly #assigner: SyncerAssigner;
 
   constructor(
     lc: LogContext,
@@ -25,6 +28,36 @@ export class WorkerDispatcher implements Service {
     changeStreamer: Worker | undefined,
   ) {
     this.#lc = lc;
+
+    const assigner = new SyncerAssigner(taskID, syncers.length);
+    this.#assigner = assigner;
+
+    const workerDispatchesCounter = getOrCreateCounter(
+      'sync',
+      'worker-dispatches',
+      'Dispatched client group connections to worker',
+    );
+
+    getOrCreateGauge(
+      'sync',
+      'worker-client-groups',
+      'Number of active client groups assigned to worker',
+    ).addCallback(result => {
+      for (let i = 0; i < syncers.length; i++) {
+        result.observe(assigner.getWorkerLoad(i), {worker: String(i)});
+      }
+    });
+
+    syncers.forEach((syncer, index) => {
+      syncer.onMessageType<ClientGroupStatusMessage>(
+        'clientGroupStatus',
+        ({clientGroupID, active, generation}) => {
+          if (!active) {
+            assigner.release(clientGroupID, index, generation);
+          }
+        },
+      );
+    });
 
     function connectParams(req: IncomingMessageSubset) {
       const {headers, url: u} = req;
@@ -69,15 +102,11 @@ export class WorkerDispatcher implements Service {
       const {clientGroupID, protocolVersion} = params;
       maxProtocolVersion = Math.max(maxProtocolVersion, protocolVersion);
 
-      // Include the TaskID when hash-bucketting the client group to the sync
-      // worker. This diversifies the distribution of client groups (across
-      // workers) for different tasks, so that if one task sheds connections
-      // from its most heavily loaded sync worker(s), those client groups will
-      // be distributed uniformly across workers on the receiving task(s).
-      const syncer = h32(taskID + '/' + clientGroupID) % syncers.length;
+      const {worker: syncer, generation} = assigner.assign(clientGroupID);
+      workerDispatchesCounter.add(1, {worker: String(syncer)});
 
       lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
-      return {payload: params, sender: syncers[syncer]};
+      return {payload: {...params, generation}, sender: syncers[syncer]};
     };
 
     const handleChangeStream = (req: IncomingMessageSubset) => {
@@ -143,6 +172,7 @@ export class WorkerDispatcher implements Service {
   }
 
   stop() {
+    this.#assigner.destroy();
     this.#state.stop(this.#lc);
     return this.#state.stopped();
   }

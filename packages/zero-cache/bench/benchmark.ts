@@ -3,6 +3,7 @@
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {getOrInsertComputed} from '../../shared/src/map.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
 import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
@@ -30,30 +31,25 @@ export function bench(opts: Options) {
     readonly defaultQueryComplete = true;
 
     getSource(name: string): Source | undefined {
-      let source = sources.get(name);
-      if (source) {
-        return source;
-      }
-      const spec = tableSpecs.get(name);
-      assert(spec?.tableSpec, `Missing tableSpec for ${name}`);
-      const {columns, primaryKey} = spec.tableSpec;
+      return getOrInsertComputed(sources, name, name => {
+        const spec = tableSpecs.get(name);
+        assert(spec?.tableSpec, `Missing tableSpec for ${name}`);
+        const {columns, primaryKey} = spec.tableSpec;
 
-      source = new TableSource(
-        lc,
-        testLogConfig,
-        db,
-        name,
-        Object.fromEntries(
-          Object.entries(columns).map(([name, {dataType}]) => [
-            name,
-            mapLiteDataTypeToZqlSchemaValue(dataType),
-          ]),
-        ),
-        [primaryKey[0], ...primaryKey.slice(1)],
-      );
-
-      sources.set(name, source);
-      return source;
+        return new TableSource(
+          lc,
+          testLogConfig,
+          db,
+          name,
+          Object.fromEntries(
+            Object.entries(columns).map(([name, {dataType}]) => [
+              name,
+              mapLiteDataTypeToZqlSchemaValue(dataType),
+            ]),
+          ),
+          [primaryKey[0], ...primaryKey.slice(1)],
+        );
+      });
     }
   }
 

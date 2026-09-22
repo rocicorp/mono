@@ -17,7 +17,12 @@ import {
 } from '../../../zero-permissions/src/permissions.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
-import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
+import {
+  LAST_POKE_PART_PROTOCOL_VERSION,
+  POKE_CHUNK_MESSAGE_TYPE,
+  type PokePartBody,
+  type PokeStartMessage,
+} from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -494,6 +499,8 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_NUM_SYNC_WORKERS']: '1',
       ['ZERO_ADMIN_PASSWORD']: '2p49fqnaivnepr',
+      // These tests exercise the legacy (client-supplied AST) query path.
+      ['ZERO_ALLOW_LEGACY_QUERIES']: 'true',
     };
 
     return async () => {
@@ -567,7 +574,26 @@ describe('integration', {timeout: 30000}, () => {
   async function expectNoPokes(client: Queue<unknown>) {
     // Use the dequeue() API that cancels the dequeue() request after a timeout.
     const timedOut = 'nothing';
-    expect(await client.dequeue(timedOut, 500)).toBe(timedOut);
+    for (;;) {
+      const msg = await client.dequeue(timedOut, 500);
+      if (msg === timedOut) {
+        return;
+      }
+      expect(isPong(msg)).toBe(true);
+    }
+  }
+
+  async function dequeueMessage(client: Queue<unknown>) {
+    for (;;) {
+      const msg = await client.dequeue();
+      if (!isPong(msg)) {
+        return msg;
+      }
+    }
+  }
+
+  function isPong(msg: unknown): boolean {
+    return Array.isArray(msg) && msg[0] === 'pong';
   }
 
   async function streamCustomChanges(changes: ChangeStreamMessage[]) {
@@ -586,7 +612,8 @@ describe('integration', {timeout: 30000}, () => {
 
     const downstream = new Queue<unknown>();
     const ws = new WebSocket(
-      `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+      // This test asserts the legacy JSON pokePart representation.
+      `ws://localhost:${port}/zero/sync/v${LAST_POKE_PART_PROTOCOL_VERSION}/connect` +
         `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
       encodeURIComponent(btoa('{}')),
     );
@@ -619,15 +646,15 @@ describe('integration', {timeout: 30000}, () => {
       ),
     );
 
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'connected',
       {wsid: '123'},
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokeStart',
       {pokeID: '00:01'},
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokePart',
       {
         pokeID: '00:01',
@@ -636,18 +663,20 @@ describe('integration', {timeout: 30000}, () => {
         },
       },
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokeEnd',
       {pokeID: '00:01'},
     ]);
 
-    const contentPokeStart = (await downstream.dequeue()) as PokeStartMessage;
+    const contentPokeStart = (await dequeueMessage(
+      downstream,
+    )) as PokeStartMessage;
     expect(contentPokeStart).toMatchObject([
       'pokeStart',
       {pokeID: /[0-9a-z]{2,}/},
     ]);
     const contentPokeID = contentPokeStart[1].pokeID;
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokePart',
       {
         pokeID: contentPokeID,
@@ -666,14 +695,103 @@ describe('integration', {timeout: 30000}, () => {
         ],
       },
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokeEnd',
       {pokeID: contentPokeID},
     ]);
   });
 
+  test('streams tagged binary poke chunks to current clients', async () => {
+    await upDB.unsafe(initialPGSetup());
+    await startZero([env]);
+
+    const downstream = new Queue<unknown>();
+    const ws = new WebSocket(
+      `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+        `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
+      encodeURIComponent(btoa('{}')),
+    );
+    ws.on('message', (data, isBinary) =>
+      downstream.enqueue(
+        isBinary
+          ? new Uint8Array(data as Buffer)
+          : JSON.parse(data.toString('utf-8')),
+      ),
+    );
+    ws.on('open', () =>
+      ws.send(
+        JSON.stringify([
+          'initConnection',
+          {
+            desiredQueriesPatch: [
+              {op: 'put', hash: 'book-query-hash', ast: BOOK_QUERY},
+            ],
+            clientSchema: {
+              tables: {
+                book: {
+                  primaryKey: ['id'],
+                  columns: {
+                    id: {type: 'string'},
+                    ip: {type: 'string'},
+                    mac: {type: 'string'},
+                    title: {type: 'string'},
+                  },
+                },
+              },
+            },
+          },
+        ] satisfies InitConnectionMessage),
+      ),
+    );
+
+    expect(await dequeueMessage(downstream)).toMatchObject([
+      'connected',
+      {wsid: '123'},
+    ]);
+    expect(await dequeueMessage(downstream)).toMatchObject([
+      'pokeStart',
+      {pokeID: '00:01'},
+    ]);
+
+    const decoder = new TextDecoder('utf-8', {fatal: true});
+    const decoded: string[] = [];
+    for (;;) {
+      const message = await dequeueMessage(downstream);
+      if (message instanceof Uint8Array) {
+        expect(message[0]).toBe(POKE_CHUNK_MESSAGE_TYPE);
+        decoded.push(decoder.decode(message.subarray(1), {stream: true}));
+        continue;
+      }
+      decoded.push(decoder.decode());
+      expect(message).toMatchObject(['pokeEnd', {pokeID: '00:01'}]);
+      break;
+    }
+
+    const parts = JSON.parse(decoded.join('')) as PokePartBody[];
+    expect(parts).toMatchObject([
+      {
+        pokeID: '00:01',
+        desiredQueriesPatches: {
+          def: [{op: 'put', hash: 'book-query-hash'}],
+        },
+      },
+    ]);
+  });
+
   test.for([
     ['single-node', 'pg', () => [env], undefined],
+    [
+      'single-node with bundled Litestream executables and no backup',
+      'pg',
+      () => [
+        {
+          ...env,
+          ['ZERO_LITESTREAM_EXECUTABLE']: '/not-used/litestream',
+          ['ZERO_LITESTREAM_EXECUTABLE_V5']: '/not-used/litestream-v5',
+        },
+      ],
+      undefined,
+    ],
     ['replica identity full', 'pg', () => [env], 'FULL'],
     [
       'lazy single-node standalone',
@@ -709,6 +827,7 @@ describe('integration', {timeout: 30000}, () => {
           ...env,
           ['ZERO_PORT']: `${port2}`,
           ['ZERO_NUM_SYNC_WORKERS']: '0',
+          ['ZERO_CHANGE_STREAMER_ADDRESS']: `localhost:${port2 + 1}`,
           ['ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS']: '0',
         },
         // startZero() will then copy to replicaDbFile2 for the view-syncer
@@ -749,6 +868,7 @@ describe('integration', {timeout: 30000}, () => {
           ...env,
           ['ZERO_PORT']: `${port2}`,
           ['ZERO_NUM_SYNC_WORKERS']: '0',
+          ['ZERO_CHANGE_STREAMER_ADDRESS']: `localhost:${port2 + 1}`,
           ['ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS']: '0',
         },
         // startZero() will then copy to replicaDbFile2 for the view-syncer
@@ -783,7 +903,8 @@ describe('integration', {timeout: 30000}, () => {
 
       const downstream = new Queue<unknown>();
       const ws = new WebSocket(
-        `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+        // This test asserts the legacy JSON pokePart representation.
+        `ws://localhost:${port}/zero/sync/v${LAST_POKE_PART_PROTOCOL_VERSION}/connect` +
           `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
         encodeURIComponent(btoa('{}')), // auth token
       );
@@ -815,15 +936,15 @@ describe('integration', {timeout: 30000}, () => {
         ),
       );
 
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'connected',
         {wsid: '123'},
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeStart',
         {pokeID: '00:01'},
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokePart',
         {
           pokeID: '00:01',
@@ -832,17 +953,19 @@ describe('integration', {timeout: 30000}, () => {
           },
         },
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeEnd',
         {pokeID: '00:01'},
       ]);
-      const contentPokeStart = (await downstream.dequeue()) as PokeStartMessage;
+      const contentPokeStart = (await dequeueMessage(
+        downstream,
+      )) as PokeStartMessage;
       expect(contentPokeStart).toMatchObject([
         'pokeStart',
         {pokeID: /[0-9a-z]{2,}/},
       ]);
       const contentPokeID = contentPokeStart[1].pokeID;
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokePart',
         {
           pokeID: contentPokeID,
@@ -871,7 +994,7 @@ describe('integration', {timeout: 30000}, () => {
           ],
         },
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeEnd',
         {pokeID: contentPokeID},
       ]);
@@ -936,11 +1059,11 @@ describe('integration', {timeout: 30000}, () => {
         ]);
       }
 
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeStart',
         {pokeID: WATERMARK_REGEX},
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokePart',
         {
           pokeID: WATERMARK_REGEX,
@@ -982,7 +1105,7 @@ describe('integration', {timeout: 30000}, () => {
           ],
         },
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeEnd',
         {pokeID: WATERMARK_REGEX},
       ]);
@@ -992,11 +1115,11 @@ describe('integration', {timeout: 30000}, () => {
         await upDB.unsafe(/*sql*/ `
           ALTER TABLE foo ADD COLUMN espresso INT DEFAULT (1 + 2 + 3) * 6;
       `);
-        expect(await downstream.dequeue()).toMatchObject([
+        expect(await dequeueMessage(downstream)).toMatchObject([
           'pokeStart',
           {pokeID: BACKFILL_WATERMARK_REGEX},
         ]);
-        expect(await downstream.dequeue()).toMatchObject([
+        expect(await dequeueMessage(downstream)).toMatchObject([
           'pokePart',
           {
             pokeID: BACKFILL_WATERMARK_REGEX,
@@ -1014,7 +1137,7 @@ describe('integration', {timeout: 30000}, () => {
             ],
           },
         ]);
-        expect(await downstream.dequeue()).toMatchObject([
+        expect(await dequeueMessage(downstream)).toMatchObject([
           'pokeEnd',
           {pokeID: BACKFILL_WATERMARK_REGEX},
         ]);
@@ -1045,11 +1168,11 @@ describe('integration', {timeout: 30000}, () => {
         ]);
       }
 
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeStart',
         {pokeID: WATERMARK_REGEX},
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokePart',
         {
           pokeID: WATERMARK_REGEX,
@@ -1067,7 +1190,7 @@ describe('integration', {timeout: 30000}, () => {
           ],
         },
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeEnd',
         {pokeID: WATERMARK_REGEX},
       ]);

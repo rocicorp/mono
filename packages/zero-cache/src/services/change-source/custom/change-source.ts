@@ -22,9 +22,13 @@ import {
   createReplicationStateTables,
   getSubscriptionState,
   initReplicationState,
-  type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
+import {
+  restoreReplica,
+  type InitializeResult,
+  type RestoreOptions,
+} from '../common/replica-restore.ts';
 import {initReplica} from '../common/replica-schema.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
 import {
@@ -45,12 +49,29 @@ export async function initializeCustomChangeSource(
   shard: ShardConfig,
   replicaDbFile: string,
   context: ServerContext,
-): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
+  {litestream, constraints}: RestoreOptions = {},
+): Promise<InitializeResult> {
+  // At the moment, the custom change-source implementation does not support
+  // per-RM backups (and thus does not support litestream v5 or RMv2). The
+  // current proposal to support this without requiring additional upstream
+  // state tracking is to:
+  // - use litestream to (ltx) query a fixed pool of subfolders within the
+  //   backupURL (e.g. /a/, /b/, /c/, /d/, /e/)
+  // - restore from the subfolder with the latest ltx file
+  // - backup to the subfolder with the oldest (or non-existent) ltx file
+  if (litestream?.backupURL) {
+    await restoreReplica(lc, litestream, replicaDbFile, constraints);
+  }
+
+  let initialSynced = false;
   await initReplica(
     lc,
     `replica-${shard.appID}-${shard.shardNum}`,
     replicaDbFile,
-    (log, tx) => initialSync(log, shard, tx, upstreamURI, context),
+    (log, tx) => {
+      initialSynced = true;
+      return initialSync(log, shard, tx, upstreamURI, context);
+    },
   );
 
   const replica = new Database(lc, replicaDbFile);
@@ -75,7 +96,16 @@ export async function initializeCustomChangeSource(
     subscriptionState,
   );
 
-  return {subscriptionState, changeSource};
+  return {
+    subscriptionState,
+    changeSource,
+    destinationBackupURL: litestream?.backupURL,
+    // A custom change source has no upstream `replicas` table to identify
+    // itself from, so the generation is the whole of the SQLite change log's
+    // identity here.
+    replicaID: null,
+    waitForBackupBeforeServing: initialSynced,
+  };
 }
 
 class CustomChangeSource implements ChangeSource {

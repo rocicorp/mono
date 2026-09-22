@@ -39,7 +39,7 @@ class YieldOutput implements FilterOutput {
 
   beginFilter() {}
   endFilter() {}
-  *filter(_node: Node): Generator<'yield', boolean> {
+  *filter(_node: Node): IterableIterator<'yield', boolean> {
     if (this.yields) yield 'yield';
     return true;
   }
@@ -70,6 +70,7 @@ class YieldMemorySource extends MemorySource {
     const input = super.connect(sort, filters, splitEditKeys);
     const originalFetch = input.fetch.bind(input);
 
+    // oxlint-disable-next-line typescript/no-this-alias
     const source = this;
     input.fetch = function* (req: FetchRequest): Stream<Node | 'yield'> {
       for (const n of originalFetch(req)) {

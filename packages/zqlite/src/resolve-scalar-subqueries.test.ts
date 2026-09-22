@@ -37,6 +37,13 @@ const ALWAYS_FALSE: SimpleCondition = {
   right: {type: 'literal', value: 0},
 };
 
+const ALWAYS_TRUE: SimpleCondition = {
+  type: 'simple',
+  op: '=',
+  left: {type: 'literal', value: 1},
+  right: {type: 'literal', value: 1},
+};
+
 // ---------- extractLiteralEqualityConstraints ----------
 
 test('extractLiteralEqualityConstraints: simple column = literal', () => {
@@ -363,6 +370,77 @@ test('returns ALWAYS_FALSE when executor returns null', () => {
   const {ast: resolved} = resolveSimpleScalarSubqueries(ast, specs, () => null);
 
   expect(resolved.where).toEqual(ALWAYS_FALSE);
+});
+
+// NOT EXISTS is the negation, so an unresolvable subquery makes it always
+// *true*: if no child row matches the subquery's WHERE, none can satisfy the
+// correlation either, so the EXISTS is false for every parent row.
+test('NOT EXISTS returns ALWAYS_TRUE when executor returns undefined', () => {
+  const specs = makeTableSpecs({users: [['id']]});
+  const ast: AST = {
+    table: 'issues',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'NOT EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['name'],
+        },
+        subquery: {
+          table: 'users',
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: 'nonexistent'},
+          },
+        },
+      },
+    },
+  };
+
+  const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
+    ast,
+    specs,
+    () => undefined,
+  );
+
+  expect(resolved.where).toEqual(ALWAYS_TRUE);
+  // Still recorded, so the pipeline re-resolves if a matching row appears.
+  expect(companions).toHaveLength(1);
+});
+
+test('NOT EXISTS returns ALWAYS_TRUE when executor returns null', () => {
+  const specs = makeTableSpecs({users: [['id']]});
+  const ast: AST = {
+    table: 'issues',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'NOT EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['name'],
+        },
+        subquery: {
+          table: 'users',
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: '0001'},
+          },
+        },
+      },
+    },
+  };
+
+  const {ast: resolved} = resolveSimpleScalarSubqueries(ast, specs, () => null);
+
+  expect(resolved.where).toEqual(ALWAYS_TRUE);
 });
 
 test('leaves non-simple scalar subquery untouched', () => {

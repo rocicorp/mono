@@ -1,12 +1,13 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
+import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
-import {beforeEach, describe, expect} from 'vitest';
+import {afterEach, beforeEach, describe, expect} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {type PgTest, test} from '../../test/db.ts';
-import type {PostgresDB} from '../../types/pg.ts';
+import {getConnectionURI, test, type PgTest} from '../../test/db.ts';
+import {pgClient, postgresTypeConfig, type PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
   type ChangeStreamData,
@@ -14,13 +15,15 @@ import {
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
+import {extractChangeSubstring} from './change-log-codec.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
 import {
-  extractChangeSubstring,
   PurgeLocker,
   Storer,
+  type PostgresDBProvider,
   type TuningOptions,
 } from './storer.ts';
 import {createSubscriber} from './test-utils.ts';
@@ -33,9 +36,46 @@ const opts: TuningOptions = {
 
 const json = BigIntJSON.stringify;
 
+/**
+ * The initialization parameters as one line per row.
+ *
+ * Lossless -- every field of every row is here -- but flat, because the cookie
+ * set is cumulative and what each step below is actually asserting is its delta
+ * from the one before. Printed as objects, every step re-prints everything its
+ * predecessors established, which is most of the snapshot and none of the
+ * signal. The `metadata: null` step keeps its object snapshot, so the exact
+ * shape this flattens is still pinned somewhere.
+ */
+function summarize({
+  lastWatermark,
+  backfillRequests,
+  cookies,
+}: Awaited<
+  ReturnType<Storer['getStartStreamInitializationParameters']>
+>): string {
+  return [
+    `lastWatermark ${lastWatermark}`,
+    'tableMetadata',
+    ...cookies.tableMetadata.map(
+      m => `  ${m.schema}.${m.table} ${json(m.metadata)}`,
+    ),
+    'backfilling',
+    ...cookies.backfilling.map(
+      b => `  ${b.schema}.${b.table}.${b.column} ${json(b.backfill)}`,
+    ),
+    'backfillRequests',
+    ...backfillRequests.map(
+      r =>
+        `  ${r.table.schema}.${r.table.name} metadata=${json(r.table.metadata)} ` +
+        `columns=${json(r.columns)}`,
+    ),
+  ].join('\n');
+}
+
 describe('change-streamer/storer', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
+  let dbProvider: PostgresDBProvider;
   let storer: Storer;
   let done: Promise<void>;
   let consumed: Queue<Commit | UpstreamStatusMessage>;
@@ -50,6 +90,14 @@ describe('change-streamer/storer', () => {
     db = await testDBs.create('change_streamer_storer', {
       typeOpts: {sendStringAsJson: true},
     });
+    dbProvider = (applicationName: string, maxConns: number) =>
+      pgClient(
+        lc,
+        getConnectionURI(db),
+        applicationName,
+        {max: maxConns},
+        {sendStringAsJson: true},
+      );
     shard = {appID: APP_ID, shardNum: SHARD_NUM};
     await db.begin(tx => setupCDCTables(lc, tx, shard));
     await ensureReplicationConfig(
@@ -94,13 +142,26 @@ describe('change-streamer/storer', () => {
 
   const messages = new ReplicationMessages({issues: 'id'});
 
-  async function drain(sub: Subscription<string>, untilWatermark?: string) {
+  async function drain(
+    sub: Subscription<string | PreSerializedBatch>,
+    untilWatermark?: string,
+  ) {
     const msgs: Downstream[] = [];
-    for await (const json of sub) {
-      const msg: Downstream = JSON.parse(json);
-      msgs.push(msg);
-      if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
-        break;
+    for await (const item of sub) {
+      if (typeof item === 'string') {
+        const msg: Downstream = JSON.parse(item);
+        msgs.push(msg);
+        if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
+          break;
+        }
+      } else {
+        for (const c of item.changes) {
+          const msg: Downstream = JSON.parse(c[2]);
+          msgs.push(msg);
+          if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
+            return msgs;
+          }
+        }
       }
     }
     return msgs;
@@ -119,7 +180,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -192,7 +253,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'ws',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -303,12 +364,13 @@ describe('change-streamer/storer', () => {
 
       // No backfillRequests should be present.
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [],
-          "lastWatermark": "09",
-        }
+        "lastWatermark 09
+        tableMetadata
+          my.foo {"rowKey":{"type":"index","columns":["a","b"]}}
+        backfilling
+        backfillRequests"
       `);
 
       // Add a different table with backfill metadata only.
@@ -360,6 +422,52 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "column": "a",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                  "column": "b",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
+                  "column": "d",
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                        "b",
+                      ],
+                      "type": "index",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+              ],
+            },
             "lastWatermark": "0a",
           }
         `);
@@ -383,56 +491,20 @@ describe('change-streamer/storer', () => {
       // Now the original table shows up in the backfillRequests, with its
       // table metadata.
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "b": {
-                    "barID": "ozz",
-                    "fooID": 843,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                },
-                "table": {
-                  "metadata": null,
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "a",
-                        "b",
-                      ],
-                      "type": "index",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-            ],
-            "lastWatermark": "0b",
-          }
-        `);
+        "lastWatermark 0b
+        tableMetadata
+          my.foo {"rowKey":{"type":"index","columns":["a","b"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.b {"barID":"ozz","fooID":843}
+          your.bar.d {"barID":"zoz","fooID":777}
+        backfillRequests
+          your.bar metadata=null columns={"a":{"barID":"zoo","fooID":987},"b":{"barID":"ozz","fooID":843},"d":{"barID":"zoz","fooID":777}}
+          my.foo metadata={"rowKey":{"type":"index","columns":["a","b"]}} columns={"c":{"barID":"baz","fooID":123}}"
+      `);
 
       // Add another column to the same table with new table metadata.
       storer.store('0c', ['begin', messages.begin(), {commitWatermark: '0b'}]);
@@ -454,59 +526,21 @@ describe('change-streamer/storer', () => {
       storer.store('0c', ['commit', messages.commit(), {watermark: '0c'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "b": {
-                    "barID": "ozz",
-                    "fooID": 843,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                },
-                "table": {
-                  "metadata": null,
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "0c",
-          }
-        `);
+        "lastWatermark 0c
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.b {"barID":"ozz","fooID":843}
+          your.bar.d {"barID":"zoz","fooID":777}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}
+          your.bar metadata=null columns={"a":{"barID":"zoo","fooID":987},"b":{"barID":"ozz","fooID":843},"d":{"barID":"zoz","fooID":777}}"
+      `);
 
       // Update the table metadata of the new table.
       storer.store('0d', ['begin', messages.begin(), {commitWatermark: '0c'}]);
@@ -529,66 +563,22 @@ describe('change-streamer/storer', () => {
       storer.store('0d', ['commit', messages.commit(), {watermark: '0d'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "b": {
-                    "barID": "ozz",
-                    "fooID": 843,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "a",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "0d",
-          }
-        `);
+        "lastWatermark 0d
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.b {"barID":"ozz","fooID":843}
+          your.bar.d {"barID":"zoz","fooID":777}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}
+          your.bar metadata={"rowKey":{"type":"default","columns":["a"]}} columns={"a":{"barID":"zoo","fooID":987},"b":{"barID":"ozz","fooID":843},"d":{"barID":"zoz","fooID":777}}"
+      `);
 
       // Rename one of the backfilling columns
       storer.store('0e', ['begin', messages.begin(), {commitWatermark: '0e'}]);
@@ -613,66 +603,22 @@ describe('change-streamer/storer', () => {
       storer.store('0e', ['commit', messages.commit(), {watermark: '0e'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                  "newName": {
-                    "barID": "ozz",
-                    "fooID": 843,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "a",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "0e",
-          }
-        `);
+        "lastWatermark 0e
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.d {"barID":"zoz","fooID":777}
+          your.bar.newName {"barID":"ozz","fooID":843}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}
+          your.bar metadata={"rowKey":{"type":"default","columns":["a"]}} columns={"a":{"barID":"zoo","fooID":987},"d":{"barID":"zoz","fooID":777},"newName":{"barID":"ozz","fooID":843}}"
+      `);
 
       // Drop a backfilling column.
       storer.store('0f', ['begin', messages.begin(), {commitWatermark: '0f'}]);
@@ -690,62 +636,21 @@ describe('change-streamer/storer', () => {
       storer.store('0f', ['commit', messages.commit(), {watermark: '0f'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "a",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "0f",
-          }
-        `);
+        "lastWatermark 0f
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.d {"barID":"zoz","fooID":777}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}
+          your.bar metadata={"rowKey":{"type":"default","columns":["a"]}} columns={"a":{"barID":"zoo","fooID":987},"d":{"barID":"zoz","fooID":777}}"
+      `);
 
       // Set the other backfilling columns to completed
       storer.store('110', [
@@ -769,38 +674,18 @@ describe('change-streamer/storer', () => {
       storer.store('110', ['commit', messages.commit(), {watermark: '110'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-            ],
-            "lastWatermark": "110",
-          }
-        `);
+        "lastWatermark 110
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}"
+      `);
 
       // Rename the backfilling table, and a contained column in the same tx.
       storer.store('111', [
@@ -837,38 +722,18 @@ describe('change-streamer/storer', () => {
       storer.store('111', ['commit', messages.commit(), {watermark: '111'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "deez": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "bloo",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "111",
-          }
-        `);
+        "lastWatermark 111
+        tableMetadata
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+          your.bloo {"rowKey":{"type":"default","columns":["b"]}}
+        backfilling
+          your.bloo.c {"barID":"baz","fooID":123}
+          your.bloo.deez {"barID":"boo","fooID":456}
+        backfillRequests
+          your.bloo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"deez":{"barID":"boo","fooID":456}}"
+      `);
 
       // Drop the backfilling table
       storer.store('112', [
@@ -886,13 +751,14 @@ describe('change-streamer/storer', () => {
       storer.store('112', ['commit', messages.commit(), {watermark: '112'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [],
-            "lastWatermark": "112",
-          }
-        `);
+        "lastWatermark 112
+        tableMetadata
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+        backfillRequests"
+      `);
     });
 
     test('non-owner purge prevented', async () => {
@@ -988,7 +854,14 @@ describe('change-streamer/storer', () => {
       // Prevent the beforeEach cleanup from re-throwing the rejected done.
       done = Promise.resolve();
 
-      // subscribers that were waiting to be caught up should be canceled
+      // Subscribers that were waiting to be caught up are canceled without a
+      // downstream error, so they reconnect rather than restoring a replica.
+      // An ownership handoff is a routine event; it must not fan out into a
+      // fleet-wide litestream restore.
+      for (const stream of [stream1, stream2]) {
+        const iterator = stream[Symbol.asyncIterator]();
+        expect((await iterator.next()).done).toBe(true);
+      }
       expect(stream1.active).toBe(false);
       expect(stream2.active).toBe(false);
     });
@@ -1276,9 +1149,6 @@ describe('change-streamer/storer', () => {
         {watermark: '08'},
       ]);
 
-      storer.status(['status', {ack: true}, {watermark: '0e'}]);
-      storer.status(['status', {ack: true}, {watermark: '0f'}]);
-
       // Catchup should wait for the transaction to complete before querying
       // the database, and start after watermark '03'.
       expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
@@ -1499,7 +1369,7 @@ describe('change-streamer/storer', () => {
         ]
       `);
 
-      await expectConsumed('08', '0e', '0f');
+      await expectConsumed('08');
     });
 
     // Similar to "queued if transaction is in progress" but tests rollback.
@@ -1536,9 +1406,6 @@ describe('change-streamer/storer', () => {
       storer.catchup(sub2, 'serving');
       // Rollback the transaction.
       storer.store('08', ['rollback', messages.rollback()]);
-
-      storer.status(['status', {ack: true}, {watermark: '0a'}]);
-      storer.status(['status', {ack: true}, {watermark: '0c'}]);
 
       // Catchup should wait for the transaction to complete before querying
       // the database, and start after watermark '03'.
@@ -1705,7 +1572,8 @@ describe('change-streamer/storer', () => {
         ]
       `);
 
-      await expectConsumed('0a', '0c');
+      // The transaction was rolled back, so nothing should be acked.
+      expect(consumed.size()).toBe(0);
     });
 
     test('catchup does not include subsequent transactions', async () => {
@@ -1739,9 +1607,6 @@ describe('change-streamer/storer', () => {
       // catchup doesn't include the next transaction.
       storer.store('09', ['begin', messages.begin(), {commitWatermark: '0a'}]);
       storer.store('0a', ['commit', messages.commit(), {watermark: '0a'}]);
-
-      storer.status(['status', {ack: true}, {watermark: '0d'}]);
-      storer.status(['status', {ack: true}, {watermark: '0e'}]);
 
       // Wait for the storer to commit that transaction.
       for (let i = 0; i < 10; i++) {
@@ -1831,7 +1696,7 @@ describe('change-streamer/storer', () => {
         ],
       ]
     `);
-      await expectConsumed('08', '0a', '0d', '0e');
+      await expectConsumed('08', '0a');
     });
   });
 
@@ -1843,7 +1708,7 @@ describe('change-streamer/storer', () => {
         'task-id',
         'change-streamer:12345',
         'wss',
-        db,
+        dbProvider,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
@@ -1857,6 +1722,338 @@ describe('change-streamer/storer', () => {
       expect(
         await db`SELECT "ownerAddress" FROM "xero_5/cdc"."replicationState" WHERE owner = 'task-id'`,
       ).toEqual([{ownerAddress: 'wss://change-streamer:12345'}]);
+    });
+  });
+
+  // Back pressure is a memory-protection mechanism, not a hang watchdog: a
+  // wedged connection (e.g. one that can never even open its `BEGIN`) is
+  // instead caught by the ProgressMonitor (see 'ProgressMonitor hang
+  // detection' below), which is what actually recovers the process in that
+  // case. These tests exercise only the apply/release threshold logic.
+  describe('back pressure', () => {
+    // Small enough that any nonzero backlog counts as "applying back
+    // pressure", and short enough to keep the test fast.
+    const TINY_BACKPRESSURE_PROPORTION = 1e-9;
+
+    beforeEach(async () => {
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        dbProvider,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {
+          ...opts,
+          backPressureLimitHeapProportion: TINY_BACKPRESSURE_PROPORTION,
+        },
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+    });
+
+    test('readyForMore() applies pressure once queued, and releases once the backlog drains', async () => {
+      storer.store('20', ['begin', messages.begin(), {commitWatermark: '20'}]);
+      storer.store('20', ['data', messages.insert('issues', {id: '0'})]);
+      // Called synchronously with the store()s above (no intervening
+      // `await`), so the async queue-processing loop has not yet had a
+      // chance to run and decrement approximateQueuedBytes.
+      const readyForMore = storer.readyForMore();
+      expect(readyForMore).toBeDefined();
+
+      storer.store('20', ['commit', messages.commit(), {watermark: '20'}]);
+      await expectConsumed('20');
+
+      // The backlog drains once the transaction is processed (a real,
+      // unwedged connection), resolving readyForMore().
+      await readyForMore;
+
+      // With nothing queued, back pressure is no longer in effect.
+      expect(storer.readyForMore()).toBeUndefined();
+    });
+  });
+
+  // The ProgressMonitor is the storer's watchdog for a db operation that hangs
+  // without ever returning (e.g. a half-open connection). These tests exercise
+  // real #processQueue / catchup code paths and assert that a hang surfaces as
+  // a *fatal* error (via onFatal), which is what the ProgressMonitor -- and
+  // *only* the ProgressMonitor -- produces (the write pool has no per-statement
+  // response timeout of its own, and the write-path test wedges *before any
+  // statement is dispatched* -- the sole connection is reserved -- so there
+  // is nothing else that could possibly time it out).
+  describe('ProgressMonitor hang detection', () => {
+    const TIMEOUT_MS = 100;
+
+    function newRawConnection() {
+      const {host, port, database, user: username, pass} = db.options;
+      return postgres({
+        host: host[0],
+        port: port[0],
+        username,
+        password: pass ?? undefined,
+        database,
+        ...postgresTypeConfig({sendStringAsJson: true}),
+      });
+    }
+
+    test('a hung write transaction (begin/commit) triggers a fatal error', async () => {
+      // Single-connection pool: reserving its one connection means the storer's
+      // write TransactionPool can never even open its `BEGIN`, so the commit's
+      // `await tx.startingReplicationState` (the begin-time SELECT ... FOR
+      // UPDATE) never resolves -- a hang *before* any statement reaches PG.
+      const {host, port, database, user: username, pass} = db.options;
+      const singleConnDb = postgres({
+        host: host[0],
+        port: port[0],
+        username,
+        password: pass ?? undefined,
+        database,
+        max: 1,
+        ...postgresTypeConfig({sendStringAsJson: true}),
+      });
+
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        () => singleConnDb,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {...opts, statementTimeoutMs: TIMEOUT_MS, drainTimeoutMs: 5_000},
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+
+      const reserved = await singleConnDb.reserve();
+      try {
+        storer.store('08', [
+          'begin',
+          messages.begin(),
+          {commitWatermark: '08'},
+        ]);
+        storer.store('08', ['data', messages.insert('issues', {id: 'a'})]);
+        storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+
+        const err = await fatalErrors.dequeue();
+        // The commit's queue-entry task is the one that fails to progress.
+        expect(err.message).toContain('failed to progress');
+        expect(err.message).toContain('queue-entry');
+      } finally {
+        // Release so #processQueue unwedges and stop() can drain in afterEach.
+        reserved.release();
+        await storer.stop().catch(() => {});
+        await singleConnDb.end();
+      }
+    });
+
+    test('a hung catchup read triggers a fatal error', async () => {
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        dbProvider,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {...opts, statementTimeoutMs: TIMEOUT_MS, drainTimeoutMs: 5_000},
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+
+      // Hold an ACCESS EXCLUSIVE lock on the changeLog so the catchup cursor
+      // read blocks indefinitely. (The lastWatermark read in #startCatchup is
+      // against replicationState, so it still completes; the hang is in the
+      // background #catchup cursor.) The lock is held until `release` resolves,
+      // so cleanup can let the transaction commit and end the connection
+      // cleanly rather than tearing down an in-flight query.
+      const lockConn = newRawConnection();
+      const acquired = resolver<void>();
+      const release = resolver<void>();
+      void lockConn
+        .begin(async tx => {
+          await tx`LOCK TABLE "xero_5/cdc"."changeLog" IN ACCESS EXCLUSIVE MODE`;
+          acquired.resolve();
+          await release.promise;
+        })
+        .catch(() => {});
+      await acquired.promise;
+
+      // A subscriber behind the durable watermark forces a catchup read.
+      // Consume its stream in the background so that, once the lock is
+      // released during cleanup, the catchup can send its buffered entries,
+      // complete, and close its reader connection (otherwise the orphaned
+      // reader keeps the worker alive after the test).
+      const [sub, , subStream] = createSubscriber('03');
+      const draining = drain(subStream, '06');
+
+      try {
+        storer.catchup(sub, 'serving');
+
+        const err = await fatalErrors.dequeue();
+        expect(err.message).toContain('failed to progress');
+        expect(err.message).toContain('catchup');
+      } finally {
+        release.resolve(); // let the held tx commit, releasing the lock
+        await draining; // catchup drains to the subscriber and completes
+        await lockConn.end();
+        await storer.stop().catch(() => {});
+      }
+    });
+  });
+
+  // assumeOwnership(), getStartStreamInitializationParameters(),
+  // getMinWatermarkForCatchup(), and getCatchupBounds() are one-off db calls,
+  // not part of the main storer loop or the background catchup read, so they
+  // are bounded by a plain #withTimeout() race instead of the ProgressMonitor.
+  // This matters concretely for assumeOwnership() and
+  // getStartStreamInitializationParameters(): both are called by
+  // ChangeStreamerImpl.run() *before* Storer.run() (see
+  // change-streamer-service.ts), i.e. before the ProgressMonitor's polling
+  // has started -- so a hang in either must be caught without relying on it.
+  // These tests call the methods directly, without ever calling
+  // `storer.run()`, to prove that.
+  describe('one-off db call timeout', () => {
+    const TIMEOUT_MS = 100;
+    let singleConnDb: PostgresDB;
+
+    beforeEach(() => {
+      const {host, port, database, user: username, pass} = db.options;
+      singleConnDb = postgres({
+        host: host[0],
+        port: port[0],
+        username,
+        password: pass ?? undefined,
+        database,
+        max: 1,
+        ...postgresTypeConfig({sendStringAsJson: true}),
+      });
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        () => singleConnDb,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {...opts, statementTimeoutMs: TIMEOUT_MS},
+      );
+    });
+
+    afterEach(async () => {
+      await singleConnDb.end();
+    });
+
+    // Reserving the sole connection means the call can never even dispatch
+    // its statement, so its own #withTimeout is the only thing that can
+    // possibly reject it (there is no in-flight statement for anything else
+    // to time out).
+    async function withReservedConnection(fn: () => Promise<unknown>) {
+      const reserved = await singleConnDb.reserve();
+      try {
+        const start = Date.now();
+        await expect(fn()).rejects.toThrow(
+          `did not complete within ${TIMEOUT_MS}ms`,
+        );
+        expect(Date.now() - start).toBeLessThan(TIMEOUT_MS * 5);
+        // Not the ProgressMonitor's doing: run() (and thus its polling) was
+        // never called.
+        expect(fatalErrors.size()).toBe(0);
+      } finally {
+        reserved.release();
+      }
+    }
+
+    test('assumeOwnership rejects on a hang, without run() ever having started the ProgressMonitor', async () => {
+      await withReservedConnection(() => storer.assumeOwnership());
+    });
+
+    test('getStartStreamInitializationParameters rejects on a hang', async () => {
+      await withReservedConnection(() =>
+        storer.getStartStreamInitializationParameters(),
+      );
+    });
+
+    test('getMinWatermarkForCatchup rejects on a hang', async () => {
+      await withReservedConnection(() => storer.getMinWatermarkForCatchup());
+    });
+
+    test('getCatchupBounds rejects on a hang', async () => {
+      await withReservedConnection(() => storer.getCatchupBounds());
+    });
+  });
+
+  describe('catchup snapshot failure', () => {
+    let catchupDB: PostgresDB;
+
+    beforeEach<PgTest>(async ({testDBs}) => {
+      // A database without the cdc tables, so that the catchup pool's
+      // snapshot read fails.
+      catchupDB = await testDBs.create('change_streamer_storer_catchup');
+      const catchupProvider: PostgresDBProvider = (applicationName, maxConns) =>
+        pgClient(
+          lc,
+          getConnectionURI(
+            applicationName === 'subscriber-catchup' ? catchupDB : db,
+          ),
+          applicationName,
+          {max: maxConns},
+          {sendStringAsJson: true},
+        );
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        catchupProvider,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        opts,
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+
+      return async () => {
+        await testDBs.drop(catchupDB);
+      };
+    });
+
+    async function catchupConnections(): Promise<number> {
+      const [{count}] = await db<{count: bigint}[]>`
+        SELECT COUNT(*) AS count FROM pg_stat_activity
+          WHERE datname = ${catchupDB.options.database}`;
+      return Number(count);
+    }
+
+    test('failed snapshot read tears down the catchup pool', async () => {
+      const [sub, _, stream] = createSubscriber('03');
+      storer.catchup(sub, 'serving');
+
+      await expect(done).rejects.toThrow('replicationState');
+      // Prevent the beforeEach cleanup from re-throwing the rejected done.
+      done = Promise.resolve();
+
+      // The subscriber is failed (closed without a downstream error) ...
+      const iterator = stream[Symbol.asyncIterator]();
+      expect((await iterator.next()).done).toBe(true);
+
+      // ... and the catchup pool, whose workers each hold an open READ ONLY
+      // transaction, is released rather than left dangling.
+      for (let i = 0; (await catchupConnections()) > 0 && i < 100; i++) {
+        await sleep(50);
+      }
+      expect(await catchupConnections()).toBe(0);
     });
   });
 

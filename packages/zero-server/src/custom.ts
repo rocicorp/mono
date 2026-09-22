@@ -25,6 +25,7 @@ import {
 import type {
   DBTransaction,
   MutateCRUD,
+  Queryable,
   ServerTransaction,
 } from '../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
@@ -184,7 +185,9 @@ type WithHiddenTxAndSchema = {
 export class CRUDMutatorFactory<S extends Schema> {
   readonly #schema: S;
   readonly #tableCRUDs: Record<string, TableCRUD<TableSchema>>;
-  #serverSchema: ServerSchema | undefined;
+  // The in-flight or resolved fetch is cached (not just the result) so that
+  // concurrent cold callers share a single catalog query.
+  #serverSchema: Promise<ServerSchema> | undefined;
 
   constructor(schema: S) {
     this.#schema = schema;
@@ -198,11 +201,13 @@ export class CRUDMutatorFactory<S extends Schema> {
   /**
    * Gets the cached serverSchema, or fetches and caches it on first call.
    */
-  async #getOrFetchServerSchema(
-    dbTransaction: DBTransaction<unknown>,
-  ): Promise<ServerSchema> {
+  getOrFetchServerSchema(queryable: Queryable): Promise<ServerSchema> {
     if (!this.#serverSchema) {
-      this.#serverSchema = await getServerSchema(dbTransaction, this.#schema);
+      this.#serverSchema = getServerSchema(queryable, this.#schema).catch(e => {
+        // Don't poison the cache with a transient failure.
+        this.#serverSchema = undefined;
+        throw e;
+      });
     }
     return this.#serverSchema;
   }
@@ -239,7 +244,7 @@ export class CRUDMutatorFactory<S extends Schema> {
     clientID: string,
     mutationID: number,
   ): Promise<TransactionImpl<S, TWrappedTransaction>> {
-    const serverSchema = await this.#getOrFetchServerSchema(dbTransaction);
+    const serverSchema = await this.getOrFetchServerSchema(dbTransaction);
     const executor = this.createExecutor(dbTransaction, serverSchema);
     const mutate = makeTransactionMutate(this.#schema, executor);
     return new TransactionImpl(
@@ -353,6 +358,11 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
 
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
+      const primaryKeyColumns = origAndServerNamesFor(
+        schema.primaryKey,
+        schema,
+      );
+
       const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
@@ -362,7 +372,10 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
             sqlInsertValue(v, serverTableSchema[serverNameFor(col, schema)]),
           ),
           ', ',
-        )})`,
+        )}) ON CONFLICT (${sql.join(
+          primaryKeyColumns.map(([, serverName]) => sql.ident(serverName)),
+          ', ',
+        )}) DO NOTHING`,
       );
       const tx = this[dbTxSymbol];
       await tx.query(stmt.text, stmt.values);
@@ -375,6 +388,19 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
         schema.primaryKey,
         schema,
       );
+      const updatedEntries = nonPrimaryKeyEntries(value, schema);
+      const conflictAction =
+        updatedEntries.length === 0
+          ? sql`DO NOTHING`
+          : sql`DO UPDATE SET ${sql.join(
+              updatedEntries.map(
+                ([col, val]) =>
+                  sql`${sql.ident(
+                    schema.columns[col].serverName ?? col,
+                  )} = ${sqlInsertValue(val, serverTableSchema[serverNameFor(col, schema)])}`,
+              ),
+              ', ',
+            )}`;
       const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
@@ -387,15 +413,7 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
         )}) ON CONFLICT (${sql.join(
           primaryKeyColumns.map(([, serverName]) => sql.ident(serverName)),
           ', ',
-        )}) DO UPDATE SET ${sql.join(
-          Object.entries(value).map(
-            ([col, val]) =>
-              sql`${sql.ident(
-                schema.columns[col].serverName ?? col,
-              )} = ${sqlInsertValue(val, serverTableSchema[serverNameFor(col, schema)])}`,
-          ),
-          ', ',
-        )}`,
+        )}) ${conflictAction}`,
       );
       const tx = this[dbTxSymbol];
       await tx.query(stmt.text, stmt.values);
@@ -403,7 +421,13 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
     async update(this: WithHiddenTxAndSchema, value) {
       value = removeUndefined(value);
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
-      const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
+      const targetedColumns = origAndServerNamesFor(
+        nonPrimaryKeyEntries(value, schema).map(([name]) => name),
+        schema,
+      );
+      if (targetedColumns.length === 0) {
+        return;
+      }
       const stmt = formatPgInternalConvert(
         sql`UPDATE ${sql.ident(serverName(schema))} SET ${sql.join(
           targetedColumns.map(
@@ -428,6 +452,15 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
   };
+}
+
+function nonPrimaryKeyEntries(
+  value: Record<string, unknown>,
+  schema: TableSchema,
+) {
+  return Object.entries(value).filter(
+    ([name]) => !schema.primaryKey.includes(name),
+  );
 }
 
 function serverName(x: {name: string; serverName?: string | undefined}) {

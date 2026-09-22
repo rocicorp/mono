@@ -108,6 +108,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     this.#replica = replica;
     this.#cgStorage = writeAuthzStorage.createClientGroupStorage(cgID);
     this.#builderDelegate = {
+      disableCorrelatedPredicatePushdown:
+        config.enableCorrelatedPredicatePushdown === false,
       getSource: name => this.#getSource(name),
       createStorage: () => this.#cgStorage.createStorage(),
       decorateSourceInput: input => input,
@@ -455,15 +457,17 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         rowQuery,
       ))
     ) {
-      this.#lc.warn?.(
-        `Permission check failed for ${JSON.stringify(
-          op,
-        )}, action ${action}, phase ${phase}, authData: ${JSON.stringify(
-          authData,
-        )}, rowPolicies: ${JSON.stringify(
-          applicableRowPolicy,
-        )}, cellPolicies: ${JSON.stringify(applicableCellPolicies)}`,
-      );
+      // `op.value` is the row being written and `authData` is the decoded
+      // JWT payload, so neither can go into the log. Column names and policy
+      // counts are enough to debug a failed permission check.
+      this.#lc.warn?.('Permission check failed', {
+        action,
+        phase,
+        tableName: op.tableName,
+        columns: Object.keys(op.value),
+        rowPolicy: applicableRowPolicy !== undefined,
+        cellPolicyCount: applicableCellPolicies.length,
+      });
       return false;
     }
 

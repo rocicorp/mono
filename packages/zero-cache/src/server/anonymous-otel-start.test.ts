@@ -1,20 +1,41 @@
-import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
-import {
-  MeterProvider,
-  PeriodicExportingMetricReader,
+import type {OTLPMetricExporter as OTLPMetricExporterType} from '@opentelemetry/exporter-metrics-otlp-http';
+import type {
+  MeterProvider as MeterProviderType,
+  PeriodicExportingMetricReader as PeriodicExportingMetricReaderType,
 } from '@opentelemetry/sdk-metrics';
-import {afterAll, beforeAll, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {getZeroConfig, type ZeroConfig} from '../config/zero-config.js';
+import type {LogContext} from '@rocicorp/logger';
 import {
-  recordConnectionAttempted,
-  recordConnectionSuccess,
-  recordMutation,
-  recordQuery,
-  recordRowsSynced,
-  shutdownAnonymousTelemetry,
-  startAnonymousTelemetry,
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {ZeroConfig} from '../config/zero-config.js';
+import type {getZeroConfig as getZeroConfigType} from '../config/zero-config.js';
+import type {
+  recordConnectionAttempted as recordConnectionAttemptedType,
+  recordConnectionSuccess as recordConnectionSuccessType,
+  recordMutation as recordMutationType,
+  recordQuery as recordQueryType,
+  recordRowsSynced as recordRowsSyncedType,
+  shutdownAnonymousTelemetry as shutdownAnonymousTelemetryType,
 } from './anonymous-otel-start.js';
+
+let OTLPMetricExporter: typeof OTLPMetricExporterType;
+let MeterProvider: typeof MeterProviderType;
+let PeriodicExportingMetricReader: typeof PeriodicExportingMetricReaderType;
+let getZeroConfig: typeof getZeroConfigType;
+let recordConnectionAttempted: typeof recordConnectionAttemptedType;
+let recordConnectionSuccess: typeof recordConnectionSuccessType;
+let recordMutation: typeof recordMutationType;
+let recordQuery: typeof recordQueryType;
+let recordRowsSynced: typeof recordRowsSyncedType;
+let shutdownAnonymousTelemetry: typeof shutdownAnonymousTelemetryType;
+let startAnonymousTelemetry: (lc?: LogContext, config?: ZeroConfig) => void;
 
 // Mock the OTLP exporter and related OpenTelemetry components
 vi.mock('@opentelemetry/exporter-metrics-otlp-http');
@@ -53,8 +74,33 @@ describe('Anonymous Telemetry Integration Tests', () => {
     // Store original environment
     originalEnv = {...process.env};
 
-    // Reset all mocks
+    // Clear environment variables that might affect telemetry
+    delete process.env.ZERO_UPSTREAM_DB;
+    delete process.env.ZERO_SERVER_VERSION;
+  });
+
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.resetModules();
+
+    const otlpModule =
+      await import('@opentelemetry/exporter-metrics-otlp-http');
+    const metricsModule = await import('@opentelemetry/sdk-metrics');
+    const configModule = await import('../config/zero-config.js');
+    ({
+      recordConnectionAttempted,
+      recordConnectionSuccess,
+      recordMutation,
+      recordQuery,
+      recordRowsSynced,
+      shutdownAnonymousTelemetry,
+      startAnonymousTelemetry,
+    } = await import('./anonymous-otel-start.js'));
+
+    OTLPMetricExporter = otlpModule.OTLPMetricExporter;
+    MeterProvider = metricsModule.MeterProvider;
+    PeriodicExportingMetricReader = metricsModule.PeriodicExportingMetricReader;
+    getZeroConfig = configModule.getZeroConfig;
 
     // Mock getZeroConfig to return default enabled state
     vi.mocked(getZeroConfig).mockReturnValue({
@@ -107,10 +153,6 @@ describe('Anonymous Telemetry Integration Tests', () => {
     vi.mocked(MeterProvider).mockImplementation(function () {
       return mockMeterProvider;
     });
-
-    // Clear environment variables that might affect telemetry
-    delete process.env.ZERO_UPSTREAM_DB;
-    delete process.env.ZERO_SERVER_VERSION;
   });
 
   afterAll(() => {
@@ -227,7 +269,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
     });
 
     test('should create all required metrics', () => {
-      // Since telemetry is already started, these should have been called
+      startAnonymousTelemetry(createSilentLogContext());
+
       expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
         'zero.uptime',
         {
@@ -320,14 +363,13 @@ describe('Anonymous Telemetry Integration Tests', () => {
           description: 'Count of CVR instances active in the last 24h',
         },
       );
-
-      // Note: Histogram metrics are not currently implemented in the anonymous telemetry
     });
 
     test('should register callbacks for observable metrics', () => {
-      // Each observable should have a callback registered
-      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(9); // 9 gauges
-      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(10); // 10 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, crud_queries, custom_queries, total_queries, rows_synced, connections_success, connections_attempted)
+      startAnonymousTelemetry(createSilentLogContext());
+
+      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(9);
+      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(10);
     });
   });
 
@@ -419,34 +461,34 @@ describe('Anonymous Telemetry Integration Tests', () => {
     });
 
     test('should include taskID in telemetry attributes', () => {
-      // Test that the telemetry system includes taskID in attributes
-      // We'll verify this by checking the existing mock calls
+      const configWithTaskID = {
+        enableTelemetry: true,
+        taskID: 'build-123',
+        upstream: {
+          db: 'postgresql://test@localhost/test',
+        },
+      } as unknown as ZeroConfig;
 
-      // Add some test data to trigger callbacks
+      startAnonymousTelemetry(createSilentLogContext(), configWithTaskID);
       recordMutation('crud');
 
-      // Get the callbacks that were registered
       type CallbackFunction = (result: {
         observe: (_value: number, attrs?: Record<string, unknown>) => void;
       }) => void;
 
-      // Find a callback that includes attributes
       let foundTaskIdInAttributes = false;
-
       const callbacks = mockObservableGauge.addCallback.mock.calls.map(
         (call: unknown[]) => call[0] as CallbackFunction,
       );
 
-      // Mock the result object to capture attributes
       const mockResult = {
         observe: vi.fn((_value: number, attrs?: Record<string, unknown>) => {
-          if (attrs && attrs['zero.task.id']) {
+          if (attrs && attrs['zero.task.id'] === 'build-123') {
             foundTaskIdInAttributes = true;
           }
         }),
       };
 
-      // Execute callbacks to see if any include taskID
       callbacks.forEach((callback: CallbackFunction) => {
         try {
           callback(mockResult);
@@ -455,30 +497,21 @@ describe('Anonymous Telemetry Integration Tests', () => {
         }
       });
 
-      // Since the singleton is already initialized, we can't easily test the new config
-      // But we can verify that taskID is part of the attribute structure
       expect(foundTaskIdInAttributes).toBe(true);
     });
 
     test('should use unknown taskID when not provided in config', () => {
       const lc = createSilentLogContext();
-
-      // Mock config without taskID
       const configWithoutTaskID = {
         enableTelemetry: true,
         upstream: {
           db: 'postgresql://test@localhost/test',
         },
-        // taskID is undefined
       } as unknown as ZeroConfig;
 
-      // Start telemetry without taskID
       startAnonymousTelemetry(lc, configWithoutTaskID);
-
-      // Add some test data to trigger callbacks
       recordMutation('crud');
 
-      // Get the callbacks that were registered
       type CallbackFunction = (result: {
         observe: (value: number, attrs?: object) => void;
       }) => void;
@@ -486,17 +519,14 @@ describe('Anonymous Telemetry Integration Tests', () => {
         (call: [CallbackFunction]) => call[0],
       );
 
-      // Mock the result object to capture attributes
       const mockResult = {
         observe: vi.fn(),
       };
 
-      // Execute callbacks to verify attributes include default taskID
       callbacks.forEach((callback: CallbackFunction) => {
         callback(mockResult);
       });
 
-      // Verify that taskID defaults to 'unknown'
       expect(mockResult.observe).toHaveBeenCalledWith(
         expect.any(Number),
         expect.objectContaining({
@@ -509,12 +539,11 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
   describe('Singleton Behavior', () => {
     test('should not start again after already started', () => {
+      startAnonymousTelemetry(createSilentLogContext());
       const initialCallCount = vi.mocked(OTLPMetricExporter).mock.calls.length;
 
-      // Try to start again
-      startAnonymousTelemetry();
+      startAnonymousTelemetry(createSilentLogContext());
 
-      // Should not create additional instances
       expect(vi.mocked(OTLPMetricExporter)).toHaveBeenCalledTimes(
         initialCallCount,
       );
@@ -523,14 +552,14 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
   describe('Observable Metric Callbacks', () => {
     test('should execute callbacks without throwing', () => {
-      // Add some test data
+      startAnonymousTelemetry(createSilentLogContext());
+
       recordMutation('crud');
       recordMutation('crud');
       recordQuery('crud');
       recordQuery('custom');
       recordRowsSynced(100);
 
-      // Get the callbacks that were registered
       type CallbackFunction = (result: {
         observe: (value: number, attrs?: object) => void;
       }) => void;
@@ -541,12 +570,10 @@ describe('Anonymous Telemetry Integration Tests', () => {
         (call: [CallbackFunction]) => call[0],
       );
 
-      // Mock the result object
       const mockResult = {
         observe: vi.fn(),
       };
 
-      // Execute callbacks to verify they work
       callbacks.forEach((callback: CallbackFunction) => {
         expect(() => callback(mockResult)).not.toThrow();
       });
@@ -555,28 +582,28 @@ describe('Anonymous Telemetry Integration Tests', () => {
         expect(() => callback(mockResult)).not.toThrow();
       });
 
-      // Verify observations were made
       expect(mockResult.observe).toHaveBeenCalled();
     });
   });
 
   describe('Shutdown', () => {
     test('should shutdown meter provider', () => {
+      startAnonymousTelemetry(createSilentLogContext());
       shutdownAnonymousTelemetry();
 
       expect(mockMeterProvider.shutdown).toHaveBeenCalled();
     });
 
     test('should handle multiple shutdown calls', () => {
+      startAnonymousTelemetry(createSilentLogContext());
       const initialCallCount = mockMeterProvider.shutdown.mock.calls.length;
 
       shutdownAnonymousTelemetry();
       shutdownAnonymousTelemetry();
 
-      // Should handle multiple calls gracefully
       expect(
         mockMeterProvider.shutdown.mock.calls.length,
-      ).toBeGreaterThanOrEqual(initialCallCount);
+      ).toBeGreaterThanOrEqual(initialCallCount + 1);
     });
   });
 

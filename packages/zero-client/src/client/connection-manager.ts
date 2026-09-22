@@ -15,6 +15,9 @@ const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
 
 export type ConnectionManagerState =
   | {
+      name: ConnectionStatus.Initializing;
+    }
+  | {
       name: ConnectionStatus.Disconnected;
       reason: DisconnectedReason;
     }
@@ -93,6 +96,12 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   #timeoutCheckIntervalMs: number;
 
   /**
+   * `Date.now()` at the last timeout-interval tick, used to notice that the
+   * JavaScript event loop was not running. See {@linkcode #creditFrozenTime}.
+   */
+  #lastTimeoutCheckAt: number;
+
+  /**
    * Resolver used to signal waiting callers when the state changes.
    */
   #stateChangeResolver: Resolver<ConnectionManagerState> = resolver();
@@ -100,18 +109,13 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   constructor(options: ConnectionManagerOptions) {
     super();
 
-    const now = Date.now();
-
     this.#disconnectTimeout = options.disconnectTimeout;
     this.#timeoutCheckIntervalMs =
       options.timeoutCheckIntervalMs ?? DEFAULT_TIMEOUT_CHECK_INTERVAL_MS;
-    this.#state = {
-      name: ConnectionStatus.Connecting,
-      attempt: 0,
-      disconnectAt: now + this.#disconnectTimeout,
-    };
-    this.#connectingStartedAt = now;
-    this.#maybeStartTimeoutInterval();
+    // The connecting window, and the timer that enforces it, start in
+    // initialized(), once the local store is loaded.
+    this.#state = {name: ConnectionStatus.Initializing};
+    this.#lastTimeoutCheckAt = Date.now();
   }
 
   get state(): ConnectionManagerState {
@@ -201,6 +205,40 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   }
 
   /**
+   * Transition from initializing to connecting, once the local store is
+   * loaded.
+   *
+   * This is where the connecting window starts. Loading the local store can
+   * take tens of seconds on a slow device with a large replica, and none of
+   * that says anything about whether the server is reachable, so it is not
+   * charged against the disconnect timeout. No connect attempt has been made
+   * yet, so `attempt` is 0.
+   *
+   * A no-op in any other state: something else, like `close()`, has already
+   * moved the state on.
+   *
+   * @returns An object containing a promise that resolves on the next state change.
+   */
+  initialized(): {nextStatePromise: Promise<ConnectionManagerState>} {
+    if (this.#state.name !== ConnectionStatus.Initializing) {
+      return {nextStatePromise: this.#nextStatePromise()};
+    }
+
+    const now = Date.now();
+    this.#connectingStartedAt = now;
+    this.#state = {
+      name: ConnectionStatus.Connecting,
+      attempt: 0,
+      disconnectAt: now + this.#disconnectTimeout,
+    };
+    // Start the interval before publishing: a subscriber may close the manager
+    // synchronously, and closed() can only stop an interval that exists.
+    this.#maybeStartTimeoutInterval();
+    const nextStatePromise = this.#publishStateAndGetPromise();
+    return {nextStatePromise};
+  }
+
+  /**
    * Transition to connecting state.
    *
    * This starts the timeout timer, but if we've entered disconnected state,
@@ -246,8 +284,9 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
         attempt: this.#state.attempt + 1,
         reason,
       };
-      const nextStatePromise = this.#publishStateAndGetPromise();
+      // See initialized() for why the interval starts before publishing.
       this.#maybeStartTimeoutInterval();
+      const nextStatePromise = this.#publishStateAndGetPromise();
       return {nextStatePromise};
     }
 
@@ -266,8 +305,10 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
       disconnectAt,
       reason,
     };
-    const nextStatePromise = this.#publishStateAndGetPromise();
+    // Start the interval before publishing: a subscriber may close the manager
+    // synchronously, and closed() can only stop an interval that exists.
     this.#maybeStartTimeoutInterval();
+    const nextStatePromise = this.#publishStateAndGetPromise();
     return {nextStatePromise};
   }
 
@@ -451,6 +492,61 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   }
 
   /**
+   * Pushes the disconnect deadline forward by however long the event loop was
+   * not running.
+   *
+   * `disconnectAt` is an absolute wall-clock instant, but what it is meant to
+   * bound is time spent *actually retrying*. Whenever the loop is frozen --- a
+   * suspended React Native app, a sleeping laptop, a throttled background tab
+   * --- wall-clock keeps advancing while no reconnect attempt can run, so
+   * without this the first tick after resume reports `Offline` having given the
+   * client zero live seconds to connect.
+   *
+   * This interval is its own detector: a tick that lands late by more than a
+   * full period means we were not running in between. A merely busy JS thread
+   * can also delay a tick, and we cannot tell the two apart from lateness
+   * alone, but the costs are asymmetric --- crediting a busy period back just
+   * grants a bit more time to connect, whereas failing to credit a real freeze
+   * produces a user-visible bogus disconnect --- so we credit.
+   *
+   * The whole gap is credited, not `elapsed` minus a period. An overdue
+   * `setInterval` callback runs as soon as the loop resumes rather than waiting
+   * out another period, so `elapsed` is already about the frozen duration;
+   * netting off a period would charge up to a full period of frozen time
+   * against the deadline. Freezing just after a tick would then leave the
+   * deadline exactly at `now` on resume and disconnect immediately, which is
+   * the very thing this is here to prevent.
+   */
+  #creditFrozenTime(): void {
+    const now = Date.now();
+    const elapsed = now - this.#lastTimeoutCheckAt;
+    this.#lastTimeoutCheckAt = now;
+
+    // Ordinary scheduling jitter, not a freeze.
+    if (elapsed <= 2 * this.#timeoutCheckIntervalMs) {
+      return;
+    }
+    const frozenMs = elapsed;
+
+    // Advance the window's origin so that a later `connecting()` that starts a
+    // fresh session recomputes a deadline that also excludes the frozen time.
+    if (this.#connectingStartedAt !== undefined) {
+      this.#connectingStartedAt += frozenMs;
+    }
+
+    if (this.#state.name === ConnectionStatus.Connecting) {
+      // Deliberately not published: the status has not changed, and waking the
+      // run loop's `waitForStateChange` racers here would interrupt an
+      // in-flight connect attempt for no reason. Readers of `state` still see
+      // the corrected deadline.
+      this.#state = {
+        ...this.#state,
+        disconnectAt: this.#state.disconnectAt + frozenMs,
+      };
+    }
+  }
+
+  /**
    * Check if we should transition from connecting to disconnected due to timeout.
    * Returns true if the transition happened.
    */
@@ -477,7 +573,9 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
     if (this.#timeoutInterval !== undefined) {
       return;
     }
+    this.#lastTimeoutCheckAt = Date.now();
     this.#timeoutInterval = setInterval(() => {
+      this.#creditFrozenTime();
       this.#checkTimeout();
     }, this.#timeoutCheckIntervalMs);
   }

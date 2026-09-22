@@ -825,31 +825,34 @@ describe('error handling', () => {
     await z.close();
   });
 
-  test('run waiting for complete results throws in custom mutations', async () => {
-    const z = zeroForTest({
-      schema: legacySchema,
-      mutators: {
-        issue: {
-          create: async (tx: MutatorTx) => {
-            await tx.run(tx.query.issue, {type: 'complete'});
+  test.each(['complete', 'cached'] as const)(
+    'run waiting for %s results throws in custom mutations',
+    async type => {
+      const z = zeroForTest({
+        schema: legacySchema,
+        mutators: {
+          issue: {
+            create: async (tx: MutatorTx) => {
+              await tx.run(tx.query.issue, {type});
+            },
           },
-        },
-      } as const,
-    });
+        } as const,
+      });
 
-    await z.triggerConnected();
-    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+      await z.triggerConnected();
+      await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-    const result = await z.mutate.issue.create().client;
-    assert(result.type === 'error', 'Expected result type to be error');
-    expect(result.error.type).toBe('app');
-    assert(result.error.type === 'app', 'Expected error type to be app');
-    expect(result.error.message).toBe(
-      'Cannot wait for complete results in custom mutations',
-    );
+      const result = await z.mutate.issue.create().client;
+      assert(result.type === 'error', 'Expected result type to be error');
+      expect(result.error.type).toBe('app');
+      assert(result.error.type === 'app', 'Expected error type to be app');
+      expect(result.error.message).toBe(
+        'Cannot wait for cached or complete results in custom mutations',
+      );
 
-    await z.close();
-  });
+      await z.close();
+    },
+  );
 
   test('cannot await the promise directly', async () => {
     const z = zeroForTest({
@@ -1020,7 +1023,7 @@ describe('server results and keeping read queries', () => {
     // query is not removed, only put.
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"37augjshwgayh","name":"a","args":[],"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1o2vimr0oukr3l","name":"a","args":[],"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -1047,7 +1050,7 @@ describe('server results and keeping read queries', () => {
     // mutation is no longer outstanding, query is removed.
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"37augjshwgayh"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1o2vimr0oukr3l"}]}]`,
       ]);
     });
 
@@ -1064,7 +1067,7 @@ describe('server results and keeping read queries', () => {
 
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1pmg07l6czqjy","name":"b","args":[],"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"0izedpx0ua8to9","name":"b","args":[],"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -1107,7 +1110,7 @@ describe('server results and keeping read queries', () => {
 
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1pmg07l6czqjy"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"0izedpx0ua8to9"}]}]`,
       ]);
     });
 
