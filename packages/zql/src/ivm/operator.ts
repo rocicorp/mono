@@ -195,15 +195,7 @@ export interface Operator extends Input, Output {
   /**
    * Intermediate pipeline operators MUST implement reconcile so that Phase 2
    * reconciliation reaches all bounded operators in the pipeline and is never
-   * accidentally swallowed. Pass-through operators should forward:
-   *
-   * ```ts
-   * *reconcile(_pusher: InputBase): Stream<'yield'> {
-   *   if (this.#output.reconcile) {
-   *     yield* this.#output.reconcile(this);
-   *   }
-   * }
-   * ```
+   * accidentally swallowed.
    */
   reconcile(pusher: InputBase): Stream<'yield'>;
 }
