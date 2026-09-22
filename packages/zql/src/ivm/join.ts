@@ -37,22 +37,16 @@ export type PartitionEntry = {
   pks: string[];
 };
 
+export type JoinEntry = Record<string, PartitionEntry>;
+
 interface JoinStorage {
-  get(key: string): PartitionEntry | undefined;
-  set(key: string, value: PartitionEntry): void;
+  get(key: string): JoinEntry | undefined;
+  set(key: string, value: JoinEntry): void;
   del(key: string): void;
-  scan(options?: {prefix: string}): Stream<[string, PartitionEntry]>;
 }
 
-function makeJunctionPrefix(junctionKey: string): string {
-  return `j\x00${junctionKey}\x00`;
-}
-
-function makePartitionStorageKey(
-  junctionKey: string,
-  partitionKey: string,
-): string {
-  return `j\x00${junctionKey}\x00${partitionKey}`;
+function makeJoinStorageKey(joinKey: string): string {
+  return `j\x00${joinKey}`;
 }
 
 type Args = {
@@ -280,24 +274,24 @@ export class Join implements Input {
       if (constraint) {
         let parentNodeStream: Stream<Node | 'yield'>;
         if (this.#storage && this.#parentPartitionKey) {
-          const junctionKey = canonicalKey(childRow, this.#childKey);
-          const prefix = makeJunctionPrefix(junctionKey);
-          const partitionEntries: PartitionEntry[] = [];
-          for (const [, entry] of this.#storage.scan({prefix})) {
-            partitionEntries.push(entry);
+          const joinKey = canonicalKey(childRow, this.#childKey);
+          const entry = this.#storage.get(makeJoinStorageKey(joinKey));
+          if (!entry) {
+            return;
           }
+          const partitionEntries = Object.values(entry);
           if (partitionEntries.length === 0) {
             return;
           }
           if (partitionEntries.length === 1) {
-            const [entry] = partitionEntries;
+            const [partition] = partitionEntries;
             parentNodeStream = this.#parent.fetch({
-              constraint: {...constraint, ...entry.constraint},
+              constraint: {...constraint, ...partition.constraint},
             });
           } else {
-            const streams = partitionEntries.map(entry =>
+            const streams = partitionEntries.map(partition =>
               this.#parent.fetch({
-                constraint: {...constraint, ...entry.constraint},
+                constraint: {...constraint, ...partition.constraint},
               }),
             );
             const compare = (a: Node, b: Node) =>
@@ -338,20 +332,22 @@ export class Join implements Input {
     ) {
       return;
     }
-    const junctionKey = canonicalKey(row, this.#parentKey);
+    const joinKey = canonicalKey(row, this.#parentKey);
     const partitionKey = canonicalKey(row, this.#parentPartitionKey);
     const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
-    const storageKey = makePartitionStorageKey(junctionKey, partitionKey);
-    const entry = this.#storage.get(storageKey);
-    if (!entry) {
-      this.#storage.set(storageKey, {
+    const storageKey = makeJoinStorageKey(joinKey);
+    const entry = this.#storage.get(storageKey) ?? {};
+    const partition = entry[partitionKey];
+    if (!partition) {
+      entry[partitionKey] = {
         constraint: Object.fromEntries(
           this.#parentPartitionKey.map(k => [k, row[k]]),
         ),
         pks: [parentPk],
-      });
-    } else if (!entry.pks.includes(parentPk)) {
-      entry.pks.push(parentPk);
+      };
+      this.#storage.set(storageKey, entry);
+    } else if (!partition.pks.includes(parentPk)) {
+      partition.pks.push(parentPk);
       this.#storage.set(storageKey, entry);
     }
   }
@@ -364,19 +360,25 @@ export class Join implements Input {
     ) {
       return;
     }
-    const junctionKey = canonicalKey(row, this.#parentKey);
+    const joinKey = canonicalKey(row, this.#parentKey);
     const partitionKey = canonicalKey(row, this.#parentPartitionKey);
     const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
-    const storageKey = makePartitionStorageKey(junctionKey, partitionKey);
+    const storageKey = makeJoinStorageKey(joinKey);
     const entry = this.#storage.get(storageKey);
     if (entry) {
-      const idx = entry.pks.indexOf(parentPk);
-      if (idx !== -1) {
-        entry.pks.splice(idx, 1);
-        if (entry.pks.length === 0) {
-          this.#storage.del(storageKey);
-        } else {
-          this.#storage.set(storageKey, entry);
+      const partition = entry[partitionKey];
+      if (partition) {
+        const idx = partition.pks.indexOf(parentPk);
+        if (idx !== -1) {
+          partition.pks.splice(idx, 1);
+          if (partition.pks.length === 0) {
+            delete entry[partitionKey];
+          }
+          if (Object.keys(entry).length === 0) {
+            this.#storage.del(storageKey);
+          } else {
+            this.#storage.set(storageKey, entry);
+          }
         }
       }
     }
