@@ -397,6 +397,42 @@ test('whereNotExists condition with orderBy in subquery', () => {
   );
 });
 
+test('whereNotExists condition inside a callback', () => {
+  // Inside `or(...)` the NOT EXISTS is rendered as `not(exists(...))` and
+  // its names are added to the enclosing callback's args.
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'or',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'title'},
+          op: '=',
+          right: {type: 'literal', value: 'x'},
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'NOT EXISTS',
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['issue_id'],
+            },
+            subquery: {
+              table: 'comment',
+              alias: 'zsubq_comments',
+            },
+          },
+        },
+      ],
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({cmp, exists, not, or}) => or(cmp('title', 'x'), not(exists('comments'))))"`,
+  );
+});
+
 test('NOT LIKE operator', () => {
   const ast: AST = {
     table: 'issue',

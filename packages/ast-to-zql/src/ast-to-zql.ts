@@ -73,6 +73,28 @@ type Args = Set<string>;
 
 type Prefix = '.where' | 'cmp';
 
+/**
+ * Renders `code` — a builder-callback expression such as `cmp(...)` or
+ * `not(exists(...))` — at `prefix`. At the top level `.where(field, ...)` has
+ * no form for it, so it becomes `.where(({...needed}) => code)`; inside a
+ * callback, the names it needs are added to the enclosing callback's
+ * destructured args and `code` is returned as is.
+ */
+function wrap(
+  prefix: Prefix,
+  args: Args,
+  needed: readonly string[],
+  code: string,
+): string {
+  if (prefix === '.where') {
+    return `.where(({${toSorted(needed).join(', ')}}) => ${code})`;
+  }
+  for (const name of needed) {
+    args.add(name);
+  }
+  return code;
+}
+
 function transformCondition(
   condition: Condition,
   prefix: Prefix,
@@ -109,13 +131,8 @@ function transformSimpleCondition(
 
   if (left.type === 'json') {
     // A JSON path operand only exists through the expression builder's
-    // `json()`, so it must be destructured wherever it appears: at the top
-    // level `.where(field, ...)` has no such form, so emit the callback form;
-    // inside a callback, add it to the enclosing callback's args.
-    if (prefix === '.where') {
-      return `.where(({cmp, json}) => cmp(${argsCode}))`;
-    }
-    args.add('json');
+    // `json()`, so the condition must be rendered as a callback.
+    return wrap(prefix, args, ['cmp', 'json'], `cmp(${argsCode})`);
   }
   return `${prefix}(${argsCode})`;
 }
@@ -204,25 +221,13 @@ function transformExistsCondition(
 
   op satisfies 'NOT EXISTS';
 
-  if (hasSubQueryProps) {
-    if (prefix === '.where') {
-      return `.where(({exists, not}) => not(exists('${relationship}', q => q${astToZQL(
-        nextSubquery,
-      )}${optionsStr})))`;
-    }
-    prefix satisfies 'cmp';
-    args.add('not');
-    args.add('exists');
-    return `not(exists('${relationship}', q => q${astToZQL(nextSubquery)}${optionsStr}))`;
-  }
-
-  if (prefix === '.where') {
-    return `.where(({exists, not}) => not(exists('${relationship}'${optionsStr})))`;
-  }
-  args.add('not');
-  args.add('exists');
-
-  return `not(exists('${relationship}'${optionsStr})))`;
+  const subquery = hasSubQueryProps ? `, q => q${astToZQL(nextSubquery)}` : '';
+  return wrap(
+    prefix,
+    args,
+    ['exists', 'not'],
+    `not(exists('${relationship}'${subquery}${optionsStr}))`,
+  );
 }
 
 // If the `exists` is applied against a junction edge, both hops will have the same alias and both hops will be exists conditions.
