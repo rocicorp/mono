@@ -77,6 +77,7 @@ import {
   ClientHandler,
   startPoke,
   type PatchToVersion,
+  type MultiPokeHandler,
   type PokeHandler,
   type RowPatch,
 } from './client-handler.ts';
@@ -1479,7 +1480,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return ttlClock;
   }
 
-  #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
+  /**
+   * @param patchesPoked Whether patches computed against the updater's CVR
+   *     have already been poked to clients. If so, the CVR is checked to be
+   *     current even when the flush has nothing to write: another
+   *     view-syncer may have already committed identical rows at a newer
+   *     version, which would otherwise leave this one poking from a stale
+   *     CVR whose version it cannot advance.
+   */
+  #flushUpdater(
+    lc: LogContext,
+    updater: CVRUpdater,
+    patchesPoked = false,
+  ): Promise<CVRSnapshot> {
     return startAsyncSpan(tracer, 'vs.#flushUpdater', () =>
       this.#runPriorityOp(lc, 'flushing cvr', async () => {
         const now = Date.now();
@@ -1489,6 +1502,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#lastConnectTime,
           now,
           ttlClock,
+          patchesPoked,
         );
 
         if (flushed) {
@@ -1499,6 +1513,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return cvr;
       }),
     );
+  }
+
+  /**
+   * Flushes an updater whose changes have already been poked. If the flush
+   * fails (e.g. the CVR was concurrently modified), the poke is cancelled
+   * before the error propagates. The error may only fail the client that
+   * initiated the operation, and any other client left mid-poke would fail
+   * its next pokeStart.
+   */
+  async #flushPoked(
+    lc: LogContext,
+    updater: CVRUpdater,
+    pokers: MultiPokeHandler,
+  ): Promise<CVRSnapshot> {
+    try {
+      return await this.#flushUpdater(lc, updater, pokers.patchesSent);
+    } catch (e) {
+      await pokers.cancel();
+      throw e;
+    }
   }
 
   #startTTLClockInterval(lc: LogContext): void {
@@ -3184,7 +3218,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = await this.#flushUpdater(lc, updater);
+      this.#cvr = await this.#flushPoked(lc, updater, pokers);
       if (budgetEvictedQueryIDs.length > 0) {
         this.#scheduleExpireEviction(lc, this.#cvr);
       }
@@ -3473,7 +3507,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'advancement state missing',
       );
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = await this.#flushUpdater(lc, updater);
+      this.#cvr = await this.#flushPoked(lc, updater, pokers);
       const finalVersion = this.#cvr.version;
 
       // Signal clients to commit.

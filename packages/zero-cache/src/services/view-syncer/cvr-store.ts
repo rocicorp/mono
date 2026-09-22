@@ -1074,6 +1074,7 @@ export class CVRStore {
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
+    verifyNoop: boolean,
   ): Promise<CVRFlushStats | null> {
     const stats: CVRFlushStats = {
       instances: 0,
@@ -1113,6 +1114,24 @@ export class CVRStore {
       this.#pendingQueryPartialUpdates.size === 0 &&
       this.#pendingDesireUpdates.size === 0
     ) {
+      if (verifyNoop) {
+        // Nothing to write, but the caller has already acted on the CVR
+        // (e.g. poked patches computed against it), so it still needs to know
+        // whether the CVR is current. Otherwise a stale view-syncer whose
+        // writes happen to match what another view-syncer already committed
+        // never learns that it is behind.
+        await runTx(
+          this.#db,
+          tx =>
+            this.#checkVersionAndOwnership(
+              lc,
+              tx,
+              expectedCurrentVersion,
+              lastConnectTime,
+            ),
+          {mode: Mode.READ_COMMITTED},
+        );
+      }
       return null;
     }
     // Note: The CVR instance itself is only updated if there are material
@@ -1249,11 +1268,19 @@ export class CVRStore {
     return this.#rowCount;
   }
 
+  /**
+   * Flushes pending writes, checking that `expectedCurrentVersion` is still
+   * the current version of the CVR and that this task still owns it.
+   *
+   * If there is nothing to write, the flush is a no-op and no check is done,
+   * unless `verifyNoop` is set.
+   */
   async flush(
     lc: LogContext,
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
+    verifyNoop = false,
   ): Promise<CVRFlushStats | null> {
     const start = performance.now();
     lc = lc.withContext('cvrFlushID', flushCounter++);
@@ -1263,6 +1290,7 @@ export class CVRStore {
         expectedCurrentVersion,
         cvr,
         lastConnectTime,
+        verifyNoop,
       );
       if (stats) {
         const elapsed = performance.now() - start;
