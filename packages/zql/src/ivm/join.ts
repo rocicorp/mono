@@ -1,6 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {
@@ -18,18 +18,42 @@ import {
   generateWithOverlayUnordered,
   isJoinMatch,
   rowEqualsForCompoundKey,
-  type PartitionEntry,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
+import {MemoryStorage} from './memory-storage.ts';
 import {
   throwOutput,
   type FetchRequest,
   type Input,
   type Output,
+  type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
 import type {TakeBoundProvider} from './take-gate.ts';
+
+export type PartitionEntry = {
+  constraint: Record<string, Value>;
+  pks: string[];
+};
+
+interface JoinStorage {
+  get(key: string): PartitionEntry | undefined;
+  set(key: string, value: PartitionEntry): void;
+  del(key: string): void;
+  scan(options?: {prefix: string}): Stream<[string, PartitionEntry]>;
+}
+
+function makeJunctionPrefix(junctionKey: string): string {
+  return `j\x00${junctionKey}\x00`;
+}
+
+function makePartitionStorageKey(
+  junctionKey: string,
+  partitionKey: string,
+): string {
+  return `j\x00${junctionKey}\x00${partitionKey}`;
+}
 
 type Args = {
   parent: Input;
@@ -43,6 +67,7 @@ type Args = {
   parentPartitionKey?: CompoundKey | undefined;
   boundProvider?: TakeBoundProvider | undefined;
   trackPartitions?: boolean | undefined;
+  storage?: Storage | undefined;
 };
 
 /**
@@ -63,7 +88,7 @@ export class Join implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #partitionMap: Map<string, Map<string, PartitionEntry>> | undefined;
+  readonly #storage: JoinStorage | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
@@ -82,6 +107,7 @@ export class Join implements Input {
     parentPartitionKey,
     boundProvider,
     trackPartitions,
+    storage,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -94,8 +120,10 @@ export class Join implements Input {
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
     this.#parentPartitionKey = parentPartitionKey;
-    this.#partitionMap =
-      (trackPartitions ?? true) && parentPartitionKey ? new Map() : undefined;
+    this.#storage =
+      (trackPartitions ?? true) && parentPartitionKey
+        ? ((storage ?? new MemoryStorage()) as unknown as JoinStorage)
+        : undefined;
     this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();
@@ -251,19 +279,23 @@ export class Join implements Input {
       );
       if (constraint) {
         let parentNodeStream: Stream<Node | 'yield'>;
-        if (this.#partitionMap && this.#parentPartitionKey) {
+        if (this.#storage && this.#parentPartitionKey) {
           const junctionKey = canonicalKey(childRow, this.#childKey);
-          const partitionEntries = this.#partitionMap.get(junctionKey);
-          if (!partitionEntries || partitionEntries.size === 0) {
+          const prefix = makeJunctionPrefix(junctionKey);
+          const partitionEntries: PartitionEntry[] = [];
+          for (const [, entry] of this.#storage.scan({prefix})) {
+            partitionEntries.push(entry);
+          }
+          if (partitionEntries.length === 0) {
             return;
           }
-          if (partitionEntries.size === 1) {
-            const [entry] = partitionEntries.values();
+          if (partitionEntries.length === 1) {
+            const [entry] = partitionEntries;
             parentNodeStream = this.#parent.fetch({
               constraint: {...constraint, ...entry.constraint},
             });
           } else {
-            const streams = Array.from(partitionEntries.values(), entry =>
+            const streams = partitionEntries.map(entry =>
               this.#parent.fetch({
                 constraint: {...constraint, ...entry.constraint},
               }),
@@ -300,7 +332,7 @@ export class Join implements Input {
 
   #indexParentRow(row: Row): void {
     if (
-      !this.#partitionMap ||
+      !this.#storage ||
       !this.#parentPartitionKey ||
       this.#parentKey.some(k => row[k] === null)
     ) {
@@ -309,27 +341,24 @@ export class Join implements Input {
     const junctionKey = canonicalKey(row, this.#parentKey);
     const partitionKey = canonicalKey(row, this.#parentPartitionKey);
     const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
-    let map = this.#partitionMap.get(junctionKey);
-    if (!map) {
-      map = new Map();
-      this.#partitionMap.set(junctionKey, map);
-    }
-    let entry = map.get(partitionKey);
+    const storageKey = makePartitionStorageKey(junctionKey, partitionKey);
+    const entry = this.#storage.get(storageKey);
     if (!entry) {
-      entry = {
+      this.#storage.set(storageKey, {
         constraint: Object.fromEntries(
           this.#parentPartitionKey.map(k => [k, row[k]]),
         ),
-        pks: new Set(),
-      };
-      map.set(partitionKey, entry);
+        pks: [parentPk],
+      });
+    } else if (!entry.pks.includes(parentPk)) {
+      entry.pks.push(parentPk);
+      this.#storage.set(storageKey, entry);
     }
-    entry.pks.add(parentPk);
   }
 
   #unindexParentRow(row: Row): void {
     if (
-      !this.#partitionMap ||
+      !this.#storage ||
       !this.#parentPartitionKey ||
       this.#parentKey.some(k => row[k] === null)
     ) {
@@ -338,16 +367,16 @@ export class Join implements Input {
     const junctionKey = canonicalKey(row, this.#parentKey);
     const partitionKey = canonicalKey(row, this.#parentPartitionKey);
     const parentPk = canonicalKey(row, this.#parent.getSchema().primaryKey);
-    const map = this.#partitionMap.get(junctionKey);
-    if (map) {
-      const entry = map.get(partitionKey);
-      if (entry) {
-        entry.pks.delete(parentPk);
-        if (entry.pks.size === 0) {
-          map.delete(partitionKey);
-          if (map.size === 0) {
-            this.#partitionMap.delete(junctionKey);
-          }
+    const storageKey = makePartitionStorageKey(junctionKey, partitionKey);
+    const entry = this.#storage.get(storageKey);
+    if (entry) {
+      const idx = entry.pks.indexOf(parentPk);
+      if (idx !== -1) {
+        entry.pks.splice(idx, 1);
+        if (entry.pks.length === 0) {
+          this.#storage.del(storageKey);
+        } else {
+          this.#storage.set(storageKey, entry);
         }
       }
     }

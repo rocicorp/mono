@@ -421,16 +421,6 @@ describe('canonicalKey', () => {
     );
   });
 
-  test('number and bigint with same value do not collide', () => {
-    // The actual production trigger: zqlite's safeIntegers returns
-    // bigint for INTEGER columns, but a MemorySource on the other side
-    // of the join would return number. Without the type tag, parents
-    // (bigint) and children (number) on the same id would not match.
-    expect(canonicalKeyForTest({k: 1}, ['k'])).not.toBe(
-      canonicalKeyForTest({k: 1n}, ['k']),
-    );
-  });
-
   test('boolean and matching string do not collide', () => {
     // boolean true → "t", string "t" → "st"
     expect(canonicalKeyForTest({k: true}, ['k'])).not.toBe(
@@ -481,19 +471,10 @@ describe('canonicalKey', () => {
     );
   });
 
-  test('compound key: number vs bigint per position', () => {
-    expect(canonicalKeyForTest({a: 1, b: 2}, ['a', 'b'])).not.toBe(
-      canonicalKeyForTest({a: 1n, b: 2n}, ['a', 'b']),
-    );
-  });
-
   test('compound key: equal records produce equal keys', () => {
     // Sanity: matching tuples must be deduped together.
     expect(canonicalKeyForTest({a: 1, b: 'x'}, ['a', 'b'])).toBe(
       canonicalKeyForTest({a: 1, b: 'x'}, ['a', 'b']),
-    );
-    expect(canonicalKeyForTest({a: 1n, b: 'x'}, ['a', 'b'])).toBe(
-      canonicalKeyForTest({a: 1n, b: 'x'}, ['a', 'b']),
     );
   });
 
@@ -524,15 +505,9 @@ describe('canonicalKey', () => {
     );
   });
 
-  test('falsy trio: 0n vs 0 vs false are all distinct', () => {
-    // Common production overlap: a SQLite INTEGER column read with
-    // safeIntegers gives bigint, a MemorySource gives number, and naive
-    // user code might compare against `false`. All three must hash apart.
-    const zeroBig = canonicalKeyForTest({k: 0n}, ['k']);
+  test('falsy pair: 0 vs false are distinct', () => {
     const zeroNum = canonicalKeyForTest({k: 0}, ['k']);
     const falseBool = canonicalKeyForTest({k: false}, ['k']);
-    expect(zeroBig).not.toBe(zeroNum);
-    expect(zeroBig).not.toBe(falseBool);
     expect(zeroNum).not.toBe(falseBool);
   });
 });

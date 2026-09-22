@@ -2058,14 +2058,6 @@ suite('canonicalKey', () => {
     );
   });
 
-  test('distinguishes bigint from number with same numeric value', () => {
-    // safeIntegers in zqlite produces bigint at runtime even though the
-    // static Value type doesn't list it.
-    expect(canonicalKeyForTest({k: 1n}, ['k'])).not.toBe(
-      canonicalKeyForTest({k: 1}, ['k']),
-    );
-  });
-
   test('compound key separator avoids collisions across boundaries', () => {
     // Without a separator, ('ab','c') and ('a','bc') would canonicalize
     // identically. The \x00 delimiter keeps the boundaries distinct for

@@ -2506,7 +2506,28 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`{}`);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          ".issues:join(comments)": {
+            "j si1 su1": {
+              "constraint": {
+                "ownerID": "u1",
+              },
+              "pks": [
+                "si1",
+              ],
+            },
+            "j si2 su1": {
+              "constraint": {
+                "ownerID": "u1",
+              },
+              "pks": [
+                "si2",
+              ],
+            },
+          },
+        }
+      `);
 
       expect(pushes).toMatchInlineSnapshot(`
         [
@@ -3002,7 +3023,20 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".comments:join(revisions)": {
+          "j sc1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "sc1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3134,7 +3168,20 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".comments:join(revisions)": {
+          "j sc1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "sc1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3256,7 +3303,20 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".comments:join(revisions)": {
+          "j sc1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "sc1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3357,7 +3417,20 @@ suite('push one:many:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".comments:join(revisions)": {
+          "j sc1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "sc1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3570,7 +3643,20 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".issueLabels:join(labels)": {
+          "j sl1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "si1 sl1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3700,7 +3786,20 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".issueLabels:join(labels)": {
+          "j sl1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "si1 sl1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3917,7 +4016,28 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".issueLabels:join(labels)": {
+          "j sl1 si1": {
+            "constraint": {
+              "issueID": "i1",
+            },
+            "pks": [
+              "si1 sl1",
+            ],
+          },
+          "j sl1 si2": {
+            "constraint": {
+              "issueID": "i2",
+            },
+            "pks": [
+              "si2 sl1",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -7509,7 +7629,36 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".owner:join(state)": {
+          "j ss0 su0": {
+            "constraint": {
+              "id": "u0",
+            },
+            "pks": [
+              "su0",
+            ],
+          },
+          "j ss0 su1": {
+            "constraint": {
+              "id": "u1",
+            },
+            "pks": [
+              "su1",
+            ],
+          },
+          "j ss1 su2": {
+            "constraint": {
+              "id": "u2",
+            },
+            "pks": [
+              "su2",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -9726,7 +9875,45 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".ownerByName:join(state)": {
+          "j ss0 sAaron": {
+            "constraint": {
+              "name": "Aaron",
+            },
+            "pks": [
+              "su2",
+              "su3",
+            ],
+          },
+          "j ss1 sAaron": {
+            "constraint": {
+              "name": "Aaron",
+            },
+            "pks": [
+              "su1",
+            ],
+          },
+          "j ss1 sArv": {
+            "constraint": {
+              "name": "Arv",
+            },
+            "pks": [
+              "su4",
+            ],
+          },
+          "j ss1 sFritz": {
+            "constraint": {
+              "name": "Fritz",
+            },
+            "pks": [
+              "su0",
+            ],
+          },
+        },
+      }
+    `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -10608,6 +10795,341 @@ suite('test overlay on many:many (no junction) pushes', () => {
               },
             },
           ],
+        },
+      ]
+    `);
+  });
+});
+
+suite('partition storage lifecycle', () => {
+  const sources: Sources = {
+    user: {
+      columns: {
+        id: {type: 'string'},
+        name: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        ownerID: {type: 'string'},
+        title: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'user',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['ownerID']},
+        subquery: {
+          table: 'issue',
+          alias: 'issues',
+          orderBy: [['id', 'asc']],
+          related: [
+            {
+              system: 'client',
+              correlation: {parentField: ['id'], childField: ['issueID']},
+              subquery: {
+                table: 'comment',
+                alias: 'comments',
+                orderBy: [['id', 'asc']],
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      issues: {
+        singular: false,
+        relationships: {
+          comments: {
+            singular: false,
+            relationships: {},
+          },
+        },
+      },
+    },
+  };
+
+  test('removes partition storage entry when parent is removed, pruning subsequent child pushes', () => {
+    const {actualStorage, pushes} = runPushTest({
+      sources,
+      sourceContents: {
+        user: [{id: 'u1', name: 'Alice'}],
+        issue: [
+          {id: 'i1', ownerID: 'u1', title: 'issue 1'},
+          {id: 'i2', ownerID: 'u1', title: 'issue 2'},
+        ],
+        comment: [{id: 'c1', issueID: 'i1', text: 'comment 1'}],
+      },
+      ast,
+      format,
+      pushes: [
+        [
+          'issue',
+          makeSourceChangeRemove({id: 'i1', ownerID: 'u1', title: 'issue 1'}),
+        ],
+        [
+          'comment',
+          makeSourceChangeAdd({
+            id: 'c2',
+            issueID: 'i1',
+            text: 'orphan comment',
+          }),
+        ],
+      ],
+    });
+
+    // i1 was removed, so its storage key was deleted via del().
+    // i2 is still view-resident, so its storage key remains.
+    expect(actualStorage).toEqual({
+      '.issues:join(comments)': {
+        'j\x00si2\x00su1': {
+          constraint: {ownerID: 'u1'},
+          pks: ['si2'],
+        },
+      },
+    });
+
+    // The child push for c2 (targeting removed i1) is pruned:
+    // the only push emitted is the removal of i1 under u1.
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {
+                  "comments": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "id": "c1",
+                        "issueID": "i1",
+                        "text": "comment 1",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "id": "i1",
+                  "ownerID": "u1",
+                  "title": "issue 1",
+                },
+              },
+              "type": "remove",
+            },
+            "relationshipName": "issues",
+          },
+          "row": {
+            "id": "u1",
+            "name": "Alice",
+          },
+          "type": "child",
+        },
+      ]
+    `);
+  });
+
+  test('shared partition entry decrements pks on first removal, and deletes storage key on second removal', () => {
+    const projectSources: Sources = {
+      project: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+      issue: {
+        columns: {
+          id: {type: 'string'},
+          projectID: {type: 'string'},
+          ownerID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      user: {
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+    };
+
+    const projectAst: AST = {
+      table: 'project',
+      orderBy: [['id', 'asc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['projectID']},
+          subquery: {
+            table: 'issue',
+            alias: 'issues',
+            orderBy: [['id', 'asc']],
+            related: [
+              {
+                system: 'client',
+                correlation: {parentField: ['ownerID'], childField: ['id']},
+                subquery: {
+                  table: 'user',
+                  alias: 'owner',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const projectFormat: Format = {
+      singular: false,
+      relationships: {
+        issues: {
+          singular: false,
+          relationships: {
+            owner: {
+              singular: true,
+              relationships: {},
+            },
+          },
+        },
+      },
+    };
+
+    // 1. Remove only i1: pks decrements from ['si1', 'si2'] to ['si2'], storage key stays.
+    const step1 = runPushTest({
+      sources: projectSources,
+      sourceContents: {
+        project: [{id: 'p1'}],
+        issue: [
+          {id: 'i1', projectID: 'p1', ownerID: 'u1'},
+          {id: 'i2', projectID: 'p1', ownerID: 'u1'},
+        ],
+        user: [{id: 'u1', name: 'Alice'}],
+      },
+      ast: projectAst,
+      format: projectFormat,
+      pushes: [
+        [
+          'issue',
+          makeSourceChangeRemove({id: 'i1', projectID: 'p1', ownerID: 'u1'}),
+        ],
+      ],
+    });
+
+    expect(step1.actualStorage).toEqual({
+      '.issues:join(owner)': {
+        'j\x00su1\x00sp1': {
+          constraint: {projectID: 'p1'},
+          pks: ['si2'],
+        },
+      },
+    });
+
+    // 2. Remove both i1 and i2: entry.pks.length reaches 0, key is deleted.
+    const step2 = runPushTest({
+      sources: projectSources,
+      sourceContents: {
+        project: [{id: 'p1'}],
+        issue: [
+          {id: 'i1', projectID: 'p1', ownerID: 'u1'},
+          {id: 'i2', projectID: 'p1', ownerID: 'u1'},
+        ],
+        user: [{id: 'u1', name: 'Alice'}],
+      },
+      ast: projectAst,
+      format: projectFormat,
+      pushes: [
+        [
+          'issue',
+          makeSourceChangeRemove({id: 'i1', projectID: 'p1', ownerID: 'u1'}),
+        ],
+        [
+          'issue',
+          makeSourceChangeRemove({id: 'i2', projectID: 'p1', ownerID: 'u1'}),
+        ],
+      ],
+    });
+
+    expect(step2.actualStorage).toEqual({
+      '.issues:join(owner)': {},
+    });
+  });
+
+  test('prefix scan isolation: child push for j1 does not match j10', () => {
+    const {pushes} = runPushTest({
+      sources,
+      sourceContents: {
+        user: [{id: 'u1', name: 'Alice'}],
+        issue: [
+          {id: 'i1', ownerID: 'u1', title: 'issue 1'},
+          {id: 'i10', ownerID: 'u1', title: 'issue 10'},
+        ],
+        comment: [],
+      },
+      ast,
+      format,
+      pushes: [
+        [
+          'comment',
+          makeSourceChangeAdd({id: 'c1', issueID: 'i1', text: 'comment for 1'}),
+        ],
+      ],
+    });
+
+    // The comment was pushed ONLY to i1, not to i10
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "id": "c1",
+                      "issueID": "i1",
+                      "text": "comment for 1",
+                    },
+                  },
+                  "type": "add",
+                },
+                "relationshipName": "comments",
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+                "title": "issue 1",
+              },
+              "type": "child",
+            },
+            "relationshipName": "issues",
+          },
+          "row": {
+            "id": "u1",
+            "name": "Alice",
+          },
+          "type": "child",
         },
       ]
     `);
