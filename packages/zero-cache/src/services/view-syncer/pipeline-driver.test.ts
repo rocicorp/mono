@@ -1025,6 +1025,74 @@ describe('view-syncer/pipeline-driver', () => {
     expect(aggChanges).toHaveLength(3);
     // Every synthetic row is an ADD.
     expect(aggChanges.every(c => c.type === ChangeType.ADD)).toBe(true);
+
+    // Client catch-up rebuilds put patches through getRow, which has no
+    // TableSource to read a synthetic table from: it serves the last streamed
+    // row, and forgets it with the query.
+    expect(pipelines.getRow(aggTable, {issueID: '2'})).toEqual({
+      issueID: '2',
+      value: 3,
+      [ZERO_VERSION_COLUMN_NAME]: '123',
+    });
+    expect(pipelines.getRow(aggTable, {issueID: '9'})).toBeUndefined();
+    pipelines.removeQuery('queryID1');
+    expect(pipelines.getRow(aggTable, {issueID: '2'})).toBeUndefined();
+  });
+
+  test('relationship aggregate: repeat emissions in one advance get increasing versions', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_WITH_COMMENT_COUNT,
+        startTimer(),
+      ),
+    ];
+    const aggTable = aggregateTableName(
+      'queryID1',
+      must(ISSUES_WITH_COMMENT_COUNT.related)[0],
+    );
+
+    // Two comments on the same issue in one transaction: the aggregate row is
+    // edited twice at replica version 134. The CVR drops a put whose version
+    // is not strictly greater than the last one it sent for the row, so the
+    // second edit must not repeat the first one's version.
+    replicator.processTransaction(
+      '134',
+      messages.insert('comments', {id: '31', issueID: '3', upvotes: 0n}),
+      messages.insert('comments', {id: '32', issueID: '3', upvotes: 0n}),
+    );
+    const aggChanges = changes().filter(
+      (c): c is RowChange => c !== 'yield' && c.table === aggTable,
+    );
+    expect(aggChanges.map(c => [c.type, c.row])).toEqual([
+      [
+        ChangeType.EDIT,
+        {issueID: '3', value: 1, [ZERO_VERSION_COLUMN_NAME]: '134'},
+      ],
+      [
+        ChangeType.EDIT,
+        {issueID: '3', value: 2, [ZERO_VERSION_COLUMN_NAME]: '134.000001'},
+      ],
+    ]);
+    expect(pipelines.getRow(aggTable, {issueID: '3'})).toEqual({
+      issueID: '3',
+      value: 2,
+      [ZERO_VERSION_COLUMN_NAME]: '134.000001',
+    });
+
+    // The next replica version is greater than any suffixed one.
+    replicator.processTransaction(
+      '135',
+      messages.insert('comments', {id: '33', issueID: '3', upvotes: 0n}),
+    );
+    expect(
+      changes()
+        .filter((c): c is RowChange => c !== 'yield' && c.table === aggTable)
+        .map(c => c.row?.[ZERO_VERSION_COLUMN_NAME]),
+    ).toEqual(['135']);
+    expect('134.000001' < '135').toBe(true);
   });
 
   // A top-level (ungrouped) aggregate: `issues.count()`. The server reduces all

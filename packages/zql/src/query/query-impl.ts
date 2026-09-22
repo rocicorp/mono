@@ -51,6 +51,7 @@ import type {
   FieldTSType,
   GetFilterType,
   HumanReadable,
+  NumericSelector,
   PreloadOptions,
   PullRow,
   Query,
@@ -470,7 +471,7 @@ export class QueryImpl<
       AggregateResult<number>
     >;
 
-  sum = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+  sum = <TSelector extends NumericSelector<TSchema['tables'][TTable]>>(
     field: TSelector,
   ): Query<TTable, TSchema, AggregateResult<number | null>> =>
     this.#aggregate('sum', field as string) as unknown as Query<
@@ -479,7 +480,7 @@ export class QueryImpl<
       AggregateResult<number | null>
     >;
 
-  avg = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+  avg = <TSelector extends NumericSelector<TSchema['tables'][TTable]>>(
     field: TSelector,
   ): Query<TTable, TSchema, AggregateResult<number | null>> =>
     this.#aggregate('avg', field as string) as unknown as Query<
@@ -578,6 +579,14 @@ export class QueryImpl<
       assert(
         sourceField.length === destField.length,
         'The source and destination of a relationship must have the same number of fields',
+      );
+
+      // The builder and the name mapper read a `related` under an aggregate
+      // as the destination of a junction (see the two-hop path below), so a
+      // direct relationship's aggregate cannot nest one.
+      assert(
+        !subQuery.format.aggregate || subQuery.#ast.related === undefined,
+        'an aggregate relationship does not support related() on its subquery',
       );
 
       // Keyed by the sub-query's identity. Each query owns its AST object, so
@@ -1000,6 +1009,10 @@ export class QueryImpl<
           ) as AnyQuery,
         ),
       );
+      assert(
+        subQuery.#ast.aggregate === undefined,
+        'exists() does not support an aggregate subquery',
+      );
       // Give the sub-query's AST an id so the enclosing `where` can key on it
       // exactly rather than comparing the sub-tree.
       astID(subQuery.#ast);
@@ -1040,6 +1053,10 @@ export class QueryImpl<
             relationship,
           ),
         ) as AnyQuery,
+      );
+      assert(
+        asQueryImpl(queryToDest).#ast.aggregate === undefined,
+        'exists() does not support an aggregate subquery',
       );
 
       return {

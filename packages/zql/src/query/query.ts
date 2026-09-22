@@ -18,6 +18,19 @@ import type {TypedView} from './typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
 
+/**
+ * The columns of a table whose values are numbers (nullable or not): the only
+ * ones `sum`/`avg` can aggregate. Anything else fails at runtime, in the IVM
+ * operator's assert or as a Postgres error, so it is rejected here instead.
+ */
+export type NumericSelector<E extends TableSchema> = {
+  [K in keyof E['columns']]: SchemaValueToTSType<E['columns'][K]> extends
+    | number
+    | null
+    ? K
+    : never;
+}[keyof E['columns']];
+
 export type NoCompoundTypeSelector<T extends TableSchema> = Exclude<
   Selector<T>,
   JsonSelectors<T> | ArraySelectors<T>
@@ -488,7 +501,7 @@ export interface Query<
    * numeric column, e.g. `issue.related('comments', c => c.sum('points'))`. The
    * value is `null` for an empty (or all-null) group, matching SQL.
    */
-  sum<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+  sum<TSelector extends NumericSelector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
   ): Query<TTable, TSchema, AggregateResult<number | null>>;
 
@@ -496,7 +509,7 @@ export interface Query<
    * Reduces this (sub)query to `avg(field)`. The value is `null` for an empty
    * (or all-null) group, matching SQL.
    */
-  avg<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+  avg<TSelector extends NumericSelector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
   ): Query<TTable, TSchema, AggregateResult<number | null>>;
 

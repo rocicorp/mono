@@ -710,6 +710,80 @@ test('protocol version', () => {
   expect(PROTOCOL_VERSION).toBe(54);
 });
 
+test('mapAST maps an aggregate field against the table it lives on', () => {
+  const tables = {
+    issue: table('issue')
+      .from('issues')
+      .columns({id: string().from('issue_id')})
+      .primaryKey('id')
+      .build(),
+    comment: table('comment')
+      .from('comments')
+      .columns({
+        id: string().from('comment_id'),
+        issueId: string().from('issue_id'),
+        points: number().from('point_count'),
+      })
+      .primaryKey('id')
+      .build(),
+    issueLabel: table('issueLabel')
+      .from('issue_labels')
+      .columns({
+        issueId: string().from('issue_id'),
+        labelId: string().from('label_id'),
+      })
+      .primaryKey('issueId', 'labelId')
+      .build(),
+    label: table('label')
+      .from('labels')
+      .columns({
+        id: string().from('label_id'),
+        weight: number().from('label_weight'),
+      })
+      .primaryKey('id')
+      .build(),
+  };
+
+  const ast: AST = {
+    table: 'issue',
+    related: [
+      // A direct relationship: the field is on the subquery's own table.
+      {
+        correlation: {parentField: ['id'], childField: ['issueId']},
+        aggregate: {fn: 'sum', field: 'points'},
+        subquery: {table: 'comment', alias: 'points'},
+      },
+      // A junction: the field is on the destination, one hop past it.
+      {
+        correlation: {parentField: ['id'], childField: ['issueId']},
+        aggregate: {fn: 'sum', field: 'weight'},
+        subquery: {
+          table: 'issueLabel',
+          alias: 'labels',
+          related: [
+            {
+              correlation: {parentField: ['labelId'], childField: ['id']},
+              subquery: {table: 'label', alias: 'labels'},
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  const serverAST = mapAST(ast, clientToServer(tables));
+  expect(serverAST.related?.map(r => r.aggregate)).toEqual([
+    {fn: 'sum', field: 'point_count'},
+    {fn: 'sum', field: 'label_weight'},
+  ]);
+  expect(
+    mapAST(serverAST, serverToClient(tables)).related?.map(r => r.aggregate),
+  ).toEqual([
+    {fn: 'sum', field: 'points'},
+    {fn: 'sum', field: 'weight'},
+  ]);
+});
+
 test('normalizedAST matches normalizeAST', () => {
   const ast: AST = {
     table: 'table',

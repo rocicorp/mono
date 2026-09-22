@@ -395,7 +395,7 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
                 field:
                   r.aggregate.field === undefined
                     ? undefined
-                    : columnName(r.subquery.table, r.aggregate.field),
+                    : columnName(aggregateFieldTable(r), r.aggregate.field),
               }
             : undefined,
         }) satisfies Required<CorrelatedSubquery>,
@@ -425,6 +425,18 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
   };
 
   return transformed;
+}
+
+/**
+ * The table an aggregate relationship's `field` belongs to. For a junction
+ * (many-to-many) aggregate the subquery is the junction table and its single
+ * `related` entry is the destination the field lives on. The query builder
+ * rejects any other `related` under an aggregate, so one being present means
+ * a junction.
+ */
+function aggregateFieldTable(r: CorrelatedSubquery): string {
+  const dest = r.subquery.related?.[0];
+  return dest ? dest.subquery.table : r.subquery.table;
 }
 
 function transformWhere(

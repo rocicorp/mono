@@ -108,6 +108,15 @@ export function aggregateSourceSchema(
 ): {columns: Record<string, SchemaValue>; primaryKey: readonly string[]} {
   const columns: Record<string, SchemaValue> = {};
   for (const col of groupKey) {
+    // The payload columns are written over the group key in the emitted row
+    // and stripped from it by the client's row key, so a collision would
+    // silently merge every group into one.
+    assert(
+      !AGGREGATE_PAYLOAD_COLUMNS.has(col),
+      () =>
+        `Aggregate: group key column "${col}" collides with the synthetic ` +
+        `aggregate column of the same name`,
+    );
     const colSchema = inputColumns[col];
     assert(colSchema, () => `Aggregate: group key column "${col}" missing`);
     columns[col] = colSchema;
@@ -150,7 +159,12 @@ interface AggStorage {
   set(key: string, value: AggState): void;
 }
 
-const isInvertible = (fn: AggregateFunction) =>
+/**
+ * Whether a change to one input row maps to a fixed delta of the aggregate
+ * (`count`/`sum`/`avg`). Shared with the synced client, which only applies
+ * optimistic deltas to these functions.
+ */
+export const isInvertible = (fn: AggregateFunction) =>
   fn === 'count' || fn === 'sum' || fn === 'avg';
 
 /**

@@ -8,7 +8,12 @@ import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
-import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
+import {
+  AGGREGATE_TABLE_SEPARATOR,
+  buildPipeline,
+  isAggregateTableName,
+  topLevelAggregateTableName,
+} from '../../../../zql/src/builder/builder.ts';
 import {
   Debug,
   runtimeDebugFlags,
@@ -57,7 +62,7 @@ import {
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
-import {type RowKey} from '../../types/row-key.ts';
+import {rowKeyString, type RowKey} from '../../types/row-key.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
   getSubscriptionState,
@@ -254,6 +259,13 @@ function shouldResetSlowCurrentChange(
  */
 export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
+  /**
+   * The latest synthetic aggregate row streamed for each key, by synthetic
+   * table. Aggregate tables have no {@link TableSource}, so this is what
+   * {@link getRow} reads for them when the view-syncer rebuilds a put patch on
+   * client catch-up. Entries live as long as the query that produced them.
+   */
+  readonly #aggregateRows = new Map<string, Map<string, Row>>();
   // Query id to pipeline
   readonly #pipelines = new Map<string, Pipeline>();
   /**
@@ -350,6 +362,7 @@ export class PipelineDriver {
       this.#destroyPipeline(queryID, pipeline, 'reset');
     }
     this.#tables.clear();
+    this.#aggregateRows.clear();
     this.#allTableNames.clear();
     this.#rowSetSignatures.clear();
     this.#initAndResetCommon(clientSchema);
@@ -472,6 +485,7 @@ export class PipelineDriver {
       this.#destroyPipeline(queryID, pipeline, 'destroy');
     }
     this.#tables.clear();
+    this.#aggregateRows.clear();
     this.#rowSetSignatures.clear();
     this.#storage.destroy();
     this.#snapshotter.destroy();
@@ -761,6 +775,7 @@ export class PipelineDriver {
         must(this.#primaryKeys),
         this.#tableSpecs,
         this.currentVersion(),
+        this.#aggregateRows,
       )) {
         if (change !== 'yield') {
           hydrationRowCount++;
@@ -933,6 +948,15 @@ export class PipelineDriver {
       this.#pruneUnusedTables();
     }
     this.#rowSetSignatures.delete(queryID);
+    // The query's synthetic aggregate tables (`aggregate:<queryID>` and
+    // `aggregate:<queryID>:<alias>`) go with it.
+    const topLevel = topLevelAggregateTableName(queryID);
+    const prefix = topLevel + AGGREGATE_TABLE_SEPARATOR;
+    for (const table of this.#aggregateRows.keys()) {
+      if (table === topLevel || table.startsWith(prefix)) {
+        this.#aggregateRows.delete(table);
+      }
+    }
   }
 
   #pruneUnusedTables() {
@@ -1005,6 +1029,9 @@ export class PipelineDriver {
    */
   getRow(table: string, pk: RowKey): Row | undefined {
     assert(this.initialized(), 'Not yet initialized');
+    if (isAggregateTableName(table)) {
+      return this.#aggregateRows.get(table)?.get(rowKeyString(pk));
+    }
     const source = must(this.#tables.get(table));
     return source.getRow(pk as Row);
   }
@@ -1326,6 +1353,7 @@ export class PipelineDriver {
       this.currentVersion(),
       (queryID, error) =>
         this.#logQueryFailure(queryID, 'query pipeline failed', error),
+      this.#aggregateRows,
     );
   }
 
@@ -1358,17 +1386,22 @@ class Streamer {
   readonly #logQueryFailure:
     | ((queryID: string, error: unknown) => void)
     | undefined;
+  // See PipelineDriver.#aggregateRows. Absent for the one-off hydrations of
+  // {@link hydrate}, which nothing catches up from.
+  readonly #aggregateRows: Map<string, Map<string, Row>> | undefined;
 
   constructor(
     primaryKeys: Map<string, PrimaryKey>,
     tableSpecs: Map<string, LiteAndZqlSpec>,
     version: string,
     logQueryFailure?: (queryID: string, error: unknown) => void,
+    aggregateRows?: Map<string, Map<string, Row>>,
   ) {
     this.#primaryKeys = primaryKeys;
     this.#tableSpecs = tableSpecs;
     this.#version = version;
     this.#logQueryFailure = logQueryFailure;
+    this.#aggregateRows = aggregateRows;
   }
 
   readonly #changes: [
@@ -1479,7 +1512,7 @@ class Streamer {
       const rowKey = getRowKey(primaryKey, row);
       if (op !== ChangeType.REMOVE) {
         if (isAggregate) {
-          row = {...row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
+          row = this.#stampAggregateRow(table, rowKey as RowKey, row);
         } else {
           const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
           if (
@@ -1489,6 +1522,14 @@ class Streamer {
             row = {...row, [ZERO_VERSION_COLUMN_NAME]: minRowVersion};
           }
         }
+      }
+
+      if (op === ChangeType.REMOVE && isAggregate) {
+        this.#rememberAggregateRow(
+          table,
+          rowKeyString(rowKey as RowKey),
+          undefined,
+        );
       }
 
       yield {
@@ -1504,6 +1545,53 @@ class Streamer {
         yield* this.#streamNodes(queryID, childSchema, op, children);
       }
     }
+  }
+
+  /**
+   * Stamps a synthetic aggregate row with the replica state version and
+   * remembers it for {@link PipelineDriver.getRow}.
+   *
+   * The CVR only sends a put whose version is strictly greater than the last
+   * one it sent for that row, and the rows of one advance reach it in pages.
+   * An aggregate row is emitted once per changed child, so a repeat emission
+   * at the same replica version gets a sequence suffix that keeps it strictly
+   * increasing. It stays below the next replica version: a LexiVersion is
+   * never a proper prefix of a later one, so the comparison is settled before
+   * the suffix is reached.
+   */
+  #stampAggregateRow(table: string, rowKey: RowKey, row: Row): Row {
+    const key = rowKeyString(rowKey);
+    let version = this.#version;
+    const prev = this.#aggregateRows?.get(table)?.get(key)?.[
+      ZERO_VERSION_COLUMN_NAME
+    ];
+    if (typeof prev === 'string' && prev.startsWith(version)) {
+      const seq =
+        prev.length === version.length
+          ? 0
+          : parseInt(prev.slice(version.length + 1), 36);
+      version = `${version}.${(seq + 1).toString(36).padStart(6, '0')}`;
+    }
+    const stamped = {...row, [ZERO_VERSION_COLUMN_NAME]: version};
+    this.#rememberAggregateRow(table, key, stamped);
+    return stamped;
+  }
+
+  #rememberAggregateRow(table: string, key: string, row: Row | undefined) {
+    const rows = this.#aggregateRows;
+    if (!rows) {
+      return;
+    }
+    if (row === undefined) {
+      rows.get(table)?.delete(key);
+      return;
+    }
+    let byKey = rows.get(table);
+    if (!byKey) {
+      byKey = new Map();
+      rows.set(table, byKey);
+    }
+    byKey.set(key, row);
   }
 }
 
@@ -1627,13 +1715,16 @@ export function hydrateInternal(
   primaryKeys: Map<string, PrimaryKey>,
   tableSpecs: Map<string, LiteAndZqlSpec>,
   version: string,
+  aggregateRows?: Map<string, Map<string, Row>>,
 ): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
-  const streamer = new Streamer(primaryKeys, tableSpecs, version).accumulate(
-    hash,
-    input.getSchema(),
-    toAdds(res),
-  );
+  const streamer = new Streamer(
+    primaryKeys,
+    tableSpecs,
+    version,
+    undefined,
+    aggregateRows,
+  ).accumulate(hash, input.getSchema(), toAdds(res));
   return streamer.stream();
 }
 

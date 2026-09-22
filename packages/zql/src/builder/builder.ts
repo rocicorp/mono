@@ -25,6 +25,7 @@ import {
   AGGREGATE_KEY_COLUMN,
   Aggregate,
   aggregateSourceSchema,
+  isInvertible,
 } from '../ivm/aggregate.ts';
 import {Cap} from '../ivm/cap.ts';
 import {Exists} from '../ivm/exists.ts';
@@ -875,8 +876,15 @@ function applyCorrelatedSubQuery(
   if (sq.aggregate) {
     const aggTable = aggregateTableName(queryID, sq);
     if (delegate.aggregatesFromSource) {
-      let source = delegate.getSource(aggTable);
-      if (!source && delegate.getAggregateSource) {
+      // Always go through getAggregateSource when the delegate has one, even
+      // if the source already exists: on reload it is provisioned from the
+      // persisted rows before the query materializes (see IVMSourceBranch
+      // applyDiffs), and this call is what registers the optimistic-delta
+      // metadata. The delegate hands back the existing source in that case.
+      let source = delegate.getAggregateSource
+        ? undefined
+        : delegate.getSource(aggTable);
+      if (delegate.getAggregateSource) {
         // The synthetic source isn't a schema table; provision it from the
         // child's column types + the aggregate fn/field so the synced rows have
         // a correctly-shaped place to land (key = correlation child field).
@@ -909,9 +917,7 @@ function applyCorrelatedSubQuery(
           sq.aggregate.field,
         );
         const {fn} = sq.aggregate;
-        // count/sum/avg are invertible (a child add/remove maps to a fixed
-        // delta); min/max are not.
-        const invertible = fn === 'count' || fn === 'sum' || fn === 'avg';
+        const invertible = isInvertible(fn);
         // A `where` is honored optimistically by compiling it to a per-row
         // predicate, but only when fully per-row evaluable. A correlated
         // subquery in the `where` can't be judged from a single child row, so
