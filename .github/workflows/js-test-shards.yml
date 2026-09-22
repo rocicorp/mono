@@ -95,8 +95,9 @@ jobs:
               # Deeper than the fetch, or not a merge commit. Rather than fail,
               # fall back to the behaviour we are trying to optimise.
               echo 'Cannot diff against the base commit: running the full suite.'
-            elif printf '%s\n' "$changed" | grep -qE \
-              '(^|/)(package\.json|tsconfig[^/]*\.json|vitest\.config[^/]*\.ts|setup\.ts|[^/]*-setup\.ts)$|^(pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$|^\.github/|^packages/zero-cache/test/'
+            elif grep -qE \
+              '(^|/)(package\.json|tsconfig[^/]*\.json|vitest\.config[^/]*\.ts|setup\.ts|[^/]*-setup\.ts)$|^(pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$|^\.github/|^packages/zero-cache/test/' \
+              <<<"$changed"
             then
               echo 'Dependency or config change: running the full suite.'
             else
