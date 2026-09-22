@@ -202,8 +202,8 @@ jobs:
           ZERO_TARBALL: ${{ steps.pack.outputs.filename }}
         run: docker buildx build --platform linux/amd64 --build-context monogo=../../go --build-arg=ZERO_VERSION="$ZERO_TARBALL" --progress=plain .
 
-  test-shards:
-    name: Test
+  test-nopg-shards:
+    name: Test no PG
     needs: [syncpack, verify-deps, format, lint]
     uses: ./.github/workflows/js-test-shards.yml
     with:
@@ -220,19 +220,19 @@ jobs:
     with:
       pg-mode: pg-${{ matrix.pg-version }}
 
-  # Gathering jobs. These are the only test checks that branch rules need to
-  # require. A skipped required check counts as passing on GitHub, so they run
+  # Gathering jobs. "Test" is the only test check that branch rules need to
+  # require. A skipped required check counts as passing on GitHub, so these run
   # whenever the workflow isn't cancelled and fail unless every shard succeeded.
-  test:
-    name: Test
+  test-nopg:
+    name: Test no PG
     runs-on: ubuntu-latest
-    needs: [test-shards]
+    needs: [test-nopg-shards]
     if: ${{ !cancelled() }}
     env:
-      RESULT: ${{ needs.test-shards.result }}
+      RESULT: ${{ needs.test-nopg-shards.result }}
     steps:
       - run: |
-          echo "Test shards: $RESULT"
+          echo "Test no PG shards: $RESULT"
           [ "$RESULT" = success ]
 
   test-pg:
@@ -246,3 +246,17 @@ jobs:
       - run: |
           echo "Test PG shards: $RESULT"
           [ "$RESULT" = success ]
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [test-nopg, test-pg]
+    if: ${{ !cancelled() }}
+    env:
+      NOPG_RESULT: ${{ needs.test-nopg.result }}
+      PG_RESULT: ${{ needs.test-pg.result }}
+    steps:
+      - run: |
+          echo "Test no PG: $NOPG_RESULT"
+          echo "Test PG: $PG_RESULT"
+          [ "$NOPG_RESULT" = success ] && [ "$PG_RESULT" = success ]

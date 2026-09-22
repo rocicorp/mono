@@ -1,7 +1,7 @@
 name: JS Test Shards
 
 # Reusable workflow that runs the vitest suite split into shards. Called once
-# per test mode from js.yml; each call shows up as one grouped job ("Test",
+# per test mode from js.yml; each call shows up as one grouped job ("Test no PG",
 # "Test PG 18", ...) whose shards are the children.
 
 on:
