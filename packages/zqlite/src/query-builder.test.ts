@@ -1,5 +1,10 @@
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import type {
+  JsonPathReference,
+  LiteralValue,
+  SimpleCondition,
+} from '../../zero-protocol/src/ast.ts';
 import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
@@ -41,6 +46,92 @@ test('non-nullable cursor columns use range and equality operators without IS NU
         "issue-1",
         "issue-1",
         "z",
+      ],
+    }
+  `);
+});
+
+test('json path filters: type gate, negation, empty NOT IN and key escaping', () => {
+  const ref = (...path: (string | number)[]): JsonPathReference => ({
+    type: 'json',
+    value: {type: 'column', name: 'metadata'},
+    path,
+  });
+  const cond = (
+    op: SimpleCondition['op'],
+    left: JsonPathReference,
+    value: LiteralValue,
+  ): NoSubqueryCondition => ({
+    type: 'simple',
+    op,
+    left,
+    right: {type: 'literal', value},
+  });
+
+  // A positive comparison gates the extraction on json_type(), so a leaf of
+  // another JSON type is NULL (a non-match): `true` never equals `1`.
+  expect(format(filtersToSQL(cond('=', ref('flagged'), true))))
+    .toMatchInlineSnapshot(`
+    {
+      "text": "(CASE WHEN json_type("metadata", ?) IN (?, ?) THEN json_extract("metadata", ?) END) = ?",
+      "values": [
+        "$."flagged"",
+        "true",
+        "false",
+        "$."flagged"",
+        1,
+      ],
+    }
+  `);
+  // A negated comparison must instead *match* a mismatched leaf and still
+  // exclude a null/missing one.
+  expect(format(filtersToSQL(cond('!=', ref('priority'), 'high'))))
+    .toMatchInlineSnapshot(`
+    {
+      "text": "(CASE WHEN json_extract("metadata", ?) IS NULL THEN 0 WHEN json_type("metadata", ?) IN (?) THEN json_extract("metadata", ?) != ? ELSE 1 END)",
+      "values": [
+        "$."priority"",
+        "$."priority"",
+        "text",
+        "$."priority"",
+        "high",
+      ],
+    }
+  `);
+  // An empty NOT IN matches every non-null leaf (bare `NOT IN ()` would also
+  // match NULL).
+  expect(format(filtersToSQL(cond('NOT IN', ref('priority'), []))))
+    .toMatchInlineSnapshot(`
+    {
+      "text": "json_extract("metadata", ?) IS NOT NULL",
+      "values": [
+        "$."priority"",
+      ],
+    }
+  `);
+  // Keys are JSON-escaped in the path (SQLite reads quoted labels with JSON
+  // escapes; SQL-style `""` doubling is not understood).
+  expect(format(filtersToSQL(cond('ILIKE', ref('a"b', 'c\\d', 0), 'x%'))))
+    .toMatchInlineSnapshot(`
+    {
+      "text": "lower((CASE WHEN json_type("metadata", ?) IN (?) THEN json_extract("metadata", ?) END)) LIKE lower(?) ESCAPE '\\'",
+      "values": [
+        "$."a\\"b"."c\\\\d"[0]",
+        "text",
+        "$."a\\"b"."c\\\\d"[0]",
+        "x%",
+      ],
+    }
+  `);
+  // A null literal has no type to gate on: the raw extraction, so a missing
+  // key and a JSON null both read as NULL.
+  expect(format(filtersToSQL(cond('IS', ref('priority'), null))))
+    .toMatchInlineSnapshot(`
+    {
+      "text": "json_extract("metadata", ?) IS ?",
+      "values": [
+        "$."priority"",
+        null,
       ],
     }
   `);

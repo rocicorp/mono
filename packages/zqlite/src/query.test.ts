@@ -1,5 +1,6 @@
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
 import {
@@ -249,6 +250,88 @@ test('json path: negative or fractional array index throws at build time', () =>
       cmp(json('metadata', 'altContacts', 1.5 as number), '=', 'x'),
     ),
   ).toThrow(/non-negative integer/);
+  // Beyond the safe-integer range the index stringifies as `1e+21`, which
+  // SQLite rejects as a bad JSON path — so it is rejected up front too.
+  expect(() =>
+    newQuery(schema, 'user').where(({cmp, json}) =>
+      cmp(json('metadata', 'altContacts', 1e21 as number), '=', 'x'),
+    ),
+  ).toThrow(/non-negative integer/);
+});
+
+test('json path filter: type-strict pushdown and key escaping', async () => {
+  // `metadata` is typed in the test schema, so use an untyped builder to reach
+  // the runtime behaviour on data that does not conform to the declared shape.
+  const db = new Database(createSilentLogContext(), ':memory:');
+  const qd = newQueryDelegate(lc, testLogConfig, db, schema);
+  const users = must(qd.getSource('users'));
+  const seed = (id: string, metadata: Record<string, ReadonlyJSONValue>) =>
+    consume(users.push(makeSourceChangeAdd({id, name: id, metadata})));
+  seed('k1', {registrar: 'github', count: 3, flagged: true});
+  // Wrong JSON type at every key.
+  seed('k2', {registrar: 42, count: 'n/a', flagged: 1});
+  seed('k3', {});
+  seed('k4', {'a"b': 'quote', 'c\\d': 'backslash', 'tags': ['x']});
+
+  const ids = async (
+    // oxlint-disable-next-line no-explicit-any
+    factory: (eb: any) => unknown,
+  ): Promise<string[]> => {
+    // oxlint-disable-next-line no-explicit-any
+    const q = newQuery(schema, 'user').where(factory as any);
+    const rows = (await qd.run(q)) as ReadonlyArray<{id: string}>;
+    return rows.map(r => r.id).sort();
+  };
+
+  // A bare json_extract would say 'n/a' > 5 (TEXT sorts above numbers), 42
+  // LIKE '4%', and true = 1; the json_type gate makes each a non-match.
+  expect(await ids(eb => eb.cmp(eb.json('metadata', 'count'), '>', 0))).toEqual(
+    ['k1'],
+  );
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'registrar'), 'LIKE', '4%')),
+  ).toEqual([]);
+  // `flagged = 1` matches only the row whose flagged is the *number* 1 (k2),
+  // never the boolean true (k1); `= true` is the reverse.
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'flagged'), '=', 1)),
+  ).toEqual(['k2']);
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'flagged'), '=', true)),
+  ).toEqual(['k1']);
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'count'), 'IN', [3, 10])),
+  ).toEqual(['k1']);
+  // A mismatched leaf matches a negated operator; a missing one never does.
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'registrar'), '!=', 'github')),
+  ).toEqual(['k2']);
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'count'), 'NOT IN', [3])),
+  ).toEqual(['k2']);
+  // k1's count is the number 3: a mismatch for the string pattern, hence a
+  // match for the negated operator, alongside k2's genuine non-match.
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'count'), 'NOT LIKE', '3%')),
+  ).toEqual(['k1', 'k2']);
+  // An empty NOT IN matches every non-null leaf but not a missing one (bare SQL
+  // `NULL NOT IN ()` would be TRUE).
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'count'), 'NOT IN', [])),
+  ).toEqual(['k1', 'k2']);
+
+  // Keys containing `"` and `\` need JSON (backslash) escaping in the SQLite
+  // path; SQL-style `""` doubling would yield NULL or a bad-path error.
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'a"b'), '=', 'quote')),
+  ).toEqual(['k4']);
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'c\\d'), '=', 'backslash')),
+  ).toEqual(['k4']);
+  // A string segment never indexes an array (matches the in-memory reader).
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'tags', '0'), '=', 'x')),
+  ).toEqual([]);
 });
 
 test('null compare', async () => {

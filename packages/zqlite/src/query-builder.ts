@@ -2,8 +2,11 @@ import type {SQLQuery} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import type {
   Condition,
+  JsonPathReference,
+  LiteralValue,
   Ordering,
   SimpleCondition,
+  SimpleOperator,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
 import type {
@@ -192,13 +195,25 @@ export function filtersToSQL(filters: NoSubqueryCondition): SQLQuery {
 }
 
 function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
+  if (filter.left.type === 'json') {
+    const json = jsonPathConditionToSQL(filter, filter.left);
+    if (json) {
+      return json;
+    }
+  }
+  return comparisonToSQL(filter, valuePositionToSQL(filter.left));
+}
+
+/**
+ * Renders `filter`'s operator and right operand against an already-rendered
+ * left operand.
+ */
+function comparisonToSQL(filter: SimpleCondition, left: SQLQuery): SQLQuery {
   const {op} = filter;
   if (op === 'IN' || op === 'NOT IN') {
     switch (filter.right.type) {
       case 'literal':
-        return sql`${valuePositionToSQL(
-          filter.left,
-        )} ${sql.__dangerous__rawValue(
+        return sql`${left} ${sql.__dangerous__rawValue(
           filter.op,
         )} (SELECT value FROM json_each(${JSON.stringify(
           filter.right.value,
@@ -215,15 +230,15 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
     op === 'ILIKE' ||
     op === 'NOT ILIKE'
   ) {
-    return likeConditionToSQL(filter);
+    return likeConditionToSQL(filter, left);
   }
 
-  return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
+  return sql`${left} ${sql.__dangerous__rawValue(
     filter.op,
   )} ${valuePositionToSQL(filter.right)}`;
 }
 
-function likeConditionToSQL(filter: SimpleCondition): SQLQuery {
+function likeConditionToSQL(filter: SimpleCondition, left: SQLQuery): SQLQuery {
   const {op} = filter;
   // Mirror Postgres pattern-matching semantics:
   //  * LIKE is case-sensitive. The replica connection runs with
@@ -241,7 +256,6 @@ function likeConditionToSQL(filter: SimpleCondition): SQLQuery {
   const negated = op === 'NOT LIKE' || op === 'NOT ILIKE';
   const likeOp = sql.__dangerous__rawValue(negated ? 'NOT LIKE' : 'LIKE');
 
-  const left = valuePositionToSQL(filter.left);
   const right = valuePositionToSQL(filter.right);
   if (caseInsensitive) {
     return sql`lower(${left}) ${likeOp} lower(${right}) ESCAPE '\\'`;
@@ -249,16 +263,97 @@ function likeConditionToSQL(filter: SimpleCondition): SQLQuery {
   return sql`${left} ${likeOp} ${right} ESCAPE '\\'`;
 }
 
+const negatedOps: ReadonlySet<SimpleOperator> = new Set([
+  '!=',
+  'NOT LIKE',
+  'NOT ILIKE',
+  'NOT IN',
+]);
+
+/**
+ * The SQLite `json_type()` names a JSON leaf must have to be compared against
+ * `literal` (for an `IN`/`NOT IN` list, the type of its first element);
+ * `undefined` for `null` or an empty list.
+ */
+function jsonTypesForLiteral(
+  literal: LiteralValue,
+): readonly string[] | undefined {
+  const v = Array.isArray(literal) ? literal[0] : literal;
+  switch (typeof v) {
+    case 'string':
+      return ['text'];
+    case 'number':
+      return ['integer', 'real'];
+    case 'boolean':
+      return ['true', 'false'];
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Compiles a comparison whose left operand is a JSON path, type-strictly, to
+ * match the in-memory predicate and the Postgres compiler: a leaf whose JSON
+ * type differs from the literal's is never equal — a non-match for a positive
+ * operator and a match for a negated one — and a null/missing leaf never
+ * matches a value operator.
+ *
+ * A bare `json_extract` would not be strict: SQLite returns booleans as 1/0 (so
+ * `true` = 1), orders any TEXT above any number (`'n/a' > 5`), and coerces
+ * numbers for LIKE. Gating the extraction on `json_type()` makes a mismatched
+ * leaf NULL, which a positive comparison excludes. Negated operators get an
+ * explicit CASE because NULL would exclude there too, where a mismatch must
+ * match.
+ *
+ * Returns `undefined` for an untyped literal (`null`, or an empty `IN` list),
+ * where the generic form already agrees with the predicate — except for an
+ * empty `NOT IN`, which SQL evaluates to TRUE even for a NULL leaf.
+ */
+function jsonPathConditionToSQL(
+  filter: SimpleCondition,
+  left: JsonPathReference,
+): SQLQuery | undefined {
+  const {op, right} = filter;
+  if (right.type !== 'literal') {
+    return undefined;
+  }
+  const col = sql.ident(left.value.name);
+  const path = jsonPathExpr(left.path);
+  const raw = sql`json_extract(${col}, ${path})`;
+  const types = jsonTypesForLiteral(right.value);
+  if (types === undefined) {
+    if (op === 'NOT IN') {
+      // `x NOT IN ()` is TRUE for a NULL leaf in SQL, but the predicate's null
+      // guard excludes it.
+      return sql`${raw} IS NOT NULL`;
+    }
+    return undefined;
+  }
+  const typeList = sql.join(
+    types.map(t => sql`${t}`),
+    sql`, `,
+  );
+  const gated = sql`(CASE WHEN json_type(${col}, ${path}) IN (${typeList}) THEN ${raw} END)`;
+  if (!negatedOps.has(op)) {
+    return comparisonToSQL(filter, gated);
+  }
+  return sql`(CASE WHEN ${raw} IS NULL THEN 0 WHEN json_type(${col}, ${path}) IN (${typeList}) THEN ${comparisonToSQL(
+    filter,
+    raw,
+  )} ELSE 1 END)`;
+}
+
 /**
  * Builds a SQLite JSON path string (e.g. `$.a.b[0]`) from a path of object
- * keys and array indices. Object keys are double-quoted (with `"` escaped) so
- * arbitrary key names are handled.
+ * keys and array indices. Object keys are emitted as JSON string literals
+ * (`JSON.stringify`): SQLite parses a double-quoted path label with JSON
+ * escapes, so `"` and `\` inside a key must be backslash-escaped — SQL-style
+ * `""` doubling is not understood and yields NULL or a "bad JSON path" error.
  */
 function jsonPathExpr(path: readonly (string | number)[]): string {
   let s = '$';
   for (const seg of path) {
-    s +=
-      typeof seg === 'number' ? `[${seg}]` : `."${seg.replaceAll('"', '""')}"`;
+    s += typeof seg === 'number' ? `[${seg}]` : `.${JSON.stringify(seg)}`;
   }
   return s;
 }
