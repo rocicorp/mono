@@ -2,21 +2,22 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {
-  AST,
-  ColumnReference,
-  CompoundKey,
-  Condition,
-  Conjunction,
-  CorrelatedSubquery,
-  CorrelatedSubqueryCondition,
-  Disjunction,
-  JsonPathReference,
-  LiteralValue,
-  Ordering,
-  Parameter,
-  SimpleCondition,
-  ValuePosition,
+import {
+  formatJsonPathReference,
+  type AST,
+  type ColumnReference,
+  type CompoundKey,
+  type Condition,
+  type Conjunction,
+  type CorrelatedSubquery,
+  type CorrelatedSubqueryCondition,
+  type Disjunction,
+  type JsonPathReference,
+  type LiteralValue,
+  type Ordering,
+  type Parameter,
+  type SimpleCondition,
+  type ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
@@ -646,14 +647,10 @@ function valuePosName(left: ValuePosition) {
     case 'column':
       return left.name;
     case 'json':
-      return `${left.value.name}${pathToJsonPath(left.path)}`;
+      return formatJsonPathReference(left);
     default:
       unreachable(left);
   }
-}
-
-function pathToJsonPath(path: readonly (string | number)[]): string {
-  return path.map(s => (typeof s === 'number' ? `[${s}]` : `.${s}`)).join('');
 }
 
 function applyCorrelatedSubQuery(

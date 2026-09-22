@@ -1,10 +1,11 @@
 // oxlint-disable e18e/prefer-static-regex
 import {unreachable} from '../../../shared/src/asserts.ts';
-import type {
-  Condition,
-  CorrelatedSubquery,
-  SimpleOperator,
-  ValuePosition,
+import {
+  formatJsonPathReference,
+  type Condition,
+  type CorrelatedSubquery,
+  type SimpleOperator,
+  type ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
 
 // This was written by ChatGPT with some improvements. It is only used for tests
@@ -192,9 +193,7 @@ function stringifyValue(value: ValuePosition): string {
     case 'column':
       return value.name;
     case 'json':
-      return `${value.value.name}${value.path
-        .map(s => (typeof s === 'number' ? `[${s}]` : `.${s}`))
-        .join('')}`;
+      return formatJsonPathReference(value);
     case 'literal':
       return `${value.value}`;
     case 'static':

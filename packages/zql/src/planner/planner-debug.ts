@@ -8,10 +8,11 @@ import type {
   PlanDebugEventJSON,
   planFailedEventJSONSchema,
 } from '../../../zero-protocol/src/analyze-query-result.ts';
-import type {
-  Condition,
-  Ordering,
-  ValuePosition,
+import {
+  formatJsonPathReference,
+  type Condition,
+  type Ordering,
+  type ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanState} from './planner-graph.ts';
@@ -201,9 +202,7 @@ function formatValuePosition(value: ValuePosition): string {
     case 'column':
       return value.name;
     case 'json':
-      return `${value.value.name}${value.path
-        .map(s => (typeof s === 'number' ? `[${s}]` : `.${s}`))
-        .join('')}`;
+      return formatJsonPathReference(value);
     case 'literal':
       // Format literal values with SQL-style quoting for strings
       if (typeof value.value === 'string') {

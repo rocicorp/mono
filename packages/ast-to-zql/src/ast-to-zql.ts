@@ -80,7 +80,7 @@ function transformCondition(
 ): string {
   switch (condition.type) {
     case 'simple':
-      return transformSimpleCondition(condition, prefix);
+      return transformSimpleCondition(condition, prefix, args);
     case 'and':
     case 'or':
       return transformLogicalCondition(condition, prefix, args);
@@ -94,6 +94,7 @@ function transformCondition(
 function transformSimpleCondition(
   condition: SimpleCondition,
   prefix: Prefix,
+  args: Args,
 ): string {
   const {left, op, right} = condition;
 
@@ -101,11 +102,24 @@ function transformSimpleCondition(
   const rightCode = transformValuePosition(right);
 
   // Handle the shorthand form for equals
-  if (op === '=') {
-    return `${prefix}(${leftCode}, ${rightCode})`;
+  const argsCode =
+    op === '='
+      ? `${leftCode}, ${rightCode}`
+      : `${leftCode}, '${op}', ${rightCode}`;
+
+  if (left.type !== 'json') {
+    return `${prefix}(${argsCode})`;
   }
 
-  return `${prefix}(${leftCode}, '${op}', ${rightCode})`;
+  // A JSON path operand only exists through the expression builder's `json()`,
+  // so it must be destructured wherever it appears: inside a callback that
+  // means adding it to the args; at the top level `.where(field, ...)` has no
+  // such form, so emit the callback form instead.
+  args.add('json');
+  if (prefix === 'cmp') {
+    return `cmp(${argsCode})`;
+  }
+  return `.where(({cmp, json}) => cmp(${argsCode}))`;
 }
 
 function transformLogicalCondition(
@@ -270,10 +284,9 @@ function transformValuePosition(value: ValuePosition): string {
     case 'column':
       return `'${value.name}'`;
     case 'json': {
+      // Segments render exactly like literals so escaping lives in one place.
       const segs = value.path
-        .map(s =>
-          typeof s === 'number' ? String(s) : `'${s.replace(/'/g, "\\'")}'`,
-        )
+        .map(s => transformLiteral({type: 'literal', value: s}))
         .join(', ');
       return `json('${value.value.name}', ${segs})`;
     }

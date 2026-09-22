@@ -43,7 +43,37 @@ test('where condition on a json path', () => {
     },
   };
   expect(astToZQL(ast)).toMatchInlineSnapshot(
-    `".where(json('metadata', 'priority'), 'high')"`,
+    `".where(({cmp, json}) => cmp(json('metadata', 'priority'), 'high'))"`,
+  );
+});
+
+test('json path operand inside or() is destructured from the builder', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'or',
+      conditions: [
+        {
+          type: 'simple',
+          left: {
+            type: 'json',
+            value: {type: 'column', name: 'metadata'},
+            path: ['priority'],
+          },
+          op: '=',
+          right: {type: 'literal', value: 'high'},
+        },
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'id'},
+          op: '=',
+          right: {type: 'literal', value: 1},
+        },
+      ],
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({cmp, json, or}) => or(cmp(json('metadata', 'priority'), 'high'), cmp('id', 1)))"`,
   );
 });
 
@@ -62,7 +92,7 @@ test('where condition on a json path with array index and operator', () => {
     },
   };
   expect(astToZQL(ast)).toMatchInlineSnapshot(
-    `".where(json('metadata', 'tags', 0), '!=', 'x')"`,
+    `".where(({cmp, json}) => cmp(json('metadata', 'tags', 0), '!=', 'x'))"`,
   );
 });
 
