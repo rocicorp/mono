@@ -1,4 +1,5 @@
 // oxlint-disable require-await
+import type {StandardSchemaV1} from '@standard-schema/spec';
 import {assert, expect, expectTypeOf, test} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -7,6 +8,7 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Codec} from '../../../zero-types/src/schema-value.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Transaction} from './custom.ts';
 import {defineMutators, defineMutatorsWithType} from './mutator-registry.ts';
 import {defineMutator} from './mutator.ts';
@@ -119,6 +121,86 @@ test('codec mutator: the callable accepts the decoded type', () => {
     mutators.event.create({id: 'a', at: 1});
   };
   void _rejectsEncoded;
+});
+
+test('a validator that also has decode/encode methods is a validator, not a codec', () => {
+  // Standard Schema implementations such as Zod 4 expose `.decode()` /
+  // `.encode()` on every schema instance; they must keep taking the validator
+  // path.
+  const zodLike: StandardSchemaV1<EncodedArgs, EncodedArgs> & {
+    decode: () => never;
+    encode: () => never;
+  } = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: value => ({value: value as EncodedArgs}),
+    },
+    'decode': () => {
+      throw new Error('decode must not be called');
+    },
+    'encode': () => {
+      throw new Error('encode must not be called');
+    },
+  };
+  const def = defineMutator(zodLike, async () => {});
+  expect(def.validator).toBe(zodLike);
+  expect(def.codec).toBeUndefined();
+
+  const mutators = defineMutators({event: {create: def}});
+  expect(mutators.event.create({id: 'a', at: 1}).args).toEqual({
+    id: 'a',
+    at: 1,
+  });
+});
+
+test('codec mutator: undefined args bypass the codec', async () => {
+  const calls: string[] = [];
+  const optionalCodec: Codec<EncodedArgs | undefined, DecodedArgs | undefined> =
+    {
+      decode: a => {
+        calls.push('decode');
+        return a && {id: a.id, at: new Date(a.at)};
+      },
+      encode: a => {
+        calls.push('encode');
+        return a && {id: a.id, at: a.at.getTime()};
+      },
+    };
+  let received: DecodedArgs | undefined | 'unset' = 'unset';
+  const mutators = defineMutators({
+    event: {
+      touch: defineMutator(
+        optionalCodec,
+        async ({
+          args,
+        }: {
+          args: DecodedArgs | undefined;
+          ctx: unknown;
+          tx: unknown;
+        }) => {
+          received = args;
+        },
+      ),
+    },
+  });
+
+  const mr = mutators.event.touch();
+  expect(mr.args).toBeUndefined();
+  await mutators.event.touch.fn({
+    args: undefined,
+    ctx: undefined,
+    tx: {} as Transaction<Schema, unknown>,
+  });
+  expect(received).toBeUndefined();
+  expect(calls).toEqual([]);
+
+  // Non-undefined args still go through the codec.
+  expect(mutators.event.touch({id: 'a', at: new Date(3)}).args).toEqual({
+    id: 'a',
+    at: 3,
+  });
+  expect(calls).toEqual(['encode']);
 });
 
 test('non-codec mutators are unaffected', () => {

@@ -463,13 +463,16 @@ export function defineQuery<
     TContext
   >;
 
-  if (isCodec(validatorCodecOrQueryFn)) {
+  // The validator check comes first: Standard Schema implementations (e.g. Zod
+  // 4) also expose `decode`/`encode` methods, which would otherwise make them
+  // look like a codec.
+  if ('~standard' in validatorCodecOrQueryFn) {
+    // defineQuery(validator, queryFn) - with validator
+    validator = validatorCodecOrQueryFn as StandardSchemaV1<TInput, TOutput>;
+    actualQueryFn = must(queryFn);
+  } else if (isCodec(validatorCodecOrQueryFn)) {
     // defineQuery(codec, queryFn) - with codec
     codec = validatorCodecOrQueryFn as Codec<TInput, TOutput>;
-    actualQueryFn = must(queryFn);
-  } else if ('~standard' in validatorCodecOrQueryFn) {
-    // defineQuery(validator, queryFn) - with validator
-    validator = validatorCodecOrQueryFn;
     actualQueryFn = must(queryFn);
   } else {
     // defineQuery(queryFn) - no validator or codec
@@ -600,9 +603,12 @@ export function createQuery<
     TContext
   > = options => {
     // Codec decoding / validation happens here. `options.args` is the encoded
-    // (JSON wire) value.
+    // (JSON wire) value. As for column codecs, `undefined` (no args) is never
+    // passed to the codec; it passes through unchanged.
     const decodedArgs = codec
-      ? codec.decode(options.args as TInput)
+      ? options.args === undefined
+        ? (undefined as TOutput)
+        : codec.decode(options.args as TInput)
       : validator
         ? validateInput(name, options.args, validator, 'query')
         : (options.args as unknown as TOutput);
@@ -623,8 +629,12 @@ export function createQuery<
   const query = (
     args: TInput,
   ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext> => ({
-    // Encode the decoded args to their JSON wire form. No-op without a codec.
-    'args': codec ? (codec.encode(args as unknown as TOutput) as TInput) : args,
+    // Encode the decoded args to their JSON wire form. No-op without a codec
+    // or when there are no args.
+    'args':
+      codec && args !== undefined
+        ? (codec.encode(args as unknown as TOutput) as TInput)
+        : args,
     '~': 'QueryRequest' as QueryRequestTypes<
       TTable,
       TInput,

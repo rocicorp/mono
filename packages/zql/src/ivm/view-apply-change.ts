@@ -7,7 +7,7 @@ import {must} from '../../../shared/src/must.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import {decodeRowFields} from './codec.ts';
+import {columnsHaveCodecs, decodeRowFields} from './codec.ts';
 import {type Comparator, type Node} from './data.ts';
 import {skipYields} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -584,13 +584,14 @@ function applyEdit<M extends Mutate>(
   withIDs: WithIDs,
   mutate: Mutate,
 ): MetaEntry<M> {
-  // Decode new row fields; keep raw row as back-pointer for binary search
-  // only when decoding actually changed the row (i.e. there are codecs).
+  // Decode new row fields; when the schema has codecs, always refresh the raw
+  // row back-pointer used by binary search. It must track the schema, not
+  // whether decoding copied: an edit that nulls every codec column decodes to
+  // the same object, and `existing` may still carry the previous raw row.
   const decodedRow = decodeRowFields(change.node.row, schema);
-  const encodedRowProp =
-    decodedRow !== change.node.row
-      ? {[encodedRowSymbol]: change.node.row}
-      : undefined;
+  const encodedRowProp = columnsHaveCodecs(schema.columns)
+    ? {[encodedRowSymbol]: change.node.row}
+    : undefined;
   // In-place edit is safe when fully mutating or when `existing` was already
   // created/cloned in this transaction (copy-on-write). A primary-key change
   // always needs a fresh entry so identity tracks the new key.
@@ -874,10 +875,10 @@ function makeNewMetaEntry(
   withIDs: WithIDs,
   rc: number,
 ): MutableMetaEntry {
-  // Decode codec columns; raw row is stored as back-pointer for binary search
-  // only when decoding actually changed the row (i.e. there are codecs).
+  // Decode codec columns; when the schema has codecs the raw row is kept as a
+  // back-pointer so binary search compares stored values.
   const decodedRow = decodeRowFields(row, schema);
-  const hasCodecs = decodedRow !== row;
+  const hasCodecs = columnsHaveCodecs(schema.columns);
   if (withIDs) {
     return track({
       ...decodedRow,

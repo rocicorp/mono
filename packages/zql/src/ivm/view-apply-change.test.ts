@@ -2934,5 +2934,63 @@ describe('applyChange', () => {
       expect((list[0].createdAt as unknown as Date).getTime()).toBe(1000);
       expect((list[1].createdAt as unknown as Date).getTime()).toBe(2000);
     });
+
+    test('edit that nulls every codec column refreshes encodedRowSymbol', () => {
+      // Sort by the codec column so a stale back-pointer would break the
+      // binary search for later changes to the same row.
+      const sortedByCodec: SourceSchema = {
+        ...codecSchema,
+        sort: [
+          ['createdAt', 'asc'],
+          ['id', 'asc'],
+        ],
+        compareRows: makeComparator([
+          ['createdAt', 'asc'],
+          ['id', 'asc'],
+        ]),
+      };
+      const applySorted = (root: Entry, change: ViewChange) =>
+        applyChange(
+          root,
+          change,
+          sortedByCodec,
+          '',
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
+
+      let root: Entry = {'': []};
+      root = applySorted(root, {
+        type: 'add',
+        node: {row: {id: 'a', createdAt: 1000}, relationships: {}},
+      });
+      root = applySorted(root, {
+        type: 'add',
+        node: {row: {id: 'b', createdAt: 2000}, relationships: {}},
+      });
+
+      // Null out the codec column: decoding is a no-op for this row, but the
+      // back-pointer must still be replaced.
+      const nulledRow = {id: 'a', createdAt: null};
+      root = applySorted(root, {
+        type: 'edit',
+        oldNode: {row: {id: 'a', createdAt: 1000}},
+        node: {row: nulledRow},
+      });
+      const list = root[''] as Entry[];
+      expect(list[0].createdAt).toBe(null);
+      expect(
+        (list[0] as {[encodedRowSymbol]?: unknown})[encodedRowSymbol],
+      ).toBe(nulledRow);
+
+      // A subsequent change to the same row is found via the refreshed
+      // back-pointer.
+      root = applySorted(root, {
+        type: 'remove',
+        node: {row: nulledRow, relationships: {}},
+      });
+      expect((root[''] as Entry[]).map(e => e.id)).toEqual(['b']);
+    });
   });
 });

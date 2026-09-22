@@ -87,6 +87,17 @@ test('expression-builder cmp encodes codec literals', () => {
   });
 });
 
+test('start encodes codec columns of the start row', () => {
+  // Start rows come from (decoded) query results, so `at` arrives as a Date.
+  const q = newQuery(schema, 'event')
+    .orderBy('at', 'asc')
+    .start({id: 'a', at: new Date(1000)});
+  expect(ast(q).start).toEqual({
+    row: {id: 'a', at: 1000},
+    exclusive: true,
+  });
+});
+
 test('expression-builder 2-arg cmp encodes codec literals', () => {
   const q = newQuery(schema, 'event').where(({cmp}) => cmp('at', new Date(7)));
   const where = ast(q).where;

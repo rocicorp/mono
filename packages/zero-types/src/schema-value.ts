@@ -70,12 +70,12 @@ export type SchemaValueWithCodec<Decoded = unknown, Encoded = unknown> = {
 
 /**
  * Returns the runtime codec attached to a column, or `undefined` if the column
- * has no codec.
+ * has no codec (or is not a known column).
  */
 export function getCodec(
-  value: SchemaValue,
+  value: SchemaValue | undefined,
 ): Codec<unknown, unknown> | undefined {
-  return (value as Partial<SchemaValueWithCodec>).codec;
+  return (value as Partial<SchemaValueWithCodec> | undefined)?.codec;
 }
 
 export type TypeNameToTypeMap = {

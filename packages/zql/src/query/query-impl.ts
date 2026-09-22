@@ -26,6 +26,7 @@ import {
 import {hashOfQueryInternals} from '../../../zero-protocol/src/query-hash-visitor.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {NotImplementedError} from '../error.ts';
+import {encodeRow} from '../ivm/codec.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {
@@ -719,11 +720,16 @@ export class QueryImpl<
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
   ): Query<TTable, TSchema, TReturn> {
+    // Start rows usually come from decoded query results, so encode codec
+    // columns back to their stored values before they reach the AST (a no-op
+    // for tables without codecs).
+    const columns = this.#schema.tables[this.#tableName]?.columns;
+    const encodedRow = columns ? encodeRow(row, columns) : row;
     // The row is an object, so it is encoded to a string to serve as the
     // lookup key. Property order is part of that string.
     return this.#derive(
       opts?.inclusive ? 'start:inclusive' : 'start:exclusive',
-      valueTag(row as ReadonlyJSONValue),
+      valueTag(encodedRow as ReadonlyJSONValue),
       undefined,
       () =>
         this.#newQuery(
@@ -731,7 +737,7 @@ export class QueryImpl<
           {
             ...this.#ast,
             start: {
-              row,
+              row: encodedRow,
               exclusive: !opts?.inclusive,
             },
           },

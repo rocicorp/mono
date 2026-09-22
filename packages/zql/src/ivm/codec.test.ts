@@ -5,7 +5,6 @@ import {
   decodeRowFields,
   encodeRow,
   encodeValue,
-  schemaHasCodecs,
 } from './codec.ts';
 import type {SourceSchema} from './schema.ts';
 
@@ -43,28 +42,24 @@ function source(
   };
 }
 
-describe('columnsHaveCodecs / schemaHasCodecs', () => {
+describe('columnsHaveCodecs', () => {
   test('false when no codecs', () => {
     expect(columnsHaveCodecs(plainColumns)).toBe(false);
-    expect(schemaHasCodecs(source(plainColumns))).toBe(false);
   });
 
   test('true when a column has a codec', () => {
     expect(columnsHaveCodecs(codecColumns)).toBe(true);
-    expect(schemaHasCodecs(source(codecColumns))).toBe(true);
   });
 
-  test('true when a relationship has a codec', () => {
-    const schema = source(plainColumns, {comments: source(codecColumns)});
-    expect(schemaHasCodecs(schema)).toBe(true);
-  });
-
-  test('handles cyclic relationships', () => {
-    const self = source(plainColumns) as {
-      relationships: Record<string, SourceSchema>;
-    } & SourceSchema;
-    self.relationships = {self};
-    expect(schemaHasCodecs(self)).toBe(false);
+  test('is memoized per columns object', () => {
+    const columns: Record<string, SchemaValue> = {id: {type: 'string'}};
+    expect(columnsHaveCodecs(columns)).toBe(false);
+    // Mutating after the first query is not observed: the result is cached on
+    // the columns object, which is immutable in practice (it belongs to the
+    // schema).
+    columns.createdAt = codecColumns.createdAt;
+    expect(columnsHaveCodecs(columns)).toBe(false);
+    expect(columnsHaveCodecs({...columns})).toBe(true);
   });
 });
 
@@ -100,6 +95,15 @@ describe('decodeRowFields', () => {
     const result = decodeRowFields(row, source(codecColumns));
     expect(result).toBe(row); // no codec columns present → unchanged
   });
+
+  test('ignores row keys that are not columns', () => {
+    const row = {id: 'a', createdAt: 1000, extra: 1};
+    const result = decodeRowFields(row, source(codecColumns));
+    expect((result as unknown as {createdAt: Date}).createdAt.getTime()).toBe(
+      1000,
+    );
+    expect(result.extra).toBe(1);
+  });
 });
 
 describe('encodeRow / encodeValue', () => {
@@ -125,6 +129,15 @@ describe('encodeRow / encodeValue', () => {
     const row = {id: 'a', createdAt: null};
     const result = encodeRow(row, codecColumns);
     expect(result.createdAt).toBe(null);
+  });
+
+  test('ignores row keys that are not columns', () => {
+    const row = {id: 'a', createdAt: new Date(5), extra: 1};
+    expect(encodeRow(row, codecColumns)).toEqual({
+      id: 'a',
+      createdAt: 5,
+      extra: 1,
+    });
   });
 
   test('encodeValue encodes single values', () => {

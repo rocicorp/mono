@@ -149,13 +149,16 @@ export function defineMutator<
     Transaction<TSchema, TWrappedTransaction>
   >;
 
-  if (isCodec(validatorCodecOrMutator)) {
+  // The validator check comes first: Standard Schema implementations (e.g. Zod
+  // 4) also expose `decode`/`encode` methods, which would otherwise make them
+  // look like a codec.
+  if ('~standard' in validatorCodecOrMutator) {
+    // defineMutator(validator, mutator)
+    validator = validatorCodecOrMutator as StandardSchemaV1<TInput, TOutput>;
+    actualMutator = must(mutator);
+  } else if (isCodec(validatorCodecOrMutator)) {
     // defineMutator(codec, mutator)
     codec = validatorCodecOrMutator as Codec<TInput, TOutput>;
-    actualMutator = must(mutator);
-  } else if ('~standard' in validatorCodecOrMutator) {
-    // defineMutator(validator, mutator)
-    validator = validatorCodecOrMutator;
     actualMutator = must(mutator);
   } else {
     // defineMutator(mutator) - no validator or codec

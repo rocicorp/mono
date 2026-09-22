@@ -11,5 +11,4 @@ export { must } from '../../../shared/src/must.ts';
 export { newQuery, type QueryImpl } from '../../../zql/src/query/query-impl.ts';
 export type { QueryDelegate } from '../../../zql/src/query/query-delegate.ts';
 export { skipYields } from '../../../zql/src/ivm/operator.ts';
-export type { SourceSchema } from '../../../zql/src/ivm/schema.ts';
 // #endregion

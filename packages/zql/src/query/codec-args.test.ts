@@ -1,3 +1,4 @@
+import type {StandardSchemaV1} from '@standard-schema/spec';
 import {assert, expect, expectTypeOf, test} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -71,6 +72,76 @@ test('codec query: fn decodes the wire args before the query fn runs', () => {
       right: {type: 'literal', value: 2000},
     },
   });
+});
+
+test('a validator that also has decode/encode methods is a validator, not a codec', () => {
+  // Standard Schema implementations such as Zod 4 expose `.decode()` /
+  // `.encode()` on every schema instance; they must keep taking the validator
+  // path.
+  const zodLike: StandardSchemaV1<EncodedArgs, EncodedArgs> & {
+    decode: () => never;
+    encode: () => never;
+  } = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: value => ({value: value as EncodedArgs}),
+    },
+    'decode': () => {
+      throw new Error('decode must not be called');
+    },
+    'encode': () => {
+      throw new Error('encode must not be called');
+    },
+  };
+  const def = defineQuery(zodLike, ({args}) =>
+    builder.event.where('at', '=', args.at),
+  );
+  expect(def.validator).toBe(zodLike);
+  expect(def.codec).toBeUndefined();
+
+  const queries = defineQueries({byTime: def});
+  const query = addContextToQuery(queries.byTime({at: 5}), {});
+  expect(asQueryInternals(query).ast).toMatchObject({
+    where: {right: {type: 'literal', value: 5}},
+  });
+});
+
+test('codec query: undefined args bypass the codec', () => {
+  const calls: string[] = [];
+  const optionalCodec: Codec<EncodedArgs | undefined, DecodedArgs | undefined> =
+    {
+      decode: a => {
+        calls.push('decode');
+        return a && {at: new Date(a.at)};
+      },
+      encode: a => {
+        calls.push('encode');
+        return a && {at: a.at.getTime()};
+      },
+    };
+  let received: DecodedArgs | undefined | 'unset' = 'unset';
+  const queries = defineQueries({
+    events: defineQuery(
+      optionalCodec,
+      ({args}: {args: DecodedArgs | undefined}) => {
+        received = args;
+        return args
+          ? builder.event.where('at', '=', args.at.getTime())
+          : builder.event;
+      },
+    ),
+  });
+
+  const qr = queries.events();
+  expect(qr.args).toBeUndefined();
+  addContextToQuery(qr, {});
+  expect(received).toBeUndefined();
+  expect(calls).toEqual([]);
+
+  // Non-undefined args still go through the codec.
+  expect(queries.events({at: new Date(3)}).args).toEqual({at: 3});
+  expect(calls).toEqual(['encode']);
 });
 
 test('codec query: the callable accepts the decoded type', () => {

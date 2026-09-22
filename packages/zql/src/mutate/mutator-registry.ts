@@ -294,8 +294,12 @@ function createMutator<
     C,
     Transaction<TSchema, TWrappedTransaction>
   > = async options => {
+    // As for column codecs, `undefined` (no args) is never passed to the
+    // codec; it passes through unchanged.
     const decodedArgs = codec
-      ? codec.decode(options.args as ArgsInput)
+      ? options.args === undefined
+        ? (undefined as ArgsOutput)
+        : codec.decode(options.args as ArgsInput)
       : validator
         ? validateInput(name, options.args, validator, 'mutator')
         : (options.args as unknown as ArgsOutput);
@@ -310,10 +314,11 @@ function createMutator<
     args: ArgsInput,
   ): MutateRequest<ArgsInput, TSchema, C, TWrappedTransaction> => ({
     // Encode the decoded args to their JSON wire form before the mutation is
-    // queued/persisted/sent. No-op when there is no codec.
-    'args': codec
-      ? (codec.encode(args as unknown as ArgsOutput) as ArgsInput)
-      : args,
+    // queued/persisted/sent. No-op when there is no codec or no args.
+    'args':
+      codec && args !== undefined
+        ? (codec.encode(args as unknown as ArgsOutput) as ArgsInput)
+        : args,
     '~': 'MutateRequest' as MutateRequestTypes<
       ArgsInput,
       TSchema,
