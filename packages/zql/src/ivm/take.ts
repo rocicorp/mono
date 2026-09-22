@@ -71,6 +71,12 @@ export class Take implements Operator, TakeBoundProvider {
   #rowHiddenFromFetch: Row | undefined;
 
   #takeGate: TakeGate | undefined;
+  /**
+   * Partitions that incurred removals in Phase 1 and require deficit refills in
+   * Phase 2 (reconcile). Keyed by `takeStateKey` (see `getTakeStateKey`), matching
+   * `#storage` keys: `'["take"]'` when unpartitioned, or `'["take", ...partitionValues]'`
+   * when partitioned.
+   */
   readonly #dirtyPartitions = new Map<string, DirtyPartitionState>();
 
   #output: Output = throwOutput;
