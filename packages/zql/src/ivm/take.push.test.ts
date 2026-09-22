@@ -1685,62 +1685,62 @@ describe('take with no partition', () => {
         }
       `);
       expect(pushesWithFetch).toMatchInlineSnapshot(`
-                [
-                  {
-                    "change": {
-                      "node": {
-                        "relationships": {},
-                        "row": {
-                          "created": 100,
-                          "id": "i1",
-                        },
-                      },
-                      "type": "remove",
-                    },
-                    "fetch": [
-                      {
-                        "relationships": {},
-                        "row": {
-                          "created": 200,
-                          "id": "i2",
-                          "text": null,
-                        },
-                      },
-                    ],
-                  },
-                  {
-                    "change": {
-                      "node": {
-                        "relationships": {},
-                        "row": {
-                          "created": 300,
-                          "id": "i3",
-                          "text": null,
-                        },
-                      },
-                      "type": "add",
-                    },
-                    "fetch": [
-                      {
-                        "relationships": {},
-                        "row": {
-                          "created": 200,
-                          "id": "i2",
-                          "text": null,
-                        },
-                      },
-                      {
-                        "relationships": {},
-                        "row": {
-                          "created": 300,
-                          "id": "i3",
-                          "text": null,
-                        },
-                      },
-                    ],
-                  },
-                ]
-              `);
+        [
+          {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                },
+              },
+              "type": "remove",
+            },
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+            ],
+          },
+          {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+              "type": "add",
+            },
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            ],
+          },
+        ]
+      `);
     });
 
     test('at limit remove row at start with row after, limit 1', () => {
