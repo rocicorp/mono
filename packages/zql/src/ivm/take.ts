@@ -23,8 +23,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
-
-const MAX_BOUND_KEY = 'maxBound';
+import type {TakeBoundProvider, TakeGate} from './take-gate.ts';
 
 type TakeState = {
   size: number;
@@ -32,9 +31,7 @@ type TakeState = {
 };
 
 interface TakeStorage {
-  get(key: typeof MAX_BOUND_KEY): Row | undefined;
   get(key: string): TakeState | undefined;
-  set(key: typeof MAX_BOUND_KEY, value: Row): void;
   set(key: string, value: TakeState): void;
   del(key: string): void;
 }
@@ -52,7 +49,7 @@ export type PartitionKey = PrimaryKey;
  * Maintains the invariant that its output size is always <= limit, even
  * mid processing of a push.
  */
-export class Take implements Operator {
+export class Take implements Operator, TakeBoundProvider {
   readonly #input: Input;
   readonly #storage: TakeStorage;
   readonly #limit: number;
@@ -61,7 +58,13 @@ export class Take implements Operator {
   // Fetch overlay needed for some split push cases.
   #rowHiddenFromFetch: Row | undefined;
 
+  #takeGate: TakeGate | undefined;
+
   #output: Output = throwOutput;
+
+  setTakeGate(gate: TakeGate): void {
+    this.#takeGate = gate;
+  }
 
   constructor(
     input: Input,
@@ -90,67 +93,62 @@ export class Take implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  getBound(constraint?: Constraint): Row | undefined {
     if (
-      !this.#partitionKey ||
-      (req.constraint &&
-        constraintMatchesPartitionKey(req.constraint, this.#partitionKey))
+      this.#partitionKey &&
+      !constraintContainsPartitionKey(constraint, this.#partitionKey)
     ) {
-      const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-      const takeState = this.#storage.get(takeStateKey);
-      if (!takeState) {
+      return undefined;
+    }
+    const takeStateKey = getTakeStateKey(this.#partitionKey, constraint);
+    const takeState = this.#storage.get(takeStateKey);
+    if (!takeState || takeState.size < this.#limit) {
+      return undefined;
+    }
+    return takeState.bound;
+  }
+
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    assert(
+      !this.#partitionKey ||
+        (req.constraint !== undefined &&
+          constraintContainsPartitionKey(req.constraint, this.#partitionKey)),
+      'Partitioned take does not allow unpartitioned fetches',
+    );
+
+    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
+    const takeState = this.#storage.get(takeStateKey);
+    if (!takeState) {
+      if (constraintMatchesPartitionKey(req.constraint, this.#partitionKey)) {
         yield* this.#initialFetch(req);
-        return;
-      }
-      if (takeState.bound === undefined) {
-        return;
-      }
-      for (const inputNode of this.#input.fetch(req)) {
-        if (inputNode === 'yield') {
-          yield inputNode;
-          continue;
-        }
-        if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
-          return;
-        }
-        if (
-          this.#rowHiddenFromFetch &&
-          this.getSchema().compareRows(
-            this.#rowHiddenFromFetch,
-            inputNode.row,
-          ) === 0
-        ) {
-          continue;
-        }
-        yield inputNode;
       }
       return;
     }
-    // There is a partition key, but the fetch is not constrained or constrained
-    // on a different key.  Thus we don't have a single take state to bound by.
-    // This currently only happens with nested sub-queries
-    // e.g. issues include issuelabels include label.  We could remove this
-    // case if we added a translation layer (powered by some state) in join.
-    // Specifically we need joinKeyValue => parent constraint key
-    const maxBound = this.#storage.get(MAX_BOUND_KEY);
-    if (maxBound === undefined) {
+    if (takeState.bound === undefined) {
       return;
     }
+    let count = 0;
     for (const inputNode of this.#input.fetch(req)) {
       if (inputNode === 'yield') {
         yield inputNode;
         continue;
       }
-      if (this.getSchema().compareRows(inputNode.row, maxBound) > 0) {
+      if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
         return;
       }
-      const takeStateKey = getTakeStateKey(this.#partitionKey, inputNode.row);
-      const takeState = this.#storage.get(takeStateKey);
       if (
-        takeState?.bound !== undefined &&
-        this.getSchema().compareRows(takeState.bound, inputNode.row) >= 0
+        this.#rowHiddenFromFetch &&
+        this.getSchema().compareRows(
+          this.#rowHiddenFromFetch,
+          inputNode.row,
+        ) === 0
       ) {
-        yield inputNode;
+        continue;
+      }
+      yield inputNode;
+      count++;
+      if (count >= this.#limit) {
+        return;
       }
     }
   }
@@ -197,12 +195,7 @@ export class Take implements Operator {
       throw e;
     } finally {
       if (!exceptionThrown) {
-        this.#setTakeState(
-          takeStateKey,
-          size,
-          bound,
-          this.#storage.get(MAX_BOUND_KEY),
-        );
+        this.#setTakeState(takeStateKey, size, bound);
         // If it becomes necessary to support downstream early return, this
         // assert should be removed, and replaced with code that consumes
         // the input stream until limit is reached or the input stream is
@@ -218,10 +211,8 @@ export class Take implements Operator {
   #getStateAndConstraint(row: Row) {
     const takeStateKey = getTakeStateKey(this.#partitionKey, row);
     const takeState = this.#storage.get(takeStateKey);
-    let maxBound: Row | undefined;
     let constraint: Constraint | undefined;
     if (takeState) {
-      maxBound = this.#storage.get(MAX_BOUND_KEY);
       constraint =
         this.#partitionKey &&
         Object.fromEntries(
@@ -229,17 +220,15 @@ export class Take implements Operator {
         );
     }
 
-    return {takeState, takeStateKey, maxBound, constraint} as
+    return {takeState, takeStateKey, constraint} as
       | {
           takeState: undefined;
           takeStateKey: string;
-          maxBound: undefined;
           constraint: undefined;
         }
       | {
           takeState: TakeState;
           takeStateKey: string;
-          maxBound: Row | undefined;
           constraint: Constraint | undefined;
         };
   }
@@ -250,8 +239,9 @@ export class Take implements Operator {
       return;
     }
 
-    const {takeState, takeStateKey, maxBound, constraint} =
-      this.#getStateAndConstraint(change[ChangeIndex.NODE].row);
+    const {takeState, takeStateKey, constraint} = this.#getStateAndConstraint(
+      change[ChangeIndex.NODE].row,
+    );
     if (!takeState) {
       return;
     }
@@ -267,7 +257,6 @@ export class Take implements Operator {
             compareRows(takeState.bound, change[ChangeIndex.NODE].row) < 0
             ? change[ChangeIndex.NODE].row
             : takeState.bound,
-          maxBound,
         );
         yield* this.#output.push(change, this);
         return;
@@ -331,7 +320,6 @@ export class Take implements Operator {
           compareRows(change[ChangeIndex.NODE].row, beforeBoundNode.row) > 0
           ? change[ChangeIndex.NODE].row
           : beforeBoundNode.row,
-        maxBound,
       );
       yield* this.#pushWithRowHiddenFromFetch(
         change[ChangeIndex.NODE].row,
@@ -347,8 +335,8 @@ export class Take implements Operator {
         change[ChangeIndex.NODE].row,
         takeState.bound,
       );
-      if (compToBound > 0) {
-        // change is after bound
+      if (compToBound > 0 || (compToBound < 0 && this.#limit === 1)) {
+        // change is not in window
         return;
       }
       let beforeBoundNode: Node | undefined;
@@ -377,45 +365,46 @@ export class Take implements Operator {
         };
       }
       if (!newBound?.push) {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
+        this.#takeGate?.open();
+        try {
+          for (const node of this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+          })) {
+            if (node === 'yield') {
+              yield node;
+              continue;
+            }
+            const push = compareRows(node.row, takeState.bound) > 0;
+            newBound = {
+              node,
+              push,
+            };
+            if (push) {
+              break;
+            }
           }
-          const push = compareRows(node.row, takeState.bound) > 0;
-          newBound = {
-            node,
-            push,
-          };
-          if (push) {
-            break;
-          }
+        } finally {
+          this.#takeGate?.close();
         }
       }
 
       if (newBound?.push) {
         yield* this.#output.push(change, this);
-        this.#setTakeState(
-          takeStateKey,
-          takeState.size,
-          newBound.node.row,
-          maxBound,
-        );
+        this.#setTakeState(takeStateKey, takeState.size, newBound.node.row);
         yield* this.#output.push(makeAddChange(newBound.node), this);
         return;
       }
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size - 1,
-        newBound?.node.row,
-        maxBound,
-      );
+      const finalBound =
+        takeState.size - 1 === 0
+          ? undefined
+          : compToBound < 0
+            ? takeState.bound
+            : beforeBoundNode?.row;
+      this.#setTakeState(takeStateKey, takeState.size - 1, finalBound);
       yield* this.#output.push(change, this);
     } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
       // A 'child' change should be pushed to output if its row
@@ -439,8 +428,9 @@ export class Take implements Operator {
       'Unexpected change of partition key',
     );
 
-    const {takeState, takeStateKey, maxBound, constraint} =
-      this.#getStateAndConstraint(change[ChangeIndex.OLD_NODE].row);
+    const {takeState, takeStateKey, constraint} = this.#getStateAndConstraint(
+      change[ChangeIndex.OLD_NODE].row,
+    );
     if (!takeState) {
       return;
     }
@@ -458,7 +448,6 @@ export class Take implements Operator {
         takeStateKey,
         takeState.size,
         change[ChangeIndex.NODE].row,
-        maxBound,
       );
       return this.#output.push(change, this);
     };
@@ -503,12 +492,7 @@ export class Take implements Operator {
           'Take: beforeBoundNode must be found during fetch',
         );
 
-        this.#setTakeState(
-          takeStateKey,
-          takeState.size,
-          beforeBoundNode.row,
-          maxBound,
-        );
+        this.#setTakeState(takeStateKey, takeState.size, beforeBoundNode.row);
         yield* this.#output.push(change, this);
         return;
       }
@@ -516,19 +500,24 @@ export class Take implements Operator {
       assert(newCmp > 0, 'New comparison must be greater than 0');
       // Find the first item at the old bounds. This will be the new bounds.
       let newBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'at',
-        },
-        constraint,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      this.#takeGate?.open();
+      try {
+        for (const node of this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'at',
+          },
+          constraint,
+        })) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
+          newBoundNode = node;
+          break;
         }
-        newBoundNode = node;
-        break;
+      } finally {
+        this.#takeGate?.close();
       }
       assert(
         newBoundNode !== undefined,
@@ -544,12 +533,7 @@ export class Take implements Operator {
 
       // The new row is now outside the bounds, so we need to remove the old
       // row and add the new bounds row.
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size,
-        newBoundNode.row,
-        maxBound,
-      );
+      this.#setTakeState(takeStateKey, takeState.size, newBoundNode.row);
       yield* this.#pushWithRowHiddenFromFetch(
         newBoundNode.row,
         makeRemoveChange(change[ChangeIndex.OLD_NODE]),
@@ -600,12 +584,7 @@ export class Take implements Operator {
 
       // Remove before add to maintain invariant that
       // output size <= limit.
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size,
-        newBoundNode.row,
-        maxBound,
-      );
+      this.#setTakeState(takeStateKey, takeState.size, newBoundNode.row);
       yield* this.#pushWithRowHiddenFromFetch(
         change[ChangeIndex.NODE].row,
         makeRemoveChange(oldBoundNode),
@@ -631,19 +610,24 @@ export class Take implements Operator {
       // at this point we need to find the row after the bound and use that or
       // the newRow as the new bound.
       let afterBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'after',
-        },
-        constraint,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      this.#takeGate?.open();
+      try {
+        for (const node of this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'after',
+          },
+          constraint,
+        })) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
+          afterBoundNode = node;
+          break;
         }
-        afterBoundNode = node;
-        break;
+      } finally {
+        this.#takeGate?.close();
       }
       assert(
         afterBoundNode !== undefined,
@@ -660,12 +644,7 @@ export class Take implements Operator {
         makeRemoveChange(change[ChangeIndex.OLD_NODE]),
         this,
       );
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size,
-        afterBoundNode.row,
-        maxBound,
-      );
+      this.#setTakeState(takeStateKey, takeState.size, afterBoundNode.row);
       yield* this.#output.push(makeAddChange(afterBoundNode), this);
       return;
     }
@@ -682,23 +661,11 @@ export class Take implements Operator {
     }
   }
 
-  #setTakeState(
-    takeStateKey: string,
-    size: number,
-    bound: Row | undefined,
-    maxBound: Row | undefined,
-  ) {
+  #setTakeState(takeStateKey: string, size: number, bound: Row | undefined) {
     this.#storage.set(takeStateKey, {
       size,
       bound,
     });
-    if (
-      bound !== undefined &&
-      (maxBound === undefined ||
-        this.getSchema().compareRows(bound, maxBound) > 0)
-    ) {
-      this.#storage.set(MAX_BOUND_KEY, bound);
-    }
   }
 
   destroy(): void {
@@ -731,6 +698,21 @@ export function constraintMatchesPartitionKey(
     return constraint === partitionKey;
   }
   if (partitionKey.length !== Object.keys(constraint).length) {
+    return false;
+  }
+  for (const key of partitionKey) {
+    if (!hasOwn(constraint, key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function constraintContainsPartitionKey(
+  constraint: Constraint | undefined,
+  partitionKey: PartitionKey | undefined,
+): boolean {
+  if (constraint === undefined || partitionKey === undefined) {
     return false;
   }
   for (const key of partitionKey) {
