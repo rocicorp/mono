@@ -105,15 +105,33 @@ export type GetFilterTypeFromTSType<
  * (an object, an array) resolves to `never`, making the `cmp` call a type error
  * rather than a query that is always-false on the client and rejected by the
  * server. An untyped leaf (`ReadonlyJSONValue`) narrows to its scalar members.
+ *
+ * An `IN`/`NOT IN` list must be homogeneous: the engines compare the leaf
+ * against the type of the list's first element, so a mixed list would drop
+ * elements (or cast-fail on Postgres). A union leaf therefore takes a list of
+ * strings, or of numbers, or of booleans — not a mix.
  */
 export type GetJsonLeafFilterType<TS, TOperator extends SimpleOperator> = [
   Extract<TS, string | number | boolean>,
 ] extends [never]
   ? never
-  : GetFilterTypeFromTSType<
-      Extract<TS, string | number | boolean | null>,
-      TOperator
-    >;
+  : TOperator extends 'IN' | 'NOT IN'
+    ? HomogeneousList<Extract<TS, string | number | boolean>>
+    : GetFilterTypeFromTSType<
+        Extract<TS, string | number | boolean | null>,
+        TOperator
+      >;
+
+type HomogeneousList<T> =
+  | ([Extract<T, string>] extends [never]
+      ? never
+      : readonly Extract<T, string>[])
+  | ([Extract<T, number>] extends [never]
+      ? never
+      : readonly Extract<T, number>[])
+  | ([Extract<T, boolean>] extends [never]
+      ? never
+      : readonly Extract<T, boolean>[]);
 
 /**
  * Resolves a single JSON path segment `K` against value type `T`: an object key
@@ -121,15 +139,25 @@ export type GetJsonLeafFilterType<TS, TOperator extends SimpleOperator> = [
  * step — e.g. into an untyped `json()` whose type is `ReadonlyJSONValue` —
  * yields `ReadonlyJSONValue`, keeping untyped paths usable rather than erroring.
  *
+ * A numeric object key (`{2024: number}`, `Record<number, X>`) is addressed by
+ * its *string* form — JSON object keys are strings, and the engines treat a
+ * number segment strictly as an array index — so a numeric-string segment is
+ * resolved against the numeric key.
+ *
  * `NonNullable<T>` is applied because the runtime collapses a null/undefined
  * intermediate to `null`; the leaf is shaped off the non-null value, and
  * operator-level null handling lives in {@link GetFilterTypeFromTSType}.
  */
 type JsonStep<T, K> = K extends keyof NonNullable<T>
   ? NonNullable<T>[K]
-  : NonNullable<T> extends readonly (infer E)[]
-    ? E
-    : ReadonlyJSONValue;
+  : K extends `${infer N extends number}`
+    ? N extends keyof NonNullable<T>
+      ? NonNullable<T>[N]
+      : JsonStepFallback<T>
+    : JsonStepFallback<T>;
+
+type JsonStepFallback<T> =
+  NonNullable<T> extends readonly (infer E)[] ? E : ReadonlyJSONValue;
 
 /**
  * Maximum JSON path depth that {@link ValueAtPath}/{@link ValidJsonPath} type.
@@ -181,10 +209,12 @@ export type ValueAtPath<
   : ReadonlyJSONValue;
 
 /**
- * The valid next path segments at value type `T`: object keys, an array index
- * (`number`), or `string | number` for an untyped (`ReadonlyJSONValue`) value.
- * A scalar leaf has no further segments (`never`). Used by {@link ValidJsonPath}
- * to constrain/autocomplete `json()` path arguments (Tier 2).
+ * The valid next path segments at value type `T`: object keys (numeric keys
+ * by their string form — a number segment is strictly an array index), an
+ * array index (`number`), or `string | number` for an untyped
+ * (`ReadonlyJSONValue`) value. A scalar leaf has no further segments (`never`).
+ * Used by {@link ValidJsonPath} to constrain/autocomplete `json()` path
+ * arguments (Tier 2).
  */
 type JsonKeysOf<T> =
   NonNullable<ReadonlyJSONValue> extends NonNullable<T>
@@ -193,7 +223,9 @@ type JsonKeysOf<T> =
     : NonNullable<T> extends readonly unknown[]
       ? number
       : NonNullable<T> extends object
-        ? Extract<keyof NonNullable<T>, string | number>
+        ?
+            | Extract<keyof NonNullable<T>, string>
+            | `${Extract<keyof NonNullable<T>, number>}`
         : never;
 
 /**

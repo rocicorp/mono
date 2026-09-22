@@ -139,9 +139,21 @@ const schemaWithTypedJson = table('testWithTypedJson')
       nested: {zip: string};
       tags: string[];
     }>(),
+    scores: json<Record<number, number>>(),
     untyped: json(),
   })
   .primaryKey('id');
+
+const schemaWithTypedJsonRelationships = relationships(
+  schemaWithTypedJson,
+  connect => ({
+    test: connect.many({
+      sourceField: ['id'],
+      destField: ['s'],
+      destSchema: testSchema,
+    }),
+  }),
+);
 
 const testWithRelationships = table('testWithRelationships')
   .columns({
@@ -228,6 +240,7 @@ const schema = createSchema({
     testWithMoreRelationshipsRelationships,
     withAdvancedTypesRelationships,
     schemaWithEnumsRelationships,
+    schemaWithTypedJsonRelationships,
     testWithOneRelationshipsRelationships,
   ],
 });
@@ -872,6 +885,14 @@ test('json path: ValueAtPath leaf resolution (Tier 1)', () => {
   expectTypeOf<ValueAtPath<Metadata, ['tags', 0]>>().toEqualTypeOf<string>();
   // empty path is the whole column type
   expectTypeOf<ValueAtPath<Metadata, []>>().toEqualTypeOf<Metadata>();
+  // a numeric object key is addressed by its string form (a number segment
+  // is strictly an array index)
+  expectTypeOf<
+    ValueAtPath<Record<number, number>, ['2024']>
+  >().toEqualTypeOf<number>();
+  expectTypeOf<
+    ValueAtPath<{2024: boolean}, ['2024']>
+  >().toEqualTypeOf<boolean>();
   // untyped json() degrades to ReadonlyJSONValue at any depth
   expectTypeOf<
     ValueAtPath<ReadonlyJSONValue, ['whatever', 0]>
@@ -933,11 +954,41 @@ test('json path: leaf type inference in cmp (Tier 1)', () => {
     // untyped json() degrades to ReadonlyJSONValue (any path, loose value)
     cmp(json('untyped', 'whatever', 0), '=', 'anything');
 
+    // An IN/NOT IN list is homogeneous: the engines compare the leaf against
+    // one type per condition, so even an untyped leaf takes one list type.
+    cmp(json('untyped', 'k'), 'IN', ['a', 'b']);
+    cmp(json('untyped', 'k'), 'NOT IN', [1, 2]);
+    cmp(json('untyped', 'k'), 'IN', [true]);
+    // @ts-expect-error - a mixed string/number list is not one type
+    cmp(json('untyped', 'k'), 'IN', ['a', 1]);
+    // @ts-expect-error - a mixed number/boolean list is not one type
+    cmp(json('untyped', 'k'), 'NOT IN', [1, true]);
+
     return cmp(json('metadata', 'priority'), '=', 'high');
   });
 
   // @ts-expect-error - 'id' is not a json() column
   query.where(({cmp, json}) => cmp(json('id', 'x'), '=', 'y'));
+});
+
+test('json path: a ColumnRef belongs to the table it was created on', () => {
+  const query = mockQuery as unknown as Query<'testWithTypedJson', Schema>;
+
+  // Same table: fine, including through a nested `and`/`or`.
+  query.where(({cmp, json, and}) =>
+    and(cmp(json('metadata', 'priority'), '=', 'high')),
+  );
+
+  // A ref built by one table's `json` cannot be compared by a related
+  // table's `cmp`: the rows of the subquery have no such column.
+  query.where(({json, exists}) =>
+    exists('test', q =>
+      q.where(({cmp}) =>
+        // @ts-expect-error - the ref is for testWithTypedJson, not test
+        cmp(json('metadata', 'priority'), '=', 'high'),
+      ),
+    ),
+  );
 });
 
 test('json path: path segment validation (Tier 2)', () => {
@@ -954,6 +1005,15 @@ test('json path: path segment validation (Tier 2)', () => {
     cmp(json('metadata', 'nested', 'nope'), '=', 'x');
     // @ts-expect-error - cannot descend into the scalar leaf metadata.priority
     cmp(json('metadata', 'priority', 'nope'), '=', 'x');
+
+    // A `Record<number, …>` (or `{2024: …}`) is an object whose keys are
+    // strings at runtime, so a key is written in its string form; a number
+    // segment is an array index and never matches an object key.
+    cmp(json('scores', '2024'), '>', 0);
+    // @ts-expect-error - 2024 (a number) is an array index, not an object key
+    cmp(json('scores', 2024), '>', 0);
+    // @ts-expect-error - the leaf is a number, not a string
+    cmp(json('scores', '2024'), '=', 'x');
 
     // untyped json() allows any segment
     return cmp(json('untyped', 'anything', 0, 'deep'), '=', 'x');
