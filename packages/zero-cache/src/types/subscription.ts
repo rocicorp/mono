@@ -112,7 +112,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     this.#pipelineEnabled = pipeline;
   }
 
-  #coalesce(this: Subscription<T, M>, curr: Entry<M>, prev: Entry<M>): M {
+  #coalesce(curr: Entry<M>, prev: Entry<M>): M {
     assert(this.#coalesceFunc, 'expected a coalesce function');
     try {
       return this.#coalesceFunc(curr.value, prev.value);
@@ -121,13 +121,13 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     }
   }
 
-  #consumed(this: Subscription<T, M>, prev: Entry<M>): void {
+  #consumed(prev: Entry<M>): void {
     this.#consumedFunc(prev.value);
     this.#consuming.delete(prev);
     prev.resolve('consumed');
   }
 
-  #cleanup(this: Subscription<T, M>, entries: Entry<M>[], err?: Error) {
+  #cleanup(entries: Entry<M>[], err?: Error) {
     this.#cleanupFunc(
       entries.map(e => e.value),
       err,
