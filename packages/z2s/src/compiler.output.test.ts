@@ -435,13 +435,12 @@ test('json path filter: string leaf equality', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text END) = $3::text::text
+        WHERE ("jsonTable_0"."metadata" -> $1::text::text) = to_jsonb($2::text::text)
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
       "values": [
         "priority",
-        "string",
         "high",
       ],
     }
@@ -603,19 +602,14 @@ test('json path filter: IN', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE 
-        (
-          (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text END) = ANY 
-          (ARRAY(
-              SELECT value::text FROM jsonb_array_elements_text($3::text::jsonb)
-            ))
-        )
+        WHERE ("jsonTable_0"."metadata" -> $1::text::text) = ANY (ARRAY(SELECT to_jsonb(v) FROM unnest(ARRAY(
+              SELECT value::text FROM jsonb_array_elements_text($2::text::jsonb)
+            )) AS v))
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
       "values": [
         "priority",
-        "string",
         "["high","low"]",
       ],
     }
@@ -707,13 +701,12 @@ test('json path filter: boolean leaf equality', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::boolean END) = $3::text::boolean
+        WHERE ("jsonTable_0"."metadata" -> $1::text::text) = to_jsonb($2::text::boolean)
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
       "values": [
         "flagged",
-        "boolean",
         "true",
       ],
     }

@@ -597,7 +597,7 @@ function jsonPathParts(
   spec: Spec,
   ref: JsonPathReference,
   table: Table,
-): {raw: SQLQuery; jsonType: SQLQuery} {
+): {value: SQLQuery; raw: SQLQuery; jsonType: SQLQuery} {
   const {name} = ref.value;
   const col = colIdent(spec.server, {table, zql: name});
   const {type, isArray} = getServerColumn(spec.server, table, name);
@@ -622,6 +622,8 @@ function jsonPathParts(
   }
   const leaf = operand(ref.path[last]);
   return {
+    // The leaf as jsonb; `raw` is its text form.
+    value: sql`(${obj} -> ${leaf})`,
     raw: sql`(${obj} ->> ${leaf})`,
     jsonType: sql`jsonb_typeof(${obj} -> ${leaf})`,
   };
@@ -683,6 +685,14 @@ function jsonPathLeaf(
  * - `IN`/`NOT IN` with a `null` literal is constant-false, as in the
  *   in-memory predicate (the generic forms would assert, or match every
  *   non-null leaf).
+ * - `=`/`IN` against a string or boolean literal compare the leaf *as jsonb*:
+ *   jsonb equality is type-strict by itself (`"42"` never equals `42`, a JSON
+ *   `null` never equals a string) and a missing key is SQL NULL, so the
+ *   `jsonb_typeof` gate is unnecessary — and without the `CASE` around the
+ *   extraction, an expression index on `(col -> 'key')` can serve the
+ *   predicate. Numbers keep the gated `double precision` form: jsonb compares
+ *   numbers exactly (`numeric`), which would diverge from the client's and
+ *   SQLite's IEEE-754 equality above 2^53 or beyond double precision.
  * - An empty `NOT IN` list matches every non-null leaf: SQL's
  *   `NOT (x = ANY('{}'))` is TRUE even for a NULL leaf, whereas the
  *   predicate's null guard excludes it.
@@ -707,6 +717,16 @@ function jsonPathCondition(
     right.value === null
   ) {
     return sql`false`;
+  }
+  if ((op === '=' || op === 'IN') && right.type === 'literal') {
+    const t = leafType(right);
+    if (t === 'string' || t === 'boolean') {
+      const {value} = jsonPathParts(spec, left, table);
+      const lit = valueComparison(spec, right, table, left, op === 'IN');
+      return op === 'IN'
+        ? sql`${value} = ANY (ARRAY(SELECT to_jsonb(v) FROM unnest(${lit}) AS v))`
+        : sql`${value} = to_jsonb(${lit})`;
+    }
   }
   if (!isNegatedOperator(op)) {
     return undefined;

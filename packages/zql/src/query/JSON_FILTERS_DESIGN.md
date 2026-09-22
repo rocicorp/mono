@@ -329,12 +329,21 @@ NOT` need nothing extra: `IS [NOT] DISTINCT FROM` treats the gate's NULL as a
   (`sqlConvert{Singular,Plural}LiteralArg`), not the column's server type — so its
   cast matches the leaf's.
 
-This yields, e.g.,
-`(CASE WHEN jsonb_typeof(col -> $1) = 'string' THEN (col ->> $1)::text END) = $2::text`
-for string equality,
+The equality family is the exception to the gate: `=`/`IN` against a string or
+boolean literal compare the leaf **as jsonb** — `(col -> $1) = to_jsonb($2::text)`
+and `(col -> $1) = ANY(ARRAY(SELECT to_jsonb(v) FROM unnest(…) v))`. jsonb
+equality is type-strict on its own (`"42"` ≠ `42`, a JSON `null` ≠ any string)
+and a missing key is SQL NULL, so the semantics are unchanged, and with no `CASE`
+around the extraction an expression index on `(col -> 'key')` serves the
+predicate (verified: index scan vs. sequential scan on 200k rows). Numbers keep
+the gated `double precision` cast even for equality: jsonb compares numbers
+exactly (`numeric`), which would diverge from the client's and SQLite's IEEE-754
+equality above 2^53 or beyond double precision.
+
+The gated forms yield, e.g.,
 `(CASE WHEN jsonb_typeof((col -> $1) -> 0) = 'number' THEN ((col -> $1) ->> 0)::double precision END) > $2::double precision`
 for numeric ordering on an index path, `… ILIKE …` for text patterns,
-`… = ANY(ARRAY(…))` for `IN`,
+`… = ANY(ARRAY(…))` for a numeric `IN`,
 `(CASE COALESCE(jsonb_typeof(col -> $1), 'null') WHEN 'null' THEN false WHEN 'string' THEN (col ->> $1)::text != $2::text ELSE true END)`
 for `!=`, `(col ->> $1) IS NOT NULL` for an empty `NOT IN`, `false` for `IN`/`NOT IN`
 with a `null` literal, and `(col ->> $1) IS NOT DISTINCT FROM NULL` for `IS NULL`

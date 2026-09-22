@@ -290,11 +290,18 @@ describe('compiler with PostgreSQL', () => {
   test('json path filter: boolean leaf equality', async () => {
     expect(await queryDocIds('=', jsonRef('flagged'), true)).toEqual(['row1']);
     expect(await queryDocIds('=', jsonRef('flagged'), false)).toEqual(['row2']);
+    expect(await queryDocIds('IN', jsonRef('flagged'), [true])).toEqual([
+      'row1',
+    ]);
+    expect(await queryDocIds('IN', jsonRef('flagged'), [false, true])).toEqual([
+      'row1',
+      'row2',
+    ]);
   });
 
   test('json path filter: mismatched leaf types are non-matches, not errors', async () => {
     // row5 holds the wrong JSON type at every path. A bare `::double precision`
-    // / `::boolean` cast of its `#>>` text would make Postgres throw and fail
+    // / `::boolean` cast of its `->>` text would make Postgres throw and fail
     // the whole query; the jsonb_typeof gate makes each a SQL NULL instead, so
     // the row is simply excluded — matching the in-memory predicate and SQLite,
     // which never throw.
@@ -426,5 +433,42 @@ describe('compiler with PostgreSQL', () => {
       'row4',
       'row5',
     ]);
+  });
+
+  test('json path filter: equality is served by an expression index', async () => {
+    // `=`/`IN` against a string or boolean literal compare the leaf as jsonb
+    // with no CASE around the extraction, so an expression index on
+    // `(col -> 'key')` matches the predicate. (Tiny table: the planner only
+    // considers the index with sequential scans disabled.)
+    await pg.unsafe(
+      `CREATE INDEX docs_priority_idx ON docs ((metadata -> 'priority'))`,
+    );
+    const plan = async (op: SimpleCondition['op'], right: LiteralValue) => {
+      const sqlQuery = formatPgInternalConvert(
+        compile(serverSchema, schema, {
+          table: 'docsTable',
+          related: [],
+          where: {
+            type: 'simple',
+            op,
+            left: jsonRef('priority'),
+            right: {type: 'literal', value: right},
+          },
+        }),
+      );
+      const rows = await pg.begin(async tx => {
+        await tx.unsafe(`SET LOCAL enable_seqscan = off`);
+        return tx.unsafe(
+          `EXPLAIN (FORMAT JSON) ${sqlQuery.text}`,
+          sqlQuery.values as JSONValue[],
+        );
+      });
+      return JSON.stringify(rows);
+    };
+    expect(await plan('=', 'high')).toContain('docs_priority_idx');
+    expect(await plan('IN', ['high', 'low'])).toContain('docs_priority_idx');
+    // The type-gated forms are plain filters.
+    expect(await plan('>', 'a')).not.toContain('docs_priority_idx');
+    expect(await plan('!=', 'high')).not.toContain('docs_priority_idx');
   });
 });
