@@ -448,6 +448,39 @@ test('json path filter: string leaf equality', () => {
   `);
 });
 
+test('json path filter: empty NOT IN excludes null and missing leaves', () => {
+  // The generic `NOT (x = ANY('{}'))` is TRUE for a NULL leaf; the predicate's
+  // null guard excludes it, so this compiles to `leaf IS NOT NULL`.
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: 'NOT IN',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: []},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[]) IS NOT NULL
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "priority",
+      ],
+    }
+  `);
+});
+
 test('json path filter: negated comparison is type-strict but keeps mismatched leaves', () => {
   // `!=` (and NOT LIKE / NOT ILIKE / NOT IN) can't reuse the positive form's
   // NULL-on-mismatch gate: NULL would *exclude* a leaf of another JSON type,

@@ -327,6 +327,13 @@ describe('compiler with PostgreSQL', () => {
       'row2',
       'row5',
     ]);
+    // An empty NOT IN list matches every non-null leaf — but not a null or
+    // missing one (bare SQL `NOT (x = ANY('{}'))` would be TRUE for NULL).
+    expect(await queryDocIds('NOT IN', jsonRef('priority'), [])).toEqual([
+      'row1',
+      'row2',
+      'row5',
+    ]);
     // IS NOT has no null guard, matching JS `lhs !== rhs`.
     expect(await queryDocIds('IS NOT', jsonRef('priority'), '42')).toEqual([
       'row1',
