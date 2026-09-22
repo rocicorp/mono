@@ -345,3 +345,155 @@ describe('or(flipped exists, filter) on a self-join with related and limit', () 
     expect(incremental).toEqual(fresh);
   });
 });
+
+describe('a flipped exists in a union nested inside another union', () => {
+  const project = table('project').columns({id: string()}).primaryKey('id');
+  const owner = table('owner').columns({id: string()}).primaryKey('id');
+  const issue = table('issue')
+    .columns({
+      id: number(),
+      x: number(),
+      y: number(),
+      projectID: string(),
+      ownerID: string(),
+    })
+    .primaryKey('id');
+  const schema = createSchema({
+    tables: [project, owner, issue],
+    relationships: [
+      relationships(issue, ({one}) => ({
+        project: one({
+          sourceField: ['projectID'],
+          destField: ['id'],
+          destSchema: project,
+        }),
+        owner: one({
+          sourceField: ['ownerID'],
+          destField: ['id'],
+          destSchema: owner,
+        }),
+      })),
+    ],
+  });
+  const tables: Tables = {
+    project: schema.tables.project,
+    owner: schema.tables.owner,
+    issue: schema.tables.issue,
+  };
+
+  // y=1 OR (y>=0 AND (x=0 OR (x=1 AND EXISTS(project, flip))))
+  // A row with y=1 is in both outer branches.
+  const nested = asQueryInternals(
+    newQuery(schema, 'issue').where(({or, and, cmp, exists}) =>
+      or(
+        cmp('y', 1),
+        and(
+          cmp('y', '>=', 0),
+          or(
+            cmp('x', 0),
+            and(
+              cmp('x', 1),
+              exists('project', p => p, {flip: true}),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ).ast;
+
+  const p1 = {id: 'p1'};
+  const o1 = {id: 'o1'};
+  const base = {id: 1, x: 0, y: 0, projectID: 'p1', ownerID: 'o1'};
+
+  function editCase(before: Row, after: Row) {
+    const incremental = run(tables, nested, {project: [p1], issue: [before]}, [
+      ['issue', makeSourceChangeEdit(after, before)],
+    ]);
+    const fresh = run(tables, nested, {project: [p1], issue: [after]});
+    expect(incremental).toEqual(fresh);
+    return incremental;
+  }
+
+  test('an edit that moves the row into the inner flipped branch brings its witness', () => {
+    expect(editCase(base, {...base, x: 1})).toEqual([
+      'issue:1=1',
+      'project:p1=1',
+    ]);
+  });
+
+  test('an edit that moves the row out of the inner flipped branch takes its witness', () => {
+    expect(editCase({...base, x: 1}, base)).toEqual(['issue:1=1']);
+  });
+
+  test('an edit that leaves one outer branch while entering the inner flipped branch', () => {
+    expect(editCase({...base, y: 1}, {...base, x: 1})).toEqual([
+      'issue:1=1',
+      'project:p1=1',
+    ]);
+  });
+
+  test('an edit that enters one outer branch while leaving the inner flipped branch', () => {
+    expect(editCase({...base, x: 1}, {...base, y: 1})).toEqual(['issue:1=1']);
+  });
+
+  // y=1 OR (y>=0 AND (x=0 OR (EXISTS(owner) AND EXISTS(project, flip))))
+  // The owner join sits above both unions, so a new owner reaches them as a
+  // child change, which the inner EXISTS(owner) filter turns into an add.
+  const nestedOwned = asQueryInternals(
+    newQuery(schema, 'issue').where(({or, and, cmp, exists}) =>
+      or(
+        cmp('y', 1),
+        and(
+          cmp('y', '>=', 0),
+          or(
+            cmp('x', 0),
+            and(
+              exists('owner'),
+              exists('project', p => p, {flip: true}),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ).ast;
+
+  test.each([
+    ['in the inner union only', base],
+    ['in both outer branches', {...base, y: 1}],
+  ])(
+    'a child change that moves the row into the inner flipped branch brings its witness (%s)',
+    (_, row) => {
+      const incremental = run(
+        tables,
+        nestedOwned,
+        {project: [p1], issue: [row]},
+        [['owner', makeSourceChangeAdd(o1)]],
+      );
+      const fresh = run(tables, nestedOwned, {
+        project: [p1],
+        owner: [o1],
+        issue: [row],
+      });
+      expect(incremental).toEqual(fresh);
+      expect(incremental).toContain('project:p1=1');
+    },
+  );
+
+  test.each([
+    ['in the inner union only', base],
+    ['in both outer branches', {...base, y: 1}],
+  ])(
+    'a child change that moves the row out of the inner flipped branch takes its witness (%s)',
+    (_, row) => {
+      const incremental = run(
+        tables,
+        nestedOwned,
+        {project: [p1], owner: [o1], issue: [row]},
+        [['owner', makeSourceChangeRemove(o1)]],
+      );
+      const fresh = run(tables, nestedOwned, {project: [p1], issue: [row]});
+      expect(incremental).toEqual(fresh);
+      expect(incremental).not.toContain('project:p1=1');
+    },
+  );
+});

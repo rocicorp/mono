@@ -101,9 +101,31 @@ export function* pushAccumulatedChanges(
     return;
   }
 
+  // A union nested in a branch keeps the row but reports its witness changes
+  // as child changes on its own branch relationships, around the change it
+  // pushes for the row. (A child change entering through the fan-out is on
+  // one of the fan-out's relationships, never a branch's.) Those are not
+  // candidates to collapse: pass them through around this fan-in's change,
+  // removals (old row) before and additions (new row) after, as the nested
+  // union ordered them.
+  const witnessesLeft: Change[] = [];
+  const witnessesEntered: Change[] = [];
+
   // collapse down to a single change per type
   const candidatesToPush = new Map<ChangeType, Change>();
   for (const change of accumulatedPushes) {
+    if (
+      isBranchRel &&
+      change[ChangeIndex.TYPE] === ChangeType.CHILD &&
+      isBranchRel(change[ChangeIndex.CHILD_DATA].relationshipName)
+    ) {
+      (change[ChangeIndex.CHILD_DATA].change[ChangeIndex.TYPE] ===
+      ChangeType.REMOVE
+        ? witnessesLeft
+        : witnessesEntered
+      ).push(change);
+      continue;
+    }
     if (
       fanOutChangeType === ChangeType.CHILD &&
       change[ChangeIndex.TYPE] !== ChangeType.CHILD
@@ -126,6 +148,36 @@ export function* pushAccumulatedChanges(
 
   accumulatedPushes.length = 0;
 
+  assert(
+    candidatesToPush.size > 0,
+    'Fan-in: witness changes without a change for their row',
+  );
+  for (const change of witnessesLeft) {
+    yield* output.push(change, pusher);
+  }
+  yield* pushCollapsed(
+    candidatesToPush,
+    output,
+    pusher,
+    fanOutChangeType,
+    mergeRelationships,
+    addEmptyRelationships,
+    isBranchRel,
+  );
+  for (const change of witnessesEntered) {
+    yield* output.push(change, pusher);
+  }
+}
+
+function* pushCollapsed(
+  candidatesToPush: Map<ChangeType, Change>,
+  output: Output,
+  pusher: InputBase,
+  fanOutChangeType: ChangeType,
+  mergeRelationships: (existing: Change, incoming: Change) => Change,
+  addEmptyRelationships: (change: Change) => Change,
+  isBranchRel: ((name: string) => boolean) | undefined,
+): Stream<'yield'> {
   const types = [...candidatesToPush.keys()];
   /**
    * Based on the received `fanOutChangeType` only certain output types are valid.
