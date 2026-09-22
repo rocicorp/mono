@@ -467,13 +467,14 @@ test('json path filter: nested path + array index, numeric ordering', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text,$2::text::text]::text[])::double precision > $3::text::double precision
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text,$2::text::text]::text[]) = $3::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text,$2::text::text]::text[])::double precision END) > $4::text::double precision
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
       "values": [
         "scores",
         "0",
+        "number",
         "10",
       ],
     }
@@ -602,12 +603,13 @@ test('json path filter: boolean leaf equality', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::boolean = $2::text::boolean
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::boolean END) = $3::text::boolean
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
       "values": [
         "flagged",
+        "boolean",
         "true",
       ],
     }

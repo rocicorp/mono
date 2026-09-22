@@ -572,9 +572,17 @@ function literalValueComparison(
  *
  * `#>>` works on both `json` and `jsonb` columns and maps **both** a missing key
  * and a JSON `null` to SQL `NULL` — matching the SQLite `json_extract` pushdown
- * and the in-memory predicate, so `IS NULL` agrees across all three. The leaf is
- * cast to the comparison type derived from the literal on the other side
- * (`pgCastTypeForJsonLeaf`) so it lines up with that literal's own cast.
+ * and the in-memory predicate, so `IS NULL` agrees across all three.
+ *
+ * The leaf is cast to the comparison type derived from the literal on the other
+ * side (`pgCastTypeForJsonLeaf`) so it lines up with that literal's own cast.
+ * For a `number`/`boolean` cast the extraction is gated on the leaf's JSON type:
+ * Postgres throws when casting non-conforming text (e.g. a string `"n/a"`, or
+ * the JSON text of an object/array) to `double precision`/`boolean`, which would
+ * fail the whole query on a single mismatched row. Gating makes a mismatched
+ * leaf SQL `NULL` — a non-match — matching the in-memory predicate and SQLite,
+ * which never throw. A `text` cast is a no-op on `#>>` output and cannot fail,
+ * so it is not gated.
  */
 function jsonPathLeaf(
   spec: Spec,
@@ -589,7 +597,18 @@ function jsonPathLeaf(
   );
   const leaf = sql`(${col} #>> ARRAY[${path}]::text[])`;
   const castType = pgCastTypeForJsonLeaf(other);
-  return castType ? sql`${leaf}::${sql.__dangerous__rawValue(castType)}` : leaf;
+  if (castType === undefined) {
+    return leaf;
+  }
+  const cast = sql`${leaf}::${sql.__dangerous__rawValue(castType)}`;
+  if (castType === 'text') {
+    return cast;
+  }
+  // `::jsonb` so `jsonb_typeof` also works on `json` columns.
+  const jsonType = castType === 'boolean' ? 'boolean' : 'number';
+  return sql`(CASE WHEN jsonb_typeof(${col}::jsonb #> ARRAY[${path}]::text[]) = ${sqlConvertSingularLiteralArg(
+    jsonType,
+  )} THEN ${cast} END)`;
 }
 
 /**

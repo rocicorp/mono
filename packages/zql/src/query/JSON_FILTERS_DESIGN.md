@@ -17,7 +17,9 @@ relationships; on-the-fly acceleration for ad-hoc `orderBy`) proposed.
   (builder → AST → `json_extract` → results).
 - **Done (Phase 1, Postgres):** the `z2s` compiler emits `#>>` json/jsonb text
   extraction with the leaf and the literal cast to a common type derived from the
-  literal (see §5.5); validated against live Postgres (`compiler.pg.test.ts`).
+  literal (see §5.5); number/boolean casts are gated on the leaf's JSON type so a
+  mismatched leaf is a non-match rather than a query error; validated against live
+  Postgres (`compiler.pg.test.ts`).
 - **Done (Phase 1, typing):** `cmp`'s comparison value is typed from the JSON-path
   leaf, and `json()` path segments are validated/autocompleted against the column's
   declared type (`ValueAtPath` / `ValidJsonPath`; see §5.2). Untyped `json()` stays
@@ -283,13 +285,21 @@ renders both sides — the two `'json'` cases just make them line up:
   maps **both** a missing key and a JSON null to SQL NULL — matching SQLite
   `json_extract` and the in-memory predicate, so `IS NULL` agrees across all three.
   The leaf is then cast to a type derived from the literal (`pgCastTypeForJsonLeaf`:
-  string → `text`, number → `double precision`, boolean → `boolean`).
+  string → `text`, number → `double precision`, boolean → `boolean`). For
+  `number`/`boolean` the cast is **gated on the leaf's JSON type**
+  (`CASE WHEN jsonb_typeof(col::jsonb #> path) = 'number' THEN … END`): Postgres
+  throws when casting non-conforming text (a string `"n/a"`, an object/array's JSON
+  text) to `double precision`/`boolean`, which would fail the whole query on one
+  mismatched row; gating makes a mismatched leaf SQL NULL — a non-match — matching
+  the in-memory predicate and SQLite, which never throw. `text` is a no-op cast on
+  `#>>` output and isn't gated.
 - `literalValueComparison` `'json'`: render the literal by its **own** JS type
   (`sqlConvert{Singular,Plural}LiteralArg`), not the column's server type — so its
   cast matches the leaf's.
 
 This yields, e.g., `(col #>> ARRAY['priority']::text[])::text = $n::text::text` for
-equality, `::double precision > …` for numeric ordering, `… ILIKE …` for text
+equality, `(CASE WHEN jsonb_typeof(…) = 'number' THEN (…)::double precision END) > …`
+for numeric ordering, `… ILIKE …` for text
 patterns, `… = ANY(ARRAY(…))` for `IN`, and `(col #>> …) IS NOT DISTINCT FROM NULL`
 for `IS NULL` (leaf left uncast so missing/JSON-null both read as SQL NULL).
 Snapshot-tested in `compiler.output.test.ts` and **executed against live Postgres**

@@ -152,7 +152,8 @@ describe('compiler with PostgreSQL', () => {
         ('row1', '{"priority":"high","count":3,"flagged":true,"nested":{"zip":"94110"},"tags":["a","b"]}'),
         ('row2', '{"priority":"low","count":10,"flagged":false}'),
         ('row3', '{"priority":null}'),
-        ('row4', '{}');
+        ('row4', '{}'),
+        ('row5', '{"priority":42,"count":"n/a","flagged":{"v":true},"tags":"not-an-array"}');
     `);
   });
 
@@ -228,6 +229,8 @@ describe('compiler with PostgreSQL', () => {
   //   row2 {priority:'low',  count:10, flagged:false}
   //   row3 {priority:null}            -- explicit JSON null
   //   row4 {}                         -- missing key
+  //   row5 {priority:42, count:'n/a', flagged:{v:true}, tags:'not-an-array'}
+  //                                   -- wrong JSON type at every path
   const jsonRef = (...path: (string | number)[]): JsonPathReference => ({
     type: 'json',
     value: {type: 'column', name: 'metadata'},
@@ -263,6 +266,7 @@ describe('compiler with PostgreSQL', () => {
     ]);
     expect(await queryDocIds('!=', jsonRef('priority'), 'high')).toEqual([
       'row2',
+      'row5',
     ]);
   });
 
@@ -276,6 +280,31 @@ describe('compiler with PostgreSQL', () => {
   test('json path filter: boolean leaf equality', async () => {
     expect(await queryDocIds('=', jsonRef('flagged'), true)).toEqual(['row1']);
     expect(await queryDocIds('=', jsonRef('flagged'), false)).toEqual(['row2']);
+  });
+
+  test('json path filter: mismatched leaf types are non-matches, not errors', async () => {
+    // row5 holds the wrong JSON type at every path. A bare `::double precision`
+    // / `::boolean` cast of its `#>>` text would make Postgres throw and fail
+    // the whole query; the jsonb_typeof gate makes each a SQL NULL instead, so
+    // the row is simply excluded — matching the in-memory predicate and SQLite,
+    // which never throw.
+
+    // A string leaf ("n/a") in a number comparison — ordering, equality, IN.
+    expect(await queryDocIds('>', jsonRef('count'), 0)).toEqual([
+      'row1',
+      'row2',
+    ]);
+    expect(await queryDocIds('=', jsonRef('count'), 3)).toEqual(['row1']);
+    expect(await queryDocIds('IN', jsonRef('count'), [3, 10])).toEqual([
+      'row1',
+      'row2',
+    ]);
+
+    // An object leaf ({v:true}) in a boolean comparison — `=` and `IS`.
+    expect(await queryDocIds('=', jsonRef('flagged'), true)).toEqual(['row1']);
+    expect(await queryDocIds('IS', jsonRef('flagged'), false)).toEqual([
+      'row2',
+    ]);
   });
 
   test('json path filter: nested object and array index', async () => {
@@ -305,6 +334,7 @@ describe('compiler with PostgreSQL', () => {
     expect(await queryDocIds('IS NOT', jsonRef('priority'), null)).toEqual([
       'row1',
       'row2',
+      'row5',
     ]);
   });
 });
