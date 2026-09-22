@@ -50,6 +50,10 @@ export class ConnectionIndex<C> {
       this.#unconstrained++;
       return;
     }
+    if (constraint.values.length === 0) {
+      // Never matches: indexed nowhere, so it is never a candidate.
+      return;
+    }
     let byValue = this.#byColumn.get(constraint.column);
     if (!byValue) {
       byValue = new Map();
@@ -68,6 +72,9 @@ export class ConnectionIndex<C> {
     this.#constraints.delete(connection);
     if (!constraint) {
       this.#unconstrained--;
+      return;
+    }
+    if (constraint.values.length === 0) {
       return;
     }
     const byValue = this.#byColumn.get(constraint.column);

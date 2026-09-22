@@ -217,6 +217,21 @@ describe('ConnectionIndex', () => {
     );
   });
 
+  test.each([
+    {name: 'another never-matching constraint', first: []},
+    {name: 'the last constraint with values on the column', first: ['3']},
+  ])('removes a never-matching constraint after $name', ({first}) => {
+    const index = new ConnectionIndex<string>();
+    index.add('c1', inn('a', first));
+    index.add('c2', inn('a', []));
+    expect(index.mayAccept({a: '3'})).toBe(first.length > 0);
+    index.remove('c1');
+    expect(index.mayAccept({a: '3'})).toBe(false);
+    index.remove('c2');
+    expect(index.size).toBe(0);
+    expect(index.mayAccept({a: '3'})).toBe(true);
+  });
+
   test('double add and unknown remove throw', () => {
     const index = new ConnectionIndex<string>();
     index.add('c1', undefined);
