@@ -17,9 +17,10 @@ relationships; on-the-fly acceleration for ad-hoc `orderBy`) proposed.
   (builder → AST → `json_extract` → results).
 - **Done (Phase 1, Postgres):** the `z2s` compiler emits `#>>` json/jsonb text
   extraction with the leaf and the literal cast to a common type derived from the
-  literal (see §5.5); number/boolean casts are gated on the leaf's JSON type so a
-  mismatched leaf is a non-match rather than a query error; validated against live
-  Postgres (`compiler.pg.test.ts`).
+  literal (see §5.5). Comparisons are **type-strict** as on the client/SQLite: every
+  cast is gated on the leaf's JSON type, so a leaf of another type is a non-match
+  for a positive operator (never a query error) and a match for a negated one
+  (`42 !== '42'`); validated against live Postgres (`compiler.pg.test.ts`).
 - **Done (Phase 1, typing):** `cmp`'s comparison value is typed from the JSON-path
   leaf, and `json()` path segments are validated/autocompleted against the column's
   declared type (`ValueAtPath` / `ValidJsonPath`; see §5.2). Untyped `json()` stays
@@ -286,25 +287,35 @@ renders both sides — the two `'json'` cases just make them line up:
   maps **both** a missing key and a JSON null to SQL NULL — matching SQLite
   `json_extract` and the in-memory predicate, so `IS NULL` agrees across all three.
   The leaf is then cast to a type derived from the literal (`pgCastTypeForJsonLeaf`:
-  string → `text`, number → `double precision`, boolean → `boolean`). For
-  `number`/`boolean` the cast is **gated on the leaf's JSON type**
-  (`CASE WHEN jsonb_typeof(col::jsonb #> path) = 'number' THEN … END`): Postgres
-  throws when casting non-conforming text (a string `"n/a"`, an object/array's JSON
-  text) to `double precision`/`boolean`, which would fail the whole query on one
-  mismatched row; gating makes a mismatched leaf SQL NULL — a non-match — matching
-  the in-memory predicate and SQLite, which never throw. `text` is a no-op cast on
-  `#>>` output and isn't gated.
+  string → `text`, number → `double precision`, boolean → `boolean`), and every
+  cast is **gated on the leaf's JSON type**
+  (`CASE WHEN jsonb_typeof(col::jsonb #> path) = 'number' THEN … END`), which makes
+  the comparison **type-strict** like the in-memory predicate (`42 !== '42'`) and
+  SQLite (integer ≠ text): `#>>` renders a numeric `42` as the text `'42'`, so an
+  ungated text comparison would wrongly match it against the string `'42'`. For
+  `number`/`boolean` the gate is also what keeps the cast from throwing — Postgres
+  errors when casting non-conforming text (a string `"n/a"`, an object's JSON text)
+  to `double precision`/`boolean`, which would fail the whole query on one row.
+- Negated operators (`!=`, `NOT LIKE`, `NOT ILIKE`, `NOT IN`) need a different form
+  (`negatedJsonPathCondition`): the gate's NULL would _exclude_ a mismatched leaf,
+  but strict inequality _includes_ it (`42 !== '42'` is true). So they compile to
+  `CASE WHEN leaf IS NULL THEN false WHEN jsonb_typeof(…) = 'string' THEN leaf != $n
+ELSE true END` — a null/missing leaf never matches (the predicate's null guard),
+  a same-typed leaf is compared for real, and a mismatched one matches. `IS`/`IS
+NOT` need nothing extra: `IS [NOT] DISTINCT FROM` treats the gate's NULL as a
+  value, which already yields the strict result.
 - `literalValueComparison` `'json'`: render the literal by its **own** JS type
   (`sqlConvert{Singular,Plural}LiteralArg`), not the column's server type — so its
   cast matches the leaf's.
 
-This yields, e.g., `(col #>> ARRAY['priority']::text[])::text = $n::text::text` for
-equality, `(CASE WHEN jsonb_typeof(…) = 'number' THEN (…)::double precision END) > …`
-for numeric ordering, `… ILIKE …` for text
-patterns, `… = ANY(ARRAY(…))` for `IN`, and `(col #>> …) IS NOT DISTINCT FROM NULL`
-for `IS NULL` (leaf left uncast so missing/JSON-null both read as SQL NULL).
-Snapshot-tested in `compiler.output.test.ts` and **executed against live Postgres**
-in `compiler.pg.test.ts`.
+This yields, e.g., `(CASE WHEN jsonb_typeof(…) = 'string' THEN (col #>> …)::text END)
+= $n::text::text` for string equality, `… = 'number' THEN (…)::double precision END)
+
+> …`for numeric ordering,`… ILIKE …`for text patterns,`… = ANY(ARRAY(…))`for`IN`, `(CASE WHEN (col #>> …) IS NULL THEN false WHEN … THEN (…)::text != $n ELSE
+> true END)`for`!=`, and `(col #>> …) IS NOT DISTINCT FROM NULL`for`IS NULL`(leaf
+left uncast so missing/JSON-null both read as SQL NULL).
+Snapshot-tested in`compiler.output.test.ts`and **executed against live Postgres**
+in`compiler.pg.test.ts`.
 
 > Note: this targets object/scalar `json`/`jsonb` columns. A `json<T[]>()` column
 > backed by a native Postgres array (server type `text[]`, not json) is not a `#>>`
@@ -322,7 +333,12 @@ Three evaluators must agree: JS `===`/`<`, SQLite `json_extract`, PG `jsonb`.
   to the same outcome (use `#>>`, which maps JSON null → SQL NULL like missing); both
   → non-match for value ops, match for `IS NULL`. Document it.
 - **object/array leaf:** out of scope v1 (scalar leaves only).
-- **mixed-type ordering:** engine-specific; document "compare within one JSON type."
+- **mixed-type comparisons:** the equality family (`= != IN NOT IN IS IS NOT`) is
+  type-strict on all three engines — a leaf of another JSON type is never equal
+  (JS `42 !== '42'`; SQLite integer ≠ text; Postgres via the `jsonb_typeof` gate,
+  §5.5). **Decision:** ordering across types (`'3' < 5`) is the caller's problem —
+  JS coerces, SQLite orders by storage class, Postgres (gated) never matches — and
+  is not made consistent; typed `json<T>()` steers callers within one type.
 
 The in-memory predicate now coalesces a path miss (missing key / null intermediate)
 to `null` so `IS NULL` matches both a missing key and a JSON null — identical to the
@@ -490,6 +506,9 @@ deploy contract.
 
 Resolved during Phase 1:
 
+- **Cross-type comparisons:** Postgres is now type-strict for the equality family,
+  matching JS/SQLite (§5.5, §5.6); cross-type _ordering_ is left as the caller's
+  problem. ✅
 - **Negative / fractional array indices:** rejected. The engines disagree on a
   negative index (Postgres `#>>` counts from the end; JS/SQLite yield null), and a
   fractional one is not an index, so a numeric segment must be a non-negative

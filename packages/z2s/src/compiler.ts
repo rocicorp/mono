@@ -393,6 +393,17 @@ export function simple(
   condition: SimpleCondition,
   table: Table,
 ): SQLQuery {
+  if (condition.left.type === 'json') {
+    const negated = negatedJsonPathCondition(
+      spec,
+      condition.left,
+      condition,
+      table,
+    );
+    if (negated) {
+      return negated;
+    }
+  }
   switch (condition.op) {
     case '!=':
     case '<':
@@ -567,22 +578,58 @@ function literalValueComparison(
 }
 
 /**
+ * The two SQL pieces every JSON path comparison is built from: the leaf's
+ * `#>>` text (`raw`, SQL NULL for a missing key or a JSON null) and its JSON
+ * type (`jsonType`, via `jsonb_typeof`; `::jsonb` so it also works on `json`
+ * columns).
+ */
+function jsonPathParts(
+  spec: Spec,
+  ref: JsonPathReference,
+  table: Table,
+): {raw: SQLQuery; jsonType: SQLQuery} {
+  const col = colIdent(spec.server, {table, zql: ref.value.name});
+  const path = sql`ARRAY[${sql.join(
+    ref.path.map(seg => sqlConvertSingularLiteralArg(String(seg))),
+    ',',
+  )}]::text[]`;
+  return {
+    raw: sql`(${col} #>> ${path})`,
+    jsonType: sql`jsonb_typeof(${col}::jsonb #> ${path})`,
+  };
+}
+
+/** The `jsonb_typeof` name a leaf must have to be cast to `castType`. */
+function jsonTypeName(castType: string): SQLQuery {
+  return sqlConvertSingularLiteralArg(
+    castType === 'text'
+      ? 'string'
+      : castType === 'boolean'
+        ? 'boolean'
+        : 'number',
+  );
+}
+
+/**
  * Compiles a JSON path reference to a Postgres text extraction
- * `("col" #>> ARRAY['a','b']::text[])`.
+ * `("col" #>> ARRAY['a','b']::text[])`, cast to the comparison type derived from
+ * the literal on the other side (`pgCastTypeForJsonLeaf`) so it lines up with
+ * that literal's own cast.
  *
  * `#>>` works on both `json` and `jsonb` columns and maps **both** a missing key
  * and a JSON `null` to SQL `NULL` — matching the SQLite `json_extract` pushdown
  * and the in-memory predicate, so `IS NULL` agrees across all three.
  *
- * The leaf is cast to the comparison type derived from the literal on the other
- * side (`pgCastTypeForJsonLeaf`) so it lines up with that literal's own cast.
- * For a `number`/`boolean` cast the extraction is gated on the leaf's JSON type:
- * Postgres throws when casting non-conforming text (e.g. a string `"n/a"`, or
- * the JSON text of an object/array) to `double precision`/`boolean`, which would
- * fail the whole query on a single mismatched row. Gating makes a mismatched
- * leaf SQL `NULL` — a non-match — matching the in-memory predicate and SQLite,
- * which never throw. A `text` cast is a no-op on `#>>` output and cannot fail,
- * so it is not gated.
+ * The cast is gated on the leaf's JSON type (`CASE WHEN jsonb_typeof(...)`), so a
+ * leaf of a different type than the literal is SQL NULL, i.e. a non-match. This
+ * is type-strict comparison, as in the in-memory predicate (`42 !== '42'`) and
+ * SQLite (integer ≠ text): `#>>` renders a numeric `42` as the text `'42'`, so an
+ * ungated text comparison would wrongly match it against the string `'42'`. For
+ * `number`/`boolean` the gate is also what keeps the cast from throwing: Postgres
+ * errors when casting non-conforming text (a string `"n/a"`, an object's JSON
+ * text) to `double precision`/`boolean`, which would fail the whole query on one
+ * mismatched row. Negated operators need a different form — see
+ * `negatedJsonPathCondition`.
  */
 function jsonPathLeaf(
   spec: Spec,
@@ -590,25 +637,65 @@ function jsonPathLeaf(
   table: Table,
   other: ValuePosition,
 ): SQLQuery {
-  const col = colIdent(spec.server, {table, zql: ref.value.name});
-  const path = sql.join(
-    ref.path.map(seg => sqlConvertSingularLiteralArg(String(seg))),
-    ',',
-  );
-  const leaf = sql`(${col} #>> ARRAY[${path}]::text[])`;
+  const {raw, jsonType} = jsonPathParts(spec, ref, table);
   const castType = pgCastTypeForJsonLeaf(other);
   if (castType === undefined) {
-    return leaf;
+    return raw;
   }
-  const cast = sql`${leaf}::${sql.__dangerous__rawValue(castType)}`;
-  if (castType === 'text') {
-    return cast;
+  return sql`(CASE WHEN ${jsonType} = ${jsonTypeName(
+    castType,
+  )} THEN ${raw}::${sql.__dangerous__rawValue(castType)} END)`;
+}
+
+const negatedOps: ReadonlySet<SimpleCondition['op']> = new Set([
+  '!=',
+  'NOT LIKE',
+  'NOT ILIKE',
+  'NOT IN',
+]);
+
+/**
+ * Compiles a negated comparison (`!=`, `NOT LIKE`, `NOT ILIKE`, `NOT IN`) whose
+ * left operand is a JSON path, matching the in-memory predicate's strict
+ * semantics:
+ *
+ * - a null/missing leaf never matches (the predicate's null guard);
+ * - a leaf of a different JSON type than the literal is *not equal*, so it
+ *   DOES match a negated comparison (JS `42 !== '42'` is true);
+ * - a leaf of the same type is compared for real.
+ *
+ * The positive operators need no special form: the type gate in `jsonPathLeaf`
+ * makes a mismatched leaf SQL NULL, which a positive comparison excludes — the
+ * right answer. But NULL also excludes under a negated operator, where the
+ * predicate *includes* the row; hence the explicit CASE here.
+ *
+ * Returns `undefined` for an untyped literal (`null`, or an empty `NOT IN`
+ * array), where the generic form already agrees with the predicate.
+ */
+function negatedJsonPathCondition(
+  spec: Spec,
+  left: JsonPathReference,
+  condition: SimpleCondition,
+  table: Table,
+): SQLQuery | undefined {
+  const {op, right} = condition;
+  if (!negatedOps.has(op)) {
+    return undefined;
   }
-  // `::jsonb` so `jsonb_typeof` also works on `json` columns.
-  const jsonType = castType === 'boolean' ? 'boolean' : 'number';
-  return sql`(CASE WHEN jsonb_typeof(${col}::jsonb #> ARRAY[${path}]::text[]) = ${sqlConvertSingularLiteralArg(
-    jsonType,
-  )} THEN ${cast} END)`;
+  const castType = pgCastTypeForJsonLeaf(right);
+  if (castType === undefined) {
+    return undefined;
+  }
+  const {raw, jsonType} = jsonPathParts(spec, left, table);
+  const leaf = sql`${raw}::${sql.__dangerous__rawValue(castType)}`;
+  const plural = op === 'NOT IN';
+  const lit = valueComparison(spec, right, table, left, plural);
+  const cmp = plural
+    ? sql`NOT (${leaf} = ANY (${lit}))`
+    : sql`${leaf} ${sql.__dangerous__rawValue(op)} ${lit}`;
+  return sql`(CASE WHEN ${raw} IS NULL THEN false WHEN ${jsonType} = ${jsonTypeName(
+    castType,
+  )} THEN ${cmp} ELSE true END)`;
 }
 
 /**

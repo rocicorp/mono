@@ -307,6 +307,44 @@ describe('compiler with PostgreSQL', () => {
     ]);
   });
 
+  test('json path filter: comparisons are type-strict (no cross-type coercion)', async () => {
+    // row5's priority is the *number* 42. `#>>` renders it as the text '42',
+    // so an ungated text comparison would match it against the string '42' —
+    // unlike the in-memory predicate (42 !== '42') and SQLite (integer ≠ text).
+    // The jsonb_typeof gate makes the leaf NULL for a positive comparison...
+    expect(await queryDocIds('=', jsonRef('priority'), '42')).toEqual([]);
+    expect(await queryDocIds('IN', jsonRef('priority'), ['42'])).toEqual([]);
+    expect(await queryDocIds('IS', jsonRef('priority'), '42')).toEqual([]);
+    // ...and a mismatched-type leaf is *not equal*, so it matches a negated
+    // comparison — while null/missing leaves (row3, row4) still never match
+    // a value operator.
+    expect(await queryDocIds('!=', jsonRef('priority'), '42')).toEqual([
+      'row1',
+      'row2',
+      'row5',
+    ]);
+    expect(await queryDocIds('NOT IN', jsonRef('priority'), ['high'])).toEqual([
+      'row2',
+      'row5',
+    ]);
+    // IS NOT has no null guard, matching JS `lhs !== rhs`.
+    expect(await queryDocIds('IS NOT', jsonRef('priority'), '42')).toEqual([
+      'row1',
+      'row2',
+      'row3',
+      'row4',
+      'row5',
+    ]);
+    // Same rule with a number literal against a string leaf (row5.count = "n/a").
+    expect(await queryDocIds('!=', jsonRef('count'), 3)).toEqual([
+      'row2',
+      'row5',
+    ]);
+    expect(await queryDocIds('NOT IN', jsonRef('count'), [3, 10])).toEqual([
+      'row5',
+    ]);
+  });
+
   test('json path filter: nested object and array index', async () => {
     expect(await queryDocIds('=', jsonRef('nested', 'zip'), '94110')).toEqual([
       'row1',

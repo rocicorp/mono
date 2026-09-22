@@ -435,12 +435,51 @@ test('json path filter: string leaf equality', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text = $2::text::text
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text END) = $3::text::text
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
       "values": [
         "priority",
+        "string",
+        "high",
+      ],
+    }
+  `);
+});
+
+test('json path filter: negated comparison is type-strict but keeps mismatched leaves', () => {
+  // `!=` (and NOT LIKE / NOT ILIKE / NOT IN) can't reuse the positive form's
+  // NULL-on-mismatch gate: NULL would *exclude* a leaf of another JSON type,
+  // whereas the in-memory predicate includes it (42 !== '42' is true). The
+  // explicit CASE keeps a null/missing leaf excluded, compares a same-typed
+  // leaf for real, and includes a mismatched one.
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '!=',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: 'high'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE (CASE WHEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[]) IS NULL THEN false WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text != $3::text::text ELSE true END)
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "priority",
+        "string",
         "high",
       ],
     }
@@ -503,9 +542,9 @@ test('json path filter: IN', () => {
         FROM "jsonTable" AS "jsonTable_0"
         WHERE 
         (
-          ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text = ANY 
+          (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text END) = ANY 
           (ARRAY(
-              SELECT value::text FROM jsonb_array_elements_text($2::text::jsonb)
+              SELECT value::text FROM jsonb_array_elements_text($3::text::jsonb)
             ))
         )
          
@@ -513,6 +552,7 @@ test('json path filter: IN', () => {
         ) "zql_root"",
       "values": [
         "priority",
+        "string",
         "["high","low"]",
       ],
     }
@@ -539,12 +579,13 @@ test('json path filter: ILIKE', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
         FROM "jsonTable" AS "jsonTable_0"
-        WHERE ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text ILIKE $2::text::text
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata"::jsonb #> ARRAY[$1::text::text]::text[]) = $2::text::text THEN ("jsonTable_0"."metadata" #>> ARRAY[$1::text::text]::text[])::text END) ILIKE $3::text::text
          
         ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
       "values": [
         "priority",
+        "string",
         "hi%",
       ],
     }
