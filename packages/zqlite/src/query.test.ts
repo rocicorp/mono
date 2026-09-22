@@ -250,8 +250,13 @@ test('json path: negative or fractional array index throws at build time', () =>
       cmp(json('metadata', 'altContacts', 1.5 as number), '=', 'x'),
     ),
   ).toThrow(/non-negative integer/);
-  // Beyond the safe-integer range the index stringifies as `1e+21`, which
-  // SQLite rejects as a bad JSON path — so it is rejected up front too.
+  // Beyond int32 an index would wrap modulo 2^32 on SQLite (and cannot be a
+  // Postgres `->` operand), so it is rejected up front too.
+  expect(() =>
+    newQuery(schema, 'user').where(({cmp, json}) =>
+      cmp(json('metadata', 'altContacts', (2 ** 31) as number), '=', 'x'),
+    ),
+  ).toThrow(/non-negative integer/);
   expect(() =>
     newQuery(schema, 'user').where(({cmp, json}) =>
       cmp(json('metadata', 'altContacts', 1e21 as number), '=', 'x'),
@@ -319,6 +324,18 @@ test('json path filter: type-strict pushdown and key escaping', async () => {
   expect(
     await ids(eb => eb.cmp(eb.json('metadata', 'count'), 'NOT IN', [])),
   ).toEqual(['k1', 'k2']);
+  // A null list is constant-false for IN and NOT IN alike (the empty-list form
+  // must not catch it).
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'count'), 'NOT IN', null)),
+  ).toEqual([]);
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'count'), 'IN', null)),
+  ).toEqual([]);
+  // LIKE requires a string leaf: k1's count is the number 3.
+  expect(
+    await ids(eb => eb.cmp(eb.json('metadata', 'count'), 'LIKE', 3)),
+  ).toEqual([]);
 
   // Keys containing `"` and `\` need JSON (backslash) escaping in the SQLite
   // path; SQL-style `""` doubling would yield NULL or a bad-path error.

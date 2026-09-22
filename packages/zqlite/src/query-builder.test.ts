@@ -87,17 +87,16 @@ test('json path filters: type gate, negation, empty NOT IN and key escaping', ()
   // exclude a null/missing one.
   expect(format(filtersToSQL(cond('!=', ref('priority'), 'high'))))
     .toMatchInlineSnapshot(`
-    {
-      "text": "(CASE WHEN json_extract("metadata", ?) IS NULL THEN 0 WHEN json_type("metadata", ?) IN (?) THEN json_extract("metadata", ?) != ? ELSE 1 END)",
-      "values": [
-        "$."priority"",
-        "$."priority"",
-        "text",
-        "$."priority"",
-        "high",
-      ],
-    }
-  `);
+      {
+        "text": "(CASE COALESCE(json_type("metadata", ?), 'null') WHEN 'null' THEN 0 WHEN ? THEN json_extract("metadata", ?) != ? ELSE 1 END)",
+        "values": [
+          "$."priority"",
+          "text",
+          "$."priority"",
+          "high",
+        ],
+      }
+    `);
   // An empty NOT IN matches every non-null leaf (bare `NOT IN ()` would also
   // match NULL).
   expect(format(filtersToSQL(cond('NOT IN', ref('priority'), []))))
@@ -135,6 +134,15 @@ test('json path filters: type gate, negation, empty NOT IN and key escaping', ()
       ],
     }
   `);
+  // `IN`/`NOT IN` with a null literal is constant-false rather than falling
+  // into the empty-list special case above (a null is not a list).
+  expect(format(filtersToSQL(cond('NOT IN', ref('priority'), null))))
+    .toMatchInlineSnapshot(`
+      {
+        "text": "FALSE",
+        "values": [],
+      }
+    `);
 });
 
 test('optional cursor columns keep IS and IS NULL checks while non-nullable columns do not', () => {

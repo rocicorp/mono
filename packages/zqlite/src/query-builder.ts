@@ -1,13 +1,13 @@
 import type {SQLQuery} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
-import type {
-  Condition,
-  JsonPathReference,
-  LiteralValue,
-  Ordering,
-  SimpleCondition,
-  SimpleOperator,
-  ValuePosition,
+import {
+  isNegatedOperator,
+  jsonLiteralType,
+  type Condition,
+  type JsonPathReference,
+  type Ordering,
+  type SimpleCondition,
+  type ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
 import type {
   SchemaValue,
@@ -263,51 +263,44 @@ function likeConditionToSQL(filter: SimpleCondition, left: SQLQuery): SQLQuery {
   return sql`${left} ${likeOp} ${right} ESCAPE '\\'`;
 }
 
-const negatedOps: ReadonlySet<SimpleOperator> = new Set([
-  '!=',
-  'NOT LIKE',
-  'NOT ILIKE',
-  'NOT IN',
-]);
+/** The extraction of a JSON path leaf (the path string is a bound parameter). */
+function jsonExtract(ref: JsonPathReference): SQLQuery {
+  return sql`json_extract(${sql.ident(ref.value.name)}, ${jsonPathExpr(
+    ref.path,
+  )})`;
+}
 
-/**
- * The SQLite `json_type()` names a JSON leaf must have to be compared against
- * `literal` (for an `IN`/`NOT IN` list, the type of its first element);
- * `undefined` for `null` or an empty list.
- */
-function jsonTypesForLiteral(
-  literal: LiteralValue,
-): readonly string[] | undefined {
-  const v = Array.isArray(literal) ? literal[0] : literal;
-  switch (typeof v) {
+/** The SQLite `json_type()` names a leaf may have for a JSON literal type. */
+function jsonTypeNames(
+  t: 'string' | 'number' | 'boolean',
+): readonly [string, ...string[]] {
+  switch (t) {
     case 'string':
       return ['text'];
     case 'number':
       return ['integer', 'real'];
     case 'boolean':
       return ['true', 'false'];
-    default:
-      return undefined;
   }
 }
 
 /**
- * Compiles a comparison whose left operand is a JSON path, type-strictly, to
- * match the in-memory predicate and the Postgres compiler: a leaf whose JSON
- * type differs from the literal's is never equal — a non-match for a positive
- * operator and a match for a negated one — and a null/missing leaf never
- * matches a value operator.
+ * Compiles a comparison whose left operand is a JSON path, type-strictly, per
+ * the semantics documented on {@link JsonPathReference} (shared with the
+ * in-memory predicate and the Postgres compiler). Returns `undefined` where
+ * the generic rendering already agrees with the predicate.
  *
  * A bare `json_extract` would not be strict: SQLite returns booleans as 1/0 (so
  * `true` = 1), orders any TEXT above any number (`'n/a' > 5`), and coerces
  * numbers for LIKE. Gating the extraction on `json_type()` makes a mismatched
  * leaf NULL, which a positive comparison excludes. Negated operators get an
  * explicit CASE because NULL would exclude there too, where a mismatch must
- * match.
+ * match: `json_type()` is NULL for a missing key and `'null'` for a JSON null,
+ * so one `COALESCE` covers the null guard without a second extraction.
  *
- * Returns `undefined` for an untyped literal (`null`, or an empty `IN` list),
- * where the generic form already agrees with the predicate — except for an
- * empty `NOT IN`, which SQL evaluates to TRUE even for a NULL leaf.
+ * `IN`/`NOT IN` with a `null` literal is constant-false (as in the predicate),
+ * and an empty `NOT IN` matches every non-null leaf (bare `NULL NOT IN ()` is
+ * TRUE).
  */
 function jsonPathConditionToSQL(
   filter: SimpleCondition,
@@ -317,30 +310,37 @@ function jsonPathConditionToSQL(
   if (right.type !== 'literal') {
     return undefined;
   }
+  if ((op === 'IN' || op === 'NOT IN') && right.value === null) {
+    return sql`FALSE`;
+  }
+  const raw = jsonExtract(left);
+  const t = jsonLiteralType(right.value);
+  if (t === undefined) {
+    // Only an empty list reaches here (a null literal has no type either, but
+    // the generic NULL comparison is already constant-false for it).
+    return op === 'NOT IN' ? sql`${raw} IS NOT NULL` : undefined;
+  }
   const col = sql.ident(left.value.name);
   const path = jsonPathExpr(left.path);
-  const raw = sql`json_extract(${col}, ${path})`;
-  const types = jsonTypesForLiteral(right.value);
-  if (types === undefined) {
-    if (op === 'NOT IN') {
-      // `x NOT IN ()` is TRUE for a NULL leaf in SQL, but the predicate's null
-      // guard excludes it.
-      return sql`${raw} IS NOT NULL`;
-    }
-    return undefined;
+  const types = jsonTypeNames(t);
+  if (!isNegatedOperator(op)) {
+    const typeList = sql.join(
+      types.map(x => sql`${x}`),
+      sql`, `,
+    );
+    return comparisonToSQL(
+      filter,
+      sql`(CASE WHEN json_type(${col}, ${path}) IN (${typeList}) THEN ${raw} END)`,
+    );
   }
-  const typeList = sql.join(
-    types.map(t => sql`${t}`),
-    sql`, `,
+  // One WHEN per accepted type name (a number leaf is 'integer' or 'real');
+  // only one branch runs per row.
+  const cmp = comparisonToSQL(filter, raw);
+  const whens = sql.join(
+    types.map(x => sql`WHEN ${x} THEN ${cmp}`),
+    sql` `,
   );
-  const gated = sql`(CASE WHEN json_type(${col}, ${path}) IN (${typeList}) THEN ${raw} END)`;
-  if (!negatedOps.has(op)) {
-    return comparisonToSQL(filter, gated);
-  }
-  return sql`(CASE WHEN ${raw} IS NULL THEN 0 WHEN json_type(${col}, ${path}) IN (${typeList}) THEN ${comparisonToSQL(
-    filter,
-    raw,
-  )} ELSE 1 END)`;
+  return sql`(CASE COALESCE(json_type(${col}, ${path}), 'null') WHEN 'null' THEN 0 ${whens} ELSE 1 END)`;
 }
 
 /**
@@ -363,10 +363,7 @@ function valuePositionToSQL(value: ValuePosition): SQLQuery {
     case 'column':
       return sql.ident(value.name);
     case 'json':
-      // The path string is passed as a bound parameter to json_extract.
-      return sql`json_extract(${sql.ident(value.value.name)}, ${jsonPathExpr(
-        value.path,
-      )})`;
+      return jsonExtract(value);
     case 'literal':
       return sql`${toSQLiteType(value.value, getJsType(value.value))}`;
     case 'static':
