@@ -40,6 +40,8 @@ export interface Input extends InputBase {
    * caller of fetch immediately.
    * - During push: If a fetch to an input consumed by the push logic yields
    * 'yield', it must be yielded to the caller of push immediately.
+   * - During reconcile: If a fetch to an input consumed by reconcile logic
+   * yields 'yield', it must be yielded to the caller of reconcile immediately.
    */
   fetch(req: FetchRequest): Stream<Node | 'yield'>;
 }
@@ -154,6 +156,13 @@ export interface Output {
    * Phase 2 of two-phase push: invoked after Phase 1 changes have propagated.
    * Bounded operators (such as Take or Cap) use this signal to refill deficits,
    * emit refilled rows downstream via push(), and update their bounds.
+   *
+   * Implementations can yield 'yield' to yield control to the caller for
+   * purposes of responsiveness.
+   *
+   * Yield contract:
+   * - During reconcile: If an internal fetch, push, or downstream reconcile call
+   *   yields 'yield', it must be yielded to the caller of reconcile immediately.
    *
    * This method is optional on Output to allow terminal sinks (such as UI views
    * or custom third-party sinks) that only consume changes to omit it without
