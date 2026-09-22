@@ -909,10 +909,15 @@ test('json path: leaf type inference in cmp (Tier 1)', () => {
     cmp(json('metadata', 'tags', 0), '=', 'a');
     // @ts-expect-error - tags elements are strings, not numbers
     cmp(json('metadata', 'tags', 0), '=', 5);
-    // A numeric segment is an array index and must be non-negative; a literal
-    // negative index is rejected at compile time (a non-literal one at runtime).
+    // A numeric segment is an array index and must be a non-negative integer; a
+    // negative or fractional literal is rejected at compile time (a non-literal
+    // `number` at runtime).
     // @ts-expect-error - -1 is not a valid array index
     cmp(json('metadata', 'tags', -1), '=', 'a');
+    // @ts-expect-error - 0.5 is not a valid array index
+    cmp(json('metadata', 'tags', 0.5), '=', 'a');
+    // @ts-expect-error - 1e-7 (a non-integer) is not a valid array index
+    cmp(json('metadata', 'tags', 1e-7), '=', 'a');
 
     // untyped json() degrades to ReadonlyJSONValue (any path, loose value)
     cmp(json('untyped', 'whatever', 0), '=', 'anything');

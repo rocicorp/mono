@@ -191,14 +191,18 @@ type JsonKeysOf<T> =
  * type's note) — `json` resolves the column type at its call site before this runs.
  */
 /**
- * `true` for a negative numeric literal segment (e.g. `-1`). A numeric segment is
- * an array index and must be non-negative — the engines disagree on negative
- * indices (Postgres counts from the end; JavaScript/SQLite yield null) — so
- * {@link ValidJsonPath} rejects one at compile time when it is a literal. A
- * non-literal `number` is checked at runtime by `json()` instead.
+ * `true` for a numeric literal segment that cannot be an array index: negative
+ * (`-1`) or non-integer (`0.5`, `1e-7`). A numeric segment is an array index and
+ * must be a non-negative integer — the engines disagree on a negative index
+ * (Postgres counts from the end; JavaScript/SQLite yield null), and a fractional
+ * one is not an index at all — so {@link ValidJsonPath} rejects one at compile
+ * time when it is a literal. Decided from the literal's string form: a leading
+ * `-`, a `.`, or a negative exponent (`e-`). A non-literal `number` is checked at
+ * runtime by `json()` instead (`isValidJsonPathIndex`); this check is
+ * deliberately a subset of that one (e.g. `1e21` is an integer and passes both).
  */
-type IsNegativeIndexLiteral<H> = H extends number
-  ? `${H}` extends `-${string}`
+type IsInvalidIndexLiteral<H> = H extends number
+  ? `${H}` extends `-${string}` | `${string}.${string}` | `${string}e-${string}`
     ? true
     : false
   : false;
@@ -213,7 +217,7 @@ export type ValidJsonPath<
       ...infer R extends readonly (string | number)[],
     ]
     ? readonly [
-        IsNegativeIndexLiteral<H> extends true ? never : JsonKeysOf<T>,
+        IsInvalidIndexLiteral<H> extends true ? never : JsonKeysOf<T>,
         ...ValidJsonPath<JsonStep<T, H>, R, DR>,
       ]
     : P
