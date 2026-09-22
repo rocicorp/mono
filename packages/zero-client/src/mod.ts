@@ -43,6 +43,7 @@ export type {
   Disjunction,
   EqualityOps,
   InOps,
+  JsonPathReference,
   LikeOps,
   LiteralReference,
   LiteralValue,
@@ -161,6 +162,7 @@ export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {InputValidationError} from '../../zql/src/query/validate-input.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
+  ColumnRef,
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';

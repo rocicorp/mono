@@ -18,7 +18,7 @@ import type {
   DestTableName,
   ExistsOptions,
   GetFilterType,
-  GetFilterTypeFromTSType,
+  GetJsonLeafFilterType,
   JsonSelectors,
   NoCompoundTypeSelector,
   PullTableSchema,
@@ -76,8 +76,13 @@ function makeColumnRef(
     }
   }
   const column: ColumnReference = {type: 'column', name};
-  const ref: ColumnReference | JsonPathReference =
-    path.length > 0 ? {type: 'json', value: column, path} : column;
+  // `json()` requires at least one segment (enforced by its type): a whole JSON
+  // column is never a comparison operand, so a bare column reference must not
+  // be produced here.
+  if (path.length === 0) {
+    throw new Error(`json('${name}') requires at least one path segment`);
+  }
+  const ref: JsonPathReference = {type: 'json', value: column, path};
   return {[toColumnRef]: () => ref};
 }
 
@@ -157,14 +162,14 @@ export class ExpressionBuilder<
     ref: ColumnRef<TColumnType, P>,
     op: TOperator,
     value:
-      | GetFilterTypeFromTSType<ValueAtPath<TColumnType, P>, TOperator>
+      | GetJsonLeafFilterType<ValueAtPath<TColumnType, P>, TOperator>
       | ParameterReference
       | undefined,
   ): Condition;
   cmp<TColumnType, const P extends readonly (string | number)[]>(
     ref: ColumnRef<TColumnType, P>,
     value:
-      | GetFilterTypeFromTSType<ValueAtPath<TColumnType, P>, '='>
+      | GetJsonLeafFilterType<ValueAtPath<TColumnType, P>, '='>
       | ParameterReference
       | undefined,
   ): Condition;
@@ -183,7 +188,9 @@ export class ExpressionBuilder<
 
   /**
    * References a value inside a `json()` column for use in `cmp`. Path
-   * segments are object keys or array indices, applied left-to-right.
+   * segments are object keys or array indices, applied left-to-right; at least
+   * one segment is required, since a whole JSON column is never a comparison
+   * operand (only scalar leaves can be compared).
    *
    * @example
    * ```ts
@@ -193,7 +200,7 @@ export class ExpressionBuilder<
    */
   json<
     TColumn extends JsonSelectors<PullTableSchema<TTable, TSchema>> & string,
-    const P extends readonly (string | number)[],
+    const P extends readonly [string | number, ...(string | number)[]],
   >(
     column: TColumn,
     // `P` is inferred from the args; intersecting with `ValidJsonPath` rejects

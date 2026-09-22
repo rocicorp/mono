@@ -57,7 +57,7 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 49 adds `scalar` to CorrelatedSubqueryCondition, removes scalarSubquery
 // -- version 50 adds OTEL headers to push and query messages
 // -- version 51 changes inspector metrics fields
-// -- version 52 adds optional `path` to ColumnReference for JSON filters (0.25)
+// -- version 52 adds the `json` (JsonPathReference) condition value for JSON path filters
 export const PROTOCOL_VERSION = 52;
 
 /**

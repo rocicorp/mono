@@ -918,6 +918,17 @@ test('json path: leaf type inference in cmp (Tier 1)', () => {
     cmp(json('metadata', 'tags', 0.5), '=', 'a');
     // @ts-expect-error - 1e-7 (a non-integer) is not a valid array index
     cmp(json('metadata', 'tags', 1e-7), '=', 'a');
+    // @ts-expect-error - 1e21 is beyond the safe-integer range
+    cmp(json('metadata', 'tags', 1e21), '=', 'a');
+
+    // Only scalar leaves can be compared; an object/array leaf, or the whole
+    // column (no segments), is a type error rather than an always-false query.
+    // @ts-expect-error - nested is an object leaf
+    cmp(json('metadata', 'nested'), '=', {zip: '94110'});
+    // @ts-expect-error - tags is an array leaf
+    cmp(json('metadata', 'tags'), '=', ['a', 'b']);
+    // @ts-expect-error - json() requires at least one segment
+    cmp(json('metadata'), '=', 'x');
 
     // untyped json() degrades to ReadonlyJSONValue (any path, loose value)
     cmp(json('untyped', 'whatever', 0), '=', 'anything');

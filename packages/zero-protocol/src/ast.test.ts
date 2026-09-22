@@ -758,4 +758,9 @@ test('json path: numeric segments must be non-negative integer indices', () => {
   expect(() => astSchema.parse(ast(['tags', 1.5]))).toThrow(
     /non-negative integer/,
   );
+  // Beyond the safe-integer range an index stringifies as `1e+21`, which
+  // SQLite rejects as a bad JSON path (a query error, not a non-match).
+  expect(() => astSchema.parse(ast(['tags', 1e21]))).toThrow(
+    /non-negative integer/,
+  );
 });

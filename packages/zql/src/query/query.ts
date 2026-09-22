@@ -99,6 +99,23 @@ export type GetFilterTypeFromTSType<
     : Exclude<TS, null> | undefined;
 
 /**
+ * The comparison-value type for a JSON path leaf of TS type `TS`. Only scalar
+ * leaves can be compared — the wire carries only primitives and primitive
+ * arrays, and deep object/array equality is out of scope — so a non-scalar leaf
+ * (an object, an array) resolves to `never`, making the `cmp` call a type error
+ * rather than a query that is always-false on the client and rejected by the
+ * server. An untyped leaf (`ReadonlyJSONValue`) narrows to its scalar members.
+ */
+export type GetJsonLeafFilterType<TS, TOperator extends SimpleOperator> = [
+  Extract<TS, string | number | boolean>,
+] extends [never]
+  ? never
+  : GetFilterTypeFromTSType<
+      Extract<TS, string | number | boolean | null>,
+      TOperator
+    >;
+
+/**
  * Resolves a single JSON path segment `K` against value type `T`: an object key
  * (`NonNullable<T>[K]`) or an array index (the element type). An unresolvable
  * step — e.g. into an untyped `json()` whose type is `ReadonlyJSONValue` —
@@ -180,6 +197,29 @@ type JsonKeysOf<T> =
         : never;
 
 /**
+ * `true` for a numeric literal segment that cannot be an array index: negative
+ * (`-1`), non-integer (`0.5`, `1e-7`) or beyond the safe-integer range (`1e21`).
+ * A numeric segment is an array index and must be a non-negative safe integer —
+ * the engines disagree on a negative index (Postgres counts from the end;
+ * JavaScript/SQLite yield null), a fractional one is not an index at all, and a
+ * huge one stringifies in exponent form, which SQLite rejects as a bad JSON
+ * path — so {@link ValidJsonPath} rejects one at compile time when it is a
+ * literal. Decided from the literal's string form: a leading `-`, a `.`, or an
+ * exponent (`e-`, `e+`). A non-literal `number` is checked at runtime by
+ * `json()` instead (`isValidJsonPathIndex`); this check is deliberately a
+ * subset of that one.
+ */
+type IsInvalidIndexLiteral<H> = H extends number
+  ? `${H}` extends
+      | `-${string}`
+      | `${string}.${string}`
+      | `${string}e-${string}`
+      | `${string}e+${string}`
+    ? true
+    : false
+  : false;
+
+/**
  * Validates/autocompletes a `json()` path tuple `P` against value type `T`: maps
  * `P` to a tuple whose element at each position is the set of keys valid *there*
  * (computed by stepping through the preceding segments). Used as `...path: P &
@@ -190,23 +230,6 @@ type JsonKeysOf<T> =
  * unconstrained. As with {@link ValueAtPath}, `T` must be concrete (see that
  * type's note) — `json` resolves the column type at its call site before this runs.
  */
-/**
- * `true` for a numeric literal segment that cannot be an array index: negative
- * (`-1`) or non-integer (`0.5`, `1e-7`). A numeric segment is an array index and
- * must be a non-negative integer — the engines disagree on a negative index
- * (Postgres counts from the end; JavaScript/SQLite yield null), and a fractional
- * one is not an index at all — so {@link ValidJsonPath} rejects one at compile
- * time when it is a literal. Decided from the literal's string form: a leading
- * `-`, a `.`, or a negative exponent (`e-`). A non-literal `number` is checked at
- * runtime by `json()` instead (`isValidJsonPathIndex`); this check is
- * deliberately a subset of that one (e.g. `1e21` is an integer and passes both).
- */
-type IsInvalidIndexLiteral<H> = H extends number
-  ? `${H}` extends `-${string}` | `${string}.${string}` | `${string}e-${string}`
-    ? true
-    : false
-  : false;
-
 export type ValidJsonPath<
   T,
   P extends readonly (string | number)[],

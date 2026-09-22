@@ -71,11 +71,25 @@ const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
 
 /**
  * A numeric JSON path segment is an array index and must be a non-negative
- * integer. Negative indices are rejected because the engines disagree on them:
- * Postgres `#>>` counts from the end, while JavaScript and SQLite yield null.
+ * safe integer. Negative indices are rejected because the engines disagree on
+ * them (Postgres `#>>` counts from the end, while JavaScript and SQLite yield
+ * null); values beyond `Number.MAX_SAFE_INTEGER` are rejected because they
+ * stringify in exponent form (`1e21` → `"1e+21"`), which SQLite rejects as a
+ * bad JSON path — a query error rather than a non-match.
  */
 export function isValidJsonPathIndex(index: number): boolean {
-  return Number.isInteger(index) && index >= 0;
+  return Number.isSafeInteger(index) && index >= 0;
+}
+
+/**
+ * Formats a JSON path reference for debug/display output, e.g.
+ * `metadata.tags[0]`. Shared by the builder's filter names, the planner debug
+ * output and test stringifiers so they cannot drift.
+ */
+export function formatJsonPathReference(ref: JsonPathReference): string {
+  return `${ref.value.name}${ref.path
+    .map(s => (typeof s === 'number' ? `[${s}]` : `.${s}`))
+    .join('')}`;
 }
 
 const jsonPathReferenceSchema: v.Type<JsonPathReference> = v.readonlyObject({
@@ -314,6 +328,21 @@ export type ColumnReference = {
  * segments are applied left-to-right as object keys (string) and array indices
  * (number). A `JsonPathReference` is allowed wherever a {@link ColumnReference} is
  * (currently only the left operand of a filter predicate).
+ *
+ * Evaluation semantics — implemented identically by the in-memory predicate
+ * (`zql/src/builder/filter.ts`), the SQLite pushdown (`zqlite/src/query-builder.ts`)
+ * and the Postgres compiler (`z2s/src/compiler.ts`); the engine comments refer
+ * here rather than restating the rules:
+ *
+ * - **Segments are strict.** A number segment indexes an array and a string
+ *   segment reads an own key of an object. Any other step — a segment of the
+ *   wrong kind, a missing key, a scalar or null intermediate — yields null.
+ * - **Missing and JSON null collapse to null:** a non-match for every value
+ *   operator, a match for `IS NULL`.
+ * - **Comparison is type-strict.** A leaf whose JSON type differs from the
+ *   literal's is never equal: a non-match for a positive operator, a match for a
+ *   negated one (`!=`, `NOT IN`, `NOT LIKE`, `NOT ILIKE`), and never an error.
+ *   Only scalar leaves are comparable.
  *
  * A path references a value inside a single column; it never crosses tables.
  * Because a path-extracted value is not a stored/indexed column, it can never
