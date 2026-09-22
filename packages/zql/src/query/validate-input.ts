@@ -1,4 +1,5 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
+import type {Codec} from '../../../zero-types/src/schema-value.ts';
 
 export class InputValidationError extends Error {
   readonly result: StandardSchemaV1.FailureResult;
@@ -55,6 +56,43 @@ export function validateInput<TInput, TOutput>(
     );
   }
   return result.value;
+}
+
+/**
+ * Decodes the stored/wire args of a query or mutator to the type its
+ * definition function receives: through the codec when one is attached,
+ * otherwise through the validator (if any). Shared by defineQuery and
+ * defineMutator.
+ *
+ * As for column codecs, `undefined` (no args) is never passed to the codec; it
+ * passes through unchanged.
+ * @internal
+ */
+export function decodeInput<TInput, TOutput>(
+  name: string,
+  input: TInput,
+  validator: StandardSchemaV1<TInput, TOutput> | undefined,
+  codec: Codec<TInput, TOutput> | undefined,
+  kind: 'query' | 'mutator',
+): TOutput {
+  if (codec) {
+    return input === undefined ? (undefined as TOutput) : codec.decode(input);
+  }
+  return validateInput(name, input, validator, kind);
+}
+
+/**
+ * Encodes the decoded args a query or mutator callable was invoked with to
+ * their JSON wire form. A no-op without a codec or when there are no args.
+ * @internal
+ */
+export function encodeInput<TInput, TOutput>(
+  args: TOutput,
+  codec: Codec<TInput, TOutput> | undefined,
+): TInput {
+  return codec && args !== undefined
+    ? codec.encode(args)
+    : (args as unknown as TInput);
 }
 
 function titleCase(kind: string): string {

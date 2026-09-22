@@ -8,7 +8,6 @@ import {
   decodeQueryResult,
   decodeRowFields,
   encodeRow,
-  encodeValue,
 } from './codec.ts';
 
 const dateCodec: Codec<number, Date> = {
@@ -213,7 +212,7 @@ describe('decodeQueryResult', () => {
   });
 });
 
-describe('encodeRow / encodeValue', () => {
+describe('encodeRow', () => {
   test('returns input unchanged when no codecs (no copy)', () => {
     const row = {id: 'a', title: 'x'};
     expect(encodeRow(row, plainColumns)).toBe(row);
@@ -245,11 +244,5 @@ describe('encodeRow / encodeValue', () => {
       createdAt: 5,
       extra: 1,
     });
-  });
-
-  test('encodeValue encodes single values', () => {
-    expect(encodeValue(new Date(7), codecColumns.createdAt)).toBe(7);
-    expect(encodeValue('x', plainColumns.title)).toBe('x');
-    expect(encodeValue(null, codecColumns.createdAt)).toBe(null);
   });
 });

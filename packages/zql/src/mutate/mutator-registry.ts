@@ -13,7 +13,7 @@ import type {
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {validateInput} from '../query/validate-input.ts';
+import {decodeInput, encodeInput} from '../query/validate-input.ts';
 import type {Transaction} from './custom.ts';
 import {
   isMutator,
@@ -294,17 +294,14 @@ function createMutator<
     C,
     Transaction<TSchema, TWrappedTransaction>
   > = async options => {
-    // As for column codecs, `undefined` (no args) is never passed to the
-    // codec; it passes through unchanged.
-    const decodedArgs = codec
-      ? options.args === undefined
-        ? (undefined as ArgsOutput)
-        : codec.decode(options.args as ArgsInput)
-      : validator
-        ? validateInput(name, options.args, validator, 'mutator')
-        : (options.args as unknown as ArgsOutput);
     await definition.fn({
-      args: decodedArgs,
+      args: decodeInput(
+        name,
+        options.args as ArgsInput,
+        validator,
+        codec,
+        'mutator',
+      ),
       ctx: options.ctx as C,
       tx: options.tx,
     });
@@ -315,10 +312,7 @@ function createMutator<
   ): MutateRequest<ArgsInput, TSchema, C, TWrappedTransaction> => ({
     // Encode the decoded args to their JSON wire form before the mutation is
     // queued/persisted/sent. No-op when there is no codec or no args.
-    'args':
-      codec && args !== undefined
-        ? (codec.encode(args as unknown as ArgsOutput) as ArgsInput)
-        : args,
+    'args': encodeInput(args as unknown as ArgsOutput, codec),
     '~': 'MutateRequest' as MutateRequestTypes<
       ArgsInput,
       TSchema,

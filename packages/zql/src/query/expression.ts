@@ -1,5 +1,5 @@
-import {assert} from '../../../shared/src/asserts.ts';
 /* oxlint-disable @typescript-eslint/no-explicit-any */
+import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {
   toStaticParam,

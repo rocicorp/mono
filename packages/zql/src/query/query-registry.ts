@@ -17,7 +17,7 @@ import {isCodec, type Codec} from '../../../zero-types/src/schema-value.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from './query-internals.ts';
 import type {PullRow, Query} from './query.ts';
-import {validateInput} from './validate-input.ts';
+import {decodeInput, encodeInput} from './validate-input.ts';
 
 // ----------------------------------------------------------------------------
 // CustomQuery and QueryRequest types
@@ -618,21 +618,18 @@ export function createQuery<
     TInput,
     TReturn,
     TContext
-  > = options => {
-    // Codec decoding / validation happens here. `options.args` is the encoded
-    // (JSON wire) value. As for column codecs, `undefined` (no args) is never
-    // passed to the codec; it passes through unchanged.
-    const decodedArgs = codec
-      ? options.args === undefined
-        ? (undefined as TOutput)
-        : codec.decode(options.args as TInput)
-      : validator
-        ? validateInput(name, options.args, validator, 'query')
-        : (options.args as unknown as TOutput);
-
-    return asQueryInternals(
+  > = options =>
+    asQueryInternals(
       definition.fn({
-        args: decodedArgs,
+        // Codec decoding / validation happens here. `options.args` is the
+        // encoded (JSON wire) value.
+        args: decodeInput(
+          name,
+          options.args as TInput,
+          validator,
+          codec,
+          'query',
+        ),
         ctx: options.ctx as TContext,
       }),
     ).nameAndArgs(
@@ -641,17 +638,13 @@ export function createQuery<
       // Send original (encoded) input args to server (not decoded output)
       options.args === undefined ? [] : [options.args],
     );
-  };
 
   const query = (
     args: TInput,
   ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext> => ({
     // Encode the decoded args to their JSON wire form. No-op without a codec
     // or when there are no args.
-    'args':
-      codec && args !== undefined
-        ? (codec.encode(args as unknown as TOutput) as TInput)
-        : args,
+    'args': encodeInput(args as unknown as TOutput, codec),
     '~': 'QueryRequest' as QueryRequestTypes<
       TTable,
       TInput,
