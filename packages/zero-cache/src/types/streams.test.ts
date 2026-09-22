@@ -17,10 +17,9 @@ import * as v from '../../../shared/src/valita.ts';
 import {
   isPreSerialized,
   stream,
-  streamIn,
-  streamInWithSize,
-  streamOut,
-  streamOutStringified,
+  streamInternal,
+  streamInternalStringified,
+  streamInternalWithSize,
   type PreSerialized,
   type Sink,
   type Source,
@@ -243,12 +242,14 @@ describe('streams with internal acks', () => {
     server = Fastify();
     await server.register(websocket);
     server.get('/', {websocket: true}, ws => {
-      void streamOut(lc, producer, ws);
-      void streamOutStringified(lc, stringifiedProducer, ws);
+      void streamInternal(lc, ws, undefined, producer);
+      void streamInternalStringified(lc, ws, undefined, stringifiedProducer);
     });
     server.get('/batched', {websocket: true}, ws => {
-      void streamOut(lc, producer, ws, {batched: true});
-      void streamOutStringified(lc, stringifiedProducer, ws, {batched: true});
+      void streamInternal(lc, ws, undefined, producer, {batched: true});
+      void streamInternalStringified(lc, ws, undefined, stringifiedProducer, {
+        batched: true,
+      });
     });
 
     // Run the server for real instead of using `injectWS()`, as that has a
@@ -267,7 +268,7 @@ describe('streams with internal acks', () => {
     ws = new WebSocket(`http://localhost:${port}/`);
     return {
       ws,
-      consumer: (await streamIn(
+      consumer: (await streamInternal(
         lc,
         ws,
         messageSchema,
@@ -279,7 +280,7 @@ describe('streams with internal acks', () => {
     ws = new WebSocket(`http://localhost:${port}/`);
     return {
       ws,
-      consumer: await streamInWithSize(lc, ws, messageSchema),
+      consumer: await streamInternalWithSize(lc, ws, messageSchema),
     };
   }
 
@@ -287,7 +288,7 @@ describe('streams with internal acks', () => {
     ws = new WebSocket(`http://localhost:${port}/batched`);
     return {
       ws,
-      consumer: (await streamIn(
+      consumer: (await streamInternal(
         lc,
         ws,
         messageSchema,
@@ -299,7 +300,7 @@ describe('streams with internal acks', () => {
     ws = new WebSocket(`http://localhost:${port}/batched`);
     return {
       ws,
-      consumer: await streamInWithSize(lc, ws, messageSchema),
+      consumer: await streamInternalWithSize(lc, ws, messageSchema),
     };
   }
 
@@ -757,7 +758,7 @@ describe('streams with internal acks', () => {
       );
     });
 
-    test('batched streaming with streamInWithSize assigns proportionate sizes', async () => {
+    test('batched streaming with streamInternalWithSize assigns proportionate sizes', async () => {
       const total = 20;
       for (let i = 0; i < total; i++) {
         producer.push({from: i, to: i + 1, str: 'sized-' + i});
@@ -807,7 +808,7 @@ describe('streams with internal acks', () => {
       await wsServer.listen({port: mixedPort});
 
       ws = new WebSocket(`http://localhost:${mixedPort}/mixed`);
-      const receiver = await streamIn(lc, ws, messageSchema);
+      const receiver = await streamInternal(lc, ws, messageSchema);
 
       await vi.waitFor(() => expect(serverWs).toBeDefined());
 
@@ -856,7 +857,7 @@ describe('streams with internal acks', () => {
       await wsServer.listen({port: invalidPort});
 
       ws = new WebSocket(`http://localhost:${invalidPort}/invalid`);
-      const receiver = await streamIn(lc, ws, messageSchema);
+      const receiver = await streamInternal(lc, ws, messageSchema);
 
       await vi.waitFor(() => expect(serverWs).toBeDefined());
 
@@ -883,5 +884,115 @@ describe('streams with internal acks', () => {
       ws.close();
       await wsServer.close();
     });
+  });
+});
+
+describe('bidirectional streamInternal', () => {
+  let lc: LogContext;
+  let server: FastifyInstance;
+  let port: number;
+  let ws: WebSocket;
+
+  // Server-side handles, handed off per connection.
+  let serverHandles: Queue<{
+    serverIn: Source<Message>;
+    serverOut: Subscription<Message>;
+    serverConsumed: Queue<Message>;
+  }>;
+
+  beforeEach(async () => {
+    lc = createSilentLogContext();
+    serverHandles = new Queue();
+
+    server = Fastify();
+    await server.register(websocket);
+    server.get('/', {websocket: true}, async ws => {
+      const serverConsumed = new Queue<Message>();
+      const serverOut = Subscription.create<Message>({
+        consumed: m => serverConsumed.enqueue(m),
+      });
+      const serverIn = await streamInternal(lc, ws, messageSchema, serverOut);
+      serverHandles.enqueue({serverIn, serverOut, serverConsumed});
+    });
+
+    port = 3000 + Math.floor(randInt(0, 5000));
+    await server.listen({port});
+  });
+
+  afterEach(async () => {
+    await server.close();
+  });
+
+  test('application messages and acks flow in both directions', async () => {
+    ws = new WebSocket(`http://localhost:${port}/`);
+    const clientConsumed = new Queue<Message>();
+    const clientOut = Subscription.create<Message>({
+      consumed: m => clientConsumed.enqueue(m),
+    });
+    const clientIn = await streamInternal(lc, ws, messageSchema, clientOut);
+
+    const {serverIn, serverOut, serverConsumed} = await serverHandles.dequeue();
+
+    // Drain both inbound directions in the background. Breaking a `for await`
+    // over an inbound Subscription cancels it (and closes the socket), so keep
+    // the loops running and read via Queues instead; close only at the end.
+    const clientReceived = new Queue<Message>();
+    void (async () => {
+      for await (const msg of clientIn) {
+        clientReceived.enqueue(msg);
+      }
+    })();
+    const serverReceived = new Queue<Message>();
+    void (async () => {
+      for await (const msg of serverIn) {
+        serverReceived.enqueue(msg);
+      }
+    })();
+
+    // Server -> client
+    serverOut.push({from: 1, to: 2, str: 's2c-a'});
+    serverOut.push({from: 2, to: 3, str: 's2c-b'});
+    // Client -> server
+    clientOut.push({from: 10, to: 11, str: 'c2s-a'});
+    clientOut.push({from: 11, to: 12, str: 'c2s-b'});
+
+    expect(await clientReceived.dequeue()).toEqual({
+      from: 1,
+      to: 2,
+      str: 's2c-a',
+    });
+    expect(await clientReceived.dequeue()).toEqual({
+      from: 2,
+      to: 3,
+      str: 's2c-b',
+    });
+    expect(await serverReceived.dequeue()).toEqual({
+      from: 10,
+      to: 11,
+      str: 'c2s-a',
+    });
+    expect(await serverReceived.dequeue()).toEqual({
+      from: 11,
+      to: 12,
+      str: 'c2s-b',
+    });
+
+    // A producer's `consumed` callback fires when the PEER acks what it sent.
+    // So the server's outbound (s2c) is acked by the client consuming it, and
+    // the client's outbound (c2s) is acked by the server consuming it — proving
+    // acks are demuxed correctly per direction (independent id-spaces, no
+    // cross-talk with the other direction's frames).
+    expect(await serverConsumed.dequeue()).toEqual({
+      from: 1,
+      to: 2,
+      str: 's2c-a',
+    });
+    expect(await clientConsumed.dequeue()).toEqual({
+      from: 10,
+      to: 11,
+      str: 'c2s-a',
+    });
+
+    ws.close();
   });
 });
