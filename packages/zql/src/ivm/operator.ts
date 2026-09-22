@@ -128,37 +128,45 @@ export type Start = {
 };
 
 /**
- * An output for an operator. Typically another Operator but can also be
- * the code running the pipeline.
+ * An output for an operator. Typically another Operator in an IVM pipeline,
+ * but can also be a terminal sink (such as a View or test consumer).
  */
 export interface Output {
   /**
-   * Push incremental changes to data previously received with fetch().
-   * Consumers must apply all pushed changes or incremental result will
-   * be incorrect.
+   * Phase 1 of two-phase push: pushes incremental changes to data previously
+   * received with fetch(). Consumers must apply all pushed changes or the
+   * incremental result will be incorrect.
+   *
    * Callers must maintain some invariants for correct operation:
    * - Only add rows which do not already exist (by deep equality).
    * - Only remove rows which do exist (by deep equality).
-   * Implmentation can yield 'yield' to yield control to the caller for purposes
-   * of responsiveness.
+   *
+   * Implementations can yield 'yield' to yield control to the caller for
+   * purposes of responsiveness.
+   *
    * Yield contract:
    * - During a push: If a push call to an output yields 'yield', it must be
-   * yielded to the caller of push immediately.
+   *   yielded to the caller of push immediately.
    */
   push(change: Change, pusher: InputBase): Stream<'yield'>;
 
   /**
-   * Phase 2 reconciliation: allows bounded operators (like Take) to refill
-   * deficits after Phase 1 changes have propagated.
+   * Phase 2 of two-phase push: invoked after all Phase 1 changes in a batch or
+   * transaction have propagated. Bounded operators (such as Take or Cap) use
+   * this signal to refill deficits, emit refilled rows downstream via push(),
+   * and update their bounds.
    *
-   * Optional on terminal Output sinks (e.g., custom UI views).
+   * This method is optional on Output to allow terminal sinks (such as UI views
+   * or custom third-party sinks) that only consume changes to omit it without
+   * breaking compatibility. Intermediate operators must check
+   * `if (this.#output.reconcile)` before forwarding.
    */
   reconcile?(pusher: InputBase): Stream<'yield'>;
 }
 
 /**
  * An implementation of Output that throws if pushed to. It is used as the
- * initial value for for an operator's output before it is set.
+ * initial value for an operator's output before it is set.
  */
 export const throwOutput: Output = {
   push(_change: Change): Stream<'yield'> {
@@ -170,17 +178,24 @@ export const throwOutput: Output = {
 };
 
 /**
- * Operators are arranged into pipelines.
+ * Operators are arranged into IVM pipelines.
  * They are stateful.
  * Each operator is an input to the next operator in the chain and an output
  * to the previous.
  */
 export interface Operator extends Input, Output {
   /**
-   * Phase 2 reconciliation: allows bounded operators (like Take) to refill
-   * deficits after Phase 1 changes have propagated.
    * Intermediate pipeline operators MUST implement reconcile so that Phase 2
-   * reconciliation is never accidentally swallowed or dropped.
+   * reconciliation reaches all bounded operators in the pipeline and is never
+   * accidentally swallowed. Pass-through operators should forward:
+   *
+   * ```ts
+   * *reconcile(_pusher: InputBase): Stream<'yield'> {
+   *   if (this.#output.reconcile) {
+   *     yield* this.#output.reconcile(this);
+   *   }
+   * }
+   * ```
    */
   reconcile(pusher: InputBase): Stream<'yield'>;
 }
