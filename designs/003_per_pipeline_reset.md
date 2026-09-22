@@ -25,9 +25,11 @@ advancing the others, and rebuilds the dropped one at the new version. All of
 this lands in the same poke, so clients see one consistent update. The client
 and the protocol do not change.
 
-It also fixes a latent bug in the CVR updater that is unreachable today but
-becomes reachable the moment one updater mixes incremental changes with a
-rebuilt query.
+It depends on two small fixes in the CVR layer that ship first. One closes a
+latent bug in the updater's pruning pass that is unreachable today but becomes
+reachable the moment one updater mixes incremental changes with a rebuilt
+query. The other lets the store discard the writes of an updater that is
+abandoned mid-way, which today's reset path also needs.
 
 ## Problem
 
@@ -170,7 +172,11 @@ Non-goals:
 There are three parts and a preliminary fix. The parts can ship separately
 behind one flag.
 
-### Step 0: fix the tombstone overwrite
+### Step 0: two prerequisite fixes in the CVR layer
+
+Both ship first, independently, and are correct on their own.
+
+#### 0a. Fix the tombstone overwrite
 
 In `#deleteUnreferencedRow`, skip the row when `#receivedRows.has(id)`, not
 when the received value is truthy. `received()` has already written the row's
@@ -180,6 +186,36 @@ Add a test to `cvr.pg.test.ts` with the A-and-C scenario above. The existing
 test "deleteUnreferencedRows skips row deletes already emitted by received"
 covers only a row whose sole reference was the tracked query itself.
 
+#### 0b. Discard an abandoned updater's pending writes
+
+`CVRStore` queues every write an updater makes and clears the queues only in
+the `finally` of `flush`. There is no way to throw the queue away. When an
+advancement aborts with a reset today, the view-syncer cancels the poke but
+leaves the row records the updater already queued, and the next flush writes
+them.
+
+The full rehydration that follows mostly masks this, because it re-receives
+almost every affected row. It does not mask a row that was not in the CVR
+before, that the aborted work added, and that no query re-declares afterwards.
+Pruning never visits such a row, because pruning walks the committed cache.
+Its pending put is flushed with a positive count although the client never
+received it, since the poke that carried it was cancelled.
+
+Add `discardPending()` to `CVRStore`. It clears exactly the state that
+`flush`'s `finally` clears: the row record updates, query updates, partial
+query updates, desire updates, the instance write, the extra write set, and
+the forced-update set. It does not touch the row cache, which only learns of
+writes at flush time. Call it wherever an updater is abandoned: in the reset
+catch of `#advancePipelines` today, and in the fallback in C2.
+
+It is safe to discard everything because the store is only written under the
+view-syncer lock by the updater in progress. The one write outside the lock,
+the TTL clock, is a direct SQL update that does not use the queue.
+
+Test it with a row absent from the original CVR, added by an aborted updater,
+whose query is then rejected by the circuit breaker during the fallback
+hydration. The pending put must not reach the CVR.
+
 ### Part A: the pipeline driver drops one pipeline and keeps going
 
 The driver already installs a wrapper operator between each source connection
@@ -187,32 +223,67 @@ and the pipeline it feeds (`decorateSourceInput` in `#addQueryImpl`). Every push
 into a pipeline passes through that wrapper, and the wrapper knows its query
 ID. Everything in this part hangs off that wrapper, which we call the guard.
 
-#### A1. Attribute advancement time to the pipeline being pushed
+#### A1. Attribute advancement time to the pipeline doing the work
 
-On push entry the guard records the advance timer's total elapsed time and
-sets the driver's "current pipeline" to its query ID. On push exit, in a
-`finally`, it adds the elapsed delta to that pipeline's advancement time for
-this transaction and clears the current pipeline.
+A pipeline does work in two places during advancement, and both must be
+attributed.
 
-The advance timer already excludes time yielded to other client groups, so
-this is process time. Pushes are never nested across pipelines, because the
-fan-out is sequential, so one "current pipeline" slot is enough. A fetch that
-one pipeline makes into another table happens inside that pipeline's push, so
-it is attributed correctly.
+The first is the push itself: the operators run as the change travels up the
+pipeline, and any fetches they make along the way. This happens inside the
+guard's `push`.
+
+The second is streaming. A pipeline's output is a `Change` whose node carries
+its relationships as lazy functions. `Join` builds them that way, and the child
+rows are not fetched until someone iterates them. The driver's `#push` collects
+each pipeline's output in a `Streamer` and drains it after the connection's
+push has returned, or at a yield point while the push is suspended. Draining is
+what fetches the related rows. For a parent change with many related rows,
+most of the work happens here, after the guard's `push` has already exited.
+
+So the driver keeps one "current pipeline" slot, and two sites set it:
+
+- The guard sets it on push entry and clears it in a `finally` on exit.
+- The driver's `#push` sets it to the entry's query ID before draining each
+  `Streamer` entry and restores the previous value afterwards. The `Streamer`
+  already records the query ID with every entry.
+
+Each site measures with the advance timer's total elapsed time, which already
+excludes time yielded to other client groups, and adds the delta to the
+pipeline's advancement time for this transaction. Pushes are never nested
+across pipelines, because the fan-out is sequential, and a `Streamer` entry
+drained while a push is suspended belongs to the same pipeline as that push.
+One slot is enough.
 
 ```text
-guard.push(change)
+guard.push(change)                       # site 1: the push
   start = advanceTimer.totalElapsed()
   driver.currentPipeline = queryID
   try
-    if queryID in driver.dropped
-      return                       # dropped earlier in this advancement
-    yield* downstream.push(change)
+    for y in downstream.push(change)
+      if queryID in driver.dropped
+        return                           # dropped while suspended; abandon
+      yield y
   catch DropPipelineSignal for queryID
     driver.dropped.add(queryID, reason)
   finally
     pipeline.advanceMs += advanceTimer.totalElapsed() - start
     driver.currentPipeline = none
+
+driver.#push(source, change)             # site 2: streaming
+  for boundary in source.genPush(change)
+    for [queryID, changes] in streamer.entries()
+      if queryID in driver.dropped
+        continue                         # discard partial output
+      previous = driver.currentPipeline
+      driver.currentPipeline = queryID
+      start = advanceTimer.totalElapsed()
+      try
+        yield* stream(queryID, changes)  # lazily fetches related rows
+      catch DropPipelineSignal for queryID
+        driver.dropped.add(queryID, reason)
+      finally
+        pipeline.advanceMs += advanceTimer.totalElapsed() - start
+        driver.currentPipeline = previous
 ```
 
 #### A2. Check the budget per pipeline
@@ -229,10 +300,11 @@ time so far and `budget` being that pipeline's own hydration time:
   exceeds the budget, or exceeds half the budget while the batch is less than
   half done.
 
-The checks run in two places. During a fetch, the shared yield callback checks
-the current pipeline. At push exit, the guard checks its own pipeline. A
-pipeline that did no work in this advancement is never over budget, so nothing
-needs to iterate all pipelines at the change boundary.
+The checks run in three places. During a fetch, the shared yield callback
+checks the current pipeline, whichever site set it. At push exit, the guard
+checks its own pipeline. After draining a `Streamer` entry, the driver checks
+that entry's pipeline. A pipeline that did no work in this advancement is never
+over budget, so nothing needs to iterate all pipelines at the change boundary.
 
 Per-pipeline hydration time already exists and is already process time. The
 view-syncer restarts the time-slice timer for each query it hydrates, and the
@@ -243,20 +315,36 @@ group is under the sum.
 
 #### A3. Drop and continue
 
-When a check fails inside a fetch, it throws `DropPipelineSignal(queryID)`. The
-signal propagates up through the pipeline's operators to the guard, which
-catches only a signal for its own query, records the drop, and returns
-normally. The fan-out loop in `genPush` moves on to the next connection and
-writes the change to the snapshot as usual. When a check fails at push exit,
-the guard records the drop without throwing.
+When a check fails inside a fetch, it throws `DropPipelineSignal(queryID)` for
+the current pipeline. Where it is caught depends on which site is running.
+
+- **Raised during the push.** The signal propagates up through the pipeline's
+  operators to the guard, which catches only a signal for its own query,
+  records the drop, and returns normally. The fan-out loop in `genPush` moves
+  on to the next connection and writes the change to the snapshot as usual.
+  When a check fails at push exit, the guard records the drop without
+  throwing.
+
+- **Raised during streaming.** The signal propagates out of the lazy
+  relationship stream to the driver's `#push`, which catches it around the
+  `Streamer` entry it was draining, records the drop, and discards the rest of
+  that entry. The guard is not on the stack at this point, so it cannot be the
+  catch site. If the entry was being drained at a yield point while the same
+  pipeline's push was suspended, that push is still live inside `genPush`.
+  The guard iterates its downstream push one step at a time, so when the push
+  resumes, the guard sees its query in the dropped set and returns. Returning
+  from the guard's generator runs the `finally` blocks of the suspended
+  operators and fetches below it, and `genPush` moves on to the next
+  connection.
 
 An abandoned fetch is safe. The `TableSource` fetch generator returns its
 prepared statement to the cache in a `finally`. The source's push overlay is
 cleared at the end of `genPush`, as it is today.
 
 From that point on, any push into any connection of the dropped pipeline
-returns immediately. A pipeline reads several tables, so it has several
-connections, and all of them consult the same dropped set.
+returns immediately, and the `Streamer` discards any output still queued for
+it. A pipeline reads several tables, so it has several connections, and all of
+them consult the same dropped set.
 
 ```diff
  genPush(connections, change)
@@ -287,7 +375,8 @@ a table nobody reads are skipped, exactly as they are today for tables no
 pipeline reads.
 
 The Streamer, which turns pushed IVM changes into row changes for the CVR,
-skips entries for dropped queries. That discards the dropped pipeline's partial
+skips entries for dropped queries, including the remainder of the entry it was
+draining when the drop was raised. That discards the dropped pipeline's partial
 output for the change it was dropped in. Output it produced for earlier changes
 in this advancement has already been yielded; Part B handles that.
 
@@ -341,21 +430,21 @@ The correctness argument is additive. For every row, the final refCounts are
 `existing − dropped queries' old counts + other queries' deltas + dropped
 queries' full new counts`. Late tracking makes the middle term correct for rows
 seen before the drop; the first-receipt strip makes it correct for rows seen
-after; the pruning pass handles rows never received. With Step 0 in place, the
+after; the pruning pass handles rows never received. With Step 0a in place, the
 pruning pass never touches a row that `received()` already finalized.
 
 Walkthrough for the hard row. R is referenced by A and C. During advancement A
 removes R. C is dropped and rebuilt, and no longer holds R.
 
-| Step                        | R's counts       | Patch to client |
-| --------------------------- | ---------------- | --------------- |
-| Before                      | `{A:1, C:1}`     |                 |
-| A's remove is received      | `{C:1}`          |                 |
-| Late-track C: zero out C    | `null`           | `del R`         |
-| C's rebuild: R not included | `null`           |                 |
-| `deleteUnreferencedRows`    | skipped (Step 0) |                 |
+| Step                        | R's counts        | Patch to client |
+| --------------------------- | ----------------- | --------------- |
+| Before                      | `{A:1, C:1}`      |                 |
+| A's remove is received      | `{C:1}`           |                 |
+| Late-track C: zero out C    | `null`            | `del R`         |
+| C's rebuild: R not included | `null`            |                 |
+| `deleteUnreferencedRows`    | skipped (Step 0a) |                 |
 
-Without Step 0 the last row would rewrite R as `{A:1}` and the client would be
+Without Step 0a the last row would rewrite R as `{A:1}` and the client would be
 missing a row the CVR says it has.
 
 The same row where C still holds R after the rebuild ends at `{C:1}` with a
@@ -411,11 +500,11 @@ In plain steps, after `#processChanges` drains the advancement stream:
 
 1. Ask the driver what it dropped. If nothing, continue exactly as today.
 2. Call the late-track method with the dropped queries. Send its patches.
-3. For each dropped pipeline, call `addQuery` with the retained transformed
-   AST and hash, hydration reason `advancement-reset`, and a fresh time-slice
-   timer. Run its row changes through `#processChanges` with the same updater
-   and the same poke handlers. This yields to other client groups as any
-   hydration does.
+3. For each dropped pipeline, call `addQuery` with the retained original AST
+   (see C5), the retained hash, hydration reason `advancement-reset`, and a
+   fresh time-slice timer. Run its row changes through `#processChanges` with
+   the same updater and the same poke handlers. This yields to other client
+   groups as any hydration does.
 4. Call `deleteUnreferencedRows`. Send its patches.
 5. `#flushPoked`, then `pokers.end` at the updater's version, as today.
 
@@ -427,9 +516,17 @@ the moment the advance generator's `finally` clears the advance context.
 #### C2. Fallback
 
 If a rebuild hydration fails or exceeds the hydration timeout, the view-syncer
-cancels the poke and returns a `ResetPipelinesSignal` with reason
-`advancement-timeout`, which is the whole-group path that runs today. The run
-loop does not change.
+cancels the poke, calls `discardPending()` on the store, and returns a
+`ResetPipelinesSignal` with reason `advancement-timeout`, which is the
+whole-group path that runs today. The run loop does not change.
+
+The discard is not optional. By this point the updater has queued row records
+for the whole advancement and for however much of the rebuild ran. A partial
+rebuild can queue a put for a row that was not in the CVR before. If the
+whole-group hydration that follows rejects that query, for example because its
+timeout tripped the circuit breaker, no query re-declares the row, pruning
+never visits it, and its pending put would be flushed although the client never
+received it. Step 0b exists for this path.
 
 #### C3. Poke audience
 
@@ -444,13 +541,33 @@ today.
 touched. The run loop's reset switch is unchanged; a partial reset never
 reaches it.
 
-#### C5. Reuse of the transformed AST
+#### C5. Reuse of the retained AST
+
+The driver keeps two ASTs per pipeline. `originalAst` is the query as the
+view-syncer handed it over. `transformedAst` is what the driver actually built:
+`#resolveScalarSubqueries` has already replaced every scalar subquery with its
+literal value, and the companion pipelines that watch those values for changes
+are created as a side effect of that resolution.
+
+The rebuild must start from `originalAst`, falling back to `transformedAst`
+only when there is no original. Rebuilding from the resolved AST would create
+no companions, so a later change to a scalar's source row would never trigger
+a reset, and the pipeline would keep serving the value the scalar had when the
+dropped pipeline was built. This is the same choice the full-reset reuse path
+makes today with `previous.originalAst ?? previous.transformedAst`.
+
+Two timing cases follow from the drop-and-rebuild sequence. A scalar source
+change that lands later in the same advancement, after the dropped pipeline's
+companions were destroyed at the change boundary, is observed by nobody; the
+rebuild then resolves the scalar at the new head, which includes that change,
+so the result is correct. A scalar source change in the next transaction is
+seen by the rebuilt pipeline's fresh companions and resets as today.
 
 The run loop today reuses previous ASTs after a reset only when the group has
 no legacy client queries, because those derive from permissions. Inside one
 advancement, permissions cannot have changed: a permissions change is its own
-reset reason and would have thrown. So the rebuild can reuse the transformed
-AST for any query type.
+reset reason and would have thrown. So the rebuild can reuse the retained AST
+for any query type.
 
 ### Observability
 
@@ -468,7 +585,7 @@ AST for any query type.
 
 - **refCount errors.** The failure mode is a row the client never deletes, or
   a row the client deletes that the CVR believes it has. The late-track
-  primitive and Step 0 are the two places this can go wrong, and both are
+  primitive and Step 0a are the two places this can go wrong, and both are
   small and directly testable. The Postgres tests should assert, after the
   flush, that the set of rows with a positive count for each query equals the
   rebuilt pipeline's row set.
@@ -486,12 +603,13 @@ AST for any query type.
   crash mid-way leaves the CVR at the previous version, exactly as an aborted
   advancement does today.
 
-- **Pending CVR writes after an abort.** Today, when an advancement aborts
-  with a reset, the poke is cancelled but the row records the updater already
-  handed to the store are not discarded until the next flush. The full
-  rehydration re-writes almost every affected row, which masks it. This design
-  does not make it worse, because the updater is not abandoned, but it is
-  worth its own fix.
+- **Pending CVR writes after an abort.** The fallback in C2 abandons an
+  updater that has queued writes for the whole advancement and part of a
+  rebuild. Without Step 0b those writes reach the next flush even though their
+  poke was cancelled, and a row the client never received can be recorded as
+  synced. Step 0b is therefore a prerequisite, not a follow-up, and it also
+  closes the narrower pre-existing version of the same hole in today's reset
+  path.
 
 - **Escalation threshold.** Too low and partial reset rarely fires. Too high
   and a group that is mostly over budget pays for both paths. Start at half
@@ -513,14 +631,31 @@ Driver unit tests, in the runaway-push harness:
 - The dropped pipeline's connections are gone and its table is pruned when it
   was the only reader.
 - Yields still happen while a drop is pending.
+- The expensive work comes from consuming an emitted relationship: a parent
+  change whose related rows are costly to fetch. The time is attributed to the
+  right pipeline and the drop is raised and caught during streaming, with the
+  other pipeline unaffected.
+- A drop raised during streaming while the same pipeline's push is suspended
+  at a yield. The suspended push is abandoned when it resumes, the remaining
+  connections still receive the change, and the change is written to the
+  snapshot.
 - The escalation rule throws the whole-group signal when the dropped set is
   most of the group.
 - `addQuery` for the dropped query succeeds after the stream is drained and
   reads from the new head.
+- A query with a scalar subquery is dropped and rebuilt. A change to the
+  scalar's source later in the same advancement is reflected in the rebuilt
+  result. A change in the next transaction triggers a reset through the
+  rebuilt pipeline's companions.
 
 CVR tests, in `cvr.pg.test.ts`:
 
-- The Step 0 regression: a tombstoned row is not resurrected by pruning.
+- The Step 0a regression: a tombstoned row is not resurrected by pruning.
+- The Step 0b regression: after `discardPending()`, a flush writes nothing
+  from the abandoned updater. Then the fallback scenario end to end: a row
+  absent from the original CVR is queued by a partial rebuild, the fallback
+  hydration rejects that query through the circuit breaker, and the row does
+  not appear in the CVR.
 - Late-track scenarios for a row referenced by A and C: A removes it and C
   still holds it; A removes it and C drops it; A adds it and C holds it; C
   alone held it and drops it. Each asserts the final refCounts and the patch
@@ -545,8 +680,8 @@ the median group is current.
 
 One flag, `ZERO_PARTIAL_PIPELINE_RESET`, default off. Off means the driver's
 checks stay at group scope and throw as they do today; the guard still records
-per-pipeline time, which is useful on its own for the inspector. Ship Step 0
-first and independently.
+per-pipeline time, which is useful on its own for the inspector. Ship the two
+Step 0 fixes first and independently; both are correct with the flag off.
 
 ## Future work
 
