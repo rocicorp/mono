@@ -41,11 +41,18 @@
  * desires, so that every connected client receives a poke once the replica
  * has the write, whether or not the write changed the group's queries.
  *
+ * The groups' advancements apply their changes in every way that
+ * `deferIvmWrites` allows, chosen by the seed for each one (see
+ * {@link SeededDeferredWritesBudget}), so that groups at the same version
+ * share the row cache while in different modes, and reconnects and restarts
+ * catch up in any of them.
+ *
  * The lane is deterministic in the seed (the query sample, the swap and event
  * schedule), except for how the view-syncers' advancements interleave.
  */
 import {expect} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
+import {DeferredWritesBudget} from '../../../zero-cache/src/services/view-syncer/deferred-writes-budget.ts';
 import {
   cmpVersions,
   versionFromString,
@@ -136,7 +143,64 @@ export type GroupsFuzzStats = {
   freshChecks: number;
   /** How many view-syncers served each group. */
   starts: Record<string, number>;
+  /** How the advancements applied their changes. */
+  advancements: SeededDeferredWritesBudget['advancements'];
 };
+
+/**
+ * The deferred IVM writes budget of the lane's worker. The seed, not the
+ * size of an advancement, decides how it applies its changes, so that every
+ * way occurs, and groups at the same version differ:
+ *
+ * - `held`: in memory until the advancement ends;
+ * - `writtenThrough`: to the replica snapshot, as when the advancement does
+ *   not fit in the budget;
+ * - `switched`: in memory for its first 1-3 changes, then written through,
+ *   as when the bytes held on the worker exceed the budget partway.
+ *
+ * The budget itself is unlimited, but still accounts for the rows and bytes
+ * held, and counts the advancements that hold more rows than they reserved.
+ */
+export class SeededDeferredWritesBudget extends DeferredWritesBudget {
+  readonly #r: Rng;
+  /** The byte checks left before the advancement is made to write through. */
+  #checksBeforeSwitch: number | undefined;
+  readonly advancements = {held: 0, writtenThrough: 0, switched: 0};
+
+  constructor(seed: number) {
+    super(Infinity, Infinity);
+    // Separate from the lane's generator: advancements interleave
+    // nondeterministically, and must not shift the lane's schedule.
+    this.#r = rng(seed ^ 0x3c6ef372);
+  }
+
+  override tryReserve(rows: number): boolean {
+    switch (this.#r.int(3)) {
+      case 0:
+        this.advancements.writtenThrough++;
+        return false;
+      case 1:
+        this.#checksBeforeSwitch = this.#r.int(3);
+        break;
+      default:
+        this.#checksBeforeSwitch = undefined;
+        this.advancements.held++;
+    }
+    return super.tryReserve(rows);
+  }
+
+  override holdBytes(bytes: number): boolean {
+    const fits = super.holdBytes(bytes);
+    if (this.#checksBeforeSwitch !== undefined) {
+      if (this.#checksBeforeSwitch-- === 0) {
+        this.#checksBeforeSwitch = undefined;
+        this.advancements.switched++;
+        return false;
+      }
+    }
+    return fits;
+  }
+}
 
 function query(table: string): AnyQuery {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
@@ -209,10 +273,12 @@ export async function checkClientGroupsFuzz(
   harness: Harness,
   seed: number,
   budget: number,
+  deferredWrites: SeededDeferredWritesBudget,
 ): Promise<GroupsFuzzStats> {
   const lane = new GroupsLane(
     harness,
-    await harness.startSyncWorker({production: true}),
+    await harness.startSyncWorker({production: true, deferredWrites}),
+    deferredWrites,
     seed,
     budget,
   );
@@ -222,6 +288,7 @@ export async function checkClientGroupsFuzz(
 class GroupsLane {
   readonly #harness: Harness;
   readonly #worker: SyncWorker;
+  readonly #deferredWrites: SeededDeferredWritesBudget;
   readonly #seed: number;
   readonly #r: Rng;
   readonly #budget: number;
@@ -238,6 +305,7 @@ class GroupsLane {
     fullChecks: 0,
     freshChecks: 0,
     starts: {},
+    advancements: {held: 0, writtenThrough: 0, switched: 0},
   };
   #watermark = '';
   #barriers = 0;
@@ -246,11 +314,13 @@ class GroupsLane {
   constructor(
     harness: Harness,
     worker: SyncWorker,
+    deferredWrites: SeededDeferredWritesBudget,
     seed: number,
     budget: number,
   ) {
     this.#harness = harness;
     this.#worker = worker;
+    this.#deferredWrites = deferredWrites;
     this.#seed = seed;
     this.#r = rng(seed ^ 0x6a09e667);
     this.#budget = budget;
@@ -293,6 +363,7 @@ class GroupsLane {
     for (const g of this.#groups) {
       this.#stats.starts[g.group.id] = g.group.starts;
     }
+    this.#stats.advancements = {...this.#deferredWrites.advancements};
     return this.#stats;
   }
 
@@ -456,6 +527,13 @@ class GroupsLane {
         }
       }
     }
+    // The change log is supposed to bound the rows an advancement holds in
+    // memory. (It writes through the rest when it does not, so a violation
+    // does not show up in the results.)
+    expect(
+      this.#deferredWrites.rowOverruns,
+      `an advancement held more rows than it reserved, by ${description}`,
+    ).toBe(0);
   }
 
   async #stepChecks(
