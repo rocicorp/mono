@@ -42,12 +42,15 @@ export type PartitionKey = PrimaryKey;
 type DirtyPartitionState = {
   constraint: Constraint | undefined;
   /**
-   * The active bound before any removals in this push cycle reduced the partition
-   * size below limit. Upstream operators (like TakeGate) consult getBound() during
-   * Phase 1 to cap child pushes. Preserving lastBound prevents TakeGate from prematurely
-   * opening (becoming unbounded) while the partition has an unresolved deficit.
+   * The bound to report to upstream TakeGate via getBound() until Phase 2
+   * reconciliation completes.
+   *
+   * When removals reduce partition size below limit in Phase 1, normal getBound()
+   * would return undefined (unbounded), which would cause upstream TakeGate to open
+   * and allow unbounded parent pushes through. Preserving gateBound keeps TakeGate
+   * capped at the pre-removal boundary until Phase 2 refills the deficit.
    */
-  lastBound: Row | undefined;
+  gateBound: Row | undefined;
 };
 
 /**
@@ -122,9 +125,9 @@ export class Take implements Operator, TakeBoundProvider {
     const takeStateKey = getTakeStateKey(this.#partitionKey, constraint);
     const dirty = this.#dirtyPartitions.get(takeStateKey);
     if (dirty) {
-      // While dirty in Phase 1, return the bound prior to any removals so upstream
-      // operators (e.g. TakeGate) remain capped rather than unbounding during push.
-      return dirty.lastBound;
+      // While dirty in Phase 1, return gateBound (the bound prior to removals) so
+      // upstream operators (e.g. TakeGate) remain capped rather than unbounding during push.
+      return dirty.gateBound;
     }
     const takeState = this.#storage.get(takeStateKey);
     if (!takeState || takeState.size < this.#limit) {
@@ -276,6 +279,10 @@ export class Take implements Operator, TakeBoundProvider {
     if (change[ChangeIndex.TYPE] === ChangeType.ADD) {
       if (takeState.size < this.#limit) {
         if (this.#dirtyPartitions.has(takeStateKey)) {
+          // While dirty with an unresolved deficit in Phase 1, only admit rows that
+          // sort strictly before the current window boundary. We refuse to expand the
+          // bound forward during Phase 1 so that Phase 2 can backfill earlier candidate
+          // rows from storage in sort order.
           if (
             takeState.bound === undefined ||
             compareRows(change[ChangeIndex.NODE].row, takeState.bound) >= 0
@@ -400,12 +407,12 @@ export class Take implements Operator, TakeBoundProvider {
             ? takeState.bound
             : beforeBoundNode?.row;
       if (!this.#dirtyPartitions.has(takeStateKey)) {
-        // Snapshot the pre-removal bound on the first removal that dirties this
-        // partition. Subsequent getBound() calls throughout Phase 1 will return
+        // Snapshot the pre-removal bound as the gate bound on the first removal that
+        // dirties this partition. Subsequent getBound() calls throughout Phase 1 will return
         // this bound to keep upstream TakeGate bounded until Phase 2 refills deficits.
         this.#dirtyPartitions.set(takeStateKey, {
           constraint,
-          lastBound: takeState.bound,
+          gateBound: takeState.bound,
         });
       }
       this.#setTakeState(takeStateKey, takeState.size - 1, finalBound);
