@@ -2277,6 +2277,78 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('child change pushed to several parents streams each row once', () => {
+    // Adding issueLabels 2-1 is pushed to comments 20, 21 and 22 in turn.
+    // Issue 2 enters the query at comment 20, and its subtree must be read
+    // then: read after the push, it would already hold comments 21 and 22,
+    // which are then added again by their own pushes.
+    const query: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'comments',
+            alias: 'zsubq_comments',
+            orderBy: [['id', 'asc']],
+            where: {
+              type: 'correlatedSubquery',
+              op: 'EXISTS',
+              related: {
+                system: 'client',
+                correlation: {
+                  parentField: ['issueID'],
+                  childField: ['issueID'],
+                },
+                subquery: {
+                  table: 'issueLabels',
+                  alias: 'zsubq_issueLabels',
+                  orderBy: [
+                    ['issueID', 'asc'],
+                    ['labelID', 'asc'],
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    pipelines.init(clientSchema);
+    [...pipelines.addQuery('hash1', 'queryID', query, startTimer())];
+
+    replicator.processTransaction(
+      '134',
+      messages.insert('issueLabels', {
+        issueID: '2',
+        labelID: '1',
+        legacyID: '2-1',
+      }),
+    );
+
+    const counts = new Map<string, number>();
+    for (const change of changes()) {
+      if (change === 'yield') {
+        continue;
+      }
+      const {table, rowKey} = change;
+      const key = `${table} ${JSON.stringify(rowKey)}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    expect(Object.fromEntries(counts)).toEqual({
+      'issues {"id":"2"}': 1,
+      'comments {"id":"20"}': 1,
+      'comments {"id":"21"}': 1,
+      'comments {"id":"22"}': 1,
+      'issueLabels {"issueID":"2","labelID":"1"}': 3,
+    });
+  });
+
   test('getRow', () => {
     pipelines.init(clientSchema);
 

@@ -749,12 +749,7 @@ export class PipelineDriver {
       builtInputs.push(input);
       const schema = input.getSchema();
       input.setOutput({
-        push: change => {
-          const streamer = this.#streamer;
-          assert(streamer, 'must #startAccumulating() before pushing changes');
-          streamer.accumulate(queryID, schema, [change]);
-          return [];
-        },
+        push: change => this.#streamPushed(queryID, schema, change),
       });
 
       for (const change of hydrateInternal(
@@ -833,13 +828,7 @@ export class PipelineDriver {
                 'scalar-subquery',
               );
             }
-            const streamer = this.#streamer;
-            assert(
-              streamer,
-              'must #startAccumulating() before pushing changes',
-            );
-            streamer.accumulate(queryID, companionSchema, [change]);
-            return [];
+            return this.#streamPushed(queryID, companionSchema, change);
           },
         });
         liveCompanions.push({input: companionInput, childField, resolvedValue});
@@ -1322,6 +1311,33 @@ export class PipelineDriver {
     }
   }
 
+  /**
+   * Converts a change pushed out of a query pipeline into row changes during
+   * the push. The relationships of a pushed node are lazy, and operators such
+   * as Join compute them from the state of the push in progress: while a child
+   * change is pushed to each matching parent in turn, parents not yet pushed
+   * must not see it. Read after the push has moved on to the next parent, or
+   * after it has finished, a node's relationships show the later state, and
+   * rows that are also pushed separately are counted twice.
+   */
+  *#streamPushed(
+    queryID: string,
+    schema: SourceSchema,
+    change: Change,
+  ): Stream<'yield'> {
+    const streamer = this.#streamer;
+    assert(streamer, 'must #startAccumulating() before pushing changes');
+    for (const rowChange of streamer.streamChange(queryID, schema, change)) {
+      if (rowChange === 'yield') {
+        yield rowChange;
+        continue;
+      }
+      // #push replaces the streamer after each 'yield', so add to the
+      // current one.
+      must(this.#streamer).add(rowChange);
+    }
+  }
+
   #startAccumulating() {
     assert(this.#streamer === null, 'Streamer already started');
     this.#streamer = new Streamer(
@@ -1375,6 +1391,21 @@ class Streamer {
     changes: Iterable<Change | 'yield'>,
   ][] = [];
 
+  /** Row changes that were already produced by {@link streamChange}. */
+  readonly #rowChanges: RowChange[] = [];
+
+  add(rowChange: RowChange) {
+    this.#rowChanges.push(rowChange);
+  }
+
+  streamChange(
+    queryID: string,
+    schema: SourceSchema,
+    change: Change,
+  ): Iterable<RowChange | 'yield'> {
+    return this.#streamChanges(queryID, schema, [change]);
+  }
+
   accumulate(
     queryID: string,
     schema: SourceSchema,
@@ -1385,6 +1416,7 @@ class Streamer {
   }
 
   *stream(): Iterable<RowChange | 'yield'> {
+    yield* this.#rowChanges;
     for (const [queryID, schema, changes] of this.#changes) {
       try {
         yield* this.#streamChanges(queryID, schema, changes);
