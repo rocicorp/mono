@@ -205,8 +205,8 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.changes).toBe(3);
     expect(diff.changesByTable()).toEqual(
       new Map([
-        ['backfilling', 1],
-        ['users', 2],
+        ['backfilling', {count: 1, rowKeyColumns: ['id']}],
+        ['users', {count: 2, rowKeyColumns: ['id']}],
       ]),
     );
 
@@ -591,6 +591,10 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
+    // A table-wide entry has no row key.
+    expect(diff.changesByTable()).toEqual(
+      new Map([['users', {count: 1, rowKeyColumns: []}]]),
+    );
 
     expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
   });

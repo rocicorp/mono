@@ -299,10 +299,10 @@ export interface SnapshotDiff extends Iterable<Change> {
   readonly changes: number;
 
   /**
-   * {@link changes} by table. Computed on the first call, as it costs a scan
-   * of the change log entries.
+   * The change log entries by table. Computed on the first call, as it costs
+   * a scan of the entries.
    */
-  changesByTable(): ReadonlyMap<string, number>;
+  changesByTable(): ReadonlyMap<string, TableChanges>;
 
   /**
    * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
@@ -313,6 +313,17 @@ export interface SnapshotDiff extends Iterable<Change> {
    */
   setPrevWrites(prevWrites: PrevWrites): void;
 }
+
+/** The change log entries of one table in a {@link SnapshotDiff}. */
+export type TableChanges = {
+  readonly count: number;
+  /**
+   * The columns of the key by which the change log identifies the table's
+   * rows (its upstream key), which need not be the primary key that a client
+   * schema gives the table. Empty if the table has only table-wide entries.
+   */
+  readonly rowKeyColumns: readonly string[];
+};
 
 /**
  * Thrown during an iteration of a {@link SnapshotDiff} when a schema
@@ -422,12 +433,26 @@ class Snapshot {
     return count;
   }
 
-  numChangesByTableSince(prevVersion: string): Map<string, number> {
-    const counts: {table: string; count: number}[] = this.db.all(
-      'SELECT "table", COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ? GROUP BY "table"',
-      prevVersion,
+  changesByTableSince(prevVersion: string): Map<string, TableChanges> {
+    // A row key is a JSON object, and the key of a table-wide entry is a
+    // version, which sorts before it. So the maximum is a row key if there
+    // is one, and its columns are the table's.
+    const tables: {table: string; count: number; rowKey: string}[] =
+      this.db.all(
+        'SELECT "table", COUNT(*) AS count, MAX("rowKey") AS rowKey FROM "_zero.changeLog2" WHERE stateVersion > ? GROUP BY "table"',
+        prevVersion,
+      );
+    return new Map(
+      tables.map(({table, count, rowKey}) => [
+        table,
+        {
+          count,
+          rowKeyColumns: rowKey.startsWith('{')
+            ? Object.keys(JSON.parse(rowKey))
+            : [],
+        },
+      ]),
     );
-    return new Map(counts.map(({table, count}) => [table, count]));
   }
 
   /**
@@ -614,7 +639,7 @@ class Diff implements SnapshotDiff {
   readonly #rowCache: SnapshotRowCache | undefined;
   #prevWrites: PrevWrites;
   #iterated = false;
-  #changesByTable: ReadonlyMap<string, number> | undefined;
+  #changesByTable: ReadonlyMap<string, TableChanges> | undefined;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
@@ -649,10 +674,8 @@ class Diff implements SnapshotDiff {
         : undefined;
   }
 
-  changesByTable(): ReadonlyMap<string, number> {
-    this.#changesByTable ??= this.curr.numChangesByTableSince(
-      this.prev.version,
-    );
+  changesByTable(): ReadonlyMap<string, TableChanges> {
+    this.#changesByTable ??= this.curr.changesByTableSince(this.prev.version);
     return this.#changesByTable;
   }
 

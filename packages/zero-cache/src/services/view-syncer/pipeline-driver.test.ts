@@ -2093,6 +2093,72 @@ describe('view-syncer/pipeline-driver', () => {
       });
     });
 
+    test('an entry counts twice when the change log is keyed by another unique key', () => {
+      // `uniques` has `id` as its primary key in the client schema, but is
+      // keyed by its other unique key, `name`, upstream and in the change log.
+      const byName = new ReplicationMessages({uniques: 'name'});
+      const budget = new DeferredWritesBudget(Infinity, Infinity);
+      const writeThrough = makeDriver('write-through', undefined);
+      const driver = makeDriver('by-name', budget);
+      let maxPendingRows = 0;
+      let reservedRows = 0;
+      const timer: Timer = {
+        elapsedLap: () => 0,
+        totalElapsed: () => {
+          maxPendingRows = Math.max(maxPendingRows, driver.pendingRows);
+          reservedRows = budget.reservedRows;
+          return 0;
+        },
+      };
+      // Changes the client primary key of the row named `bar`: one change log
+      // entry, but a remove and an add, of two rows, to the source.
+      replicator.processTransaction(
+        '134',
+        byName.update('uniques', {id: 'foo2', name: 'bar'}),
+      );
+
+      const expected = summarize(
+        writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+      );
+      const {numChanges, changes} = driver.advance(timer);
+      expect(summarize(changes)).toEqual(expected);
+      expect(numChanges).toBe(1);
+      expect({maxPendingRows, reservedRows}).toEqual({
+        maxPendingRows: 2,
+        reservedRows: 2,
+      });
+    });
+
+    test('an advancement that holds more rows than it reserved writes through the rest', () => {
+      // Undercounts the changes, which the reservation is based on.
+      const advance = Snapshotter.prototype.advance;
+      vi.spyOn(Snapshotter.prototype, 'advance').mockImplementation(function (
+        this: Snapshotter,
+        ...args
+      ) {
+        const diff = advance.apply(this, args);
+        diff.changesByTable = () => new Map();
+        return diff;
+      });
+      const budget = new DeferredWritesBudget(Infinity, Infinity);
+      const holdBytes = vi.spyOn(budget, 'holdBytes');
+      const writeThrough = makeDriver('write-through', undefined);
+      const driver = makeDriver('undercounted', budget);
+
+      transactions.forEach((txn, i) => {
+        replicator.processTransaction(`${134 + i}`, ...txn);
+        expect(
+          summarize(driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+        ).toEqual(
+          summarize(writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+        );
+      });
+      // Once per advancement, after its first change.
+      expect(budget.rowOverruns).toBe(transactions.length);
+      expect(holdBytes).toHaveBeenCalledTimes(transactions.length);
+      expect([budget.reservedRows, budget.heldBytes]).toEqual([0, 0]);
+    });
+
     test('reservation is released when the advancement is abandoned', () => {
       const budget = new DeferredWritesBudget(Infinity, Infinity);
       const driver = makeDriver('abandoned', budget);

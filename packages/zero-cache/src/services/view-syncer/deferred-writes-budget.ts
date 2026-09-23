@@ -19,7 +19,10 @@ export const BYTES_PER_ROW = 1024;
  * number bounds the rows its sources can hold: the change log has one entry
  * per row key (a truncation, which does not, resets the pipelines instead),
  * and a row displaced through a unique key must itself have changed in the
- * same interval, so it has its own entry. An advancement that does not fit is
+ * same interval, so it has its own entry. (An entry counts twice for a table
+ * whose primary key in the client schema is not the key the change log uses,
+ * since the entry can change its row's primary key.) An advancement that does
+ * not fit is
  * written through to the replica snapshot instead, which SQLite bounds with
  * its page cache and spills to disk.
  *
@@ -39,6 +42,7 @@ export class DeferredWritesBudget {
   readonly #maxBytes: number;
   #reservedRows = 0;
   #heldBytes = 0;
+  #rowOverruns = 0;
 
   /**
    * A budget of `proportion` of the heap limit, and the rows that fit in it
@@ -99,6 +103,19 @@ export class DeferredWritesBudget {
     this.#heldBytes += bytes;
     assert(this.#heldBytes >= 0, () => `Holding ${this.#heldBytes} bytes`);
     return this.#heldBytes <= this.#maxBytes;
+  }
+
+  /**
+   * The advancements that have held more rows than they reserved, which the
+   * reservation is supposed to rule out. Each writes through the rest of its
+   * changes instead.
+   */
+  get rowOverruns(): number {
+    return this.#rowOverruns;
+  }
+
+  recordRowOverrun(): void {
+    this.#rowOverruns++;
   }
 
   /** Returns an advancement's reserved `rows` and the `bytes` it held. */

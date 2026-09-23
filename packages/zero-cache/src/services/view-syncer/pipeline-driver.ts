@@ -1190,7 +1190,7 @@ export class PipelineDriver {
           }
 
           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
-          bytesFit = this.#holdPendingBytes(advanceContext);
+          bytesFit = this.#holdPendingRows(advanceContext);
         } finally {
           advanceContext.currentChangeStartMs = undefined;
         }
@@ -1231,11 +1231,19 @@ export class PipelineDriver {
       return undefined;
     }
     // Only the changes to tables that this group's pipelines read reach its
-    // sources.
+    // sources. An entry sets or removes one row, and a row that it displaces
+    // has an entry of its own. But if the change log identifies the rows of a
+    // table by a key other than its primary key here, an entry can change the
+    // primary key of its row, which is two rows to a source: the old and the
+    // new.
     let rows = 0;
-    for (const [table, changes] of diff.changesByTable()) {
+    for (const [table, {count, rowKeyColumns}] of diff.changesByTable()) {
       if (this.#tables.has(table)) {
-        rows += changes;
+        const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+        const sameKey =
+          primaryKey.length === rowKeyColumns.length &&
+          primaryKey.every(col => rowKeyColumns.includes(col));
+        rows += sameKey ? count : 2 * count;
       }
     }
     if (budget.tryReserve(rows)) {
@@ -1263,10 +1271,9 @@ export class PipelineDriver {
     this.#deferredWritesFallbacks.add(1, {stage: 'partway'});
     this.#lc.debug?.(
       `writing through at ${advanceContext.pos} of ` +
-        `${advanceContext.numChanges} changes: holding ` +
-        `${advanceContext.heldBytes} estimated bytes takes the bytes held on ` +
-        `this worker to ${budget.heldBytes}, past its budget of ` +
-        `${budget.maxBytes}`,
+        `${advanceContext.numChanges} changes, holding ` +
+        `${advanceContext.heldBytes} of the ${budget.heldBytes} estimated ` +
+        `bytes held on this worker (budget: ${budget.maxBytes})`,
     );
     // `prev` is about to be written, so the reads that its writes can affect
     // can no longer be shared.
@@ -1396,17 +1403,35 @@ export class PipelineDriver {
    * The rows an advancement holds in memory are bounded by its reservation,
    * but their width is not known in advance. So the bytes they are estimated
    * to hold are added to those held by the other advancements on this worker.
-   * Returns false if that takes them past the budget.
+   * Returns false if that takes them past the budget, or if the rows are not
+   * bounded by the reservation after all.
    */
-  #holdPendingBytes(advanceContext: AdvanceContext): boolean {
-    const {reservedRows, heldBytes} = advanceContext;
+  #holdPendingRows(advanceContext: AdvanceContext): boolean {
+    const {reservedRows, heldBytes, pos, numChanges} = advanceContext;
     if (reservedRows === undefined) {
       return true;
     }
-    const bytes = this.pendingBytes;
+    const budget = must(this.#deferredWrites);
+    let rows = 0;
+    let bytes = 0;
+    for (const source of this.#tables.values()) {
+      rows += source.pendingRows;
+      bytes += source.pendingBytes;
+    }
     // Recorded first, so that the bytes are released even if they do not fit.
     advanceContext.heldBytes = bytes;
-    return must(this.#deferredWrites).holdBytes(bytes - heldBytes);
+    const bytesFit = budget.holdBytes(bytes - heldBytes);
+    if (rows > reservedRows) {
+      // The reservation is supposed to bound the rows held (see
+      // DeferredWritesBudget), so this is a bug, but not one to crash on.
+      budget.recordRowOverrun();
+      this.#lc.error?.(
+        `Advancement holds ${rows} rows at ${pos} of ${numChanges} changes, ` +
+          `more than the ${reservedRows} it reserved. Writing through the rest.`,
+      );
+      return false;
+    }
+    return bytesFit;
   }
 
   #throwSlowCurrentChangeReset(
