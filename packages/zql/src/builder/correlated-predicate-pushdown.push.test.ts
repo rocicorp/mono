@@ -378,15 +378,6 @@ describe('posts.where(id, 42).related(comments)', () => {
             "type": "edit",
           },
         ],
-        [
-          ":source(posts)",
-          "fetch",
-          {
-            "constraint": {
-              "id": 7,
-            },
-          },
-        ],
       ]
     `);
     expect(on.pushes).toEqual([]);

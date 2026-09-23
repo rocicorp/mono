@@ -226,19 +226,7 @@ test('child change, parent is after bound', () => {
     ]
   `);
 
-  expect(log.filter(msg => msg[0] === ':take')).toMatchInlineSnapshot(`
-    [
-      [
-        ":take",
-        "fetch",
-        {
-          "constraint": {
-            "id": "i3",
-          },
-        },
-      ],
-    ]
-  `);
+  expect(log.filter(msg => msg[0] === ':take')).toMatchInlineSnapshot(`[]`);
 
   expect(pushes).toHaveLength(0);
 
