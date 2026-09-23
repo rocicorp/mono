@@ -82,4 +82,53 @@ describe('runaway push reproduction', () => {
     expect(flippedJoinPushes.length).toBe(5);
     expect(takePushes.length).toBeLessThanOrEqual(10);
   });
+
+  test('multiple removals are batched in Phase 1 before deficit refill in Phase 2', () => {
+    const customSourceContents: SourceContents = {
+      issue: [
+        {id: 'i000', projectID: 'p1'},
+        {id: 'i001', projectID: 'p1'},
+        {id: 'i002', projectID: 'p1'},
+        {id: 'i003', projectID: 'p2'},
+        {id: 'i004', projectID: 'p2'},
+        {id: 'i005', projectID: 'p2'},
+        {id: 'i006', projectID: 'p2'},
+      ],
+      project: [
+        {id: 'p1', name: 'Alpha'},
+        {id: 'p2', name: 'Beta'},
+      ],
+    };
+
+    const {pushes, data} = runPushTest({
+      sources,
+      sourceContents: customSourceContents,
+      ast,
+      format,
+      pushes: [['project', makeSourceChangeRemove({id: 'p1', name: 'Alpha'})]],
+    });
+
+    // In Phase 1, all 3 p1 issues are removed without interleaving refills.
+    // In Phase 2 (reconcile), Take refills the 3-row deficit by fetching i005 and i006 in a single batch.
+    expect(
+      pushes.map(p =>
+        p.type === 'add' || p.type === 'remove'
+          ? [p.type, p.node !== 'yield' ? (p.node.row.id as string) : 'yield']
+          : [p.type],
+      ),
+    ).toEqual([
+      ['remove', 'i000'],
+      ['remove', 'i001'],
+      ['remove', 'i002'],
+      ['add', 'i005'],
+      ['add', 'i006'],
+    ]);
+
+    expect(data).toMatchObject([
+      {id: 'i003', projectID: 'p2'},
+      {id: 'i004', projectID: 'p2'},
+      {id: 'i005', projectID: 'p2'},
+      {id: 'i006', projectID: 'p2'},
+    ]);
+  });
 });

@@ -12,6 +12,7 @@ import type {
 import {
   type FetchRequest,
   type Input,
+  type InputBase,
   type Operator,
   type Output,
 } from './operator.ts';
@@ -87,6 +88,12 @@ export class Snitch implements Operator {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
     if (this.#output) {
       yield* this.#output.push(change, this);
+    }
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output?.reconcile) {
+      yield* this.#output.reconcile(this);
     }
   }
 }
@@ -176,6 +183,12 @@ export class FilterSnitch implements FilterOperator {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
     if (this.#output) {
       yield* this.#output.push(change, this);
+    }
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output?.reconcile) {
+      yield* this.#output.reconcile(this);
     }
   }
 }

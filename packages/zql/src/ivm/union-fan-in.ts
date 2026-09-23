@@ -16,8 +16,10 @@ import {
 } from './operator.ts';
 import {
   makeAddEmptyRelationships,
+  mergeEmpty,
   mergeRelationships,
   pushAccumulatedChanges,
+  pushWitnessDeltas,
 } from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
@@ -27,8 +29,10 @@ export class UnionFanIn implements Operator {
   readonly #inputs: readonly Input[];
   readonly #schema: SourceSchema;
   #fanOutPushStarted: boolean = false;
+  #fanOutReconcileStarted: boolean = false;
   #output: Output = throwOutput;
   #accumulatedPushes: Change[] = [];
+  readonly #branchRels: ReadonlySet<string>;
 
   constructor(fanOut: UnionFanOut, inputs: Input[]) {
     this.#inputs = inputs;
@@ -93,6 +97,7 @@ export class UnionFanIn implements Operator {
 
     this.#schema = schema;
     this.#inputs = inputs;
+    this.#branchRels = relationshipsFromBranches;
   }
 
   destroy(): void {
@@ -107,7 +112,12 @@ export class UnionFanIn implements Operator {
     const compare = req.reverse
       ? (l: Node, r: Node) => compareRows(r.row, l.row)
       : (l: Node, r: Node) => compareRows(l.row, r.row);
-    return mergeFetches(iterables, compare);
+    const relNames = Object.keys(this.#schema.relationships);
+    return mapNodes(mergeFetches(iterables, compare), node => {
+      const relationships = {...node.relationships};
+      mergeEmpty(relationships, relNames);
+      return {row: node.row, relationships};
+    });
   }
 
   getSchema(): SourceSchema {
@@ -189,7 +199,15 @@ export class UnionFanIn implements Operator {
       }
 
       if (otherBranchHasRow) {
-        // Another branch has the row, so the add/remove is not needed.
+        // Another branch has the row, so it stays. What changed is that it
+        // gained or lost the pusher's witnesses: say so as child changes.
+        yield* pushWitnessDeltas(
+          change[ChangeIndex.NODE],
+          change[ChangeIndex.TYPE],
+          name => this.#branchRels.has(name),
+          this.#output,
+          this,
+        );
         return;
       }
     }
@@ -231,11 +249,52 @@ export class UnionFanIn implements Operator {
       fanOutChangeType,
       mergeRelationships,
       makeAddEmptyRelationships(this.#schema),
+      name => this.#branchRels.has(name),
     );
+  }
+
+  fanOutStartedReconciling() {
+    assert(
+      this.#fanOutReconcileStarted === false,
+      'UnionFanIn: fanOutStartedReconciling called while already reconciling',
+    );
+    this.#fanOutReconcileStarted = true;
+  }
+
+  *fanOutDoneReconciling(): Stream<'yield'> {
+    assert(
+      this.#fanOutReconcileStarted,
+      'UnionFanIn: fanOutDoneReconciling called without fanOutStartedReconciling',
+    );
+    this.#fanOutReconcileStarted = false;
+    if (this.#inputs.length === 0) {
+      return;
+    }
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 
   setOutput(output: Output): void {
     this.#output = output;
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#fanOutReconcileStarted) {
+      return;
+    }
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
+  }
+}
+
+function* mapNodes(
+  nodes: Iterable<Node | 'yield'>,
+  f: (n: Node) => Node,
+): Stream<Node | 'yield'> {
+  for (const n of nodes) {
+    yield n === 'yield' ? n : f(n);
   }
 }
 
@@ -287,8 +346,27 @@ export function* mergeFetches(
       ) {
         continue;
       }
+      // The same row from another branch is at the head of that branch's
+      // stream. Union its relationships in (first branch wins a conflict)
+      // instead of dropping it, so a fetched row carries what a pushed one does.
+      let merged = minNode;
+      for (let j = 0; j < iterators.length; j++) {
+        let head = current[j];
+        while (head !== null && comparator(head, minNode) === 0) {
+          merged = {
+            row: merged.row,
+            relationships: {...head.relationships, ...merged.relationships},
+          };
+          let r = iterators[j].next();
+          while (!r.done && r.value === 'yield') {
+            yield r.value;
+            r = iterators[j].next();
+          }
+          head = current[j] = r.done ? null : (r.value as Node);
+        }
+      }
       lastNodeYielded = minNode;
-      yield minNode;
+      yield merged;
     }
   } catch (e) {
     threw = true;

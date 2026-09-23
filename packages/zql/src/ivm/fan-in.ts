@@ -11,8 +11,10 @@ import {
   type FilterOperator,
   type FilterOutput,
 } from './filter-operators.ts';
+import type {InputBase} from './operator.ts';
 import {pushAccumulatedChanges} from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
+import type {Stream} from './stream.ts';
 
 /**
  * The FanIn operator merges multiple streams into one.
@@ -91,5 +93,19 @@ export class FanIn implements FilterOperator {
       identity,
       identity,
     );
+  }
+
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    // Reconcile is coordinated by FanOut, which calls fanOutDoneReconciling after all branches complete.
+    return emptyArray;
+  }
+
+  *fanOutDoneReconciling(): Stream<'yield'> {
+    if (this.#inputs.length === 0) {
+      return;
+    }
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 }

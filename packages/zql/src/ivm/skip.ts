@@ -14,6 +14,7 @@ import {
   throwOutput,
   type FetchRequest,
   type Input,
+  type InputBase,
   type Operator,
   type Output,
   type Start,
@@ -101,6 +102,12 @@ export class Skip implements Operator {
 
     if (shouldBePresent(change[ChangeIndex.NODE].row)) {
       yield* this.#output.push(change, this);
+    }
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
     }
   }
 
