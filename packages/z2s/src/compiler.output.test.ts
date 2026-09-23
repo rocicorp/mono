@@ -785,6 +785,23 @@ test('json path filter: LIKE with a non-string literal compares text', () => {
   `);
 });
 
+test('json path filter: an unbound parameter is rejected, not read as an empty list', () => {
+  for (const op of ['NOT IN', 'IN', '!=', '='] as const) {
+    expect(() =>
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op,
+          left: jsonRef(['priority']),
+          right: {type: 'static', anchor: 'authData', field: 'roles'},
+        },
+      }),
+    ).toThrow(/Static parameters must be bound/);
+  }
+});
+
 test('json path filter: IS NULL collapses missing key and JSON null', () => {
   expect(
     formatPgInternalConvert(

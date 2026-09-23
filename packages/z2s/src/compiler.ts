@@ -839,7 +839,9 @@ function jsonPathCondition(
         : sql`${value} = to_jsonb(${lit})`;
     }
   }
-  if (!isNegatedOperator(op)) {
+  // A non-literal (an unbound static parameter) falls through to the generic
+  // rendering, which rejects it; it must not be mistaken for an empty list.
+  if (!isNegatedOperator(op) || right.type !== 'literal') {
     return undefined;
   }
   const t = leafType(right);
