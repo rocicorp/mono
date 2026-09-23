@@ -234,6 +234,7 @@ test('tree', () => {
     relationshipName: 'children',
     hidden: false,
     system: 'client',
+    storage: new MemoryStorage(),
   });
 
   let commit: () => void = () => {};
@@ -588,6 +589,7 @@ test('tree-single', () => {
     relationshipName: 'child',
     hidden: false,
     system: 'client',
+    storage: new MemoryStorage(),
   });
 
   let commit: () => void = () => {};
@@ -1556,6 +1558,7 @@ test('tree edit', () => {
     relationshipName: 'children',
     hidden: false,
     system: 'client',
+    storage: new MemoryStorage(),
   });
 
   let commit: () => void = () => {};

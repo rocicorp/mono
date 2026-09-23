@@ -8,6 +8,7 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtNode} from './catch.ts';
 import {canonicalKeyForTest, FlippedJoin} from './flipped-join.ts';
+import {MemoryStorage} from './memory-storage.ts';
 import type {FetchRequest} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
@@ -2443,6 +2444,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
       relationshipName: info.relationshipName,
       hidden: false,
       system: 'client',
+      storage: new MemoryStorage(),
     });
   }
 

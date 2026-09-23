@@ -306,6 +306,7 @@ describe('Yield Propagation (Push)', () => {
         relationshipName: 'child',
         hidden: false,
         system: 'client',
+        storage: new MemoryStorage(),
       });
       const output = new YieldOutput();
       output.yields = false;
@@ -335,6 +336,7 @@ describe('Yield Propagation (Push)', () => {
         relationshipName: 'child',
         hidden: false,
         system: 'client',
+        storage: new MemoryStorage(),
       });
       const output = new YieldOutput();
       output.yields = false;
@@ -365,6 +367,7 @@ describe('Yield Propagation (Push)', () => {
         relationshipName: 'child',
         hidden: false,
         system: 'client',
+        storage: new MemoryStorage(),
       });
       const output = new YieldOutput();
       output.yields = true;
@@ -397,6 +400,7 @@ describe('Yield Propagation (Push)', () => {
         relationshipName: 'child',
         hidden: false,
         system: 'client',
+        storage: new MemoryStorage(),
       });
       const output = new YieldOutput();
       output.yields = false;
@@ -426,6 +430,7 @@ describe('Yield Propagation (Push)', () => {
         relationshipName: 'child',
         hidden: false,
         system: 'client',
+        storage: new MemoryStorage(),
       });
       const output = new YieldOutput();
       output.yields = false;
@@ -453,6 +458,7 @@ describe('Yield Propagation (Push)', () => {
         relationshipName: 'child',
         hidden: false,
         system: 'client',
+        storage: new MemoryStorage(),
       });
       const output = new YieldOutput();
       output.yields = true;
@@ -480,6 +486,7 @@ describe('Yield Propagation (Push)', () => {
         relationshipName: 'child',
         hidden: false,
         system: 'client',
+        storage: new MemoryStorage(),
       });
 
       const start = new FilterStart(join);
@@ -509,6 +516,7 @@ describe('Yield Propagation (Push)', () => {
         relationshipName: 'child',
         hidden: false,
         system: 'client',
+        storage: new MemoryStorage(),
       });
 
       const start = new FilterStart(join);
