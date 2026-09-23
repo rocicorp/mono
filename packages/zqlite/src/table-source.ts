@@ -209,6 +209,16 @@ export class TableSource implements Source {
   }
 
   /**
+   * Drops the changes held in memory (see {@link setDeferWrites}), for an
+   * advancement that has been abandoned. The source then no longer reflects
+   * the changes pushed to it, so it must not be read again until it has moved
+   * to another snapshot ({@link setDB}), if it is used again at all.
+   */
+  discardPendingChanges(): void {
+    this.#delta?.clear();
+  }
+
+  /**
    * Writes the changes held in memory (see {@link setDeferWrites}) to the
    * backing snapshot, which is left as if they had been written through (in
    * the source's columns), and writes the changes pushed from then on through

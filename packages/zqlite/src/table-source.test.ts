@@ -962,6 +962,27 @@ test('pending changes can be written through partway', () => {
   expect([...deferred.source.writePendingChanges()]).toEqual([]);
 });
 
+test('pending changes can be discarded', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(/* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a INTEGER);`);
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'foo',
+    {id: {type: 'string'}, a: {type: 'number'}},
+    ['id'],
+  );
+  source.setDeferWrites(true);
+  consume(source.push(makeSourceChangeAdd({id: '1', a: 1})));
+  expect(source.pendingRows).toBe(1);
+
+  source.discardPendingChanges();
+  expect(source.pendingRows).toBe(0);
+  expect(source.getRow({id: '1'})).toBeUndefined();
+  expect(db.prepare(/* sql */ `SELECT * FROM foo`).all()).toEqual([]);
+});
+
 describe('optional filters to sql', () => {
   test('simple condition', () => {
     expect(

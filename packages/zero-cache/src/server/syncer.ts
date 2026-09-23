@@ -17,6 +17,7 @@ import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink} from '../observability/events.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
@@ -201,6 +202,18 @@ export default async function runWorker(
         `rows (~${(deferredWritesBudget.maxBytes / 1024 ** 2).toFixed(2)} MB) ` +
         `across client groups`,
     );
+    getOrCreateGauge(
+      'sync',
+      'ivm.deferred-writes-reserved-rows',
+      'Rows reserved by the client groups of a sync worker to hold IVM ' +
+        'changes in memory (deferIvmWrites)',
+    ).addCallback(o => o.observe(deferredWritesBudget.reservedRows));
+    getOrCreateGauge('sync', 'ivm.deferred-writes-held-bytes', {
+      description:
+        'Estimated bytes of the IVM changes that the client groups of a sync ' +
+        'worker hold in memory (deferIvmWrites)',
+      unit: 'By',
+    }).addCallback(o => o.observe(deferredWritesBudget.heldBytes));
   }
 
   const viewSyncerFactory = (

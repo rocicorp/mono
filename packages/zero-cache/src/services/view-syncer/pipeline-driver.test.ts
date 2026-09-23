@@ -2159,20 +2159,33 @@ describe('view-syncer/pipeline-driver', () => {
       expect([budget.reservedRows, budget.heldBytes]).toEqual([0, 0]);
     });
 
-    test('reservation is released when the advancement is abandoned', () => {
-      const budget = new DeferredWritesBudget(Infinity, Infinity);
-      const driver = makeDriver('abandoned', budget);
-      replicator.processTransaction('134', ...transactions[0]);
+    test.each(['return', 'throw'] as const)(
+      'what an advancement holds is dropped and released when it is abandoned: $0',
+      how => {
+        const budget = new DeferredWritesBudget(Infinity, Infinity);
+        const driver = makeDriver('abandoned', budget);
+        replicator.processTransaction('134', ...transactions[0]);
 
-      const {numChanges, changes} = driver.advance(NO_TIME_ADVANCEMENT_TIMER);
-      // Nothing is reserved until the changes are iterated.
-      expect(budget.reservedRows).toBe(0);
-      const iter = changes[Symbol.iterator]();
-      expect(iter.next().done).toBe(false);
-      expect(budget.reservedRows).toBe(numChanges);
-      iter.return?.();
-      expect(budget.reservedRows).toBe(0);
-    });
+        const {numChanges, changes} = driver.advance(NO_TIME_ADVANCEMENT_TIMER);
+        // Nothing is reserved until the changes are iterated.
+        expect(budget.reservedRows).toBe(0);
+        const iter = changes[Symbol.iterator]();
+        while (budget.heldBytes === 0) {
+          expect(iter.next().done).toBe(false);
+        }
+        expect(budget.reservedRows).toBe(numChanges);
+        expect(driver.pendingRows).toBeGreaterThan(0);
+
+        if (how === 'return') {
+          iter.return?.();
+        } else {
+          const err = new Error('abandoned');
+          expect(() => iter.throw?.(err)).toThrow(err);
+        }
+        expect(driver.pendingRows).toBe(0);
+        expect([budget.reservedRows, budget.heldBytes]).toEqual([0, 0]);
+      },
+    );
 
     test('reserves only the changes to tables the client group reads', () => {
       const budget = new DeferredWritesBudget(Infinity, Infinity);
