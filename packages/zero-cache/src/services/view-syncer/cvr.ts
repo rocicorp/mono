@@ -1136,7 +1136,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       tracer,
       'CVRQueryDrivenUpdater.#deleteUnreferencedRow',
       () => {
-        if (this.#receivedRows.get(existing.id)) {
+        // received() has already written the final record (and patch) of a
+        // received row, including a row whose refCounts all went to zero.
+        // Rebuilding such a tombstone from the pre-update refCounts would
+        // resurrect a reference that an untracked query's delta removed.
+        if (this.#receivedRows.has(existing.id)) {
           return null;
         }
 

@@ -3497,6 +3497,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } catch (e) {
         if (e instanceof ResetPipelinesSignal) {
           await pokers?.cancel();
+          // The updater is abandoned with the poke. The row records it has
+          // queued describe patches that the clients never received, so they
+          // must not reach the next flush.
+          this.#cvrStore.discardPending();
           return e;
         }
         throw e;
