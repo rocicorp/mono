@@ -413,13 +413,22 @@ async function checkHydrateCases(
  * the {@link Coverage} (asserted 100% pairwise by the backbone). A row unrealizable on a
  * target (text filter / no relationship) is skipped there and not counted toward
  * coverage.
+ *
+ * `part` of `parts` runs only every `parts`-th case (starting at `part - 1`), so the
+ * sweep can be split across test files. The split interleaves rather than slicing
+ * contiguous ranges because the corpus lists the cheap root decorations before the far
+ * slower nested-child ones. The returned {@link Coverage} is always that of the whole
+ * corpus.
  */
 export async function checkL1(
   delegates: Delegates,
   data: Data,
+  part = 1,
+  parts = 1,
 ): Promise<{report: Report; coverage: Coverage}> {
   const {cases, coverage} = l1QueryCases(data);
-  return {report: await checkHydrateCases(delegates, cases), coverage};
+  const slice = cases.filter((_, i) => i % parts === part - 1);
+  return {report: await checkHydrateCases(delegates, slice), coverage};
 }
 
 // ── the randomized layers (L2 swarm / L3 mutation / L4 random tail) ────────────────────

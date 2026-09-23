@@ -8,7 +8,9 @@
  * `chinook-fuzz-scale.pg.test.ts`.) The backbone is split across
  * `chinook-fuzz-backbone-*.pg.test.ts` files so CI can spread its lanes over test shards.
  *
- * This file: the **L1** lane.
+ * This file: the **L1** lane, part 2 of 2. The lane's cases are interleaved
+ * across `chinook-fuzz-backbone-l1-*.pg.test.ts`, since the whole lane
+ * outgrew the test timeout on a loaded CI shard.
  *
  * - **L1** — the pairwise covering array of decorations (filter × exists × order ×
  *   limit × start), lowered onto every decoratable root and onto nested child collections,
@@ -28,10 +30,12 @@ import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
 import {schema} from './schema.ts';
 
+const PART = 2;
+const PARTS = 2;
 const TIMEOUT_MS = 120_000;
 
 const harness = await bootstrap({
-  suiteName: 'chinook_fuzz_backbone_l1',
+  suiteName: `chinook_fuzz_backbone_l1_${PART}`,
   zqlSchema: schema,
   pgContent: miniPgContent(),
 });
@@ -39,11 +43,16 @@ const harness = await bootstrap({
 const data = new Data(miniData, pkOf);
 
 test(
-  'L1 — 3-way covering array: 100% coverage + hydrate-equal over mini',
+  `L1 — 3-way covering array: 100% coverage + hydrate-equal over mini (part ${PART}/${PARTS})`,
   async () => {
-    const {report, coverage} = await checkL1(harness.delegates, data);
+    const {report, coverage} = await checkL1(
+      harness.delegates,
+      data,
+      PART,
+      PARTS,
+    );
     console.log(
-      `L1 backbone: ${report.total} cases, ${coverage.summary()}, ${report.failures.length} failures`,
+      `L1 backbone part ${PART}/${PARTS}: ${report.total} cases, ${coverage.summary()}, ${report.failures.length} failures`,
     );
     expect(
       coverage.fraction(),
