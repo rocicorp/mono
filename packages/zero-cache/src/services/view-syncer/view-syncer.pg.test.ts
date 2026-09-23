@@ -4609,6 +4609,74 @@ describe('view-syncer/service', () => {
       `);
   });
 
+  test('does not flush the rows of an advancement that is reset', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    // The advancement streams a full batch of new rows (which reaches the
+    // CVR updater and the poke) and is then reset. The rows are not in the
+    // replica, so the hydration that follows the reset does not declare them
+    // again.
+    const batchSize = 10_000;
+    const advance = PipelineDriver.prototype.advance;
+    vi.spyOn(PipelineDriver.prototype, 'advance').mockImplementationOnce(
+      function (this: PipelineDriver, timer) {
+        return {
+          ...advance.call(this, timer),
+          changes: (function* (): Iterable<RowChange | 'yield'> {
+            for (let i = 0; i < batchSize; i++) {
+              const id = `phantom-${i}`;
+              yield {
+                type: ChangeType.ADD,
+                queryID: 'query-hash1',
+                table: 'issues',
+                rowKey: {id},
+                row: {id, title: 'phantom', _0_version: '02'},
+              };
+            }
+            throw new ResetPipelinesSignal(
+              'Advancement exceeded timeout',
+              'advancement-timeout',
+            );
+          })(),
+        };
+      },
+    );
+    replicator.processTransaction(
+      '02',
+      messages.update('issues', {
+        id: '1',
+        title: 'new title',
+        owner: 100,
+        parent: null,
+        big: 9007199254740991n,
+      }),
+    );
+    stateChanges.push({state: 'version-ready'});
+
+    // The advancement's poke is cancelled, and the hydration after the reset
+    // pokes the new title.
+    const cancelled = await nextPoke(client);
+    expect(cancelled.at(-1)).toMatchObject(['pokeEnd', {cancel: true}]);
+    const rehydrated = await nextPoke(client);
+    expect(rehydrated.at(-1)).toMatchObject(['pokeEnd', {cookie: '02'}]);
+
+    // Large row flushes are deferred. Stopping waits for them.
+    await vs.stop();
+    await viewSyncerDone;
+
+    // The rows that the clients never received are not in the CVR.
+    const rows = await cvrDB<{rowKey: {id: string}}[]>`
+      SELECT "rowKey" FROM ${cvrDB(cvrSchema(SHARD))}.rows
+        WHERE "clientGroupID" = ${serviceID} AND "table" = 'issues'
+        ORDER BY "rowKey"->>'id'`;
+    expect(rows.map(({rowKey}) => rowKey.id)).toEqual(['1', '2', '3', '4']);
+  });
+
   test('process advancements', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
