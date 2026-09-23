@@ -137,38 +137,45 @@ describe('view-syncer/pipeline-driver', () => {
     ],
   };
 
-  const ISSUES_WITH_CREATOR_EXISTS_COMMENT_AST: AST = {
+  const ISSUES_WITH_EXISTS_CREATOR_AND_EXISTS_COMMENT_AST: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
-    related: [
-      {
-        system: 'client',
-        correlation: {
-          parentField: ['creatorID'],
-          childField: ['id'],
-        },
-        subquery: {
-          table: 'user',
-          alias: 'creator',
-          orderBy: [['id', 'desc']],
-        },
-      },
-    ],
     where: {
-      type: 'correlatedSubquery',
-      op: 'EXISTS',
-      related: {
-        system: 'client',
-        correlation: {
-          parentField: ['id'],
-          childField: ['issueID'],
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            system: 'client',
+            correlation: {
+              parentField: ['creatorID'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'user',
+              alias: 'creator',
+              orderBy: [['id', 'desc']],
+            },
+          },
         },
-        subquery: {
-          table: 'comment',
-          alias: 'comments',
-          orderBy: [['id', 'asc']],
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            system: 'client',
+            correlation: {
+              parentField: ['id'],
+              childField: ['issueID'],
+            },
+            subquery: {
+              table: 'comment',
+              alias: 'comments',
+              orderBy: [['id', 'asc']],
+            },
+          },
         },
-      },
+      ],
     },
   };
 
@@ -208,7 +215,7 @@ describe('view-syncer/pipeline-driver', () => {
       ...pipelines.addQuery(
         'hash1',
         'queryID1',
-        ISSUES_WITH_CREATOR_EXISTS_COMMENT_AST,
+        ISSUES_WITH_EXISTS_CREATOR_AND_EXISTS_COMMENT_AST,
         {
           totalElapsed: () => 1000,
           elapsedLap: () => 1000,
@@ -216,8 +223,9 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    // This change will fetch each of the 1000 issue related to user 'u1', but
-    // has no push output because none of them pass the exists comments filter.
+    // This change will fetch each of the 1000 issues related to user 'u1'
+    // because fromCondition EXISTS joins do not track partitions / JoinIndex,
+    // but has no push output because none of them pass the exists comments filter.
     replicator.processTransaction(
       '134',
       messages.update('user', {id: 'u1', name: 'wuzzy'}),

@@ -589,6 +589,8 @@ test('inprogress child REMOVE incompatible with req.constraint is dropped from m
   // parent-key {id:'p1'} conflicts with req.constraint and must be
   // dropped from the multi.
   const {fj, child, log} = makeSetup({parentCount: 3});
+  new Catch(fj).fetch({});
+  log.length = 0;
 
   let fetched: CaughtNode[] | undefined;
   fj.setOutput({
