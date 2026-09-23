@@ -530,6 +530,11 @@ export class TableSource implements Source {
     return this.#delta?.size ?? 0;
   }
 
+  /** Estimated bytes retained by deferred changes and their indexes. */
+  get pendingBytes(): number {
+    return this.#delta?.estimatedBytes ?? 0;
+  }
+
   *genPush(change: SourceChange): Stream<'yield' | undefined> {
     if (
       this.#skipUnobservableChanges &&

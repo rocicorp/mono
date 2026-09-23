@@ -63,6 +63,8 @@ export class PendingDelta {
   readonly #indexes = new Map<string, BTreeSet<Row>>();
 
   #liveCount = 0;
+  #rowBytes = 0;
+  #indexBytes = 0;
 
   constructor(primaryKey: PrimaryKey) {
     this.#primaryKey = primaryKey;
@@ -82,6 +84,19 @@ export class PendingDelta {
     return this.#byKey.size;
   }
 
+  /**
+   * Estimated retained bytes, including keys, tombstones, and sorted indexes.
+   * This is a budgeting heuristic, not a measurement of the JavaScript heap.
+   */
+  get estimatedBytes(): number {
+    // Budget 32 bytes per live row per index for references and B-tree nodes.
+    return (
+      this.#rowBytes +
+      this.#indexBytes +
+      this.#liveCount * this.#indexes.size * 32
+    );
+  }
+
   #key(row: Row): unknown {
     const single = this.#singleColumnKey;
     if (single !== undefined) {
@@ -95,6 +110,12 @@ export class PendingDelta {
   set(row: Row): void {
     const key = this.#key(row);
     const existing = this.#byKey.get(key);
+    if (!this.#byKey.has(key)) {
+      this.#rowBytes += 64 + estimateBytes(key as Value);
+    }
+    this.#rowBytes +=
+      estimateBytes(row) -
+      (existing === undefined ? 0 : estimateBytes(existing));
     if (existing !== undefined) {
       // A live row for this key is already indexed under its old value, which
       // may sort differently. Retract it before inserting the new one.
@@ -110,7 +131,11 @@ export class PendingDelta {
   delete(row: Row): void {
     const key = this.#key(row);
     const existing = this.#byKey.get(key);
+    if (!this.#byKey.has(key)) {
+      this.#rowBytes += 64 + estimateBytes(key as Value);
+    }
     if (existing !== undefined) {
+      this.#rowBytes -= estimateBytes(existing);
       this.#removeFromIndexes(existing);
       this.#liveCount--;
     }
@@ -176,6 +201,7 @@ export class PendingDelta {
         }
       }
       this.#indexes.set(indexKey, data);
+      this.#indexBytes += 128 + estimateBytes(indexKey) + estimateBytes(sort);
     }
     return data;
   }
@@ -266,7 +292,31 @@ export class PendingDelta {
     this.#byKey.clear();
     this.#indexes.clear();
     this.#liveCount = 0;
+    this.#rowBytes = 0;
+    this.#indexBytes = 0;
   }
+}
+
+// Allow for object/property storage and UTF-16 strings without allocating a
+// serialized copy. Shared values may be counted more than once intentionally.
+function estimateBytes(value: Value): number {
+  if (typeof value === 'string') {
+    return 24 + value.length * 2;
+  }
+  if (value === null || typeof value !== 'object') {
+    return 8;
+  }
+  let bytes = 32;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      bytes += 8 + estimateBytes(item);
+    }
+  } else {
+    for (const key in value) {
+      bytes += 16 + estimateBytes(key) + estimateBytes((value as Row)[key]);
+    }
+  }
+  return bytes;
 }
 
 export const NOT_OVERRIDDEN = Symbol('not-overridden');

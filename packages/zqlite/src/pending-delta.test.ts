@@ -14,6 +14,7 @@ import {
 } from '../../zql/src/ivm/source.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
 import {Database} from './db.ts';
+import {PendingDelta} from './pending-delta.ts';
 import {TableSource} from './table-source.ts';
 
 const lc = createSilentLogContext();
@@ -25,6 +26,40 @@ const columns = {
 } as const;
 
 const byID: Ordering = [['id', 'asc']];
+
+test('pending byte estimate tracks replacements, tombstones, indexes, and clear', () => {
+  const delta = new PendingDelta(['id']);
+  const row = {id: 'a', value: {items: ['small', 1, true, null]}};
+  expect(delta.estimatedBytes).toBe(0);
+  delta.set(row);
+  const originalBytes = delta.estimatedBytes;
+  expect(originalBytes).toBeGreaterThan(0);
+  delta.set(row);
+  expect(delta.estimatedBytes).toBe(originalBytes);
+  delta.set({...row, extra: 'x'.repeat(1024)});
+  expect(delta.estimatedBytes).toBeGreaterThan(originalBytes + 2048);
+  delta.set(row);
+  expect(delta.estimatedBytes).toBe(originalBytes);
+
+  [...delta.rowsFor(byID, undefined, undefined, undefined, undefined)];
+  const indexedBytes = delta.estimatedBytes;
+  expect(indexedBytes).toBeGreaterThan(originalBytes);
+  [...delta.rowsFor(byID, undefined, undefined, undefined, undefined)];
+  expect(delta.estimatedBytes).toBe(indexedBytes);
+  delta.delete(row);
+  expect(delta.estimatedBytes).toBeGreaterThan(0);
+  expect(delta.estimatedBytes).toBeLessThan(indexedBytes);
+  const tombstoneBytes = delta.estimatedBytes;
+  delta.delete(row);
+  expect(delta.estimatedBytes).toBe(tombstoneBytes);
+  delta.set(row);
+  expect(delta.estimatedBytes).toBe(indexedBytes);
+  delta.clear();
+  expect(delta.estimatedBytes).toBe(0);
+  delta.delete(row);
+  expect(delta.estimatedBytes).toBeGreaterThan(0);
+  expect(delta.estimatedBytes).toBeLessThan(originalBytes);
+});
 
 function newDB(rows: readonly Row[], ddl?: string, table = 'foo') {
   const db = new Database(lc, ':memory:');
@@ -380,7 +415,9 @@ describe('setDB', () => {
     // The replicator's own commit is what makes the change durable; the source
     // leapfrogs onto a snapshot that already contains it.
     const next = newDB([...initial, {id: 'd', a: 4, b: 'four'}]);
+    expect(source.pendingBytes).toBeGreaterThan(0);
     source.setDB(next);
+    expect(source.pendingBytes).toBe(0);
 
     // Exactly one 'd' -- the batch is gone rather than double-counted.
     expect(fetchAll(source).map(r => r.id)).toEqual(['a', 'b', 'c', 'd']);

@@ -685,6 +685,17 @@ export const zeroOptions = {
     hidden: true,
   },
 
+  deferIvmWritesMaxBytes: {
+    type: v.number().default(32 * 1024 * 1024),
+    desc: [
+      `With {bold deferIvmWrites}, the maximum estimated bytes retained by`,
+      `pending rows and indexes across a client group's tables during one`,
+      `advancement. Exceeding this resets and rehydrates the pipelines.`,
+      `This is an estimate, not a hard JavaScript heap limit.`,
+    ],
+    hidden: true,
+  },
+
   yieldThresholdMs: {
     type: v.number().default(10),
     desc: [

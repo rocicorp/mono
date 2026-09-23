@@ -1861,7 +1861,10 @@ describe('view-syncer/pipeline-driver', () => {
     ).toEqual([`${ChangeType.EDIT}:foo`, `${ChangeType.ADD}:baz`]);
   });
 
-  test('deferred advancement resets past its pending-row limit', () => {
+  test.each([
+    {deferIvmWritesMaxRows: 1, deferIvmWritesMaxBytes: Infinity},
+    {deferIvmWritesMaxRows: Infinity, deferIvmWritesMaxBytes: 1},
+  ])('deferred advancement resets past its pending limit: %j', limits => {
     const storage = new Database(lc, ':memory:');
     storage.prepare(CREATE_STORAGE_TABLE).run();
     const driver = new PipelineDriver(
@@ -1874,7 +1877,7 @@ describe('view-syncer/pipeline-driver', () => {
       new InspectorDelegate(undefined),
       () => 200 /** yield threshold */,
       undefined,
-      {deferIvmWrites: true, deferIvmWritesMaxRows: 1} as never,
+      {deferIvmWrites: true, ...limits} as never,
     );
     driver.init(clientSchema);
     [...driver.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer())];
