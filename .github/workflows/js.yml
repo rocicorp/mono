@@ -117,11 +117,78 @@ jobs:
           const [{filename}] = JSON.parse(output);
           appendFileSync(process.env.GITHUB_OUTPUT, `filename=${filename}\n`);
           EOF
+      # The three Go stages -- two pinned Litestream builds and vfs-query --
+      # are ~250s of this job, yet their inputs rarely change: Litestream is
+      # pinned by version and base-image digest, and vfs-query depends only on
+      # go/. Cache the three binaries they produce (~140 MB) rather than
+      # BuildKit's layer cache (~850 MB, mostly golang base-image layers that
+      # Docker Hub already serves): the repo's Actions cache is close to its
+      # 10 GB limit, and an entry that size would evict the pnpm store caches.
+      #
+      # A --build-context whose name matches a stage replaces that stage, so a
+      # hit skips the Go builds without the Dockerfile knowing. The release
+      # workflows still build everything from scratch.
+      #
+      # Floating inputs (the golang:1.25-alpine tag, apk's zig, the Litestream
+      # tags) are not in the key, so upstream drift that breaks those stages
+      # surfaces when the Dockerfile or go/ next changes, or at release.
+      - name: Restore prebuilt Go binaries
+        id: go-bins
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/zero-go-bins
+          key: zero-go-bins-v1-linux-amd64-${{ hashFiles('packages/zero/Dockerfile', 'go/**') }}
       - name: Build Docker Image
         working-directory: packages/zero
         env:
           ZERO_TARBALL: ${{ steps.pack.outputs.filename }}
-        run: docker buildx build --platform linux/amd64 --build-context monogo=../../go --build-arg=ZERO_VERSION="$ZERO_TARBALL" --progress=plain .
+          CACHE_HIT: ${{ steps.go-bins.outputs.cache-hit }}
+          EVENT: ${{ github.event_name }}
+          BINS: ${{ runner.temp }}/zero-go-bins
+        run: |
+          args=(--platform linux/amd64 --build-context monogo=../../go
+            --build-arg=ZERO_VERSION="$ZERO_TARBALL" --progress=plain)
+          if [ "$CACHE_HIT" = true ]; then
+            # Nothing in the build executes these, so a lost exec bit would
+            # still produce a green build of an image that cannot start.
+            chmod +x "$BINS"/*/usr/local/bin/*
+            docker buildx build "${args[@]}" \
+              --build-context litestream="$BINS/litestream" \
+              --build-context litestream-v5="$BINS/litestream-v5" \
+              --build-context vfs-query="$BINS/vfs-query" .
+          elif [ "$EVENT" != push ]; then
+            # A miss that won't be saved (see the next step): exporting the
+            # image only to throw the binaries away would be pure overhead, so
+            # build exactly as before.
+            docker buildx build "${args[@]}" .
+          else
+            # A miss that will be saved. Build as before, so the Go stages
+            # still run in parallel, then take the binaries out of the image.
+            image="$RUNNER_TEMP/zero-image.tar"
+            docker buildx build "${args[@]}" --output "type=tar,dest=$image" .
+            # Each binary goes where its stage has it, since that is where the
+            # final stage's COPY --from reads it: litestream-v5 is installed
+            # as /usr/local/bin/litestream-v5 but built as .../litestream.
+            extract() { # <stage> <file in final image> <file in stage>
+              mkdir -p "$BINS/$1/usr/local/bin"
+              tar -xOf "$image" "usr/local/bin/$2" > "$BINS/$1/usr/local/bin/$3"
+              chmod +x "$BINS/$1/usr/local/bin/$3"
+            }
+            extract litestream litestream litestream
+            extract litestream-v5 litestream-v5 litestream
+            extract vfs-query vfs-query vfs-query
+            rm "$image"
+          fi
+      # Saved from main only. Pull requests can read main's cache, and keeping
+      # their builds out of it stops them evicting it, or the pnpm caches.
+      # The build step only extracts the binaries on a push, so this condition
+      # and its `EVENT != push` branch have to change together.
+      - name: Save prebuilt Go binaries
+        if: steps.go-bins.outputs.cache-hit != 'true' && github.event_name == 'push'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/zero-go-bins
+          key: ${{ steps.go-bins.outputs.cache-primary-key }}
 
   test-nopg-shards:
     name: Test no PG
