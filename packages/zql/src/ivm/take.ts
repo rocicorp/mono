@@ -690,13 +690,12 @@ export class Take implements Operator, TakeBoundProvider {
 
       for (const [takeStateKey, {constraint}] of dirty) {
         const takeState = this.#storage.get(takeStateKey);
-        if (!takeState) {
-          continue;
-        }
+        assert(
+          takeState !== undefined,
+          'Take: dirty partition must exist in storage',
+        );
         const deficit = this.#limit - takeState.size;
-        if (deficit <= 0) {
-          continue;
-        }
+        assert(deficit > 0, 'Take: dirty partition must have a deficit');
 
         const toPush: Node[] = [];
         this.#takeGate?.open();
