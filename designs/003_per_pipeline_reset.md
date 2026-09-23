@@ -1,6 +1,7 @@
 # 003: Per-pipeline reset
 
-- **Status:** Proposed
+- **Status:** Implemented behind `ZERO_PARTIAL_PIPELINE_RESET` (default
+  off). See [Implementation notes](#implementation-notes).
 - **Date:** 2026-09-22
 - **Revised:** 2026-09-23, after review (two-phase push, time attribution,
   group backstop, abort in place)
@@ -967,3 +968,64 @@ Resolved in review (2026-09-23):
 - Should a rebuild that exceeds the hydration timeout fall back to a
   whole-group reset? No. The view-syncer aborts the query in place, the way a
   query-set sync does (C2).
+
+## Implementation notes
+
+Where the code differs from the text above, or names what the text leaves
+open:
+
+- **Output is streamed during the push, not at the yields (A1, A3).** Since
+  #6660, the driver turns a pushed change into row changes while the push is
+  in progress (`#streamPushed`), because a Join computes the relationships of
+  the parents it pushes from the state of that push. So the lazy relationship
+  fetches run inside the guard, which charges them to the pipeline and catches
+  the drops they raise. `#push` has no charge site or catch site of its own:
+  it yields the row changes that the pushes produced, and discards those of a
+  dropped pipeline. That discards all of the pipeline's output for the change
+  it was dropped in, except the output already yielded at a yield earlier in
+  the same push. The "raised during streaming" case of A3 does not occur.
+- **A dropped pipeline that is suspended is abandoned by throwing, not by
+  returning (A1, A3).** The guard throws the drop signal into the suspended
+  operators (`it.throw`), where the pseudo-code calls `it.return()`. A return
+  runs the `finally` of Take's and Cap's `#initialFetch` as an early return,
+  and they assert that a fetch was not cut short ("Unexpected early return
+  prevented full hydration"). That error is not a reset signal, so it would
+  stop the view-syncer. A push suspended inside Cap's initial fetch of an
+  EXISTS partition reached this when output was streamed at the yields. Now
+  that no check runs while a push is suspended (see above), the guard's check
+  before resuming is only a safeguard.
+- **A changed transformation hash does not bump the version in an advancement
+  (B2).** The advancement updater's version is already new, so
+  `#trackExecuted` would not bump it again. It would update the query's hash
+  and transformation version without any sign of it.
+  `trackQueriesAfterReceived` (the late-track method of B1) asserts that the
+  hashes are unchanged, and the view-syncer checks first and falls back to a
+  whole-group reset.
+- **The group check runs before the pipeline check** in each fetch. When both
+  fail, the group resets without dropping first.
+- **Escalation weighs pipelines by their budgets (A6)**, i.e. their IVM
+  hydration time with a floor of 1 ms, so that pipelines that hydrated in no
+  measurable time still count.
+- **Advance time.** When pipelines are rebuilt, the advancement's timer is
+  stopped before the rebuild, and `sync.advance-time` records the processing
+  time of the advancement plus that of the rebuild.
+- **Names.** Driver: `DropPipelineSignal`, `droppedQueries()`,
+  `PipelineGuard`, stop and hydration reason `advancement-reset`, and a new
+  `ivmHydrationTimeMs` on pipelines and in the hydrate-finish lifecycle log.
+  Snapshotter: `SnapshotDiff.changesByTable`. CVR:
+  `CVRStore.discardPending()` and
+  `CVRQueryDrivenUpdater.trackQueriesAfterReceived()`. Config:
+  `partialPipelineReset` (hidden). Metrics: `sync.pipeline-partial-resets`
+  (with `reason`: `slow-change`, `projected-overrun` or `timeout`) and
+  `sync.pipeline-partial-reset-size`. Each drop is logged at info level as
+  `resetting pipeline: <message>`.
+- **Randomized test.** `view-syncer-partial-reset-fuzz.pg.test.ts` checks the
+  client's rows and the CVR's refCounts against a fresh hydration after every
+  transaction. It skips two things that legitimately differ. One is the rows
+  of an EXISTS subquery, which a Cap limits to the first few it saw. The
+  other is refCounts of `0`, which the CVR stores for a row that was not in
+  the CVR when a query added and removed it within one batch. That second
+  behavior predates this design. Catch-up excludes rows with
+  `NOT "refCounts" ?| excludeQueryHashes`, so it treats such a row as
+  referenced.
+- **Not done yet:** the measurement with the `zql-benchmarks` harness.

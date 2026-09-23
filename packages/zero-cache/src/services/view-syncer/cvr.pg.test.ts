@@ -20,6 +20,7 @@ import {
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
   CVRUpdater,
+  type RowUpdate,
 } from './cvr.ts';
 import {formatSignature} from './row-set-signature.ts';
 import {
@@ -2681,6 +2682,217 @@ describe('view-syncer/cvr', () => {
       // cancelled) is not in the CVR.
       await expectState(cvrDb, {
         rows: [rowsRow(ROW_KEY1, {[A]: 1})],
+      });
+    });
+
+    describe('trackQueriesAfterReceived', () => {
+      test('A removes the row, and C still holds it', async () => {
+        const {cvrStore, cvr} = await load([
+          rowsRow(ROW_KEY1, {[A]: 1, [C]: 1}),
+        ]);
+        const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+        // Advancement: A's remove. C still references the row.
+        expect(
+          await updater.received(
+            lc,
+            new Map([[ROW_ID1, {refCounts: {[A]: -1}}]]),
+          ),
+        ).toEqual([]);
+
+        // C is dropped: its reference goes, and so does the row.
+        expect(
+          await updater.trackQueriesAfterReceived(lc, [
+            {id: C, transformationHash: 'serverTwoHash'},
+          ]),
+        ).toEqual([del(ROW_ID1)]);
+
+        // C's rebuild holds the row: it is put back in the same poke.
+        expect(
+          await updater.received(
+            lc,
+            new Map([
+              [
+                ROW_ID1,
+                {version: '03', contents: {id: '123'}, refCounts: {[C]: 1}},
+              ],
+            ]),
+          ),
+        ).toEqual([put(ROW_ID1, {id: '123'})]);
+        expect(await updater.deleteUnreferencedRows(lc)).toEqual([]);
+
+        await flush(updater);
+        // The row is unchanged for clients that had it before this update.
+        await expectState(cvrDb, {
+          rows: [rowsRow(ROW_KEY1, {[C]: 1}, '03', '1a0')],
+        });
+      });
+
+      test('A removes the row, and C no longer holds it', async () => {
+        const {cvrStore, cvr} = await load([
+          rowsRow(ROW_KEY1, {[A]: 1, [C]: 1}),
+        ]);
+        const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+        expect(
+          await updater.received(
+            lc,
+            new Map([[ROW_ID1, {refCounts: {[A]: -1}}]]),
+          ),
+        ).toEqual([]);
+        expect(
+          await updater.trackQueriesAfterReceived(lc, [
+            {id: C, transformationHash: 'serverTwoHash'},
+          ]),
+        ).toEqual([del(ROW_ID1)]);
+
+        // C's rebuild does not include the row. The pruning pass must not
+        // rewrite the tombstone as {A: 1} (from the refCounts before the
+        // update, with C stripped).
+        expect(await updater.received(lc, new Map())).toEqual([]);
+        expect(await updater.deleteUnreferencedRows(lc)).toEqual([]);
+
+        await flush(updater);
+        await expectState(cvrDb, {
+          rows: [rowsRow(ROW_KEY1, null, '03', '1ba')],
+        });
+      });
+
+      test('A adds the row, and C holds it', async () => {
+        const {cvrStore, cvr} = await load([rowsRow(ROW_KEY1, {[C]: 1})]);
+        const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+        // Advancement: A adds the row, which has a new version.
+        expect(
+          await updater.received(
+            lc,
+            new Map([
+              [
+                ROW_ID1,
+                {version: '04', contents: {id: '123'}, refCounts: {[A]: 1}},
+              ],
+            ]),
+          ),
+        ).toEqual([put(ROW_ID1, {id: '123'})]);
+
+        // A still references the row, so dropping C sends nothing.
+        expect(
+          await updater.trackQueriesAfterReceived(lc, [
+            {id: C, transformationHash: 'serverTwoHash'},
+          ]),
+        ).toEqual([]);
+
+        // The rebuild's put is deduped against the one already sent.
+        expect(
+          await updater.received(
+            lc,
+            new Map([
+              [
+                ROW_ID1,
+                {version: '04', contents: {id: '123'}, refCounts: {[C]: 1}},
+              ],
+            ]),
+          ),
+        ).toEqual([]);
+        expect(await updater.deleteUnreferencedRows(lc)).toEqual([]);
+
+        await flush(updater);
+        await expectState(cvrDb, {
+          rows: [rowsRow(ROW_KEY1, {[A]: 1, [C]: 1}, '04', '1ba')],
+        });
+      });
+
+      test('C alone held the row, and no longer holds it', async () => {
+        const {cvrStore, cvr} = await load([
+          rowsRow(ROW_KEY1, {[C]: 1}),
+          rowsRow(ROW_KEY2, {[A]: 1}),
+        ]);
+        const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+        // The advancement does not touch the row.
+        expect(
+          await updater.trackQueriesAfterReceived(lc, [
+            {id: C, transformationHash: 'serverTwoHash'},
+          ]),
+        ).toEqual([]);
+        expect(await updater.received(lc, new Map())).toEqual([]);
+
+        // The row was never received, so the pruning pass deletes it.
+        expect(await updater.deleteUnreferencedRows(lc)).toEqual([
+          del(ROW_ID1),
+        ]);
+
+        await flush(updater);
+        await expectState(cvrDb, {
+          rows: [
+            rowsRow(ROW_KEY1, null, '03', '1ba'),
+            rowsRow(ROW_KEY2, {[A]: 1}),
+          ],
+        });
+      });
+
+      test("cancels the dropped query's partial advancement deltas", async () => {
+        const {cvrStore, cvr} = await load([rowsRow(ROW_KEY3, {[C]: 1})]);
+        const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+        // C's partial output, before it was dropped: it added a row that was
+        // not in the CVR, and removed one that it held.
+        expect(
+          await updater.received(
+            lc,
+            new Map<RowID, RowUpdate>([
+              [
+                ROW_ID2,
+                {version: '05', contents: {id: '321'}, refCounts: {[C]: 1}},
+              ],
+              [ROW_ID3, {refCounts: {[C]: -1}}],
+            ]),
+          ),
+        ).toEqual([put(ROW_ID2, {id: '321'}), del(ROW_ID3)]);
+
+        // Dropping C cancels the put the client got for the new row.
+        expect(
+          await updater.trackQueriesAfterReceived(lc, [
+            {id: C, transformationHash: 'serverTwoHash'},
+          ]),
+        ).toEqual([del(ROW_ID2)]);
+
+        // C's rebuild holds the row it had, but not the new one.
+        expect(
+          await updater.received(
+            lc,
+            new Map([
+              [
+                ROW_ID3,
+                {version: '03', contents: {id: '888'}, refCounts: {[C]: 1}},
+              ],
+            ]),
+          ),
+        ).toEqual([put(ROW_ID3, {id: '888'})]);
+        expect(await updater.deleteUnreferencedRows(lc)).toEqual([]);
+
+        await flush(updater);
+        // The new row never reaches the CVR, and the row C held is unchanged.
+        await expectState(cvrDb, {
+          rows: [rowsRow(ROW_KEY3, {[C]: 1}, '03', '1a0')],
+        });
+      });
+
+      test('rejects a query whose transformation hash changed', async () => {
+        const {cvrStore, cvr} = await load([
+          rowsRow(ROW_KEY1, {[A]: 1, [C]: 1}),
+        ]);
+        // An advancement, whose version is already bumped: tracking the new
+        // hash would not bump it again, but would still change the query.
+        const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+        await expect(
+          updater.trackQueriesAfterReceived(lc, [
+            {id: C, transformationHash: 'serverTwoHashV2'},
+          ]),
+        ).rejects.toThrow(
+          `Query ${C} must keep its transformation hash (serverTwoHash) ` +
+            `when tracked after rows were received, not serverTwoHashV2`,
+        );
       });
     });
   });

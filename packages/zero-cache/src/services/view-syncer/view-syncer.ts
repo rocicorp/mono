@@ -102,7 +102,12 @@ import {E2EServingLagTracker} from './e2e-serving-lag.ts';
 import {HydrationBudget, type MonotonicClock} from './hydration-budget.ts';
 import {HydrationCircuitBreaker} from './hydration-circuit-breaker.ts';
 import {handleInspect} from './inspect-handler.ts';
-import type {PipelineDriver, QueryInfo, RowChange} from './pipeline-driver.ts';
+import type {
+  DroppedQuery,
+  PipelineDriver,
+  QueryInfo,
+  RowChange,
+} from './pipeline-driver.ts';
 import {QueryCoveringIndex} from './query-covering.ts';
 import {parseSignature} from './row-set-signature.ts';
 import {
@@ -443,6 +448,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'sync',
     'pipeline-resets',
     'Number of pipeline resets',
+  );
+  readonly #pipelinePartialResets = getOrCreateCounter(
+    'sync',
+    'pipeline-partial-resets',
+    'Number of query pipelines that were dropped during an advancement for ' +
+      'going over their own advancement budget, and rebuilt at the new ' +
+      'version, labeled by the check that failed. Resets of every pipeline ' +
+      'of a client group are counted by pipeline-resets.',
+  );
+  readonly #pipelinePartialResetSizes = getOrCreateValueHistogram(
+    'sync',
+    'pipeline-partial-reset-size',
+    {
+      description:
+        'Number of query pipelines dropped and rebuilt in an advancement ' +
+        'with a partial pipeline reset.',
+      unit: '{pipeline}',
+      bucketBoundaries: [1, 2, 3, 5, 10, 20, 50, 100],
+    },
   );
   readonly #rowSetSignatureDrifts = getOrCreateCounter(
     'sync',
@@ -802,7 +826,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                   q => q.type === 'client',
                 );
                 if (!hasClientQueries) {
-                  previousQueries = new Map(this.#pipelines.queries());
+                  // The pipelines that the advancement dropped before it
+                  // reset the group (e.g. because they added up to most of
+                  // its hydration time) are already destroyed.
+                  previousQueries = new Map<string, QueryInfo>([
+                    ...this.#pipelines.droppedQueries(),
+                    ...this.#pipelines.queries(),
+                  ]);
                 }
                 break;
               }
@@ -3463,6 +3493,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       let updater: CVRQueryDrivenUpdater | undefined;
       let version: string | undefined;
       let numChanges = 0;
+      let rebuildProcessTime = 0;
       try {
         const advancement = this.#pipelines.advance(timer);
         version = advancement.version;
@@ -3494,6 +3525,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           updater,
           pokers,
         );
+
+        const dropped = this.#pipelines.droppedQueries();
+        if (dropped.size > 0) {
+          // The rebuild is timed separately, per query. Stopping the
+          // advancement's timer keeps the time that the rebuild yields to
+          // other work out of the advancement's processing time.
+          timer.stop();
+          rebuildProcessTime = await this.#rebuildDroppedPipelines(
+            lc,
+            cvr,
+            dropped,
+            updater,
+            pokers,
+          );
+        }
       } catch (e) {
         if (e instanceof ResetPipelinesSignal) {
           await pokers?.cancel();
@@ -3524,13 +3570,181 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#markVersionServed(version);
 
       const wallTime = performance.now() - start;
-      const totalProcessTime = timer.totalElapsed();
+      const totalProcessTime = timer.totalElapsed() + rebuildProcessTime;
       lc.debug?.(
         `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
       );
       this.#transactionAdvanceTime.recordMs(totalProcessTime);
       return 'success';
     });
+  }
+
+  /**
+   * Rebuilds, at the new version, the pipelines that the advancement dropped
+   * for going over their own advancement budget. The rows of the rebuilt
+   * queries are re-declared through the advancement's `updater`, and their
+   * patches go out in the advancement's poke, so the clients receive one
+   * update that is consistent at the new version.
+   *
+   * The queries are not transformed again: their pipelines are rebuilt from
+   * the ASTs they were built from, which a permissions change (a reset of its
+   * own) cannot have changed within the advancement. A rebuild that exceeds
+   * the hydration timeout, or whose hydration circuit breaker is open, is
+   * aborted in place, as it is when the query set is synced.
+   *
+   * Throws a {@link ResetPipelinesSignal} if a dropped query's transformation
+   * hash differs from the one in the CVR, in which case the whole client
+   * group is reset instead.
+   *
+   * @returns The processing time of the rebuild.
+   */
+  async #rebuildDroppedPipelines(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+    dropped: ReadonlyMap<string, DroppedQuery>,
+    updater: CVRQueryDrivenUpdater,
+    pokers: PokeHandler,
+  ): Promise<number> {
+    const queries: HydrationQuery[] = [];
+    for (const [id, query] of dropped) {
+      // Tracking a query with a new hash would change its record in the CVR
+      // (and possibly the CVR's version) after the poke has started.
+      const cvrHash = cvr.queries[id]?.transformationHash;
+      if (cvrHash !== query.transformationHash) {
+        throw new ResetPipelinesSignal(
+          `Dropped pipeline for query ${id} has transformation hash ` +
+            `${query.transformationHash}, but the CVR has ${cvrHash}`,
+          'advancement-timeout',
+        );
+      }
+      queries.push({
+        id,
+        // Not the transformed AST, in which the values of scalar subqueries
+        // are resolved: the companion pipelines that watch those values are
+        // built when they are resolved.
+        ast: query.originalAst,
+        transformationHash: query.transformationHash,
+        name: query.queryName,
+      });
+    }
+    lc.info?.(`rebuilding ${queries.length} dropped pipelines`);
+
+    // Removes the dropped queries' references from the rows received in the
+    // advancement, including their partial output, before their rows are
+    // received again (in batches of their own).
+    for (const patch of await updater.trackQueriesAfterReceived(
+      lc,
+      queries.map(({id, transformationHash}) => ({id, transformationHash})),
+    )) {
+      await pokers.addPatch(patch);
+    }
+
+    let totalProcessTime = 0;
+    const timer = new TimeSliceTimer(lc);
+    const timedOutQueries: HydrationQuery[] = [];
+    const rejectedQueries: HydrationQuery[] = [];
+    const pipelines = this.#pipelines;
+    const circuitBreaker = this.#hydrationCircuitBreaker;
+    // oxlint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+
+    function* rebuild(): Iterable<RowChange | 'yield'> {
+      for (const q of queries) {
+        let queryLC = lc
+          .withContext('queryHash', q.id)
+          .withContext('transformationHash', q.transformationHash);
+        if (q.name !== undefined) {
+          queryLC = queryLC.withContext('queryName', q.name);
+        }
+        // Internal queries are never aborted.
+        const breakable = cvr.queries[q.id]?.type !== 'internal';
+        if (breakable && circuitBreaker.isOpen(q.transformationHash)) {
+          rejectedQueries.push(q);
+          self.#recordCircuitBreakerRejection(queryLC, q);
+          continue;
+        }
+        let timedOut = false;
+        for (const change of pipelines.addQuery(
+          q.transformationHash,
+          q.id,
+          q.ast,
+          timer.startWithoutYielding(),
+          q.name,
+          'advancement-reset',
+        )) {
+          if (
+            change === 'yield' &&
+            breakable &&
+            circuitBreaker.exceeded(timer.totalElapsed())
+          ) {
+            // Breaking out returns the addQuery generator, which tears down
+            // the partially built pipeline. The rows already streamed for the
+            // query are unreferenced when it is aborted below.
+            timedOut = true;
+            yield change;
+            break;
+          }
+          yield change;
+        }
+        const elapsed = timer.stop();
+        totalProcessTime += elapsed;
+        if (timedOut) {
+          timedOutQueries.push(q);
+          self.#recordHydrationTimeout(queryLC, q, elapsed);
+          continue;
+        }
+        self.#hydrations.add(1);
+        self.#hydrationTime.recordMs(elapsed);
+        self.#addQueryMaterializationServerMetric(q.id, elapsed);
+        self.#inspectorDelegate.addQuery(q.id, q.ast);
+      }
+    }
+
+    // yield at the very beginning so that the first time slice
+    // is properly processed by the time-slice queue.
+    await yieldProcess(lc);
+    await this.#processChanges(lc, timer, rebuild(), updater, pokers);
+
+    const abortedQueries = [...timedOutQueries, ...rejectedQueries];
+    if (abortedQueries.length > 0) {
+      const abortedQueryIDs = abortedQueries.map(({id}) => id);
+      for (const patch of await updater.abortExecutedQueries(
+        lc,
+        abortedQueryIDs,
+      )) {
+        await pokers.addPatch(patch);
+      }
+      for (const queryID of abortedQueryIDs) {
+        this.#pipelines.removeQuery(queryID);
+        this.#inspectorDelegate.removeQuery(queryID);
+        this.#queryReplacements.delete(queryID);
+      }
+      if (timedOutQueries.length > 0) {
+        this.#queryEvictions.add(timedOutQueries.length, {
+          reason: 'hydration-timeout',
+        });
+      }
+      if (rejectedQueries.length > 0) {
+        this.#queryEvictions.add(rejectedQueries.length, {
+          reason: 'hydration-circuit-breaker',
+        });
+      }
+      this.#sendHydrationTimeoutErrors(cvr, abortedQueries);
+    }
+
+    for (const patch of await updater.deleteUnreferencedRows(lc)) {
+      await pokers.addPatch(patch);
+    }
+
+    for (const {reason} of dropped.values()) {
+      this.#pipelinePartialResets.add(1, {reason});
+    }
+    this.#pipelinePartialResetSizes.record(dropped.size);
+    lc.info?.(
+      `rebuilt ${queries.length - abortedQueries.length} dropped pipelines ` +
+        `(${abortedQueries.length} aborted) in ${totalProcessTime} ms`,
+    );
+    return totalProcessTime;
   }
 
   async inspect(

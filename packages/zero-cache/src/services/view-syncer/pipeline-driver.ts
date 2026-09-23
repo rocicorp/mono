@@ -23,6 +23,7 @@ import {
   type FetchRequest,
   type Input,
   type InputBase,
+  type Operator,
   type Output,
   type Storage,
 } from '../../../../zql/src/ivm/operator.ts';
@@ -95,6 +96,16 @@ type CompanionPipeline = {
 type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
+  /**
+   * The driver's own processing time to hydrate the pipeline, measured like
+   * its advancement time (see {@link AdvanceContext}): without the time the
+   * consumer of the hydration spends between pulls. Unlike `hydrationTimeMs`,
+   * this does not depend on how the caller processed the rows, so it is the
+   * pipeline's advancement budget.
+   */
+  readonly ivmHydrationTimeMs: number;
+  /** The tables that the pipeline and its companions read. */
+  readonly tables: ReadonlySet<string>;
   readonly hydrationRowCount: number;
   readonly hydrationReason: PipelineHydrationReason;
   readonly pipelineRunID: string;
@@ -128,13 +139,59 @@ type QueryPipelineLifecycleEvent =
 
 export type PipelineHydrationReason =
   | 'query-set-sync'
-  | 'unchanged-query-rehydrate';
+  | 'unchanged-query-rehydrate'
+  | 'advancement-reset';
 
 type PipelineStopReason =
   | 'replace-query'
   | 'remove-query'
   | 'reset'
-  | 'destroy';
+  | 'destroy'
+  | 'advancement-reset';
+
+/**
+ * Which advancement check a pipeline failed: its time in the current change,
+ * its projected time for the whole advancement, or its time so far.
+ */
+export type PartialResetReason =
+  | 'slow-change'
+  | 'projected-overrun'
+  | 'timeout';
+
+/**
+ * A pipeline that {@link PipelineDriver.advance} dropped for going over its
+ * advancement budget, with what is needed to rebuild it without transforming
+ * the query again.
+ */
+export type DroppedQuery = {
+  readonly transformationHash: string;
+  readonly transformedAst: AST;
+  readonly originalAst: AST;
+  readonly queryName?: string | undefined;
+  readonly reason: PartialResetReason;
+  /** The hydration time that set the pipeline's advancement budget. */
+  readonly hydrationTimeMs: number;
+};
+
+/**
+ * Thrown when a pipeline goes over its advancement budget, to abandon the
+ * pipeline's work on the current change. It is caught where the pipeline's
+ * work started (by the pipeline's guard, or around the streaming of its
+ * output), so the change continues to the other pipelines.
+ *
+ * It is a {@link ResetPipelinesSignal}, so it is not logged as a query failure,
+ * and a signal that escapes by mistake resets the whole client group.
+ */
+export class DropPipelineSignal extends ResetPipelinesSignal {
+  readonly queryID: string;
+  readonly dropReason: PartialResetReason;
+
+  constructor(queryID: string, dropReason: PartialResetReason, msg: string) {
+    super(msg, 'advancement-timeout');
+    this.queryID = queryID;
+    this.dropReason = dropReason;
+  }
+}
 
 type QueryPipelineLifecycleLog = {
   readonly zeroEvent: QueryPipelineLifecycleEvent;
@@ -145,8 +202,23 @@ type QueryPipelineLifecycleLog = {
   readonly hydrationReason?: PipelineHydrationReason | undefined;
   readonly stopReason?: PipelineStopReason | undefined;
   readonly hydrationTimeMs?: number | undefined;
+  readonly ivmHydrationTimeMs?: number | undefined;
   readonly hydrationRowCount?: number | undefined;
   readonly pipelineLifetimeMs?: number | undefined;
+};
+
+/** The advancement accounting of one pipeline, for one advancement. */
+type PipelineAdvancement = {
+  readonly queryID: string;
+  readonly pipeline: Pipeline;
+  /** The number of changes in the diff to the tables the pipeline reads. */
+  readonly numChanges: number;
+  /** The driver's time spent on the pipeline in this advancement. */
+  advanceMs: number;
+  /** The part of `advanceMs` spent in the change numbered `changeSeq`. */
+  changeMs: number;
+  changeSeq: number;
+  dropped: DropPipelineSignal | undefined;
 };
 
 type AdvanceContext = {
@@ -155,6 +227,33 @@ type AdvanceContext = {
   readonly numChanges: number;
   currentChangeStartMs: number | undefined;
   pos: number;
+
+  // Per-pipeline accounting.
+  //
+  // The driver's time is charged to the pipeline in the `current` slot. The
+  // slot is set while a pipeline's guard pushes or reconciles a change, and
+  // while the pipeline's output is streamed (which fetches the rows of lazy
+  // relationships). Each time the slot changes, the time since `mark` is
+  // charged to the pipeline that held it. The time the consumer of
+  // advance() spends between pulls is charged to no pipeline, and neither is
+  // time with an empty slot (e.g. reading the diff).
+
+  /** Whether pipelines are dropped when they go over their own budget. */
+  readonly partialReset: boolean;
+  readonly changesByTable: ReadonlyMap<string, number>;
+  /** The number of changes processed so far, by table. */
+  readonly posByTable: Map<string, number>;
+  /** Numbers the changes of the diff, starting at 1. */
+  changeSeq: number;
+  readonly pipelines: Map<string, PipelineAdvancement>;
+  current: PipelineAdvancement | undefined;
+  mark: number;
+  /** The sum of the advancement budgets of the pipelines. */
+  readonly totalBudgetMs: number;
+  /** The sum of the advancement budgets of the dropped pipelines. */
+  droppedBudgetMs: number;
+  /** Pipelines dropped in the current change, destroyed at its end. */
+  readonly toDestroy: string[];
 };
 
 type HydrateContext = {
@@ -178,6 +277,12 @@ const MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS = 5;
 const MIN_PROJECTED_ADVANCEMENT_CHANGES = 16;
 const PROJECTED_ADVANCEMENT_RESET_MULTIPLIER = 1.5;
 const LATE_ADVANCEMENT_FINISH_PROGRESS = 0.8;
+/**
+ * When the pipelines dropped in an advancement account for more than this
+ * fraction of the client group's hydration time, the whole group is reset
+ * instead, as rebuilding the dropped pipelines would cost about as much.
+ */
+const PARTIAL_RESET_ESCALATION_FRACTION = 0.5;
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -251,6 +356,94 @@ function shouldResetSlowCurrentChange(
   );
 }
 
+type AdvancementOverrun = {
+  readonly reason: PartialResetReason;
+  readonly message: string;
+};
+
+/**
+ * Checks whether an advancement should be abandoned because it is projected
+ * to take longer than a hydration: either the whole batch projects to be more
+ * expensive than hydration, or the current source change alone exceeds the
+ * hydration budget. The late-finish exception only applies to batch-level
+ * checks; a single pathological push always fails.
+ *
+ * This applies to a client group (all of its pipelines, with the sum of their
+ * hydration times as the budget) and to a single pipeline (with its own).
+ *
+ * @param budgetName describes `hydrationTimeMs` in the returned message.
+ */
+function checkAdvancementBudget(
+  elapsed: number,
+  currentChangeElapsedMs: number | undefined,
+  pos: number,
+  numChanges: number,
+  hydrationTimeMs: number,
+  budgetName: string,
+): AdvancementOverrun | undefined {
+  // Only built for a failed check, as this runs for every row fetched.
+  const limit = () =>
+    ` Advancement time limited based on ${budgetName} of ` +
+    `${hydrationTimeMs} ms.`;
+  if (
+    currentChangeElapsedMs !== undefined &&
+    shouldResetSlowCurrentChange(currentChangeElapsedMs, hydrationTimeMs)
+  ) {
+    return {
+      reason: 'slow-change',
+      message:
+        `Advancement exceeded timeout processing current change at ${pos} of ` +
+        `${numChanges} changes after ${currentChangeElapsedMs} ms ` +
+        `(${elapsed} ms total).` +
+        limit(),
+    };
+  }
+  const projectedTotalTimeMs = projectedAdvancementTimeMs(
+    elapsed,
+    pos,
+    numChanges,
+  );
+  const shouldFinish = shouldFinishLateAdvancement(pos, numChanges);
+  if (
+    !shouldFinish &&
+    shouldResetProjectedAdvancement(
+      elapsed,
+      projectedTotalTimeMs,
+      pos,
+      numChanges,
+      hydrationTimeMs,
+    )
+  ) {
+    const projection =
+      projectedTotalTimeMs === undefined
+        ? ''
+        : ` Projected total advancement time is ${projectedTotalTimeMs} ms.`;
+    return {
+      reason: 'projected-overrun',
+      message:
+        `Advancement projected to exceed hydration time at ${pos} of ` +
+        `${numChanges} changes after ${elapsed} ms.` +
+        projection +
+        limit(),
+    };
+  }
+  if (
+    !shouldFinish &&
+    elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+    (elapsed > hydrationTimeMs ||
+      (elapsed > hydrationTimeMs / 2 && pos <= numChanges / 2))
+  ) {
+    return {
+      reason: 'timeout',
+      message:
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
+        `after ${elapsed} ms.` +
+        limit(),
+    };
+  }
+  return undefined;
+}
+
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
@@ -281,6 +474,18 @@ export class PipelineDriver {
   #streamer: Streamer | null = null;
   #hydrateContext: HydrateContext | null = null;
   #advanceContext: AdvanceContext | null = null;
+  /**
+   * The pipelines dropped by the last {@link advance}. Kept until the next
+   * advance() or reset(). See {@link droppedQueries}.
+   */
+  #droppedQueries = new Map<string, DroppedQuery>();
+  readonly #guardDelegate: PipelineGuardDelegate = {
+    dropped: queryID => this.#advanceContext?.pipelines.get(queryID)?.dropped,
+    enter: queryID => this.#enterPipeline(queryID),
+    exit: previous => this.#exitPipeline(previous),
+    checkAtExit: queryID => this.#checkPipelineAtExit(queryID),
+    drop: signal => this.#dropPipeline(signal),
+  };
   #replicaVersion: string | null = null;
   #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
@@ -354,6 +559,7 @@ export class PipelineDriver {
     this.#tables.clear();
     this.#allTableNames.clear();
     this.#rowSetSignatures.clear();
+    this.#droppedQueries = new Map();
     this.#initAndResetCommon(clientSchema);
   }
 
@@ -492,6 +698,25 @@ export class PipelineDriver {
     return total;
   }
 
+  /**
+   * The pipelines that the last {@link advance} dropped for going over their
+   * advancement budget, by query ID, once its changes have been consumed.
+   * Dropped pipelines are destroyed during the advancement, so the caller
+   * must add them again (at the new head) to keep them.
+   *
+   * This is kept until the next advance() or {@link reset()}, so that a
+   * reset that follows can reuse the dropped queries' ASTs.
+   *
+   * Pipelines are dropped only when partial pipeline resets are enabled.
+   */
+  droppedQueries(): ReadonlyMap<string, DroppedQuery> {
+    return this.#droppedQueries;
+  }
+
+  get #partialReset(): boolean {
+    return this.#config?.partialPipelineReset === true;
+  }
+
   #logQueryPipelineLifecycle({
     zeroEvent,
     pipelineRunID,
@@ -501,6 +726,7 @@ export class PipelineDriver {
     hydrationReason,
     stopReason,
     hydrationTimeMs,
+    ivmHydrationTimeMs,
     hydrationRowCount,
     pipelineLifetimeMs,
   }: QueryPipelineLifecycleLog): void {
@@ -520,6 +746,9 @@ export class PipelineDriver {
     }
     if (hydrationTimeMs !== undefined) {
       lc = lc.withContext('hydrationTimeMs', hydrationTimeMs);
+    }
+    if (ivmHydrationTimeMs !== undefined) {
+      lc = lc.withContext('ivmHydrationTimeMs', ivmHydrationTimeMs);
     }
     if (hydrationRowCount !== undefined) {
       lc = lc.withContext('hydrationRowCount', hydrationRowCount);
@@ -554,7 +783,17 @@ export class PipelineDriver {
     return this.#config?.enableCorrelatedPredicatePushdown === false;
   }
 
-  #resolveScalarSubqueries(ast: AST): {
+  /**
+   * @param queryID The query that owns the companion pipelines. Their guards
+   *        use its ID, so that their advancement time is charged to it and
+   *        they are dropped with it.
+   * @param getSource Records the tables that the companions read.
+   */
+  #resolveScalarSubqueries(
+    ast: AST,
+    queryID: string,
+    getSource: (name: string) => Source,
+  ): {
     ast: AST;
     companionRows: {table: string; row: Row}[];
     companions: CompanionSubquery[];
@@ -573,9 +812,10 @@ export class PipelineDriver {
         {
           disableCorrelatedPredicatePushdown:
             this.#disableCorrelatedPredicatePushdown(),
-          getSource: name => this.#getSource(name),
+          getSource,
           createStorage: () => this.#createStorage(),
-          decorateSourceInput: (input: SourceInput): Input => input,
+          decorateSourceInput: (input: SourceInput): Input =>
+            new PipelineGuard(input, queryID, this.#guardDelegate),
           decorateInput: input => input,
           addEdge() {},
           decorateFilterInput: input => input,
@@ -699,6 +939,21 @@ export class PipelineDriver {
     let hydrationFinished = false;
     let hydrationFailed = false;
     let hydrationRowCount = 0;
+    // The driver's own hydration time: the time between pulls, when the
+    // consumer processes the rows, is not counted.
+    let ivmHydrationTimeMs = 0;
+    let mark = timer.totalElapsed();
+    const pause = () => {
+      ivmHydrationTimeMs += timer.totalElapsed() - mark;
+    };
+    const resume = () => {
+      mark = timer.totalElapsed();
+    };
+    const tables = new Set<string>();
+    const getSource = (name: string) => {
+      tables.add(name);
+      return this.#getSource(name);
+    };
     // The inputs built so far, held outside the try so that a hydration that
     // does not finish (aborted by the consumer or failed) can tear them down.
     // Only a finished hydration hands them over to #pipelines.
@@ -710,7 +965,7 @@ export class PipelineDriver {
         companions: companionMeta,
         companionInputs,
         ignoredScalarHints,
-      } = this.#resolveScalarSubqueries(query);
+      } = this.#resolveScalarSubqueries(query, queryID, getSource);
       builtInputs = [...companionInputs];
 
       this.#warnIgnoredScalarHints(queryID, ignoredScalarHints);
@@ -724,20 +979,26 @@ export class PipelineDriver {
             this.#disableCorrelatedPredicatePushdown(),
           enablePlannerAwarePushdown:
             this.#config?.enablePlannerAwarePushdown !== false,
-          getSource: name => this.#getSource(name),
+          getSource,
           createStorage: () => this.#createStorage(),
+          // The guard is next to the pipeline, so that it catches a
+          // DropPipelineSignal before the operators that wrap it see it.
           decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
-            new MeasurePushOperator(
-              new QueryFailureLoggingOperator(
-                this.#lc,
-                input,
+            new PipelineGuard(
+              new MeasurePushOperator(
+                new QueryFailureLoggingOperator(
+                  this.#lc,
+                  input,
+                  queryID,
+                  transformationHash,
+                  queryName,
+                ),
                 queryID,
-                transformationHash,
-                queryName,
+                this.#inspectorDelegate,
+                'query-update-server',
               ),
               queryID,
-              this.#inspectorDelegate,
-              'query-update-server',
+              this.#guardDelegate,
             ),
           decorateInput: input => input,
           addEdge() {},
@@ -761,12 +1022,15 @@ export class PipelineDriver {
         if (change !== 'yield') {
           hydrationRowCount++;
         }
+        pause();
         yield change;
+        resume();
       }
 
       for (const {table, row} of companionRows) {
         const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
         hydrationRowCount++;
+        pause();
         yield {
           type: ChangeType.ADD,
           queryID,
@@ -774,8 +1038,10 @@ export class PipelineDriver {
           rowKey: getRowKey(primaryKey, row),
           row,
         } as RowChange;
+        resume();
       }
 
+      pause();
       const hydrationTimeMs = timer.totalElapsed();
       if (runtimeDebugFlags.trackRowCountsVended) {
         if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
@@ -841,6 +1107,8 @@ export class PipelineDriver {
       this.#pipelines.set(queryID, {
         input,
         hydrationTimeMs,
+        ivmHydrationTimeMs,
+        tables,
         hydrationRowCount,
         hydrationReason,
         pipelineRunID,
@@ -860,6 +1128,7 @@ export class PipelineDriver {
         queryName,
         hydrationReason,
         hydrationTimeMs,
+        ivmHydrationTimeMs,
         hydrationRowCount,
       });
     } catch (e) {
@@ -1002,6 +1271,13 @@ export class PipelineDriver {
   /**
    * Advances to the new head of the database.
    *
+   * With partial pipeline resets enabled, a pipeline that goes over its own
+   * advancement budget is dropped: it stops receiving changes, its partial
+   * output for the change it was dropped in is discarded, and it is
+   * destroyed at the end of that change. The other pipelines advance to the
+   * end. Once the `changes` have been consumed, {@link droppedQueries}
+   * returns the dropped pipelines, which the caller must add again.
+   *
    * @param timer The caller-controlled {@link Timer} that will be used to
    *        measure the progress of the advancement and abort with a
    *        {@link ResetPipelinesSignal} if it is estimated to take longer
@@ -1031,12 +1307,33 @@ export class PipelineDriver {
     this.#lc.debug?.(
       `advance ${prev.version} => ${curr.version}: ${changes} changes`,
     );
+    this.#droppedQueries = new Map();
 
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#trackRowSetSignatures(this.#advance(diff, timer, changes)),
+      changes: this.#trackRowSetSignatures(
+        this.#excludeConsumerTime(this.#advance(diff, timer, changes)),
+      ),
     };
+  }
+
+  /**
+   * Stops charging the driver's time to pipelines while the consumer of
+   * {@link advance} processes a change (e.g. to update the CVR for a batch
+   * of rows from many pipelines).
+   */
+  *#excludeConsumerTime(
+    changes: Iterable<RowChange | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
+    for (const change of changes) {
+      this.#charge();
+      yield change;
+      const ctx = this.#advanceContext;
+      if (ctx) {
+        ctx.mark = ctx.timer.totalElapsed();
+      }
+    }
   }
 
   *#advance(
@@ -1049,12 +1346,26 @@ export class PipelineDriver {
       'Cannot advance while hydration is in progress',
     );
     const totalHydrationTimeMs = this.totalHydrationTimeMs();
+    let totalBudgetMs = 0;
+    for (const pipeline of this.#pipelines.values()) {
+      totalBudgetMs += advancementResetTimeLimitMs(pipeline.ivmHydrationTimeMs);
+    }
     this.#advanceContext = {
       timer,
       totalHydrationTimeMs,
       numChanges,
       currentChangeStartMs: undefined,
       pos: 0,
+      partialReset: this.#partialReset,
+      changesByTable: diff.changesByTable,
+      posByTable: new Map(),
+      changeSeq: 0,
+      pipelines: new Map(),
+      current: undefined,
+      mark: timer.totalElapsed(),
+      totalBudgetMs,
+      droppedBudgetMs: 0,
+      toDestroy: [],
     };
     this.#lc.debug?.(
       `starting pipeline advancement of ${numChanges} changes with an ` +
@@ -1073,6 +1384,7 @@ export class PipelineDriver {
         const start = timer.totalElapsed();
         const advanceContext = must(this.#advanceContext);
         advanceContext.currentChangeStartMs = start;
+        advanceContext.changeSeq++;
 
         try {
           try {
@@ -1117,12 +1429,19 @@ export class PipelineDriver {
             }
           } finally {
             advanceContext.pos++;
+            const {posByTable} = advanceContext;
+            posByTable.set(table, (posByTable.get(table) ?? 0) + 1);
           }
 
           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
         } finally {
           advanceContext.currentChangeStartMs = undefined;
         }
+
+        // The change has been pushed to every connection and its output has
+        // been streamed, so the pipelines dropped while processing it can be
+        // destroyed.
+        this.#destroyDroppedPipelines(advanceContext);
 
         const elapsed = timer.totalElapsed() - start;
         this.#advanceTime.recordMs(elapsed, {
@@ -1138,7 +1457,13 @@ export class PipelineDriver {
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
       this.#lc.debug?.(`Advanced to ${curr.version}`);
     } finally {
+      const advanceContext = this.#advanceContext;
       this.#advanceContext = null;
+      if (advanceContext) {
+        // A dropped pipeline holds partially applied state, so it is never
+        // left behind, even when the advancement is abandoned.
+        this.#destroyDroppedPipelines(advanceContext);
+      }
     }
   }
 
@@ -1177,111 +1502,223 @@ export class PipelineDriver {
   }
 
   /**
-   * Cancel advancement processing when either the whole batch projects to be
-   * more expensive than hydration, or the current source change alone exceeds
-   * the hydration budget. The late-finish exception only applies to batch-level
-   * checks; a single pathological push always resets.
+   * Cancels advancement processing when the client group goes over its
+   * budget (see {@link checkAdvancementBudget}), by throwing a
+   * {@link ResetPipelinesSignal}.
+   *
+   * With partial pipeline resets enabled, first checks the pipeline that the
+   * driver is working on against its own budget, and drops it by throwing a
+   * {@link DropPipelineSignal}. A pipeline that does no work cannot go over
+   * its budget, so only the current one needs to be checked.
    */
   #shouldAdvanceYieldMaybeAbortAdvance(checkYield = true): boolean {
+    const ctx = must(this.#advanceContext);
     const {
       currentChangeStartMs,
       pos,
       numChanges,
       timer: advanceTimer,
       totalHydrationTimeMs,
-    } = must(this.#advanceContext);
+    } = ctx;
     const elapsed = advanceTimer.totalElapsed();
     const currentChangeElapsedMs =
       currentChangeStartMs === undefined
         ? undefined
         : elapsed - currentChangeStartMs;
-    if (
-      currentChangeElapsedMs !== undefined &&
-      shouldResetSlowCurrentChange(currentChangeElapsedMs, totalHydrationTimeMs)
-    ) {
-      this.#throwSlowCurrentChangeReset(
-        pos,
-        numChanges,
-        elapsed,
-        currentChangeElapsedMs,
-        totalHydrationTimeMs,
-      );
-    }
-    const projectedTotalTimeMs = projectedAdvancementTimeMs(
+    const overrun = checkAdvancementBudget(
       elapsed,
+      currentChangeElapsedMs,
       pos,
       numChanges,
+      totalHydrationTimeMs,
+      'total hydration time',
     );
-    const shouldFinish = shouldFinishLateAdvancement(pos, numChanges);
-    if (
-      !shouldFinish &&
-      shouldResetProjectedAdvancement(
-        elapsed,
-        projectedTotalTimeMs,
-        pos,
-        numChanges,
-        totalHydrationTimeMs,
-      )
-    ) {
-      this.#throwProjectedAdvancementReset(
-        pos,
-        numChanges,
-        elapsed,
-        projectedTotalTimeMs,
-        totalHydrationTimeMs,
-      );
+    if (overrun) {
+      throw new ResetPipelinesSignal(overrun.message, 'advancement-timeout');
     }
-    if (
-      !shouldFinish &&
-      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
-      (elapsed > totalHydrationTimeMs ||
-        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
-    ) {
-      throw new ResetPipelinesSignal(
-        `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
-          `after ${elapsed} ms. Advancement time limited based on total ` +
-          `hydration time of ${totalHydrationTimeMs} ms.`,
-        'advancement-timeout',
-      );
+    const {current} = ctx;
+    if (current) {
+      this.#charge(elapsed);
+      const drop = this.#checkPipeline(ctx, current);
+      if (drop) {
+        throw drop;
+      }
     }
     return checkYield && advanceTimer.elapsedLap() > this.#yieldThresholdMs();
   }
 
-  #throwSlowCurrentChangeReset(
-    pos: number,
-    numChanges: number,
-    elapsed: number,
-    currentChangeElapsedMs: number,
-    totalHydrationTimeMs: number,
-  ): never {
-    throw new ResetPipelinesSignal(
-      `Advancement exceeded timeout processing current change at ${pos} of ` +
-        `${numChanges} changes after ${currentChangeElapsedMs} ms ` +
-        `(${elapsed} ms total). Advancement time limited based on total ` +
-        `hydration time of ${totalHydrationTimeMs} ms.`,
-      'advancement-timeout',
-    );
+  /** Charges the driver's time since the last charge to the current pipeline. */
+  #charge(now?: number): void {
+    const ctx = this.#advanceContext;
+    if (!ctx) {
+      return;
+    }
+    now ??= ctx.timer.totalElapsed();
+    const {current} = ctx;
+    if (current) {
+      const ms = now - ctx.mark;
+      current.advanceMs += ms;
+      if (current.changeSeq !== ctx.changeSeq) {
+        current.changeSeq = ctx.changeSeq;
+        current.changeMs = 0;
+      }
+      current.changeMs += ms;
+    }
+    ctx.mark = now;
   }
 
-  #throwProjectedAdvancementReset(
-    pos: number,
-    numChanges: number,
-    elapsed: number,
-    projectedTotalTimeMs: number | undefined,
-    totalHydrationTimeMs: number,
-  ): never {
-    const projection =
-      projectedTotalTimeMs === undefined
-        ? ''
-        : ` Projected total advancement time is ${projectedTotalTimeMs} ms.`;
-    throw new ResetPipelinesSignal(
-      `Advancement projected to exceed hydration time at ${pos} of ` +
-        `${numChanges} changes after ${elapsed} ms.` +
-        projection +
-        ` Advancement time limited based on total hydration time of ` +
-        `${totalHydrationTimeMs} ms.`,
-      'advancement-timeout',
+  /**
+   * Charges the driver's time to the pipeline of `queryID` until
+   * {@link #exitPipeline} is called with the returned (previous) pipeline.
+   */
+  #enterPipeline(queryID: string): PipelineAdvancement | undefined {
+    const ctx = this.#advanceContext;
+    if (!ctx) {
+      return undefined;
+    }
+    this.#charge();
+    const previous = ctx.current;
+    ctx.current = getOrInsertComputed(ctx.pipelines, queryID, queryID => {
+      const pipeline = must(
+        this.#pipelines.get(queryID),
+        `No pipeline for query ${queryID}`,
+      );
+      let numChanges = 0;
+      for (const table of pipeline.tables) {
+        numChanges += ctx.changesByTable.get(table) ?? 0;
+      }
+      return {
+        queryID,
+        pipeline,
+        numChanges,
+        advanceMs: 0,
+        changeMs: 0,
+        changeSeq: ctx.changeSeq,
+        dropped: undefined,
+      };
+    });
+    return previous;
+  }
+
+  #exitPipeline(previous: PipelineAdvancement | undefined): void {
+    const ctx = this.#advanceContext;
+    if (!ctx) {
+      return;
+    }
+    this.#charge();
+    ctx.current = previous;
+  }
+
+  /**
+   * Checks the pipeline when its work (a push, a reconcile, or the streaming
+   * of its output) is done, and records a drop without throwing.
+   */
+  #checkPipelineAtExit(queryID: string): void {
+    const ctx = this.#advanceContext;
+    const pipeline = ctx?.pipelines.get(queryID);
+    if (!ctx || !pipeline) {
+      return;
+    }
+    this.#charge();
+    const drop = this.#checkPipeline(ctx, pipeline);
+    if (drop) {
+      this.#dropPipeline(drop);
+    }
+  }
+
+  #checkPipeline(
+    ctx: AdvanceContext,
+    p: PipelineAdvancement,
+  ): DropPipelineSignal | undefined {
+    if (!ctx.partialReset || p.dropped) {
+      return undefined;
+    }
+    // The changes to the tables that the pipeline reads, rather than all of
+    // the changes, measure its progress: the diff is in commit order, so the
+    // changes to its tables may all come early (or late) in the diff.
+    let pos = 0;
+    for (const table of p.pipeline.tables) {
+      pos += ctx.posByTable.get(table) ?? 0;
+    }
+    const overrun = checkAdvancementBudget(
+      p.advanceMs,
+      p.changeSeq === ctx.changeSeq ? p.changeMs : undefined,
+      pos,
+      p.numChanges,
+      p.pipeline.ivmHydrationTimeMs,
+      'pipeline hydration time',
     );
+    return overrun
+      ? new DropPipelineSignal(p.queryID, overrun.reason, overrun.message)
+      : undefined;
+  }
+
+  /**
+   * Records that the pipeline of `signal.queryID` is dropped: from now on its
+   * guards do not push or reconcile any change into it, its output is
+   * discarded, and it is destroyed at the end of the current change.
+   *
+   * Throws a (whole-group) {@link ResetPipelinesSignal} instead if the
+   * dropped pipelines account for most of the group's hydration time.
+   */
+  #dropPipeline(signal: DropPipelineSignal): void {
+    const ctx = must(this.#advanceContext);
+    const {queryID} = signal;
+    const p = must(ctx.pipelines.get(queryID));
+    if (p.dropped) {
+      return;
+    }
+    p.dropped = signal;
+    ctx.toDestroy.push(queryID);
+    const {pipeline} = p;
+    this.#droppedQueries.set(queryID, {
+      transformationHash: pipeline.transformationHash,
+      transformedAst: pipeline.transformedAst,
+      originalAst: pipeline.originalAst,
+      ...(pipeline.queryName !== undefined && {queryName: pipeline.queryName}),
+      reason: signal.dropReason,
+      hydrationTimeMs: pipeline.ivmHydrationTimeMs,
+    });
+
+    let lc = this.#lc
+      .withContext('queryHash', queryID)
+      .withContext('transformationHash', pipeline.transformationHash);
+    if (pipeline.queryName !== undefined) {
+      lc = lc.withContext('queryName', pipeline.queryName);
+    }
+    let pos = 0;
+    for (const table of pipeline.tables) {
+      pos += ctx.posByTable.get(table) ?? 0;
+    }
+    lc.info?.(`resetting pipeline: ${signal.message}`, {
+      reason: signal.dropReason,
+      advancementTimeMs: p.advanceMs,
+      hydrationTimeMs: pipeline.ivmHydrationTimeMs,
+      pos,
+      numChanges: p.numChanges,
+    });
+
+    ctx.droppedBudgetMs += advancementResetTimeLimitMs(
+      pipeline.ivmHydrationTimeMs,
+    );
+    if (
+      ctx.droppedBudgetMs >
+      ctx.totalBudgetMs * PARTIAL_RESET_ESCALATION_FRACTION
+    ) {
+      throw new ResetPipelinesSignal(
+        `Dropped pipelines account for ${ctx.droppedBudgetMs} ms of the ` +
+          `total hydration time of ${ctx.totalBudgetMs} ms. ` +
+          signal.message,
+        'advancement-timeout',
+      );
+    }
+  }
+
+  #destroyDroppedPipelines(ctx: AdvanceContext): void {
+    for (const queryID of ctx.toDestroy) {
+      this.removeQuery(queryID, 'advancement-reset');
+    }
+    ctx.toDestroy.length = 0;
   }
 
   /** Implements `BuilderDelegate.createStorage()` */
@@ -1299,9 +1736,7 @@ export class PipelineDriver {
         if (val === 'yield') {
           yield 'yield';
         }
-        for (const changeOrYield of this.#stopAccumulating().stream()) {
-          yield changeOrYield;
-        }
+        yield* this.#streamOutput(this.#stopAccumulating());
         this.#startAccumulating();
       }
     } finally {
@@ -1335,6 +1770,23 @@ export class PipelineDriver {
       // #push replaces the streamer after each 'yield', so add to the
       // current one.
       must(this.#streamer).add(rowChange);
+    }
+  }
+
+  /**
+   * Streams the row changes that the pipelines produced during their pushes
+   * (see {@link #streamPushed}), without those of a dropped pipeline: its
+   * partial output for the change it was dropped in is discarded. The
+   * pipelines' guards charged the time to produce them.
+   */
+  *#streamOutput(streamer: Streamer): Iterable<RowChange | 'yield'> {
+    for (const rowChange of streamer.stream()) {
+      if (
+        rowChange === 'yield' ||
+        !this.#guardDelegate.dropped(rowChange.queryID)
+      ) {
+        yield rowChange;
+      }
     }
   }
 
@@ -1520,6 +1972,123 @@ class Streamer {
         const childSchema = must(schema.relationships[relationship]);
         yield* this.#streamNodes(queryID, childSchema, op, children);
       }
+    }
+  }
+}
+
+/** How a {@link PipelineGuard} reports to the {@link PipelineDriver}. */
+interface PipelineGuardDelegate {
+  /**
+   * The signal that dropped the pipeline of `queryID` in the current
+   * advancement, if any.
+   */
+  dropped(queryID: string): DropPipelineSignal | undefined;
+  /**
+   * Charges the driver's time to the pipeline of `queryID`, until
+   * {@link exit} is called with the returned value.
+   */
+  enter(queryID: string): PipelineAdvancement | undefined;
+  exit(previous: PipelineAdvancement | undefined): void;
+  /** Checks the pipeline's budget, recording a drop without throwing. */
+  checkAtExit(queryID: string): void;
+  drop(signal: DropPipelineSignal): void;
+}
+
+/**
+ * Sits between a pipeline and each of its source connections, so that every
+ * push and reconcile into the pipeline passes through it. It charges the
+ * driver's time to the pipeline while the pipeline processes a change, and
+ * it contains a drop of the pipeline: it catches the
+ * {@link DropPipelineSignal} that a budget check throws from within the
+ * pipeline, and it does not pass any further push or reconcile to a dropped
+ * pipeline, so that the source continues with its other connections.
+ *
+ * Skipping the reconcile of a dropped pipeline is necessary for correctness:
+ * a pipeline dropped during a push holds partially applied state, which
+ * Take's refill would assert on.
+ *
+ * The companion pipelines of a query's scalar subqueries use guards with the
+ * query's ID, so that they are charged and dropped with it.
+ */
+class PipelineGuard implements Operator {
+  readonly #input: Input;
+  readonly #queryID: string;
+  readonly #delegate: PipelineGuardDelegate;
+  #output: Output = throwOutput;
+
+  constructor(input: Input, queryID: string, delegate: PipelineGuardDelegate) {
+    this.#input = input;
+    this.#queryID = queryID;
+    this.#delegate = delegate;
+    input.setOutput(this);
+  }
+
+  setOutput(output: Output): void {
+    this.#output = output;
+  }
+
+  getSchema(): SourceSchema {
+    return this.#input.getSchema();
+  }
+
+  destroy(): void {
+    this.#input.destroy();
+  }
+
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    return this.#input.fetch(req);
+  }
+
+  push(change: Change): Stream<'yield'> {
+    return this.#guard(() => this.#output.push(change, this));
+  }
+
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    return this.#guard(() => this.#output.reconcile?.(this) ?? []);
+  }
+
+  *#guard(work: () => Stream<'yield'>): Stream<'yield'> {
+    const delegate = this.#delegate;
+    const queryID = this.#queryID;
+    if (delegate.dropped(queryID)) {
+      return;
+    }
+    const previous = delegate.enter(queryID);
+    try {
+      const it = work()[Symbol.iterator]();
+      for (;;) {
+        // Checked before resuming the pipeline, so that a pipeline dropped
+        // while suspended does no more work. This is a safeguard: the
+        // pipeline's output is streamed during its push (see
+        // PipelineDriver.#streamPushed), so no check runs while it is
+        // suspended.
+        const dropped = delegate.dropped(queryID);
+        if (dropped) {
+          // Throwing into the suspended operators, rather than returning
+          // from them, unwinds them as an abort. Take and Cap assert, when a
+          // fetch returns early, that it was not cut short.
+          if (it.throw) {
+            it.throw(dropped);
+          } else {
+            it.return?.();
+          }
+          return;
+        }
+        const next = it.next();
+        if (next.done) {
+          break;
+        }
+        yield next.value;
+      }
+      delegate.checkAtExit(queryID);
+    } catch (e) {
+      if (e instanceof DropPipelineSignal && e.queryID === queryID) {
+        delegate.drop(e);
+        return;
+      }
+      throw e;
+    } finally {
+      delegate.exit(previous);
     }
   }
 }
