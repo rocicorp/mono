@@ -4,9 +4,9 @@
  * The **per-PR backbone** of the coverage-driven fuzzer (ported from rusty-ivm
  * `rindle-fuzz/tests/backbone.rs`): the cheap, structured layers over the small,
  * self-contained {@link miniPgContent mini} fixture, so CI exercises the small-scope
- * region on every change. (The full-chinook *scale subset* runs nightly — a later
- * phase.) The backbone is split across `chinook-fuzz-backbone-*.pg.test.ts` files so
- * CI can spread its lanes over test shards.
+ * region on every change. (The full-chinook *scale subset* runs in the nightly,
+ * `chinook-fuzz-scale.pg.test.ts`.) The backbone is split across
+ * `chinook-fuzz-backbone-*.pg.test.ts` files so CI can spread its lanes over test shards.
  *
  * This file: the **L0** and **flip-invariance** lanes.
  *

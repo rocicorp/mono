@@ -178,11 +178,16 @@ const invoiceLineRelationships = relationships(invoiceLine, ({one}) => ({
   ),
 }));
 
-const customerRelationships = relationships(customer, ({one}) => ({
+const customerRelationships = relationships(customer, ({one, many}) => ({
   supportRep: one({
     sourceField: ['supportRepId'],
     destField: ['id'],
     destSchema: employee,
+  }),
+  invoices: many({
+    sourceField: ['id'],
+    destField: ['customerId'],
+    destSchema: invoice,
   }),
 }));
 

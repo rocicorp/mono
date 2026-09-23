@@ -13,13 +13,14 @@
  * - **L4 random tail** — random deep shapes (depth ≤ 4) the enumerator can't reach, under
  *   the static cost gate.
  *
- * Every layer is **deterministic in {@link SEED}** (printed up front and embedded in each
- * case label — the repro key): a divergence replays bit-for-bit. Any failure is
- * auto-minimized to a readable repro by the driver's shrinker.
+ * Every layer is **deterministic in {@link SEED}** (printed up front, embedded in each
+ * case label and in the failure summary — the repro key): a divergence replays
+ * bit-for-bit. Any failure is auto-minimized to a readable repro by the driver's shrinker.
  *
- * The full-chinook **scale subset** (the same tail under the cost gate + a per-case
- * watchdog over the large dataset) runs nightly — a later phase. This file is the cheap
- * mini-scale randomized net that runs per-PR alongside the structured backbone.
+ * Per-PR this is the cheap mini-scale randomized net that runs alongside the structured
+ * backbone, on the fixed default seed. The nightly (`.github/workflows/fuzz-nightly.yml`)
+ * re-runs it on a fresh `ZERO_FUZZ_SEED` with the case counts scaled by
+ * `ZERO_FUZZ_BUDGET` (see `fuzz/seed.ts`), next to the full-chinook scale subset.
  */
 
 import {expect, test} from 'vitest';
@@ -35,13 +36,15 @@ import {
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
+import {formatSeed, fuzzBudget, fuzzSeed} from './fuzz/seed.ts';
 import {enumerate} from './fuzz/skeleton.ts';
 import {schema} from './schema.ts';
 
-const TIMEOUT_MS = 120_000;
-
-/** The repro key (design §9). Override-able for replay if a regression is found. */
-const SEED = 0x00c0ffee;
+/** The repro key (design §9): `ZERO_FUZZ_SEED`, or the fixed per-PR default. */
+const SEED = fuzzSeed();
+/** Case-count multiplier: 1 per-PR, larger nightly. */
+const BUDGET = fuzzBudget();
+const TIMEOUT_MS = 120_000 * BUDGET;
 const data = new Data(miniData, pkOf);
 
 const harness = await bootstrap({
@@ -50,12 +53,20 @@ const harness = await bootstrap({
   pgContent: miniPgContent(),
 });
 
-console.log(`══ chinook-fuzz sweep ══  seed = ${SEED}`);
+console.log(
+  `══ chinook-fuzz sweep ══  seed = ${formatSeed(SEED)}  budget = ${BUDGET}`,
+);
 
 test(
   'L2 swarm — masked-random queries hydrate-equal over mini',
   async () => {
-    const report = await checkSwarm(harness.delegates, data, SEED, 16, 4);
+    const report = await checkSwarm(
+      harness.delegates,
+      data,
+      SEED,
+      16 * BUDGET,
+      4,
+    );
     console.log(
       `swarm: ${report.total} cases, ${report.failures.length} failures`,
     );
@@ -71,7 +82,10 @@ test(
   async () => {
     // The corpus: bounded skeletons (a depth-2 root + one related + one exists), each
     // given one random mutation. Capped so the per-PR sweep stays cheap.
-    const corpus = enumerate({depth: 2, related: 1, exists: 1}).slice(0, 100);
+    const corpus = enumerate({depth: 2, related: 1, exists: 1}).slice(
+      0,
+      100 * BUDGET,
+    );
     const report = await checkMutate(harness.delegates, corpus, SEED ^ 0x5eed);
     console.log(
       `mutate: ${report.total} cases, ${report.failures.length} failures`,
@@ -92,7 +106,7 @@ test(
       harness.delegates,
       cost,
       SEED,
-      150,
+      150 * BUDGET,
     );
     console.log(
       `tail: generated ${generated} | gated ${gated} | ${report.total} checked | ${report.failures.length} failures`,

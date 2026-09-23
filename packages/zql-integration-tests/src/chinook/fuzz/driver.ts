@@ -39,7 +39,14 @@ import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {mapResultToClientNames} from '../../../../zqlite/src/test/source-factory.ts';
 import {type Delegates, runAndCompare} from '../../helpers/runner.ts';
 import {schema} from '../schema.ts';
-import {pinOn, relOf} from './axes.ts';
+import {
+  axisIndex,
+  LIMIT_VALS,
+  pinOn,
+  relOf,
+  relPath,
+  type OrderVal,
+} from './axes.ts';
 import type {CostModel} from './cost.ts';
 import {
   applyLimit,
@@ -63,14 +70,16 @@ import {mutate} from './mutate.ts';
 import {
   fourPhase,
   type Mutation,
-  pushForSkeleton,
+  pushForChild,
+  pushForQuery,
   queryTables,
 } from './push.ts';
 import type {Regression} from './regressions.ts';
 import {rng} from './rng.ts';
 import {scalarizableExistsCount, setScalars} from './scalar.ts';
+import {reproHint} from './seed.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
-import {enumerate, label, lower, type Skeleton} from './skeleton.ts';
+import {enumerate, label, lower, lowerOr, type Skeleton} from './skeleton.ts';
 import {Mask, swarmGen} from './swarm.ts';
 import {type DeepBounds, tailBounds, tailGen} from './tail.ts';
 import {wrapAst} from './wrap.ts';
@@ -404,13 +413,22 @@ async function checkHydrateCases(
  * the {@link Coverage} (asserted 100% pairwise by the backbone). A row unrealizable on a
  * target (text filter / no relationship) is skipped there and not counted toward
  * coverage.
+ *
+ * `part` of `parts` runs only every `parts`-th case (starting at `part - 1`), so the
+ * sweep can be split across test files. The split interleaves rather than slicing
+ * contiguous ranges because the corpus lists the cheap root decorations before the far
+ * slower nested-child ones. The returned {@link Coverage} is always that of the whole
+ * corpus.
  */
 export async function checkL1(
   delegates: Delegates,
   data: Data,
+  part = 1,
+  parts = 1,
 ): Promise<{report: Report; coverage: Coverage}> {
   const {cases, coverage} = l1QueryCases(data);
-  return {report: await checkHydrateCases(delegates, cases), coverage};
+  const slice = cases.filter((_, i) => i % parts === part - 1);
+  return {report: await checkHydrateCases(delegates, slice), coverage};
 }
 
 // ── the randomized layers (L2 swarm / L3 mutation / L4 random tail) ────────────────────
@@ -590,7 +608,11 @@ async function pushWalk(
   }
 }
 
-/** Push-maintenance cases generated from skeletons, independent of the target. */
+/**
+ * Push-maintenance cases generated from skeletons, independent of the target. Every
+ * table the query touches is mutated ({@link pushForQuery}): mutating only the root and
+ * the deepest leaf never pushed to a skeleton's other children, or to a junction table.
+ */
 export function pushCases(
   data: Data,
   skels: readonly Skeleton[],
@@ -598,36 +620,111 @@ export function pushCases(
 ): readonly PushCase[] {
   const cases: PushCase[] = [];
   for (const s of skels) {
-    const mutations = pushForSkeleton(data, s, n);
+    const query = lower(s);
+    const mutations = pushForQuery(data, s, asQueryInternals(query).ast, n);
     if (mutations.length === 0) {
       continue;
     }
-    cases.push({
-      label: `push|${label(s)}`,
-      query: lower(s),
-      mutations,
-    });
+    cases.push({label: `push|${label(s)}`, query, mutations});
   }
   return cases;
 }
 
-/** Top-N push-maintenance cases generated from skeletons, independent of the target. */
+/** Which top-N cases {@link decoratedPushCases} builds from each skeleton. */
+export type DecoratedPushOptions = {
+  /** The root `orderBy` under the `limit` (default `asc1`). */
+  readonly order?: OrderVal | undefined;
+  /**
+   * Also lower a skeleton with root gates as those gates ORed with a simple root filter
+   * ({@link lowerOr}), which puts a fan-in under the `Take` (default false).
+   */
+  readonly or?: boolean | undefined;
+  /**
+   * Also run every flip assignment of up to this many gates, since a flipped gate is the
+   * only thing that builds a `UnionFanIn` (default 0: the builder's plan only).
+   */
+  readonly maxFlips?: number | undefined;
+};
+
+/**
+ * Top-N push-maintenance cases generated from skeletons, independent of the target: each
+ * lowering gets a root `orderBy` + small `limit`, and every table the query touches is
+ * mutated ({@link pushForQuery}), so one source change can reach the limited window
+ * through two connections (a self-join, two paths to one table).
+ */
 export function decoratedPushCases(
   data: Data,
   skels: readonly Skeleton[],
   n: number,
+  {order = 'asc1', or = false, maxFlips = 0}: DecoratedPushOptions = {},
 ): readonly PushCase[] {
   const cases: PushCase[] = [];
   for (const s of skels) {
-    const mutations = pushForSkeleton(data, s, n);
-    if (mutations.length === 0) {
-      continue;
+    const shapes: Array<[string, AnyQuery]> = [['and', lower(s)]];
+    if (or && s.children.some(c => c.kind !== 'related')) {
+      shapes.push(['or', lowerOr(s)]);
     }
-    cases.push({
-      label: `decpush|${label(s)}`,
-      query: applyLimit(applyOrder(lower(s), s.table, 'asc1'), 'small'),
-      mutations,
-    });
+    for (const [shape, lowered] of shapes) {
+      const base = applyLimit(applyOrder(lowered, s.table, order), 'small');
+      const mutations = pushForQuery(data, s, asQueryInternals(base).ast, n);
+      if (mutations.length === 0) {
+        continue;
+      }
+      for (const [suffix, query] of queryFlipVariants(base, maxFlips)) {
+        cases.push({
+          label: `decpush|${order}|${shape}|${label(s)}${suffix}`,
+          query,
+          mutations,
+        });
+      }
+    }
+  }
+  return cases;
+}
+
+/**
+ * Push cases for a **limited nested collection** (ported from rindle's
+ * `check_decorated_push_child`): each covering-array row is lowered onto the child of a
+ * `(parent, relationship)` pair ({@link decorateChild}) and driven through
+ * {@link pushForChild}'s history.
+ *
+ * {@link decoratedPushCases} only ever puts the `limit` at the root, and the L1 lane only
+ * *hydrates* a decorated child. A nested `limit` or `start` builds one window per parent,
+ * each with its own state, refill and eviction, and a hydrate rebuilds them all from the
+ * source, so only a push can observe one that went wrong: rindle's version of a window
+ * that drained to empty and then dropped every later add for its parent was invisible to
+ * both of those lanes. Draining the whole child table takes every window to empty, and
+ * adding it back refills them.
+ *
+ * `windowedOnly` keeps just the rows that decorate the child with a `limit`, the ones that
+ * build a partitioned `Take`.
+ */
+export function childPushCases(
+  data: Data,
+  t: number,
+  n: number,
+  windowedOnly: boolean,
+): readonly PushCase[] {
+  const rows = greedyCover(t);
+  const noLimit = LIMIT_VALS.indexOf('none');
+  const cases: PushCase[] = [];
+  for (const [parent, rel] of childDecorationPairs()) {
+    const path = relPath(parent, rel);
+    for (const row of rows) {
+      if (windowedOnly && row[axisIndex('limit')] === noLimit) {
+        continue;
+      }
+      const res = decorateChild(parent, rel, row, data);
+      if (!res) {
+        continue;
+      }
+      const ast = asQueryInternals(res[0]).ast;
+      cases.push({
+        label: `childpush|${parent}.${rel}|${rowLabel(row)}`,
+        query: res[0],
+        mutations: pushForChild(data, path, ast, n),
+      });
+    }
   }
   return cases;
 }
@@ -706,8 +803,8 @@ export async function checkPushCases(
 }
 
 /**
- * **Push sweep:** lower each skeleton, generate its four-phase push history (root +
- * deepest leaf), and check per-step push parity inside a rolled-back transaction. `n`
+ * **Push sweep:** lower each skeleton, generate its four-phase push history (every table
+ * the query touches), and check per-step push parity inside a rolled-back transaction. `n`
  * rows per mutated table. The four-phase sequence is net-zero (it restores the seed), so
  * a clean skeleton leaves the data pristine for the next.
  */
@@ -735,19 +832,20 @@ export async function checkPushWalk(
  * the fuzzer leaves uncovered. Elsewhere `order`/`limit` are hydrate-only (L1, swarm,
  * tail) and the push sweep carries no decorations, so a `whereExists(...).orderBy().limit()`
  * **push** is never exercised. Here each skeleton is lowered, given a root `orderBy` + a
- * small `limit`, and pushed (root + EXISTS-gated leaf) with parity re-checked **after every
+ * small `limit`, and pushed (every table it touches) with parity re-checked **after every
  * mutation** — a top-N push that strands or drops an in-window row is wrong *between*
  * mutations even when a later mutation restores the seed, a transient a final-state
- * comparison misses.
+ * comparison misses. `opts` adds the OR shape and flip plans ({@link DecoratedPushOptions}).
  */
 export async function checkDecoratedPush(
   transact: Transact,
   data: Data,
   skels: readonly Skeleton[],
   n: number,
+  opts: DecoratedPushOptions = {},
 ): Promise<Report> {
   const failures: Array<[string, string]> = [];
-  const cases = decoratedPushCases(data, skels, n);
+  const cases = decoratedPushCases(data, skels, n, opts);
   for (const c of cases) {
     const msg = await capture(() =>
       transact(d => pushWalk(d, c.query, c.mutations)),
@@ -786,7 +884,7 @@ export async function checkYield(
   let total = 0;
   let idx = 0;
   for (const s of skels) {
-    const mutations = pushForSkeleton(data, s, n);
+    const mutations = pushForQuery(data, s, asQueryInternals(lower(s)).ast, n);
     for (const [suffix, query] of yieldPlanVariants(s, maxFlips)) {
       const i = idx++;
       // Per-variant deterministic yield stream so a failure replays from (seed, index).
@@ -1003,8 +1101,9 @@ export async function checkRegressions(
 }
 
 /**
- * Throw with a collected summary (all failing labels + the first `nShow` diffs) if
- * anything failed. A no-op when the batch was clean.
+ * Throw with a collected summary (all failing labels + the first `nShow` diffs, and the
+ * seed to replay with if the file read one) if anything failed. A no-op when the batch
+ * was clean.
  */
 export function panicIfFailed(report: Report, nShow: number): void {
   if (report.failures.length === 0) {
@@ -1021,7 +1120,7 @@ export function panicIfFailed(report: Report, nShow: number): void {
   throw new Error(
     `${report.failures.length}/${report.total} generated cases failed.\n\n` +
       `ALL FAILING LABELS:\n  ${labels}\n\n` +
-      `FIRST ${nShow} DIFFS:\n\n${shown}${more}`,
+      `FIRST ${nShow} DIFFS:\n\n${shown}${more}${reproHint()}`,
   );
 }
 
