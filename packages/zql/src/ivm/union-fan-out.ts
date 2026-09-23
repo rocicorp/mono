@@ -3,7 +3,13 @@ import {must} from '../../../shared/src/must.ts';
 import {ChangeIndex} from './change-index.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
-import type {FetchRequest, Input, Operator, Output} from './operator.ts';
+import type {
+  FetchRequest,
+  Input,
+  InputBase,
+  Operator,
+  Output,
+} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 import type {UnionFanIn} from './union-fan-in.ts';
@@ -30,6 +36,16 @@ export class UnionFanOut implements Operator {
       yield* output.push(change, this);
     }
     yield* must(this.#unionFanIn).fanOutDonePushing(change[ChangeIndex.TYPE]);
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    must(this.#unionFanIn).fanOutStartedReconciling();
+    for (const output of this.#outputs) {
+      if (output.reconcile) {
+        yield* output.reconcile(this);
+      }
+    }
+    yield* must(this.#unionFanIn).fanOutDoneReconciling();
   }
 
   setOutput(output: Output): void {

@@ -9,7 +9,9 @@ import {
   type FilterOutput,
 } from './filter-operators.ts';
 import {filterPush} from './filter-push.ts';
+import type {InputBase} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
+import type {Stream} from './stream.ts';
 
 /**
  * The Filter operator filters data through a predicate. It is stateless.
@@ -57,6 +59,12 @@ export class Filter implements FilterOperator {
 
   push(change: Change) {
     return filterPush(change, this.#output, this, this.#predicate);
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 }
 

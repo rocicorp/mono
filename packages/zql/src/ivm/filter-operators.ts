@@ -58,6 +58,10 @@ export const throwFilterOutput: FilterOutput = {
     throw new Error('Output not set');
   },
 
+  reconcile(): Stream<'yield'> {
+    throw new Error('Output not set');
+  },
+
   beginFilter() {},
   endFilter() {},
 };
@@ -87,6 +91,12 @@ export class FilterStart implements FilterInput, Output {
 
   push(change: Change) {
     return this.#output.push(change, this);
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
@@ -162,6 +172,12 @@ export class FilterEnd implements Input, FilterOutput {
 
   push(change: Change) {
     return this.#output.push(change, this);
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 }
 

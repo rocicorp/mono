@@ -11,6 +11,7 @@ import {
   type FilterOperator,
   type FilterOutput,
 } from './filter-operators.ts';
+import type {InputBase} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
 
@@ -105,6 +106,12 @@ export class Exists implements FilterOperator {
 
   getSchema(): SourceSchema {
     return this.#input.getSchema();
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 
   *push(change: Change): Stream<'yield'> {

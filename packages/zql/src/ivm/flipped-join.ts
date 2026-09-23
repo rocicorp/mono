@@ -159,10 +159,18 @@ export class FlippedJoin implements Input {
 
     parent.setOutput({
       push: (change: Change) => this.#pushParent(change),
+      reconcile: () => this.#reconcile(),
     });
     child.setOutput({
       push: (change: Change) => this.#pushChild(change),
+      reconcile: () => this.#reconcile(),
     });
+  }
+
+  *#reconcile(): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 
   destroy(): void {
