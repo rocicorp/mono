@@ -11,7 +11,8 @@ import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts
 import type {Service} from '../service.ts';
 import type {PreSerializedBatch} from './broadcast.ts';
 import * as ErrorType from './error-type-enum.ts';
-import type {SnapshotMessage} from './snapshot.ts';
+import type {SnapshotMessage} from './snapshot-message.ts';
+import type {SubscribeDownstream} from './subscribe.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
@@ -72,7 +73,9 @@ export interface ChangeStreamer {
    * date. Each result contains parsed, validated data and its approximate
    * serialized transport size.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>>;
+  subscribe(
+    ctx: SubscriberContext,
+  ): Promise<Source<Sized<SubscribeDownstream>>>;
 }
 
 // v1: v0.18

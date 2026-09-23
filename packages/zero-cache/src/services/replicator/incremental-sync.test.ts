@@ -1011,6 +1011,48 @@ describe('replicator/incremental-sync', () => {
     void localSyncing.catch(() => {});
   });
 
+  test('the first subscribe reuses the initial connection; reconnects use a fresh one', async () => {
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+
+    const {promise: hasReconnected, resolve: reconnected} = resolver<true>();
+    const changeStreamerSubscribe = vi.fn().mockImplementation(() => {
+      reconnected(true);
+      return resolver().promise;
+    });
+    const initialSubscribe = vi.fn().mockResolvedValueOnce(downstream);
+
+    const syncer = new IncrementalSyncer(
+      lc,
+      TASK_ID,
+      REPLICA_ID,
+      {subscribe: changeStreamerSubscribe},
+      worker,
+      'serving',
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+      {subscribe: initialSubscribe, cancel: vi.fn()},
+    );
+
+    const localSyncing = syncer.run();
+
+    // The first connection is served by the initial (reservation) connection,
+    // not a fresh changeStreamer.subscribe() call.
+    await vi.waitFor(() => expect(initialSubscribe).toHaveBeenCalledTimes(1));
+    expect(changeStreamerSubscribe).not.toHaveBeenCalled();
+    expect(initialSubscribe.mock.calls[0][0]).toMatchObject({
+      taskID: TASK_ID,
+      mode: 'serving',
+    });
+
+    // Once that connection ends, the reconnect goes through the regular
+    // changeStreamer, not the (already-consumed) initial connection.
+    downstream.fail(new Error('doh'));
+    expect(await hasReconnected).toBe(true);
+    expect(initialSubscribe).toHaveBeenCalledTimes(1);
+
+    syncer.stop(lc);
+    void localSyncing.catch(() => {});
+  });
+
   test('shut down on change-streamer error message', async () => {
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
     const processMessages = vi.spyOn(worker, 'processMessages');

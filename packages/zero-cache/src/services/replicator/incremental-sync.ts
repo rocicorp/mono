@@ -3,16 +3,17 @@ import {AbortError} from '../../../../shared/src/abort-error.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {mapPostgresToLiteIndex} from '../../db/pg-to-lite.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
-import type {Source} from '../../types/streams.ts';
+import type {Sized, Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {ReservationFollowup} from '../change-streamer/change-streamer-http.ts';
 import {
   errorTypeToReadableName,
   PROTOCOL_VERSION,
   type ChangeStreamer,
-  type SizedDownstream,
 } from '../change-streamer/change-streamer.ts';
 import type * as ErrorType from '../change-streamer/error-type-enum.ts';
+import type {SubscribeDownstream} from '../change-streamer/subscribe.ts';
 import {RunningState} from '../running-state.ts';
 import type {CommitResult} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
@@ -47,6 +48,9 @@ export class IncrementalSyncer {
   readonly #statusPublisher: ReplicationStatusPublisher | null;
   readonly #notifier: Notifier;
   readonly #reporter: ReplicationReportRecorder;
+  // Consumed (and cleared) by the first subscribe() in run()'s loop; every
+  // subsequent (re)connection goes through #changeStreamer.subscribe().
+  #initialConnection: ReservationFollowup | undefined;
 
   readonly #state = new RunningState('IncrementalSyncer');
 
@@ -64,6 +68,7 @@ export class IncrementalSyncer {
     worker: WriteWorkerClient,
     mode: ReplicatorMode,
     statusPublisher: ReplicationStatusPublisher | null,
+    initialConnection?: ReservationFollowup,
   ) {
     this.#lc = lc;
     this.#taskID = taskID;
@@ -74,6 +79,7 @@ export class IncrementalSyncer {
     this.#statusPublisher = statusPublisher;
     this.#notifier = new Notifier();
     this.#reporter = new ReplicationReportRecorder(lc);
+    this.#initialConnection = initialConnection;
   }
 
   async run() {
@@ -99,19 +105,28 @@ export class IncrementalSyncer {
       const {replicaVersion, watermark} =
         await this.#worker.getSubscriptionState();
 
-      let downstream: Source<SizedDownstream> | undefined;
+      let downstream: Source<Sized<SubscribeDownstream>> | undefined;
       let unregister = () => {};
       let err: unknown | undefined;
 
       try {
-        downstream = await this.#changeStreamer.subscribe({
+        const ctx = {
           protocolVersion: PROTOCOL_VERSION,
           taskID: this.#taskID,
           id: this.#id,
           mode: this.#mode,
           watermark,
           replicaVersion,
-        });
+        };
+        // The first connection reuses the still-open reservation connection
+        // (if any) from the backup restore, so the replication-manager that
+        // reserved the change log is the one that serves the subscription.
+        // Every reconnect after that opens a fresh connection.
+        const initialConnection = this.#initialConnection;
+        this.#initialConnection = undefined;
+        downstream = initialConnection
+          ? await initialConnection.subscribe(ctx)
+          : await this.#changeStreamer.subscribe(ctx);
         unregister = this.#state.cancelOnStop(downstream);
         this.#statusPublisher?.publish(
           lc,
@@ -169,6 +184,11 @@ export class IncrementalSyncer {
 
           this.#replicationEvents.add(1);
           switch (message[0]) {
+            case 'reserved':
+              lc.warn?.(`unexpected snapshot reservation message recevied`, {
+                message: message[0],
+              });
+              break;
             case 'status': {
               const {lagReport} = message[1];
               if (lagReport) {

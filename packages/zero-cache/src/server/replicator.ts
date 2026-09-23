@@ -14,7 +14,11 @@ import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {initEventSink} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
-import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
+import {
+  ChangeStreamerHttpClient,
+  type ReservationFollowup,
+  type SnapshotReserver,
+} from '../services/change-streamer/change-streamer-http.ts';
 import {reserveAndGetSnapshotStatus} from '../services/change-streamer/snapshot.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
@@ -84,15 +88,39 @@ export default async function runWorker(
     );
   initEventSink(lc, config);
 
+  const shard = getShardConfig(config);
+  const {
+    taskID,
+    change,
+    changeStreamer: {
+      port,
+      uri: changeStreamerURI = runningLocalChangeStreamer
+        ? `http://localhost:${port}/`
+        : undefined,
+    },
+  } = config;
+  const changeStreamer = new ChangeStreamerHttpClient(
+    lc,
+    shard,
+    change.db,
+    changeStreamerURI,
+  );
+
   // Remote view-syncers restore from the replication-manager, which supplies
   // the backup URL. A local change-streamer owns the canonical replica and
   // must not infer backup configuration from bundled executable paths.
+  //
+  // The reservation's connection (`initialConnection`) is threaded through to
+  // IncrementalSyncer's first subscribe(), so the replication-manager that
+  // reserved the change log for this restore is the one that serves the
+  // subscription (single-connection handoff).
+  let initialConnection: ReservationFollowup | undefined;
   if (
     fileMode === 'serving' &&
     !runningLocalChangeStreamer &&
     (config.litestream.executable || config.litestream.executableV5)
   ) {
-    await restoreReplica(lc, config);
+    initialConnection = await restoreReplica(lc, config, changeStreamer);
   }
 
   const {
@@ -137,24 +165,6 @@ export default async function runWorker(
   const workerClient = new ThreadWriteWorkerClient();
   await workerClient.init(dbPath, mode, pragmas, config.log, checkpoint);
 
-  const shard = getShardConfig(config);
-  const {
-    taskID,
-    change,
-    changeStreamer: {
-      port,
-      uri: changeStreamerURI = runningLocalChangeStreamer
-        ? `http://localhost:${port}/`
-        : undefined,
-    },
-  } = config;
-  const changeStreamer = new ChangeStreamerHttpClient(
-    lc,
-    shard,
-    change.db,
-    changeStreamerURI,
-  );
-
   const replicator = new ReplicatorService(
     lc,
     taskID,
@@ -166,6 +176,7 @@ export default async function runWorker(
       ? // publish ReplicationStatusEvents from backup-replicator only
         ReplicationStatusPublisher.forReplicaFile(dbPath)
       : null,
+    initialConnection,
   );
 
   setUpMessageHandlers(lc, replicator, parent);
@@ -239,31 +250,46 @@ const RETRY_INTERVAL_MS = 3000;
 // replica. The platform's startup probe budget (which scales with replica
 // size) is the backstop, so restoreReplica must not impose its own shorter
 // cap and self-terminate while the backup is still being produced.
-async function restoreReplica(lc: LogContext, config: NormalizedZeroConfig) {
+//
+// Returns the `followup` of the reservation whose backup was actually
+// restored, still open, so the caller can hand it to IncrementalSyncer's
+// first subscribe() via `followup.subscribe()`: the same replication-manager
+// that reserved the change log is the one that serves the subscription.
+async function restoreReplica(
+  lc: LogContext,
+  config: NormalizedZeroConfig,
+  changeStreamer: SnapshotReserver,
+): Promise<ReservationFollowup> {
   const start = performance.now();
   let backupURL: string | undefined;
   let result: RestoreResult | undefined;
   const progress = new RestoreProgressReporter(lc, config.replica.file);
   try {
     for (;;) {
-      const snapshotStatus = await reserveAndGetSnapshotStatus(lc, config);
+      const {reserved, followup} = await reserveAndGetSnapshotStatus(
+        lc,
+        config.taskID,
+        changeStreamer,
+      );
       // The backupURL comes from the replication-manager's snapshot response.
-      ({backupURL} = snapshotStatus);
+      ({backupURL} = reserved);
       const litestream: LitestreamConfig = {...config.litestream, backupURL};
-      progress.start(snapshotStatus.replicaSize);
+      progress.start(reserved.replicaSize);
       const attempt = await tryRestore(
         lc,
         litestream,
         config.replica.file,
-        snapshotStatus,
+        reserved,
         'view_syncer',
       );
       progress.stop();
       if (attempt.restored) {
         result = attempt.result;
         progress.done();
-        return;
+        return followup; // connection to be converted to a subscription
       }
+      // This attempt's reservation is stale; a fresh one is made on retry.
+      followup.cancel();
       lc.info?.(
         `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
       );

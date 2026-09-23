@@ -16,6 +16,7 @@ import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {
   isPreSerialized,
+  readHead,
   stream,
   streamInternal,
   streamInternalStringified,
@@ -995,4 +996,27 @@ describe('bidirectional streamInternal', () => {
 
     ws.close();
   });
+});
+
+test('readHead', async () => {
+  const subscription = Subscription.create<number>();
+  for (let i = 1; i <= 10; i++) {
+    subscription.push(i);
+  }
+
+  const {head, rest} = readHead(subscription);
+
+  expect(await head.next()).toEqual({value: 1});
+  expect(await head.next()).toEqual({value: 2});
+  expect(await head.next()).toEqual({value: 3});
+
+  const tail: number[] = [];
+  for await (const n of rest) {
+    tail.push(n);
+    if (n === 10) {
+      subscription.cancel();
+    }
+  }
+
+  expect(tail).toEqual([4, 5, 6, 7, 8, 9, 10]);
 });

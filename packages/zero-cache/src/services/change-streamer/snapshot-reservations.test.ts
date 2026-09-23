@@ -5,8 +5,8 @@ import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Source} from '../../types/streams.ts';
+import type {SnapshotMessage} from './snapshot-message.ts';
 import {SnapshotReservations} from './snapshot-reservations.ts';
-import type {SnapshotMessage} from './snapshot.ts';
 
 function getFirstMessage(
   sub: Source<SnapshotMessage>,

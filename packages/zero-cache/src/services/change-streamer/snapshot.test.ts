@@ -2,21 +2,16 @@ import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import type {NormalizedZeroConfig} from '../../config/normalize.ts';
-import type {Source} from '../../types/streams.ts';
-import {Subscription} from '../../types/subscription.ts';
-import {
-  reserveAndGetSnapshotStatus,
-  type ReserveSnapshot,
-  type SnapshotMessage,
-  type SnapshotStatus,
-} from './snapshot.ts';
+import type {
+  ReservationFollowup,
+  SnapshotReserver,
+} from './change-streamer-http.ts';
+import {reserveAndGetSnapshotStatus, type SnapshotStatus} from './snapshot.ts';
 
 describe('change-streamer/snapshot', () => {
   const lc = createSilentLogContext();
-  const config = {} as NormalizedZeroConfig;
   const status: SnapshotStatus = {
-    tag: 'status',
+    tag: 'snapshot',
     backupURL: 's3://bucket/backup',
     replicaVersion: '123',
     minWatermark: '0a',
@@ -50,42 +45,52 @@ describe('change-streamer/snapshot', () => {
     (added as () => void)();
   }
 
-  test('signal listeners are removed once the reservation completes', async () => {
-    const stream = Subscription.create<SnapshotMessage>();
-    const reserve: ReserveSnapshot = vi
-      .fn<ReserveSnapshot>()
-      // The first attempt fails (e.g. incompatible replication-manager).
-      .mockRejectedValueOnce(new Error('not yet'))
-      .mockResolvedValueOnce(stream);
+  function fakeFollowup(): ReservationFollowup {
+    return {
+      subscribe: vi.fn(),
+      cancel: vi.fn(),
+    };
+  }
 
-    const result = reserveAndGetSnapshotStatus(lc, config, reserve);
+  test('signal listeners are removed once the reservation completes', async () => {
+    const followup = fakeFollowup();
+    const changeStreamer: SnapshotReserver = {
+      reserveSnapshot: vi
+        .fn()
+        // The first attempt fails (e.g. incompatible replication-manager).
+        .mockRejectedValueOnce(new Error('not yet'))
+        .mockResolvedValueOnce({reserved: status, followup}),
+    };
+    const result = reserveAndGetSnapshotStatus(lc, 'task-id', changeStreamer);
     // The listeners are registered while the reservation is in progress...
     expectListenersAdded(1);
 
-    // ... including across the retry sleep.
+    // ... including across the retry sleep. Advancing past the retry also
+    // resolves the (immediately-settling, per the mock) second attempt, so by
+    // the time this settles the reservation has already fully completed.
     await vi.advanceTimersByTimeAsync(5000);
-    expect(reserve).toHaveBeenCalledTimes(2);
-    expectListenersAdded(1);
+    expect(changeStreamer.reserveSnapshot).toHaveBeenCalledTimes(2);
 
-    stream.push(['status', status]);
-    expect(await result).toEqual(status);
+    expect(await result).toEqual({reserved: status, followup});
 
-    // The change-streamer closes the stream when the subscription starts.
-    stream.cancel();
-    await vi.advanceTimersByTimeAsync(0);
-
-    // ... and are gone once the reservation is over, so that repeated
-    // reservations do not accumulate process listeners.
+    // ... and are gone as soon as the reservation resolves, so that repeated
+    // reservations do not accumulate process listeners. The returned
+    // `followup`'s connection lifetime is the caller's responsibility from
+    // here (subscribe() or cancel() it); this function is no longer involved.
     expectListenersAdded(0);
+    expect(followup.cancel).not.toHaveBeenCalled();
   });
 
   test('signal during retry rejects and removes the listeners', async () => {
-    const reserve: ReserveSnapshot = vi
-      .fn<ReserveSnapshot>()
-      .mockRejectedValue(new Error('not yet'));
+    const changeStreamer: SnapshotReserver = {
+      reserveSnapshot: vi
+        .fn()
+        // The first attempt fails (e.g. incompatible replication-manager).
+        .mockRejectedValueOnce(new Error('not yet')),
+    };
 
     const sigtermListeners = new Set(process.listeners('SIGTERM'));
-    const result = reserveAndGetSnapshotStatus(lc, config, reserve);
+    const result = reserveAndGetSnapshotStatus(lc, 'task-id', changeStreamer);
     // Attach a rejection handler immediately to prevent unhandledRejections.
     result.catch(() => {});
     await vi.advanceTimersByTimeAsync(1000);
@@ -97,14 +102,17 @@ describe('change-streamer/snapshot', () => {
     expectListenersAdded(0);
   });
 
-  test('signal while the reservation is pending rejects and removes the listeners', async () => {
-    const reservation = resolver<Source<SnapshotMessage>>();
-    const reserve: ReserveSnapshot = vi
-      .fn<ReserveSnapshot>()
-      .mockReturnValue(reservation.promise);
+  test('signal while the reservation is pending rejects, removes the listeners, and cancels a late reservation', async () => {
+    const reservation = resolver<{
+      reserved: SnapshotStatus;
+      followup: ReservationFollowup;
+    }>();
+    const changeStreamer: SnapshotReserver = {
+      reserveSnapshot: vi.fn().mockReturnValue(reservation.promise),
+    };
 
     const sigtermListeners = new Set(process.listeners('SIGTERM'));
-    const result = reserveAndGetSnapshotStatus(lc, config, reserve);
+    const result = reserveAndGetSnapshotStatus(lc, 'task-id', changeStreamer);
     result.catch(() => {});
     await vi.advanceTimersByTimeAsync(0);
     expectListenersAdded(1);
@@ -114,31 +122,13 @@ describe('change-streamer/snapshot', () => {
     await expect(result).rejects.toBeInstanceOf(AbortError);
     expectListenersAdded(0);
 
-    // A reservation that completes after the abort is not held open.
-    const stream = Subscription.create<SnapshotMessage>();
-    reservation.resolve(stream);
+    // promiseOrAbort() doesn't cancel the loser of the race: the reservation
+    // can still resolve after this function has already given up on it. When
+    // it does, its connection must be closed rather than leaked, since
+    // nobody will call followup.subscribe().
+    const followup = fakeFollowup();
+    reservation.resolve({reserved: status, followup});
     await vi.advanceTimersByTimeAsync(0);
-    expect((await stream[Symbol.asyncIterator]().next()).done).toBe(true);
-  });
-
-  test('signal while the stream is open cancels it and removes the listeners', async () => {
-    const stream = Subscription.create<SnapshotMessage>();
-    const reserve: ReserveSnapshot = vi
-      .fn<ReserveSnapshot>()
-      .mockResolvedValue(stream);
-
-    const sigtermListeners = new Set(process.listeners('SIGTERM'));
-    const result = reserveAndGetSnapshotStatus(lc, config, reserve);
-    stream.push(['status', status]);
-    expect(await result).toEqual(status);
-    expectListenersAdded(1);
-
-    sendSigterm(sigtermListeners);
-    await vi.advanceTimersByTimeAsync(0);
-
-    expectListenersAdded(0);
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
-      AbortError,
-    );
+    expect(followup.cancel).toHaveBeenCalledTimes(1);
   });
 });
