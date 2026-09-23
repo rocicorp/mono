@@ -1594,6 +1594,7 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
         : t.join),
       hidden: false,
       system: 'client',
+      storage: new MemoryStorage(),
     }),
     mockDelegate,
     filterInput =>

@@ -12,6 +12,7 @@ import {
   FlippedJoin,
   setMultiConstraintChunkSizeForTest,
 } from './flipped-join.ts';
+import {MemoryStorage} from './memory-storage.ts';
 import type {FetchRequest, Input, Output} from './operator.ts';
 import {Snitch, type FetchMessage, type SnitchMessage} from './snitch.ts';
 import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
@@ -117,6 +118,7 @@ function makeSetup(opts: {
     relationshipName: 'children',
     hidden: false,
     system: 'client',
+    storage: new MemoryStorage(),
   });
 
   return {fj, log, parent, child};

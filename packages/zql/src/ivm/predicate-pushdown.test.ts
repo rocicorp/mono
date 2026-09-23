@@ -220,6 +220,7 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
       relationshipName: 'tagged',
       hidden: true,
       system: 'client',
+      storage: new MemoryStorage(),
     });
 
     const incomingFilter: NoSubqueryCondition = cmpEq('status', 'open');
@@ -267,6 +268,7 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
       relationshipName: 'tagged',
       hidden: true,
       system: 'client',
+      storage: new MemoryStorage(),
     });
 
     const incomingFilter: NoSubqueryCondition = cmpEq('status', 'open');

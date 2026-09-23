@@ -18,6 +18,7 @@ import {buildFilterPipeline} from '../../zql/src/ivm/filter-operators.ts';
 import {Filter} from '../../zql/src/ivm/filter.ts';
 import {Join} from '../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 
 import {
   makeSourceChangeAdd,
@@ -435,6 +436,7 @@ describe('Join', () => {
       relationshipName: 'owner',
       hidden: false,
       system: 'client',
+      storage: new MemoryStorage(),
     });
     const out = new Catch(join);
 
@@ -471,6 +473,7 @@ describe('Join', () => {
       relationshipName: 'owner',
       hidden: false,
       system: 'client',
+      storage: new MemoryStorage(),
     });
     new Catch(join);
     join.fetch({});
@@ -518,6 +521,7 @@ describe('Join', () => {
       relationshipName: 'owner',
       hidden: false,
       system: 'client',
+      storage: new MemoryStorage(),
     });
     new Catch(join);
     join.fetch({});
