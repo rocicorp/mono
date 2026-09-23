@@ -973,21 +973,22 @@ class TransactionProcessor {
     const rowKeyCols = relation.rowKey.columns;
     const cols = [...rowKeyCols, ...columns];
 
-    const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
     // If none of the columns are still backfilling on this replica, they were
     // already published (e.g. a redundant backfill from a replication-manager
     // re-running a backfill this replica already completed). Bumping versions
     // again would spuriously reset pipelines and re-report completion, so treat
     // the completion as a no-op.
-    if (
-      !cols.some(col => columnMetadata.getColumn(tableName, col)?.isBackfilling)
-    ) {
+    const tableSpec = must(this.#tableSpecs.get(tableName));
+    const backfillingSet = new Set(tableSpec.backfilling ?? []);
+    if (!cols.some(col => backfillingSet.has(col))) {
       this.#lc.debug?.(
         `skipping redundant backfill-completed for ${tableName} ` +
           `(all columns already published)`,
       );
       return;
     }
+
+    const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
     for (const col of cols) {
       columnMetadata.clearBackfilling(tableName, col);
     }
