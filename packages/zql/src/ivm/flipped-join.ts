@@ -36,7 +36,12 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
-import type {TakeBoundProvider} from './take-gate.ts';
+import {
+  isInParentFetch,
+  readParentFetchBounds,
+  type ParentFetchBound,
+  type TakeBoundProvider,
+} from './take-gate.ts';
 
 /**
  * Maximum number of entries sent in a single batched `parent.fetch`
@@ -116,6 +121,7 @@ export class FlippedJoin implements Input {
 
   #inprogressChildChange: Change | undefined;
   #inprogressChildChangePosition: Row | undefined;
+  #inprogressParentFetchBounds: ParentFetchBound[] | undefined;
 
   constructor({
     parent,
@@ -363,30 +369,20 @@ export class FlippedJoin implements Input {
   ): Stream<Node> {
     let overlaidRelatedChildNodes = relatedChildNodes;
 
-    let isParentInPushQueue: boolean;
-    if (this.#boundProvider) {
-      const partitionConstraint = this.#parentPartitionKey
-        ? Object.fromEntries(
-            this.#parentPartitionKey.map(k => [k, minParentNode.row[k]]),
-          )
-        : undefined;
-      const bound = this.#boundProvider.getBound(partitionConstraint);
-      isParentInPushQueue =
-        bound !== undefined &&
-        this.#inprogressChildChangePosition !== undefined &&
-        this.#parent
-          .getSchema()
-          .compareRows(minParentNode.row, this.#inprogressChildChangePosition) >
-          0 &&
-        this.#parent.getSchema().compareRows(minParentNode.row, bound) <= 0;
-    } else {
-      isParentInPushQueue =
-        this.#inprogressChildChangePosition !== undefined &&
-        this.#parent
-          .getSchema()
-          .compareRows(minParentNode.row, this.#inprogressChildChangePosition) >
-          0;
-    }
+    // The parent has yet to get the in-progress child change if it comes
+    // after the current position and a parent fetch of the push yields it.
+    // With a TakeGate the fetches are capped at the bounds read when they
+    // started.
+    const {compareRows} = this.#parent.getSchema();
+    const isParentInPushQueue =
+      this.#inprogressChildChangePosition !== undefined &&
+      compareRows(minParentNode.row, this.#inprogressChildChangePosition) > 0 &&
+      (this.#inprogressParentFetchBounds === undefined ||
+        isInParentFetch(
+          this.#inprogressParentFetchBounds,
+          minParentNode.row,
+          compareRows,
+        ));
 
     if (
       this.#inprogressChildChange &&
@@ -484,33 +480,39 @@ export class FlippedJoin implements Input {
         }
       }
 
-      let parentNodeStream: Stream<Node | 'yield'>;
+      let fetchConstraints: Constraint[];
       if (changeType !== ChangeType.ADD && changeType !== ChangeType.CHILD) {
         assert(
           matching,
           'Matching entries must exist for non-add child change',
         );
-        if (matching.length === 1) {
-          const [entry] = matching;
-          parentNodeStream = this.#parent.fetch({
-            constraint: entry.partitionConstraint
-              ? {...constraint, ...entry.partitionConstraint}
-              : constraint,
-          });
-        } else {
-          const streams = matching.map(entry =>
-            this.#parent.fetch({
-              constraint: entry.partitionConstraint
-                ? {...constraint, ...entry.partitionConstraint}
-                : constraint,
-            }),
-          );
-          const compare = (a: Node, b: Node) =>
-            this.#schema.compareRows(a.row, b.row);
-          parentNodeStream = mergeSortedStreams(streams, compare);
-        }
+        fetchConstraints = matching.map(entry =>
+          entry.partitionConstraint
+            ? {...constraint, ...entry.partitionConstraint}
+            : constraint,
+        );
       } else {
-        parentNodeStream = this.#parent.fetch({constraint});
+        fetchConstraints = [constraint];
+      }
+      if (this.#boundProvider) {
+        this.#inprogressParentFetchBounds = readParentFetchBounds(
+          this.#boundProvider,
+          fetchConstraints,
+        );
+      }
+
+      let parentNodeStream: Stream<Node | 'yield'>;
+      if (fetchConstraints.length === 1) {
+        parentNodeStream = this.#parent.fetch({
+          constraint: fetchConstraints[0],
+        });
+      } else {
+        const streams = fetchConstraints.map(c =>
+          this.#parent.fetch({constraint: c}),
+        );
+        const compare = (a: Node, b: Node) =>
+          this.#schema.compareRows(a.row, b.row);
+        parentNodeStream = mergeSortedStreams(streams, compare);
       }
 
       for (const parentNode of parentNodeStream) {
@@ -582,6 +584,7 @@ export class FlippedJoin implements Input {
     } finally {
       this.#inprogressChildChange = undefined;
       this.#inprogressChildChangePosition = undefined;
+      this.#inprogressParentFetchBounds = undefined;
     }
   }
 
