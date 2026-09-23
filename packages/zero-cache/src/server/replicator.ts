@@ -244,13 +244,13 @@ function observeSQLiteFileBytes(
 
 const RETRY_INTERVAL_MS = 3000;
 
-// View-syncers (no replicaConstraints) wait indefinitely for the
-// replication-manager to publish a restorable backup. On a fresh stack the
-// first backup is not durable until the initial sync completes and litestream
-// uploads the initial snapshot, which can take many minutes for a large
-// replica. The platform's startup probe budget (which scales with replica
-// size) is the backstop, so restoreReplica must not impose its own shorter
-// cap and self-terminate while the backup is still being produced.
+// View-syncers wait indefinitely for the replication-manager to publish a
+// restorable backup. On a fresh stack the first backup is not durable until
+// the initial sync completes and litestream uploads the initial snapshot,
+// which can take many minutes for a large replica. The platform's startup
+// probe budget (which scales with replica size) is the backstop, so
+// restoreReplica must not impose its own shorter cap and self-terminate
+// while the backup is still being produced.
 //
 // Returns the `followup` of the reservation whose backup was actually
 // restored, still open, so the caller can hand it to IncrementalSyncer's
