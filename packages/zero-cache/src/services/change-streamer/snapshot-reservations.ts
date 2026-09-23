@@ -8,7 +8,7 @@ import {
   litestreamSnapshotReservationDuration,
 } from '../litestream/metrics.ts';
 import type {BackupConfig} from './change-streamer-service.ts';
-import type {SnapshotMessage} from './snapshot.ts';
+import type {SnapshotMessage} from './snapshot-message.ts';
 import type {ChangeLogReadSource} from './sqlite-change-log-read-router.ts';
 
 export class SnapshotReservations {
@@ -35,7 +35,7 @@ export class SnapshotReservations {
       cleanup: () => this.#close(taskID, instanceID),
     });
     this.#reservations.set(taskID, new Reservation(instanceID, downstream));
-    this.#lc.info?.(`created snasphot reservation for ${taskID}`);
+    this.#lc.info?.(`created snapshot reservation for ${taskID}`);
     return downstream;
   }
 

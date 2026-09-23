@@ -66,7 +66,7 @@ import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
 import {initChangeStreamerSchema} from './schema/init.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
-import type {SnapshotMessage} from './snapshot.ts';
+import type {SnapshotMessage} from './snapshot-message.ts';
 import {SQLiteChangeLogCatchup} from './sqlite-change-log-catchup.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {SQLiteChangeLogWriter} from './sqlite-change-log-writer.ts';

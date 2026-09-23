@@ -23,7 +23,7 @@ import {
 import type {SubscriberContext} from './change-streamer.ts';
 import {PROTOCOL_VERSION} from './change-streamer.ts';
 import {setupCDCTables} from './schema/tables.ts';
-import {type SnapshotMessage} from './snapshot.ts';
+import {type SnapshotMessage} from './snapshot-message.ts';
 import {type SubscribeDownstream} from './subscribe.ts';
 
 const SHARD_ID = {
@@ -255,9 +255,13 @@ describe('change-streamer/http', () => {
             getConnectionURI(changeDB),
             `http://${addr()}`,
           );
-      const sub = await client.reserveSnapshot('foo-bar-id');
-
-      expect(snapshotFn).toHaveBeenCalledWith('foo-bar-id');
+      // reserveSnapshot() now blocks on the connection's first inbound
+      // message, so the mocked reservation status must be pushed after the
+      // call starts (once the server has opened the reservation), not before.
+      const result = client.reserveSnapshot('foo-bar-id');
+      await vi.waitFor(() =>
+        expect(snapshotFn).toHaveBeenCalledWith('foo-bar-id'),
+      );
 
       const status = [
         'status',
@@ -271,7 +275,57 @@ describe('change-streamer/http', () => {
 
       snapshotStream.push(status);
 
-      expect(await drain(1, sub)).toEqual([status]);
+      // The server translates the /snapshot protocol's ['status', ...]
+      // message to the merged connection's ['reserved', {..., tag: 'snapshot'}].
+      const {reserved, followup} = await result;
+      expect(reserved).toEqual({...status[1], tag: 'snapshot'});
+
+      // The reservation connection is held open (by design, to pin the
+      // change-log floor) until a subscription starts on it. Transition it
+      // here, mirroring real usage, and verify that the SAME connection goes
+      // on to stream actual subscription (change-stream) messages — not just
+      // that subscribe() resolves.
+      const downstream = await followup.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'foo-bar-id',
+        id: 'foo',
+        mode: 'serving',
+        replicaVersion: '148',
+        watermark: '188',
+      });
+      await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledOnce());
+      expect(subscribeFn.mock.calls[0][0]).toMatchObject({
+        taskID: 'foo-bar-id',
+        watermark: '188',
+      });
+
+      const begin = JSON.stringify([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: '456'},
+      ]);
+      const commit = JSON.stringify([
+        'commit',
+        {tag: 'commit'},
+        {watermark: '456'},
+      ]);
+      must(capturedSubscribeDownstream).push(begin);
+      must(capturedSubscribeDownstream).push(commit);
+
+      // Pushed synchronously back-to-back, these batch into a single frame.
+      const batchedFrame = `{"id":1,"batch":[${begin},${commit}]}`;
+      const batchedSize = Math.round(batchedFrame.length / 2);
+
+      expect(await drain(2, downstream)).toEqual([
+        {
+          data: ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
+          size: batchedSize,
+        },
+        {
+          data: ['commit', {tag: 'commit'}, {watermark: '456'}],
+          size: batchedSize,
+        },
+      ]);
     },
   );
 

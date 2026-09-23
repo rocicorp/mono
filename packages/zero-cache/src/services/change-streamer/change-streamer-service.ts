@@ -57,8 +57,8 @@ import {
   ensureReplicationConfig,
   markResetRequired,
 } from './schema/tables.ts';
+import type {SnapshotMessage} from './snapshot-message.ts';
 import {SnapshotReservations} from './snapshot-reservations.ts';
-import type {SnapshotMessage} from './snapshot.ts';
 import {
   SQLiteChangeLogCatchup,
   type SQLiteChangeLogCleanupGuard,
