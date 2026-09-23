@@ -315,6 +315,38 @@ describe('compound primary keys', () => {
 });
 
 describe('getRow', () => {
+  test.each(['edit', 'remove'] as const)(
+    'revalidates a non-primary unique key after %s and finds its new owner',
+    change => {
+      const original = {id: 'a', a: 1, b: 'old'};
+      const edited = {...original, b: 'new'};
+      const db = newDB(
+        [original],
+        'CREATE TABLE foo (id TEXT PRIMARY KEY, a, b TEXT UNIQUE)',
+      );
+      const source = newSource(db, true);
+      apply(source, [
+        change === 'edit'
+          ? makeSourceChangeEdit(edited, original)
+          : makeSourceChangeRemove(original),
+      ]);
+
+      expect(source.getRow({b: 'old'})).toBeUndefined();
+      expect(source.getRow({b: 'new'})).toEqual(
+        change === 'edit' ? edited : undefined,
+      );
+      expect(source.getRow({a: 1, b: 'old'})).toBeUndefined();
+      expect(source.getRow({a: 1})).toEqual(
+        change === 'edit' ? edited : undefined,
+      );
+
+      const replacement = {id: 'b', a: 2, b: 'old'};
+      apply(source, [makeSourceChangeAdd(replacement)]);
+      expect(source.getRow({b: 'old'})).toEqual(replacement);
+      expect(rowsInDB(db)).toEqual([original]);
+    },
+  );
+
   test('reflects a row the batch edited, removed, or added', () => {
     const db = newDB(initial);
     const source = newSource(db, true);

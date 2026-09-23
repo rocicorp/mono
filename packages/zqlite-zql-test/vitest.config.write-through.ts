@@ -12,6 +12,7 @@ export default defineConfig({
   define,
   esbuild,
   test: {
+    name: 'zqlite-zql-test-write-through',
     include: ['../zql/src/**/*.test.ts'],
     setupFiles: ['./src/setup.ts'],
     testTimeout: 20_000,

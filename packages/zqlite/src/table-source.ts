@@ -794,9 +794,18 @@ export class TableSource implements Source {
       // The batch may have edited or removed the base row out from under this
       // lookup. Its own primary key is what identifies it in the batch.
       const overridden = delta.get(row);
-      return overridden === NOT_OVERRIDDEN ? row : overridden;
+      if (overridden === NOT_OVERRIDDEN) {
+        return row;
+      }
+      if (
+        overridden !== undefined &&
+        keyCols.every(c => overridden[c] === rowKey[c])
+      ) {
+        return overridden;
+      }
     }
-    // No base row: the batch may have added one that matches this key.
+    // The base match is absent, removed, or no longer matches this key. Another
+    // pending row may now own the key.
     return delta.getByColumns(keyCols, rowKey);
   }
 
