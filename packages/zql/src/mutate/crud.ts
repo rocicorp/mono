@@ -146,7 +146,13 @@ export function makeCRUDMutate<
   // Create a callable function that accepts CRUDMutateRequest
   const mutate = (request: AnyCRUDMutateRequest) => {
     const {table, kind, args} = request;
-    return executor(table, kind, args);
+    // Encode codec columns, as the table-property form (makeTableCRUD) does.
+    const columns = schema.tables[table]?.columns;
+    return executor(
+      table,
+      kind,
+      columns ? encodeRow(args as Record<string, unknown>, columns) : args,
+    );
   };
 
   // Only add table properties when enableLegacyMutators is true

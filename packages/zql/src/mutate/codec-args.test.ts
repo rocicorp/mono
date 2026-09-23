@@ -216,3 +216,37 @@ test('non-codec mutators are unaffected', () => {
   const mr = mutators.event.plain({id: 'a'});
   expect(mr.args).toEqual({id: 'a'});
 });
+
+test('a validator with a non-JSON output resolves as a validator, not a codec (type level)', () => {
+  // Zod 4 schemas expose decode/encode and may transform to a non-JSON type
+  // (e.g. a Date). They must take the validator signature, so the callable
+  // accepts the raw (validated) input rather than the decoded output.
+  const zodLike: StandardSchemaV1<EncodedArgs, DecodedArgs> & {
+    decode: (v: EncodedArgs) => DecodedArgs;
+    encode: (v: DecodedArgs) => EncodedArgs;
+  } = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: value => {
+        const {id, at} = value as EncodedArgs;
+        return {value: {id, at: new Date(at)}};
+      },
+    },
+    'decode': ({id, at}) => ({id, at: new Date(at)}),
+    'encode': ({id, at}) => ({id, at: at.getTime()}),
+  };
+  const def = defineMutator(zodLike, async ({args}) => {
+    expectTypeOf(args).toEqualTypeOf<DecodedArgs>();
+  });
+  expect(def.validator).toBe(zodLike);
+  expect(def.codec).toBeUndefined();
+
+  const mutators = defineMutators({event: {create: def}});
+  expectTypeOf(mutators.event.create).parameter(0).toEqualTypeOf<EncodedArgs>();
+  // The raw input is stored as-is (no encode).
+  expect(mutators.event.create({id: 'a', at: 1}).args).toEqual({
+    id: 'a',
+    at: 1,
+  });
+});

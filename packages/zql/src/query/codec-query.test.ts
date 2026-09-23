@@ -106,3 +106,36 @@ test('expression-builder 2-arg cmp encodes codec literals', () => {
     right: {type: 'literal', value: 7},
   });
 });
+
+test('LIKE-family patterns on a codec column bypass the codec', () => {
+  const tagged = table('tagged')
+    .columns({
+      id: string(),
+      // A codec whose encode would break on a plain pattern string.
+      at: string().codec<Date>({
+        decode: (s: string) => new Date(s),
+        encode: (d: Date) => d.toISOString(),
+      }),
+    })
+    .primaryKey('id');
+  const s = createSchema({tables: [tagged]});
+  for (const op of ['LIKE', 'NOT LIKE', 'ILIKE', 'NOT ILIKE'] as const) {
+    const q = newQuery(s, 'tagged').where('at', op, '2024-%');
+    expect(ast(q).where).toMatchObject({
+      op,
+      right: {type: 'literal', value: '2024-%'},
+    });
+    const qe = newQuery(s, 'tagged').where(({cmp}) => cmp('at', op, '2024-%'));
+    expect(ast(qe).where).toMatchObject({
+      op,
+      right: {type: 'literal', value: '2024-%'},
+    });
+  }
+  // Comparison operators still encode.
+  expect(
+    ast(newQuery(s, 'tagged').where('at', '=', new Date(0))).where,
+  ).toMatchObject({right: {value: '1970-01-01T00:00:00.000Z'}});
+
+  // @ts-expect-error - a LIKE pattern is a string, not the decoded Date
+  newQuery(s, 'tagged').where('at', 'LIKE', new Date(0));
+});

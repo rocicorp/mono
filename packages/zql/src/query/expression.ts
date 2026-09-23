@@ -4,6 +4,7 @@ import {must} from '../../../shared/src/must.ts';
 import {
   toStaticParam,
   type Condition,
+  type LikeOps,
   type LiteralValue,
   type Parameter,
   type SimpleOperator,
@@ -22,6 +23,12 @@ import type {
   PullTableSchema,
   Query,
 } from './query.ts';
+
+function isLikeOp(op: SimpleOperator): op is LikeOps {
+  return (
+    op === 'LIKE' || op === 'NOT LIKE' || op === 'ILIKE' || op === 'NOT ILIKE'
+  );
+}
 
 export type ParameterReference = {
   [toStaticParam](): Parameter;
@@ -43,7 +50,9 @@ export function encodeFilterValue(
     return value;
   }
   const codec = getCodec(column);
-  if (!codec) {
+  // LIKE-family operands are patterns over the stored string, not decoded
+  // column values, so they must not go through the codec.
+  if (!codec || isLikeOp(op)) {
     return value;
   }
   if (op === 'IN' || op === 'NOT IN') {

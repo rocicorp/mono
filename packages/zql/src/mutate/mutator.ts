@@ -78,10 +78,14 @@ export function defineMutator<
   >,
 ): MutatorDefinition<TInput, TInput, TContext, TWrappedTransaction>;
 
-// Overload for validator
+// Overload for validator. TOutput is unconstrained (as in defineQuery): a
+// Standard Schema validator may transform to a non-JSON type. Keeping it
+// JSON-bound made such validators (e.g. Zod 4 schemas, which also expose
+// decode/encode) fall through to the codec overload at the type level while
+// the runtime treats them as validators.
 export function defineMutator<
   TInput extends ReadonlyJSONValue | undefined = undefined,
-  TOutput extends ReadonlyJSONValue | undefined = TInput,
+  TOutput = TInput,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
@@ -225,11 +229,8 @@ type TypedDefineMutator<
     >,
   ): MutatorDefinition<TArgs, TArgs, TContext, TWrappedTransaction>;
 
-  // With validator
-  <
-    TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
-  >(
+  // With validator (must precede the codec signature; see defineMutator)
+  <TInput extends ReadonlyJSONValue | undefined, TOutput>(
     validator: StandardSchemaV1<TInput, TOutput>,
     mutator: MutatorDefinitionFunction<
       TOutput,

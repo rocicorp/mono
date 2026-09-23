@@ -1,6 +1,9 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
-import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import {
+  type LikeOps,
+  type SimpleOperator,
+} from '../../../zero-protocol/src/ast.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {
   SchemaValueToTSType,
@@ -157,19 +160,30 @@ export type GetFilterType<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
   TOperator extends SimpleOperator,
-> = TOperator extends 'IS' | 'IS NOT'
-  ? // SchemaValueToTSType adds null if the type is optional, but we add null
-    // no matter what for dx reasons. See:
-    // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
-    SchemaValueToTSType<TSchema['columns'][TColumn]> | null | undefined
-  : TOperator extends 'IN' | 'NOT IN'
-    ? // We don't want to compare to null in where clauses because it causes
-      // confusing results:
-      // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
-      readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
+> = TOperator extends LikeOps
+  ? TSchema['columns'][TColumn] extends {codec: unknown}
+    ? // A LIKE pattern on a codec column is matched against the stored
+      // string, so it is a string, not the decoded type.
+      string | undefined
     :
         | Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>
-        | undefined;
+        | undefined
+  : TOperator extends 'IS' | 'IS NOT'
+    ? // SchemaValueToTSType adds null if the type is optional, but we add null
+      // no matter what for dx reasons. See:
+      // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
+      SchemaValueToTSType<TSchema['columns'][TColumn]> | null | undefined
+    : TOperator extends 'IN' | 'NOT IN'
+      ? // We don't want to compare to null in where clauses because it causes
+        // confusing results:
+        // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
+        readonly Exclude<
+          SchemaValueToTSType<TSchema['columns'][TColumn]>,
+          null
+        >[]
+      :
+          | Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>
+          | undefined;
 
 export type AvailableRelationships<
   TTable extends string,
