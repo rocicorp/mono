@@ -637,11 +637,17 @@ export class Zero<
     const {clientSchema, hash} = clientSchemaFrom(schema);
     this.#clientSchema = clientSchema;
 
-    // Create a hash that includes storage key, URL configuration, and query parameters
+    // Create a hash that includes storage key, URL configuration, and query parameters.
+    // The cache server is part of it because the cookie a replica stores is
+    // only meaningful to the zero-cache that issued it: reopened against a
+    // different server, the client presents a cookie that server has no CVR
+    // for, gets `ClientNotFound`, and has to wipe. A different server is a
+    // different replica.
     const nameKey = JSON.stringify({
       storageKey: this.storageKey,
       mutateUrl: options.mutateURL ?? '',
       queryUrl: options.queryURL ?? options.getQueriesURL ?? '',
+      cacheUrl: server ?? '',
     });
     const hashedKey = h64(nameKey).toString(36);
     // Logged-out clients still need a stable local storage namespace.

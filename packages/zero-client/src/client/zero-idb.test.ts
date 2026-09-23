@@ -3,6 +3,7 @@ import {hasMemStore} from '../../../replicache/src/kv/mem-store.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {getServer} from './server-option.ts';
 import {LOGGED_OUT_STORAGE_USER_ID, Zero} from './zero.ts';
 
 const schema = createSchema({
@@ -79,6 +80,14 @@ test('idbName generation with URL configuration', async () => {
       },
       storageKey: 'different-storage-key',
     },
+    {
+      name: 'cache server provided',
+      config: {
+        cacheURL: 'https://cache.example.com',
+        mutateURL: 'https://example.com/mutate',
+        queryURL: 'https://example.com/query',
+      },
+    },
   ];
 
   for (const testCase of testCases) {
@@ -97,6 +106,7 @@ test('idbName generation with URL configuration', async () => {
         storageKey: testStorageKey,
         mutateUrl: testCase.config.mutateURL ?? '',
         queryUrl: testCase.config.queryURL ?? '',
+        cacheUrl: getServer(testCase.config.cacheURL ?? null) ?? '',
       }),
     ).toString(36)}`;
 
@@ -107,6 +117,33 @@ test('idbName generation with URL configuration', async () => {
 
     await zero.close();
   }
+});
+
+test('idbName differs by cache server, so a replica is never reopened against a server that did not issue its cookie', async () => {
+  const make = (cacheURL: string | undefined) =>
+    new Zero({
+      userID,
+      storageKey,
+      schema,
+      kvStore: 'mem',
+      cacheURL,
+      mutateURL: 'https://example.com/mutate',
+      queryURL: 'https://example.com/query',
+    });
+
+  const production = make('https://cache.example.com');
+  const canary = make('https://canary.example.com');
+  const productionAgain = make('https://cache.example.com/');
+  const none = make(undefined);
+
+  expect(canary.idbName).not.toBe(production.idbName);
+  expect(none.idbName).not.toBe(production.idbName);
+  // A trailing slash is the same server; `getServer` normalizes it.
+  expect(productionAgain.idbName).toBe(production.idbName);
+
+  await Promise.all(
+    [production, canary, productionAgain, none].map(z => z.close()),
+  );
 });
 
 test('delete closes and removes all databases for the same zero instance', async () => {
@@ -166,7 +203,7 @@ test('logged-out client uses a private storage sentinel for idb naming', async (
   });
 
   expect(zero.idbName).toEqual(
-    `rep:zero-${LOGGED_OUT_STORAGE_USER_ID}-o92aeop6ci3f:7:53.32bj126fs2e3f`,
+    `rep:zero-${LOGGED_OUT_STORAGE_USER_ID}-263ddfoiq8or4:7:53.32bj126fs2e3f`,
   );
 
   await zero.close();
