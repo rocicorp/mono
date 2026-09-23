@@ -41,7 +41,7 @@ export type RestoreResult =
   | 'invalid_replica'
   | 'error';
 
-type RestoreAttempt = {
+export type RestoreAttempt = {
   restored: boolean;
   backupURL: string | undefined;
   result: RestoreResult;
@@ -151,6 +151,7 @@ export async function tryRestore(
   replicaFile: string,
   replicaConstraints: ReplicaConstraints | undefined,
   role: LitestreamRole,
+  signal?: AbortSignal,
 ): Promise<RestoreAttempt> {
   const {backupURL} = config;
   const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
@@ -191,7 +192,7 @@ export async function tryRestore(
         String(parallelism),
         replicaFile,
       ],
-      {env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true},
+      {env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, signal},
     );
     let stdout = '';
     let stderr = '';

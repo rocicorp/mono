@@ -33,6 +33,8 @@ const snapshotStatusSchema = statusSchema.extend({
   tag: v.literal('snapshot'), // Replace tag: 'status' with tag: 'snapshot'
 });
 
+export type SnapshotStatus = v.Infer<typeof snapshotStatusSchema>;
+
 // ---------------------------------------------------------------------------
 // Upstream (view-syncer → replication-manager) — application control messages.
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
+  readHead,
   streamInternal,
   streamInternalStringified,
   streamInternalWithSize,
@@ -24,19 +25,18 @@ import {HttpService, type Options as HttpOptions} from '../http-service.ts';
 import {handleProfzRequest} from '../profz.ts';
 import type {PreSerializedBatch} from './broadcast.ts';
 import {
-  downstreamSchema,
   PROTOCOL_VERSION,
   type ChangeStreamer,
   type ChangeStreamerService,
-  type SizedDownstream,
   type SubscriberContext,
 } from './change-streamer.ts';
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
-import {snapshotMessageSchema, type SnapshotMessage} from './snapshot.ts';
+import {type SnapshotMessage} from './snapshot-message.ts';
 import {
   subscribeDownstreamSchema,
   subscribeUpstreamSchema,
   type ReservedMessage,
+  type SnapshotStatus,
   type SubscribeContext,
   type SubscribeDownstream,
   type SubscribeUpstream,
@@ -53,7 +53,6 @@ const SUBSCRIBE_PATH_PATTERN = '/replication/:version/subscribe';
 const PATH_REGEX =
   /\/replication\/v(?<version>\d+)\/(changes|snapshot|subscribe)$/;
 
-const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const SUBSCRIBE_PATH = `/replication/v${PROTOCOL_VERSION}/subscribe`;
 
 type Options = HttpOptions & {
@@ -321,7 +320,38 @@ export class ChangeStreamerHttpServer extends HttpService {
   }
 }
 
-export class ChangeStreamerHttpClient implements ChangeStreamer {
+export interface SnapshotReserver {
+  reserveSnapshot(taskID: string): Promise<{
+    reserved: SnapshotStatus;
+    followup: ReservationFollowup;
+  }>;
+}
+
+export interface SubscriptionStarter {
+  subscribe(
+    ctx: SubscriberContext,
+  ): Promise<Source<Sized<SubscribeDownstream>>>;
+}
+
+export interface ReservationFollowup extends SubscriptionStarter {
+  /**
+   * A signal to indicate that the followup is no longer valid (i.e. the
+   * connection to the reserving task has been severed).
+   */
+  readonly signal: AbortSignal;
+
+  /**
+   * Abandons the reservation without subscribing, closing the connection that
+   * was held open to pin the change-log floor. Used when the caller cannot
+   * proceed to `subscribe()` (e.g. process shutdown while a restore is in
+   * progress) and must not leave the reservation's connection open forever.
+   */
+  cancel(reason?: Error): void;
+}
+
+export class ChangeStreamerHttpClient
+  implements ChangeStreamer, SnapshotReserver, SubscriptionStarter
+{
   readonly #lc: LogContext;
   readonly #shardID: ShardID;
   readonly #changeDB: PostgresDB;
@@ -361,34 +391,41 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     return uri;
   }
 
-  async reserveSnapshot(taskID: string): Promise<Source<SnapshotMessage>> {
-    const uri = await this.#resolveChangeStreamer(SNAPSHOT_PATH);
+  async reserveSnapshot(taskID: string): Promise<{
+    reserved: SnapshotStatus;
+    followup: ReservationFollowup;
+  }> {
+    const {instream, outbound} = await this.connect(taskID);
+    outbound.push(['reserve-snapshot', {taskID}]);
 
-    const params = new URLSearchParams({taskID});
-    const ws = new WebSocket(uri + `?${params.toString()}`);
+    const {head, rest} = readHead(instream);
+    const item = await head.next();
+    if (!item.value) {
+      throw new Error('stream closed without snapshot reservation');
+    }
+    const {data: msg} = item.value;
+    if (msg[0] !== 'reserved') {
+      throw new Error(`expected "reserved" message but got ${msg[0]}`);
+    }
+    const reserved: SnapshotStatus = msg[1];
+    const followup: ReservationFollowup = {
+      subscribe: ctx => {
+        outbound.push(['start-subscription', toStartSubscriptionContext(ctx)]);
+        return Promise.resolve(rest);
+      },
+      signal: outbound.signal,
+      cancel: reason => outbound.cancel(reason),
+    };
 
-    return streamInternal(this.#lc, ws, snapshotMessageSchema);
+    return {reserved, followup};
   }
 
-  async subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>> {
-    const uri = await this.#resolveChangeStreamer(SUBSCRIBE_PATH);
-
-    // taskID is carried in the query for observability/routing; the server
-    // reads the authoritative context from the start-subscription message.
-    const params = new URLSearchParams({taskID: ctx.taskID});
-    const ws = new WebSocket(uri + `?${params.toString()}`);
-
-    const outbound = Subscription.create<SubscribeUpstream>();
-    // Subscribe-only flow (no snapshot reservation on this connection):
-    // transition straight into the subscription phase. For a fresh serving
-    // replicator, the reservation was taken over the legacy /snapshot
-    // connection during restore; the server releases it (keyed on taskID)
-    // once this subscriber is registered.
+  async subscribe(
+    ctx: SubscriberContext,
+  ): Promise<Source<Sized<SubscribeDownstream>>> {
+    const {instream, outbound} = await this.connect(ctx.taskID);
     outbound.push(['start-subscription', toStartSubscriptionContext(ctx)]);
-
-    // In the subscribe-only flow the server never sends a ['reserved', …]
-    // message, so the inbound stream is exactly the change-stream downstream.
-    return streamInternalWithSize(this.#lc, ws, downstreamSchema, outbound);
+    return instream;
   }
 
   /**
@@ -399,6 +436,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
    * the reservation, backup restore, and subscription, so the reserving
    * replication-manager is the one that serves the subscription.
    */
+  // exported for testing
   async connect(taskID: string): Promise<{
     instream: Source<Sized<SubscribeDownstream>>;
     outbound: Subscription<SubscribeUpstream>;

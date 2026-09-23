@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ReadonlyJSONObject} from '../../../../shared/src/json.ts';
 import type {Source} from '../../types/streams.ts';
+import type {ReservationFollowup} from '../change-streamer/change-streamer-http.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
@@ -97,6 +98,11 @@ export class ReplicatorService implements Replicator, Service {
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
     statusPublisher: ReplicationStatusPublisher | null,
+    // The still-open connection from the snapshot reservation that produced
+    // the replica this process just restored (serving mode only). Used for
+    // IncrementalSyncer's first subscribe() so the replication-manager that
+    // reserved the change log is the one that serves the subscription.
+    initialConnection?: ReservationFollowup,
   ) {
     this.id = id;
     this.#lc = lc
@@ -113,6 +119,7 @@ export class ReplicatorService implements Replicator, Service {
       worker,
       mode,
       statusPublisher,
+      initialConnection,
     );
   }
 

@@ -70,6 +70,25 @@ export type Sink<T> = {
 };
 
 /**
+ * Utility method for reading the first items from a {@link Source} and passing
+ * the `rest` to a separate consumer. The caller should call `head.next()` to
+ * pull items out of the Source, but should not call the
+ * {@link AsyncIterator.return()} method, as that will cancel the Source.
+ */
+export function readHead<T>(source: Source<T>): {
+  head: AsyncIterator<T, T, T>;
+  rest: Source<T>;
+} {
+  const iter = source[Symbol.asyncIterator]();
+  const rest: Source<T> = {
+    [Symbol.asyncIterator]: () => iter,
+    cancel: err => source.cancel(err),
+    signal: source.signal,
+  };
+  return {head: iter, rest};
+}
+
+/**
  * Back-pressure-aware transformation of a WebSocket into
  * upstream and downstream {@link Subscription} objects.
  *
