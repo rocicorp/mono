@@ -63,17 +63,15 @@ class OpSQLitePreparedStatement implements PreparedStatement {
   }
 }
 
+/** What `open()` accepts; kept so `destroy()` reopens with the same options. */
+type OpenOptions = Parameters<typeof open>[0];
+
 class OpSQLiteDatabase implements SQLiteDatabase {
   readonly #db: DB;
-  readonly #filename: string;
+  readonly #openOpts: OpenOptions;
 
   constructor(filename: string, opts?: OpSQLiteStoreOptions) {
-    this.#filename = filename;
-    const openOpts: {
-      name: string;
-      location?: string;
-      encryptionKey?: string;
-    } = {name: filename};
+    const openOpts: OpenOptions = {name: filename};
 
     if (opts?.location) {
       openOpts.location = opts.location;
@@ -82,6 +80,7 @@ class OpSQLiteDatabase implements SQLiteDatabase {
       openOpts.encryptionKey = opts.encryptionKey;
     }
 
+    this.#openOpts = openOpts;
     this.#db = open(openOpts);
   }
 
@@ -91,9 +90,12 @@ class OpSQLiteDatabase implements SQLiteDatabase {
 
   destroy(): void {
     // OpSQLite uses delete method on the database instance
-    // We need to create a temporary connection to delete the database
+    // We need to create a temporary connection to delete the database. It
+    // must be opened with the same options as the store, or a non-default
+    // `location` deletes a (freshly created, empty) file at the default path
+    // and leaves the real database in place.
     try {
-      const tempDb = open({name: this.#filename});
+      const tempDb = open(this.#openOpts);
       tempDb.delete();
       tempDb.close();
     } catch (_error) {
