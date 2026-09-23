@@ -1315,14 +1315,28 @@ export class CVRStore {
       this.#rowCache.clear();
       throw e;
     } finally {
-      this.#writes.clear();
-      this.#pendingInstanceWrite = undefined;
-      this.#pendingRowRecordUpdates.clear();
-      this.#forceUpdates.clear();
-      this.#pendingQueryUpdates.clear();
-      this.#pendingDesireUpdates.clear();
-      this.#pendingQueryPartialUpdates.clear();
+      this.discardPending();
     }
+  }
+
+  /**
+   * Discards the writes queued since the last {@link flush}, i.e. those of
+   * an updater that is abandoned without being flushed (such as an
+   * advancement that aborts with a pipeline reset). Otherwise they would be
+   * written by the next flush, even though the poke that carried them to the
+   * clients was cancelled.
+   *
+   * The row cache is not affected: it only learns of writes when they are
+   * flushed.
+   */
+  discardPending(): void {
+    this.#writes.clear();
+    this.#pendingInstanceWrite = undefined;
+    this.#pendingRowRecordUpdates.clear();
+    this.#forceUpdates.clear();
+    this.#pendingQueryUpdates.clear();
+    this.#pendingDesireUpdates.clear();
+    this.#pendingQueryPartialUpdates.clear();
   }
 
   hasPendingUpdates(): boolean {

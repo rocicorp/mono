@@ -1,5 +1,6 @@
 import {beforeEach, describe, expect, vi} from 'vitest';
 import {unreachable} from '../../../../shared/src/asserts.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
@@ -2440,6 +2441,248 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
     expect(await updater.deleteUnreferencedRows(lc)).toEqual([]);
+  });
+
+  // Updates that are abandoned, or that mix incremental changes from query A
+  // ('oneHash') with the re-execution of query C ('twoHash').
+  describe('abandoned and mixed updates', () => {
+    const A = 'oneHash';
+    const C = 'twoHash';
+    const NEW_VERSION = {stateVersion: '1ba'};
+
+    function queriesRow(queryHash: string, transformationHash: string) {
+      return {
+        clientGroupID: 'abc123',
+        queryHash,
+        queryArgs: null,
+        queryName: null,
+        clientAST: {table: 'issues'},
+        transformationHash,
+        transformationVersion: '1a0',
+        patchVersion: '1a0:01',
+        internal: null,
+        deleted: null,
+      } satisfies QueriesRow;
+    }
+
+    function rowsRow(
+      rowKey: {id: string},
+      refCounts: {[queryHash: string]: number} | null,
+      rowVersion = '03',
+      patchVersion = '1a0',
+    ): RowsRow {
+      return {
+        clientGroupID: 'abc123',
+        schema: 'public',
+        table: 'issues',
+        rowKey,
+        rowVersion,
+        patchVersion,
+        refCounts,
+      };
+    }
+
+    function initialState(rows: RowsRow[]): DBState {
+      return {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: Date.UTC(2024, 3, 23),
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+            clientSchema: null,
+          },
+        ],
+        clients: [{clientGroupID: 'abc123', clientID: 'fooClient'}],
+        queries: [
+          queriesRow(A, 'serverOneHash'),
+          queriesRow(C, 'serverTwoHash'),
+        ],
+        desires: [A, C].map(queryHash => ({
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash,
+          patchVersion: '1a0:01',
+          deleted: null,
+          inactivatedAt: null,
+          ttl: DEFAULT_TTL_MS,
+        })),
+        rows,
+      };
+    }
+
+    async function load(rows: RowsRow[]) {
+      await setInitialState(cvrDb, initialState(rows));
+      const cvrStore = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      return {cvrStore, cvr};
+    }
+
+    function flush(updater: CVRUpdater) {
+      return updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
+        ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+      );
+    }
+
+    function put(id: RowID, contents: JSONObject): PatchToVersion {
+      return {
+        toVersion: NEW_VERSION,
+        patch: {type: 'row', op: 'put', id, contents},
+      };
+    }
+
+    function del(id: RowID): PatchToVersion {
+      return {toVersion: NEW_VERSION, patch: {type: 'row', op: 'del', id}};
+    }
+
+    test('deleteUnreferencedRows does not resurrect a row tombstoned by an untracked query', async () => {
+      const {cvrStore, cvr} = await load([rowsRow(ROW_KEY1, {[A]: 1, [C]: 1})]);
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+      // C is re-executed; A is not tracked.
+      const {newVersion, queryPatches} = updater.trackQueries(
+        lc,
+        [{id: C, transformationHash: 'serverTwoHash'}],
+        [],
+      );
+      expect(newVersion).toEqual(NEW_VERSION);
+      expect(queryPatches).toEqual([]);
+
+      // An incremental change from A removes the row. C's old reference is
+      // stripped on first receipt, so the row is deleted.
+      expect(
+        await updater.received(
+          lc,
+          new Map([[ROW_ID1, {refCounts: {[A]: -1}}]]),
+        ),
+      ).toEqual([del(ROW_ID1)]);
+
+      // C's re-execution does not include the row. The row has already been
+      // finalized by received(), and must not be rebuilt as {A: 1}.
+      expect(await updater.deleteUnreferencedRows(lc)).toEqual([]);
+
+      await flush(updater);
+      await expectState(cvrDb, {
+        rows: [rowsRow(ROW_KEY1, null, '03', '1ba')],
+      });
+    });
+
+    test('discardPending drops the writes of an abandoned updater', async () => {
+      const {cvrStore, cvr} = await load([rowsRow(ROW_KEY1, {[A]: 1, [C]: 1})]);
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+      // A query update, a row edit and a new row.
+      updater.trackQueries(
+        lc,
+        [{id: C, transformationHash: 'serverTwoHashV2'}],
+        [],
+      );
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {version: '04', contents: {id: '123'}, refCounts: {[C]: 1}},
+          ],
+          [
+            ROW_ID2,
+            {version: '05', contents: {id: '321'}, refCounts: {[C]: 1}},
+          ],
+        ]),
+      );
+
+      cvrStore.discardPending();
+
+      const {flushed} = await flush(new CVRUpdater(cvrStore, cvr, '120'));
+      expect(flushed).toBe(false);
+      await expectState(cvrDb, {
+        instances: [
+          {
+            ...initialState([]).instances[0],
+            owner: 'my-task',
+            grantedAt: 1709251200000,
+          },
+        ],
+        queries: initialState([]).queries,
+        rows: [rowsRow(ROW_KEY1, {[A]: 1, [C]: 1})],
+      });
+    });
+
+    test('a row put by an abandoned advancement is not flushed by the reset that follows', async () => {
+      const {cvrStore, cvr} = await load([rowsRow(ROW_KEY1, {[A]: 1, [C]: 1})]);
+
+      // The advancement: C's (partial) output adds a row that was not in the
+      // CVR, and then the advancement is abandoned for a reset.
+      const advancement = new CVRQueryDrivenUpdater(
+        cvrStore,
+        cvr,
+        '1ba',
+        '120',
+      );
+      expect(
+        await advancement.received(
+          lc,
+          new Map([
+            [
+              ROW_ID2,
+              {version: '05', contents: {id: '321'}, refCounts: {[C]: 1}},
+            ],
+          ]),
+        ),
+      ).toEqual([put(ROW_ID2, {id: '321'})]);
+      cvrStore.discardPending();
+
+      // The hydration after the reset: A is rehydrated, and C is rejected
+      // (e.g. by its open hydration circuit breaker) without any rows.
+      const hydration = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+      const {newVersion} = hydration.trackQueries(
+        lc,
+        [
+          {id: A, transformationHash: 'serverOneHash'},
+          {id: C, transformationHash: 'serverTwoHash'},
+        ],
+        [],
+      );
+      expect(newVersion).toEqual(NEW_VERSION);
+      expect(
+        await hydration.received(
+          lc,
+          new Map([
+            [
+              ROW_ID1,
+              {version: '03', contents: {id: '123'}, refCounts: {[A]: 1}},
+            ],
+          ]),
+        ),
+      ).toEqual([
+        // The row is unchanged, so the patch is at its existing version.
+        {
+          toVersion: {stateVersion: '1a0'},
+          patch: {type: 'row', op: 'put', id: ROW_ID1, contents: {id: '123'}},
+        },
+      ]);
+      expect(await hydration.abortExecutedQueries(lc, [C])).toEqual([
+        {toVersion: NEW_VERSION, patch: {type: 'query', op: 'del', id: C}},
+      ]);
+      expect(await hydration.deleteUnreferencedRows(lc)).toEqual([]);
+      await flush(hydration);
+
+      // The row that the clients never received (the advancement's poke was
+      // cancelled) is not in the CVR.
+      await expectState(cvrDb, {
+        rows: [rowsRow(ROW_KEY1, {[A]: 1})],
+      });
+    });
   });
 
   // ^^: just run this test twice? Once for executed once for transformed
