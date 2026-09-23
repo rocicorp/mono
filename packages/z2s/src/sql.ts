@@ -264,7 +264,7 @@ function formatPlural(index: number, select: string) {
         )`;
 }
 
-function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {
+export function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {
   switch (type) {
     case 'boolean':
       return 'boolean';

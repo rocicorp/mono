@@ -7,6 +7,7 @@ import type {
   Conjunction,
   CorrelatedSubqueryCondition,
   Disjunction,
+  SimpleCondition,
 } from '../../../zero-protocol/src/ast.ts';
 import {Catch} from '../ivm/catch.ts';
 import {consume} from '../ivm/stream.ts';
@@ -2357,6 +2358,49 @@ test('bind static parameters', () => {
       },
     }
   `);
+});
+
+test('bind static parameters: a JSON path leaf re-validates the bound literal', () => {
+  const ast = (op: SimpleCondition['op'], field: string): AST => ({
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'simple',
+      op,
+      left: {
+        type: 'json',
+        value: {type: 'column', name: 'metadata'},
+        path: ['role'],
+      },
+      right: {type: 'static', anchor: 'authData', field},
+    },
+  });
+  const bind = (op: SimpleCondition['op'], field: string) =>
+    bindStaticParameters(ast(op, field), {
+      authData: {
+        role: 'admin',
+        roles: ['admin', 'editor'],
+        mixed: ['admin', 1],
+        claims: {sub: 'u1'},
+      },
+    });
+
+  // Values the wire would accept bind as usual.
+  expect(bind('=', 'role').where).toMatchObject({
+    right: {type: 'literal', value: 'admin'},
+  });
+  expect(bind('IN', 'roles').where).toMatchObject({
+    right: {type: 'literal', value: ['admin', 'editor']},
+  });
+  // A parameter is bound after the wire validation ran, so the rules the
+  // engines rely on (a homogeneous primitive list; no object literals) are
+  // re-applied to the bound value rather than surfacing as a Postgres cast
+  // error or silently dropped elements.
+  expect(() => bind('IN', 'mixed')).toThrow(/one type/);
+  expect(() => bind('=', 'claims')).toThrow();
+  // The operator's shape is checked too: IN needs a list, = a scalar.
+  expect(() => bind('IN', 'role')).toThrow(/expected a list/);
+  expect(() => bind('=', 'roles')).toThrow(/a scalar/);
 });
 
 test('empty or - nothing goes through', () => {

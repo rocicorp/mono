@@ -70,6 +70,114 @@ const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
 });
 
 /**
+ * Upper bound for an array-index segment. SQLite parses a `$[i]` index as an
+ * unsigned 32-bit integer (larger values silently wrap), and the Postgres `->`
+ * operator takes an `int4`, so anything above this is not a usable index on
+ * every engine.
+ */
+export const MAX_JSON_PATH_INDEX = 2 ** 31 - 1;
+
+/**
+ * A numeric JSON path segment is an array index and must be an integer in
+ * `[0, MAX_JSON_PATH_INDEX]`. Negative indices are rejected because the engines
+ * disagree on them (Postgres counts from the end, while JavaScript and SQLite
+ * yield null); larger values are rejected because SQLite wraps them modulo
+ * 2^32 (silently addressing another element) and Postgres cannot take them as
+ * an `int4` operand.
+ */
+export function isValidJsonPathIndex(index: number): boolean {
+  return Number.isInteger(index) && index >= 0 && index <= MAX_JSON_PATH_INDEX;
+}
+
+/**
+ * The JS type a JSON leaf must have to be compared against `literal` —
+ * `'string' | 'number' | 'boolean'` — or `undefined` for `null` and for an
+ * empty list. For an `IN`/`NOT IN` list, the type of its first element (lists
+ * are homogeneous: enforced by the builder's types, by `cmp()` and at the
+ * wire). Shared by the in-memory predicate, the SQLite pushdown and the
+ * Postgres compiler so the type-strict rule cannot drift between engines.
+ */
+export function jsonLiteralType(
+  literal: LiteralValue,
+): 'string' | 'number' | 'boolean' | undefined {
+  const v = Array.isArray(literal) ? literal[0] : literal;
+  switch (typeof v) {
+    case 'string':
+      return 'string';
+    case 'number':
+      return 'number';
+    case 'boolean':
+      return 'boolean';
+    default:
+      return undefined;
+  }
+}
+
+const negatedOperators: ReadonlySet<SimpleOperator> = new Set([
+  '!=',
+  'NOT LIKE',
+  'NOT ILIKE',
+  'NOT IN',
+]);
+
+/**
+ * The operators under which a JSON leaf of a *different* type than the literal
+ * is a match (it is "not equal"); under every other operator a mismatch is a
+ * non-match. `IS NOT` is not listed: `IS`/`IS NOT` are null-safe equality and
+ * already yield the strict answer.
+ */
+export function isNegatedOperator(op: SimpleOperator): boolean {
+  return negatedOperators.has(op);
+}
+
+const likeOperators: ReadonlySet<SimpleOperator> = new Set([
+  'LIKE',
+  'NOT LIKE',
+  'ILIKE',
+  'NOT ILIKE',
+]);
+
+/**
+ * The pattern-matching operators, which compare text and therefore require a
+ * string leaf whatever the literal's type.
+ */
+export function isLikeOperator(op: SimpleOperator): boolean {
+  return likeOperators.has(op);
+}
+
+/**
+ * Formats a JSON path reference for debug/display output, e.g.
+ * `metadata.tags[0]`. Shared by the builder's filter names, the planner debug
+ * output and test stringifiers so they cannot drift.
+ */
+export function formatJsonPathReference(ref: JsonPathReference): string {
+  return `${ref.value.name}${ref.path
+    .map(s => (typeof s === 'number' ? `[${s}]` : `.${s}`))
+    .join('')}`;
+}
+
+const jsonPathReferenceSchema: v.Type<JsonPathReference> = v.readonlyObject({
+  type: v.literal('json'),
+  value: columnReferenceSchema,
+  path: v
+    .readonlyArray(
+      v.union(
+        v.string(),
+        v
+          .number()
+          .assert(
+            isValidJsonPathIndex,
+            'expected a non-negative integer array index',
+          ),
+      ),
+    )
+    // `json(col, ...path)` types the path as non-empty; reject an empty one at
+    // the wire too, since the compilers address the last segment and a bare
+    // column is not a JSON leaf.
+    .assert(path => path.length > 0, 'expected a non-empty JSON path'),
+});
+
+/**
  * A parameter is a value that is not known at the time the query is written
  * and is resolved at runtime.
  *
@@ -100,17 +208,71 @@ const parameterReferenceSchema = v.readonlyObject({
 const conditionValueSchema = v.union(
   literalReferenceSchema,
   columnReferenceSchema,
+  jsonPathReferenceSchema,
   parameterReferenceSchema,
 );
 
 export type Parameter = v.Infer<typeof parameterReferenceSchema>;
 
-export const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
-  type: v.literal('simple'),
-  op: simpleOperatorSchema,
-  left: conditionValueSchema,
-  right: v.union(parameterReferenceSchema, literalReferenceSchema),
-});
+/**
+ * The literal compared against a JSON path leaf has the shape its operator
+ * needs: `IN`/`NOT IN` take a list (or `null`, the explicitly supported
+ * constant-false case) and every other operator a scalar. The builder's types
+ * guarantee this for a literal, but a parameter is bound to whatever the
+ * anchor holds; without this check a scalar bound to `IN` trips the in-memory
+ * predicate's array assertion and a list bound to `=` the Postgres compiler's
+ * plural assertion. A plain column's literal is not checked here (its shape
+ * was never validated at the wire, and changing that is out of scope).
+ */
+function hasJsonLeafLiteralShape(c: SimpleCondition): boolean {
+  if (c.left.type !== 'json' || c.right.type !== 'literal') {
+    return true;
+  }
+  const isList = Array.isArray(c.right.value);
+  return c.op === 'IN' || c.op === 'NOT IN'
+    ? isList || c.right.value === null
+    : !isList;
+}
+
+/**
+ * An `IN`/`NOT IN` list against a JSON path leaf is homogeneous: the engines
+ * compare the leaf against the type of the list's first element (see
+ * `jsonLiteralType`), and a mixed list would cast-fail on Postgres while
+ * silently dropping elements elsewhere. `cmp()` rejects one for a `json()`
+ * reference; this rejects it at the wire so a hand-built AST cannot bypass
+ * that. A plain column's list is not restricted (its type is the column's).
+ */
+function hasHomogeneousJsonInList(c: SimpleCondition): boolean {
+  if (
+    c.left.type !== 'json' ||
+    (c.op !== 'IN' && c.op !== 'NOT IN') ||
+    c.right.type !== 'literal'
+  ) {
+    return true;
+  }
+  const {value} = c.right;
+  if (!Array.isArray(value)) {
+    return true;
+  }
+  const list: readonly (string | number | boolean)[] = value;
+  return list.every(e => typeof e === typeof list[0]);
+}
+
+export const simpleConditionSchema: v.Type<SimpleCondition> = v
+  .readonlyObject({
+    type: v.literal('simple'),
+    op: simpleOperatorSchema,
+    left: conditionValueSchema,
+    right: v.union(parameterReferenceSchema, literalReferenceSchema),
+  })
+  .assert(
+    hasJsonLeafLiteralShape,
+    'expected a list for IN/NOT IN against a JSON path and a scalar for other operators',
+  )
+  .assert(
+    hasHomogeneousJsonInList,
+    'expected a list of values of one type for IN against a JSON path',
+  );
 
 type ConditionValue = v.Infer<typeof conditionValueSchema>;
 
@@ -264,16 +426,55 @@ export type CorrelatedSubquery = {
   readonly hidden?: boolean | undefined;
 };
 
-export type ValuePosition = LiteralReference | Parameter | ColumnReference;
+export type ValuePosition =
+  | LiteralReference
+  | Parameter
+  | ColumnReference
+  | JsonPathReference;
 
 export type ColumnReference = {
   readonly type: 'column';
   /**
-   * Not a path yet as we're currently not allowing
-   * comparisons across tables. This will need to
-   * be a path through the tree in the near future.
+   * The name of the column on the current table.
+   *
+   * Note: this is *not* a path through the relationship tree. Cross-table
+   * comparisons are not yet supported and would be modeled separately.
    */
   readonly name: string;
+};
+
+/**
+ * A reference to a value *inside* a `json()` column, produced by `eb.json()`.
+ *
+ * Wraps a {@link ColumnReference} and navigates into its JSON value via `path`:
+ * segments are applied left-to-right as object keys (string) and array indices
+ * (number). A `JsonPathReference` is allowed wherever a {@link ColumnReference} is
+ * (currently only the left operand of a filter predicate).
+ *
+ * Evaluation semantics — implemented identically by the in-memory predicate
+ * (`zql/src/builder/filter.ts`), the SQLite pushdown (`zqlite/src/query-builder.ts`)
+ * and the Postgres compiler (`z2s/src/compiler.ts`); the engine comments refer
+ * here rather than restating the rules:
+ *
+ * - **Segments are strict.** A number segment indexes an array and a string
+ *   segment reads an own key of an object. Any other step — a segment of the
+ *   wrong kind, a missing key, a scalar or null intermediate — yields null.
+ * - **Missing and JSON null collapse to null:** a non-match for every value
+ *   operator, a match for `IS NULL`.
+ * - **Comparison is type-strict.** A leaf whose JSON type differs from the
+ *   literal's is never equal: a non-match for a positive operator, a match for a
+ *   negated one (`!=`, `NOT IN`, `NOT LIKE`, `NOT ILIKE`), and never an error.
+ *   Only scalar leaves are comparable.
+ *
+ * A path references a value inside a single column; it never crosses tables.
+ * Because a path-extracted value is not a stored/indexed column, it can never
+ * be a primary-key or join constraint key (see {@link extractColumn}, which
+ * excludes it from constraint/PK lookups).
+ */
+export type JsonPathReference = {
+  readonly type: 'json';
+  readonly value: ColumnReference;
+  readonly path: readonly (string | number)[];
 };
 
 export type LiteralReference = {
@@ -308,7 +509,7 @@ export type SimpleCondition = {
    * `null` is absent since we do not have an `IS` or `IS NOT`
    * operator defined and `null != null` in SQL.
    */
-  readonly right: Exclude<ValuePosition, ColumnReference>;
+  readonly right: Exclude<ValuePosition, ColumnReference | JsonPathReference>;
 };
 
 export type Conjunction = {
@@ -335,6 +536,9 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
 interface ASTTransform {
   tableName(orig: string): string;
   columnName(origTable: string, origColumn: string): string;
+  // The column wrapped by a JSON path reference. A mapper that knows column
+  // types rejects a column that is not a json column here.
+  jsonColumnName(origTable: string, origColumn: string): string;
 }
 
 function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
@@ -389,9 +593,22 @@ function transformWhere(
   transform: ASTTransform,
 ): Condition {
   // Name mapping functions (e.g. to server names)
-  const {columnName} = transform;
-  const condValue = (c: ConditionValue) =>
-    c.type !== 'column' ? c : {...c, name: columnName(table, c.name)};
+  const {columnName, jsonColumnName} = transform;
+  const condValue = (c: ConditionValue): ConditionValue => {
+    switch (c.type) {
+      case 'column':
+        return {...c, name: columnName(table, c.name)};
+      case 'json':
+        // The column name maps client->server (and is validated to be a json
+        // column); the path is data and is preserved as-is.
+        return {
+          ...c,
+          value: {...c.value, name: jsonColumnName(table, c.value.name)},
+        };
+      default:
+        return c;
+    }
+  };
   const key = (table: string, k: CompoundKey) => {
     const serverKey = k.map(col => columnName(table, col));
     return mustCompoundKey(serverKey);
@@ -595,6 +812,12 @@ function normalizeValuePosition<T extends ValuePosition>(v: T): T {
       return {type: 'literal', value: v.value} as T;
     case 'column':
       return {type: 'column', name: v.name} as T;
+    case 'json':
+      return {
+        type: 'json',
+        value: normalizeValuePosition(v.value),
+        path: v.path,
+      } as T;
     default:
       return {type: 'static', anchor: v.anchor, field: v.field} as T;
   }
@@ -672,6 +895,7 @@ export function mapAST(ast: AST, mapper: NameMapper) {
   return transformAST(ast, {
     tableName: table => mapper.tableName(table),
     columnName: (table, col) => mapper.columnName(table, col),
+    jsonColumnName: (table, col) => mapper.jsonColumnName(table, col),
   });
 }
 
@@ -683,6 +907,7 @@ export function mapCondition(
   return transformWhere(cond, table, {
     tableName: table => mapper.tableName(table),
     columnName: (table, col) => mapper.columnName(table, col),
+    jsonColumnName: (table, col) => mapper.jsonColumnName(table, col),
   });
 }
 
@@ -747,6 +972,12 @@ function compareValuePosition(a: ValuePosition, b: ValuePosition): number {
     case 'column':
       assert(b.type === 'column', 'Expected column type for comparison');
       return compareUTF8(a.name, b.name);
+    case 'json':
+      assert(b.type === 'json', 'Expected json type for comparison');
+      return (
+        compareValuePosition(a.value, b.value) ||
+        compareUTF8(JSON.stringify(a.path), JSON.stringify(b.path))
+      );
     case 'static':
       assert(b.type === 'static', 'Expected static type for comparison');
       // A field is a string or a path of strings, which cmpLiteralValue()

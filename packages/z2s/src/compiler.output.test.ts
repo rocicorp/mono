@@ -129,6 +129,14 @@ const connectedCalls = table('connected_calls')
   })
   .primaryKey('callId', 'userId', 'connectionId');
 
+// Table with an object-valued json column, for JSON path filter tests.
+const jsonTable = table('jsonTable')
+  .columns({
+    id: string(),
+    metadata: json(),
+  })
+  .primaryKey('id');
+
 const schema = createSchema({
   tables: [
     user,
@@ -142,6 +150,7 @@ const schema = createSchema({
     timesTable,
     alternateUser,
     connectedCalls,
+    jsonTable,
   ],
 });
 
@@ -206,6 +215,10 @@ const serverSchema: ServerSchema = {
     callId: {type: 'text', isArray: false, isEnum: false},
     userId: {type: 'text', isArray: false, isEnum: false},
     connectionId: {type: 'text', isArray: false, isEnum: false},
+  },
+  'jsonTable': {
+    id: {type: 'text', isArray: false, isEnum: false},
+    metadata: {type: 'jsonb', isArray: false, isEnum: false},
   },
 };
 
@@ -471,6 +484,383 @@ test('compile with enumArray', () => {
         ) "zql_root"",
       "values": [
         "["active"]",
+      ],
+    }
+  `);
+});
+
+const jsonRef = (path: (string | number)[]) =>
+  ({
+    type: 'json',
+    value: {type: 'column', name: 'metadata'},
+    path,
+  }) as const;
+
+test('json path filter: string leaf equality', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: 'high'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE ("jsonTable_0"."metadata" -> $1::text::text) = to_jsonb($2::text::text)
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "priority",
+        "high",
+      ],
+    }
+  `);
+});
+
+test('json path filter: IN with a null list is constant-false', () => {
+  // The predicate is constant-false for a null list; the generic forms would
+  // assert (IN) or, via the empty-list rule, match every non-null leaf (NOT IN).
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: 'NOT IN',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: null},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE false
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [],
+    }
+  `);
+});
+
+test('json path filter: empty NOT IN excludes null and missing leaves', () => {
+  // The generic `NOT (x = ANY('{}'))` is TRUE for a NULL leaf; the predicate's
+  // null guard excludes it, so this compiles to `leaf IS NOT NULL`.
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: 'NOT IN',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: []},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE ("jsonTable_0"."metadata" ->> $1::text::text) IS NOT NULL
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "priority",
+      ],
+    }
+  `);
+});
+
+test('json path filter: negated comparison is type-strict but keeps mismatched leaves', () => {
+  // `!=` (and NOT LIKE / NOT ILIKE / NOT IN) can't reuse the positive form's
+  // NULL-on-mismatch gate: NULL would *exclude* a leaf of another JSON type,
+  // whereas the in-memory predicate includes it (42 !== '42' is true). The
+  // explicit CASE keeps a null/missing leaf excluded, compares a same-typed
+  // leaf for real, and includes a mismatched one.
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '!=',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: 'high'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE (CASE COALESCE(jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text), 'null') WHEN 'null' THEN false WHEN $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text != $3::text::text ELSE true END)
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "priority",
+        "string",
+        "high",
+      ],
+    }
+  `);
+});
+
+test('json path filter: nested path + array index, numeric ordering', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '>',
+          left: jsonRef(['scores', 0]),
+          right: {type: 'literal', value: 10},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE (CASE WHEN jsonb_typeof(("jsonTable_0"."metadata" -> $1::text::text) -> 0) = $2::text::text THEN (("jsonTable_0"."metadata" -> $1::text::text) ->> 0)::double precision END) > $3::text::double precision
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "scores",
+        "number",
+        "10",
+      ],
+    }
+  `);
+});
+
+test('json path filter: IN', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: 'IN',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: ['high', 'low']},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE ("jsonTable_0"."metadata" -> $1::text::text) = ANY (ARRAY(SELECT to_jsonb(v) FROM unnest(ARRAY(
+              SELECT value::text FROM jsonb_array_elements_text($2::text::jsonb)
+            )) AS v))
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "priority",
+        "["high","low"]",
+      ],
+    }
+  `);
+});
+
+test('json path filter: ILIKE', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: 'ILIKE',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: 'hi%'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text END) ILIKE $3::text::text
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "priority",
+        "string",
+        "hi%",
+      ],
+    }
+  `);
+});
+
+test('json path filter: LIKE with a non-string literal compares text', () => {
+  // The LIKE family requires a string leaf whatever the literal's type and
+  // matches the literal's text form (as the in-memory predicate does with
+  // `String(pattern)`): `LIKE 3` gates on a string leaf and binds '3', never a
+  // `double precision` cast that Postgres cannot LIKE. The negated form keeps
+  // the mismatched-leaf-matches CASE.
+  const query = (op: 'LIKE' | 'NOT LIKE') =>
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op,
+          left: jsonRef(['count']),
+          right: {type: 'literal', value: 3},
+        },
+      }),
+    );
+  expect(query('LIKE')).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE (CASE WHEN jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text) = $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text END) LIKE $3::text::text
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "count",
+        "string",
+        "3",
+      ],
+    }
+  `);
+  expect(query('NOT LIKE')).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE (CASE COALESCE(jsonb_typeof("jsonTable_0"."metadata" -> $1::text::text), 'null') WHEN 'null' THEN false WHEN $2::text::text THEN ("jsonTable_0"."metadata" ->> $1::text::text)::text NOT LIKE $3::text::text ELSE true END)
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "count",
+        "string",
+        "3",
+      ],
+    }
+  `);
+});
+
+test('json path filter: an unbound parameter is rejected, not read as an empty list', () => {
+  for (const op of ['NOT IN', 'IN', '!=', '='] as const) {
+    expect(() =>
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op,
+          left: jsonRef(['priority']),
+          right: {type: 'static', anchor: 'authData', field: 'roles'},
+        },
+      }),
+    ).toThrow(/Static parameters must be bound/);
+  }
+});
+
+test('json path filter: IS NULL collapses missing key and JSON null', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: 'IS',
+          left: jsonRef(['priority']),
+          right: {type: 'literal', value: null},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE ("jsonTable_0"."metadata" ->> $1::text::text) IS NOT DISTINCT FROM $2
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "priority",
+        null,
+      ],
+    }
+  `);
+});
+
+test('json path filter: boolean leaf equality', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'jsonTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: jsonRef(['flagged']),
+          right: {type: 'literal', value: true},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "jsonTable_0"."id" as "id","jsonTable_0"."metadata" as "metadata"
+        FROM "jsonTable" AS "jsonTable_0"
+        WHERE ("jsonTable_0"."metadata" -> $1::text::text) = to_jsonb($2::text::boolean)
+         
+        ORDER BY "jsonTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "flagged",
+        "true",
       ],
     }
   `);

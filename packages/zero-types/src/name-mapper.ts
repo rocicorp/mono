@@ -10,6 +10,12 @@ export type DestNames = {
   tableName: string;
   columns: ColumnNames;
   allColumnsSame: boolean;
+  /**
+   * The source names of the table's `json` columns, when the mapper was built
+   * with column type information. Absent for mappers built from names alone
+   * (e.g. the identity `validator`), which then skip the json-column check.
+   */
+  jsonColumns?: ReadonlySet<string> | undefined;
 };
 
 export class NameMapper {
@@ -43,6 +49,24 @@ export class NameMapper {
       throw new Error(`unknown column "${src}" of "${table}" table`);
     }
     return dst;
+  }
+
+  /**
+   * Maps the column wrapped by a JSON path reference. A JSON path is only
+   * valid on a `json` column — on any other column the SQLite replica's
+   * `json_type()`/`json_extract()` would throw at fetch time and take the
+   * whole client connection down — so a mapper that knows column types
+   * rejects it here, at the query boundary.
+   */
+  jsonColumnName(table: string, src: string): string {
+    const dest = this.#getTable(table);
+    if (dest.jsonColumns && !dest.jsonColumns.has(src)) {
+      // log-leak-ignore -- table and column names are schema, not customer data
+      throw new Error(
+        `column "${src}" of "${table}" table is not a json column`,
+      );
+    }
+    return this.columnName(table, src);
   }
 
   row<V extends Value>(

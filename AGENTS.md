@@ -226,6 +226,27 @@ const validKeys = keys.filter(key =>
 
 See: https://github.com/rocicorp/mono/pull/5542
 
+### JSON columns: pass objects to `push`, not pre-stringified JSON
+
+`TableSource.push` (and everything that goes through `toSQLiteType`) runs a
+`json` column's value through `JSON.stringify` itself. Passing a value that is
+already a JSON _string_ therefore stores it double-encoded — as a JSON string
+scalar rather than an object/array — and every `json_extract`/`json_type` on
+that column silently returns `NULL`, so JSON path filters never match.
+
+```typescript
+// Correct — the source stringifies for you
+source.push(makeSourceChangeAdd({id, metadata: {registrar: 'github'}}));
+
+// Incorrect — stored as "\"{\\\"registrar\\\":...}\""; json_extract() -> NULL
+source.push(makeSourceChangeAdd({id, metadata: JSON.stringify({...})}));
+```
+
+The production replicator (`liteValue` in `zero-cache/src/types/lite.ts`)
+stores Postgres json/jsonb as raw JSON text and is not affected; the trap is in
+tests and client-side writes. Several older zqlite test fixtures seed
+pre-stringified JSON and rely on never reading it as JSON.
+
 ## Git Conventions
 
 ### Commit Messages

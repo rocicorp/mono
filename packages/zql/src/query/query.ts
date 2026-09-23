@@ -1,5 +1,6 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {
@@ -23,7 +24,7 @@ export type NoCompoundTypeSelector<T extends TableSchema> = Exclude<
   JsonSelectors<T> | ArraySelectors<T>
 >;
 
-type JsonSelectors<E extends TableSchema> = {
+export type JsonSelectors<E extends TableSchema> = {
   [K in keyof E['columns']]: E['columns'][K] extends {type: 'json'} ? K : never;
 }[keyof E['columns']];
 
@@ -157,19 +158,218 @@ export type GetFilterType<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
   TOperator extends SimpleOperator,
+> = GetFilterTypeFromTSType<
+  SchemaValueToTSType<TSchema['columns'][TColumn]>,
+  TOperator
+>;
+
+/**
+ * The allowed comparison-value type for a left operand whose TypeScript type is
+ * `TS`, given the operator. Used both by {@link GetFilterType} (column operands)
+ * and by `cmp` for {@link ExpressionBuilder.json} operands (JSON-path leaves).
+ */
+export type GetFilterTypeFromTSType<
+  TS,
+  TOperator extends SimpleOperator,
 > = TOperator extends 'IS' | 'IS NOT'
   ? // SchemaValueToTSType adds null if the type is optional, but we add null
     // no matter what for dx reasons. See:
     // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
-    SchemaValueToTSType<TSchema['columns'][TColumn]> | null | undefined
+    TS | null | undefined
   : TOperator extends 'IN' | 'NOT IN'
     ? // We don't want to compare to null in where clauses because it causes
       // confusing results:
       // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
-      readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
-    :
-        | Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>
-        | undefined;
+      readonly Exclude<TS, null>[]
+    : Exclude<TS, null> | undefined;
+
+/**
+ * The comparison-value type for a JSON path leaf of TS type `TS`. Only scalar
+ * leaves can be compared — the wire carries only primitives and primitive
+ * arrays, and deep object/array equality is out of scope — so a non-scalar leaf
+ * (an object, an array) resolves to `never`, making the `cmp` call a type error
+ * rather than a query that is always-false on the client and rejected by the
+ * server. An untyped leaf (`ReadonlyJSONValue`) narrows to its scalar members.
+ *
+ * An `IN`/`NOT IN` list must be homogeneous: the engines compare the leaf
+ * against the type of the list's first element, so a mixed list would drop
+ * elements (or cast-fail on Postgres). A union leaf therefore takes a list of
+ * strings, or of numbers, or of booleans — not a mix.
+ */
+export type GetJsonLeafFilterType<TS, TOperator extends SimpleOperator> = [
+  Extract<
+    TS,
+    // `IS`/`IS NOT` also accept a leaf typed exactly `null`: the engines all
+    // support `IS NULL` on it, and there is nothing else it could take.
+    | string
+    | number
+    | boolean
+    | (TOperator extends 'IS' | 'IS NOT' ? null : never)
+  >,
+] extends [never]
+  ? never
+  : TOperator extends 'IN' | 'NOT IN'
+    ? HomogeneousList<Extract<TS, string | number | boolean>>
+    : GetFilterTypeFromTSType<
+        Extract<TS, string | number | boolean | null>,
+        TOperator
+      >;
+
+type HomogeneousList<T> =
+  | ([Extract<T, string>] extends [never]
+      ? never
+      : readonly Extract<T, string>[])
+  | ([Extract<T, number>] extends [never]
+      ? never
+      : readonly Extract<T, number>[])
+  | ([Extract<T, boolean>] extends [never]
+      ? never
+      : readonly Extract<T, boolean>[]);
+
+/**
+ * Resolves a single JSON path segment `K` against value type `T`: an object key
+ * (`NonNullable<T>[K]`) or an array index (the element type). An unresolvable
+ * step — e.g. into an untyped `json()` whose type is `ReadonlyJSONValue` —
+ * yields `ReadonlyJSONValue`, keeping untyped paths usable rather than erroring.
+ *
+ * A numeric object key (`{2024: number}`, `Record<number, X>`) is addressed by
+ * its *string* form — JSON object keys are strings, and the engines treat a
+ * number segment strictly as an array index — so a numeric-string segment is
+ * resolved against the numeric key.
+ *
+ * `NonNullable<T>` is applied because the runtime collapses a null/undefined
+ * intermediate to `null`; the leaf is shaped off the non-null value, and
+ * operator-level null handling lives in {@link GetFilterTypeFromTSType}.
+ */
+type JsonStep<T, K> = K extends keyof NonNullable<T>
+  ? NonNullable<T>[K]
+  : K extends `${infer N extends number}`
+    ? N extends keyof NonNullable<T>
+      ? NonNullable<T>[N]
+      : JsonStepFallback<T>
+    : JsonStepFallback<T>;
+
+type JsonStepFallback<T> =
+  NonNullable<T> extends readonly (infer E)[] ? E : ReadonlyJSONValue;
+
+/**
+ * Maximum JSON path depth that {@link ValueAtPath}/{@link ValidJsonPath} type.
+ * Paths deeper than this keep working at runtime but lose static leaf-typing /
+ * segment-validation past this depth.
+ *
+ * This is essentially free: for a fixed (`const`) tuple path the recursion stops
+ * when the path is exhausted, not at the budget, so the budget only bounds the
+ * rare non-tuple `(string | number)[]` case. The hard ceiling is ~999 (above
+ * that, building the `Tuple` budget hits TypeScript's 1000-deep tail-recursion
+ * limit — TS2589); 32 is far beyond any real JSON path, with ~30× margin.
+ */
+type MaxJsonPathDepth = 32;
+
+/**
+ * A tuple of length `N`, used as a decrementing recursion budget (each step drops
+ * one element; the empty tuple is the base case). A counter avoids a hand-written
+ * decrement table and lets {@link MaxJsonPathDepth} be a single number.
+ */
+type Tuple<N extends number, A extends unknown[] = []> = A['length'] extends N
+  ? A
+  : Tuple<N, [unknown, ...A]>;
+
+type JsonDepthBudget = Tuple<MaxJsonPathDepth>;
+
+/**
+ * The type at JSON path `P` inside value type `T`, segments applied
+ * left-to-right. Paths deeper than {@link MaxJsonPathDepth} fall back to
+ * `ReadonlyJSONValue`.
+ *
+ * Recursion is bounded by the `D` budget tuple. **`T` must be a concrete type, not
+ * a deferred schema lookup** — `cmp` walks the column type captured (concretely) by
+ * `json` at its call site, *not* `SchemaValueToTSType<...[TColumn]>` against a
+ * generic `TSchema`. Walking a deferred schema type in `cmp`'s signature defeats
+ * TypeScript's structural comparison of `ExpressionBuilder` and cascades into
+ * widespread `Query`/`ExpressionBuilder` assignability failures.
+ */
+export type ValueAtPath<
+  T,
+  P extends readonly (string | number)[],
+  D extends unknown[] = JsonDepthBudget,
+> = D extends [unknown, ...infer DR]
+  ? P extends readonly [
+      infer H,
+      ...infer R extends readonly (string | number)[],
+    ]
+    ? ValueAtPath<JsonStep<T, H>, R, DR>
+    : T
+  : ReadonlyJSONValue;
+
+/**
+ * The valid next path segments at value type `T`: object keys (numeric keys
+ * by their string form — a number segment is strictly an array index), an
+ * array index (`number`), or `string | number` for an untyped
+ * (`ReadonlyJSONValue`) value. A scalar leaf has no further segments (`never`).
+ * Used by {@link ValidJsonPath} to constrain/autocomplete `json()` path
+ * arguments (Tier 2).
+ */
+type JsonKeysOf<T> =
+  NonNullable<ReadonlyJSONValue> extends NonNullable<T>
+    ? // untyped `json()` (`ReadonlyJSONValue`) / `any` — allow any segment
+      string | number
+    : NonNullable<T> extends readonly unknown[]
+      ? number
+      : NonNullable<T> extends object
+        ?
+            | Extract<keyof NonNullable<T>, string>
+            | `${Extract<keyof NonNullable<T>, number>}`
+        : never;
+
+/**
+ * `true` for a numeric literal segment that cannot be an array index: negative
+ * (`-1`), non-integer (`0.5`, `1e-7`) or beyond the safe-integer range (`1e21`).
+ * A numeric segment is an array index and must be a non-negative safe integer —
+ * the engines disagree on a negative index (Postgres counts from the end;
+ * JavaScript/SQLite yield null), a fractional one is not an index at all, and a
+ * huge one stringifies in exponent form, which SQLite rejects as a bad JSON
+ * path — so {@link ValidJsonPath} rejects one at compile time when it is a
+ * literal. Decided from the literal's string form: a leading `-`, a `.`, or an
+ * exponent (`e-`, `e+`). A non-literal `number` is checked at runtime by
+ * `json()` instead (`isValidJsonPathIndex`); this check is deliberately a
+ * subset of that one.
+ */
+type IsInvalidIndexLiteral<H> = H extends number
+  ? `${H}` extends
+      | `-${string}`
+      | `${string}.${string}`
+      | `${string}e-${string}`
+      | `${string}e+${string}`
+    ? true
+    : false
+  : false;
+
+/**
+ * Validates/autocompletes a `json()` path tuple `P` against value type `T`: maps
+ * `P` to a tuple whose element at each position is the set of keys valid *there*
+ * (computed by stepping through the preceding segments). Used as `...path: P &
+ * ValidJsonPath<T, P>`, so an invalid segment fails to satisfy the allowed-keys
+ * union at its position — and editors offer the allowed keys as completions.
+ *
+ * Recursion is bounded by the `D` counter; segments past depth `D` are left
+ * unconstrained. As with {@link ValueAtPath}, `T` must be concrete (see that
+ * type's note) — `json` resolves the column type at its call site before this runs.
+ */
+export type ValidJsonPath<
+  T,
+  P extends readonly (string | number)[],
+  D extends unknown[] = JsonDepthBudget,
+> = D extends [unknown, ...infer DR]
+  ? P extends readonly [
+      infer H,
+      ...infer R extends readonly (string | number)[],
+    ]
+    ? readonly [
+        IsInvalidIndexLiteral<H> extends true ? never : JsonKeysOf<T>,
+        ...ValidJsonPath<JsonStep<T, H>, R, DR>,
+      ]
+    : P
+  : P; // past supported depth — leave the rest unconstrained
 
 export type AvailableRelationships<
   TTable extends string,

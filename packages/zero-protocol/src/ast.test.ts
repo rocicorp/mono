@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {h64} from '../../shared/src/hash.ts';
 import {
+  json,
   number,
   string,
   table,
@@ -690,8 +691,8 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toEqual('1dsf0svqtvyhv');
-  expect(PROTOCOL_VERSION).toBe(53);
+  expect(hash).toEqual('31fkfm2g3rxsh');
+  expect(PROTOCOL_VERSION).toBe(54);
 });
 
 test('normalizedAST matches normalizeAST', () => {
@@ -994,4 +995,178 @@ describe('normalization is canonical across key reordering', () => {
       JSON.stringify(normalizeAST(ast)),
     );
   });
+});
+
+test('json path column reference: hashing and name mapping', () => {
+  const ast = (path?: (string | number)[]): AST => ({
+    table: 'issue',
+    where: {
+      type: 'simple',
+      op: '=',
+      left: path
+        ? {type: 'json', value: {type: 'column', name: 'metadata'}, path}
+        : {type: 'column', name: 'metadata'},
+      right: {type: 'literal', value: 'x'},
+    },
+  });
+
+  // The path participates in the AST hash (so otherwise-identical queries on
+  // different paths are distinct queries).
+  const h = (a: AST) => h64(JSON.stringify(normalizeAST(a))).toString(36);
+  expect(h(ast(['a']))).not.toEqual(h(ast()));
+  expect(h(ast(['a']))).not.toEqual(h(ast(['b'])));
+  expect(h(ast(['a', 0]))).not.toEqual(h(ast(['a', 1])));
+  expect(h(ast(['a']))).toEqual(h(ast(['a'])));
+
+  // Name mapping rewrites the column name but leaves the JSON path (data, not
+  // a schema name) untouched.
+  const tables = {
+    issue: table('issue')
+      .from('issues')
+      .columns({id: string(), metadata: json().from('meta_data')})
+      .primaryKey('id')
+      .build(),
+  };
+  const mapped = mapAST(ast(['registrar']), clientToServer(tables));
+  expect(mapped.where).toEqual({
+    type: 'simple',
+    op: '=',
+    left: {
+      type: 'json',
+      value: {type: 'column', name: 'meta_data'},
+      path: ['registrar'],
+    },
+    right: {type: 'literal', value: 'x'},
+  });
+});
+
+test('json path: numeric segments must be non-negative integer indices', () => {
+  const ast = (path: (string | number)[]): AST => ({
+    table: 'issue',
+    where: {
+      type: 'simple',
+      op: '=',
+      left: {type: 'json', value: {type: 'column', name: 'metadata'}, path},
+      right: {type: 'literal', value: 'x'},
+    },
+  });
+  // Accepted: object keys and non-negative integer array indices.
+  expect(() => astSchema.parse(ast(['tags', 0, 'a']))).not.toThrow();
+  // Rejected at the wire boundary (a hand-built AST can't bypass the builder's
+  // check): a negative index would mean "from the end" on Postgres but null on
+  // the client/SQLite, and a fractional index is not an index at all.
+  expect(() => astSchema.parse(ast(['tags', -1]))).toThrow(
+    /non-negative integer/,
+  );
+  expect(() => astSchema.parse(ast(['tags', 1.5]))).toThrow(
+    /non-negative integer/,
+  );
+  // Beyond the safe-integer range an index stringifies as `1e+21`, which
+  // SQLite rejects as a bad JSON path (a query error, not a non-match).
+  expect(() => astSchema.parse(ast(['tags', 1e21]))).toThrow(
+    /non-negative integer/,
+  );
+  // Beyond int32 SQLite wraps the index modulo 2^32 and Postgres `->` cannot
+  // take it as an operand.
+  expect(() => astSchema.parse(ast(['tags', 2 ** 31]))).toThrow(
+    /non-negative integer/,
+  );
+  expect(() => astSchema.parse(ast(['tags', 2 ** 31 - 1]))).not.toThrow();
+  // An empty path is not a JSON leaf (the compilers address the last segment;
+  // the builder's `json(col, ...path)` already requires one).
+  expect(() => astSchema.parse(ast([]))).toThrow(/non-empty JSON path/);
+});
+
+test('json path: IN lists must be homogeneous; json refs must wrap json columns', () => {
+  const cond = (value: LiteralValue): AST => ({
+    table: 'issue',
+    where: {
+      type: 'simple',
+      op: 'IN',
+      left: {
+        type: 'json',
+        value: {type: 'column', name: 'metadata'},
+        path: ['k'],
+      },
+      right: {type: 'literal', value},
+    },
+  });
+  expect(() => astSchema.parse(cond(['a', 'b']))).not.toThrow();
+  expect(() => astSchema.parse(cond([1, 2]))).not.toThrow();
+  // The engines compare the leaf against the type of the first element, so a
+  // mixed list has no consistent meaning: rejected at the wire.
+  expect(() => astSchema.parse(cond([1, 'a']))).toThrow(/one type/);
+  expect(() =>
+    astSchema.parse({
+      table: 'issue',
+      where: {
+        type: 'simple',
+        op: 'NOT IN',
+        left: {
+          type: 'json',
+          value: {type: 'column', name: 'metadata'},
+          path: ['k'],
+        },
+        right: {type: 'literal', value: [true, 'a']},
+      },
+    }),
+  ).toThrow(/one type/);
+  // The literal's shape must match the operator: a list for IN/NOT IN (or the
+  // constant-false null), a scalar for everything else. A parameter bound to
+  // the wrong shape would otherwise trip an engine assertion.
+  expect(() => astSchema.parse(cond('a'))).toThrow(/expected a list/);
+  expect(() => astSchema.parse(cond(null))).not.toThrow();
+  const eq = (value: LiteralValue): AST => ({
+    table: 'issue',
+    where: {
+      type: 'simple',
+      op: '=',
+      left: {
+        type: 'json',
+        value: {type: 'column', name: 'metadata'},
+        path: ['k'],
+      },
+      right: {type: 'literal', value},
+    },
+  });
+  expect(() => astSchema.parse(eq(['a', 'b']))).toThrow(/a scalar/);
+  expect(() => astSchema.parse(eq('a'))).not.toThrow();
+  expect(() => astSchema.parse(eq(null))).not.toThrow();
+  // A plain column's list is not restricted (its type is the column's, and
+  // `cmp()` only checks json() references), as before JSON paths existed.
+  expect(() =>
+    astSchema.parse({
+      table: 'issue',
+      where: {
+        type: 'simple',
+        op: 'IN',
+        left: {type: 'column', name: 'title'},
+        right: {type: 'literal', value: [1, 'a']},
+      },
+    }),
+  ).not.toThrow();
+
+  // A JSON path on a non-json column would make the replica's json_type()
+  // throw at fetch time; a type-aware mapper rejects it at the query boundary.
+  const tables = {
+    issue: table('issue')
+      .columns({id: string(), title: string(), metadata: json()})
+      .primaryKey('id')
+      .build(),
+  };
+  const jsonRef = (column: string): AST => ({
+    table: 'issue',
+    where: {
+      type: 'simple',
+      op: '=',
+      left: {type: 'json', value: {type: 'column', name: column}, path: ['k']},
+      right: {type: 'literal', value: 'x'},
+    },
+  });
+  expect(() =>
+    mapAST(jsonRef('metadata'), clientToServer(tables)),
+  ).not.toThrow();
+  expect(() => mapAST(jsonRef('title'), clientToServer(tables))).toThrow(
+    /not a json column/,
+  );
 });

@@ -166,6 +166,113 @@ test('like', () => {
   }
 });
 
+test('json path', () => {
+  const row = {
+    metadata: {
+      priority: 'high',
+      count: 3,
+      flagged: true,
+      nested: {zip: '94110'},
+      tags: ['a', 'b'],
+      maybeNull: null,
+    },
+  };
+
+  const p = (op: SimpleOperator, path: (string | number)[], value: unknown) =>
+    createPredicate({
+      type: 'simple',
+      op,
+      left: {type: 'json', value: {type: 'column', name: 'metadata'}, path},
+      // oxlint-disable-next-line no-explicit-any
+      right: {type: 'literal', value: value as any},
+    });
+
+  // string leaf
+  expect(p('=', ['priority'], 'high')(row)).toBe(true);
+  expect(p('=', ['priority'], 'low')(row)).toBe(false);
+  expect(p('!=', ['priority'], 'low')(row)).toBe(true);
+  // number leaf
+  expect(p('>', ['count'], 2)(row)).toBe(true);
+  expect(p('<', ['count'], 2)(row)).toBe(false);
+  // boolean leaf
+  expect(p('=', ['flagged'], true)(row)).toBe(true);
+  expect(p('=', ['flagged'], false)(row)).toBe(false);
+  // nested object
+  expect(p('=', ['nested', 'zip'], '94110')(row)).toBe(true);
+  // array index
+  expect(p('=', ['tags', 0], 'a')(row)).toBe(true);
+  expect(p('=', ['tags', 1], 'a')(row)).toBe(false);
+  // LIKE on a string leaf
+  expect(p('LIKE', ['priority'], 'hi%')(row)).toBe(true);
+  expect(p('LIKE', ['priority'], 'lo%')(row)).toBe(false);
+  // IN
+  expect(p('IN', ['priority'], ['high', 'med'])(row)).toBe(true);
+  expect(p('IN', ['priority'], ['low', 'med'])(row)).toBe(false);
+
+  // Missing key: non-match for value ops; treated as null for IS (parity with
+  // SQLite json_extract -> NULL).
+  expect(p('=', ['missing'], 'x')(row)).toBe(false);
+  expect(p('IS', ['missing'], null)(row)).toBe(true);
+  expect(p('IS NOT', ['missing'], null)(row)).toBe(false);
+  // Explicit JSON null leaf.
+  expect(p('IS', ['maybeNull'], null)(row)).toBe(true);
+  expect(p('IS NOT', ['maybeNull'], null)(row)).toBe(false);
+  // Navigating through a null/absent intermediate.
+  expect(p('=', ['maybeNull', 'deep'], 'x')(row)).toBe(false);
+  expect(p('IS', ['maybeNull', 'deep'], null)(row)).toBe(true);
+  // Top-level column entirely absent.
+  expect(p('=', ['priority'], 'high')({})).toBe(false);
+  expect(p('IS', ['priority'], null)({})).toBe(true);
+
+  // Comparison is type-strict and never throws: a leaf whose JSON type differs
+  // from the literal's is a non-match for a positive operator and a match for
+  // a negated one (`compareValues` / the LIKE matcher would otherwise throw on
+  // mixed types).
+  expect(p('>', ['priority'], 5)(row)).toBe(false);
+  expect(p('<', ['count'], 'x')(row)).toBe(false);
+  expect(p('=', ['count'], '3')(row)).toBe(false);
+  expect(p('!=', ['count'], '3')(row)).toBe(true);
+  expect(p('LIKE', ['count'], '3%')(row)).toBe(false);
+  expect(p('NOT LIKE', ['count'], '3%')(row)).toBe(true);
+  expect(p('IN', ['count'], ['3'])(row)).toBe(false);
+  expect(p('NOT IN', ['count'], ['3'])(row)).toBe(true);
+  expect(p('=', ['flagged'], 1)(row)).toBe(false);
+  expect(p('!=', ['flagged'], 1)(row)).toBe(true);
+  // Object / array leaves are never equal to a scalar.
+  expect(p('=', ['nested'], 'x')(row)).toBe(false);
+  expect(p('!=', ['nested'], 'x')(row)).toBe(true);
+  expect(p('>', ['nested'], 1)(row)).toBe(false);
+  expect(p('=', ['tags'], 'a')(row)).toBe(false);
+  // An empty list: IN never matches; NOT IN matches every non-null leaf only.
+  expect(p('IN', ['priority'], [])(row)).toBe(false);
+  expect(p('NOT IN', ['priority'], [])(row)).toBe(true);
+  expect(p('NOT IN', ['missing'], [])(row)).toBe(false);
+
+  // Navigation is strict, matching SQLite json_extract: a number segment only
+  // indexes an array and a string segment only reads an own key of an object.
+  // Indexing into a string, `length`, inherited members and the wrong segment
+  // kind all yield null.
+  expect(p('=', ['priority', 0], 'h')(row)).toBe(false);
+  expect(p('IS', ['priority', 0], null)(row)).toBe(true);
+  expect(p('IS', ['priority', 'length'], null)(row)).toBe(true);
+  expect(p('IS', ['tags', 'length'], null)(row)).toBe(true);
+  expect(p('IS', ['constructor'], null)(row)).toBe(true);
+  expect(p('IS NOT', ['constructor'], null)(row)).toBe(false);
+  expect(p('IS', ['nested', '__proto__'], null)(row)).toBe(true);
+  expect(p('=', ['tags', '0'], 'a')(row)).toBe(false);
+  expect(p('IS', ['tags', '0'], null)(row)).toBe(true);
+  expect(p('IS', ['nested', 0], null)(row)).toBe(true);
+
+  // The LIKE family compares text, so it requires a string leaf whatever the
+  // literal's type — a numeric leaf is a mismatch, never an assertString throw.
+  expect(p('LIKE', ['count'], 3)(row)).toBe(false);
+  expect(p('NOT LIKE', ['count'], 3)(row)).toBe(true);
+  expect(p('ILIKE', ['priority'], 3)(row)).toBe(false);
+  // IN / NOT IN with a null list are constant-false.
+  expect(p('IN', ['priority'], null)(row)).toBe(false);
+  expect(p('NOT IN', ['priority'], null)(row)).toBe(false);
+});
+
 test('and', () => {
   const predicate = createPredicate({
     type: 'and',

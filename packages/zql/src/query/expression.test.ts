@@ -2,10 +2,17 @@ import fc from 'fast-check';
 import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {
+  MAX_JSON_PATH_INDEX,
   type Condition,
   type Conjunction,
   type Disjunction,
 } from '../../../zero-protocol/src/ast.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  json,
+  string,
+  table,
+} from '../../../zero-schema/src/builder/table-builder.ts';
 import {parse, stringify} from './expression-test-util.ts';
 import {
   and,
@@ -563,5 +570,96 @@ test('standalone cmp with operator string as value', () => {
     left: {type: 'column', name: 'a'},
     right: {type: 'literal', value: '='},
     op: '!=',
+  });
+});
+
+describe('json() path references', () => {
+  const schema = createSchema({
+    tables: [
+      table('t')
+        .columns({id: string(), name: string(), metadata: json()})
+        .primaryKey('id'),
+    ],
+  });
+  const builder = new ExpressionBuilder<'t', typeof schema>(vi.fn());
+  const {cmp, json: jsonRef} = builder;
+  const left = (...path: (string | number)[]) => ({
+    type: 'json',
+    value: {type: 'column', name: 'metadata'},
+    path,
+  });
+
+  test('cmp builds a json condition', () => {
+    expect(cmp(jsonRef('metadata', 'a', 0, 'b'), '=', 'x')).toEqual({
+      type: 'simple',
+      left: left('a', 0, 'b'),
+      right: {type: 'literal', value: 'x'},
+      op: '=',
+    });
+    // 2-arg form defaults to '='; undefined becomes null as for columns
+    expect(cmp(jsonRef('metadata', 'a'), undefined)).toEqual({
+      type: 'simple',
+      left: left('a'),
+      right: {type: 'literal', value: null},
+      op: '=',
+    });
+    expect(cmp(jsonRef('metadata', 'a'), 'IS NOT', undefined)).toEqual({
+      type: 'simple',
+      left: left('a'),
+      right: {type: 'literal', value: null},
+      op: 'IS NOT',
+    });
+  });
+
+  test('json() requires at least one segment', () => {
+    const untyped = jsonRef as unknown as (
+      column: string,
+      ...path: (string | number)[]
+    ) => unknown;
+    expect(() => untyped('metadata')).toThrow(
+      /requires at least one path segment/,
+    );
+  });
+
+  test('json() rejects a numeric segment that is not an array index', () => {
+    for (const bad of [-1, 0.5, NaN, Infinity, MAX_JSON_PATH_INDEX + 1]) {
+      expect(() => jsonRef('metadata', 'a', bad as number)).toThrow(
+        /Invalid JSON path segment/,
+      );
+    }
+    expect(cmp(jsonRef('metadata', 0, MAX_JSON_PATH_INDEX), '=', 1)).toEqual({
+      type: 'simple',
+      left: left(0, MAX_JSON_PATH_INDEX),
+      right: {type: 'literal', value: 1},
+      op: '=',
+    });
+  });
+
+  test('a json() reference is only valid on the left of cmp', () => {
+    const ref = jsonRef('metadata', 'a') as unknown as string;
+    expect(() => cmp('name', '=', ref)).toThrow(
+      /only valid as the left operand/,
+    );
+    expect(() => cmp(jsonRef('metadata', 'b'), '=', ref)).toThrow(
+      /only valid as the left operand/,
+    );
+  });
+
+  test('IN/NOT IN against a json() reference takes a list of one type', () => {
+    expect(() =>
+      cmp(jsonRef('metadata', 'a'), 'IN', ['a', 1] as unknown as string[]),
+    ).toThrow(/list of values of one type/);
+    expect(() =>
+      cmp(jsonRef('metadata', 'a'), 'NOT IN', [
+        true,
+        'x',
+      ] as unknown as string[]),
+    ).toThrow(/list of values of one type/);
+    expect(() => cmp(jsonRef('metadata', 'a'), 'IN', ['a', 'b'])).not.toThrow();
+    expect(() => cmp(jsonRef('metadata', 'a'), 'NOT IN', [])).not.toThrow();
+    // A plain column list is not restricted (the check is for JSON leaves).
+    expect(() =>
+      cmp('name', 'IN', ['a', 1] as unknown as string[]),
+    ).not.toThrow();
   });
 });

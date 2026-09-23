@@ -1,4 +1,5 @@
 import {newArray} from '../../../shared/src/arrays.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
 import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import type * as v from '../../../shared/src/valita.ts';
 import type {
@@ -9,10 +10,11 @@ import type {
   PlanDebugEventJSON,
   planFailedEventJSONSchema,
 } from '../../../zero-protocol/src/analyze-query-result.ts';
-import type {
-  Condition,
-  Ordering,
-  ValuePosition,
+import {
+  formatJsonPathReference,
+  type Condition,
+  type Ordering,
+  type ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanState} from './planner-graph.ts';
@@ -207,6 +209,8 @@ function formatValuePosition(value: ValuePosition): string {
   switch (value.type) {
     case 'column':
       return value.name;
+    case 'json':
+      return formatJsonPathReference(value);
     case 'literal':
       // Format literal values with SQL-style quoting for strings
       if (typeof value.value === 'string') {
@@ -215,6 +219,8 @@ function formatValuePosition(value: ValuePosition): string {
       return JSON.stringify(value.value);
     case 'static':
       return `@${value.anchor}.${Array.isArray(value.field) ? value.field.join('.') : value.field}`;
+    default:
+      unreachable(value);
   }
 }
 

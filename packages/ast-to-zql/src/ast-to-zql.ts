@@ -73,6 +73,28 @@ type Args = Set<string>;
 
 type Prefix = '.where' | 'cmp';
 
+/**
+ * Renders `code` — a builder-callback expression such as `cmp(...)` or
+ * `not(exists(...))` — at `prefix`. At the top level `.where(field, ...)` has
+ * no form for it, so it becomes `.where(({...needed}) => code)`; inside a
+ * callback, the names it needs are added to the enclosing callback's
+ * destructured args and `code` is returned as is.
+ */
+function wrap(
+  prefix: Prefix,
+  args: Args,
+  needed: readonly string[],
+  code: string,
+): string {
+  if (prefix === '.where') {
+    return `.where(({${toSorted(needed).join(', ')}}) => ${code})`;
+  }
+  for (const name of needed) {
+    args.add(name);
+  }
+  return code;
+}
+
 function transformCondition(
   condition: Condition,
   prefix: Prefix,
@@ -80,7 +102,7 @@ function transformCondition(
 ): string {
   switch (condition.type) {
     case 'simple':
-      return transformSimpleCondition(condition, prefix);
+      return transformSimpleCondition(condition, prefix, args);
     case 'and':
     case 'or':
       return transformLogicalCondition(condition, prefix, args);
@@ -94,6 +116,7 @@ function transformCondition(
 function transformSimpleCondition(
   condition: SimpleCondition,
   prefix: Prefix,
+  args: Args,
 ): string {
   const {left, op, right} = condition;
 
@@ -101,11 +124,17 @@ function transformSimpleCondition(
   const rightCode = transformValuePosition(right);
 
   // Handle the shorthand form for equals
-  if (op === '=') {
-    return `${prefix}(${leftCode}, ${rightCode})`;
-  }
+  const argsCode =
+    op === '='
+      ? `${leftCode}, ${rightCode}`
+      : `${leftCode}, '${op}', ${rightCode}`;
 
-  return `${prefix}(${leftCode}, '${op}', ${rightCode})`;
+  if (left.type === 'json') {
+    // A JSON path operand only exists through the expression builder's
+    // `json()`, so the condition must be rendered as a callback.
+    return wrap(prefix, args, ['cmp', 'json'], `cmp(${argsCode})`);
+  }
+  return `${prefix}(${argsCode})`;
 }
 
 function transformLogicalCondition(
@@ -192,25 +221,13 @@ function transformExistsCondition(
 
   op satisfies 'NOT EXISTS';
 
-  if (hasSubQueryProps) {
-    if (prefix === '.where') {
-      return `.where(({exists, not}) => not(exists('${relationship}', q => q${astToZQL(
-        nextSubquery,
-      )}${optionsStr})))`;
-    }
-    prefix satisfies 'cmp';
-    args.add('not');
-    args.add('exists');
-    return `not(exists('${relationship}', q => q${astToZQL(nextSubquery)}${optionsStr}))`;
-  }
-
-  if (prefix === '.where') {
-    return `.where(({exists, not}) => not(exists('${relationship}'${optionsStr})))`;
-  }
-  args.add('not');
-  args.add('exists');
-
-  return `not(exists('${relationship}'${optionsStr})))`;
+  const subquery = hasSubQueryProps ? `, q => q${astToZQL(nextSubquery)}` : '';
+  return wrap(
+    prefix,
+    args,
+    ['exists', 'not'],
+    `not(exists('${relationship}'${subquery}${optionsStr}))`,
+  );
 }
 
 // If the `exists` is applied against a junction edge, both hops will have the same alias and both hops will be exists conditions.
@@ -269,6 +286,13 @@ function transformValuePosition(value: ValuePosition): string {
       return transformLiteral(value);
     case 'column':
       return `'${value.name}'`;
+    case 'json': {
+      // Segments render exactly like literals so escaping lives in one place.
+      const segs = value.path
+        .map(s => transformLiteral({type: 'literal', value: s}))
+        .join(', ');
+      return `json('${value.value.name}', ${segs})`;
+    }
     case 'static':
       return transformParameter(value);
     default:
@@ -284,9 +308,20 @@ function transformLiteral(literal: LiteralReference): string {
     return JSON.stringify(literal.value);
   }
   if (typeof literal.value === 'string') {
-    return `'${literal.value.replace(/'/g, "\\'")}'`;
+    return jsStringLiteral(literal.value);
   }
   return String(literal.value);
+}
+
+/**
+ * A single-quoted JavaScript string literal for `s`. `JSON.stringify` does the
+ * escaping (backslashes, control characters, quotes), so the rendered code
+ * parses back to exactly `s`: escaping only `'` would drop the backslash from
+ * a JSON path key like `c\d` and name a different path than the engines read.
+ */
+function jsStringLiteral(s: string): string {
+  const inner = JSON.stringify(s).slice(1, -1);
+  return `'${inner.replace(/\\"/g, '"').replace(/'/g, "\\'")}'`;
 }
 
 function transformParameter(param: Parameter): string {

@@ -31,6 +31,20 @@ function simple(
   };
 }
 
+function jsonPath(
+  column: string,
+  path: (string | number)[],
+  right: unknown,
+): Condition {
+  return {
+    type: 'simple',
+    op: '=',
+    left: {type: 'json', value: {type: 'column', name: column}, path},
+    // oxlint-disable-next-line no-explicit-any
+    right: {type: 'literal', value: right as any},
+  };
+}
+
 /**
  * Spread across every field of the AST and every node kind: each condition
  * type, correlated subqueries, static parameters, compound keys, bounds,
@@ -107,6 +121,17 @@ const CORPUS: AST[] = [
     left: {type: 'column', name: 'creatorID'},
     right: {type: 'static', anchor: 'authData', field: ['a', 'b']},
   }),
+
+  // JSON path references: the wrapped column and the path, whose segments
+  // keep their kind (an object key vs. an array index).
+  where(simple('metadata', '=', 'a')),
+  where(jsonPath('metadata', ['priority'], 'a')),
+  where(jsonPath('metadata', ['priority'], 'b')),
+  where(jsonPath('metadata', ['priority', 'nested'], 'a')),
+  where(jsonPath('metadata', ['tags', 0], 'a')),
+  where(jsonPath('metadata', ['tags', '0'], 'a')),
+  where(jsonPath('metadata', ['tags', 1], 'a')),
+  where(jsonPath('other', ['priority'], 'a')),
 
   // Conjunctions and disjunctions.
   where({

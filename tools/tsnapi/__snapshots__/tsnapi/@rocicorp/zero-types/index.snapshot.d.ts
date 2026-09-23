@@ -7,12 +7,13 @@ export type { AnyViewFactory, Entry, EntryList, Format, View, ViewFactory, } fro
 export { ApplicationError } from '../../zero-protocol/src/application-error.ts';
 export type { ApplicationErrorOptions } from '../../zero-protocol/src/application-error.ts';
 export type { AssetPermissions, PermissionRule, PermissionsConfig, } from '../../zero-permissions/src/permissions.ts';
-export type { AST, Bound, ColumnReference, CompoundKey, Condition, Conjunction, CorrelatedSubquery, CorrelatedSubqueryCondition, CorrelatedSubqueryConditionOperator, Disjunction, EqualityOps, InOps, LikeOps, LiteralReference, LiteralValue, Ordering, OrderOps, OrderPart, Parameter, SimpleCondition, SimpleOperator, ValuePosition, } from '../../zero-protocol/src/ast.ts';
+export type { AST, Bound, ColumnReference, CompoundKey, Condition, Conjunction, CorrelatedSubquery, CorrelatedSubqueryCondition, CorrelatedSubqueryConditionOperator, Disjunction, EqualityOps, InOps, JsonPathReference, LikeOps, LiteralReference, LiteralValue, Ordering, OrderOps, OrderPart, Parameter, SimpleCondition, SimpleOperator, ValuePosition, } from '../../zero-protocol/src/ast.ts';
 export type { BaseDefaultContext, BaseDefaultSchema, DefaultContext, DefaultSchema, DefaultTypes, DefaultWrappedTransaction, } from '../../zero-types/src/default-types.ts';
 export type { BatchMutator, DBMutator } from './client/crud.ts';
 export { boolean, enumeration, json, number, string, table, type ColumnBuilder, type TableBuilderWithColumns, } from '../../zero-schema/src/builder/table-builder.ts';
 export type { Change } from '../../zql/src/ivm/change.ts';
 export type { ClientGroupID, ClientID } from '../../replicache/src/sync/ids.ts';
+export type { ColumnRef, ExpressionBuilder, ExpressionFactory, } from '../../zql/src/query/expression.ts';
 export type { AssetPermissions as CompiledAssetPermissions, PermissionsConfig as CompiledPermissionsConfig, Policy as CompiledPermissionsPolicy, Rule as CompiledPermissionsRule, } from '../../zero-schema/src/compiled-permissions.ts';
 export type { ConditionalSchemaQuery, SchemaQuery, } from '../../zql/src/query/schema-query.ts';
 export type { Connection, ConnectionSource, ConnectionState, Source, } from './client/connection.ts';
@@ -28,7 +29,6 @@ export { defineQueries, defineQueriesWithType, defineQuery, defineQueryWithType,
 export { dropAllDatabases, dropDatabase, } from '../../replicache/src/persist/collect-idb-databases.ts';
 export { escapeLike } from '../../zql/src/query/escape-like.ts';
 export type { Expand } from '../../shared/src/expand.ts';
-export type { ExpressionBuilder, ExpressionFactory, } from '../../zql/src/query/expression.ts';
 export type { Falsy } from '../../shared/src/falsy.ts';
 export { getDefaultPuller } from '../../replicache/src/get-default-puller.ts';
 export type { HTTPRequestInfo } from '../../replicache/src/http-request-info.ts';
