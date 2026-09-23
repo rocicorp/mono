@@ -956,6 +956,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   async subscribe(
     ctx: SubscriberContext,
+    downstream: Subscription<
+      string | PreSerializedBatch
+    > = Subscription.create(),
   ): Promise<Source<string | PreSerialized>> {
     const {protocolVersion, id, mode, replicaVersion, watermark, wsBatched} =
       ctx;
@@ -963,9 +966,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#serving.resolve();
     }
     let cleanupSubscriber = () => {};
-    const downstream = Subscription.create<string | PreSerializedBatch>({
-      cleanup: () => cleanupSubscriber(),
-    });
+
     // No subscriber's ACK advances the SQLite change log's head any more: the
     // writer runs in this process, so the barrier is notified from the commit
     // itself (see #changeLogWriter's onCommit).
@@ -1096,6 +1097,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
       }
     }
+    // Register the cleanup now that `cleanupSubscriber` points at the real
+    // cleanup and the subscriber is registered. If `downstream` was already
+    // cancelled (e.g. a client disconnect during the catchup await above),
+    // `addCloseHandler` runs the cleanup immediately, and so it must not be
+    // called until cleanupSubscriber is properly set up.
+    downstream.addCloseHandler(() => cleanupSubscriber());
+
     // Any snapshot reservation held by this task can be closed now that
     // it is subscribed to the change stream.
     this.#reservations?.close(ctx.taskID);

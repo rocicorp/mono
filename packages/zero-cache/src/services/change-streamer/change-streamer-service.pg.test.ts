@@ -50,7 +50,7 @@ import {
   type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import {isPreSerializedBatch} from './broadcast.ts';
+import {isPreSerializedBatch, type PreSerializedBatch} from './broadcast.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import {
   initializeStreamer,
@@ -475,8 +475,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: REPLICA_VERSION,
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
   }
 
@@ -935,8 +933,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: REPLICA_VERSION,
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const output = drainToQueue(sub);
       expect(await nextChange(output)).toMatchObject({tag: 'status'});
@@ -1031,8 +1027,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '06',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const reconnectedOut = drainToQueue(reconnected);
       expect(await nextChange(reconnectedOut)).toMatchObject({tag: 'status'});
@@ -1053,8 +1047,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: promisedMin,
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const followerOut = drainToQueue(follower);
       expect(await nextChange(followerOut)).toMatchObject({tag: 'status'});
@@ -1129,8 +1121,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '06',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const afterOut = drainToQueue(after);
       expect(await nextChange(afterOut)).toMatchObject({tag: 'status'});
@@ -1272,8 +1262,6 @@ describe('change-streamer/service', () => {
         mode: 'backup',
         watermark: REPLICA_VERSION,
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const backupOutput = drainToQueue(backupSub);
       expect(await nextChange(backupOutput)).toMatchObject({tag: 'status'});
@@ -1404,8 +1392,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '04',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
 
       let fired = 0;
@@ -1544,8 +1530,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '08',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const output = drainToQueue(sub);
       expect(await nextChange(output)).toMatchObject({tag: 'status'});
@@ -2063,8 +2047,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: REPLICA_VERSION,
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const live = drainToQueue(liveSub);
       expect(await nextChange(live)).toMatchObject({tag: 'status'});
@@ -2088,8 +2070,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: REPLICA_VERSION,
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const committed = drainToQueue(commitSub);
 
@@ -2122,8 +2102,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '04',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const rolledBack = drainToQueue(rollbackSub);
 
@@ -2169,8 +2147,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '08',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const interrupted = drainToQueue(interruptedSub);
 
@@ -2441,8 +2417,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: REPLICA_VERSION,
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       const observed = drainToQueue(observerSub);
       expect(await nextChange(observed)).toMatchObject({tag: 'status'});
@@ -2462,8 +2436,6 @@ describe('change-streamer/service', () => {
         mode: 'backup',
         watermark: REPLICA_VERSION,
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       expect(shouldUse).not.toHaveBeenCalled();
       const backed = drainToQueue(backupSub);
@@ -2491,8 +2463,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: REPLICA_VERSION,
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: true,
       });
       expect(shouldUse).toHaveBeenCalledOnce();
       const written = drainToQueue(writerSub);
@@ -2755,8 +2725,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
     const downstream = drainToQueue(sub);
 
@@ -2917,8 +2885,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     changes.push(['status', {ack: true}, {watermark: '0a'}]);
@@ -3039,8 +3005,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     // Process more upstream changes.
@@ -3138,8 +3102,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '0b',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     // Process more upstream changes.
@@ -3250,8 +3212,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
     const downstream = drainToQueue(sub);
 
@@ -3355,8 +3315,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
     const catchup = drainToQueue(catchupSub);
     expect(await nextChange(catchup)).toMatchObject({tag: 'status'});
@@ -3407,8 +3365,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '04',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       }),
     );
     expect(await nextChange(sub04)).toMatchObject({tag: 'status'});
@@ -3421,8 +3377,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '08',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       }),
     );
     expect(await nextChange(sub08)).toMatchObject({tag: 'status'});
@@ -3435,8 +3389,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '02',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       }),
     );
     expect(await sub02.dequeue()).toEqual([
@@ -3468,8 +3420,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '06',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     const sub2 = await streamer.subscribe({
@@ -3479,8 +3429,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '04',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     expect(
@@ -3550,8 +3498,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '04',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     const msgs = drainToQueue(sub3);
@@ -3610,8 +3556,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '04',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
     const sub2 = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
@@ -3620,8 +3564,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '06',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     const behindLogs = () =>
@@ -3679,8 +3621,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '08',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
     streamer.trackBackupWatermark('0a');
     await fireNextTimer();
@@ -3688,6 +3628,50 @@ describe('change-streamer/service', () => {
     await fireNextTimer();
     expect(behindLogs()).toHaveLength(3);
     sub3.cancel();
+  });
+
+  test('a downstream cancelled during subscribe does not leak into the floor', async () => {
+    // Regression test for the merged /subscribe race: the caller (the HTTP
+    // handler) attaches the `downstream` sink to the live websocket *before*
+    // calling subscribe(), so a client disconnect can cancel it at any point
+    // during subscription setup. The subscriber must not be left registered in
+    // the Forwarder pinning the cleanup floor. This models the worst case: the
+    // sink is already cancelled when subscribe() runs.
+    await sql`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
+    `.simple();
+
+    // A far-behind subscriber ('04') would pin the floor at '04' if it leaked.
+    const downstream = Subscription.create<string | PreSerializedBatch>();
+    downstream.cancel();
+    await streamer.subscribe(
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
+        id: 'phantom',
+        mode: 'serving',
+        watermark: '04',
+        replicaVersion: REPLICA_VERSION,
+      },
+      downstream,
+    );
+
+    setTimeoutFn.mockClear();
+    streamer.trackBackupWatermark('08');
+
+    // With the cancelled subscriber correctly removed, nothing pins the floor:
+    // the purge reaches the backup watermark.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+    await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['08']]);
   });
 
   test('startSnapshotReservation throws when backups are not configured', async () => {
@@ -3765,8 +3749,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '05',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     // The reservation's connection is torn down once its taskID subscribes
@@ -3984,8 +3966,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '06',
       replicaVersion: REPLICA_VERSION + 'foobar',
-      initial: true,
-      logsChangeStream: false,
     });
 
     const msgs = drainToQueue(sub);
@@ -4254,8 +4234,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
     const msgs = drainToQueue(sub);
     expect(await nextChange(msgs)).toMatchObject({tag: 'status'});
@@ -4545,8 +4523,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
     const downstream = drainToQueue(sub);
 
@@ -4644,8 +4620,6 @@ describe('change-streamer/service', () => {
         mode: 'serving',
         watermark: '01',
         replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
       });
       // Pulled one at a time. A message is consumed, which is what completes
       // its flow control, only when the next one is pulled.
@@ -4803,8 +4777,6 @@ describe('change-streamer/service', () => {
       mode: 'backup',
       watermark: '02', // Too early
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     await streamerDone;
@@ -4839,8 +4811,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     const msgs = drainToQueue(sub);
@@ -4867,8 +4837,6 @@ describe('change-streamer/service', () => {
       mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
     });
 
     const msgs = drainToQueue(sub);

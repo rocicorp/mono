@@ -5,22 +5,26 @@ import {beforeEach, describe, expect, type MockedFunction, vi} from 'vitest';
 import WebSocket from 'ws';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
 import {getConnectionURI, type PgTest, test} from '../../test/db.ts';
 import {type PostgresDB} from '../../types/pg.ts';
 import {inProcChannel} from '../../types/processes.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
-import type {Source} from '../../types/streams.ts';
+import type {PreSerialized, Sized, Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {installWebSocketHandoff} from '../../types/websocket-handoff.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
 import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
 } from './change-streamer-http.ts';
-import type {Downstream, SubscriberContext} from './change-streamer.ts';
+import type {SubscriberContext} from './change-streamer.ts';
 import {PROTOCOL_VERSION} from './change-streamer.ts';
 import {setupCDCTables} from './schema/tables.ts';
 import {type SnapshotMessage} from './snapshot.ts';
+import {type SubscribeDownstream} from './subscribe.ts';
 
 const SHARD_ID = {
   appID: 'foo',
@@ -32,8 +36,17 @@ describe('change-streamer/http', () => {
   let changeDB: PostgresDB;
   let downstream: Subscription<string>;
   let snapshotStream: Subscription<SnapshotMessage>;
+  // The merged /subscribe handler passes its own `outbound` sink as the second
+  // arg; capture it so tests can push changes onto the sink the connection
+  // actually serves.
+  let capturedSubscribeDownstream:
+    | Subscription<string | PreSerializedBatch>
+    | undefined;
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Promise<Subscription<string>>
+    (
+      ctx: SubscriberContext,
+      existing?: Subscription<string | PreSerializedBatch>,
+    ) => Promise<Source<string | PreSerialized>>
   >;
   let snapshotFn: MockedFunction<
     (id: string) => Promise<Subscription<SnapshotMessage>>
@@ -43,7 +56,6 @@ describe('change-streamer/http', () => {
 
   let serverAddress: string;
   let dispatcherAddress: string;
-  let connectionClosed: Promise<Downstream[]>;
   let changeStreamerClient: ChangeStreamerHttpClient;
 
   beforeEach<PgTest>(async ({testDBs}) => {
@@ -62,12 +74,7 @@ describe('change-streamer/http', () => {
       undefined,
     );
 
-    const {promise, resolve: cleanup} = resolver<Downstream[]>();
-    connectionClosed = promise;
-    downstream = Subscription.create({
-      cleanup: msgs =>
-        cleanup(msgs.map(m => BigIntJSON.parse(m) as Downstream)),
-    });
+    downstream = Subscription.create();
     snapshotStream = Subscription.create();
     subscribeFn = vi.fn();
     snapshotFn = vi.fn();
@@ -97,7 +104,16 @@ describe('change-streamer/http', () => {
       parent,
       {
         id: 'change-streamer',
-        subscribe: subscribeFn.mockResolvedValue(downstream),
+        // Legacy /changes passes no downstream (returns the pre-created one);
+        // the merged /subscribe passes its own sink, which we capture and push
+        // changes onto, mirroring the real service pushing onto it.
+        subscribe: subscribeFn.mockImplementation((_ctx, existing) => {
+          if (existing) {
+            capturedSubscribeDownstream = existing;
+            return Promise.resolve(existing);
+          }
+          return Promise.resolve(downstream);
+        }),
         startSnapshotReservation: snapshotFn.mockResolvedValue(snapshotStream),
         trackBackupWatermark: vi.fn(),
         run: runFn.mockImplementation(() => service.promise),
@@ -200,13 +216,13 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v4 ... v6]`,
+        `Cannot service client at protocol v8. Supported protocols: [v4 ... v7]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true&id=foo`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v4 ... v6]`,
+        `Cannot service client at protocol v8. Supported protocols: [v4 ... v7]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
@@ -274,9 +290,6 @@ describe('change-streamer/http', () => {
         mode: 'serving',
         replicaVersion: 'abc',
         watermark: '123',
-        initial: true,
-        // Non-default so that the roundtrip below pins the parameter.
-        logsChangeStream: true,
         wsBatched: true,
       } as const;
       await setChangeStreamerAddress(addr());
@@ -288,7 +301,15 @@ describe('change-streamer/http', () => {
             getConnectionURI(changeDB),
             `http://${addr()}`,
           );
+      // The client's subscribe() now uses the merged /subscribe endpoint in
+      // subscribe-only mode: it sends a start-subscription control message and
+      // the server serves the change stream over its own `outbound` sink.
       const sub = await client.subscribe(ctx);
+      await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledOnce());
+      const serverClosed = resolver<void>();
+      must(capturedSubscribeDownstream).addCloseHandler(() =>
+        serverClosed.resolve(),
+      );
 
       const begin = JSON.stringify([
         'begin',
@@ -300,8 +321,8 @@ describe('change-streamer/http', () => {
         {tag: 'commit'},
         {watermark: '456'},
       ]);
-      downstream.push(begin);
-      downstream.push(commit);
+      must(capturedSubscribeDownstream).push(begin);
+      must(capturedSubscribeDownstream).push(commit);
 
       const batchedFrame = `{"id":1,"batch":[${begin},${commit}]}`;
       const batchedSize = Math.round(batchedFrame.length / 2);
@@ -319,9 +340,10 @@ describe('change-streamer/http', () => {
 
       // Draining the client-side subscription should cancel it, closing the
       // websocket, which should cancel the server-side subscription.
-      expect(await connectionClosed).toEqual([]);
+      await serverClosed.promise;
 
-      expect(subscribeFn).toHaveBeenCalledOnce();
+      // The server builds the SubscriberContext from the start-subscription
+      // message: protocolVersion comes from the path, wsBatched is implicit.
       expect(subscribeFn.mock.calls[0][0]).toEqual(ctx);
 
       // The ChangeStreamerService should be started when an
@@ -329,6 +351,116 @@ describe('change-streamer/http', () => {
       expect(runFn).toHaveBeenCalledOnce();
     },
   );
+
+  // Reads an inbound Source into a Queue without cancelling it (breaking a
+  // for-await would close the connection).
+  function readInto<T>(source: Source<T>): Queue<T> {
+    const q = new Queue<T>();
+    void (async () => {
+      for await (const msg of source) {
+        q.enqueue(msg);
+      }
+    })();
+    return q;
+  }
+
+  describe('merged v7 subscribe', () => {
+    const status = [
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: '148',
+        minWatermark: '188',
+      },
+    ] satisfies SnapshotMessage;
+
+    const ctxPayload = {
+      taskID: 'foo-task',
+      id: 'foo',
+      mode: 'serving',
+      replicaVersion: '148',
+      watermark: '188',
+    } as const;
+
+    const begin = JSON.stringify([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: '456'},
+    ]);
+    const commit = JSON.stringify([
+      'commit',
+      {tag: 'commit'},
+      {watermark: '456'},
+    ]);
+
+    test('reserve then start-subscription on one connection', async () => {
+      await setChangeStreamerAddress(serverAddress);
+      const {instream, outbound} =
+        await changeStreamerClient.connect('foo-task');
+      const received: Queue<Sized<SubscribeDownstream>> = readInto(instream);
+
+      // Reservation phase.
+      outbound.push(['reserve-snapshot', {taskID: 'foo-task'}]);
+      await vi.waitFor(() =>
+        expect(snapshotFn).toHaveBeenCalledWith('foo-task'),
+      );
+      snapshotStream.push(status);
+
+      // The reservation status arrives as a distinct 'reserved' message, with
+      // the tag rewritten from 'status' to 'snapshot'.
+      expect((await received.dequeue()).data).toEqual([
+        'reserved',
+        {...status[1], tag: 'snapshot'},
+      ]);
+
+      // Subscription phase on the SAME connection.
+      outbound.push(['start-subscription', ctxPayload]);
+      await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledOnce());
+      expect(subscribeFn.mock.calls[0][0]).toEqual({
+        protocolVersion: PROTOCOL_VERSION,
+        ...ctxPayload,
+        wsBatched: true,
+      });
+
+      // The subscriber pushes changes directly onto the connection's sink.
+      must(capturedSubscribeDownstream).push(begin);
+      must(capturedSubscribeDownstream).push(commit);
+      expect((await received.dequeue()).data).toEqual([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: '456'},
+      ]);
+      expect((await received.dequeue()).data).toEqual([
+        'commit',
+        {tag: 'commit'},
+        {watermark: '456'},
+      ]);
+
+      outbound.cancel();
+    });
+
+    test('subscribe-only (reconnect) skips the reservation', async () => {
+      await setChangeStreamerAddress(serverAddress);
+      const {instream, outbound} =
+        await changeStreamerClient.connect('foo-task');
+      const received: Queue<Sized<SubscribeDownstream>> = readInto(instream);
+
+      // No reserve-snapshot: go straight to the subscription.
+      outbound.push(['start-subscription', ctxPayload]);
+      await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledOnce());
+      expect(snapshotFn).not.toHaveBeenCalled();
+
+      must(capturedSubscribeDownstream).push(begin);
+      expect((await received.dequeue()).data).toEqual([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: '456'},
+      ]);
+
+      outbound.cancel();
+    });
+  });
 
   test('bigint fields', async () => {
     await setChangeStreamerAddress(serverAddress);
@@ -339,9 +471,8 @@ describe('change-streamer/http', () => {
       mode: 'serving',
       replicaVersion: 'abc',
       watermark: '123',
-      initial: true,
-      logsChangeStream: false,
     });
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledOnce());
 
     const messages = new ReplicationMessages({issues: 'id'});
     const insert = messages.insert('issues', {
@@ -352,7 +483,7 @@ describe('change-streamer/http', () => {
     });
 
     const json = BigIntJSON.stringify(['data', insert]);
-    downstream.push(json);
+    must(capturedSubscribeDownstream).push(json);
     expect(await drain(1, sub)).toEqual([
       {data: ['data', insert], size: `{"id":1,"msg":${json}}`.length},
     ]);

@@ -1,6 +1,7 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {PreSerialized, Sized, Source} from '../../types/streams.ts';
+import type {Subscription} from '../../types/subscription.ts';
 import {
   changeStreamDataSchema,
   type ChangeStreamData,
@@ -8,6 +9,7 @@ import {
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
 import * as ErrorType from './error-type-enum.ts';
 import type {SnapshotMessage} from './snapshot.ts';
 
@@ -102,8 +104,19 @@ export interface ChangeStreamer {
 //     The stream is parsed in 'passthrough' mode, so an older peer ignores the
 //     field, and a newer peer treats its absence (including in changes
 //     replayed from the Change DB) as "no commit time reported".
+// v7: v1.12
+//   - Merges the separate `/snapshot` and `/changes` connections into a single
+//     bidirectional `/subscribe` connection (see subscribe.ts). The view-syncer
+//     drives the connection with upstream `reserve-snapshot` / `start-subscription`
+//     application messages; the change-streamer replies with a `reserved`
+//     message and then the change stream on the same socket. This guarantees the
+//     replication-manager that reserves the change log is the one that serves the
+//     subscription. The legacy `/snapshot` + `/changes` endpoints remain for
+//     v4-v6 subscribers during rollout.
+//   - Drops the legacy "initial" and "logsChangeStream" query parameters from the
+//     subscriber context
 
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 export type SubscriberContext = {
   /**
@@ -141,21 +154,6 @@ export type SubscriberContext = {
    * Only changes after the watermark will be streamed.
    */
   watermark: string;
-
-  /**
-   * Whether this is the first subscription request made by the task,
-   * i.e. indicating that the watermark comes from a restored replica
-   * backup. The ChangeStreamer uses this to determine which changes
-   * are safe to purge from the Storer.
-   */
-  initial: boolean;
-
-  /**
-   * Legacy topology hint retained on the wire. It no longer affects local
-   * routing: the change-streamer writes the SQLite log itself, so no
-   * subscriber's ACK advances its head or releases its catchup barrier.
-   */
-  logsChangeStream: boolean;
 
   /**
    * Whether the subscriber supports batched WebSocket frames.
@@ -241,8 +239,14 @@ export interface ChangeStreamerService
   /**
    * The server-side interface overrides `subscribe()` to return a stream
    * of already-stringified {@link Downstream} payloads or pre-serialized Buffers.
+   *
+   * If a `downstream` subscription is supplied it is used directly as the
+   * returned Source. Otherwise, a new one is created.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<string | PreSerialized>>;
+  subscribe(
+    ctx: SubscriberContext,
+    downstream?: Subscription<string | PreSerializedBatch>,
+  ): Promise<Source<string | PreSerialized>>;
 
   /**
    * Starts a snapshot reservation to preserve change-log entries while
