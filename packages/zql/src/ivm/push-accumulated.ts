@@ -91,6 +91,9 @@ export function* pushAccumulatedChanges(
   fanOutChangeType: ChangeType,
   mergeRelationships: (existing: Change, incoming: Change) => Change,
   addEmptyRelationships: (change: Change) => Change,
+  // Relationships a branch adds (a flipped join's witnesses). Only the union
+  // fan has any; the filter fan passes nothing and behaves as before.
+  isBranchRel?: (name: string) => boolean,
 ): Stream<'yield'> {
   if (accumulatedPushes.length === 0) {
     // It is possible for no forks to pass along the push.
@@ -98,9 +101,31 @@ export function* pushAccumulatedChanges(
     return;
   }
 
+  // A union nested in a branch keeps the row but reports its witness changes
+  // as child changes on its own branch relationships, around the change it
+  // pushes for the row. (A child change entering through the fan-out is on
+  // one of the fan-out's relationships, never a branch's.) Those are not
+  // candidates to collapse: pass them through around this fan-in's change,
+  // removals (old row) before and additions (new row) after, as the nested
+  // union ordered them.
+  const witnessesLeft: Change[] = [];
+  const witnessesEntered: Change[] = [];
+
   // collapse down to a single change per type
   const candidatesToPush = new Map<ChangeType, Change>();
   for (const change of accumulatedPushes) {
+    if (
+      isBranchRel &&
+      change[ChangeIndex.TYPE] === ChangeType.CHILD &&
+      isBranchRel(change[ChangeIndex.CHILD_DATA].relationshipName)
+    ) {
+      (change[ChangeIndex.CHILD_DATA].change[ChangeIndex.TYPE] ===
+      ChangeType.REMOVE
+        ? witnessesLeft
+        : witnessesEntered
+      ).push(change);
+      continue;
+    }
     if (
       fanOutChangeType === ChangeType.CHILD &&
       change[ChangeIndex.TYPE] !== ChangeType.CHILD
@@ -123,6 +148,36 @@ export function* pushAccumulatedChanges(
 
   accumulatedPushes.length = 0;
 
+  assert(
+    candidatesToPush.size > 0,
+    'Fan-in: witness changes without a change for their row',
+  );
+  for (const change of witnessesLeft) {
+    yield* output.push(change, pusher);
+  }
+  yield* pushCollapsed(
+    candidatesToPush,
+    output,
+    pusher,
+    fanOutChangeType,
+    mergeRelationships,
+    addEmptyRelationships,
+    isBranchRel,
+  );
+  for (const change of witnessesEntered) {
+    yield* output.push(change, pusher);
+  }
+}
+
+function* pushCollapsed(
+  candidatesToPush: Map<ChangeType, Change>,
+  output: Output,
+  pusher: InputBase,
+  fanOutChangeType: ChangeType,
+  mergeRelationships: (existing: Change, incoming: Change) => Change,
+  addEmptyRelationships: (change: Change) => Change,
+  isBranchRel: ((name: string) => boolean) | undefined,
+): Stream<'yield'> {
   const types = [...candidatesToPush.keys()];
   /**
    * Based on the received `fanOutChangeType` only certain output types are valid.
@@ -168,6 +223,48 @@ export function* pushAccumulatedChanges(
       const addChange = candidatesToPush.get(ChangeType.ADD);
       const removeChange = candidatesToPush.get(ChangeType.REMOVE);
       let editChange = candidatesToPush.get(ChangeType.EDIT);
+
+      // The row stays downstream (a branch kept the edit, or it moved from
+      // one branch to another). Branches it left take their witnesses with
+      // them; branches it entered bring theirs. An edit syncs one row, so
+      // those must travel as child changes around it.
+      if (isBranchRel && (editChange || (addChange && removeChange))) {
+        if (removeChange) {
+          yield* pushWitnessDeltas(
+            removeChange[ChangeIndex.NODE],
+            ChangeType.REMOVE,
+            isBranchRel,
+            output,
+            pusher,
+          );
+        }
+        const strip = (n: Node): Node => ({
+          row: n.row,
+          relationships: Object.fromEntries(
+            Object.entries(n.relationships).filter(([k]) => !isBranchRel(k)),
+          ),
+        });
+        yield* output.push(
+          addEmptyRelationships(
+            editChange ??
+              makeEditChange(
+                strip(must(addChange)[ChangeIndex.NODE]),
+                strip(must(removeChange)[ChangeIndex.NODE]),
+              ),
+          ),
+          pusher,
+        );
+        if (addChange) {
+          yield* pushWitnessDeltas(
+            addChange[ChangeIndex.NODE],
+            ChangeType.ADD,
+            isBranchRel,
+            output,
+            pusher,
+          );
+        }
+        return;
+      }
 
       // If an `edit` is present, it supersedes `add` and `remove`
       // as it semantically represents both.
@@ -236,7 +333,27 @@ export function* pushAccumulatedChanges(
       // If any branch preserved the original child change, that takes precedence over all other changes.
       const childChange = candidatesToPush.get(ChangeType.CHILD);
       if (childChange) {
+        const left = candidatesToPush.get(ChangeType.REMOVE);
+        const entered = candidatesToPush.get(ChangeType.ADD);
+        if (isBranchRel && left) {
+          yield* pushWitnessDeltas(
+            left[ChangeIndex.NODE],
+            ChangeType.REMOVE,
+            isBranchRel,
+            output,
+            pusher,
+          );
+        }
         yield* output.push(childChange, pusher);
+        if (isBranchRel && entered) {
+          yield* pushWitnessDeltas(
+            entered[ChangeIndex.NODE],
+            ChangeType.ADD,
+            isBranchRel,
+            output,
+            pusher,
+          );
+        }
         return;
       }
 
@@ -256,6 +373,42 @@ export function* pushAccumulatedChanges(
     }
     default:
       fanOutChangeType satisfies never;
+  }
+}
+
+/**
+ * The row stays downstream, but it gained (`ADD`) or lost (`REMOVE`) every
+ * witness in `node`'s branch relationships. One child change per witness.
+ */
+export function* pushWitnessDeltas(
+  node: Node,
+  type: ChangeType.ADD | ChangeType.REMOVE,
+  isBranchRel: (name: string) => boolean,
+  output: Output,
+  pusher: InputBase,
+): Stream<'yield'> {
+  for (const [relationshipName, children] of Object.entries(
+    node.relationships,
+  )) {
+    if (!isBranchRel(relationshipName)) {
+      continue;
+    }
+    for (const child of children()) {
+      if (child === 'yield') {
+        yield child;
+        continue;
+      }
+      yield* output.push(
+        makeChildChange(node, {
+          relationshipName,
+          change:
+            type === ChangeType.ADD
+              ? makeAddChange(child)
+              : makeRemoveChange(child),
+        }),
+        pusher,
+      );
+    }
   }
 }
 

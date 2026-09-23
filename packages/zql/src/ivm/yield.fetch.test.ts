@@ -160,13 +160,13 @@ describe('Yield Propagation', () => {
         "yield",
         "yield",
         "yield",
+        "yield",
         {
           "relationships": {},
           "row": {
             "id": "1",
           },
         },
-        "yield",
         {
           "relationships": {},
           "row": {
