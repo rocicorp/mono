@@ -2127,16 +2127,22 @@ describe('backfill-manager', () => {
     // Let the backfill start and block on the reservation.
     await sleep(10);
     expect(backfillRequests).toHaveLength(1);
-    expect(finalizedStreams).toBe(0);
-
-    // Canceling the change stream must unblock the backfill so that its
-    // stream (and the upstream resources it holds) is finalized.
-    changeStream.asSource().cancel();
+    // The consumer is blocked acquiring the reservation, so nothing has been
+    // pushed to the change stream. (The prefetch producer independently drains
+    // and finalizes the short upstream stream once it has been fully read.)
+    expect(changes.size()).toBe(0);
     await vi.waitFor(() => expect(finalizedStreams).toBe(1));
 
-    // The backfill must not be retried after cancelation.
+    // Canceling the change stream must unblock the consumer (which is awaiting
+    // the reservation) so that the backfill task unwinds rather than remaining
+    // suspended forever.
+    changeStream.asSource().cancel();
+
+    // The backfill must not be retried after cancelation, and — since it never
+    // acquired the reservation — must never have emitted any changes.
     await sleep(100);
     expect(backfillRequests).toHaveLength(1);
+    expect(changes.size()).toBe(0);
   });
 
   test('change stream cancelation unblocks a backfill awaiting the stream watermark', async () => {
@@ -2188,15 +2194,22 @@ describe('backfill-manager', () => {
       ],
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
     ]);
-    expect(finalizedStreams).toBe(0);
-
-    // The change stream never reaches the watermark. Canceling it must
-    // unblock the backfill so that its stream is finalized.
-    changeStream.asSource().cancel();
+    // The prefetch producer reads the whole (short) upstream stream and
+    // finalizes it, even though the `backfill-completed` message is still
+    // pending the change stream reaching the backfill watermark ('130').
     await vi.waitFor(() => expect(finalizedStreams).toBe(1));
+    // The completed message has not been emitted (the watermark isn't reached).
+    expect(changes.size()).toBe(0);
 
-    // The backfill must not be retried after cancelation.
+    // The change stream never reaches the watermark. Canceling it must unblock
+    // the backfill (awaiting the watermark) so that it unwinds rather than
+    // remaining suspended forever.
+    changeStream.asSource().cancel();
+
+    // The backfill must not be retried after cancelation, nor emit its
+    // `backfill-completed` message.
     await sleep(100);
     expect(backfillRequests).toHaveLength(1);
+    expect(changes.size()).toBe(0);
   });
 });
