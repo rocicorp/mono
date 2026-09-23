@@ -1,4 +1,12 @@
+import {getHeapStatistics} from 'node:v8';
 import {assert} from '../../../../shared/src/asserts.ts';
+
+/**
+ * The bytes assumed for each row held in memory, which converts the memory
+ * given to deferred writes into rows. The width of the rows an advancement
+ * will hold is not known before it starts.
+ */
+export const BYTES_PER_ROW = 1024;
 
 /**
  * Bounds the memory that deferred IVM writes (see `deferIvmWrites`) use
@@ -7,32 +15,65 @@ import {assert} from '../../../../shared/src/asserts.ts';
  * Each client group holds its own in-memory copy of the changes of the
  * advancement it is processing, so the copies add up across the groups that
  * advance at the same time. Before an advancement starts, its pipeline driver
- * reserves the advancement's number of change log entries. That number bounds
- * the rows its sources can hold: the change log has one entry per row key
- * (a truncation, which does not, resets the pipelines instead), and a row
- * displaced through a unique key must itself have changed in the same
- * interval, so it has its own entry. An advancement that does not fit is
+ * reserves the number of change log entries of the tables it reads. That
+ * number bounds the rows its sources can hold: the change log has one entry
+ * per row key (a truncation, which does not, resets the pipelines instead),
+ * and a row displaced through a unique key must itself have changed in the
+ * same interval, so it has its own entry. An advancement that does not fit is
  * written through to the replica snapshot instead, which SQLite bounds with
  * its page cache and spills to disk.
+ *
+ * The rows are reserved at an assumed {@link BYTES_PER_ROW}, but their width
+ * is not known until they are held. So the advancements also add up the
+ * bytes they are estimated to hold as they go, and the one that takes the
+ * total past the budget is abandoned.
+ *
+ * The budget is a share of the heap, so it does not depend on how many
+ * client groups are connected: when advancements do not overlap, each one
+ * can use all of it, and when many do, each gets less and the rest write
+ * through.
  */
 export class DeferredWritesBudget {
   readonly #maxRows: number;
+  readonly #maxBytes: number;
   #reservedRows = 0;
+  #heldBytes = 0;
 
   /**
-   * Estimated bytes one client group may hold for one advancement. The row
-   * count is known before the advancement starts, but the width of the rows
-   * is not, so this is checked as the rows are written.
+   * A budget of `proportion` of the heap limit, and the rows that fit in it
+   * at {@link BYTES_PER_ROW}.
    */
-  readonly maxBytesPerClientGroup: number;
+  static forHeapProportion(proportion: number): DeferredWritesBudget {
+    return DeferredWritesBudget.forBytes(
+      Math.floor(getHeapStatistics().heap_size_limit * proportion),
+    );
+  }
 
-  constructor(maxRows: number, maxBytesPerClientGroup: number) {
+  /** A budget of `bytes`, and the rows that fit in it at {@link BYTES_PER_ROW}. */
+  static forBytes(bytes: number): DeferredWritesBudget {
+    return new DeferredWritesBudget(Math.floor(bytes / BYTES_PER_ROW), bytes);
+  }
+
+  constructor(maxRows: number, maxBytes: number) {
     this.#maxRows = maxRows;
-    this.maxBytesPerClientGroup = maxBytesPerClientGroup;
+    this.#maxBytes = maxBytes;
+  }
+
+  get maxRows(): number {
+    return this.#maxRows;
+  }
+
+  get maxBytes(): number {
+    return this.#maxBytes;
   }
 
   get reservedRows(): number {
     return this.#reservedRows;
+  }
+
+  /** The estimated bytes held by the advancements that hold rows. */
+  get heldBytes(): number {
+    return this.#heldBytes;
   }
 
   /**
@@ -47,12 +88,30 @@ export class DeferredWritesBudget {
     return true;
   }
 
-  release(rows: number): void {
+  /**
+   * Adds `bytes` (fewer if negative) to the estimated bytes held by an
+   * advancement that has reserved rows, and returns whether the total is
+   * still within the budget. The advancement is expected to be abandoned if
+   * it is not.
+   */
+  holdBytes(bytes: number): boolean {
+    this.#heldBytes += bytes;
+    assert(this.#heldBytes >= 0, () => `Holding ${this.#heldBytes} bytes`);
+    return this.#heldBytes <= this.#maxBytes;
+  }
+
+  /** Returns an advancement's reserved `rows` and the `bytes` it held. */
+  release(rows: number, bytes: number): void {
     assert(
       rows <= this.#reservedRows,
       () =>
         `Releasing ${rows} rows but only ${this.#reservedRows} are reserved`,
     );
+    assert(
+      bytes <= this.#heldBytes,
+      () => `Releasing ${bytes} bytes but only ${this.#heldBytes} are held`,
+    );
     this.#reservedRows -= rows;
+    this.#heldBytes -= bytes;
   }
 }

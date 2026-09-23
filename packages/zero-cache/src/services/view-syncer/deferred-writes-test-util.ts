@@ -1,4 +1,4 @@
-import {DeferredWritesBudget} from './deferred-writes-budget.ts';
+import {BYTES_PER_ROW, DeferredWritesBudget} from './deferred-writes-budget.ts';
 
 /**
  * A budget in which every other reservation fails, starting with one that
@@ -23,12 +23,13 @@ class AlternatingBudget extends DeferredWritesBudget {
  * - `1`: every advancement is held in memory;
  * - `mixed`: every other advancement is written through.
  *
- * The limits are the defaults of `deferIvmWritesMaxRows` and
- * `deferIvmWritesMaxBytes`.
+ * The budget is the default share of the heap (`deferIvmWritesHeapProportion`)
+ * of a 4 GiB heap, rather than of the heap of the test process, so that tests
+ * do not depend on the machine they run on.
  */
 export function testDeferredWritesBudget(): DeferredWritesBudget | undefined {
-  const maxRows = 200_000;
-  const maxBytes = 32 * 1024 * 1024;
+  const maxBytes = 1024 * 1024 * 1024;
+  const maxRows = maxBytes / BYTES_PER_ROW;
   const mode = process.env['ZERO_TEST_DEFER_IVM_WRITES'];
   switch (mode) {
     case undefined:

@@ -674,27 +674,19 @@ export const zeroOptions = {
     hidden: true,
   },
 
-  deferIvmWritesMaxRows: {
-    type: v.number().default(200_000),
+  deferIvmWritesHeapProportion: {
+    type: v.number().default(0.25),
     desc: [
-      `With {bold deferIvmWrites}, the maximum number of rows that the client`,
-      `groups of one sync worker may hold in memory at once. Each client group`,
-      `holds its own copy of the changes it is advancing through. Before an`,
-      `advancement starts, its number of changes is reserved from this budget;`,
-      `an advancement that does not fit is written through to the replica`,
-      `snapshot instead, as when {bold deferIvmWrites} is off.`,
-    ],
-    hidden: true,
-  },
-
-  deferIvmWritesMaxBytes: {
-    type: v.number().default(32 * 1024 * 1024),
-    desc: [
-      `With {bold deferIvmWrites}, the maximum estimated bytes retained by`,
-      `pending rows and indexes across a client group's tables during one`,
-      `advancement. This is a backstop for wide rows, which the row budget`,
-      `does not account for. Exceeding it resets and rehydrates the client`,
-      `group's pipelines. This is an estimate, not a hard JavaScript heap limit.`,
+      `With {bold deferIvmWrites}, the proportion of {bold --max-old-space-size}`,
+      `that the client groups of one sync worker may hold in memory at once.`,
+      `Each client group holds its own copy of the changes it is advancing`,
+      `through. Before an advancement starts, the number of rows it will`,
+      `change in the tables its queries read is reserved from this budget, at`,
+      `an assumed 1 KiB per row; an advancement that does not fit is written`,
+      `through to the replica snapshot instead, as when {bold deferIvmWrites}`,
+      `is off. The bytes the rows are estimated to hold are also added up as`,
+      `the client groups go, and a client group that takes the total past the`,
+      `budget is reset and rehydrated.`,
     ],
     hidden: true,
   },

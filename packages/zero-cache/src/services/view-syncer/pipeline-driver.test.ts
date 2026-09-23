@@ -2108,6 +2108,23 @@ describe('view-syncer/pipeline-driver', () => {
       expect(budget.reservedRows).toBe(0);
     });
 
+    test('reserves only the changes to tables the client group reads', () => {
+      const budget = new DeferredWritesBudget(Infinity, Infinity);
+      const tryReserve = vi.spyOn(budget, 'tryReserve');
+      const driver = makeDriver('uniques-only', budget);
+      replicator.processTransaction(
+        '134',
+        messages.insert('issues', {id: '4', closed: 0}),
+        messages.insert('issues', {id: '5', closed: 1}),
+        messages.update('uniques', {id: 'foo', name: 'wuzzy'}),
+      );
+
+      const {numChanges, changes} = driver.advance(NO_TIME_ADVANCEMENT_TIMER);
+      [...changes];
+      expect(numChanges).toBe(3);
+      expect(tryReserve.mock.calls).toEqual([[1]]);
+    });
+
     test('advancement resets past the byte backstop', () => {
       const budget = new DeferredWritesBudget(Infinity, 1);
       const driver = makeDriver('wide', budget);
@@ -2121,6 +2138,78 @@ describe('view-syncer/pipeline-driver', () => {
       }
       expect(err).toBeInstanceOf(ResetPipelinesSignal);
       expect((err as ResetPipelinesSignal).reason).toBe('ivm-delta-overflow');
+      expect(budget.reservedRows).toBe(0);
+      expect(budget.heldBytes).toBe(0);
+    });
+
+    test('the bytes held by client groups add up', () => {
+      // A budget whose byte limit is set once the bytes a client group holds
+      // have been measured, which is after the drivers are created.
+      class Budget extends DeferredWritesBudget {
+        limit = Infinity;
+        override holdBytes(bytes: number): boolean {
+          return super.holdBytes(bytes) && this.heldBytes <= this.limit;
+        }
+      }
+      const alone = new DeferredWritesBudget(Infinity, Infinity);
+      const budget = new Budget(Infinity, Infinity);
+      const drivers = {
+        writeThrough: makeDriver('write-through', undefined),
+        alone: makeDriver('alone', alone),
+        a: makeDriver('a', budget),
+        b: makeDriver('b', budget),
+      };
+      replicator.processTransaction('134', ...transactions[0]);
+      const expected = summarize(
+        drivers.writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+      );
+
+      // The most bytes one client group holds for the advancement. The timer
+      // is also consulted after each change's bytes are added up.
+      let mostBytes = 0;
+      const timer: Timer = {
+        elapsedLap: () => 0,
+        totalElapsed: () => {
+          mostBytes = Math.max(mostBytes, alone.heldBytes);
+          return 0;
+        },
+      };
+      expect(summarize(drivers.alone.advance(timer).changes)).toEqual(expected);
+      expect(mostBytes).toBeGreaterThan(0);
+      expect(alone.heldBytes).toBe(0);
+
+      // Enough for either client group, but not both.
+      budget.limit = mostBytes;
+
+      // `a` is partway through its advancement, holding some bytes.
+      const aChanges = drivers.a
+        .advance(NO_TIME_ADVANCEMENT_TIMER)
+        .changes[Symbol.iterator]();
+      const aSoFar: (RowChange | 'yield')[] = [];
+      while (budget.heldBytes === 0) {
+        const next = aChanges.next();
+        expect(next.done).toBe(false);
+        aSoFar.push(next.value as RowChange | 'yield');
+      }
+      const aBytes = budget.heldBytes;
+
+      // So `b` takes the total past the budget, and is abandoned.
+      let err;
+      try {
+        [...drivers.b.advance(NO_TIME_ADVANCEMENT_TIMER).changes];
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(ResetPipelinesSignal);
+      expect((err as ResetPipelinesSignal).reason).toBe('ivm-delta-overflow');
+      expect(budget.heldBytes).toBe(aBytes);
+      expect(budget.reservedRows).toBe(2);
+
+      // `a` finishes within the budget.
+      expect(
+        summarize([...aSoFar, ...{[Symbol.iterator]: () => aChanges}]),
+      ).toEqual(expected);
+      expect(budget.heldBytes).toBe(0);
       expect(budget.reservedRows).toBe(0);
     });
   });

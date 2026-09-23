@@ -191,11 +191,17 @@ export default async function runWorker(
   // Shared by all of the view-syncers on this worker, which each hold their
   // own copy of the changes they are advancing through.
   const deferredWritesBudget = config.deferIvmWrites
-    ? new DeferredWritesBudget(
-        config.deferIvmWritesMaxRows,
-        config.deferIvmWritesMaxBytes,
+    ? DeferredWritesBudget.forHeapProportion(
+        config.deferIvmWritesHeapProportion,
       )
     : undefined;
+  if (deferredWritesBudget) {
+    lc.info?.(
+      `Deferred IVM writes may hold up to ${deferredWritesBudget.maxRows} ` +
+        `rows (~${(deferredWritesBudget.maxBytes / 1024 ** 2).toFixed(2)} MB) ` +
+        `across client groups`,
+    );
+  }
 
   const viewSyncerFactory = (
     id: string,

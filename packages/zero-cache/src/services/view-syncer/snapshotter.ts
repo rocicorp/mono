@@ -299,6 +299,12 @@ export interface SnapshotDiff extends Iterable<Change> {
   readonly changes: number;
 
   /**
+   * {@link changes} by table. Computed on the first call, as it costs a scan
+   * of the change log entries.
+   */
+  changesByTable(): ReadonlyMap<string, number>;
+
+  /**
    * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
    * caller that decides how to write to `prev` once it knows the number of
    * {@link changes}. Must be called before the diff is iterated.
@@ -413,6 +419,14 @@ class Snapshot {
       prevVersion,
     );
     return count;
+  }
+
+  numChangesByTableSince(prevVersion: string): Map<string, number> {
+    const counts: {table: string; count: number}[] = this.db.all(
+      'SELECT "table", COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ? GROUP BY "table"',
+      prevVersion,
+    );
+    return new Map(counts.map(({table, count}) => [table, count]));
   }
 
   /**
@@ -599,6 +613,7 @@ class Diff implements SnapshotDiff {
   readonly #rowCache: SnapshotRowCache | undefined;
   #prevWrites: PrevWrites;
   #iterated = false;
+  #changesByTable: ReadonlyMap<string, number> | undefined;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
@@ -631,6 +646,13 @@ class Diff implements SnapshotDiff {
       rowCache && !curr.hasTableWideOpSince(prev.version)
         ? rowCache
         : undefined;
+  }
+
+  changesByTable(): ReadonlyMap<string, number> {
+    this.#changesByTable ??= this.curr.numChangesByTableSince(
+      this.prev.version,
+    );
+    return this.#changesByTable;
   }
 
   setPrevWrites(prevWrites: PrevWrites): void {

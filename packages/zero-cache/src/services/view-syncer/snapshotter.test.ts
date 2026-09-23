@@ -203,6 +203,12 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('09');
     expect(diff.changes).toBe(3);
+    expect(diff.changesByTable()).toEqual(
+      new Map([
+        ['backfilling', 1],
+        ['users', 2],
+      ]),
+    );
 
     expect([...diff]).toMatchInlineSnapshot(`
       [
