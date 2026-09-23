@@ -335,6 +335,12 @@ export interface SubscriptionStarter {
 
 export interface ReservationFollowup extends SubscriptionStarter {
   /**
+   * A signal to indicate that the followup is no longer valid (i.e. the
+   * connection to the reserving task has been severed).
+   */
+  readonly signal: AbortSignal;
+
+  /**
    * Abandons the reservation without subscribing, closing the connection that
    * was held open to pin the change-log floor. Used when the caller cannot
    * proceed to `subscribe()` (e.g. process shutdown while a restore is in
@@ -407,6 +413,7 @@ export class ChangeStreamerHttpClient
         outbound.push(['start-subscription', toStartSubscriptionContext(ctx)]);
         return Promise.resolve(rest);
       },
+      signal: outbound.signal,
       cancel: reason => outbound.cancel(reason),
     };
 

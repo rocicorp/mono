@@ -48,6 +48,7 @@ describe('change-streamer/snapshot', () => {
   function fakeFollowup(): ReservationFollowup {
     return {
       subscribe: vi.fn(),
+      signal: new AbortController().signal,
       cancel: vi.fn(),
     };
   }

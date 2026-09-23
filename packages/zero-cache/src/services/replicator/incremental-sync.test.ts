@@ -1029,7 +1029,11 @@ describe('replicator/incremental-sync', () => {
       worker,
       'serving',
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
-      {subscribe: initialSubscribe, cancel: vi.fn()},
+      {
+        subscribe: initialSubscribe,
+        signal: new AbortController().signal,
+        cancel: vi.fn(),
+      },
     );
 
     const localSyncing = syncer.run();

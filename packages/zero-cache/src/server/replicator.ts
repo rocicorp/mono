@@ -23,6 +23,7 @@ import {reserveAndGetSnapshotStatus} from '../services/change-streamer/snapshot.
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
   tryRestore,
+  type RestoreAttempt,
   type RestoreResult,
 } from '../services/litestream/commands.ts';
 import {
@@ -275,14 +276,29 @@ async function restoreReplica(
       ({backupURL} = reserved);
       const litestream: LitestreamConfig = {...config.litestream, backupURL};
       progress.start(reserved.replicaSize);
-      const attempt = await tryRestore(
-        lc,
-        litestream,
-        config.replica.file,
-        reserved,
-        'view_syncer',
-      );
-      progress.stop();
+      let attempt: RestoreAttempt;
+      try {
+        attempt = await tryRestore(
+          lc,
+          litestream,
+          config.replica.file,
+          reserved,
+          'view_syncer',
+          followup.signal, // abort the restore if the reservation disconnects
+        );
+      } catch (e) {
+        if (followup.signal.aborted) {
+          lc.info?.(
+            `reservation disconnected during restore. retrying`,
+            String(e),
+          );
+          followup.cancel();
+          continue;
+        }
+        throw e;
+      } finally {
+        progress.stop();
+      }
       if (attempt.restored) {
         result = attempt.result;
         progress.done();
