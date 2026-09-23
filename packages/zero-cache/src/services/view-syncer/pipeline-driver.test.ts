@@ -46,6 +46,7 @@ import {
 } from '../replicator/test-utils.ts';
 import {getMutationResultsQuery} from './cvr.ts';
 import {DeferredWritesBudget} from './deferred-writes-budget.ts';
+import {testDeferredWritesBudget} from './deferred-writes-test-util.ts';
 import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {RowID} from './schema/types.ts';
@@ -58,17 +59,12 @@ const NO_TIME_ADVANCEMENT_TIMER: Timer = {
   totalElapsed: () => 0,
 };
 
-// Set by `vitest.config.deferred-ivm.ts`, which runs this whole file a second
-// time with view-syncer derivation held in an in-memory batch overlay instead
-// of written to (and rolled back out of) the replica snapshot. Every result
-// here must be identical either way.
-const deferIvmWrites = process.env['ZERO_TEST_DEFER_IVM_WRITES'] === '1';
-
-// The defaults of `deferIvmWritesMaxRows` and `deferIvmWritesMaxBytes`.
-const deferredWritesBudget = () =>
-  deferIvmWrites
-    ? new DeferredWritesBudget(200_000, 32 * 1024 * 1024)
-    : undefined;
+// `vitest.config.deferred-ivm.ts` and `vitest.config.mixed-ivm.ts` run this
+// whole file again with view-syncer derivation held in an in-memory batch
+// overlay instead of written to (and rolled back out of) the replica snapshot,
+// for every advancement or every other one. Every result here must be
+// identical either way.
+const deferredWritesBudget = testDeferredWritesBudget;
 
 describe('view-syncer/pipeline-driver', () => {
   const shardID: ShardID = {appID: 'zeroz', shardNum: 1};
@@ -1876,13 +1872,26 @@ describe('view-syncer/pipeline-driver', () => {
     function makeDriver(
       clientGroupID: string,
       budget: DeferredWritesBudget | undefined,
+      {
+        rowCache,
+        query = UNIQUES_QUERY,
+      }: {
+        rowCache?: SnapshotRowCache | undefined;
+        query?: AST | undefined;
+      } = {},
     ) {
       const storage = new Database(lc, ':memory:');
       storage.prepare(CREATE_STORAGE_TABLE).run();
       const driver = new PipelineDriver(
         lc,
         testLogConfig,
-        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        new Snapshotter(
+          lc,
+          dbFile.path,
+          {appID: shardID.appID},
+          undefined,
+          rowCache,
+        ),
         shardID,
         new DatabaseStorage(storage).createClientGroupStorage(clientGroupID),
         'pipeline-driver.test.ts',
@@ -1893,7 +1902,7 @@ describe('view-syncer/pipeline-driver', () => {
         budget,
       );
       driver.init(clientSchema);
-      [...driver.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer())];
+      [...driver.addQuery('hash1', 'queryID1', query, startTimer())];
       return driver;
     }
 
@@ -1945,6 +1954,110 @@ describe('view-syncer/pipeline-driver', () => {
         expect(mixedBudget.reservedRows).toBe(0);
       });
       expect(tryReserve.mock.calls).toEqual([[2], [3], [1]]);
+      expect(tryReserve.mock.results.map(r => r.value)).toEqual([
+        true,
+        false,
+        true,
+      ]);
+    });
+
+    test.each([
+      {deferring: 'a', first: 'a'},
+      {deferring: 'a', first: 'b'},
+      {deferring: 'b', first: 'a'},
+      {deferring: 'b', first: 'b'},
+    ] as const)(
+      'client groups in different modes share a row cache: $deferring defers, $first advances first',
+      ({deferring, first}) => {
+        // As in 'client groups sharing a row cache advance past a skipped
+        // unique-key edit', but only one group holds its changes in memory
+        // (and reads `prev` as it was). The other does not fit in its budget,
+        // so it writes them through (and reads `prev` as it writes to it).
+        // Whichever advances first fills the row cache.
+        const rowCache = new SnapshotRowCache(100);
+        const budgetFor = (id: string) =>
+          new DeferredWritesBudget(id === deferring ? Infinity : 0, Infinity);
+        const drivers = {
+          // Cannot observe `foo`, so it skips `foo`'s edit.
+          a: makeDriver('a', budgetFor('a'), {
+            rowCache,
+            query: {
+              ...UNIQUES_QUERY,
+              where: {
+                type: 'simple',
+                left: {type: 'column', name: 'id'},
+                op: '=',
+                right: {type: 'literal', value: 'boo'},
+              },
+            },
+          }),
+          b: makeDriver('b', budgetFor('b'), {rowCache}),
+        };
+
+        replicator.processTransaction(
+          '134',
+          messages.update('uniques', {id: 'foo', name: 'wuzzy'}),
+          messages.insert('uniques', {id: 'baz', name: 'bar'}),
+        );
+
+        const order =
+          first === 'a' ? (['a', 'b'] as const) : (['b', 'a'] as const);
+        const results: Record<string, string[]> = {};
+        for (const id of order) {
+          results[id] = summarize(
+            drivers[id].advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+          );
+        }
+        expect(results).toEqual({
+          a: [],
+          b: [`${ChangeType.EDIT}:foo:wuzzy`, `${ChangeType.ADD}:baz:bar`],
+        });
+      },
+    );
+
+    test('an advancement writes through while another holds the budget', () => {
+      // Fits the 2 changes of one advancement of the first transaction at a
+      // time, or the 3 of the second.
+      const budget = new DeferredWritesBudget(3, Infinity);
+      const tryReserve = vi.spyOn(budget, 'tryReserve');
+      const writeThrough = makeDriver('write-through', undefined);
+      const a = makeDriver('a', budget);
+      const b = makeDriver('b', budget);
+
+      replicator.processTransaction('134', ...transactions[0]);
+      const expected = summarize(
+        writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+      );
+
+      // `a` is partway through its advancement, which holds its reservation.
+      const aChanges = a
+        .advance(NO_TIME_ADVANCEMENT_TIMER)
+        .changes[Symbol.iterator]();
+      const aFirst = aChanges.next();
+      expect(aFirst.done).toBe(false);
+      expect(budget.reservedRows).toBe(2);
+
+      // So `b`'s changes do not fit, and it writes them through.
+      expect(summarize(b.advance(NO_TIME_ADVANCEMENT_TIMER).changes)).toEqual(
+        expected,
+      );
+      expect(budget.reservedRows).toBe(2);
+
+      // `a` finishes, and releases its reservation.
+      expect(
+        summarize([
+          aFirst.value as RowChange | 'yield',
+          ...{[Symbol.iterator]: () => aChanges},
+        ]),
+      ).toEqual(expected);
+      expect(budget.reservedRows).toBe(0);
+
+      // Then `b`'s next advancement fits.
+      replicator.processTransaction('135', ...transactions[1]);
+      expect(summarize(b.advance(NO_TIME_ADVANCEMENT_TIMER).changes)).toEqual(
+        summarize(writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+      );
+      expect(tryReserve.mock.calls).toEqual([[2], [2], [3]]);
       expect(tryReserve.mock.results.map(r => r.value)).toEqual([
         true,
         false,

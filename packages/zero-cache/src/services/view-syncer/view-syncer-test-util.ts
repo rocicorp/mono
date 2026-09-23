@@ -53,7 +53,7 @@ import type {ReplicaState} from '../replicator/replicator.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.ts';
 import {ConnectionContextManagerImpl} from './connection-context-manager.ts';
-import {DeferredWritesBudget} from './deferred-writes-budget.ts';
+import {testDeferredWritesBudget} from './deferred-writes-test-util.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
 import type {MonotonicClock} from './hydration-budget.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
@@ -833,7 +833,8 @@ export async function setup(
       () => YIELD_THRESHOLD_MS,
       undefined,
       undefined,
-      deferredWritesBudget(),
+      // Selected by ZERO_TEST_DEFER_IVM_WRITES.
+      testDeferredWritesBudget(),
     ),
     stateChanges,
     drainCoordinator,
@@ -1024,7 +1025,8 @@ export function restartViewSyncer(params: {
       () => YIELD_THRESHOLD_MS,
       undefined,
       undefined,
-      deferredWritesBudget(),
+      // Selected by ZERO_TEST_DEFER_IVM_WRITES.
+      testDeferredWritesBudget(),
     ),
     stateChanges,
     drainCoordinator,
@@ -1255,15 +1257,3 @@ export const app2Messages = new ReplicationMessages(
   {clients: ['clientGroupID', 'clientID']},
   'this_app_2',
 );
-
-/**
- * Set `ZERO_TEST_DEFER_IVM_WRITES=1` to run the view-syncer suites with IVM
- * derivation held in memory rather than written to the replica snapshot.
- * The limits are the defaults of `deferIvmWritesMaxRows` and
- * `deferIvmWritesMaxBytes`.
- */
-function deferredWritesBudget(): DeferredWritesBudget | undefined {
-  return process.env['ZERO_TEST_DEFER_IVM_WRITES'] === '1'
-    ? new DeferredWritesBudget(200_000, 32 * 1024 * 1024)
-    : undefined;
-}
