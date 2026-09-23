@@ -2,7 +2,7 @@ import type {IncomingMessage} from 'node:http';
 import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
-import {assert} from '../../../../shared/src/asserts.ts';
+import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
@@ -13,13 +13,16 @@ import {
   streamInternal,
   streamInternalStringified,
   streamInternalWithSize,
+  type Sized,
   type Source,
 } from '../../types/streams.ts';
+import {Subscription} from '../../types/subscription.ts';
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService, type Options as HttpOptions} from '../http-service.ts';
 import {handleProfzRequest} from '../profz.ts';
+import type {PreSerializedBatch} from './broadcast.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
@@ -30,15 +33,28 @@ import {
 } from './change-streamer.ts';
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
 import {snapshotMessageSchema, type SnapshotMessage} from './snapshot.ts';
+import {
+  subscribeDownstreamSchema,
+  subscribeUpstreamSchema,
+  type ReservedMessage,
+  type SubscribeContext,
+  type SubscribeDownstream,
+  type SubscribeUpstream,
+} from './subscribe.ts';
 
 const MIN_SUPPORTED_PROTOCOL_VERSION = 4;
 
+// The merged `/subscribe` protocol was introduced at v7.
+const MIN_SUBSCRIBE_PROTOCOL_VERSION = 7;
+
 const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
 const CHANGES_PATH_PATTERN = '/replication/:version/changes';
-const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
+const SUBSCRIBE_PATH_PATTERN = '/replication/:version/subscribe';
+const PATH_REGEX =
+  /\/replication\/v(?<version>\d+)\/(changes|snapshot|subscribe)$/;
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
-const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
+const SUBSCRIBE_PATH = `/replication/v${PROTOCOL_VERSION}/subscribe`;
 
 type Options = HttpOptions & {
   startupDelayMs: number;
@@ -61,12 +77,13 @@ export class ChangeStreamerHttpServer extends HttpService {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
 
-      fastify.get(CHANGES_PATH_PATTERN, {websocket: true}, this.#subscribe);
+      fastify.get(CHANGES_PATH_PATTERN, {websocket: true}, this.#changes);
       fastify.get(
         SNAPSHOT_PATH_PATTERN,
         {websocket: true},
         this.#reserveSnapshot,
       );
+      fastify.get(SUBSCRIBE_PATH_PATTERN, {websocket: true}, this.#subscribe);
 
       fastify.get('/profz', (req, res) =>
         handleProfzRequest(
@@ -80,7 +97,7 @@ export class ChangeStreamerHttpServer extends HttpService {
         ),
       );
 
-      installWebSocketReceiver<'snapshot' | 'changes'>(
+      installWebSocketReceiver<'snapshot' | 'changes' | 'subscribe'>(
         lc,
         fastify.websocketServer,
         this.#receiveWebsocket,
@@ -96,13 +113,15 @@ export class ChangeStreamerHttpServer extends HttpService {
   // Called when receiving a web socket via the main dispatcher handoff.
   readonly #receiveWebsocket = (
     ws: WebSocket,
-    action: 'changes' | 'snapshot',
+    action: 'changes' | 'snapshot' | 'subscribe',
     msg: IncomingMessageSubset,
   ) => {
     switch (action) {
       case 'snapshot':
         return this.#reserveSnapshot(ws, msg);
       case 'changes':
+        return this.#changes(ws, msg);
+      case 'subscribe':
         return this.#subscribe(ws, msg);
       default:
         closeWithError(
@@ -136,7 +155,7 @@ export class ChangeStreamerHttpServer extends HttpService {
     }
   };
 
-  readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
+  readonly #changes = async (ws: WebSocket, req: RequestHeaders) => {
     try {
       const ctx = getSubscriberContext(req);
       if (ctx.mode === 'serving') {
@@ -153,6 +172,100 @@ export class ChangeStreamerHttpServer extends HttpService {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
   };
+
+  /**
+   * The merged v7 `/subscribe` handler. A single bidirectional connection
+   * carries, in sequence: an optional reservation phase (`reserve-snapshot` →
+   * `reserved`) and then the subscription phase (`start-subscription` → change
+   * stream). This ensures that the subscriber subscribes to the same task from
+   * which it restored the backup.
+   */
+  readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
+    let reservation: Source<SnapshotMessage> | undefined;
+    const outbound = Subscription.create<string | PreSerializedBatch>();
+
+    try {
+      const url = new URL(
+        req.url ?? '',
+        req.headers.origin ?? 'http://localhost',
+      );
+      const protocolVersion = checkProtocolVersion(url.pathname);
+      if (protocolVersion < MIN_SUBSCRIBE_PROTOCOL_VERSION) {
+        throw new Error(
+          `the /subscribe endpoint requires protocol v${MIN_SUBSCRIBE_PROTOCOL_VERSION} ` +
+            `(client is at v${protocolVersion})`,
+        );
+      }
+
+      const instream = await streamInternalStringified(
+        this._lc,
+        ws,
+        subscribeUpstreamSchema,
+        outbound,
+        {batched: true},
+      );
+
+      // Keep reading upstream control messages for the life of the connection.
+      // Do not manually exit loop, as that would close the socket. The loop
+      // exits naturally when the connection closes.
+      for await (const msg of instream) {
+        if (msg[0] === 'reserve-snapshot') {
+          const {taskID} = msg[1];
+          this.#ensureChangeStreamerStarted('incoming snapshot reservation');
+          reservation =
+            await this.#changeStreamer.startSnapshotReservation(taskID);
+          void this.#forwardReservation(reservation, outbound);
+        } else if (msg[0] === 'start-subscription') {
+          const ctx: SubscriberContext = {
+            ...msg[1],
+            protocolVersion,
+            wsBatched: true,
+          };
+          if (ctx.mode === 'serving') {
+            this.#ensureChangeStreamerStarted('incoming subscription');
+          }
+          // subscribe() registers the subscriber and then releases any
+          // reservation for that task.
+          reservation = undefined;
+          await this.#changeStreamer.subscribe(ctx, outbound);
+        }
+      }
+    } catch (err) {
+      closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
+    } finally {
+      // Covers a reservation-phase disconnect (instream ended before a
+      // subscription started); idempotent with the close handler above.
+      reservation?.cancel();
+    }
+  };
+
+  /**
+   * Forwards a snapshot reservation's single `['status', ...]` message onto
+   * the merged connection's `outbound` sink as a `['reserved', ...]` message.
+   * The loop then blocks on the held-open reservation until it is cancelled,
+   * by `subscribe()` at the subscription handoff, or by the reservation-phase
+   * teardown on disconnect.
+   */
+  async #forwardReservation(
+    reservation: Source<SnapshotMessage>,
+    outbound: Subscription<string | PreSerializedBatch>,
+  ) {
+    try {
+      for await (const [, status] of reservation) {
+        // Translate the /snapshot protocol's ['status', {tag: 'status', ...}]
+        // message to the /subscribe protocol's ['reserved', {tag: 'snapshot', ...}].
+        outbound.push(
+          BigIntJSON.stringify([
+            'reserved',
+            {...status, tag: 'snapshot'},
+          ] satisfies ReservedMessage),
+        );
+      }
+    } catch (e) {
+      this._lc.warn?.(`error forwarding snapshot reservation`, e);
+      outbound.fail(e instanceof Error ? e : new Error(String(e)));
+    }
+  }
 
   #changeStreamerStarted = false;
 
@@ -258,12 +371,53 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   }
 
   async subscribe(ctx: SubscriberContext): Promise<Source<SizedDownstream>> {
-    const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
+    const uri = await this.#resolveChangeStreamer(SUBSCRIBE_PATH);
 
-    const params = getParams({wsBatched: true, ...ctx});
+    // taskID is carried in the query for observability/routing; the server
+    // reads the authoritative context from the start-subscription message.
+    const params = new URLSearchParams({taskID: ctx.taskID});
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamInternalWithSize(this.#lc, ws, downstreamSchema);
+    const outbound = Subscription.create<SubscribeUpstream>();
+    // Subscribe-only flow (no snapshot reservation on this connection):
+    // transition straight into the subscription phase. For a fresh serving
+    // replicator, the reservation was taken over the legacy /snapshot
+    // connection during restore; the server releases it (keyed on taskID)
+    // once this subscriber is registered.
+    outbound.push(['start-subscription', toStartSubscriptionContext(ctx)]);
+
+    // In the subscribe-only flow the server never sends a ['reserved', …]
+    // message, so the inbound stream is exactly the change-stream downstream.
+    return streamInternalWithSize(this.#lc, ws, downstreamSchema, outbound);
+  }
+
+  /**
+   * Opens a merged v7 `/subscribe` connection (see subscribe.ts). Returns the
+   * inbound change/reservation stream and an `outbound` sink into which the
+   * caller pushes the `reserve-snapshot` / `start-subscription` control
+   * messages that drive the connection's phases. The single connection spans
+   * the reservation, backup restore, and subscription, so the reserving
+   * replication-manager is the one that serves the subscription.
+   */
+  async connect(taskID: string): Promise<{
+    instream: Source<Sized<SubscribeDownstream>>;
+    outbound: Subscription<SubscribeUpstream>;
+  }> {
+    const uri = await this.#resolveChangeStreamer(SUBSCRIBE_PATH);
+
+    // taskID is carried in the query for observability/routing; the server
+    // reads the authoritative taskID from the control messages themselves.
+    const params = new URLSearchParams({taskID});
+    const ws = new WebSocket(uri + `?${params.toString()}`);
+
+    const outbound = Subscription.create<SubscribeUpstream>();
+    const instream = await streamInternalWithSize(
+      this.#lc,
+      ws,
+      subscribeDownstreamSchema,
+      outbound,
+    );
+    return {instream, outbound};
   }
 }
 
@@ -281,11 +435,9 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
     mode: params.get('mode', false) === 'backup' ? 'backup' : 'serving',
     replicaVersion: params.get('replicaVersion', true),
     watermark: params.get('watermark', true),
-    initial: params.getBoolean('initial'),
     // Absent for subscribers that predate the parameter, which is the safe
     // default: the barrier falls back to polling rather than waiting on an
     // ACK that would never be attributed to a writer.
-    logsChangeStream: params.getBoolean('logsChangeStream'),
     wsBatched: params.getBoolean('wsBatched'),
   };
 }
@@ -309,21 +461,10 @@ function checkProtocolVersion(pathname: string): number {
   return v;
 }
 
-// This is called from the client-side (i.e. the replicator).
-function getParams(ctx: SubscriberContext): URLSearchParams {
-  // The protocolVersion is hard-coded into the CHANGES_PATH.
-  const {protocolVersion, wsBatched, ...stringParams} = ctx;
-  assert(
-    protocolVersion === PROTOCOL_VERSION,
-    `replicator should be setting protocolVersion to ${PROTOCOL_VERSION}`,
-  );
-  const params = new URLSearchParams({
-    ...stringParams,
-    initial: ctx.initial ? 'true' : 'false',
-    logsChangeStream: ctx.logsChangeStream ? 'true' : 'false',
-  });
-  if (wsBatched) {
-    params.set('wsBatched', 'true');
-  }
-  return params;
+// Projects a client-side SubscriberContext onto the start-subscription
+// message payload, dropping the fields that are implicit on the merged
+// connection: protocolVersion (from the request path), wsBatched (always on).
+function toStartSubscriptionContext(ctx: SubscriberContext): SubscribeContext {
+  const {taskID, id, mode, replicaVersion, watermark} = ctx;
+  return {taskID, id, mode, replicaVersion, watermark};
 }

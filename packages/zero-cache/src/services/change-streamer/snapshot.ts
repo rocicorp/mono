@@ -16,51 +16,24 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import * as v from '../../../../shared/src/valita.ts';
 import {type NormalizedZeroConfig} from '../../config/normalize.ts';
 import {getShardConfig} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {ChangeStreamerHttpClient} from './change-streamer-http.ts';
 
-const statusSchema = v.object({
-  tag: v.literal('status'),
+// The schema definitions live in the pure schema module (with no dependency on
+// the HTTP client) so that subscribe.ts can import them without forming an
+// import cycle through change-streamer-http.ts. Imported here for local use and
+// re-exported for existing consumers.
+import {
+  snapshotMessageSchema,
+  statusSchema,
+  type SnapshotMessage,
+  type SnapshotStatus,
+} from './snapshot-message.ts';
 
-  /**
-   * The location from which litestream should perform the restore.
-   */
-  backupURL: v.string(),
-
-  /**
-   * The `replicaVersion` of the backup. If a subscriber's restored or
-   * existing replica is of a different version, it should delete it and
-   * retry the restore from litestream (i.e. equivalent to a
-   * `WrongReplicaVersion` response from a `/changes` subscription).
-   */
-  replicaVersion: v.string(),
-
-  /**
-   * The earliest watermark from which catchup is possible. If the
-   * subscriber's replica is older that this watermark, it should delete it
-   * and (retry the) restore from litestream (i.e. equivalent to a
-   * `WatermarkTooOld` response from a `/changes` subscription).
-   */
-  minWatermark: v.string(),
-
-  /**
-   * The size in bytes of the replication-manager's replica when the snapshot
-   * was reserved, used as an estimate of the size of the restored replica
-   * when reporting restore progress. Absent from older replication-managers.
-   */
-  replicaSize: v.number().optional(),
-});
-
-export type SnapshotStatus = v.Infer<typeof statusSchema>;
-
-const statusMessageSchema = v.tuple([v.literal('status'), statusSchema]);
-
-export const snapshotMessageSchema = v.union(statusMessageSchema);
-
-export type SnapshotMessage = v.Infer<typeof statusMessageSchema>;
+export {snapshotMessageSchema, statusSchema};
+export type {SnapshotMessage, SnapshotStatus};
 
 export type ReserveSnapshot = (
   lc: LogContext,

@@ -111,12 +111,6 @@ export class IncrementalSyncer {
           mode: this.#mode,
           watermark,
           replicaVersion,
-          initial: watermark === initialWatermark,
-          // The SQLite change log is written by the change-streamer itself, so
-          // no replicator logs the change stream any more. The parameter stays
-          // on the wire for change-streamers that still exclude a writer from
-          // SQLite catchup.
-          logsChangeStream: false,
         });
         unregister = this.#state.cancelOnStop(downstream);
         this.#statusPublisher?.publish(
