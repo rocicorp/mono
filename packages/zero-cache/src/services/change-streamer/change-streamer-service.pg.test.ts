@@ -50,7 +50,7 @@ import {
   type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import {isPreSerializedBatch} from './broadcast.ts';
+import {isPreSerializedBatch, type PreSerializedBatch} from './broadcast.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import {
   initializeStreamer,
@@ -3628,6 +3628,50 @@ describe('change-streamer/service', () => {
     await fireNextTimer();
     expect(behindLogs()).toHaveLength(3);
     sub3.cancel();
+  });
+
+  test('a downstream cancelled during subscribe does not leak into the floor', async () => {
+    // Regression test for the merged /subscribe race: the caller (the HTTP
+    // handler) attaches the `downstream` sink to the live websocket *before*
+    // calling subscribe(), so a client disconnect can cancel it at any point
+    // during subscription setup. The subscriber must not be left registered in
+    // the Forwarder pinning the cleanup floor. This models the worst case: the
+    // sink is already cancelled when subscribe() runs.
+    await sql`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
+    `.simple();
+
+    // A far-behind subscriber ('04') would pin the floor at '04' if it leaked.
+    const downstream = Subscription.create<string | PreSerializedBatch>();
+    downstream.cancel();
+    await streamer.subscribe(
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
+        id: 'phantom',
+        mode: 'serving',
+        watermark: '04',
+        replicaVersion: REPLICA_VERSION,
+      },
+      downstream,
+    );
+
+    setTimeoutFn.mockClear();
+    streamer.trackBackupWatermark('08');
+
+    // With the cancelled subscriber correctly removed, nothing pins the floor:
+    // the purge reaches the backup watermark.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+    await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['08']]);
   });
 
   test('startSnapshotReservation throws when backups are not configured', async () => {
