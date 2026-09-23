@@ -215,6 +215,26 @@ const conditionValueSchema = v.union(
 export type Parameter = v.Infer<typeof parameterReferenceSchema>;
 
 /**
+ * The literal compared against a JSON path leaf has the shape its operator
+ * needs: `IN`/`NOT IN` take a list (or `null`, the explicitly supported
+ * constant-false case) and every other operator a scalar. The builder's types
+ * guarantee this for a literal, but a parameter is bound to whatever the
+ * anchor holds; without this check a scalar bound to `IN` trips the in-memory
+ * predicate's array assertion and a list bound to `=` the Postgres compiler's
+ * plural assertion. A plain column's literal is not checked here (its shape
+ * was never validated at the wire, and changing that is out of scope).
+ */
+function hasJsonLeafLiteralShape(c: SimpleCondition): boolean {
+  if (c.left.type !== 'json' || c.right.type !== 'literal') {
+    return true;
+  }
+  const isList = Array.isArray(c.right.value);
+  return c.op === 'IN' || c.op === 'NOT IN'
+    ? isList || c.right.value === null
+    : !isList;
+}
+
+/**
  * An `IN`/`NOT IN` list against a JSON path leaf is homogeneous: the engines
  * compare the leaf against the type of the list's first element (see
  * `jsonLiteralType`), and a mixed list would cast-fail on Postgres while
@@ -245,6 +265,10 @@ export const simpleConditionSchema: v.Type<SimpleCondition> = v
     left: conditionValueSchema,
     right: v.union(parameterReferenceSchema, literalReferenceSchema),
   })
+  .assert(
+    hasJsonLeafLiteralShape,
+    'expected a list for IN/NOT IN against a JSON path and a scalar for other operators',
+  )
   .assert(
     hasHomogeneousJsonInList,
     'expected a list of values of one type for IN against a JSON path',

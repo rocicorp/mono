@@ -691,7 +691,7 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toEqual('19apwsypfsksu');
+  expect(hash).toEqual('31fkfm2g3rxsh');
   expect(PROTOCOL_VERSION).toBe(54);
 });
 
@@ -1111,6 +1111,27 @@ test('json path: IN lists must be homogeneous; json refs must wrap json columns'
       },
     }),
   ).toThrow(/one type/);
+  // The literal's shape must match the operator: a list for IN/NOT IN (or the
+  // constant-false null), a scalar for everything else. A parameter bound to
+  // the wrong shape would otherwise trip an engine assertion.
+  expect(() => astSchema.parse(cond('a'))).toThrow(/expected a list/);
+  expect(() => astSchema.parse(cond(null))).not.toThrow();
+  const eq = (value: LiteralValue): AST => ({
+    table: 'issue',
+    where: {
+      type: 'simple',
+      op: '=',
+      left: {
+        type: 'json',
+        value: {type: 'column', name: 'metadata'},
+        path: ['k'],
+      },
+      right: {type: 'literal', value},
+    },
+  });
+  expect(() => astSchema.parse(eq(['a', 'b']))).toThrow(/a scalar/);
+  expect(() => astSchema.parse(eq('a'))).not.toThrow();
+  expect(() => astSchema.parse(eq(null))).not.toThrow();
   // A plain column's list is not restricted (its type is the column's, and
   // `cmp()` only checks json() references), as before JSON paths existed.
   expect(() =>

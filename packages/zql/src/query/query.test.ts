@@ -138,6 +138,7 @@ const schemaWithTypedJson = table('testWithTypedJson')
       flagged: boolean;
       nested: {zip: string};
       tags: string[];
+      legacy: null;
     }>(),
     scores: json<Record<number, number>>(),
     untyped: json(),
@@ -869,6 +870,7 @@ type Metadata = {
   flagged: boolean;
   nested: {zip: string};
   tags: string[];
+  legacy: null;
 };
 
 test('json path: ValueAtPath leaf resolution (Tier 1)', () => {
@@ -908,6 +910,13 @@ test('json path: leaf type inference in cmp (Tier 1)', () => {
     cmp(json('metadata', 'priority'), 'low'); // 2-arg form defaults to '='
     cmp(json('metadata', 'priority'), 'IN', ['high', 'low']);
     cmp(json('metadata', 'priority'), 'IS', null);
+    // a leaf typed exactly `null` is only comparable with IS / IS NOT
+    cmp(json('metadata', 'legacy'), 'IS', null);
+    cmp(json('metadata', 'legacy'), 'IS NOT', null);
+    // @ts-expect-error - nothing but null can be equal to a null leaf
+    cmp(json('metadata', 'legacy'), '=', null);
+    // @ts-expect-error - a null leaf has no list type
+    cmp(json('metadata', 'legacy'), 'IN', [null]);
     // @ts-expect-error - 'nope' is not 'high' | 'low'
     cmp(json('metadata', 'priority'), '=', 'nope');
 

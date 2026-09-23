@@ -2398,6 +2398,9 @@ test('bind static parameters: a JSON path leaf re-validates the bound literal', 
   // error or silently dropped elements.
   expect(() => bind('IN', 'mixed')).toThrow(/one type/);
   expect(() => bind('=', 'claims')).toThrow();
+  // The operator's shape is checked too: IN needs a list, = a scalar.
+  expect(() => bind('IN', 'role')).toThrow(/expected a list/);
+  expect(() => bind('=', 'roles')).toThrow(/a scalar/);
 });
 
 test('empty or - nothing goes through', () => {

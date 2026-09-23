@@ -197,7 +197,15 @@ export type GetFilterTypeFromTSType<
  * strings, or of numbers, or of booleans — not a mix.
  */
 export type GetJsonLeafFilterType<TS, TOperator extends SimpleOperator> = [
-  Extract<TS, string | number | boolean>,
+  Extract<
+    TS,
+    // `IS`/`IS NOT` also accept a leaf typed exactly `null`: the engines all
+    // support `IS NULL` on it, and there is nothing else it could take.
+    | string
+    | number
+    | boolean
+    | (TOperator extends 'IS' | 'IS NOT' ? null : never)
+  >,
 ] extends [never]
   ? never
   : TOperator extends 'IN' | 'NOT IN'
