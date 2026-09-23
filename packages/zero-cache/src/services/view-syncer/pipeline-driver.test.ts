@@ -45,6 +45,7 @@ import {
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
 import {getMutationResultsQuery} from './cvr.ts';
+import {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {RowID} from './schema/types.ts';
@@ -62,6 +63,12 @@ const NO_TIME_ADVANCEMENT_TIMER: Timer = {
 // of written to (and rolled back out of) the replica snapshot. Every result
 // here must be identical either way.
 const deferIvmWrites = process.env['ZERO_TEST_DEFER_IVM_WRITES'] === '1';
+
+// The defaults of `deferIvmWritesMaxRows` and `deferIvmWritesMaxBytes`.
+const deferredWritesBudget = () =>
+  deferIvmWrites
+    ? new DeferredWritesBudget(200_000, 32 * 1024 * 1024)
+    : undefined;
 
 describe('view-syncer/pipeline-driver', () => {
   const shardID: ShardID = {appID: 'zeroz', shardNum: 1};
@@ -92,7 +99,8 @@ describe('view-syncer/pipeline-driver', () => {
       new InspectorDelegate(undefined),
       () => 200 /** yield threshold */,
       undefined,
-      {deferIvmWrites} as never,
+      undefined,
+      deferredWritesBudget(),
     );
 
     db = dbFile.connect(lc);
@@ -769,7 +777,8 @@ describe('view-syncer/pipeline-driver', () => {
       new InspectorDelegate(undefined),
       () => 200 /** yield threshold */,
       undefined,
-      {deferIvmWrites} as never,
+      undefined,
+      deferredWritesBudget(),
     );
     pipelines.init(clientSchema);
 
@@ -1803,6 +1812,7 @@ describe('view-syncer/pipeline-driver', () => {
     // it. The unique-key conflict probe for `baz` must still give each group
     // the answer for its own `prev` snapshot.
     const rowCache = new SnapshotRowCache(100);
+    const budget = deferredWritesBudget();
     const storage = new Database(lc, ':memory:');
     storage.prepare(CREATE_STORAGE_TABLE).run();
     const databaseStorage = new DatabaseStorage(storage);
@@ -1823,7 +1833,8 @@ describe('view-syncer/pipeline-driver', () => {
         new InspectorDelegate(undefined),
         () => 200 /** yield threshold */,
         undefined,
-        {deferIvmWrites} as never,
+        undefined,
+        budget,
       );
     const a = makeDriver('a');
     const b = makeDriver('b');
@@ -1861,41 +1872,144 @@ describe('view-syncer/pipeline-driver', () => {
     ).toEqual([`${ChangeType.EDIT}:foo`, `${ChangeType.ADD}:baz`]);
   });
 
-  test.each([
-    {deferIvmWritesMaxRows: 1, deferIvmWritesMaxBytes: Infinity},
-    {deferIvmWritesMaxRows: Infinity, deferIvmWritesMaxBytes: 1},
-  ])('deferred advancement resets past its pending limit: %j', limits => {
-    const storage = new Database(lc, ':memory:');
-    storage.prepare(CREATE_STORAGE_TABLE).run();
-    const driver = new PipelineDriver(
-      lc,
-      testLogConfig,
-      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
-      shardID,
-      new DatabaseStorage(storage).createClientGroupStorage('limited'),
-      'pipeline-driver.test.ts',
-      new InspectorDelegate(undefined),
-      () => 200 /** yield threshold */,
-      undefined,
-      {deferIvmWrites: true, ...limits} as never,
-    );
-    driver.init(clientSchema);
-    [...driver.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer())];
-
-    replicator.processTransaction(
-      '134',
-      messages.update('uniques', {id: 'foo', name: 'wuzzy'}),
-      messages.update('uniques', {id: 'boo', name: 'fuzzy'}),
-    );
-
-    let err;
-    try {
-      [...driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes];
-    } catch (e) {
-      err = e;
+  describe('deferred writes budget', () => {
+    function makeDriver(
+      clientGroupID: string,
+      budget: DeferredWritesBudget | undefined,
+    ) {
+      const storage = new Database(lc, ':memory:');
+      storage.prepare(CREATE_STORAGE_TABLE).run();
+      const driver = new PipelineDriver(
+        lc,
+        testLogConfig,
+        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        new DatabaseStorage(storage).createClientGroupStorage(clientGroupID),
+        'pipeline-driver.test.ts',
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+        undefined,
+        undefined,
+        budget,
+      );
+      driver.init(clientSchema);
+      [...driver.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer())];
+      return driver;
     }
-    expect(err).toBeInstanceOf(ResetPipelinesSignal);
-    expect((err as ResetPipelinesSignal).reason).toBe('ivm-delta-overflow');
+
+    const summarize = (changes: Iterable<RowChange | 'yield'>) =>
+      Array.from(changes, c =>
+        c === 'yield'
+          ? c
+          : `${c.type}:${String(c.rowKey.id)}:${String(c.row?.name)}`,
+      );
+
+    // Each transaction displaces a row through the unique `name` column. The
+    // change log compresses them to 2, 3 and 1 entries.
+    const transactions = [
+      [
+        messages.delete('uniques', {id: 'foo'}),
+        messages.insert('uniques', {id: 'baz', name: 'bar'}),
+        messages.insert('uniques', {id: 'foo', name: 'wuzzy'}),
+      ],
+      [
+        messages.delete('uniques', {id: 'boo'}),
+        messages.insert('uniques', {id: 'qux', name: 'dar'}),
+        messages.update('uniques', {id: 'baz', name: 'zap'}),
+      ],
+      [messages.update('uniques', {id: 'foo', name: 'bar'})],
+    ];
+
+    test('write mode can change between advancements', () => {
+      const writeThrough = makeDriver('write-through', undefined);
+      const deferred = makeDriver(
+        'deferred',
+        new DeferredWritesBudget(Infinity, Infinity),
+      );
+      // Fits the 2 and 1 change advancements, but not the 3 change one.
+      const mixedBudget = new DeferredWritesBudget(2, Infinity);
+      const tryReserve = vi.spyOn(mixedBudget, 'tryReserve');
+      const mixed = makeDriver('mixed', mixedBudget);
+
+      transactions.forEach((txn, i) => {
+        replicator.processTransaction(`${134 + i}`, ...txn);
+        const expected = summarize(
+          writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+        );
+        expect(
+          summarize(deferred.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+        ).toEqual(expected);
+        expect(
+          summarize(mixed.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+        ).toEqual(expected);
+        expect(mixedBudget.reservedRows).toBe(0);
+      });
+      expect(tryReserve.mock.calls).toEqual([[2], [3], [1]]);
+      expect(tryReserve.mock.results.map(r => r.value)).toEqual([
+        true,
+        false,
+        true,
+      ]);
+    });
+
+    test('pending rows never exceed the reserved changes', () => {
+      const budget = new DeferredWritesBudget(Infinity, Infinity);
+      const driver = makeDriver('bounded', budget);
+      let maxPendingRows = 0;
+      let reservedRows = 0;
+      // The timer is also consulted after each change has been applied,
+      // which is when the sources hold the most rows.
+      const timer: Timer = {
+        elapsedLap: () => 0,
+        totalElapsed: () => {
+          maxPendingRows = Math.max(maxPendingRows, driver.pendingRows);
+          reservedRows = budget.reservedRows;
+          return 0;
+        },
+      };
+      transactions.forEach((txn, i) => {
+        replicator.processTransaction(`${134 + i}`, ...txn);
+        maxPendingRows = 0;
+        const {numChanges, changes} = driver.advance(timer);
+        [...changes];
+        expect(reservedRows).toBe(numChanges);
+        expect(maxPendingRows).toBeGreaterThan(0);
+        expect(maxPendingRows).toBeLessThanOrEqual(numChanges);
+        expect(driver.pendingRows).toBe(0);
+        expect(budget.reservedRows).toBe(0);
+      });
+    });
+
+    test('reservation is released when the advancement is abandoned', () => {
+      const budget = new DeferredWritesBudget(Infinity, Infinity);
+      const driver = makeDriver('abandoned', budget);
+      replicator.processTransaction('134', ...transactions[0]);
+
+      const {numChanges, changes} = driver.advance(NO_TIME_ADVANCEMENT_TIMER);
+      // Nothing is reserved until the changes are iterated.
+      expect(budget.reservedRows).toBe(0);
+      const iter = changes[Symbol.iterator]();
+      expect(iter.next().done).toBe(false);
+      expect(budget.reservedRows).toBe(numChanges);
+      iter.return?.();
+      expect(budget.reservedRows).toBe(0);
+    });
+
+    test('advancement resets past the byte backstop', () => {
+      const budget = new DeferredWritesBudget(Infinity, 1);
+      const driver = makeDriver('wide', budget);
+      replicator.processTransaction('134', ...transactions[0]);
+
+      let err;
+      try {
+        [...driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes];
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(ResetPipelinesSignal);
+      expect((err as ResetPipelinesSignal).reason).toBe('ivm-delta-overflow');
+      expect(budget.reservedRows).toBe(0);
+    });
   });
 
   test('whereExists query', () => {
@@ -3300,6 +3414,7 @@ describe('view-syncer/pipeline-driver', () => {
         () => 200 /** yield threshold */,
         false,
         config as ZeroConfig | undefined,
+        deferredWritesBudget(),
       );
     }
 

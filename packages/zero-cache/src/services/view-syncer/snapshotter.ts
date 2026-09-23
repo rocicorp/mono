@@ -297,6 +297,13 @@ export interface SnapshotDiff extends Iterable<Change> {
    *       may not be worth it for a presumable rare operation.
    */
   readonly changes: number;
+
+  /**
+   * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
+   * caller that decides how to write to `prev` once it knows the number of
+   * {@link changes}. Must be called before the diff is iterated.
+   */
+  setPrevWrites(prevWrites: PrevWrites): void;
 }
 
 /**
@@ -590,7 +597,8 @@ class Diff implements SnapshotDiff {
   readonly #allTableNames: Set<string>;
   readonly #observedTables: TableFilter | undefined;
   readonly #rowCache: SnapshotRowCache | undefined;
-  readonly #prevWrites: PrevWrites;
+  #prevWrites: PrevWrites;
+  #iterated = false;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
@@ -625,7 +633,13 @@ class Diff implements SnapshotDiff {
         : undefined;
   }
 
+  setPrevWrites(prevWrites: PrevWrites): void {
+    assert(!this.#iterated, 'prevWrites must be set before iterating the diff');
+    this.#prevWrites = prevWrites;
+  }
+
   [Symbol.iterator](): Iterator<Change> {
+    this.#iterated = true;
     const {changes, cleanup: done} = this.curr.changesSince(this.prev.version);
 
     const cleanup = () => {

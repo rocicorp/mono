@@ -87,7 +87,8 @@ export type TableSourceOptions = {
   /**
    * When set, pushed changes are held in an in-memory {@link PendingDelta}
    * merged into every read instead of being written to the backing table.
-   * The delta is dropped when the source moves to the next snapshot.
+   * The delta is dropped when the source moves to the next snapshot. This is
+   * the initial mode; see {@link TableSource.setDeferWrites}.
    */
   deferWrites?: boolean | undefined;
 };
@@ -130,7 +131,7 @@ export class TableSource implements Source {
    * being written to (and later rolled back out of) the backing snapshot. See
    * {@link PendingDelta}.
    */
-  readonly #delta: PendingDelta | undefined;
+  #delta: PendingDelta | undefined;
 
   /**
    * @param shouldYield a function called after each row is read from the database,
@@ -186,6 +187,24 @@ export class TableSource implements Source {
     // The new snapshot already contains everything the batch was standing in
     // for, so the batch is done.
     this.#delta?.clear();
+  }
+
+  /**
+   * Sets whether the changes pushed from now on are held in memory (see
+   * {@link TableSourceOptions.deferWrites}) or written to the backing
+   * snapshot. The two must not be mixed within one snapshot, so this may only
+   * be called before the first push after construction or {@link setDB}.
+   */
+  setDeferWrites(deferWrites: boolean) {
+    assert(
+      this.#delta === undefined || this.#delta.isEmpty,
+      'Cannot change how writes are applied while changes are pending',
+    );
+    if (!deferWrites) {
+      this.#delta = undefined;
+    } else {
+      this.#delta ??= new PendingDelta(this.#primaryKey);
+    }
   }
 
   #getStatementsFor(db: Database) {

@@ -66,6 +66,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
+import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
@@ -153,6 +154,8 @@ type AdvanceContext = {
   readonly timer: Timer;
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
+  /** Whether the advancement's changes are held in memory. */
+  readonly deferWrites: boolean;
   currentChangeStartMs: number | undefined;
   pos: number;
 };
@@ -274,6 +277,7 @@ export class PipelineDriver {
   readonly #shardID: ShardID;
   readonly #logConfig: LogConfig;
   readonly #config: ZeroConfig | undefined;
+  readonly #deferredWrites: DeferredWritesBudget | undefined;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #allTableNames = new Set<string>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
@@ -297,6 +301,13 @@ export class PipelineDriver {
     'Number of rows deleted because they conflicted with added row',
   );
 
+  readonly #deferredWritesFallbacks = getOrCreateCounter(
+    'sync',
+    'ivm.deferred-writes-fallbacks',
+    'Number of advancements written through to the replica snapshot because ' +
+      'their changes did not fit in the deferred IVM writes budget',
+  );
+
   readonly #inspectorDelegate: InspectorDelegate;
 
   constructor(
@@ -310,6 +321,7 @@ export class PipelineDriver {
     yieldThresholdMs: () => number,
     enablePlanner?: boolean,
     config?: ZeroConfig,
+    deferredWrites?: DeferredWritesBudget,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
@@ -317,6 +329,7 @@ export class PipelineDriver {
     this.#shardID = shardID;
     this.#logConfig = logConfig;
     this.#config = config;
+    this.#deferredWrites = deferredWrites;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
@@ -488,6 +501,19 @@ export class PipelineDriver {
     let total = 0;
     for (const pipeline of this.#pipelines.values()) {
       total += pipeline.hydrationTimeMs;
+    }
+    return total;
+  }
+
+  /**
+   * The rows the sources hold in memory for the advancement in progress.
+   * The advancement's reservation from the {@link DeferredWritesBudget}
+   * bounds this.
+   */
+  get pendingRows(): number {
+    let total = 0;
+    for (const source of this.#tables.values()) {
+      total += source.pendingRows;
     }
     return total;
   }
@@ -1025,7 +1051,8 @@ export class PipelineDriver {
       this.#tables,
       // Sources skip changes that none of this client group's pipelines can
       // observe, so a `prev` they write to diverges from other groups'.
-      this.#config?.deferIvmWrites ? 'none' : 'divergent',
+      // #advance() overrides this if it holds the changes in memory.
+      'divergent',
     );
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
@@ -1049,19 +1076,32 @@ export class PipelineDriver {
       'Cannot advance while hydration is in progress',
     );
     const totalHydrationTimeMs = this.totalHydrationTimeMs();
-    this.#advanceContext = {
-      timer,
-      totalHydrationTimeMs,
-      numChanges,
-      currentChangeStartMs: undefined,
-      pos: 0,
-    };
-    this.#lc.debug?.(
-      `starting pipeline advancement of ${numChanges} changes with an ` +
-        `advancement time limited based on total hydration time of ` +
-        `${totalHydrationTimeMs} ms.`,
-    );
+    // The reservation is made here rather than in advance(), so that the
+    // finally below is guaranteed to release it: a generator that is never
+    // started never runs its finally.
+    let deferWrites = false;
     try {
+      deferWrites = this.#reserveDeferredWrites(numChanges);
+      if (deferWrites) {
+        // `prev` is not written, so all of its reads can be shared.
+        diff.setPrevWrites('none');
+      }
+      for (const table of this.#tables.values()) {
+        table.setDeferWrites(deferWrites);
+      }
+      this.#advanceContext = {
+        timer,
+        totalHydrationTimeMs,
+        numChanges,
+        deferWrites,
+        currentChangeStartMs: undefined,
+        pos: 0,
+      };
+      this.#lc.debug?.(
+        `starting pipeline advancement of ${numChanges} changes with an ` +
+          `advancement time limited based on total hydration time of ` +
+          `${totalHydrationTimeMs} ms (${deferWrites ? 'deferred' : 'write-through'}).`,
+      );
       for (const {table, prevValues: probedPrevValues, nextValue} of diff) {
         // Advance progress is checked each time a row is fetched
         // from a TableSource during push processing, but some pushes
@@ -1130,7 +1170,7 @@ export class PipelineDriver {
           }
 
           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
-          this.#checkPendingLimits(advanceContext.pos, numChanges);
+          this.#checkPendingBytes(advanceContext);
         } finally {
           advanceContext.currentChangeStartMs = undefined;
         }
@@ -1149,8 +1189,33 @@ export class PipelineDriver {
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
       this.#lc.debug?.(`Advanced to ${curr.version}`);
     } finally {
+      if (deferWrites) {
+        must(this.#deferredWrites).release(numChanges);
+      }
       this.#advanceContext = null;
     }
+  }
+
+  /**
+   * Decides how the sources apply an advancement's changes: in memory if
+   * they fit in the worker's {@link DeferredWritesBudget}, and otherwise
+   * written through to the `prev` snapshot. Returns true if they are held in
+   * memory, in which case `numChanges` rows have been reserved.
+   */
+  #reserveDeferredWrites(numChanges: number): boolean {
+    const budget = this.#deferredWrites;
+    if (!budget) {
+      return false;
+    }
+    if (budget.tryReserve(numChanges)) {
+      return true;
+    }
+    this.#deferredWritesFallbacks.add(1);
+    this.#lc.debug?.(
+      `writing through ${numChanges} changes: ${budget.reservedRows} rows ` +
+        `of the deferred writes budget are reserved`,
+    );
+    return false;
   }
 
   /** Implements `BuilderDelegate.getSource()` */
@@ -1170,10 +1235,8 @@ export class PipelineDriver {
         () => this.#shouldYield(),
         // Pipelines only read tables through their connections, and the
         // sources are moved to the next snapshot after every advancement.
-        {
-          skipUnobservableChanges: true,
-          deferWrites: this.#config?.deferIvmWrites ?? false,
-        },
+        // How writes are applied is set per advancement, by #advance().
+        {skipUnobservableChanges: true},
       );
       this.#lc.debug?.(`created TableSource for ${tableName}`);
       return source;
@@ -1262,30 +1325,22 @@ export class PipelineDriver {
   }
 
   /**
-   * With `deferIvmWrites`, the advancement's changes are held in memory by
-   * the TableSources until they move to the next snapshot. This bounds them.
+   * The rows an advancement holds in memory are bounded by its reservation,
+   * but their width is not known in advance. This is the backstop for wide
+   * rows.
    */
-  #checkPendingLimits(pos: number, numChanges: number) {
-    const config = this.#config;
-    if (!config?.deferIvmWrites) {
+  #checkPendingBytes({deferWrites, pos, numChanges}: AdvanceContext) {
+    if (!deferWrites) {
       return;
     }
-    let pendingRows = 0;
+    const {maxBytesPerClientGroup} = must(this.#deferredWrites);
     let pendingBytes = 0;
     for (const source of this.#tables.values()) {
-      pendingRows += source.pendingRows;
       pendingBytes += source.pendingBytes;
     }
-    if (pendingRows > config.deferIvmWritesMaxRows) {
+    if (pendingBytes > maxBytesPerClientGroup) {
       throw new ResetPipelinesSignal(
-        `Advancement exceeded ${config.deferIvmWritesMaxRows} pending rows ` +
-          `at ${pos} of ${numChanges} changes.`,
-        'ivm-delta-overflow',
-      );
-    }
-    if (pendingBytes > config.deferIvmWritesMaxBytes) {
-      throw new ResetPipelinesSignal(
-        `Advancement exceeded ${config.deferIvmWritesMaxBytes} estimated pending bytes ` +
+        `Advancement exceeded ${maxBytesPerClientGroup} estimated pending bytes ` +
           `(${pendingBytes} bytes) at ${pos} of ${numChanges} changes.`,
         'ivm-delta-overflow',
       );

@@ -675,12 +675,14 @@ export const zeroOptions = {
   },
 
   deferIvmWritesMaxRows: {
-    type: v.number().default(100_000),
+    type: v.number().default(200_000),
     desc: [
-      `With {bold deferIvmWrites}, the maximum number of rows a client group`,
-      `may hold in memory for a single advancement. An advancement that`,
-      `exceeds it is abandoned and the client group's pipelines are reset,`,
-      `as when an advancement exceeds its time limit.`,
+      `With {bold deferIvmWrites}, the maximum number of rows that the client`,
+      `groups of one sync worker may hold in memory at once. Each client group`,
+      `holds its own copy of the changes it is advancing through. Before an`,
+      `advancement starts, its number of changes is reserved from this budget;`,
+      `an advancement that does not fit is written through to the replica`,
+      `snapshot instead, as when {bold deferIvmWrites} is off.`,
     ],
     hidden: true,
   },
@@ -690,8 +692,9 @@ export const zeroOptions = {
     desc: [
       `With {bold deferIvmWrites}, the maximum estimated bytes retained by`,
       `pending rows and indexes across a client group's tables during one`,
-      `advancement. Exceeding this resets and rehydrates the pipelines.`,
-      `This is an estimate, not a hard JavaScript heap limit.`,
+      `advancement. This is a backstop for wide rows, which the row budget`,
+      `does not account for. Exceeding it resets and rehydrates the client`,
+      `group's pipelines. This is an estimate, not a hard JavaScript heap limit.`,
     ],
     hidden: true,
   },

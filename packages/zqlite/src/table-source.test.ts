@@ -845,6 +845,38 @@ test('getByKey', () => {
   ).toBeUndefined();
 });
 
+test('the write mode can change between snapshots', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(/* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a INTEGER);`);
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'foo',
+    {id: {type: 'string'}, a: {type: 'number'}},
+    ['id'],
+  );
+  const written = () =>
+    db.prepare(/* sql */ `SELECT id FROM foo`).all<{id: string}>();
+
+  source.setDeferWrites(true);
+  consume(source.push(makeSourceChangeAdd({id: '1', a: 1})));
+  expect(source.getRow({id: '1'})).toEqual({id: '1', a: 1});
+  expect(written()).toEqual([]);
+  expect(() => source.setDeferWrites(false)).toThrow(
+    'Cannot change how writes are applied while changes are pending',
+  );
+
+  // Moving to the next snapshot drops the held changes.
+  source.setDB(db);
+  expect(source.getRow({id: '1'})).toBeUndefined();
+
+  source.setDeferWrites(false);
+  consume(source.push(makeSourceChangeAdd({id: '2', a: 2})));
+  expect(written()).toEqual([{id: '2'}]);
+  expect(source.getRow({id: '2'})).toEqual({id: '2', a: 2});
+});
+
 describe('optional filters to sql', () => {
   test('simple condition', () => {
     expect(

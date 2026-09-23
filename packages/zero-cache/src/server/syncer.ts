@@ -25,6 +25,7 @@ import {
   type ConnectionContextManager,
   ConnectionContextManagerImpl,
 } from '../services/view-syncer/connection-context-manager.ts';
+import {DeferredWritesBudget} from '../services/view-syncer/deferred-writes-budget.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {SnapshotRowCache} from '../services/view-syncer/snapshot-row-cache.ts';
@@ -187,6 +188,15 @@ export default async function runWorker(
       ? new SnapshotRowCache(config.snapshotRowCacheSize)
       : undefined;
 
+  // Shared by all of the view-syncers on this worker, which each hold their
+  // own copy of the changes they are advancing through.
+  const deferredWritesBudget = config.deferIvmWrites
+    ? new DeferredWritesBudget(
+        config.deferIvmWritesMaxRows,
+        config.deferIvmWritesMaxBytes,
+      )
+    : undefined;
+
   const viewSyncerFactory = (
     id: string,
     sub: Subscription<ReplicaState>,
@@ -250,6 +260,7 @@ export default async function runWorker(
             : normalYieldThresholdMs,
         config.enableQueryPlanner,
         config,
+        deferredWritesBudget,
       ),
       sub,
       drainCoordinator,
