@@ -182,11 +182,16 @@ export class Snapshotter {
    * change-applying iterations, the caller must (1) create a save point
    * on `prev` before each iteration, and (2) rollback to the save point after
    * the iteration.
+   *
+   * @param prevWrites How the caller writes to `prev` during the iteration,
+   *        which determines which `prev` reads can be shared through the
+   *        {@link SnapshotRowCache}. See {@link PrevWrites}.
    */
   advance(
     syncableTables: Map<string, LiteAndZqlSpec>,
     allTableNames: Set<string>,
     observedTables?: TableFilter | undefined,
+    prevWrites: PrevWrites = 'uniform',
   ): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
     return new Diff(
@@ -197,6 +202,7 @@ export class Snapshotter {
       curr,
       observedTables,
       this.#rowCache,
+      prevWrites,
     );
   }
 
@@ -242,6 +248,23 @@ export type Change = {
 export interface TableFilter {
   has(table: string): boolean;
 }
+
+/**
+ * How the caller of {@link Snapshotter.advance()} writes the changes of a
+ * {@link SnapshotDiff} to its `prev` snapshot while iterating over it.
+ *
+ * A `prev` read for a table with a single unique key (its primary key)
+ * cannot observe earlier changes of the iteration, since a row key appears
+ * once in the diff. A read for a table with other unique keys can, because
+ * the rows it returns may have been displaced or edited by earlier changes.
+ *
+ * * `uniform`: every caller applies every change, so such a read depends on
+ *   the `<prev, curr>` versions of the diff, and is shared on that basis.
+ * * `divergent`: callers apply different subsets of the changes (e.g. the
+ *   pipeline driver skips changes that no pipeline can observe), so such a
+ *   read depends on the caller and is not shared.
+ */
+export type PrevWrites = 'uniform' | 'divergent';
 
 /**
  * Represents the difference between two database Snapshots.
@@ -564,6 +587,7 @@ class Diff implements SnapshotDiff {
   readonly #allTableNames: Set<string>;
   readonly #observedTables: TableFilter | undefined;
   readonly #rowCache: SnapshotRowCache | undefined;
+  readonly #prevWrites: PrevWrites;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
@@ -576,7 +600,9 @@ class Diff implements SnapshotDiff {
     curr: Snapshot,
     observedTables?: TableFilter | undefined,
     rowCache?: SnapshotRowCache | undefined,
+    prevWrites: PrevWrites = 'uniform',
   ) {
+    this.#prevWrites = prevWrites;
     this.#permissionsTable = `${appID}.permissions`;
     this.#syncableTables = syncableTables;
     this.#allTableNames = allTableNames;
@@ -684,9 +710,8 @@ class Diff implements SnapshotDiff {
             //   this row, so the result depends solely on `prev.version`.
             //   Otherwise, the result can include rows that conflict on
             //   other unique keys, which may have been added or removed by
-            //   preceding changes; that sequence is determined by the
-            //   `<prev, curr>` versions of the Diff, both of which are then
-            //   included in the cache tag.
+            //   preceding changes; see PrevWrites for when that can be
+            //   shared.
             // The first advance() after this Diff was created resets the
             // `prev` connection to head. Reads would then no longer reflect
             // `prev.version`, and cache hits would not reveal it (the cached
@@ -699,10 +724,14 @@ class Diff implements SnapshotDiff {
             }
 
             const cache = this.#rowCache;
-            const prevTag =
-              tableSpec.uniqueKeys.length <= 1
-                ? `p:${this.prev.version}`
-                : `p:${this.prev.version}:${this.curr.version}`;
+            const prevDependsOnWrites = tableSpec.uniqueKeys.length > 1;
+            const prevCache =
+              prevDependsOnWrites && this.#prevWrites === 'divergent'
+                ? undefined
+                : cache;
+            const prevTag = prevDependsOnWrites
+              ? `p:${this.prev.version}:${this.curr.version}`
+              : `p:${this.prev.version}`;
             const nextValue =
               op === SET_OP
                 ? this.curr.getRow(
@@ -718,14 +747,14 @@ class Diff implements SnapshotDiff {
                 tableSpec,
                 tableSpec.uniqueKeys,
                 nextValue,
-                cache,
+                prevCache,
                 prevTag,
               );
             } else {
               const prevValue = this.prev.getRow(
                 tableSpec,
                 rowKey,
-                cache,
+                prevCache,
                 prevTag,
               );
               prevValues = prevValue ? [prevValue] : [];

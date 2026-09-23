@@ -1034,6 +1034,9 @@ export class PipelineDriver {
       this.#tableSpecs,
       this.#allTableNames,
       this.#tables,
+      // Sources skip changes that none of this client group's pipelines can
+      // observe, so a `prev` they write to diverges from other groups'.
+      'divergent',
     );
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
