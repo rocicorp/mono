@@ -3609,9 +3609,9 @@ describe('replicator/change-processor', () => {
             relation: {
               schema: 'public',
               name: 'bff',
-              rowKey: {columns: ['b', 'a', 'c']},
+              rowKey: {columns: ['id']},
             },
-            columns: ['d', 'e'],
+            columns: [],
             watermark: '115',
           },
         ],
@@ -4624,5 +4624,371 @@ describe('replicator/column-metadata-integration', () => {
       characterMaxLength: null,
       isBackfilling: false,
     });
+  });
+});
+
+describe('replicator/change-processor redundant backfills', () => {
+  let lc: LogContext;
+  let replica: Database;
+  let processor: ChangeProcessor;
+
+  const bff = new ReplicationMessages({bff: ['b', 'a', 'c']});
+  const relation = {
+    schema: 'public',
+    name: 'bff',
+    rowKey: {columns: ['b', 'a', 'c']},
+  };
+
+  beforeEach(() => {
+    lc = createSilentLogContext();
+    replica = new Database(lc, ':memory:');
+    initReplicationState(replica, ['zero_data'], '02');
+    initDB(
+      replica,
+      /*sql*/ `
+        CREATE TABLE bff(a int, b int, c int, _0_version TEXT, PRIMARY KEY(a, b, c));
+        INSERT INTO bff(a, b, c, _0_version) VALUES (1, 2, 3, '03');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (23, 45, 67, '03');
+      `,
+    );
+    processor = createChangeProcessor(replica);
+  });
+
+  function process(...changes: ChangeStreamData[]) {
+    for (const change of changes) {
+      processor.processMessage(lc, change);
+    }
+  }
+
+  function minRowVersion(table: string) {
+    return must(listTables(replica).find(t => t.name === table)).minRowVersion;
+  }
+
+  function isBackfilling(table: string, column: string) {
+    return must(ColumnMetadataStore.getInstance(replica)).getColumn(
+      table,
+      column,
+    )?.isBackfilling;
+  }
+
+  // Adds column `d`, backfills it (snapshot watermark '0f'), and completes the
+  // backfill so that `d` becomes published.
+  function backfillAndPublishColumnD() {
+    process(
+      ['begin', bff.begin(), {commitWatermark: '0e'}],
+      [
+        'data',
+        bff.addColumn(
+          'bff',
+          'd',
+          {dataType: 'int', pos: 3},
+          {
+            tableMetadata: {rowKey: {columns: ['b', 'a', 'c']}},
+            backfill: {id: 4},
+          },
+        ),
+      ],
+      ['commit', bff.commit(), {watermark: '0e'}],
+
+      ['begin', bff.begin(), {commitWatermark: '100'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation,
+          watermark: '0f',
+          columns: ['d'],
+          rowValues: [
+            [2, 1, 3, 4],
+            [45, 23, 67, 40],
+          ],
+        },
+      ],
+      ['commit', bff.commit(), {watermark: '100'}],
+
+      ['begin', bff.begin(), {commitWatermark: '101'}],
+      [
+        'data',
+        {tag: 'backfill-completed', relation, watermark: '0f', columns: ['d']},
+      ],
+      ['commit', bff.commit(), {watermark: '101'}],
+    );
+  }
+
+  test('redundant column backfill does not overwrite a published column', () => {
+    backfillAndPublishColumnD();
+
+    // A replicated update changes the now-published column to a new value.
+    process(
+      ['begin', bff.begin(), {commitWatermark: '200'}],
+      ['data', bff.update('bff', {a: 23, b: 45, c: 67, d: 999})],
+      ['commit', bff.commit(), {watermark: '200'}],
+    );
+
+    expect(isBackfilling('bff', 'd')).toBe(false);
+    expect(minRowVersion('bff')).toBe('101');
+
+    // A redundant backfill (older snapshot) for the published column, e.g. from
+    // a replication-manager re-running a backfill this replica already
+    // completed. It must not rewind the published value to the stale snapshot.
+    process(
+      ['begin', bff.begin(), {commitWatermark: '300'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation,
+          watermark: '0f',
+          columns: ['d'],
+          rowValues: [
+            [2, 1, 3, 4],
+            [45, 23, 67, 40],
+          ],
+        },
+      ],
+      ['commit', bff.commit(), {watermark: '300'}],
+      ['begin', bff.begin(), {commitWatermark: '301'}],
+      [
+        'data',
+        {tag: 'backfill-completed', relation, watermark: '0f', columns: ['d']},
+      ],
+      ['commit', bff.commit(), {watermark: '301'}],
+    );
+
+    expectTables(
+      replica,
+      {
+        bff: [
+          {a: 1n, b: 2n, c: 3n, d: 4n, ['_0_version']: '03'},
+          {a: 23n, b: 45n, c: 67n, d: 999n, ['_0_version']: '200'},
+        ],
+      },
+      'bigint',
+    );
+    // The redundant backfill-completed did not bump versions / reset pipelines.
+    expect(minRowVersion('bff')).toBe('101');
+  });
+
+  test('redundant table backfill after publish is skipped', () => {
+    const bff2 = new ReplicationMessages({bff2: 'id'});
+    const relation2 = {
+      schema: 'public',
+      name: 'bff2',
+      rowKey: {columns: ['id']},
+    };
+
+    // Create a table that needs backfilling, backfill it, and complete it.
+    process(
+      ['begin', bff2.begin(), {commitWatermark: '0e'}],
+      [
+        'data',
+        bff2.createTable(
+          {
+            schema: 'public',
+            name: 'bff2',
+            primaryKey: ['id'],
+            columns: {
+              id: {dataType: 'int', pos: 0},
+              x: {dataType: 'int', pos: 1},
+            },
+          },
+          {
+            metadata: {rowKey: {columns: ['id']}},
+            backfill: {id: {id: 1}, x: {id: 2}},
+          },
+        ),
+      ],
+      [
+        'data',
+        bff2.createIndex({
+          name: 'bff2_pkey',
+          schema: 'public',
+          tableName: 'bff2',
+          unique: true,
+          columns: {id: 'ASC'},
+        }),
+      ],
+      ['commit', bff2.commit(), {watermark: '0e'}],
+
+      ['begin', bff2.begin(), {commitWatermark: '100'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation: relation2,
+          watermark: '0f',
+          columns: ['x'],
+          rowValues: [
+            [1, 10],
+            [2, 20],
+          ],
+        },
+      ],
+      ['commit', bff2.commit(), {watermark: '100'}],
+
+      ['begin', bff2.begin(), {commitWatermark: '101'}],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: relation2,
+          watermark: '0f',
+          columns: ['x'],
+        },
+      ],
+      ['commit', bff2.commit(), {watermark: '101'}],
+
+      // A replicated insert of a new row after the table is published.
+      ['begin', bff2.begin(), {commitWatermark: '200'}],
+      ['data', bff2.insert('bff2', {id: 3, x: 30})],
+      ['commit', bff2.commit(), {watermark: '200'}],
+    );
+
+    expect(isBackfilling('bff2', 'x')).toBe(false);
+    expect(minRowVersion('bff2')).toBe('101');
+
+    // Redundant full-table backfill (older snapshot, with different values)
+    // must be skipped entirely.
+    process(
+      ['begin', bff2.begin(), {commitWatermark: '300'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation: relation2,
+          watermark: '0f',
+          columns: ['x'],
+          rowValues: [
+            [1, 999],
+            [2, 999],
+            [3, 999],
+          ],
+        },
+      ],
+      ['commit', bff2.commit(), {watermark: '300'}],
+      ['begin', bff2.begin(), {commitWatermark: '301'}],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: relation2,
+          watermark: '0f',
+          columns: ['x'],
+        },
+      ],
+      ['commit', bff2.commit(), {watermark: '301'}],
+    );
+
+    expectTables(
+      replica,
+      {
+        bff2: [
+          // Rows inserted by the backfill carry the backfill snapshot watermark.
+          {id: 1n, x: 10n, ['_0_version']: '0f'},
+          {id: 2n, x: 20n, ['_0_version']: '0f'},
+          {id: 3n, x: 30n, ['_0_version']: '200'},
+        ],
+      },
+      'bigint',
+    );
+    expect(minRowVersion('bff2')).toBe('101');
+  });
+
+  test('partially redundant backfill only touches still-backfilling columns', () => {
+    // Add two backfilling columns, d and e.
+    process(
+      ['begin', bff.begin(), {commitWatermark: '0e'}],
+      [
+        'data',
+        bff.addColumn(
+          'bff',
+          'd',
+          {dataType: 'int', pos: 3},
+          {
+            tableMetadata: {rowKey: {columns: ['b', 'a', 'c']}},
+            backfill: {id: 4},
+          },
+        ),
+      ],
+      [
+        'data',
+        bff.addColumn(
+          'bff',
+          'e',
+          {dataType: 'int', pos: 4},
+          {
+            tableMetadata: {rowKey: {columns: ['b', 'a', 'c']}},
+            backfill: {id: 5},
+          },
+        ),
+      ],
+      ['commit', bff.commit(), {watermark: '0e'}],
+
+      // Backfill both columns.
+      ['begin', bff.begin(), {commitWatermark: '100'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation,
+          watermark: '0f',
+          columns: ['d', 'e'],
+          rowValues: [
+            [2, 1, 3, 4, 5],
+            [45, 23, 67, 40, 50],
+          ],
+        },
+      ],
+      ['commit', bff.commit(), {watermark: '100'}],
+
+      // Complete only `d` — `e` stays backfilling.
+      ['begin', bff.begin(), {commitWatermark: '101'}],
+      [
+        'data',
+        {tag: 'backfill-completed', relation, watermark: '0f', columns: ['d']},
+      ],
+      ['commit', bff.commit(), {watermark: '101'}],
+
+      // A replicated update sets the now-published `d` to a new value.
+      ['begin', bff.begin(), {commitWatermark: '200'}],
+      ['data', bff.update('bff', {a: 23, b: 45, c: 67, d: 999})],
+      ['commit', bff.commit(), {watermark: '200'}],
+    );
+
+    expect(isBackfilling('bff', 'd')).toBe(false);
+    expect(isBackfilling('bff', 'e')).toBe(true);
+
+    // A backfill carrying both the published `d` and the still-backfilling `e`.
+    // `d` must be left alone; `e` must be applied.
+    process(
+      ['begin', bff.begin(), {commitWatermark: '300'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation,
+          watermark: '0f',
+          columns: ['d', 'e'],
+          rowValues: [
+            [2, 1, 3, 44, 55],
+            [45, 23, 67, 40, 51],
+          ],
+        },
+      ],
+      ['commit', bff.commit(), {watermark: '300'}],
+    );
+
+    expectTables(
+      replica,
+      {
+        bff: [
+          // d retained (4 from the original backfill, not 44); e updated to 55.
+          {a: 1n, b: 2n, c: 3n, d: 4n, e: 55n, ['_0_version']: '03'},
+          // d retained (999 from replication, not 40); e updated to 51.
+          {a: 23n, b: 45n, c: 67n, d: 999n, e: 51n, ['_0_version']: '200'},
+        ],
+      },
+      'bigint',
+    );
   });
 });

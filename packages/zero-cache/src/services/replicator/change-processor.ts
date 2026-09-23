@@ -894,6 +894,23 @@ class TransactionProcessor {
     const rowKeyCols = relation.rowKey.columns;
     const cols = [...rowKeyCols, ...columns];
 
+    // Columns that are still being backfilled on _this_ replica. Once a column
+    // has been published (backfill completed), its values strictly follow the
+    // replication timeline, so a subsequent backfill must never overwrite
+    // them. This guards against a redundant backfill, e.g. when the
+    // view-syncer (re)connects to a replication-manager that is (re)running
+    // a backfill this replica already completed.
+    const backfillingSet = new Set(tableSpec.backfilling ?? []);
+    if (!cols.some(c => backfillingSet.has(c))) {
+      // Every delivered column is already published: the backfill is entirely
+      // redundant. Skip it rather than rewind published values to the snapshot.
+      this.#lc.debug?.(
+        `skipping redundant backfill of ${rowValues.length} rows into ` +
+          `${tableName} (all columns already published)`,
+      );
+      return;
+    }
+
     // Common parts of the INSERT sql statement.
     const insertColsStr = [...cols, ZERO_VERSION_COLUMN_NAME].map(id).join(',');
     const qMarks = Array.from({length: cols.length + 1})
@@ -915,14 +932,18 @@ class TransactionProcessor {
         skipped++;
         continue; // the row was deleted after the backfill snapshot
       }
-      const updates =
+      // Restrict the DO UPDATE columns to those still being backfilled. Never
+      // update an already backfilled (i.e. published) column.
+      const updates = (
         rowOp?.op === SET_OP
           ? cols.filter(
               c => (rowOp.backfillingColumnVersions[c] ?? '') <= watermark,
             )
-          : cols;
+          : cols
+      ).filter(c => backfillingSet.has(c));
       if (updates.length === 0) {
-        // row already has newer values for all backfilling columns.
+        // row already has newer (or published) values for all backfilling
+        // columns.
         skipped++;
         continue;
       }
@@ -953,6 +974,20 @@ class TransactionProcessor {
     const cols = [...rowKeyCols, ...columns];
 
     const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
+    // If none of the columns are still backfilling on this replica, they were
+    // already published (e.g. a redundant backfill from a replication-manager
+    // re-running a backfill this replica already completed). Bumping versions
+    // again would spuriously reset pipelines and re-report completion, so treat
+    // the completion as a no-op.
+    if (
+      !cols.some(col => columnMetadata.getColumn(tableName, col)?.isBackfilling)
+    ) {
+      this.#lc.debug?.(
+        `skipping redundant backfill-completed for ${tableName} ` +
+          `(all columns already published)`,
+      );
+      return;
+    }
     for (const col of cols) {
       columnMetadata.clearBackfilling(tableName, col);
     }
