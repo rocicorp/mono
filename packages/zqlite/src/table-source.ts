@@ -193,7 +193,8 @@ export class TableSource implements Source {
    * Sets whether the changes pushed from now on are held in memory (see
    * {@link TableSourceOptions.deferWrites}) or written to the backing
    * snapshot. The two must not be mixed within one snapshot, so this may only
-   * be called before the first push after construction or {@link setDB}.
+   * be called before the first push after construction or {@link setDB}. To
+   * switch to writing through partway, see {@link writePendingChanges}.
    */
   setDeferWrites(deferWrites: boolean) {
     assert(
@@ -205,6 +206,39 @@ export class TableSource implements Source {
     } else {
       this.#delta ??= new PendingDelta(this.#primaryKey);
     }
+  }
+
+  /**
+   * Writes the changes held in memory (see {@link setDeferWrites}) to the
+   * backing snapshot, which is left as if they had been written through (in
+   * the source's columns), and writes the changes pushed from then on through
+   * to it. Yields when the
+   * source's `shouldYield` says to, and must not be interleaved with a push.
+   */
+  *writePendingChanges(): Stream<'yield'> {
+    const delta = this.#delta;
+    if (delta === undefined) {
+      return;
+    }
+    // The rows the delta holds satisfy the table's unique keys, but one may
+    // take a unique value from another row that the delta also changed. So
+    // every row it touched is deleted before any is inserted.
+    for (const key of delta.touchedKeys()) {
+      this.#stmts.delete.run(
+        ...toSQLiteTypes(this.#primaryKey, key, this.#columns),
+      );
+      if (this.#shouldYield()) {
+        yield 'yield';
+      }
+    }
+    const columns = Object.keys(this.#columns);
+    for (const row of delta.liveRows()) {
+      this.#stmts.insert.run(...toSQLiteTypes(columns, row, this.#columns));
+      if (this.#shouldYield()) {
+        yield 'yield';
+      }
+    }
+    this.#delta = undefined;
   }
 
   #getStatementsFor(db: Database) {

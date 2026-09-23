@@ -27,6 +27,26 @@ const columns = {
 
 const byID: Ordering = [['id', 'asc']];
 
+test('touched keys include removed rows, for single and composite keys', () => {
+  const single = new PendingDelta(['id']);
+  single.set({id: 'a', v: 1});
+  single.delete({id: 'b', v: 2});
+  expect([...single.touchedKeys()]).toEqual([{id: 'a', v: 1}, {id: 'b'}]);
+  expect([...single.liveRows()]).toEqual([{id: 'a', v: 1}]);
+
+  const composite = new PendingDelta(['x', 'y']);
+  composite.delete({x: 'a', y: 1, v: 1});
+  composite.set({x: 'a', y: 2, v: 2});
+  composite.set({x: 'b', y: 1, v: 3});
+  composite.delete({x: 'b', y: 1, v: 3});
+  expect([...composite.touchedKeys()]).toEqual([
+    {x: 'a', y: 1},
+    {x: 'a', y: 2, v: 2},
+    {x: 'b', y: 1},
+  ]);
+  expect([...composite.liveRows()]).toEqual([{x: 'a', y: 2, v: 2}]);
+});
+
 test('pending byte estimate tracks replacements, tombstones, indexes, and clear', () => {
   const delta = new PendingDelta(['id']);
   const row = {id: 'a', value: {items: ['small', 1, true, null]}};

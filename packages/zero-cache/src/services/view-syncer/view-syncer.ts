@@ -791,7 +791,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelineResets.add(1, {reason: result.reason});
             switch (result.reason) {
               case 'advancement-timeout':
-              case 'ivm-delta-overflow':
               case 'scalar-subquery':
               case 'truncation':
               case 'schema-change': {

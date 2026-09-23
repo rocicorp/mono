@@ -154,8 +154,11 @@ type AdvanceContext = {
   readonly timer: Timer;
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
-  /** Whether the advancement's changes are held in memory. */
-  readonly deferWrites: boolean;
+  /**
+   * The rows reserved from the {@link DeferredWritesBudget} while the
+   * advancement's changes are held in memory.
+   */
+  reservedRows: number | undefined;
   /** The bytes the advancement has added to the budget's held bytes. */
   heldBytes: number;
   currentChangeStartMs: number | undefined;
@@ -307,7 +310,8 @@ export class PipelineDriver {
     'sync',
     'ivm.deferred-writes-fallbacks',
     'Number of advancements written through to the replica snapshot because ' +
-      'their changes did not fit in the deferred IVM writes budget',
+      'their changes did not fit in the deferred IVM writes budget, from the ' +
+      'start or partway',
   );
 
   readonly #inspectorDelegate: InspectorDelegate;
@@ -1090,13 +1094,22 @@ export class PipelineDriver {
       'Cannot advance while hydration is in progress',
     );
     const totalHydrationTimeMs = this.totalHydrationTimeMs();
+    const advanceContext: AdvanceContext = {
+      timer,
+      totalHydrationTimeMs,
+      numChanges,
+      reservedRows: undefined,
+      heldBytes: 0,
+      currentChangeStartMs: undefined,
+      pos: 0,
+    };
+    this.#advanceContext = advanceContext;
     // The reservation is made here rather than in advance(), so that the
     // finally below is guaranteed to release it: a generator that is never
     // started never runs its finally.
-    let reservedRows: number | undefined;
     try {
-      reservedRows = this.#reserveDeferredWrites(diff);
-      const deferWrites = reservedRows !== undefined;
+      advanceContext.reservedRows = this.#reserveDeferredWrites(diff);
+      const deferWrites = advanceContext.reservedRows !== undefined;
       if (deferWrites) {
         // `prev` is not written, so all of its reads can be shared.
         diff.setPrevWrites('none');
@@ -1104,15 +1117,6 @@ export class PipelineDriver {
       for (const table of this.#tables.values()) {
         table.setDeferWrites(deferWrites);
       }
-      this.#advanceContext = {
-        timer,
-        totalHydrationTimeMs,
-        numChanges,
-        deferWrites,
-        heldBytes: 0,
-        currentChangeStartMs: undefined,
-        pos: 0,
-      };
       this.#lc.debug?.(
         `starting pipeline advancement of ${numChanges} changes with an ` +
           `advancement time limited based on total hydration time of ` +
@@ -1127,9 +1131,9 @@ export class PipelineDriver {
           yield 'yield';
         }
         const start = timer.totalElapsed();
-        const advanceContext = must(this.#advanceContext);
         advanceContext.currentChangeStartMs = start;
 
+        let bytesFit = true;
         try {
           try {
             const tableSource = this.#tables.get(table);
@@ -1186,7 +1190,7 @@ export class PipelineDriver {
           }
 
           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
-          this.#holdPendingBytes(advanceContext);
+          bytesFit = this.#holdPendingBytes(advanceContext);
         } finally {
           advanceContext.currentChangeStartMs = undefined;
         }
@@ -1195,6 +1199,11 @@ export class PipelineDriver {
         this.#advanceTime.recordMs(elapsed, {
           table,
         });
+
+        if (!bytesFit) {
+          // Before the diff reads the next change from `prev`.
+          yield* this.#writeThrough(advanceContext, diff);
+        }
       }
 
       // Set the new snapshot on all TableSources.
@@ -1205,12 +1214,7 @@ export class PipelineDriver {
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
       this.#lc.debug?.(`Advanced to ${curr.version}`);
     } finally {
-      if (reservedRows !== undefined) {
-        must(this.#deferredWrites).release(
-          reservedRows,
-          this.#advanceContext?.heldBytes ?? 0,
-        );
-      }
+      this.#releaseDeferredWrites(advanceContext);
       this.#advanceContext = null;
     }
   }
@@ -1237,12 +1241,49 @@ export class PipelineDriver {
     if (budget.tryReserve(rows)) {
       return rows;
     }
-    this.#deferredWritesFallbacks.add(1);
+    this.#deferredWritesFallbacks.add(1, {stage: 'start'});
     this.#lc.debug?.(
       `writing through ${rows} changes: ${budget.reservedRows} rows ` +
         `of the deferred writes budget are reserved`,
     );
     return undefined;
+  }
+
+  /**
+   * Writes the changes that an advancement holds in memory through to the
+   * `prev` snapshot, and the rest of its changes after them, when holding
+   * them has taken the bytes held on this worker past the budget. The
+   * advancement then continues as if it had written through from the start.
+   */
+  *#writeThrough(
+    advanceContext: AdvanceContext,
+    diff: SnapshotDiff,
+  ): Iterable<'yield'> {
+    const budget = must(this.#deferredWrites);
+    this.#deferredWritesFallbacks.add(1, {stage: 'partway'});
+    this.#lc.debug?.(
+      `writing through at ${advanceContext.pos} of ` +
+        `${advanceContext.numChanges} changes: holding ` +
+        `${advanceContext.heldBytes} estimated bytes takes the bytes held on ` +
+        `this worker to ${budget.heldBytes}, past its budget of ` +
+        `${budget.maxBytes}`,
+    );
+    // `prev` is about to be written, so the reads that its writes can affect
+    // can no longer be shared.
+    diff.setPrevWrites('divergent');
+    for (const source of this.#tables.values()) {
+      yield* source.writePendingChanges();
+    }
+    this.#releaseDeferredWrites(advanceContext);
+  }
+
+  #releaseDeferredWrites(advanceContext: AdvanceContext) {
+    const {reservedRows, heldBytes} = advanceContext;
+    if (reservedRows !== undefined) {
+      must(this.#deferredWrites).release(reservedRows, heldBytes);
+      advanceContext.reservedRows = undefined;
+      advanceContext.heldBytes = 0;
+    }
   }
 
   /** Implements `BuilderDelegate.getSource()` */
@@ -1354,26 +1395,18 @@ export class PipelineDriver {
   /**
    * The rows an advancement holds in memory are bounded by its reservation,
    * but their width is not known in advance. So the bytes they are estimated
-   * to hold are added to those held by the other advancements on this worker,
-   * and the advancement is abandoned if that takes them past the budget.
+   * to hold are added to those held by the other advancements on this worker.
+   * Returns false if that takes them past the budget.
    */
-  #holdPendingBytes(advanceContext: AdvanceContext) {
-    const {deferWrites, heldBytes, pos, numChanges} = advanceContext;
-    if (!deferWrites) {
-      return;
+  #holdPendingBytes(advanceContext: AdvanceContext): boolean {
+    const {reservedRows, heldBytes} = advanceContext;
+    if (reservedRows === undefined) {
+      return true;
     }
-    const budget = must(this.#deferredWrites);
     const bytes = this.pendingBytes;
-    // Recorded first, so that the bytes are released if this throws.
+    // Recorded first, so that the bytes are released even if they do not fit.
     advanceContext.heldBytes = bytes;
-    if (!budget.holdBytes(bytes - heldBytes)) {
-      throw new ResetPipelinesSignal(
-        `Advancement holds ${bytes} estimated bytes at ${pos} of ` +
-          `${numChanges} changes, which takes the bytes held on this worker ` +
-          `to ${budget.heldBytes}, past its budget of ${budget.maxBytes}.`,
-        'ivm-delta-overflow',
-      );
-    }
+    return must(this.#deferredWrites).holdBytes(bytes - heldBytes);
   }
 
   #throwSlowCurrentChangeReset(

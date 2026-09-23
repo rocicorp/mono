@@ -877,6 +877,91 @@ test('the write mode can change between snapshots', () => {
   expect(source.getRow({id: '2'})).toEqual({id: '2', a: 2});
 });
 
+test('pending changes can be written through partway', () => {
+  const columns = {
+    a: {type: 'string'},
+    b: {type: 'number'},
+    email: {type: 'string'},
+  } as const;
+  const makeSource = (deferWrites: boolean) => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(/* sql */ `
+      CREATE TABLE foo (a TEXT, b INTEGER, email TEXT, PRIMARY KEY (a, b));
+      CREATE UNIQUE INDEX foo_email ON foo (email);
+      INSERT INTO foo VALUES ('x', 1, 'one'), ('x', 2, 'two'), ('y', 1, 'three');
+    `);
+    let yields = 0;
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'foo',
+      columns,
+      ['a', 'b'],
+      () => {
+        yields++;
+        return true;
+      },
+    );
+    source.setDeferWrites(deferWrites);
+    const rows = () =>
+      db.prepare(/* sql */ `SELECT * FROM foo ORDER BY a, b`).all<Row>();
+    return {source, rows, yields: () => yields};
+  };
+  const changes = [
+    // Swap the emails of x/1 and x/2, so that each takes the other's value.
+    makeSourceChangeEdit(
+      {a: 'x', b: 1, email: 'tmp'},
+      {a: 'x', b: 1, email: 'one'},
+    ),
+    makeSourceChangeEdit(
+      {a: 'x', b: 2, email: 'one'},
+      {a: 'x', b: 2, email: 'two'},
+    ),
+    makeSourceChangeEdit(
+      {a: 'x', b: 1, email: 'two'},
+      {a: 'x', b: 1, email: 'tmp'},
+    ),
+    makeSourceChangeRemove({a: 'y', b: 1, email: 'three'}),
+    makeSourceChangeAdd({a: 'y', b: 2, email: 'three'}),
+  ];
+
+  const writeThrough = makeSource(false);
+  for (const change of changes) {
+    consume(writeThrough.source.push(change));
+  }
+
+  const deferred = makeSource(true);
+  const before = deferred.rows();
+  for (const change of changes.slice(0, 4)) {
+    consume(deferred.source.push(change));
+  }
+  expect(deferred.rows()).toEqual(before);
+  expect(deferred.source.pendingRows).toBe(3);
+
+  const yieldsBefore = deferred.yields();
+  expect([...deferred.source.writePendingChanges()]).toEqual(
+    // A delete for each of the 3 rows touched, then an insert for each of
+    // the 2 left.
+    Array(5).fill('yield'),
+  );
+  expect(deferred.yields() - yieldsBefore).toBe(5);
+  expect(deferred.source.pendingRows).toBe(0);
+
+  // The rest is written through.
+  consume(deferred.source.push(changes[4]));
+  expect(deferred.source.pendingRows).toBe(0);
+  expect(deferred.rows()).toEqual(writeThrough.rows());
+  expect(deferred.rows()).toEqual([
+    {a: 'x', b: 1, email: 'two'},
+    {a: 'x', b: 2, email: 'one'},
+    {a: 'y', b: 2, email: 'three'},
+  ]);
+
+  // Nothing is held after that.
+  expect([...deferred.source.writePendingChanges()]).toEqual([]);
+});
+
 describe('optional filters to sql', () => {
   test('simple condition', () => {
     expect(

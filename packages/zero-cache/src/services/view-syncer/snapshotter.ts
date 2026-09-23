@@ -307,7 +307,9 @@ export interface SnapshotDiff extends Iterable<Change> {
   /**
    * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
    * caller that decides how to write to `prev` once it knows the number of
-   * {@link changes}. Must be called before the diff is iterated.
+   * {@link changes}. Must be called before the diff is iterated, except to
+   * switch to `divergent`, which can be done between any two changes: it
+   * shares only the reads that no write to `prev` can affect.
    */
   setPrevWrites(prevWrites: PrevWrites): void;
 }
@@ -319,7 +321,6 @@ export interface SnapshotDiff extends Iterable<Change> {
  */
 export type ResetPipelinesReason =
   | 'advancement-timeout'
-  | 'ivm-delta-overflow'
   | 'scalar-subquery'
   | 'schema-change'
   | 'truncation'
@@ -656,7 +657,10 @@ class Diff implements SnapshotDiff {
   }
 
   setPrevWrites(prevWrites: PrevWrites): void {
-    assert(!this.#iterated, 'prevWrites must be set before iterating the diff');
+    assert(
+      !this.#iterated || prevWrites === 'divergent',
+      'prevWrites must be set before iterating the diff',
+    );
     this.#prevWrites = prevWrites;
   }
 

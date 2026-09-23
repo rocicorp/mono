@@ -287,6 +287,35 @@ export class PendingDelta {
     return this.#key(row);
   }
 
+  /**
+   * A row with the primary key of each row the batch has touched, removed
+   * rows included. A live row is returned as is.
+   */
+  *touchedKeys(): Iterable<Row> {
+    const single = this.#singleColumnKey;
+    for (const [key, row] of this.#byKey) {
+      if (row !== undefined) {
+        yield row;
+      } else if (single !== undefined) {
+        yield {[single]: key as Value};
+      } else {
+        const values = JSON.parse(key as string) as Value[];
+        yield Object.fromEntries(
+          this.#primaryKey.map((k, i) => [k, values[i]]),
+        );
+      }
+    }
+  }
+
+  /** The rows the batch has added or edited, and not since removed. */
+  *liveRows(): Iterable<Row> {
+    for (const row of this.#byKey.values()) {
+      if (row !== undefined) {
+        yield row;
+      }
+    }
+  }
+
   /** Drops the batch. Called when the source moves to a snapshot that has it. */
   clear(): void {
     this.#byKey.clear();

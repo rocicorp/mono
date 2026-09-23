@@ -62,8 +62,8 @@ const NO_TIME_ADVANCEMENT_TIMER: Timer = {
 // `vitest.config.deferred-ivm.ts` and `vitest.config.mixed-ivm.ts` run this
 // whole file again with view-syncer derivation held in an in-memory batch
 // overlay instead of written to (and rolled back out of) the replica snapshot,
-// for every advancement or every other one. Every result here must be
-// identical either way.
+// for every advancement or for some, and some switch partway. Every result
+// here must be identical either way.
 const deferredWritesBudget = testDeferredWritesBudget;
 
 describe('view-syncer/pipeline-driver', () => {
@@ -2125,22 +2125,48 @@ describe('view-syncer/pipeline-driver', () => {
       expect(tryReserve.mock.calls).toEqual([[1]]);
     });
 
-    test('advancement resets past the byte backstop', () => {
-      const budget = new DeferredWritesBudget(Infinity, 1);
-      const driver = makeDriver('wide', budget);
-      replicator.processTransaction('134', ...transactions[0]);
+    test.each(['switching', 'deferring'] as const)(
+      'an advancement over the byte budget writes through the rest: $0 advances first',
+      first => {
+        // The group that switches shares a row cache with one that holds all
+        // of its changes in memory, and so reads `prev` as it was. Whichever
+        // advances first fills the row cache.
+        const rowCache = new SnapshotRowCache(100);
+        const writeThrough = makeDriver('write-through', undefined);
+        // Holding any bytes takes it past the budget.
+        const budget = new DeferredWritesBudget(Infinity, 1);
+        const holdBytes = vi.spyOn(budget, 'holdBytes');
+        const drivers = {
+          switching: makeDriver('switching', budget, {rowCache}),
+          deferring: makeDriver(
+            'deferring',
+            new DeferredWritesBudget(Infinity, Infinity),
+            {rowCache},
+          ),
+        };
+        const order =
+          first === 'switching'
+            ? (['switching', 'deferring'] as const)
+            : (['deferring', 'switching'] as const);
 
-      let err;
-      try {
-        [...driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes];
-      } catch (e) {
-        err = e;
-      }
-      expect(err).toBeInstanceOf(ResetPipelinesSignal);
-      expect((err as ResetPipelinesSignal).reason).toBe('ivm-delta-overflow');
-      expect(budget.reservedRows).toBe(0);
-      expect(budget.heldBytes).toBe(0);
-    });
+        transactions.forEach((txn, i) => {
+          replicator.processTransaction(`${134 + i}`, ...txn);
+          const expected = summarize(
+            writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+          );
+          holdBytes.mockClear();
+          for (const id of order) {
+            expect(
+              summarize(drivers[id].advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+            ).toEqual(expected);
+          }
+          // Only after the first change, after which it writes through.
+          expect(holdBytes).toHaveBeenCalledTimes(1);
+          expect(holdBytes.mock.results[0].value).toBe(false);
+          expect([budget.reservedRows, budget.heldBytes]).toEqual([0, 0]);
+        });
+      },
+    );
 
     test('the bytes held by client groups add up', () => {
       // A budget whose byte limit is set once the bytes a client group holds
@@ -2193,15 +2219,10 @@ describe('view-syncer/pipeline-driver', () => {
       }
       const aBytes = budget.heldBytes;
 
-      // So `b` takes the total past the budget, and is abandoned.
-      let err;
-      try {
-        [...drivers.b.advance(NO_TIME_ADVANCEMENT_TIMER).changes];
-      } catch (e) {
-        err = e;
-      }
-      expect(err).toBeInstanceOf(ResetPipelinesSignal);
-      expect((err as ResetPipelinesSignal).reason).toBe('ivm-delta-overflow');
+      // So `b` takes the total past the budget, and writes through the rest.
+      expect(
+        summarize(drivers.b.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+      ).toEqual(expected);
       expect(budget.heldBytes).toBe(aBytes);
       expect(budget.reservedRows).toBe(2);
 

@@ -26,7 +26,8 @@ export const BYTES_PER_ROW = 1024;
  * The rows are reserved at an assumed {@link BYTES_PER_ROW}, but their width
  * is not known until they are held. So the advancements also add up the
  * bytes they are estimated to hold as they go, and the one that takes the
- * total past the budget is abandoned.
+ * total past the budget writes what it holds through to the replica snapshot,
+ * and the rest of its changes after them.
  *
  * The budget is a share of the heap, so it does not depend on how many
  * client groups are connected: when advancements do not overlap, each one
@@ -91,8 +92,8 @@ export class DeferredWritesBudget {
   /**
    * Adds `bytes` (fewer if negative) to the estimated bytes held by an
    * advancement that has reserved rows, and returns whether the total is
-   * still within the budget. The advancement is expected to be abandoned if
-   * it is not.
+   * still within the budget. If it is not, the advancement is expected to
+   * stop holding rows and {@link release} them.
    */
   holdBytes(bytes: number): boolean {
     this.#heldBytes += bytes;

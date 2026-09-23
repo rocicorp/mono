@@ -1,17 +1,35 @@
 import {BYTES_PER_ROW, DeferredWritesBudget} from './deferred-writes-budget.ts';
 
 /**
- * A budget in which every other reservation fails, starting with one that
- * succeeds, so that a driver switches between holding its advancements'
- * changes in memory and writing them through to the snapshot. Drivers that
- * share one alternate with each other.
+ * A budget whose reservations cycle between three outcomes, so that a driver
+ * switches between the ways its advancements can apply their changes: held
+ * in memory; written through to the snapshot; and held in memory until the
+ * first change, then written through. Drivers that share one cycle with each
+ * other.
  */
-class AlternatingBudget extends DeferredWritesBudget {
-  #fits = false;
+class CyclingBudget extends DeferredWritesBudget {
+  #reservations = 0;
+  #overflowNext = false;
 
   override tryReserve(rows: number): boolean {
-    this.#fits = !this.#fits;
-    return this.#fits && super.tryReserve(rows);
+    switch (this.#reservations++ % 3) {
+      case 0:
+        return super.tryReserve(rows);
+      case 1:
+        return false;
+      default:
+        this.#overflowNext = super.tryReserve(rows);
+        return this.#overflowNext;
+    }
+  }
+
+  override holdBytes(bytes: number): boolean {
+    const fits = super.holdBytes(bytes);
+    if (this.#overflowNext) {
+      this.#overflowNext = false;
+      return false;
+    }
+    return fits;
   }
 }
 
@@ -21,7 +39,8 @@ class AlternatingBudget extends DeferredWritesBudget {
  *
  * - unset: none, so every advancement is written through;
  * - `1`: every advancement is held in memory;
- * - `mixed`: every other advancement is written through.
+ * - `mixed`: advancements cycle between being held in memory, written
+ *   through, and written through from their second change.
  *
  * The budget is the default share of the heap (`deferIvmWritesHeapProportion`)
  * of a 4 GiB heap, rather than of the heap of the test process, so that tests
@@ -38,7 +57,7 @@ export function testDeferredWritesBudget(): DeferredWritesBudget | undefined {
     case '1':
       return new DeferredWritesBudget(maxRows, maxBytes);
     case 'mixed':
-      return new AlternatingBudget(maxRows, maxBytes);
+      return new CyclingBudget(maxRows, maxBytes);
     default:
       throw new Error(`Unknown ZERO_TEST_DEFER_IVM_WRITES: ${mode}`);
   }
