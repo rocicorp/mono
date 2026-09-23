@@ -2,8 +2,10 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import * as v from '../../../shared/src/valita.ts';
 import {
   formatJsonPathReference,
+  simpleConditionSchema,
   type AST,
   type CompoundKey,
   type Condition,
@@ -202,11 +204,22 @@ export function bindStaticParameters(
 
   function bindCondition(condition: Condition): Condition {
     if (condition.type === 'simple') {
-      return {
+      const bound: SimpleCondition = {
         ...condition,
         left: bindValue(condition.left),
         right: bindValue(condition.right) as SimpleCondition['right'],
       };
+      if (bound.left.type === 'json' && condition.right.type === 'static') {
+        // The wire schema requires the literal compared against a JSON path
+        // leaf to be a primitive or a homogeneous primitive list (the engines
+        // gate and cast on the type of the first element). A parameter is
+        // bound after that validation ran, so re-apply it to the bound value:
+        // a mixed list from authData then fails here, loudly, instead of as a
+        // Postgres cast error or silently dropped elements on the other
+        // engines.
+        v.parse(bound, simpleConditionSchema);
+      }
+      return bound;
     }
     if (condition.type === 'correlatedSubquery') {
       return {
