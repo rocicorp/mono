@@ -13,6 +13,7 @@ import {
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
+  canonicalKey,
   generateWithOverlay,
   generateWithOverlayUnordered,
   getMatchingParentEntries,
@@ -32,7 +33,12 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
-import type {TakeBoundProvider} from './take-gate.ts';
+import {
+  isInParentFetch,
+  readParentFetchBounds,
+  type ParentFetchBound,
+  type TakeBoundProvider,
+} from './take-gate.ts';
 
 type Args = {
   parent: Input;
@@ -73,6 +79,15 @@ export class Join implements Input {
 
   #inprogressChildChange: Change | undefined;
   #inprogressChildChangePosition: Row | undefined;
+  /**
+   * Primary keys of the parents #inprogressChildChange has reached so far,
+   * kept only when the parent input is unordered. An unordered stream is not
+   * in `compareRows` order (SQLite returns it in whatever order its plan
+   * visits, e.g. rowid order), so whether a parent is still in the push queue
+   * cannot be decided by comparing it to #inprogressChildChangePosition.
+   */
+  #inprogressReachedParents: Set<string> | undefined;
+  #inprogressParentFetchBounds: ParentFetchBound[] | undefined;
 
   constructor({
     parent,
@@ -253,6 +268,8 @@ export class Join implements Input {
   *#pushChildChange(childRow: Row, change: Change): Stream<'yield'> {
     this.#inprogressChildChange = change;
     this.#inprogressChildChangePosition = undefined;
+    this.#inprogressReachedParents =
+      this.#parent.getSchema().sort === undefined ? new Set() : undefined;
     try {
       const constraint = buildJoinConstraint(
         childRow,
@@ -270,21 +287,26 @@ export class Join implements Input {
           return;
         }
 
+        const fetchConstraints = matching.map(entry =>
+          entry.partitionConstraint
+            ? {...constraint, ...entry.partitionConstraint}
+            : constraint,
+        );
+        if (this.#boundProvider) {
+          this.#inprogressParentFetchBounds = readParentFetchBounds(
+            this.#boundProvider,
+            fetchConstraints,
+          );
+        }
+
         let parentNodeStream: Stream<Node | 'yield'>;
-        if (matching.length === 1) {
-          const [entry] = matching;
+        if (fetchConstraints.length === 1) {
           parentNodeStream = this.#parent.fetch({
-            constraint: entry.partitionConstraint
-              ? {...constraint, ...entry.partitionConstraint}
-              : constraint,
+            constraint: fetchConstraints[0],
           });
         } else {
-          const streams = matching.map(entry =>
-            this.#parent.fetch({
-              constraint: entry.partitionConstraint
-                ? {...constraint, ...entry.partitionConstraint}
-                : constraint,
-            }),
+          const streams = fetchConstraints.map(c =>
+            this.#parent.fetch({constraint: c}),
           );
           const compare = (a: Node, b: Node) =>
             this.#schema.compareRows(a.row, b.row);
@@ -297,6 +319,9 @@ export class Join implements Input {
             continue;
           }
           this.#inprogressChildChangePosition = parentNode.row;
+          this.#inprogressReachedParents?.add(
+            canonicalKey(parentNode.row, this.#schema.primaryKey),
+          );
           const childChange = makeChildChange(
             this.#processParentNode(parentNode.row, parentNode.relationships),
             {
@@ -310,7 +335,31 @@ export class Join implements Input {
     } finally {
       this.#inprogressChildChange = undefined;
       this.#inprogressChildChangePosition = undefined;
+      this.#inprogressReachedParents = undefined;
+      this.#inprogressParentFetchBounds = undefined;
     }
+  }
+
+  /**
+   * Whether the in-progress child change has yet to reach `parentNodeRow`,
+   * i.e. the row comes after #inprogressChildChangePosition in the parent
+   * stream.
+   */
+  #isAfterInprogressPosition(parentNodeRow: Row): boolean {
+    if (this.#inprogressChildChangePosition === undefined) {
+      return false;
+    }
+    if (this.#inprogressReachedParents) {
+      return !this.#inprogressReachedParents.has(
+        canonicalKey(parentNodeRow, this.#schema.primaryKey),
+      );
+    }
+    return (
+      this.#schema.compareRows(
+        parentNodeRow,
+        this.#inprogressChildChangePosition,
+      ) > 0
+    );
   }
 
   #indexParentRow(row: Row): void {
@@ -345,30 +394,18 @@ export class Join implements Input {
       );
       const stream = constraint ? this.#child.fetch({constraint}) : [];
 
-      let inPushQueue: boolean;
-      if (this.#boundProvider) {
-        const partitionConstraint = this.#parentPartitionKey
-          ? Object.fromEntries(
-              this.#parentPartitionKey.map(k => [k, parentNodeRow[k]]),
-            )
-          : undefined;
-        const bound = this.#boundProvider.getBound(partitionConstraint);
-        inPushQueue =
-          bound !== undefined &&
-          this.#inprogressChildChangePosition !== undefined &&
-          this.#schema.compareRows(
+      // The parent has yet to get the in-progress child change if it comes
+      // after the current position and a parent fetch of the push yields it.
+      // With a TakeGate the fetches are capped at the bounds read when they
+      // started.
+      const inPushQueue =
+        this.#isAfterInprogressPosition(parentNodeRow) &&
+        (this.#inprogressParentFetchBounds === undefined ||
+          isInParentFetch(
+            this.#inprogressParentFetchBounds,
             parentNodeRow,
-            this.#inprogressChildChangePosition,
-          ) > 0 &&
-          this.#schema.compareRows(parentNodeRow, bound) <= 0;
-      } else {
-        inPushQueue =
-          this.#inprogressChildChangePosition !== undefined &&
-          this.#schema.compareRows(
-            parentNodeRow,
-            this.#inprogressChildChangePosition,
-          ) > 0;
-      }
+            this.#schema.compareRows,
+          ));
 
       if (
         this.#inprogressChildChange &&
