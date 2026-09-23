@@ -15,119 +15,21 @@ permissions:
   contents: read
 
 jobs:
-  # Fast preflight checks. Expensive jobs wait on these to avoid wasted CI minutes.
-  syncpack:
-    name: Sync Package Versions
+  # Every static check, in one job so they share one checkout and one install
+  # instead of paying for them five times over -- each of these used to be its
+  # own job, spending ~20s on setup for 9-13s of work.
+  #
+  # Each check is its own step, and runs even when an earlier one failed, so a
+  # pull request sees every problem at once rather than one per push.
+  #
+  # Nothing waits on this job. It includes the type checker (~2 min), so
+  # gating the tests on it would hold them back far longer than the old fast
+  # preflight did; they run in parallel instead. Its failures block a merge
+  # only if the "Protect main" ruleset lists "Checks" as a required status
+  # check, so renaming this job means updating that ruleset too.
+  checks:
+    name: Checks
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-        with:
-          version: 11.11.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.x
-          package-manager-cache: false
-      - name: Get pnpm store path
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - name: Cache pnpm store
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
-          restore-keys: |
-            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-
-      - run: pnpm install --frozen-lockfile --filter @rocicorp/mono --ignore-scripts
-      - run: pnpm exec syncpack lint
-
-  verify-deps:
-    name: Verify Package Dependencies
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-        with:
-          version: 11.11.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.x
-          package-manager-cache: false
-      - name: Get pnpm store path
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - name: Cache pnpm store
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-verify-deps-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
-          restore-keys: |
-            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-verify-deps-
-      - run: pnpm install --frozen-lockfile --filter verify-package-deps --ignore-scripts
-      - run: pnpm run verify-deps
-
-  format:
-    name: Oxfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-        with:
-          version: 11.11.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.x
-          package-manager-cache: false
-      - name: Get pnpm store path
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - name: Cache pnpm store
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
-          restore-keys: |
-            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-
-      - run: pnpm install --frozen-lockfile --filter @rocicorp/mono --ignore-scripts
-      - run: pnpm exec oxfmt --check
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-        with:
-          version: 11.11.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.x
-          package-manager-cache: false
-      - name: Get pnpm store path
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - name: Cache pnpm store
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
-          restore-keys: |
-            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-
-      - run: pnpm install --frozen-lockfile --filter @rocicorp/mono --ignore-scripts
-      - run: pnpm run lint
-
-  check-types:
-    name: Check Types
-    runs-on: ubuntu-latest
-    needs: [syncpack, verify-deps, format, lint]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -149,13 +51,32 @@ jobs:
           key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           restore-keys: |
             pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run check-types
+      # The type checker needs the whole workspace, so this is a full install
+      # rather than the filtered ones the separate jobs used.
+      - name: Install
+        id: install
+        run: pnpm install --frozen-lockfile
+      # Fastest first, so a quick failure is in the log before the type checker
+      # finishes. The Checks status itself only reports once every step is done.
+      - name: Sync Package Versions
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm exec syncpack lint
+      - name: Verify Package Dependencies
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run verify-deps
+      - name: Oxfmt
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm exec oxfmt --check
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run lint
+      - name: Check Types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check-types
 
   zero-docker:
     name: Build Zero Docker Image
     runs-on: ubuntu-latest
-    needs: [syncpack, verify-deps, format, lint]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -204,14 +125,12 @@ jobs:
 
   test-nopg-shards:
     name: Test no PG
-    needs: [syncpack, verify-deps, format, lint]
     uses: ./.github/workflows/js-test-shards.yml
     with:
       pg-mode: nopg
 
   test-pg-shards:
     name: Test PG ${{ matrix.pg-version }}
-    needs: [syncpack, verify-deps, format, lint]
     strategy:
       fail-fast: false
       matrix:
