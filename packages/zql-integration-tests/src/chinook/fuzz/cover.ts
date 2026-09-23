@@ -193,6 +193,7 @@ export function childDecorationPairs(): ReadonlyArray<
     ['customer', 'invoices'],
     ['genre', 'tracks'],
     ['invoice', 'lines'],
+    ['mediaType', 'tracks'],
   ];
 }
 

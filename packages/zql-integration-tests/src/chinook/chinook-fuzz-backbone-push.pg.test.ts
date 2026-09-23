@@ -4,17 +4,17 @@
  * The **per-PR backbone** of the coverage-driven fuzzer (ported from rusty-ivm
  * `rindle-fuzz/tests/backbone.rs`): the cheap, structured layers over the small,
  * self-contained {@link miniPgContent mini} fixture, so CI exercises the small-scope
- * region on every change. (The full-chinook *scale subset* runs nightly — a later
- * phase.) The backbone is split across `chinook-fuzz-backbone-*.pg.test.ts` files so
- * CI can spread its lanes over test shards.
+ * region on every change. (The full-chinook *scale subset* runs in the nightly,
+ * `chinook-fuzz-scale.pg.test.ts`.) The backbone is split across
+ * `chinook-fuzz-backbone-*.pg.test.ts` files so CI can spread its lanes over test shards.
  *
- * This file: the **push** lanes.
+ * This file: the **push** lanes. The top-N ones are in
+ * `chinook-fuzz-backbone-decpush.pg.test.ts`.
  *
  * - **Push** — every single-level (depth ≤ 1) skeleton, driven through the four-phase
- *   push protocol (root + leaf membership churn + boundary-crossing edits, incl. the
- *   EXISTS-gate table), stays parity-clean at **every** step.
- * - **Pinned push** and **decorated push** — the same protocol over correlated-filter
- *   and top-N shapes.
+ *   push protocol (membership churn + boundary-crossing edits on every table the query
+ *   touches, incl. the EXISTS-gate tables), stays parity-clean at **every** step.
+ * - **Pinned push** — the same protocol over correlated-filter shapes.
  * - **Random-yield** — hydrate + push parity while the IVM sources are interleaved
  *   with `'yield'`s.
  *
@@ -27,7 +27,6 @@ import '../helpers/comparePg.ts';
 import {bootstrap} from '../helpers/runner.ts';
 import {pkOf} from './fuzz/axes.ts';
 import {
-  checkDecoratedPush,
   checkPushCases,
   checkPushWalk,
   checkYield,
@@ -39,13 +38,14 @@ import {
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
+import {fuzzSeed} from './fuzz/seed.ts';
 import {enumerate} from './fuzz/skeleton.ts';
 import {schema} from './schema.ts';
 
 const TIMEOUT_MS = 120_000;
 
-/** The repro key for the random-yield interleave lane. */
-const YIELD_SEED = 0x00c0ffee;
+/** The repro key for the random-yield interleave lanes (`ZERO_FUZZ_SEED`). */
+const YIELD_SEED = fuzzSeed();
 
 const harness = await bootstrap({
   suiteName: 'chinook_fuzz_backbone_push',
@@ -86,24 +86,6 @@ test(
     const report = await checkPushCases(harness.transact, cases);
     console.log(
       `Pinned push backbone (D≤2): ${report.total} cases, ${report.failures.length} failures`,
-    );
-    panicIfFailed(report, 12);
-  },
-  TIMEOUT_MS,
-);
-
-// oxlint-disable-next-line expect-expect
-test(
-  'Decorated push — top-N four-phase per-step parity over mini (D≤1)',
-  async () => {
-    // The order/limit × push cross-product the other sweeps miss: each depth-1 skeleton
-    // becomes a top-N (`orderBy` + small `limit`) and is pushed (incl. the EXISTS-gated
-    // leaf) with PER-STEP parity, so a top-N push that strands/drops in-window rows is
-    // caught between mutations.
-    const skels = enumerate({depth: 1, related: 2, exists: 2});
-    const report = await checkDecoratedPush(harness.transact, data, skels, 1);
-    console.log(
-      `Decorated push backbone (top-N, D≤1): ${report.total} cases, ${report.failures.length} failures`,
     );
     panicIfFailed(report, 12);
   },

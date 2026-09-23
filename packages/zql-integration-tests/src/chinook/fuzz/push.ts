@@ -16,9 +16,11 @@
  * (every `remove`/`edit{old}` targets the current state) and ends at the original seed —
  * which lets a whole sweep share one rolled-back transaction.
  *
- * The push history targets the **root** (top-level membership churn) and the **deepest
- * leaf** (child re-parent / EXISTS gate open-close) — including a leaf that is *not* in
- * the output (an EXISTS-subquery table), so gate transitions are exercised.
+ * {@link pushForSkeleton} targets the **root** (top-level membership churn) and the
+ * **deepest leaf** (child re-parent / EXISTS gate open-close) — including a leaf that is
+ * *not* in the output (an EXISTS-subquery table), so gate transitions are exercised. The
+ * lanes use {@link pushForQuery}, which adds every other table the query touches, and
+ * {@link pushForChild} for a limited nested collection.
  */
 
 import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
@@ -162,4 +164,28 @@ export function pushForQuery(
 ): Mutation[] {
   const tables = new Set([skel.table, deepestTable(skel), ...queryTables(ast)]);
   return [...tables].flatMap(t => fourPhase(data, t, n));
+}
+
+/**
+ * The push history for a query built around one nested collection reached through
+ * `path` (the tables a relationship's hops land on: the child, after the junction for a
+ * junction relationship). Four-phase over **every** row of each path table first, so
+ * each per-parent window a nested `limit` or `start` builds drains to empty and refills,
+ * then over the first `n` rows of every other table `ast` touches: a parent leaving and
+ * re-entering tears its window down and rebuilds it, and a gate under the child opens and
+ * closes.
+ */
+export function pushForChild(
+  data: Data,
+  path: readonly string[],
+  ast: AST,
+  n: number,
+): Mutation[] {
+  const drained = path.flatMap(t =>
+    fourPhase(data, t, miniData[t]?.length ?? 0),
+  );
+  const rest = [...queryTables(ast)]
+    .filter(t => !path.includes(t))
+    .flatMap(t => fourPhase(data, t, n));
+  return [...drained, ...rest];
 }

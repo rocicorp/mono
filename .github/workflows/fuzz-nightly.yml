@@ -1,0 +1,129 @@
+name: Fuzz Nightly
+
+# The chinook differential fuzzer on a fresh seed every night.
+#
+# Pull requests run the same lanes on one fixed seed, so they only ever replay the
+# cases that seed generates. Here ZERO_FUZZ_SEED is the run number, so each night
+# explores new ones. ZERO_FUZZ_BUDGET scales the randomized lanes' case counts and,
+# above 1, turns on the extended push lanes; CHINOOK_SCALE turns on the full-chinook
+# lane. Both are too heavy for pull requests.
+# See packages/zql-integration-tests/src/chinook/fuzz/seed.ts.
+#
+# A failure prints the seed to replay it with. Locally:
+#   cd packages/zql-integration-tests
+#   ZERO_FUZZ_SEED=<seed> ZERO_FUZZ_BUDGET=<budget> CHINOOK_SCALE=1 \
+#     pnpm exec vitest run --project='*pg-18*' <file>
+# or dispatch this workflow with the seed.
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: ZERO_FUZZ_SEED (decimal or 0x hex). Empty uses the run number.
+        required: false
+        type: string
+      budget:
+        description: ZERO_FUZZ_BUDGET, the case-count multiplier for the randomized lanes.
+        required: false
+        type: string
+        default: '4'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  chinook:
+    name: Chinook fuzz (PG 18, shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      SHARD: ${{ matrix.shard }}
+      ZERO_FUZZ_SEED: ${{ inputs.seed || github.run_number }}
+      ZERO_FUZZ_BUDGET: ${{ inputs.budget || '4' }}
+      CHINOOK_SCALE: '1'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          restore-keys: |
+            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
+      - run: pnpm install --frozen-lockfile
+      - name: Record seed
+        if: matrix.shard == 1
+        run: |
+          echo "ZERO_FUZZ_SEED=$ZERO_FUZZ_SEED ZERO_FUZZ_BUDGET=$ZERO_FUZZ_BUDGET" \
+            >> "$GITHUB_STEP_SUMMARY"
+      # --retry=0: pull requests retry Postgres tests to ride out flaky
+      # infrastructure, which would also hide a lane that diverges only on some
+      # interleavings. Here that is a finding. --silent=false keeps each lane's
+      # case and failure counts in the log, so a lane that quietly stops
+      # generating cases shows up.
+      - name: Chinook fuzz
+        working-directory: packages/zql-integration-tests
+        run: >-
+          pnpm exec vitest run --project='*pg-18*' --retry=0 --silent=false
+          --shard="$SHARD/3" chinook-fuzz chinook-zero-cache-fuzzer
+
+  # The opt-in Take-over-UnionFanIn sweep. Its data seeds are fixed, so this is
+  # a daily regression gate on main rather than a search, under both the memory
+  # and the SQLite sources.
+  take-union-sweep:
+    name: Take-union sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SWEEP: '1'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          restore-keys: |
+            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
+      - run: pnpm install --frozen-lockfile
+      - name: Memory sources
+        working-directory: packages/zql
+        run: pnpm exec vitest run --retry=0 take-union-empty-window.sweep
+      - name: SQLite sources
+        if: ${{ !cancelled() }}
+        working-directory: packages/zqlite-zql-test
+        run: pnpm exec vitest run --retry=0 take-union-empty-window.sweep

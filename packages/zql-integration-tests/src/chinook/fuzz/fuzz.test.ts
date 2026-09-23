@@ -35,6 +35,7 @@ import {
   N_AXES,
   pinOf,
   pkOf,
+  relPath,
   relsOf,
   tables,
 } from './axes.ts';
@@ -42,6 +43,7 @@ import {CostModel} from './cost.ts';
 import {
   applyLimit,
   applyOrder,
+  childDecorationPairs,
   decorate,
   decorateChild,
   decoratableRoots,
@@ -58,7 +60,12 @@ import {Data} from './literals.ts';
 import {RELATIONS, transform} from './metamorphic.ts';
 import {miniData} from './mini.ts';
 import {mutate} from './mutate.ts';
-import {fourPhase, pushForQuery, pushForSkeleton} from './push.ts';
+import {
+  fourPhase,
+  pushForChild,
+  pushForQuery,
+  pushForSkeleton,
+} from './push.ts';
 import {
   loadRegressions,
   parseRegression,
@@ -282,6 +289,17 @@ describe('L1 covering array', () => {
     }
     expect(realized).toBeGreaterThan(rows.length / 2);
   });
+
+  test('every child decoration pair names a plural relationship', () => {
+    // A pair the schema lacks makes `decorateChild` return null for every row, so its
+    // L1 and child-push cells would be silently empty.
+    for (const [parent, rel] of childDecorationPairs()) {
+      const r = relsOf(parent).find(x => x.name === rel);
+      expect(r, `${parent}.${rel}`).toBeDefined();
+      expect(r?.card, `${parent}.${rel}`).toBe('many');
+      expect(r?.junction, `${parent}.${rel}`).toBe(false);
+    }
+  });
 });
 
 // ── data + roles ──────────────────────────────────────────────────────────────────────
@@ -449,6 +467,20 @@ describe('push protocol', () => {
     for (const m of p) {
       expect(Object.keys(m.row).toSorted()).toEqual(cols);
     }
+  });
+
+  test('child push drains the whole child table and touches every other table', () => {
+    const [q] = must(decorateChild('album', 'tracks', greedyCover(2)[0], data));
+    const ast = asQueryInternals(q).ast;
+    expect(relPath('album', 'tracks')).toEqual(['track']);
+    const p = pushForChild(data, relPath('album', 'tracks'), ast, 1);
+    const removed = (t: string) =>
+      p.filter(m => m.table === t && m.kind === 'remove').length;
+    // Every track row is removed (so every per-album window empties), one album row.
+    expect(removed('track')).toBe(miniData.track.length);
+    expect(removed('album')).toBe(1);
+    // The drain comes first, so the windows empty before the parents churn.
+    expect(p[0].table).toBe('track');
   });
 
   test('skeleton push targets both root and the deepest leaf', () => {

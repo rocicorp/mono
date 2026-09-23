@@ -13,9 +13,11 @@
  *
  * Gated behind `CHINOOK_SCALE=1` (mirroring the Rust nightly's `CHINOOK_SQL` gate): the
  * full-chinook bootstrap + thousands-of-rows hydrates are too heavy for the per-PR lane, so
- * this lane runs nightly / on demand. Deterministic in {@link SEED} (the repro key).
+ * this lane runs in the nightly (`.github/workflows/fuzz-nightly.yml`) or on demand.
+ * Deterministic in {@link SEED} (the repro key, `ZERO_FUZZ_SEED`); case counts scale with
+ * `ZERO_FUZZ_BUDGET` (see `fuzz/seed.ts`).
  *
- * Run: `CHINOOK_SCALE=1 pnpm exec vitest run --project='*pg-16*' chinook-fuzz-scale`.
+ * Run: `CHINOOK_SCALE=1 pnpm exec vitest run --project='*pg-18*' chinook-fuzz-scale`.
  */
 
 import {expect, test} from 'vitest';
@@ -31,12 +33,14 @@ import {
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
 import {miniData} from './fuzz/mini.ts';
+import {formatSeed, fuzzBudget, fuzzSeed} from './fuzz/seed.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
 const RUN = !!process.env.CHINOOK_SCALE;
-const SEED = 0x00c0ffee;
-const TIMEOUT_MS = 600_000;
+const SEED = fuzzSeed();
+const BUDGET = fuzzBudget();
+const TIMEOUT_MS = 600_000 * BUDGET;
 const startData = new Data(miniData, pkOf);
 
 /**
@@ -68,7 +72,9 @@ const harness = RUN
   : null;
 
 if (RUN) {
-  console.log(`══ chinook-fuzz scale ══  seed = ${SEED}`);
+  console.log(
+    `══ chinook-fuzz scale ══  seed = ${formatSeed(SEED)}  budget = ${BUDGET}`,
+  );
 }
 
 test.skipIf(!RUN)(
@@ -80,7 +86,7 @@ test.skipIf(!RUN)(
       harness!.delegates,
       cost,
       SEED,
-      200,
+      200 * BUDGET,
     );
     console.log(
       `chinook tail: generated ${generated} | gated ${gated} | ${report.total} checked | ${report.failures.length} failures`,
@@ -95,8 +101,14 @@ test.skipIf(!RUN)(
 test.skipIf(!RUN)(
   'scale swarm — masked-random over full chinook',
   async () => {
-    // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const report = await checkSwarm(harness!.delegates, startData, SEED, 24, 6);
+    const report = await checkSwarm(
+      // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
+      harness!.delegates,
+      startData,
+      SEED,
+      24 * BUDGET,
+      6,
+    );
     console.log(
       `chinook swarm: ${report.total} cases, ${report.failures.length} failures`,
     );
@@ -120,7 +132,7 @@ test.skipIf(!RUN)(
       harness!.transact,
       cost,
       SEED ^ 0x1eaf,
-      80,
+      80 * BUDGET,
     );
     console.log(
       `chinook yield-tail: generated ${generated} | gated ${gated} | ${report.total} checked | ${report.failures.length} failures`,

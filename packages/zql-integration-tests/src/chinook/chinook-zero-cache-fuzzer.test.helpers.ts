@@ -9,9 +9,11 @@
  */
 import {expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import type {NormalizedZeroConfig} from '../../../zero-cache/src/config/normalize.ts';
 import {InspectorDelegate} from '../../../zero-cache/src/server/inspector-delegate.ts';
@@ -41,6 +43,7 @@ import {
   cmpVersions,
   versionFromString,
 } from '../../../zero-cache/src/services/view-syncer/schema/types.ts';
+import {SnapshotRowCache} from '../../../zero-cache/src/services/view-syncer/snapshot-row-cache.ts';
 import {Snapshotter} from '../../../zero-cache/src/services/view-syncer/snapshotter.ts';
 import {
   ViewSyncerService,
@@ -51,6 +54,7 @@ import {
   type PgTest,
 } from '../../../zero-cache/src/test/db.ts';
 import {DbFile} from '../../../zero-cache/src/test/lite.ts';
+import type {ViewSyncerDownstream} from '../../../zero-cache/src/types/downstream.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
 import type {
   PreSerialized,
@@ -65,7 +69,12 @@ import {
   ANYONE_CAN_DO_ANYTHING,
   definePermissions,
 } from '../../../zero-permissions/src/permissions.ts';
-import {mapAST, normalizeAST} from '../../../zero-protocol/src/ast.ts';
+import {
+  type AST,
+  type Condition,
+  mapAST,
+  normalizeAST,
+} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Downstream as ProtocolDownstream} from '../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
@@ -112,7 +121,8 @@ import {
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
-import {pushForSkeleton, type Mutation} from './fuzz/push.ts';
+import {pushForQuery, type Mutation} from './fuzz/push.ts';
+import {fuzzSeed} from './fuzz/seed.ts';
 import {lower, label as skeletonLabel, type Skeleton} from './fuzz/skeleton.ts';
 import {builder, schema} from './schema.ts';
 
@@ -123,10 +133,11 @@ const SHARD_NUM = 0;
 const TASK_ID = 'zql-integration-zero-cache-fuzzer';
 const PROTOCOL_CLIENT_GROUP_ID = 'zql-integration-protocol-fuzzer-client-group';
 const PROTOCOL_CLIENT_ID = 'zql-integration-protocol-fuzzer-client';
-const PROTOCOL_WS_ID = 'zql-integration-protocol-fuzzer-ws';
 export const TIMEOUT_MS = 120_000;
 const PROTOCOL_WAIT_TIMEOUT_MS = 20_000;
-const SEED = 0x00c0ffee;
+/** The generator seed of the zero-cache fuzzer lanes (`ZERO_FUZZ_SEED`). */
+const SEED = fuzzSeed();
+export const FUZZ_SEED = SEED;
 const writeSchema: ZeroSchema = schema;
 const {clientSchema: chinookClientSchema} = clientSchemaFrom(schema);
 const chinookClientToServer = clientToServer(schema.tables);
@@ -173,11 +184,15 @@ const WRITE_FUZZ_EXTRA_LABELS = [
 const WRITE_FUZZ_SKELETONS = selectWriteFuzzSkeletons(
   enumerate({depth: 1, related: 1, exists: 1}),
 );
-export const WRITE_FUZZ_CASES = WRITE_FUZZ_SKELETONS.map(s => ({
-  label: `write|${skeletonLabel(s)}`,
-  mutations: pushForSkeleton(data, s, 1),
-  query: lower(s),
-}));
+export const WRITE_FUZZ_CASES = WRITE_FUZZ_SKELETONS.map(s => {
+  const query = lower(s);
+  return {
+    label: `write|${skeletonLabel(s)}`,
+    // Every table the query touches, including a junction's middle table.
+    mutations: pushForQuery(data, s, asQueryInternals(query).ast, 1),
+    query,
+  };
+});
 export const WRITE_FUZZ_WRITE_COUNT = WRITE_FUZZ_CASES.reduce(
   (n, c) => n + c.mutations.length,
   0,
@@ -313,9 +328,14 @@ async function withTimeout<T>(
   }
 }
 
+/**
+ * @param upstreamSetup SQL run on the upstream database after the mini
+ *        fixture is loaded, before the replica is initialized.
+ */
 export async function startZeroCacheReplica(
   testDBs: PgTest['testDBs'],
   suite: string,
+  upstreamSetup?: string | undefined,
 ) {
   // Replication slot names are derived from the app ID and are global to the
   // Postgres cluster, so each test file gets its own app ID.
@@ -337,6 +357,9 @@ export async function startZeroCacheReplica(
     cleanup.push(() => testDBs.drop(upstream, changeDB));
 
     await upstream.unsafe(miniPgContent());
+    if (upstreamSetup) {
+      await upstream.unsafe(upstreamSetup);
+    }
     await upstream`CREATE SCHEMA ${upstream(appID)}`;
     await upstream`
       CREATE TABLE ${upstream(appID)}.permissions (
@@ -427,9 +450,23 @@ export async function startZeroCacheReplica(
     );
     const pg = new TestPGQueryDelegate(upstream, schema, serverSchema);
 
-    async function startProtocolClient() {
+    let workers = 0;
+
+    /**
+     * Starts a sync worker. As in `server/syncer.ts`, the view-syncers of
+     * the client groups on a worker share one CVR database and one operator
+     * storage database. A `production` worker is also configured like a
+     * production one: its view-syncers share a {@link SnapshotRowCache} and
+     * plan their queries with the query planner (both on by default).
+     */
+    async function startSyncWorker({
+      production,
+    }: {
+      production: boolean;
+    }): Promise<SyncWorker> {
+      const worker = workers++;
       const cvrDB = await testDBs.create(
-        `chinook_zero_cache_fuzzer_${suite}_cvr`,
+        `chinook_zero_cache_fuzzer_${suite}_cvr${worker === 0 ? '' : worker}`,
       );
       cleanup.push(() => testDBs.drop(cvrDB));
       await initViewSyncerSchema(lc, cvrDB, shard);
@@ -437,11 +474,9 @@ export async function startZeroCacheReplica(
       const storageDB = new Database(lc, ':memory:');
       storageDB.prepare(CREATE_STORAGE_TABLE).run();
       cleanup.push(() => storageDB.close());
-
       const databaseStorage = new DatabaseStorage(storageDB);
-      const operatorStorage = databaseStorage.createClientGroupStorage(
-        PROTOCOL_CLIENT_GROUP_ID,
-      );
+
+      const rowCache = production ? new SnapshotRowCache() : undefined;
       const config = {
         auth: {},
         query: {url: []},
@@ -449,72 +484,91 @@ export async function startZeroCacheReplica(
         app: {id: appID},
         replica: {file: replicaDbFile.path},
         log: {level: 'error'},
+        enableQueryPlanner: production,
       } as unknown as NormalizedZeroConfig;
-      const inspectorDelegate = new InspectorDelegate(undefined);
-      const connContextManager = new ConnectionContextManagerImpl(
-        lc,
-        config.auth.revalidateIntervalSeconds,
-        config.auth.retransformIntervalSeconds,
-        {
-          url: config.query.url,
-          apiKey: config.query.apiKey,
-          allowedClientHeaders: config.query.allowedClientHeaders,
-          allowedRequestHeaders: config.query.allowedRequestHeaders,
-          forwardCookies: config.query.forwardCookies,
-        },
-        {
-          url: config.push?.url ?? config.mutate?.url,
-          apiKey: config.push?.apiKey ?? config.mutate?.apiKey,
-          allowedClientHeaders:
-            config.push?.allowedClientHeaders ??
-            config.mutate?.allowedClientHeaders,
-          allowedRequestHeaders:
-            config.push?.allowedRequestHeaders ??
-            config.mutate?.allowedRequestHeaders,
-          forwardCookies:
-            config.push?.forwardCookies ??
-            config.mutate?.forwardCookies ??
-            false,
-        },
-      );
-      const viewSyncer = new ViewSyncerService(
-        config,
-        lc,
-        shard,
-        TASK_ID,
-        PROTOCOL_CLIENT_GROUP_ID,
-        cvrDB,
-        new PipelineDriver(
-          lc.withContext('component', 'pipeline-driver'),
-          testLogConfig,
-          new Snapshotter(lc, replicaDbFile.path, shard),
-          shard,
-          operatorStorage,
-          PROTOCOL_CLIENT_GROUP_ID,
-          inspectorDelegate,
-          () => 200,
-        ),
-        replicator.subscribe() as Subscription<ReplicaState>,
-        new DrainCoordinator(),
-        100,
-        inspectorDelegate,
-        connContextManager,
-        undefined,
-        (_lc, _description, op) => op(),
-      );
-      const viewSyncerDone = viewSyncer.run();
-      cleanup.push(async () => {
-        await viewSyncer.stop();
-        await viewSyncerDone;
-      });
 
-      return ProtocolFuzzerClient.connect(viewSyncer);
+      const newViewSyncer = (clientGroupID: string) => {
+        const inspectorDelegate = new InspectorDelegate(undefined);
+        const connContextManager = new ConnectionContextManagerImpl(
+          lc,
+          config.auth.revalidateIntervalSeconds,
+          config.auth.retransformIntervalSeconds,
+          {
+            url: config.query.url,
+            apiKey: config.query.apiKey,
+            allowedClientHeaders: config.query.allowedClientHeaders,
+            allowedRequestHeaders: config.query.allowedRequestHeaders,
+            forwardCookies: config.query.forwardCookies,
+          },
+          {
+            url: config.push?.url ?? config.mutate?.url,
+            apiKey: config.push?.apiKey ?? config.mutate?.apiKey,
+            allowedClientHeaders:
+              config.push?.allowedClientHeaders ??
+              config.mutate?.allowedClientHeaders,
+            allowedRequestHeaders:
+              config.push?.allowedRequestHeaders ??
+              config.mutate?.allowedRequestHeaders,
+            forwardCookies:
+              config.push?.forwardCookies ??
+              config.mutate?.forwardCookies ??
+              false,
+          },
+        );
+        return new ViewSyncerService(
+          config,
+          lc,
+          shard,
+          TASK_ID,
+          clientGroupID,
+          cvrDB,
+          new PipelineDriver(
+            lc.withContext('component', 'pipeline-driver'),
+            testLogConfig,
+            new Snapshotter(lc, replicaDbFile.path, shard, undefined, rowCache),
+            shard,
+            databaseStorage.createClientGroupStorage(clientGroupID),
+            clientGroupID,
+            inspectorDelegate,
+            () => 200,
+            production,
+            production ? config : undefined,
+          ),
+          replicator.subscribe() as Subscription<ReplicaState>,
+          new DrainCoordinator(),
+          100,
+          inspectorDelegate,
+          connContextManager,
+          undefined,
+          (_lc, _description, op) => op(),
+        );
+      };
+
+      return {
+        startGroup: clientGroupID =>
+          new SyncGroup(
+            clientGroupID,
+            () => newViewSyncer(clientGroupID),
+            stop => cleanup.push(stop),
+          ),
+      };
+    }
+
+    async function startProtocolClient() {
+      const worker = await startSyncWorker({production: false});
+      const client = new ProtocolFuzzerClient(
+        worker.startGroup(PROTOCOL_CLIENT_GROUP_ID),
+        PROTOCOL_CLIENT_ID,
+      );
+      client.connect();
+      return client;
     }
 
     return {
       upstream,
       pg,
       sqlite,
+      startSyncWorker,
       startProtocolClient,
       async watermark(): Promise<string> {
         // A lower bound for "not yet caused by a write that hasn't
@@ -594,6 +648,21 @@ class ProtocolRows {
         this.#applyRowPatch(patch);
       }
     }
+  }
+
+  /** The rows of every table, in a canonical order (for comparing stores). */
+  snapshot(): Record<string, Row[]> {
+    const byKey = ([a]: [string, unknown], [b]: [string, unknown]) =>
+      a < b ? -1 : a > b ? 1 : 0;
+    return Object.fromEntries(
+      [...this.#rows]
+        .filter(([, rows]) => rows.size > 0)
+        .sort(byKey)
+        .map(([table, rows]) => [
+          table,
+          [...rows.entries()].toSorted(byKey).map(([, row]) => row),
+        ]),
+    );
   }
 
   run(query: AnyQuery) {
@@ -679,29 +748,146 @@ class ProtocolRows {
   }
 }
 
-class ProtocolFuzzerClient {
-  readonly #rows = new ProtocolRows();
-  readonly #viewSyncer: ViewSyncerService;
-  readonly #ctx: SyncContext;
-  readonly #queue: Queue<ProtocolDownstream>;
-  readonly #gotQueries = new Set<string>();
+/**
+ * A sync worker's client groups. See `startSyncWorker()` in
+ * {@link startZeroCacheReplica}.
+ */
+export type SyncWorker = {
+  startGroup(clientGroupID: string): SyncGroup;
+};
 
-  private constructor(
-    viewSyncer: ViewSyncerService,
-    ctx: SyncContext,
-    queue: Queue<ProtocolDownstream>,
+/**
+ * A client group on a {@link SyncWorker}. Its view-syncer can be stopped and
+ * replaced, as the syncer's `ServiceRunner` replaces one that has shut down;
+ * the replacement loads the client group's CVR from the CVR database.
+ */
+export class SyncGroup {
+  readonly id: string;
+  readonly #newViewSyncer: () => ViewSyncerService;
+  readonly #onStart: (stop: () => Promise<void>) => void;
+  #viewSyncer: ViewSyncerService | undefined;
+  #done: Promise<void> = Promise.resolve();
+  #starts = 0;
+
+  constructor(
+    id: string,
+    newViewSyncer: () => ViewSyncerService,
+    onStart: (stop: () => Promise<void>) => void,
   ) {
-    this.#viewSyncer = viewSyncer;
-    this.#ctx = ctx;
-    this.#queue = queue;
+    this.id = id;
+    this.#newViewSyncer = newViewSyncer;
+    this.#onStart = onStart;
+    this.start();
   }
 
-  static connect(viewSyncer: ViewSyncerService): ProtocolFuzzerClient {
+  /** Starts a view-syncer for the group. */
+  start(): void {
+    assert(!this.#viewSyncer, `${this.id} is already running`);
+    const viewSyncer = this.#newViewSyncer();
+    const done = viewSyncer.run();
+    this.#onStart(async () => {
+      await viewSyncer.stop();
+      await done;
+    });
+    this.#viewSyncer = viewSyncer;
+    this.#done = done;
+    this.#starts++;
+  }
+
+  /** How many view-syncers have served the group. */
+  get starts(): number {
+    return this.#starts;
+  }
+
+  /**
+   * The view-syncer for a new connection. Like `ServiceRunner.getService()`,
+   * this keeps the current one alive with `keepalive()`, or replaces it if it
+   * is shutting down (i.e. its clients disconnected and its keepalive lapsed).
+   */
+  viewSyncerForConnection(): ViewSyncerService {
+    const viewSyncer = must(this.#viewSyncer, `${this.id} is stopped`);
+    if (!viewSyncer.keepalive()) {
+      this.#viewSyncer = undefined;
+      this.start();
+    }
+    return must(this.#viewSyncer);
+  }
+
+  /**
+   * Keeps the view-syncer alive for its keepalive period after its last
+   * client disconnects, as a connection does.
+   */
+  keepalive(): boolean {
+    return must(this.#viewSyncer, `${this.id} is stopped`).keepalive();
+  }
+
+  async stop(): Promise<void> {
+    const viewSyncer = must(this.#viewSyncer, `${this.id} is stopped`);
+    this.#viewSyncer = undefined;
+    await viewSyncer.stop();
+    await this.#done;
+  }
+}
+
+/**
+ * Every query put by a {@link ProtocolFuzzerClient}, by hash, so that a client
+ * group's queries can be re-desired from the hashes the server reports.
+ */
+const queriesByHash = new Map<string, AnyQuery>();
+
+type ProtocolConnection = {
+  readonly viewSyncer: ViewSyncerService;
+  readonly selector: {readonly clientID: string; readonly wsID: string};
+  readonly source: Source<ViewSyncerDownstream>;
+  readonly queue: Queue<ProtocolDownstream>;
+};
+
+/**
+ * A protocol client: it folds the pokes it receives into a row store, as
+ * zero-client does. The store and cookie outlive a connection, so the
+ * client can disconnect and reconnect with its cookie as the base cookie.
+ */
+export class ProtocolFuzzerClient {
+  readonly group: SyncGroup;
+  readonly clientID: string;
+  readonly #rows = new ProtocolRows();
+  readonly #gotQueries = new Set<string>();
+  #cookie: string | null = null;
+  #connections = 0;
+  #conn: ProtocolConnection | undefined;
+
+  constructor(group: SyncGroup, clientID: string) {
+    this.group = group;
+    this.clientID = clientID;
+  }
+
+  /** The cookie of the last poke applied to the store. */
+  get cookie(): string | null {
+    return this.#cookie;
+  }
+
+  get connected(): boolean {
+    return this.#conn !== undefined;
+  }
+
+  /** The queries the client group has got, as reported by the server. */
+  get gotQueries(): ReadonlySet<string> {
+    return this.#gotQueries;
+  }
+
+  /**
+   * Connects with the client's cookie as the base cookie (`null` the first
+   * time), and optionally puts `queries` in the `initConnection` message, as
+   * zero-client does for queries it added while disconnected.
+   */
+  connect(queries: readonly ProtocolQueryCase[] = []): void {
+    assert(!this.#conn, `${this.clientID} is already connected`);
+    const viewSyncer = this.group.viewSyncerForConnection();
     const ctx: SyncContext = {
-      clientID: PROTOCOL_CLIENT_ID,
+      clientID: this.clientID,
       profileID: 'p0000g00000000001',
-      wsID: PROTOCOL_WS_ID,
-      baseCookie: null,
+      wsID: `${this.clientID}-ws${this.#connections++}`,
+      baseCookie: this.#cookie,
       protocolVersion: PROTOCOL_VERSION,
       httpCookie: undefined,
       origin: undefined,
@@ -714,7 +900,7 @@ class ProtocolFuzzerClient {
       {
         protocolVersion: ctx.protocolVersion,
         clientID: ctx.clientID,
-        clientGroupID: PROTOCOL_CLIENT_GROUP_ID,
+        clientGroupID: this.group.id,
         profileID: ctx.profileID,
         baseCookie: ctx.baseCookie,
         timestamp: Date.now(),
@@ -729,16 +915,15 @@ class ProtocolFuzzerClient {
       },
       ctx.auth,
     );
-    viewSyncer.connContextManager.initConnection(selector, {
-      desiredQueriesPatch: [],
-      clientSchema: chinookClientSchema,
-    });
+    const body = {
+      desiredQueriesPatch: queries.map(c => putPatchFor(c.query)),
+      // As in zero-client, the schema is only sent without a base cookie.
+      ...(ctx.baseCookie === null ? {clientSchema: chinookClientSchema} : {}),
+    };
+    viewSyncer.connContextManager.initConnection(selector, body);
     const source = viewSyncer.initConnection(selector, [
       'initConnection',
-      {
-        desiredQueriesPatch: [],
-        clientSchema: chinookClientSchema,
-      },
+      body,
     ]);
     const queue = new Queue<ProtocolDownstream>();
 
@@ -752,23 +937,25 @@ class ProtocolFuzzerClient {
       }
     })();
 
-    return new ProtocolFuzzerClient(viewSyncer, ctx, queue);
+    this.#conn = {viewSyncer, selector, source, queue};
+  }
+
+  /**
+   * Closes the connection. Pokes that were received but not yet applied are
+   * dropped, so the client reconnects from the last poke it applied.
+   */
+  disconnect(): void {
+    const conn = must(this.#conn, `${this.clientID} is not connected`);
+    this.#conn = undefined;
+    conn.source.cancel();
   }
 
   async setQueries(cases: readonly ProtocolQueryCase[], label: string) {
     const puts = cases.map(c => putPatchFor(c.query));
-    const putHashes = new Set(puts.map(p => p.hash));
-    const expectDels = [...this.#gotQueries].filter(
-      hash => !putHashes.has(hash),
-    );
-    for (const hash of expectDels) {
-      this.#gotQueries.delete(hash);
-    }
     const desiredQueriesPatch: UpQueriesPatch = [{op: 'clear'}, ...puts];
     await this.#changeDesiredQueries(
       desiredQueriesPatch,
       puts.map(p => p.hash),
-      [],
       `protocol set queries ${label}`,
     );
   }
@@ -784,13 +971,9 @@ class ProtocolFuzzerClient {
   }) {
     const puts = put.map(c => putPatchFor(c.query));
     const dels = del.map(c => ({op: 'del' as const, hash: hashFor(c.query)}));
-    for (const {hash} of dels) {
-      this.#gotQueries.delete(hash);
-    }
     await this.#changeDesiredQueries(
       [...dels, ...puts],
       puts.map(p => p.hash),
-      [],
       `protocol change queries ${label}`,
     );
   }
@@ -798,95 +981,120 @@ class ProtocolFuzzerClient {
   async #changeDesiredQueries(
     desiredQueriesPatch: UpQueriesPatch,
     expectGotPuts: readonly string[],
-    expectGotDels: readonly string[],
     description: string,
   ) {
-    await this.#viewSyncer.changeDesiredQueries(
-      {clientID: this.#ctx.clientID, wsID: this.#ctx.wsID},
-      ['changeDesiredQueries', {desiredQueriesPatch}],
-    );
-    await this.#waitForGotQueryPatches(
-      expectGotPuts,
-      expectGotDels,
-      description,
-    );
+    const conn = must(this.#conn, `${this.clientID} is not connected`);
+    await conn.viewSyncer.changeDesiredQueries(conn.selector, [
+      'changeDesiredQueries',
+      {desiredQueriesPatch},
+    ]);
+    await this.waitForGotQueries(expectGotPuts, description);
   }
 
-  async #waitForGotQueryPatches(
-    expectPuts: readonly string[],
-    expectDels: readonly string[],
-    description: string,
-  ) {
-    if (this.#hasExpectedGotQueries(expectPuts, expectDels)) {
-      return;
+  /**
+   * Waits until the server reports that the client group has got the
+   * queries with the given hashes. (A deleted query is not awaited: it stays
+   * got until its TTL expires.)
+   */
+  async waitForGotQueries(hashes: readonly string[], description: string) {
+    const got = () => hashes.every(hash => this.#gotQueries.has(hash));
+    if (!got()) {
+      await this.#drainUntil(got, description);
     }
-    await this.#drainUntil(poke => {
-      for (const msg of poke) {
-        if (msg[0] !== 'pokePart') {
-          continue;
-        }
-        for (const patch of msg[1].gotQueriesPatch ?? []) {
-          if (patch.op === 'put') {
-            this.#gotQueries.add(patch.hash);
-          } else if (patch.op === 'del') {
-            this.#gotQueries.delete(patch.hash);
-          }
-        }
-      }
-      return this.#hasExpectedGotQueries(expectPuts, expectDels);
-    }, description);
   }
 
-  #hasExpectedGotQueries(
-    expectPuts: readonly string[],
-    expectDels: readonly string[],
-  ) {
-    return (
-      expectPuts.every(hash => this.#gotQueries.has(hash)) &&
-      expectDels.every(hash => !this.#gotQueries.has(hash))
-    );
-  }
-
+  /**
+   * Waits for a poke whose cookie is at or beyond the replica `stateVersion`.
+   */
   async waitForCookieAtOrBeyond(
     stateVersion: string,
     description: string,
   ): Promise<void> {
-    await this.#drainUntil(poke => {
-      const cookie = pokeEndCookie(poke);
-      return (
-        cookie !== undefined &&
-        cmpVersions(versionFromString(cookie), {stateVersion}) >= 0
-      );
-    }, `protocol poke for ${description}`);
+    const reached = () =>
+      this.#cookie !== null &&
+      cmpVersions(versionFromString(this.#cookie), {stateVersion}) >= 0;
+    if (!reached()) {
+      await this.#drainUntil(reached, `protocol poke for ${description}`);
+    }
+  }
+
+  /** Waits for a poke whose cookie is at or beyond `cookie`. */
+  async waitForCookie(cookie: string, description: string): Promise<void> {
+    const reached = () =>
+      this.#cookie !== null &&
+      cmpVersions(versionFromString(this.#cookie), versionFromString(cookie)) >=
+        0;
+    if (!reached()) {
+      await this.#drainUntil(reached, `protocol poke for ${description}`);
+    }
   }
 
   run(query: AnyQuery) {
     return this.#rows.run(query);
   }
 
-  async #drainUntil(
-    done: (poke: readonly ProtocolDownstream[]) => boolean,
-    description: string,
-  ) {
+  /** The rows in the client's store, in a canonical order. */
+  rows(): Record<string, Row[]> {
+    return this.#rows.snapshot();
+  }
+
+  async #drainUntil(done: () => boolean, description: string) {
     await withTimeout(
       (async () => {
-        for (;;) {
-          const poke = await this.#nextPoke();
-          this.#rows.apply(poke);
-          if (done(poke)) {
-            return;
-          }
-        }
+        do {
+          this.#apply(await this.#nextPoke());
+        } while (!done());
       })(),
-      description,
+      `${this.clientID}: ${description}`,
       PROTOCOL_WAIT_TIMEOUT_MS,
     );
   }
 
+  /**
+   * Applies a poke to the store, or drops it if it was canceled. Like
+   * Replicache, the client rejects a poke whose base cookie is not its
+   * cookie: the server would be patching a store the client does not have.
+   */
+  #apply(poke: readonly ProtocolDownstream[]) {
+    const start = poke[0];
+    const end = must(poke.at(-1));
+    assert(start[0] === 'pokeStart' && end[0] === 'pokeEnd', 'partial poke');
+    if (end[1].cancel) {
+      return;
+    }
+    if ((start[1].baseCookie ?? null) !== this.#cookie) {
+      throw new Error(
+        `${this.clientID}: unexpected base cookie ${start[1].baseCookie} ` +
+          `for poke ${start[1].pokeID}, client is at ${this.#cookie}`,
+      );
+    }
+    this.#rows.apply(poke);
+    for (const msg of poke) {
+      if (msg[0] !== 'pokePart') {
+        continue;
+      }
+      for (const patch of msg[1].gotQueriesPatch ?? []) {
+        switch (patch.op) {
+          case 'put':
+            this.#gotQueries.add(patch.hash);
+            break;
+          case 'del':
+            this.#gotQueries.delete(patch.hash);
+            break;
+          case 'clear':
+            this.#gotQueries.clear();
+            break;
+        }
+      }
+    }
+    this.#cookie = end[1].cookie;
+  }
+
   async #nextPoke(): Promise<ProtocolDownstream[]> {
+    const {queue} = must(this.#conn, `${this.clientID} is not connected`);
     const poke: ProtocolDownstream[] = [];
     for (;;) {
-      const msg = await this.#queue.dequeue();
+      const msg = await queue.dequeue();
       switch (msg[0]) {
         case 'pokeStart':
         case 'pokePart':
@@ -904,26 +1112,67 @@ class ProtocolFuzzerClient {
   }
 }
 
-function pokeEndCookie(
-  poke: readonly ProtocolDownstream[],
-): string | undefined {
-  for (const msg of poke) {
-    if (msg[0] === 'pokeEnd' && !msg[1].cancel) {
-      return msg[1].cookie;
-    }
-  }
-  return undefined;
+/** Looks up a query put by a {@link ProtocolFuzzerClient} by its hash. */
+export function queryForHash(hash: string): AnyQuery {
+  return must(queriesByHash.get(hash), `unknown query hash ${hash}`);
 }
 
-function hashFor(query: AnyQuery): string {
-  return hashOfAST(normalizeAST(asQueryInternals(query).ast));
+/**
+ * The AST that zero-client would send for `query`. The fuzz generators build
+ * queries with the permissions builder (`newStaticQuery`), which marks every
+ * subquery as a `permissions` subquery, and zero-cache does not sync the rows
+ * of those. zero-client marks them as `client` subqueries.
+ */
+function clientASTFor(query: AnyQuery): AST {
+  return normalizeAST(asClientAST(asQueryInternals(query).ast));
+}
+
+function asClientAST(ast: AST): AST {
+  return {
+    ...ast,
+    ...(ast.where ? {where: asClientCondition(ast.where)} : {}),
+    ...(ast.related
+      ? {
+          related: ast.related.map(r => ({
+            ...r,
+            system: 'client' as const,
+            subquery: asClientAST(r.subquery),
+          })),
+        }
+      : {}),
+  };
+}
+
+function asClientCondition(cond: Condition): Condition {
+  switch (cond.type) {
+    case 'and':
+    case 'or':
+      return {...cond, conditions: cond.conditions.map(asClientCondition)};
+    case 'correlatedSubquery':
+      return {
+        ...cond,
+        related: {
+          ...cond.related,
+          system: 'client',
+          subquery: asClientAST(cond.related.subquery),
+        },
+      };
+    default:
+      return cond;
+  }
+}
+
+export function hashFor(query: AnyQuery): string {
+  return hashOfAST(clientASTFor(query));
 }
 
 function putPatchFor(query: AnyQuery) {
-  const clientAST = normalizeAST(asQueryInternals(query).ast);
+  const clientAST = clientASTFor(query);
+  const hash = hashOfAST(clientAST);
+  queriesByHash.set(hash, query);
   return {
     op: 'put' as const,
-    hash: hashOfAST(clientAST),
+    hash,
     ast: mapAST(clientAST, chinookClientToServer),
   };
 }
@@ -988,7 +1237,7 @@ function primaryKeyConditions(upstream: PostgresDB, table: string, row: Row) {
   });
 }
 
-function mutationDescription(mutation: Mutation): string {
+export function mutationDescription(mutation: Mutation): string {
   const pks = tableSchema(mutation.table)
     .primaryKey.map(
       column => `${column}=${JSON.stringify(mutation.row[column])}`,
@@ -1008,7 +1257,7 @@ function expectSingleAffectedRow(
   }
 }
 
-async function applyWriteFuzzMutation(
+export async function applyWriteFuzzMutation(
   upstream: PostgresDB,
   mutation: Mutation,
 ) {

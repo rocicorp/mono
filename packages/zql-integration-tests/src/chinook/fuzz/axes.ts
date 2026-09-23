@@ -110,6 +110,16 @@ export function relOf(table: string, name: string): Rel | undefined {
   return relsOf(table).find(r => r.name === name);
 }
 
+/**
+ * The tables relationship `table.name`'s hops land on, in order: `[child]`, or
+ * `[junction, child]` for a junction relationship. Empty if there is no such relationship.
+ */
+export function relPath(table: string, name: string): string[] {
+  const rels: Record<string, unknown> = schema.relationships[table] ?? {};
+  const chain = rels[name] as ReadonlyArray<{destSchema: string}> | undefined;
+  return (chain ?? []).map(c => c.destSchema);
+}
+
 /** Whether `table` has a text column (so LIKE/ILIKE/NOT LIKE are realizable on it). */
 export function hasText(table: string): boolean {
   return rolesOf(table).text !== null;
