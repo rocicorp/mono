@@ -830,6 +830,8 @@ export async function setup(
       'view-syncer.pg.test.ts',
       inspectorDelegate,
       () => YIELD_THRESHOLD_MS,
+      undefined,
+      pipelineDriverConfig(),
     ),
     stateChanges,
     drainCoordinator,
@@ -1018,6 +1020,8 @@ export function restartViewSyncer(params: {
       'view-syncer-restart',
       inspectorDelegate,
       () => YIELD_THRESHOLD_MS,
+      undefined,
+      pipelineDriverConfig(),
     ),
     stateChanges,
     drainCoordinator,
@@ -1248,3 +1252,13 @@ export const app2Messages = new ReplicationMessages(
   {clients: ['clientGroupID', 'clientID']},
   'this_app_2',
 );
+
+/**
+ * Set `ZERO_TEST_DEFER_IVM_WRITES=1` to run the view-syncer suites with IVM
+ * derivation held in memory rather than written to the replica snapshot.
+ */
+function pipelineDriverConfig(): ZeroConfig | undefined {
+  return process.env['ZERO_TEST_DEFER_IVM_WRITES'] === '1'
+    ? ({deferIvmWrites: true, deferIvmWritesMaxRows: 100_000} as ZeroConfig)
+    : undefined;
+}

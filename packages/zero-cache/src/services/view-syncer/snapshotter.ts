@@ -306,6 +306,7 @@ export interface SnapshotDiff extends Iterable<Change> {
  */
 export type ResetPipelinesReason =
   | 'advancement-timeout'
+  | 'ivm-delta-overflow'
   | 'scalar-subquery'
   | 'schema-change'
   | 'truncation'

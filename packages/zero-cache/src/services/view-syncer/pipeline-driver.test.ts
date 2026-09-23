@@ -1861,6 +1861,40 @@ describe('view-syncer/pipeline-driver', () => {
     ).toEqual([`${ChangeType.EDIT}:foo`, `${ChangeType.ADD}:baz`]);
   });
 
+  test('deferred advancement resets past its pending-row limit', () => {
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    const driver = new PipelineDriver(
+      lc,
+      testLogConfig,
+      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+      shardID,
+      new DatabaseStorage(storage).createClientGroupStorage('limited'),
+      'pipeline-driver.test.ts',
+      new InspectorDelegate(undefined),
+      () => 200 /** yield threshold */,
+      undefined,
+      {deferIvmWrites: true, deferIvmWritesMaxRows: 1} as never,
+    );
+    driver.init(clientSchema);
+    [...driver.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer())];
+
+    replicator.processTransaction(
+      '134',
+      messages.update('uniques', {id: 'foo', name: 'wuzzy'}),
+      messages.update('uniques', {id: 'boo', name: 'fuzzy'}),
+    );
+
+    let err;
+    try {
+      [...driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes];
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ResetPipelinesSignal);
+    expect((err as ResetPipelinesSignal).reason).toBe('ivm-delta-overflow');
+  });
+
   test('whereExists query', () => {
     pipelines.init(clientSchema);
     [

@@ -522,6 +522,14 @@ export class TableSource implements Source {
     }
   }
 
+  /**
+   * The number of rows held in memory for changes that have been pushed but
+   * not written, i.e. with `deferWrites`, since the last {@link setDB}.
+   */
+  get pendingRows(): number {
+    return this.#delta?.size ?? 0;
+  }
+
   *genPush(change: SourceChange): Stream<'yield' | undefined> {
     if (
       this.#skipUnobservableChanges &&

@@ -674,6 +674,17 @@ export const zeroOptions = {
     hidden: true,
   },
 
+  deferIvmWritesMaxRows: {
+    type: v.number().default(100_000),
+    desc: [
+      `With {bold deferIvmWrites}, the maximum number of rows a client group`,
+      `may hold in memory for a single advancement. An advancement that`,
+      `exceeds it is abandoned and the client group's pipelines are reset,`,
+      `as when an advancement exceeds its time limit.`,
+    ],
+    hidden: true,
+  },
+
   yieldThresholdMs: {
     type: v.number().default(10),
     desc: [

@@ -1130,6 +1130,7 @@ export class PipelineDriver {
           }
 
           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
+          this.#checkPendingRows(advanceContext.pos, numChanges);
         } finally {
           advanceContext.currentChangeStartMs = undefined;
         }
@@ -1258,6 +1259,28 @@ export class PipelineDriver {
       );
     }
     return checkYield && advanceTimer.elapsedLap() > this.#yieldThresholdMs();
+  }
+
+  /**
+   * With `deferIvmWrites`, the advancement's changes are held in memory by
+   * the TableSources until they move to the next snapshot. This bounds them.
+   */
+  #checkPendingRows(pos: number, numChanges: number) {
+    const config = this.#config;
+    if (!config?.deferIvmWrites) {
+      return;
+    }
+    let pendingRows = 0;
+    for (const source of this.#tables.values()) {
+      pendingRows += source.pendingRows;
+    }
+    if (pendingRows > config.deferIvmWritesMaxRows) {
+      throw new ResetPipelinesSignal(
+        `Advancement exceeded ${config.deferIvmWritesMaxRows} pending rows ` +
+          `at ${pos} of ${numChanges} changes.`,
+        'ivm-delta-overflow',
+      );
+    }
   }
 
   #throwSlowCurrentChangeReset(
