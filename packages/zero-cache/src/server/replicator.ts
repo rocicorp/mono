@@ -292,9 +292,9 @@ async function restoreReplica(
             `reservation disconnected during restore. retrying`,
             String(e),
           );
-          followup.cancel();
           continue;
         }
+        followup.cancel();
         throw e;
       } finally {
         progress.stop();

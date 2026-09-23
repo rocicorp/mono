@@ -185,7 +185,7 @@ export class IncrementalSyncer {
           this.#replicationEvents.add(1);
           switch (message[0]) {
             case 'reserved':
-              lc.warn?.(`unexpected snapshot reservation message recevied`, {
+              lc.warn?.(`unexpected snapshot reservation message received`, {
                 message: message[0],
               });
               break;

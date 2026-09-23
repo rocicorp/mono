@@ -40,7 +40,7 @@ export async function reserveAndGetSnapshotStatus(
   // DOMException that AbortController.abort() defaults to) so that
   // promiseOrAbort()'s rejection, which propagates `signal.reason` verbatim,
   // is always an instance of the shared AbortError type.
-  const onSignal = () => abort.abort(new AbortError('SIGTTERM/SIGINT'));
+  const onSignal = () => abort.abort(new AbortError('SIGTERM/SIGINT'));
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
 
