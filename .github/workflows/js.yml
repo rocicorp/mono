@@ -24,7 +24,9 @@ jobs:
   #
   # Nothing waits on this job. It includes the type checker (~2 min), so
   # gating the tests on it would hold them back far longer than the old fast
-  # preflight did; they run in parallel instead, and both are required checks.
+  # preflight did; they run in parallel instead. Its failures block a merge
+  # only if the "Protect main" ruleset lists "Checks" as a required status
+  # check, so renaming this job means updating that ruleset too.
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -54,7 +56,8 @@ jobs:
       - name: Install
         id: install
         run: pnpm install --frozen-lockfile
-      # Fastest first, so a quick failure shows up before the type checker.
+      # Fastest first, so a quick failure is in the log before the type checker
+      # finishes. The Checks status itself only reports once every step is done.
       - name: Sync Package Versions
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm exec syncpack lint
