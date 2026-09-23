@@ -21,6 +21,7 @@ const mockOperator = (schema: SourceSchema, data: Node[] = []): Operator => ({
   getSchema: () => schema,
   fetch: (_req: FetchRequest) => data,
   push: vi.fn(),
+  reconcile: vi.fn(),
   setOutput: vi.fn(),
   destroy: vi.fn(),
 });
@@ -254,6 +255,7 @@ describe('UnionFanIn', () => {
       fetch: (req: FetchRequest) =>
         req.reverse ? data.toReversed() : [...data],
       push: vi.fn(),
+      reconcile: vi.fn(),
       setOutput: vi.fn(),
       destroy: vi.fn(),
     });

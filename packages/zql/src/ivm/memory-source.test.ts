@@ -1678,3 +1678,42 @@ describe('pushAdds', () => {
     expect(Array.from(source.data, r => r.a)).toEqual([1, 2, 3]);
   });
 });
+
+test('multi-connection push runs Phase 1 for all connections before Phase 2 reconcile', () => {
+  const ms = createSource(lc, testLogConfig, 'table', {id: {type: 'string'}}, [
+    'id',
+  ]);
+  const conn1 = ms.connect([['id', 'asc']]);
+  const conn2 = ms.connect([['id', 'asc']]);
+
+  const events: string[] = [];
+  conn1.setOutput({
+    push() {
+      events.push('conn1:push');
+      return emptyArray;
+    },
+    reconcile() {
+      events.push('conn1:reconcile');
+      return emptyArray;
+    },
+  });
+  conn2.setOutput({
+    push() {
+      events.push('conn2:push');
+      return emptyArray;
+    },
+    reconcile() {
+      events.push('conn2:reconcile');
+      return emptyArray;
+    },
+  });
+
+  consume(ms.push(makeSourceChangeAdd({id: '1'})));
+
+  expect(events).toEqual([
+    'conn1:push',
+    'conn2:push',
+    'conn1:reconcile',
+    'conn2:reconcile',
+  ]);
+});

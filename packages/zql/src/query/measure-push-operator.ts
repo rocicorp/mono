@@ -4,6 +4,7 @@ import {
   throwOutput,
   type FetchRequest,
   type Input,
+  type InputBase,
   type Operator,
   type Output,
 } from '../ivm/operator.ts';
@@ -58,5 +59,17 @@ export class MeasurePushOperator implements Operator {
       performance.now() - startTime,
       this.#queryID,
     );
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      const startTime = performance.now();
+      yield* this.#output.reconcile(this);
+      this.#metricsDelegate.addMetric(
+        this.#metricName,
+        performance.now() - startTime,
+        this.#queryID,
+      );
+    }
   }
 }

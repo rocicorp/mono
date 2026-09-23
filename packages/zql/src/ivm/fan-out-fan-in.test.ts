@@ -337,3 +337,28 @@ test('FanIn forwards beginFilter/endFilter to output', () => {
   fanIn.endFilter();
   expect(mockOutput.endFilter).toHaveBeenCalled();
 });
+
+test('FanOut and FanIn forward reconcile downstream', () => {
+  const s = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  const connector = s.connect([['a', 'asc']]);
+  const filterStart = new FilterStart(connector);
+  const fanOut = new FanOut(filterStart);
+  const fanIn = new FanIn(fanOut, [fanOut]);
+  fanOut.setFanIn(fanIn);
+  const filterEnd = new FilterEnd(filterStart, fanIn);
+
+  const mockOutput = {
+    push: vi.fn().mockReturnValue([]),
+    reconcile: vi.fn().mockReturnValue([]),
+  };
+  filterEnd.setOutput(mockOutput);
+
+  consume(s.push(makeSourceChangeAdd({a: 1, b: 'foo'})));
+  expect(mockOutput.reconcile).toHaveBeenCalledTimes(1);
+});

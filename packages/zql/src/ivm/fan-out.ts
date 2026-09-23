@@ -8,6 +8,8 @@ import type {
   FilterOperator,
   FilterOutput,
 } from './filter-operators.ts';
+import type {InputBase} from './operator.ts';
+import type {Stream} from './stream.ts';
 
 /**
  * Forks a stream into multiple streams.
@@ -79,5 +81,16 @@ export class FanOut implements FilterOperator {
       this.#fanIn,
       'fan-out must have a corresponding fan-in set!',
     ).fanOutDonePushingToAllBranches(change[ChangeIndex.TYPE]);
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    for (const output of this.#outputs) {
+      if (output.reconcile) {
+        yield* output.reconcile(this);
+      }
+    }
+    if (this.#fanIn) {
+      yield* this.#fanIn.fanOutDoneReconciling();
+    }
   }
 }

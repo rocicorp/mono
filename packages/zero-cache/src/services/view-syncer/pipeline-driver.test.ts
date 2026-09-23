@@ -1065,6 +1065,49 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('delete with limit refills deficit', () => {
+    pipelines.init(clientSchema);
+    const ISSUES_LIMIT_2: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      limit: 2,
+    };
+
+    const initial = [
+      ...pipelines.addQuery(
+        'hash-limit',
+        'queryLimit',
+        ISSUES_LIMIT_2,
+        startTimer(),
+      ),
+    ] as RowChange[];
+    expect(initial.map(r => (r.row as {id: string}).id)).toEqual(['1', '2']);
+
+    replicator.processTransaction('134', messages.delete('issues', {id: '1'}));
+
+    const advChanges = changes();
+    expect(advChanges).toEqual([
+      {
+        queryID: 'queryLimit',
+        table: 'issues',
+        type: 1, // REMOVE
+        row: undefined,
+        rowKey: {id: '1'},
+      },
+      {
+        queryID: 'queryLimit',
+        table: 'issues',
+        type: 0, // ADD
+        row: {
+          _0_version: '123',
+          closed: false,
+          id: '3',
+        },
+        rowKey: {id: '3'},
+      },
+    ]);
+  });
+
   test('truncate', () => {
     pipelines.init(clientSchema);
     [

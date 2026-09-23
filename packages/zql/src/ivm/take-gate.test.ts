@@ -3,10 +3,12 @@ import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {Catch} from './catch.ts';
-import {makeAddChange} from './change.ts';
+import {makeAddChange, makeRemoveChange} from './change.ts';
+import {MemoryStorage} from './memory-storage.ts';
 import {makeSourceChangeAdd} from './source.ts';
 import {consume} from './stream.ts';
 import {TakeGate, type TakeBoundProvider} from './take-gate.ts';
+import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 
 const lc = createSilentLogContext();
@@ -181,5 +183,43 @@ describe('TakeGate', () => {
       {id: 'i1', created: 100},
       {id: 'i2', created: 200},
     ]);
+  });
+
+  test('preserves Take bound for TakeGate while partition is dirty before reconcile', () => {
+    const input = setupSource();
+    const gate = new TakeGate(input);
+    const storage = new MemoryStorage();
+    const take = new Take(gate, storage, 2);
+    take.setTakeGate(gate);
+    gate.setBoundProvider(take);
+    const sink = new Catch(take);
+
+    // Initial fetch populates take with i1, i2
+    expect(
+      sink.fetch().map(n => (n === 'yield' ? 'yield' : (n as {row: Row}).row)),
+    ).toEqual([
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+    ]);
+
+    expect(gate.getBound()).toEqual({id: 'i2', created: 200});
+
+    // Remove i1: size drops to 1, partition becomes dirty
+    consume(
+      take.push(
+        makeRemoveChange({row: {id: 'i1', created: 100}, relationships: {}}),
+      ),
+    );
+
+    // TakeGate should still see i2 bound while dirty, NOT undefined (which would unbind fetches)
+    expect(take.getBound()).toEqual({id: 'i2', created: 200});
+    expect(gate.getBound()).toEqual({id: 'i2', created: 200});
+
+    // Reconcile drains deficit and fetches i3
+    consume(take.reconcile());
+
+    // After reconcile, partition is clean and bound updates to i3
+    expect(take.getBound()).toEqual({id: 'i3', created: 300});
+    expect(gate.getBound()).toEqual({id: 'i3', created: 300});
   });
 });

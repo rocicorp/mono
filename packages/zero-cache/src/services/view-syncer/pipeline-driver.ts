@@ -22,6 +22,7 @@ import {
   throwOutput,
   type FetchRequest,
   type Input,
+  type InputBase,
   type Output,
   type Storage,
 } from '../../../../zql/src/ivm/operator.ts';
@@ -34,6 +35,7 @@ import {
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from '../../../../zql/src/ivm/source.ts';
+import type {Stream} from '../../../../zql/src/ivm/stream.ts';
 import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
 import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
@@ -1541,6 +1543,26 @@ class QueryFailureLoggingOperator implements Input, Output {
         e,
       );
       throw e;
+    }
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#output.reconcile) {
+      try {
+        yield* this.#output.reconcile(this);
+      } catch (e) {
+        logQueryFailure(
+          this.#lc,
+          {
+            queryHash: this.#queryHash,
+            transformationHash: this.#transformationHash,
+            queryName: this.#queryName,
+          },
+          'query pipeline failed during reconcile',
+          e,
+        );
+        throw e;
+      }
     }
   }
 }

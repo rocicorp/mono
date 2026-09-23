@@ -27,6 +27,7 @@ export class UnionFanIn implements Operator {
   readonly #inputs: readonly Input[];
   readonly #schema: SourceSchema;
   #fanOutPushStarted: boolean = false;
+  #fanOutReconcileStarted: boolean = false;
   #output: Output = throwOutput;
   #accumulatedPushes: Change[] = [];
 
@@ -234,8 +235,39 @@ export class UnionFanIn implements Operator {
     );
   }
 
+  fanOutStartedReconciling() {
+    assert(
+      this.#fanOutReconcileStarted === false,
+      'UnionFanIn: fanOutStartedReconciling called while already reconciling',
+    );
+    this.#fanOutReconcileStarted = true;
+  }
+
+  *fanOutDoneReconciling(): Stream<'yield'> {
+    assert(
+      this.#fanOutReconcileStarted,
+      'UnionFanIn: fanOutDoneReconciling called without fanOutStartedReconciling',
+    );
+    this.#fanOutReconcileStarted = false;
+    if (this.#inputs.length === 0) {
+      return;
+    }
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
+  }
+
   setOutput(output: Output): void {
     this.#output = output;
+  }
+
+  *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#fanOutReconcileStarted) {
+      return;
+    }
+    if (this.#output.reconcile) {
+      yield* this.#output.reconcile(this);
+    }
   }
 }
 

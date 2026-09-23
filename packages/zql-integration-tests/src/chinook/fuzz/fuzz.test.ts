@@ -1029,47 +1029,49 @@ function decoratedPushLaneCases(skels: readonly Skeleton[], n: number) {
 }
 
 describe('decorated push memory parity', () => {
-  test('all decpush cases', async () => {
-    const skels = enumerate({depth: 2, related: 1, exists: 2});
-    const cases = decoratedPushLaneCases(skels, 1);
-    // One line per failing case: the first step that diverged from a fresh hydrate.
-    const failures: string[] = [];
-    for (const c of cases) {
-      const delegate = memoryDelegate();
-      const memView = delegate.materialize(c.query);
-      // `null` checks the hydration; each later step checks a mutation.
-      const steps = [null, ...c.mutations];
-      try {
-        for (let i = 0; i < steps.length; i++) {
-          const m = steps[i];
-          if (m) {
-            const src = must(delegate.getSource(m.table));
-            if (m.kind === 'remove') {
-              consume(src.push(makeSourceChangeRemove(m.row)));
-            } else if (m.kind === 'add') {
-              consume(src.push(makeSourceChangeAdd(m.row)));
-            } else if (m.kind === 'edit') {
-              consume(src.push(makeSourceChangeEdit(m.row, m.old)));
+  for (const n of [1, 2]) {
+    test(`all decpush cases (n=${n})`, async () => {
+      const skels = enumerate({depth: 2, related: 1, exists: 2});
+      const cases = decoratedPushLaneCases(skels, n);
+      // One line per failing case: the first step that diverged from a fresh hydrate.
+      const failures: string[] = [];
+      for (const c of cases) {
+        const delegate = memoryDelegate();
+        const memView = delegate.materialize(c.query);
+        // `null` checks the hydration; each later step checks a mutation.
+        const steps = [null, ...c.mutations];
+        try {
+          for (let i = 0; i < steps.length; i++) {
+            const m = steps[i];
+            if (m) {
+              const src = must(delegate.getSource(m.table));
+              if (m.kind === 'remove') {
+                consume(src.push(makeSourceChangeRemove(m.row)));
+              } else if (m.kind === 'add') {
+                consume(src.push(makeSourceChangeAdd(m.row)));
+              } else if (m.kind === 'edit') {
+                consume(src.push(makeSourceChangeEdit(m.row, m.old)));
+              }
+            }
+            const expected = await delegate.run(c.query);
+            try {
+              expect(memView.data).toEqual(expected);
+            } catch {
+              failures.push(
+                `${c.label}: ${m ? `step ${i - 1} (${m.kind} on ${m.table})` : 'hydrate'}`,
+              );
+              break;
             }
           }
-          const expected = await delegate.run(c.query);
-          try {
-            expect(memView.data).toEqual(expected);
-          } catch {
-            failures.push(
-              `${c.label}: ${m ? `step ${i - 1} (${m.kind} on ${m.table})` : 'hydrate'}`,
-            );
-            break;
-          }
+        } catch (e: unknown) {
+          failures.push(
+            `${c.label}: threw ${e instanceof Error ? e.message : String(e)}`,
+          );
+        } finally {
+          memView.destroy();
         }
-      } catch (e: unknown) {
-        failures.push(
-          `${c.label}: threw ${e instanceof Error ? e.message : String(e)}`,
-        );
-      } finally {
-        memView.destroy();
       }
-    }
-    expect(failures).toEqual([]);
-  }, 60_000);
+      expect(failures).toEqual([]);
+    }, 60_000);
+  }
 });
