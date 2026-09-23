@@ -603,7 +603,6 @@ function applyFilterWithFlips(
         system: sq.system ?? 'client',
         parentPartitionKey,
         boundProvider,
-        trackPartitions: true,
         storage: delegate.createStorage(flippedJoinName),
       });
       delegate.addEdge(end, flippedJoin);
@@ -770,7 +769,6 @@ function applyCorrelatedSubQuery(
   );
 
   const joinName = `${name}:join(${sq.subquery.alias})`;
-  const trackPartitions = !fromCondition;
   const join = new Join({
     parent: end,
     child,
@@ -781,8 +779,7 @@ function applyCorrelatedSubQuery(
     system: sq.system ?? 'client',
     parentPartitionKey: fromCondition ? undefined : parentPartitionKey,
     boundProvider,
-    trackPartitions,
-    storage: trackPartitions ? delegate.createStorage(joinName) : undefined,
+    storage: delegate.createStorage(joinName),
   });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);

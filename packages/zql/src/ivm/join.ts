@@ -23,7 +23,6 @@ import {
   type JoinStorage,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
-import {MemoryStorage} from './memory-storage.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -46,8 +45,7 @@ type Args = {
   system: System;
   parentPartitionKey?: CompoundKey | undefined;
   boundProvider?: TakeBoundProvider | undefined;
-  trackPartitions?: boolean | undefined;
-  storage?: Storage | undefined;
+  storage: Storage;
 };
 
 /**
@@ -68,7 +66,7 @@ export class Join implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #storage: JoinStorage | undefined;
+  readonly #storage: JoinStorage;
   readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
@@ -86,7 +84,6 @@ export class Join implements Input {
     system,
     parentPartitionKey,
     boundProvider,
-    trackPartitions,
     storage,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
@@ -100,10 +97,7 @@ export class Join implements Input {
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
     this.#parentPartitionKey = parentPartitionKey;
-    this.#storage =
-      (trackPartitions ?? true)
-        ? ((storage ?? new MemoryStorage()) as unknown as JoinStorage)
-        : undefined;
+    this.#storage = storage as unknown as JoinStorage;
     this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();
@@ -258,39 +252,35 @@ export class Join implements Input {
         this.#parentKey,
       );
       if (constraint) {
+        const matching = getMatchingParentEntries(
+          this.#storage,
+          childRow,
+          this.#childKey,
+          this.#parentPartitionKey,
+        );
+        if (!matching) {
+          return;
+        }
+
         let parentNodeStream: Stream<Node | 'yield'>;
-        let matching: ReturnType<typeof getMatchingParentEntries> | undefined;
-        if (this.#storage) {
-          matching = getMatchingParentEntries(
-            this.#storage,
-            childRow,
-            this.#childKey,
-            this.#parentPartitionKey,
-          );
-          if (!matching) {
-            return;
-          }
-          if (matching.length === 1) {
-            const [entry] = matching;
-            parentNodeStream = this.#parent.fetch({
+        if (matching.length === 1) {
+          const [entry] = matching;
+          parentNodeStream = this.#parent.fetch({
+            constraint: entry.partitionConstraint
+              ? {...constraint, ...entry.partitionConstraint}
+              : constraint,
+          });
+        } else {
+          const streams = matching.map(entry =>
+            this.#parent.fetch({
               constraint: entry.partitionConstraint
                 ? {...constraint, ...entry.partitionConstraint}
                 : constraint,
-            });
-          } else {
-            const streams = matching.map(entry =>
-              this.#parent.fetch({
-                constraint: entry.partitionConstraint
-                  ? {...constraint, ...entry.partitionConstraint}
-                  : constraint,
-              }),
-            );
-            const compare = (a: Node, b: Node) =>
-              this.#schema.compareRows(a.row, b.row);
-            parentNodeStream = mergeSortedStreams(streams, compare);
-          }
-        } else {
-          parentNodeStream = this.#parent.fetch({constraint});
+            }),
+          );
+          const compare = (a: Node, b: Node) =>
+            this.#schema.compareRows(a.row, b.row);
+          parentNodeStream = mergeSortedStreams(streams, compare);
         }
 
         for (const parentNode of parentNodeStream) {
@@ -316,9 +306,6 @@ export class Join implements Input {
   }
 
   #indexParentRow(row: Row): void {
-    if (!this.#storage) {
-      return;
-    }
     indexParentInStorage(
       this.#storage,
       row,
@@ -329,9 +316,6 @@ export class Join implements Input {
   }
 
   #unindexParentRow(row: Row): void {
-    if (!this.#storage) {
-      return;
-    }
     unindexParentInStorage(
       this.#storage,
       row,

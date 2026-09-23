@@ -26,7 +26,6 @@ import {
   type JoinStorage,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
-import {MemoryStorage} from './memory-storage.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -91,8 +90,7 @@ type Args = {
   system: System;
   parentPartitionKey?: CompoundKey | undefined;
   boundProvider?: TakeBoundProvider | undefined;
-  trackPartitions?: boolean | undefined;
-  storage?: Storage | undefined;
+  storage: Storage;
 };
 
 /**
@@ -112,7 +110,7 @@ export class FlippedJoin implements Input {
   readonly #schema: SourceSchema;
   readonly #parentPartitionKey: CompoundKey | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
-  readonly #storage: JoinStorage | undefined;
+  readonly #storage: JoinStorage;
 
   #output: Output = throwOutput;
 
@@ -129,7 +127,6 @@ export class FlippedJoin implements Input {
     system,
     parentPartitionKey,
     boundProvider,
-    trackPartitions,
     storage,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
@@ -144,10 +141,7 @@ export class FlippedJoin implements Input {
     this.#relationshipName = relationshipName;
     this.#parentPartitionKey = parentPartitionKey;
     this.#boundProvider = boundProvider;
-    this.#storage =
-      (trackPartitions ?? true)
-        ? ((storage ?? new MemoryStorage()) as unknown as JoinStorage)
-        : undefined;
+    this.#storage = storage as unknown as JoinStorage;
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -467,34 +461,27 @@ export class FlippedJoin implements Input {
       const childRow = change[ChangeIndex.NODE].row;
       const changeType = change[ChangeIndex.TYPE];
 
-      let matching: ReturnType<typeof getMatchingParentEntries> | undefined;
-      if (this.#storage) {
-        matching = getMatchingParentEntries(
-          this.#storage,
-          childRow,
-          this.#childKey,
-          this.#parentPartitionKey,
-        );
-        if (!matching) {
-          // If no matching parent is resident in the view, REMOVE and EDIT
-          // cannot affect any view-resident parent. (ADD and CHILD can qualify
-          // previously absent parents).
-          if (
-            changeType !== ChangeType.ADD &&
-            changeType !== ChangeType.CHILD
-          ) {
-            return;
-          }
+      const matching = getMatchingParentEntries(
+        this.#storage,
+        childRow,
+        this.#childKey,
+        this.#parentPartitionKey,
+      );
+      if (!matching) {
+        // If no matching parent is resident in the view, REMOVE and EDIT
+        // cannot affect any view-resident parent. (ADD and CHILD can qualify
+        // previously absent parents).
+        if (changeType !== ChangeType.ADD && changeType !== ChangeType.CHILD) {
+          return;
         }
       }
 
       let parentNodeStream: Stream<Node | 'yield'>;
-      if (
-        matching &&
-        this.#parentPartitionKey &&
-        changeType !== ChangeType.ADD &&
-        changeType !== ChangeType.CHILD
-      ) {
+      if (changeType !== ChangeType.ADD && changeType !== ChangeType.CHILD) {
+        assert(
+          matching,
+          'Matching entries must exist for non-add child change',
+        );
         if (matching.length === 1) {
           const [entry] = matching;
           parentNodeStream = this.#parent.fetch({
@@ -591,9 +578,6 @@ export class FlippedJoin implements Input {
   }
 
   #indexParentRow(row: Row): void {
-    if (!this.#storage) {
-      return;
-    }
     indexParentInStorage(
       this.#storage,
       row,
@@ -604,9 +588,6 @@ export class FlippedJoin implements Input {
   }
 
   #unindexParentRow(row: Row): void {
-    if (!this.#storage) {
-      return;
-    }
     unindexParentInStorage(
       this.#storage,
       row,
