@@ -68,7 +68,7 @@ jobs:
         run: git fetch origin +refs/heads/main:refs/remotes/origin/main
 
       - name: Verify Signed Commit Authors
-        uses: rocicorp/.github/.github/actions/verify-signed-commit-authors@b0bc55c1abf942d3c04a4fbe911f7882a90526b0 # main
+        uses: rocicorp/.github/.github/actions/verify-signed-commit-authors@06a0ebd29781171bf219e601f94af752cad3891a # main
         with:
           enforce: 'true'
           github-token: ${{ secrets.GITHUB_TOKEN }}
