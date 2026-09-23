@@ -110,16 +110,29 @@ patchedDependencies:
 EOF
 
 COPY patches/ patches/
-COPY pkgs/ /tmp/pkgs/
 
 # Install zero package based on install source format (tarball or pnpm)
-RUN ZERO_INSTALL_SOURCE="${ZERO_PACKAGE:-$ZERO_VERSION}" && \
+#
+# pkgs/ is bind-mounted for the duration of this RUN rather than COPYed in. A
+# COPY commits the directory to its own layer, and the `rm -rf /tmp/pkgs` that
+# used to be at the end of this RUN could only write a whiteout on top of it --
+# a layer that is already committed cannot be removed by a later one. Both
+# layers shipped, so every published image carried the release tarball twice:
+# once unpacked into node_modules, and once as the deleted-but-still-present
+# copy under /tmp/pkgs.
+#
+# A bind mount is never committed, so there is nothing left to remove -- and
+# `rm` could not remove it anyway, since the mount is read-only and still busy
+# while the RUN is executing. That is why the `rm -rf /tmp/pkgs` below is gone
+# while the `rm -rf ./$FILENAME` stays.
+RUN --mount=type=bind,source=pkgs,target=/tmp/pkgs \
+  ZERO_INSTALL_SOURCE="${ZERO_PACKAGE:-$ZERO_VERSION}" && \
   if echo "$ZERO_INSTALL_SOURCE" | grep -q "\.tgz$"; then \
     FILENAME=$(basename "$ZERO_INSTALL_SOURCE") && \
     echo "Installing from local tarball $FILENAME" && \
     cp "/tmp/pkgs/$FILENAME" . && \
     pnpm add ./$FILENAME && \
-    rm -rf /tmp/pkgs ./$FILENAME; \
+    rm -rf ./$FILENAME; \
   else \
     echo "Installing from npm @rocicorp/zero@$ZERO_INSTALL_SOURCE" && \
     pnpm add @rocicorp/zero@${ZERO_INSTALL_SOURCE}; \
