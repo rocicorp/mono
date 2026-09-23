@@ -2,7 +2,7 @@
   "name": "zqlite-zql-test",
   "version": "0.0.0",
   "private": true,
-  "description": "zql tests against zqlite TableSource",
+  "description": "zql tests against zqlite TableSource, write-through and deferred-writes",
   "type": "module",
   "scripts": {
     "format": "oxfmt .",
@@ -10,8 +10,8 @@
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
-    "test": "vitest run",
-    "test:watch": "vitest watch",
+    "test": "vitest run --config vitest.config.write-through.ts && vitest run --config vitest.config.deferred-writes.ts",
+    "test:watch": "vitest watch --config vitest.config.write-through.ts",
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },

@@ -42,8 +42,26 @@ export const createSource: SourceFactory = (
     )}));`,
   );
   db.exec(query);
-  return new TableSource(lc, logConfig, db, tableName, columns, primaryKey);
+  return new TableSource(
+    lc,
+    logConfig,
+    db,
+    tableName,
+    columns,
+    primaryKey,
+    undefined,
+    {deferWrites: DEFER_WRITES},
+  );
 };
+
+/**
+ * Runs the shared ZQL suite against a `TableSource` whose derivation is
+ * read-only -- changes accumulate in a `PendingDelta` and are merged into each
+ * leaf scan rather than being written to the backing database. The two modes
+ * must be indistinguishable to every operator above the source, which is
+ * exactly what this suite checks when run both ways.
+ */
+const DEFER_WRITES = process.env.ZQLITE_TEST_DEFER_WRITES === '1';
 
 export function mapResultToClientNames<T, S extends Schema>(
   result: unknown,

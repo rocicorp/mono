@@ -1025,7 +1025,7 @@ export class PipelineDriver {
       this.#tables,
       // Sources skip changes that none of this client group's pipelines can
       // observe, so a `prev` they write to diverges from other groups'.
-      'divergent',
+      this.#config?.deferIvmWrites ? 'none' : 'divergent',
     );
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
@@ -1062,7 +1062,7 @@ export class PipelineDriver {
         `${totalHydrationTimeMs} ms.`,
     );
     try {
-      for (const {table, prevValues, nextValue} of diff) {
+      for (const {table, prevValues: probedPrevValues, nextValue} of diff) {
         // Advance progress is checked each time a row is fetched
         // from a TableSource during push processing, but some pushes
         // don't read any rows.  Check progress here before processing
@@ -1082,6 +1082,16 @@ export class PipelineDriver {
               continue;
             }
             const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+            // The diff probed the `prev` snapshot for the rows this change
+            // collides with. If the source is deferring its writes, the
+            // earlier changes of this advancement are not in that snapshot,
+            // so the probe has to be reconciled against them. A no-op for a
+            // write-through source, which has already applied them to `prev`.
+            const prevValues = tableSource.reconcilePendingConflicts(
+              probedPrevValues,
+              nextValue,
+              this.#tableSpecs.get(table)?.tableSpec.uniqueKeys ?? [],
+            );
             let editOldRow: Row | undefined = undefined;
             for (const prevValue of prevValues) {
               if (
@@ -1159,7 +1169,10 @@ export class PipelineDriver {
         () => this.#shouldYield(),
         // Pipelines only read tables through their connections, and the
         // sources are moved to the next snapshot after every advancement.
-        {skipUnobservableChanges: true},
+        {
+          skipUnobservableChanges: true,
+          deferWrites: this.#config?.deferIvmWrites ?? false,
+        },
       );
       this.#lc.debug?.(`created TableSource for ${tableName}`);
       return source;

@@ -57,6 +57,12 @@ const NO_TIME_ADVANCEMENT_TIMER: Timer = {
   totalElapsed: () => 0,
 };
 
+// Set by `vitest.config.deferred-ivm.ts`, which runs this whole file a second
+// time with view-syncer derivation held in an in-memory batch overlay instead
+// of written to (and rolled back out of) the replica snapshot. Every result
+// here must be identical either way.
+const deferIvmWrites = process.env['ZERO_TEST_DEFER_IVM_WRITES'] === '1';
+
 describe('view-syncer/pipeline-driver', () => {
   const shardID: ShardID = {appID: 'zeroz', shardNum: 1};
   const mutationsTableName = `${upstreamSchema(shardID)}.mutations`;
@@ -85,6 +91,8 @@ describe('view-syncer/pipeline-driver', () => {
       'pipeline-driver.test.ts',
       new InspectorDelegate(undefined),
       () => 200 /** yield threshold */,
+      undefined,
+      {deferIvmWrites} as never,
     );
 
     db = dbFile.connect(lc);
@@ -760,6 +768,8 @@ describe('view-syncer/pipeline-driver', () => {
       'foo-client-group',
       new InspectorDelegate(undefined),
       () => 200 /** yield threshold */,
+      undefined,
+      {deferIvmWrites} as never,
     );
     pipelines.init(clientSchema);
 
@@ -1812,6 +1822,8 @@ describe('view-syncer/pipeline-driver', () => {
         'pipeline-driver.test.ts',
         new InspectorDelegate(undefined),
         () => 200 /** yield threshold */,
+        undefined,
+        {deferIvmWrites} as never,
       );
     const a = makeDriver('a');
     const b = makeDriver('b');

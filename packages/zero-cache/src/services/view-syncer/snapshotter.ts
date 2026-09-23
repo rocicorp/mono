@@ -263,8 +263,10 @@ export interface TableFilter {
  * * `divergent`: callers apply different subsets of the changes (e.g. the
  *   pipeline driver skips changes that no pipeline can observe), so such a
  *   read depends on the caller and is not shared.
+ * * `none`: the caller does not write to `prev` (e.g. IVM derivation is
+ *   held in memory), so every read depends solely on `prev.version`.
  */
-export type PrevWrites = 'uniform' | 'divergent';
+export type PrevWrites = 'uniform' | 'divergent' | 'none';
 
 /**
  * Represents the difference between two database Snapshots.
@@ -724,7 +726,8 @@ class Diff implements SnapshotDiff {
             }
 
             const cache = this.#rowCache;
-            const prevDependsOnWrites = tableSpec.uniqueKeys.length > 1;
+            const prevDependsOnWrites =
+              tableSpec.uniqueKeys.length > 1 && this.#prevWrites !== 'none';
             const prevCache =
               prevDependsOnWrites && this.#prevWrites === 'divergent'
                 ? undefined

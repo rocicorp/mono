@@ -655,6 +655,25 @@ export const zeroOptions = {
     ],
   },
 
+  deferIvmWrites: {
+    type: v.boolean().default(false),
+    desc: [
+      `Derive IVM advancements without writing to the replica snapshot.`,
+      ``,
+      `A view-syncer normally makes each change durable in the SQLite snapshot`,
+      `it is reading from, because the next change has to read a base that`,
+      `includes the previous ones. Those writes are always rolled back -- the`,
+      `replicator is the only committer -- so they exist only to serve reads`,
+      `for the rest of the advancement.`,
+      ``,
+      `When enabled, the changes are held in memory and merged into each leaf`,
+      `scan instead, leaving the snapshot read-only. This is a performance`,
+      `experiment; the two modes are required to be indistinguishable to the`,
+      `pipelines above the source.`,
+    ],
+    hidden: true,
+  },
+
   yieldThresholdMs: {
     type: v.number().default(10),
     desc: [
