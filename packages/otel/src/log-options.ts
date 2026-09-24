@@ -25,6 +25,10 @@ export const logOptions = {
     type: v.number().default(100),
     desc: [
       `The number of milliseconds a query hydration must take to print a slow warning.`,
+      ``,
+      `The warning logs the query with its literal values redacted, and is logged`,
+      `at most once every 5 minutes per query shape (the query with its values`,
+      `redacted), with a count of the slow hydrations suppressed in between.`,
     ],
   },
 

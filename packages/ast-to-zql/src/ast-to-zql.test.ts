@@ -261,6 +261,87 @@ test('with start', () => {
   );
 });
 
+test('redactLiterals renders every literal and the start row as ?', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'ownerID'},
+          op: '=',
+          right: {type: 'static', anchor: 'authData', field: 'sub'},
+        },
+        {
+          type: 'or',
+          conditions: [
+            {
+              type: 'simple',
+              left: {type: 'column', name: 'title'},
+              op: 'ILIKE',
+              right: {type: 'literal', value: '%secret%'},
+            },
+            {
+              type: 'simple',
+              left: {type: 'column', name: 'id'},
+              op: 'IN',
+              right: {type: 'literal', value: ['a', 'b', 'c']},
+            },
+            {
+              type: 'simple',
+              left: {type: 'column', name: 'assigneeID'},
+              op: 'IS',
+              right: {type: 'literal', value: null},
+            },
+          ],
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['id'], childField: ['issueID']},
+            subquery: {
+              table: 'comment',
+              alias: 'zsubq_comments',
+              where: {
+                type: 'simple',
+                left: {type: 'column', name: 'body'},
+                op: '=',
+                right: {type: 'literal', value: 'hunter2'},
+              },
+            },
+          },
+        },
+      ],
+    },
+    related: [
+      {
+        correlation: {parentField: ['id'], childField: ['issueID']},
+        subquery: {
+          table: 'label',
+          alias: 'labels',
+          where: {
+            type: 'simple',
+            left: {type: 'column', name: 'name'},
+            op: '!=',
+            right: {type: 'literal', value: 42},
+          },
+        },
+      },
+    ],
+    orderBy: [
+      ['modified', 'desc'],
+      ['id', 'asc'],
+    ],
+    limit: 50,
+    start: {row: {modified: 1700000000000, id: 'private'}, exclusive: true},
+  };
+  expect(astToZQL(ast, {redactLiterals: true})).toMatchInlineSnapshot(
+    `".where('ownerID', authParam('sub')).where(({cmp, or}) => or(cmp('title', 'ILIKE', ?), cmp('id', 'IN', ?), cmp('assigneeID', 'IS', ?))).whereExists('comments', q => q.where('body', ?)).related('labels', q => q.where('name', '!=', ?)).orderBy('modified', 'desc').orderBy('id', 'asc').limit(50).start(?)"`,
+  );
+});
+
 test('whereExists condition', () => {
   const ast: AST = {
     table: 'issue',

@@ -26,12 +26,12 @@ import {SUBQ_PREFIX} from '../../zero-protocol/src/ast.ts';
  * console.log(astToZQL(ast)); // outputs: .where('id', '=', 123)
  * ```
  */
-export function astToZQL(ast: AST): string {
+export function astToZQL(ast: AST, options: AstToZQLOptions = {}): string {
   let code = '';
 
   // Handle where conditions
   if (ast.where) {
-    code += transformCondition(ast.where, '.where', new Set());
+    code += transformCondition(ast.where, '.where', new Set(), options);
   }
 
   // Handle related subqueries
@@ -40,10 +40,10 @@ export function astToZQL(ast: AST): string {
       if (related.hidden) {
         const nestedRelated = related.subquery.related?.[0];
         if (nestedRelated) {
-          code += transformRelated(nestedRelated);
+          code += transformRelated(nestedRelated, options);
         }
       } else {
-        code += transformRelated(related);
+        code += transformRelated(related, options);
       }
     }
   }
@@ -61,13 +61,21 @@ export function astToZQL(ast: AST): string {
   // Handle start
   if (ast.start) {
     const {row, exclusive} = ast.start;
-    code += `.start(${JSON.stringify(row)}${
+    code += `.start(${options.redactLiterals ? '?' : JSON.stringify(row)}${
       exclusive ? '' : ', { inclusive: true }'
     })`;
   }
 
   return code;
 }
+
+export type AstToZQLOptions = {
+  /**
+   * Renders every literal value, and the `start` row, as `?` so that the
+   * output can be logged without leaking row data or query arguments.
+   */
+  readonly redactLiterals?: boolean | undefined;
+};
 
 type Args = Set<string>;
 
@@ -77,15 +85,16 @@ function transformCondition(
   condition: Condition,
   prefix: Prefix,
   args: Args,
+  options: AstToZQLOptions,
 ): string {
   switch (condition.type) {
     case 'simple':
-      return transformSimpleCondition(condition, prefix);
+      return transformSimpleCondition(condition, prefix, options);
     case 'and':
     case 'or':
-      return transformLogicalCondition(condition, prefix, args);
+      return transformLogicalCondition(condition, prefix, args, options);
     case 'correlatedSubquery':
-      return transformExistsCondition(condition, prefix, args);
+      return transformExistsCondition(condition, prefix, args, options);
     default:
       unreachable(condition);
   }
@@ -94,11 +103,12 @@ function transformCondition(
 function transformSimpleCondition(
   condition: SimpleCondition,
   prefix: Prefix,
+  options: AstToZQLOptions,
 ): string {
   const {left, op, right} = condition;
 
-  const leftCode = transformValuePosition(left);
-  const rightCode = transformValuePosition(right);
+  const leftCode = transformValuePosition(left, options);
+  const rightCode = transformValuePosition(right, options);
 
   // Handle the shorthand form for equals
   if (op === '=') {
@@ -112,17 +122,20 @@ function transformLogicalCondition(
   condition: Conjunction | Disjunction,
   prefix: Prefix,
   args: Args,
+  options: AstToZQLOptions,
 ): string {
   const {type, conditions} = condition;
 
   // For single condition, no need for logical operator
   if (conditions.length === 1) {
-    return transformCondition(conditions[0], prefix, args);
+    return transformCondition(conditions[0], prefix, args, options);
   }
 
   // Generate multiple where calls for top-level AND conditions
   if (type === 'and') {
-    const parts = conditions.map(c => transformCondition(c, prefix, args));
+    const parts = conditions.map(c =>
+      transformCondition(c, prefix, args, options),
+    );
     // Simply concatenate the where conditions
     if (prefix === '.where') {
       return parts.join('');
@@ -135,7 +148,7 @@ function transformLogicalCondition(
 
   // Handle nested conditions with a callback for OR conditions and nested ANDs/ORs
   const conditionsCode = conditions
-    .map(c => transformCondition(c, 'cmp', args))
+    .map(c => transformCondition(c, 'cmp', args, options))
     .join(', ');
 
   args.add('cmp');
@@ -149,6 +162,7 @@ function transformExistsCondition(
   condition: CorrelatedSubqueryCondition,
   prefix: '.where' | 'cmp',
   args: Set<string>,
+  options: AstToZQLOptions,
 ): string {
   const {related, op} = condition;
   const relationship = extractRelationshipName(related);
@@ -183,11 +197,11 @@ function transformExistsCondition(
     }
 
     if (prefix === '.where') {
-      return `.whereExists('${relationship}', q => q${astToZQL(nextSubquery)}${optionsStr})`;
+      return `.whereExists('${relationship}', q => q${astToZQL(nextSubquery, options)}${optionsStr})`;
     }
     prefix satisfies 'cmp';
     args.add('exists');
-    return `exists('${relationship}', q => q${astToZQL(nextSubquery)}${optionsStr})`;
+    return `exists('${relationship}', q => q${astToZQL(nextSubquery, options)}${optionsStr})`;
   }
 
   op satisfies 'NOT EXISTS';
@@ -196,12 +210,13 @@ function transformExistsCondition(
     if (prefix === '.where') {
       return `.where(({exists, not}) => not(exists('${relationship}', q => q${astToZQL(
         nextSubquery,
+        options,
       )}${optionsStr})))`;
     }
     prefix satisfies 'cmp';
     args.add('not');
     args.add('exists');
-    return `not(exists('${relationship}', q => q${astToZQL(nextSubquery)}${optionsStr}))`;
+    return `not(exists('${relationship}', q => q${astToZQL(nextSubquery, options)}${optionsStr}))`;
   }
 
   if (prefix === '.where') {
@@ -234,7 +249,10 @@ function extractRelationshipName(related: CorrelatedSubquery): string {
     : alias;
 }
 
-function transformRelated(related: CorrelatedSubquery): string {
+function transformRelated(
+  related: CorrelatedSubquery,
+  options: AstToZQLOptions,
+): string {
   const {alias} = related.subquery;
   if (!alias) return '';
 
@@ -248,7 +266,7 @@ function transformRelated(related: CorrelatedSubquery): string {
     related.subquery.orderBy ||
     related.subquery.limit
   ) {
-    code += ', q => q' + astToZQL(related.subquery);
+    code += ', q => q' + astToZQL(related.subquery, options);
   }
 
   code += ')';
@@ -263,10 +281,13 @@ function transformOrder(orderBy: Ordering): string {
   return code;
 }
 
-function transformValuePosition(value: ValuePosition): string {
+function transformValuePosition(
+  value: ValuePosition,
+  options: AstToZQLOptions,
+): string {
   switch (value.type) {
     case 'literal':
-      return transformLiteral(value);
+      return options.redactLiterals ? '?' : transformLiteral(value);
     case 'column':
       return `'${value.name}'`;
     case 'static':

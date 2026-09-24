@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {
   AST,
   Condition,
@@ -2444,6 +2445,43 @@ describe('view-syncer/pipeline-driver', () => {
         },
       ]
     `);
+  });
+
+  test('hydrationStats counts rows output and rows read', () => {
+    pipelines.init(clientSchema);
+    expect(pipelines.hydrationStats('queryID')).toBeUndefined();
+
+    const rows = [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID',
+        ISSUES_QUERY_WITH_EXISTS,
+        startTimer(),
+      ),
+    ].filter(change => change !== 'yield');
+
+    const stats = must(pipelines.hydrationStats('queryID'));
+    expect(stats.rowCount).toBe(rows.length);
+    // Only issue 1 has a label, but every issue and its label edges are read
+    // to find that out.
+    expect(stats.rowsRead).toBeGreaterThan(stats.rowCount);
+
+    // A second hydration only counts its own reads.
+    [
+      ...pipelines.addQuery(
+        'hash2',
+        'queryID2',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    ];
+    const stats2 = must(pipelines.hydrationStats('queryID2'));
+    // 3 issues and 4 comments, each read once.
+    expect(stats2).toEqual({rowCount: 7, rowsRead: 7});
+    expect(pipelines.hydrationStats('queryID')).toEqual(stats);
+
+    pipelines.removeQuery('queryID');
+    expect(pipelines.hydrationStats('queryID')).toBeUndefined();
   });
 
   test('subset client schema can hydrate whereExists helper tables', () => {

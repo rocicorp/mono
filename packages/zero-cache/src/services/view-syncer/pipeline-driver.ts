@@ -97,6 +97,7 @@ type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
   readonly hydrationRowCount: number;
+  readonly hydrationRowsRead: number;
   readonly hydrationReason: PipelineHydrationReason;
   readonly pipelineRunID: string;
   readonly pipelineReadyAtMs: number;
@@ -112,6 +113,18 @@ export type QueryInfo = {
   readonly originalAst?: AST | undefined;
   readonly transformationHash: string;
   readonly queryName?: string | undefined;
+};
+
+export type HydrationStats = {
+  /** The rows the hydration output. */
+  readonly rowCount: number;
+  /**
+   * The rows the hydration read from the replica, including rows that were
+   * then filtered out, e.g. by a filter that could not be pushed to SQLite or
+   * by an EXISTS that did not match. Much greater than {@link rowCount} means
+   * the query does a lot of work for the rows it returns.
+   */
+  readonly rowsRead: number;
 };
 
 type QueryLogInfo = {
@@ -147,6 +160,7 @@ type QueryPipelineLifecycleLog = {
   readonly stopReason?: PipelineStopReason | undefined;
   readonly hydrationTimeMs?: number | undefined;
   readonly hydrationRowCount?: number | undefined;
+  readonly hydrationRowsRead?: number | undefined;
   readonly pipelineLifetimeMs?: number | undefined;
 };
 
@@ -511,6 +525,28 @@ export class PipelineDriver {
     return this.#pipelines;
   }
 
+  /**
+   * Stats from the hydration of the pipeline for `queryID`, or `undefined` if
+   * the query has no pipeline.
+   */
+  hydrationStats(queryID: string): HydrationStats | undefined {
+    const pipeline = this.#pipelines.get(queryID);
+    return pipeline
+      ? {
+          rowCount: pipeline.hydrationRowCount,
+          rowsRead: pipeline.hydrationRowsRead,
+        }
+      : undefined;
+  }
+
+  #totalRowsRead(): number {
+    let total = 0;
+    for (const table of this.#tables.values()) {
+      total += table.rowsRead;
+    }
+    return total;
+  }
+
   totalHydrationTimeMs(): number {
     let total = 0;
     for (const pipeline of this.#pipelines.values()) {
@@ -554,6 +590,7 @@ export class PipelineDriver {
     stopReason,
     hydrationTimeMs,
     hydrationRowCount,
+    hydrationRowsRead,
     pipelineLifetimeMs,
   }: QueryPipelineLifecycleLog): void {
     let lc = this.#lc
@@ -575,6 +612,9 @@ export class PipelineDriver {
     }
     if (hydrationRowCount !== undefined) {
       lc = lc.withContext('hydrationRowCount', hydrationRowCount);
+    }
+    if (hydrationRowsRead !== undefined) {
+      lc = lc.withContext('hydrationRowsRead', hydrationRowsRead);
     }
     if (pipelineLifetimeMs !== undefined) {
       lc = lc.withContext('pipelineLifetimeMs', pipelineLifetimeMs);
@@ -748,6 +788,10 @@ export class PipelineDriver {
     this.#hydrateContext = {
       timer,
     };
+    // Hydration has the driver to itself, so the rows read by all of its
+    // tables in the meantime are the rows read by this hydration. Tables
+    // added by the hydration start from zero, which this also accounts for.
+    const rowsReadAtStart = this.#totalRowsRead();
     let hydrationFinished = false;
     let hydrationFailed = false;
     let hydrationRowCount = 0;
@@ -829,6 +873,7 @@ export class PipelineDriver {
       }
 
       const hydrationTimeMs = timer.totalElapsed();
+      const hydrationRowsRead = this.#totalRowsRead() - rowsReadAtStart;
       if (runtimeDebugFlags.trackRowCountsVended) {
         if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
           let totalRowsConsidered = 0;
@@ -894,6 +939,7 @@ export class PipelineDriver {
         input,
         hydrationTimeMs,
         hydrationRowCount,
+        hydrationRowsRead,
         hydrationReason,
         pipelineRunID,
         pipelineReadyAtMs,
@@ -913,6 +959,7 @@ export class PipelineDriver {
         hydrationReason,
         hydrationTimeMs,
         hydrationRowCount,
+        hydrationRowsRead,
       });
     } catch (e) {
       hydrationFailed = true;
