@@ -51,25 +51,44 @@ export class MeasurePushOperator implements Operator {
     this.#input.destroy();
   }
 
-  *push(change: Change): Stream<'yield'> {
-    const startTime = performance.now();
-    yield* this.#output.push(change, this);
-    this.#metricsDelegate.addMetric(
-      this.#metricName,
-      performance.now() - startTime,
-      this.#queryID,
-    );
+  push(change: Change): Stream<'yield'> {
+    return this.#measure(() => this.#output.push(change, this));
   }
 
   *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      const startTime = performance.now();
-      yield* this.#output.reconcile(this);
-      this.#metricsDelegate.addMetric(
-        this.#metricName,
-        performance.now() - startTime,
-        this.#queryID,
-      );
+    const reconcile = this.#output.reconcile?.bind(this.#output);
+    if (reconcile) {
+      yield* this.#measure(() => reconcile(this));
+    }
+  }
+
+  /**
+   * Runs the stream returned by `run` and records the time spent running it.
+   *
+   * The time the stream spends suspended at a `yield` is not counted: the
+   * caller yields the thread there, and whatever else runs in the meantime
+   * is not this query's work.
+   *
+   * The time is recorded even if the stream throws or is abandoned, so that
+   * a push aborted for taking too long is accounted to its query.
+   */
+  *#measure(run: () => Stream<'yield'>): Stream<'yield'> {
+    let elapsed = 0;
+    let start = performance.now();
+    let running = true;
+    try {
+      for (const result of run()) {
+        elapsed += performance.now() - start;
+        running = false;
+        yield result;
+        running = true;
+        start = performance.now();
+      }
+    } finally {
+      if (running) {
+        elapsed += performance.now() - start;
+      }
+      this.#metricsDelegate.addMetric(this.#metricName, elapsed, this.#queryID);
     }
   }
 }

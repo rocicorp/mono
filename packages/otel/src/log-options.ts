@@ -32,6 +32,20 @@ export const logOptions = {
     ],
   },
 
+  slowAdvanceThreshold: {
+    type: v.number().default(100),
+    desc: [
+      `The number of milliseconds a query must take to process one advancement`,
+      `(the changes of a replicated transaction, or a batch of them) to print a`,
+      `slow warning.`,
+      ``,
+      `Like {bold slowHydrateThreshold}, the warning logs the query with its values`,
+      `redacted, at most once every 5 minutes per query shape. When an advancement`,
+      `times out and resets the pipelines, the queries that took the most time are`,
+      `logged regardless of this threshold.`,
+    ],
+  },
+
   planWarningRowThreshold: {
     type: v.number().default(10_000),
     desc: [

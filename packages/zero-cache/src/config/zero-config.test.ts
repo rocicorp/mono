@@ -351,6 +351,17 @@ test('zero-cache --help', () => {
                                                                                    at most once every 5 minutes per query shape (the query with its values                                                    
                                                                                    redacted), with a count of the slow hydrations suppressed in between.                                                      
                                                                                                                                                                                                               
+     --log-slow-advance-threshold number                                           default: 100                                                                                                               
+       ZERO_LOG_SLOW_ADVANCE_THRESHOLD env                                                                                                                                                                    
+                                                                                   The number of milliseconds a query must take to process one advancement                                                    
+                                                                                   (the changes of a replicated transaction, or a batch of them) to print a                                                   
+                                                                                   slow warning.                                                                                                              
+                                                                                                                                                                                                              
+                                                                                   Like slowHydrateThreshold, the warning logs the query with its values                                                      
+                                                                                   redacted, at most once every 5 minutes per query shape. When an advancement                                                
+                                                                                   times out and resets the pipelines, the queries that took the most time are                                                
+                                                                                   logged regardless of this threshold.                                                                                       
+                                                                                                                                                                                                              
      --log-plan-warning-row-threshold number                                       default: 10000                                                                                                             
        ZERO_LOG_PLAN_WARNING_ROW_THRESHOLD env                                                                                                                                                                
                                                                                    Log a warning when the query planner estimates that one read of a table                                                    

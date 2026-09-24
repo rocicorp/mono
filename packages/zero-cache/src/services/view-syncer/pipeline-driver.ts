@@ -42,6 +42,10 @@ import type {
   PlanWarningThresholds,
 } from '../../../../zql/src/planner/planner-warnings.ts';
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
+import type {
+  MetricMap,
+  MetricsDelegate,
+} from '../../../../zql/src/query/metrics-delegate.ts';
 import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {
@@ -187,6 +191,10 @@ type AdvanceContext = {
   heldBytes: number;
   currentChangeStartMs: number | undefined;
   pos: number;
+  /** The table of the change being pushed. */
+  currentTable: string | undefined;
+  /** The processing time of each query's pushes, by query ID. */
+  readonly queryStats: Map<string, QueryAdvanceStats>;
 };
 
 /**
@@ -195,6 +203,20 @@ type AdvanceContext = {
  * to reserve, or more rows held than reserved.
  */
 type HeldRows = 'fits' | 'bytes' | 'rows' | 'row-overrun';
+
+type QueryAdvanceStats = {
+  /** The time spent processing pushes to the query. */
+  timeMs: number;
+  /** The number of changes pushed to the query. */
+  changes: number;
+  /** The position of the last change pushed to the query. */
+  lastPos: number;
+  /** {@link timeMs} by the table of the change pushed. */
+  readonly timeMsByTable: Map<string, number>;
+};
+
+/** The most queries a log of an advancement timeout lists. */
+const ADVANCE_TIMEOUT_LOG_MAX_QUERIES = 3;
 
 type HydrateContext = {
   readonly timer: Timer;
@@ -230,6 +252,16 @@ const PLAN_WARNING_LOG_WINDOW_MS = 60 * 60_000;
 // throttled across client groups.
 const planWarningLogThrottle = new LogThrottle({
   windowMs: PLAN_WARNING_LOG_WINDOW_MS,
+});
+
+/**
+ * Slow advancements of a query shape, and advancement timeouts led by it,
+ * are logged at most once per this window per process.
+ */
+const SLOW_ADVANCE_LOG_WINDOW_MS = 5 * 60_000;
+
+const slowAdvanceLogThrottle = new LogThrottle({
+  windowMs: SLOW_ADVANCE_LOG_WINDOW_MS,
 });
 
 function randomID() {
@@ -362,6 +394,23 @@ export class PipelineDriver {
   );
 
   readonly #inspectorDelegate: InspectorDelegate;
+
+  /**
+   * Passes the pipelines' metrics on to the inspector, and accounts the time
+   * spent pushing to each query to the advancement in progress.
+   */
+  readonly #metricsDelegate: MetricsDelegate = {
+    addMetric: <K extends keyof MetricMap>(
+      metric: K,
+      value: number,
+      ...args: MetricMap[K]
+    ) => {
+      this.#inspectorDelegate.addMetric(metric, value, ...args);
+      if (metric === 'query-update-server') {
+        this.#recordAdvancePush(args[0], value);
+      }
+    },
+  };
 
   constructor(
     lc: LogContext,
@@ -904,7 +953,7 @@ export class PipelineDriver {
                 queryName,
               ),
               queryID,
-              this.#inspectorDelegate,
+              this.#metricsDelegate,
               'query-update-server',
             ),
           decorateInput: input => input,
@@ -1243,6 +1292,8 @@ export class PipelineDriver {
       heldBytes: 0,
       currentChangeStartMs: undefined,
       pos: 0,
+      currentTable: undefined,
+      queryStats: new Map(),
     };
     this.#advanceContext = advanceContext;
     // The reservation is made here rather than in advance(), so that the
@@ -1278,6 +1329,7 @@ export class PipelineDriver {
         }
         const start = timer.totalElapsed();
         advanceContext.currentChangeStartMs = start;
+        advanceContext.currentTable = table;
 
         let holds: HeldRows = 'fits';
         try {
@@ -1368,6 +1420,15 @@ export class PipelineDriver {
       }
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
       this.#lc.debug?.(`Advanced to ${curr.version}`);
+      this.#logSlowAdvances(advanceContext);
+    } catch (e) {
+      if (
+        e instanceof ResetPipelinesSignal &&
+        e.reason === 'advancement-timeout'
+      ) {
+        this.#logAdvanceTimeout(advanceContext, e);
+      }
+      throw e;
     } finally {
       if (advanceContext.reservedRows !== undefined) {
         // An advancement that completed has moved its sources to `curr`,
@@ -1470,6 +1531,147 @@ export class PipelineDriver {
       advanceContext.reservedRows = undefined;
       advanceContext.heldBytes = 0;
     }
+  }
+
+  #recordAdvancePush(queryID: string, timeMs: number): void {
+    const advance = this.#advanceContext;
+    if (advance === null) {
+      return;
+    }
+    const stats = getOrInsertComputed(advance.queryStats, queryID, () => ({
+      timeMs: 0,
+      changes: 0,
+      lastPos: -1,
+      timeMsByTable: new Map(),
+    }));
+    stats.timeMs += timeMs;
+    if (stats.lastPos !== advance.pos) {
+      stats.lastPos = advance.pos;
+      stats.changes++;
+    }
+    const table = advance.currentTable;
+    if (table !== undefined) {
+      stats.timeMsByTable.set(
+        table,
+        (stats.timeMsByTable.get(table) ?? 0) + timeMs,
+      );
+    }
+  }
+
+  /**
+   * The identity of the query of the pipeline for `queryID` and its
+   * {@link queryShape}, for logging.
+   */
+  #queryForLog(queryID: string) {
+    const pipeline = this.#pipelines.get(queryID);
+    if (pipeline === undefined) {
+      return undefined;
+    }
+    const {transformationHash, queryName, originalAst} = pipeline;
+    const shape = queryShape(originalAst);
+    return {
+      queryName,
+      shape,
+      fields: {
+        queryHash: queryID,
+        transformationHash,
+        ...(queryName !== undefined && {queryName}),
+        queryShape: shape.hash,
+      },
+    };
+  }
+
+  /**
+   * Logs each query whose pushes took longer than the slow advance
+   * threshold, at most once per query shape per
+   * {@link SLOW_ADVANCE_LOG_WINDOW_MS}.
+   */
+  #logSlowAdvances({queryStats, numChanges}: AdvanceContext): void {
+    if (!this.#lc.warn) {
+      return;
+    }
+    for (const [queryID, stats] of queryStats) {
+      if (stats.timeMs <= this.#logConfig.slowAdvanceThreshold) {
+        continue;
+      }
+      const query = this.#queryForLog(queryID);
+      if (query === undefined) {
+        continue;
+      }
+      const suppressed = slowAdvanceLogThrottle.admit(
+        `${query.queryName ?? ''}:${query.shape.hash}`,
+      );
+      if (suppressed === undefined) {
+        continue;
+      }
+      this.#lc.warn(
+        `Slow query advancement${query.queryName === undefined ? '' : ` for ${query.queryName}`}: ` +
+          `${Math.round(stats.timeMs)} ms for ${stats.changes} of ${numChanges} changes`,
+        {
+          zeroEvent: 'query-slow-advance',
+          ...query.fields,
+          advanceTimeMs: stats.timeMs,
+          changes: stats.changes,
+          advancementChanges: numChanges,
+          timeMsByTable: Object.fromEntries(stats.timeMsByTable),
+          ...(suppressed > 0 && {suppressedSinceLastLog: suppressed}),
+          zql: query.shape.zql,
+        },
+      );
+    }
+  }
+
+  /**
+   * Logs the queries that took the most time in an advancement that timed
+   * out, since the reset that follows would otherwise not say what was slow.
+   * Throttled per query shape of the slowest query.
+   */
+  #logAdvanceTimeout(
+    {queryStats, numChanges}: AdvanceContext,
+    reset: ResetPipelinesSignal,
+  ): void {
+    if (!this.#lc.warn) {
+      return;
+    }
+    const slowest = [...queryStats]
+      .toSorted(([, a], [, b]) => b.timeMs - a.timeMs)
+      .slice(0, ADVANCE_TIMEOUT_LOG_MAX_QUERIES)
+      .flatMap(([queryID, stats]) => {
+        const query = this.#queryForLog(queryID);
+        return query ? [{query, stats}] : [];
+      });
+    if (slowest.length === 0) {
+      return;
+    }
+    const suppressed = slowAdvanceLogThrottle.admit(
+      `timeout:${slowest[0].query.queryName ?? ''}:${slowest[0].query.shape.hash}`,
+    );
+    if (suppressed === undefined) {
+      return;
+    }
+    const summary = slowest
+      .map(
+        ({query, stats}) =>
+          `${query.queryName ?? query.fields.queryHash} (${Math.round(stats.timeMs)} ms)`,
+      )
+      .join(', ');
+    this.#lc.warn(
+      `Advancement of ${numChanges} changes timed out. ` +
+        `The queries that took the most time: ${summary}`,
+      {
+        zeroEvent: 'query-advance-timeout',
+        // Says where the advancement was when it timed out.
+        reason: reset.message,
+        advancementChanges: numChanges,
+        queries: slowest.map(({query, stats}) => ({
+          ...query.fields,
+          advanceTimeMs: stats.timeMs,
+          changes: stats.changes,
+          zql: query.shape.zql,
+        })),
+        ...(suppressed > 0 && {suppressedSinceLastLog: suppressed}),
+      },
+    );
   }
 
   /** Implements `BuilderDelegate.getSource()` */

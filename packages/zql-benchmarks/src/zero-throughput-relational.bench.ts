@@ -447,6 +447,7 @@ function setupZqlite(): BenchState {
       level: 'error',
       ivmSampling: 0,
       slowHydrateThreshold: 0,
+      slowAdvanceThreshold: 0,
       slowRowThreshold: 0,
       planWarningRowThreshold: 0,
       planWarningCostThreshold: 0,
