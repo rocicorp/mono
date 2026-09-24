@@ -28,7 +28,7 @@ import {
 } from '../db/test-helpers.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {type Hash, assertHash, makeNewFakeHashFunction} from '../hash.ts';
-import type {ZeroTxData} from '../replicache-options.ts';
+import type {ZeroReadOptions, ZeroTxData} from '../replicache-options.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import {
   type WriteTransaction,
@@ -901,20 +901,28 @@ describe('persistDD31', () => {
     // holds the read that fixed the base snapshot. The probe below asks for
     // the memdag write lock from inside getZeroData; while the read is held it
     // cannot be granted.
-    const seen: {readOptions: unknown; writeGranted: string}[] = [];
+    const seen: {
+      readOptions: ZeroReadOptions | undefined;
+      writeGranted?: string | undefined;
+    }[] = [];
     const getZeroData = async (
       _desiredHead: Hash,
-      readOptions?: {openLazyRead?: unknown; openLazySourceRead?: unknown},
+      readOptions?: ZeroReadOptions,
     ): Promise<ZeroTxData> => {
-      const writeProbe = memdag.write().then(write => {
-        write.release();
-        return 'granted' as const;
-      });
-      const writeGranted = await Promise.race([
-        writeProbe,
-        sleep(20).then(() => 'blocked' as const),
-      ]);
-      seen.push({readOptions, writeGranted});
+      // Only the first call, the fork to the memdag base snapshot, is probed.
+      if (seen.length === 0) {
+        const writeProbe = memdag.write().then(write => {
+          write.release();
+          return 'granted' as const;
+        });
+        const writeGranted = await Promise.race([
+          writeProbe,
+          sleep(20).then(() => 'blocked' as const),
+        ]);
+        seen.push({readOptions, writeGranted});
+      } else {
+        seen.push({readOptions});
+      }
       const txData: ZeroTxData = {
         ivmSources: undefined,
         token: undefined,
