@@ -13,14 +13,8 @@ import {
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
-  canonicalKey,
-  generateWithOverlay,
-  generateWithOverlayUnordered,
-  getMatchingParentEntries,
-  indexParentInStorage,
-  isJoinMatch,
+  JoinIndex,
   rowEqualsForCompoundKey,
-  unindexParentInStorage,
   type JoinStorage,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
@@ -33,12 +27,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
-import {
-  isInParentFetch,
-  readParentFetchBounds,
-  type ParentFetchBound,
-  type TakeBoundProvider,
-} from './take-gate.ts';
+import {type TakeBoundProvider} from './take-gate.ts';
 
 type Args = {
   parent: Input;
@@ -71,23 +60,9 @@ export class Join implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
-  readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #storage: JoinStorage;
-  readonly #boundProvider: TakeBoundProvider | undefined;
+  readonly #joinIndex: JoinIndex;
 
   #output: Output = throwOutput;
-
-  #inprogressChildChange: Change | undefined;
-  #inprogressChildChangePosition: Row | undefined;
-  /**
-   * Primary keys of the parents #inprogressChildChange has reached so far,
-   * kept only when the parent input is unordered. An unordered stream is not
-   * in `compareRows` order (SQLite returns it in whatever order its plan
-   * visits, e.g. rowid order), so whether a parent is still in the push queue
-   * cannot be decided by comparing it to #inprogressChildChangePosition.
-   */
-  #inprogressReachedParents: Set<string> | undefined;
-  #inprogressParentFetchBounds: ParentFetchBound[] | undefined;
 
   constructor({
     parent,
@@ -98,7 +73,6 @@ export class Join implements Input {
     hidden,
     system,
     parentPartitionKey,
-    boundProvider,
     storage,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
@@ -111,9 +85,12 @@ export class Join implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
-    this.#parentPartitionKey = parentPartitionKey;
-    this.#storage = storage as unknown as JoinStorage;
-    this.#boundProvider = boundProvider;
+    this.#joinIndex = new JoinIndex(
+      storage as unknown as JoinStorage,
+      parentKey,
+      parent.getSchema().primaryKey,
+      parentPartitionKey,
+    );
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -164,7 +141,7 @@ export class Join implements Input {
         yield parentNode;
         continue;
       }
-      this.#indexParentRow(parentNode.row);
+      this.#joinIndex.index(parentNode.row);
       yield this.#processParentNode(parentNode.row, parentNode.relationships);
     }
   }
@@ -172,7 +149,7 @@ export class Join implements Input {
   *#pushParent(change: Change): Stream<'yield'> {
     switch (change[ChangeIndex.TYPE]) {
       case ChangeType.ADD:
-        this.#indexParentRow(change[ChangeIndex.NODE].row);
+        this.#joinIndex.index(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeAddChange(
             this.#processParentNode(
@@ -184,7 +161,7 @@ export class Join implements Input {
         );
         break;
       case ChangeType.REMOVE:
-        this.#unindexParentRow(change[ChangeIndex.NODE].row);
+        this.#joinIndex.unindex(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeRemoveChange(
             this.#processParentNode(
@@ -217,8 +194,8 @@ export class Join implements Input {
           ),
           `Parent edit must not change relationship.`,
         );
-        this.#unindexParentRow(change[ChangeIndex.OLD_NODE].row);
-        this.#indexParentRow(change[ChangeIndex.NODE].row);
+        this.#joinIndex.unindex(change[ChangeIndex.OLD_NODE].row);
+        this.#joinIndex.index(change[ChangeIndex.NODE].row);
         yield* this.#output.push(
           makeEditChange(
             this.#processParentNode(
@@ -266,120 +243,53 @@ export class Join implements Input {
   }
 
   *#pushChildChange(childRow: Row, change: Change): Stream<'yield'> {
-    this.#inprogressChildChange = change;
-    this.#inprogressChildChangePosition = undefined;
-    this.#inprogressReachedParents =
-      this.#parent.getSchema().sort === undefined ? new Set() : undefined;
-    try {
-      const constraint = buildJoinConstraint(
-        childRow,
-        this.#childKey,
-        this.#parentKey,
+    const constraint = buildJoinConstraint(
+      childRow,
+      this.#childKey,
+      this.#parentKey,
+    );
+    if (!constraint) {
+      return;
+    }
+    const matching = this.#joinIndex.getMatching(childRow, this.#childKey);
+    if (!matching) {
+      return;
+    }
+
+    const fetchConstraints = matching.map(entry =>
+      entry.partitionConstraint
+        ? {...constraint, ...entry.partitionConstraint}
+        : constraint,
+    );
+
+    let parentNodeStream: Stream<Node | 'yield'>;
+    if (fetchConstraints.length === 1) {
+      parentNodeStream = this.#parent.fetch({
+        constraint: fetchConstraints[0],
+      });
+    } else {
+      const streams = fetchConstraints.map(c =>
+        this.#parent.fetch({constraint: c}),
       );
-      if (constraint) {
-        const matching = getMatchingParentEntries(
-          this.#storage,
-          childRow,
-          this.#childKey,
-          this.#parentPartitionKey,
-        );
-        if (!matching) {
-          return;
-        }
+      const compare = (a: Node, b: Node) =>
+        this.#schema.compareRows(a.row, b.row);
+      parentNodeStream = mergeSortedStreams(streams, compare);
+    }
 
-        const fetchConstraints = matching.map(entry =>
-          entry.partitionConstraint
-            ? {...constraint, ...entry.partitionConstraint}
-            : constraint,
-        );
-        if (this.#boundProvider) {
-          this.#inprogressParentFetchBounds = readParentFetchBounds(
-            this.#boundProvider,
-            fetchConstraints,
-          );
-        }
-
-        let parentNodeStream: Stream<Node | 'yield'>;
-        if (fetchConstraints.length === 1) {
-          parentNodeStream = this.#parent.fetch({
-            constraint: fetchConstraints[0],
-          });
-        } else {
-          const streams = fetchConstraints.map(c =>
-            this.#parent.fetch({constraint: c}),
-          );
-          const compare = (a: Node, b: Node) =>
-            this.#schema.compareRows(a.row, b.row);
-          parentNodeStream = mergeSortedStreams(streams, compare);
-        }
-
-        for (const parentNode of parentNodeStream) {
-          if (parentNode === 'yield') {
-            yield parentNode;
-            continue;
-          }
-          this.#inprogressChildChangePosition = parentNode.row;
-          this.#inprogressReachedParents?.add(
-            canonicalKey(parentNode.row, this.#schema.primaryKey),
-          );
-          const childChange = makeChildChange(
-            this.#processParentNode(parentNode.row, parentNode.relationships),
-            {
-              relationshipName: this.#relationshipName,
-              change,
-            },
-          );
-          yield* this.#output.push(childChange, this);
-        }
+    for (const parentNode of parentNodeStream) {
+      if (parentNode === 'yield') {
+        yield parentNode;
+        continue;
       }
-    } finally {
-      this.#inprogressChildChange = undefined;
-      this.#inprogressChildChangePosition = undefined;
-      this.#inprogressReachedParents = undefined;
-      this.#inprogressParentFetchBounds = undefined;
-    }
-  }
-
-  /**
-   * Whether the in-progress child change has yet to reach `parentNodeRow`,
-   * i.e. the row comes after #inprogressChildChangePosition in the parent
-   * stream.
-   */
-  #isAfterInprogressPosition(parentNodeRow: Row): boolean {
-    if (this.#inprogressChildChangePosition === undefined) {
-      return false;
-    }
-    if (this.#inprogressReachedParents) {
-      return !this.#inprogressReachedParents.has(
-        canonicalKey(parentNodeRow, this.#schema.primaryKey),
+      const childChange = makeChildChange(
+        this.#processParentNode(parentNode.row, parentNode.relationships),
+        {
+          relationshipName: this.#relationshipName,
+          change,
+        },
       );
+      yield* this.#output.push(childChange, this);
     }
-    return (
-      this.#schema.compareRows(
-        parentNodeRow,
-        this.#inprogressChildChangePosition,
-      ) > 0
-    );
-  }
-
-  #indexParentRow(row: Row): void {
-    indexParentInStorage(
-      this.#storage,
-      row,
-      this.#parentKey,
-      this.#parent.getSchema().primaryKey,
-      this.#parentPartitionKey,
-    );
-  }
-
-  #unindexParentRow(row: Row): void {
-    unindexParentInStorage(
-      this.#storage,
-      row,
-      this.#parentKey,
-      this.#parent.getSchema().primaryKey,
-      this.#parentPartitionKey,
-    );
   }
 
   #processParentNode(
@@ -392,46 +302,7 @@ export class Join implements Input {
         this.#parentKey,
         this.#childKey,
       );
-      const stream = constraint ? this.#child.fetch({constraint}) : [];
-
-      // The parent has yet to get the in-progress child change if it comes
-      // after the current position and a parent fetch of the push yields it.
-      // With a TakeGate the fetches are capped at the bounds read when they
-      // started.
-      const inPushQueue =
-        this.#isAfterInprogressPosition(parentNodeRow) &&
-        (this.#inprogressParentFetchBounds === undefined ||
-          isInParentFetch(
-            this.#inprogressParentFetchBounds,
-            parentNodeRow,
-            this.#schema.compareRows,
-          ));
-
-      if (
-        this.#inprogressChildChange &&
-        isJoinMatch(
-          parentNodeRow,
-          this.#parentKey,
-          this.#inprogressChildChange[ChangeIndex.NODE].row,
-          this.#childKey,
-        ) &&
-        inPushQueue
-      ) {
-        const childSchema = this.#child.getSchema();
-        if (childSchema.sort === undefined) {
-          return generateWithOverlayUnordered(
-            stream,
-            this.#inprogressChildChange,
-            childSchema,
-          );
-        }
-        return generateWithOverlay(
-          stream,
-          this.#inprogressChildChange,
-          childSchema,
-        );
-      }
-      return stream;
+      return constraint ? this.#child.fetch({constraint}) : [];
     };
 
     return {

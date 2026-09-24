@@ -8,6 +8,7 @@ import type {
   FilterInput,
   FilterOperator,
   FilterOutput,
+  FilterStart,
 } from './filter-operators.ts';
 import {
   type FetchRequest,
@@ -172,6 +173,10 @@ export class FilterSnitch implements FilterOperator {
     return this.#input.getSchema();
   }
 
+  getFilterStart(): FilterStart | undefined {
+    return this.#input.getFilterStart?.();
+  }
+
   #log(message: SnitchMessage) {
     if (!this.#logTypes.includes(message[1])) {
       return;
@@ -183,12 +188,6 @@ export class FilterSnitch implements FilterOperator {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
     if (this.#output) {
       yield* this.#output.push(change, this);
-    }
-  }
-
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output?.reconcile) {
-      yield* this.#output.reconcile(this);
     }
   }
 }

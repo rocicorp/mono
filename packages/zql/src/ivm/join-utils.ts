@@ -1,207 +1,8 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import {ChangeIndex} from './change-index.ts';
-import {ChangeType} from './change-type.ts';
-import type {Change} from './change.ts';
-import {compareValues, valuesEqual, type Node} from './data.ts';
-import type {SourceSchema} from './schema.ts';
+import {compareValues, valuesEqual} from './data.ts';
 import type {Stream} from './stream.ts';
-
-export function generateWithOverlayNoYield(
-  stream: Stream<Node>,
-  overlay: Change,
-  schema: SourceSchema,
-): Stream<Node> {
-  return generateWithOverlay(stream, overlay, schema) as Stream<Node>;
-}
-
-export function* generateWithOverlay(
-  stream: Stream<Node | 'yield'>,
-  overlay: Change,
-  schema: SourceSchema,
-): Stream<Node | 'yield'> {
-  let applied = false;
-  let editOldApplied = false;
-  let editNewApplied = false;
-  for (const node of stream) {
-    if (node === 'yield') {
-      yield node;
-      continue;
-    }
-    let yieldNode = true;
-    if (!applied) {
-      switch (overlay[ChangeIndex.TYPE]) {
-        case ChangeType.ADD: {
-          if (
-            schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
-          ) {
-            applied = true;
-            yieldNode = false;
-          }
-          break;
-        }
-        case ChangeType.REMOVE: {
-          if (schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) < 0) {
-            applied = true;
-            yield overlay[ChangeIndex.NODE];
-          }
-          break;
-        }
-        case ChangeType.EDIT: {
-          if (
-            !editOldApplied &&
-            schema.compareRows(overlay[ChangeIndex.OLD_NODE].row, node.row) < 0
-          ) {
-            editOldApplied = true;
-            if (editNewApplied) {
-              applied = true;
-            }
-            yield overlay[ChangeIndex.OLD_NODE];
-          }
-          if (
-            !editNewApplied &&
-            schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
-          ) {
-            editNewApplied = true;
-            if (editOldApplied) {
-              applied = true;
-            }
-            yieldNode = false;
-          }
-          break;
-        }
-        case ChangeType.CHILD: {
-          if (
-            schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
-          ) {
-            applied = true;
-            yield {
-              row: node.row,
-              relationships: {
-                ...node.relationships,
-                [overlay[ChangeIndex.CHILD_DATA].relationshipName]: () =>
-                  generateWithOverlay(
-                    node.relationships[
-                      overlay[ChangeIndex.CHILD_DATA].relationshipName
-                    ](),
-                    overlay[ChangeIndex.CHILD_DATA].change,
-                    schema.relationships[
-                      overlay[ChangeIndex.CHILD_DATA].relationshipName
-                    ],
-                  ),
-              },
-            };
-            yieldNode = false;
-          }
-          break;
-        }
-      }
-    }
-    if (yieldNode) {
-      yield node;
-    }
-  }
-  if (!applied) {
-    if (overlay[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-      applied = true;
-      yield overlay[ChangeIndex.NODE];
-    } else if (overlay[ChangeIndex.TYPE] === ChangeType.EDIT) {
-      assert(
-        editNewApplied,
-        'edit overlay: new node must be applied before old node',
-      );
-      editOldApplied = true;
-      applied = true;
-      yield overlay[ChangeIndex.OLD_NODE];
-    }
-  }
-
-  assert(
-    applied,
-    'overlayGenerator: overlay was never applied to any fetched node',
-  );
-}
-
-export function generateWithOverlayNoYieldUnordered(
-  stream: Stream<Node>,
-  overlay: Change,
-  schema: SourceSchema,
-): Stream<Node> {
-  return generateWithOverlayUnordered(stream, overlay, schema) as Stream<Node>;
-}
-
-export function* generateWithOverlayUnordered(
-  stream: Stream<Node | 'yield'>,
-  overlay: Change,
-  schema: SourceSchema,
-): Stream<Node | 'yield'> {
-  // Eager inject
-  if (overlay[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-    yield overlay[ChangeIndex.NODE];
-  } else if (overlay[ChangeIndex.TYPE] === ChangeType.EDIT) {
-    yield overlay[ChangeIndex.OLD_NODE];
-  }
-
-  // Stream with inline suppress
-  let suppressed = false;
-  for (const node of stream) {
-    if (node === 'yield') {
-      yield node;
-      continue;
-    }
-    if (!suppressed) {
-      if (
-        overlay[ChangeIndex.TYPE] === ChangeType.ADD ||
-        overlay[ChangeIndex.TYPE] === ChangeType.EDIT
-      ) {
-        if (
-          rowEqualsForCompoundKey(
-            overlay[ChangeIndex.NODE].row,
-            node.row,
-            schema.primaryKey,
-          )
-        ) {
-          suppressed = true;
-          continue;
-        }
-      }
-      if (overlay[ChangeIndex.TYPE] === ChangeType.CHILD) {
-        if (
-          rowEqualsForCompoundKey(
-            overlay[ChangeIndex.NODE].row,
-            node.row,
-            schema.primaryKey,
-          )
-        ) {
-          suppressed = true;
-          yield {
-            row: node.row,
-            relationships: {
-              ...node.relationships,
-              [overlay[ChangeIndex.CHILD_DATA].relationshipName]: () =>
-                generateWithOverlay(
-                  node.relationships[
-                    overlay[ChangeIndex.CHILD_DATA].relationshipName
-                  ](),
-                  overlay[ChangeIndex.CHILD_DATA].change,
-                  schema.relationships[
-                    overlay[ChangeIndex.CHILD_DATA].relationshipName
-                  ],
-                ),
-            },
-          };
-          continue;
-        }
-      }
-    }
-    yield node;
-  }
-  assert(
-    suppressed || overlay[ChangeIndex.TYPE] === ChangeType.REMOVE,
-    'overlayGenerator: overlay was never applied to any fetched node',
-  );
-}
 
 export function rowEqualsForCompoundKey(
   a: Row,
@@ -362,26 +163,123 @@ export function decodePartitionConstraint(
   return constraint;
 }
 
+export class JoinIndex {
+  readonly #storage: JoinStorage;
+  readonly #parentKey: CompoundKey;
+  readonly #primaryKey: CompoundKey;
+  readonly #parentPartitionKey?: CompoundKey | undefined;
+
+  constructor(
+    storage: JoinStorage,
+    parentKey: CompoundKey,
+    primaryKey: CompoundKey,
+    parentPartitionKey?: CompoundKey,
+  ) {
+    this.#storage = storage;
+    this.#parentKey = parentKey;
+    this.#primaryKey = primaryKey;
+    this.#parentPartitionKey = parentPartitionKey;
+  }
+
+  index(row: Row, value: number = 1): void {
+    const key = this.#makeKey(row);
+    if (key) {
+      this.#storage.set(key, value);
+    }
+  }
+
+  unindex(row: Row): void {
+    const key = this.#makeKey(row);
+    if (key) {
+      this.#storage.del(key);
+    }
+  }
+
+  get(row: Row): number | undefined {
+    const key = this.#makeKey(row);
+    return key ? (this.#storage.get(key) as number | undefined) : undefined;
+  }
+
+  has(row: Row): boolean {
+    return this.get(row) !== undefined;
+  }
+
+  increment(row: Row): {oldCount: number; newCount: number} {
+    const oldCount = this.get(row) ?? 0;
+    const newCount = oldCount + 1;
+    this.index(row, newCount);
+    return {oldCount, newCount};
+  }
+
+  decrement(row: Row): {oldCount: number | undefined; newCount: number} {
+    const current = this.get(row);
+    if (current === undefined) {
+      return {oldCount: undefined, newCount: 0};
+    }
+    const newCount = current - 1;
+    if (newCount > 0) {
+      this.index(row, newCount);
+    } else {
+      this.unindex(row);
+    }
+    return {oldCount: current, newCount: Math.max(0, newCount)};
+  }
+
+  getMatching(
+    childRow: Row,
+    childKey: CompoundKey,
+  ): MatchingParentEntry[] | undefined {
+    return getMatchingParentEntries(
+      this.#storage,
+      childRow,
+      childKey,
+      this.#parentPartitionKey,
+    );
+  }
+
+  delEntry(
+    joinKey: string,
+    pk: string,
+    partitionConstraint?: Record<string, Value | undefined>,
+  ): void {
+    const storageKey = this.#parentPartitionKey
+      ? makePartitionStorageKey(
+          joinKey,
+          canonicalKey(partitionConstraint!, this.#parentPartitionKey),
+          pk,
+        )
+      : makeUnpartitionedStorageKey(joinKey, pk);
+    this.#storage.del(storageKey);
+  }
+
+  #makeKey(row: Row): string | undefined {
+    if (this.#parentKey.some(k => row[k] === null)) {
+      return undefined;
+    }
+    const joinKey = canonicalKey(row, this.#parentKey);
+    const parentPk = canonicalKey(row, this.#primaryKey);
+    return this.#parentPartitionKey
+      ? makePartitionStorageKey(
+          joinKey,
+          canonicalKey(row, this.#parentPartitionKey),
+          parentPk,
+        )
+      : makeUnpartitionedStorageKey(joinKey, parentPk);
+  }
+}
+
 export function indexParentInStorage(
   storage: JoinStorage,
   row: Row,
   parentKey: CompoundKey,
   primaryKey: CompoundKey,
   parentPartitionKey?: CompoundKey,
+  count: number = 1,
 ): void {
-  if (parentKey.some(k => row[k] === null)) {
-    return;
-  }
-  const joinKey = canonicalKey(row, parentKey);
-  const parentPk = canonicalKey(row, primaryKey);
-  const storageKey = parentPartitionKey
-    ? makePartitionStorageKey(
-        joinKey,
-        canonicalKey(row, parentPartitionKey),
-        parentPk,
-      )
-    : makeUnpartitionedStorageKey(joinKey, parentPk);
-  storage.set(storageKey, 1);
+  new JoinIndex(storage, parentKey, primaryKey, parentPartitionKey).index(
+    row,
+    count,
+  );
 }
 
 export function unindexParentInStorage(
@@ -391,19 +289,9 @@ export function unindexParentInStorage(
   primaryKey: CompoundKey,
   parentPartitionKey?: CompoundKey,
 ): void {
-  if (parentKey.some(k => row[k] === null)) {
-    return;
-  }
-  const joinKey = canonicalKey(row, parentKey);
-  const parentPk = canonicalKey(row, primaryKey);
-  const storageKey = parentPartitionKey
-    ? makePartitionStorageKey(
-        joinKey,
-        canonicalKey(row, parentPartitionKey),
-        parentPk,
-      )
-    : makeUnpartitionedStorageKey(joinKey, parentPk);
-  storage.del(storageKey);
+  new JoinIndex(storage, parentKey, primaryKey, parentPartitionKey).unindex(
+    row,
+  );
 }
 
 export type MatchingParentEntry = {

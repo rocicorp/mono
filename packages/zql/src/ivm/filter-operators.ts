@@ -29,9 +29,11 @@ import {type Stream} from './stream.ts';
 export interface FilterInput extends InputBase {
   /** Tell the input where to send its output. */
   setFilterOutput(output: FilterOutput): void;
+  getFilterStart?(): FilterStart | undefined;
 }
 
-export interface FilterOutput extends Output {
+export interface FilterOutput {
+  push(change: Change, pusher: InputBase): Stream<'yield'>;
   // Lets the operator know that we're in a loop of filtering
   // nodes. E.g., so the operator can cache results for the
   // duration of the loop.
@@ -58,10 +60,6 @@ export const throwFilterOutput: FilterOutput = {
     throw new Error('Output not set');
   },
 
-  reconcile(): Stream<'yield'> {
-    throw new Error('Output not set');
-  },
-
   beginFilter() {},
   endFilter() {},
 };
@@ -70,6 +68,8 @@ export class FilterStart implements FilterInput, Output {
   readonly #input: Input;
   readonly #condition: NoSubqueryCondition | undefined;
   #output: FilterOutput = throwFilterOutput;
+  #end: FilterEnd | undefined;
+  readonly #deferredFlushes: Array<() => Stream<'yield'>> = [];
 
   constructor(input: Input, condition?: NoSubqueryCondition) {
     this.#input = input;
@@ -77,11 +77,28 @@ export class FilterStart implements FilterInput, Output {
     input.setOutput(this);
   }
 
+  getFilterStart(): FilterStart {
+    return this;
+  }
+
+  registerDeferredFlush(flush: () => Stream<'yield'>): void {
+    this.#deferredFlushes.push(flush);
+  }
+
+  *pushFromFilterStart(change: Change): Stream<'yield'> {
+    yield* this.#output.push(change, this);
+  }
+
   setFilterOutput(output: FilterOutput) {
     this.#output = output;
   }
 
+  setFilterEnd(end: FilterEnd) {
+    this.#end = end;
+  }
+
   destroy(): void {
+    this.#deferredFlushes.length = 0;
     this.#input.destroy();
   }
 
@@ -94,8 +111,15 @@ export class FilterStart implements FilterInput, Output {
   }
 
   *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
+    while (this.#deferredFlushes.length > 0) {
+      const flushes = [...this.#deferredFlushes];
+      this.#deferredFlushes.length = 0;
+      for (const flush of flushes) {
+        yield* flush();
+      }
+    }
+    if (this.#end) {
+      yield* this.#end.reconcileFromStart();
     }
   }
 
@@ -145,6 +169,7 @@ export class FilterEnd implements Input, FilterOutput {
     this.#start = start;
     this.#input = input;
     input.setFilterOutput(this);
+    start.setFilterEnd(this);
   }
 
   fetch(req: FetchRequest): Stream<Node | 'yield'> {
@@ -174,7 +199,7 @@ export class FilterEnd implements Input, FilterOutput {
     return this.#output.push(change, this);
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
+  *reconcileFromStart(): Stream<'yield'> {
     if (this.#output.reconcile) {
       yield* this.#output.reconcile(this);
     }

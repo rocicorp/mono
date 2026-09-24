@@ -727,18 +727,28 @@ describe('applyChange', () => {
         }
       `);
 
-      expect(() =>
-        apply({
-          type: 'remove',
-          node: {
-            row: {
-              id: '2',
-              name: 'Greg',
-            },
-            relationships: {},
+      apply({
+        type: 'remove',
+        node: {
+          row: {
+            id: '2',
+            name: 'Greg',
           },
-        }),
-      ).toThrowError(new Error('node does not exist'));
+          relationships: {},
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+              Symbol(rc): 1,
+              Symbol(id): ""1"",
+            },
+          ],
+        }
+      `);
     });
 
     test('column named __proto__ with JSON array is preserved on Object.assign edit path', () => {

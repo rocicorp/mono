@@ -188,21 +188,6 @@ suite('EXISTS 1 to many', () => {
           ],
           [
             ":flipped-join(issue)",
-            "fetch",
-            {
-              "constraint": undefined,
-              "reverse": true,
-              "start": {
-                "basis": "after",
-                "row": {
-                  "id": "c2",
-                  "issueID": "i1",
-                },
-              },
-            },
-          ],
-          [
-            ":flipped-join(issue)",
             "push",
             {
               "row": {
@@ -217,7 +202,6 @@ suite('EXISTS 1 to many', () => {
             "fetch",
             {
               "constraint": undefined,
-              "reverse": true,
               "start": {
                 "basis": "after",
                 "row": {
@@ -225,14 +209,6 @@ suite('EXISTS 1 to many', () => {
                   "issueID": "i1",
                 },
               },
-            },
-          ],
-          [
-            ":flipped-join(issue)",
-            "fetch",
-            {
-              "constraint": undefined,
-              "start": undefined,
             },
           ],
         ]
@@ -254,21 +230,6 @@ suite('EXISTS 1 to many', () => {
           ],
           [
             ":flipped-join(issue)",
-            "fetch",
-            {
-              "constraint": undefined,
-              "reverse": true,
-              "start": {
-                "basis": "after",
-                "row": {
-                  "id": "c2",
-                  "issueID": "i1",
-                },
-              },
-            },
-          ],
-          [
-            ":flipped-join(issue)",
             "push",
             {
               "row": {
@@ -283,7 +244,6 @@ suite('EXISTS 1 to many', () => {
             "fetch",
             {
               "constraint": undefined,
-              "reverse": true,
               "start": {
                 "basis": "after",
                 "row": {
@@ -291,14 +251,6 @@ suite('EXISTS 1 to many', () => {
                   "issueID": "i1",
                 },
               },
-            },
-          ],
-          [
-            ":flipped-join(issue)",
-            "fetch",
-            {
-              "constraint": undefined,
-              "start": undefined,
             },
           ],
         ]
