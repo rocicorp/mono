@@ -49,6 +49,7 @@ import {getMutationResultsQuery} from './cvr.ts';
 import {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {testDeferredWritesBudget} from './deferred-writes-test-util.ts';
 import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
+import {QueryStats} from './query-stats.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {RowID} from './schema/types.ts';
 import {SnapshotRowCache} from './snapshot-row-cache.ts';
@@ -1454,6 +1455,7 @@ describe('view-syncer/pipeline-driver', () => {
   function warnLoggingDrivers(
     clientGroupIDs: string[],
     logConfig: Partial<typeof testLogConfig>,
+    queryStats?: QueryStats,
   ): PipelineDriver[] {
     const warnLC = new LogContext('warn', undefined, logSink);
     const storage = new Database(lc, ':memory:');
@@ -1469,11 +1471,87 @@ describe('view-syncer/pipeline-driver', () => {
         clientGroupID,
         new InspectorDelegate(undefined),
         () => 200 /** yield threshold */,
+        undefined,
+        undefined,
+        queryStats,
       );
       driver.init(clientSchema);
       return driver;
     });
   }
+
+  function flushQueryStats(queryStats: QueryStats) {
+    const sink = new TestLogSink();
+    queryStats.flush(new LogContext('info', undefined, sink));
+    return sink.messages.map(([, , [, fields]]) => fields);
+  }
+
+  test('accounts hydrations and advancements to query shapes across client groups', () => {
+    const queryStats = new QueryStats();
+    const drivers = warnLoggingDrivers(
+      ['cg1', 'cg2'],
+      {slowAdvanceThreshold: 60_000},
+      queryStats,
+    );
+    for (const driver of drivers) {
+      [
+        ...driver.addQuery(
+          'hash1',
+          'queryID1',
+          ISSUES_AND_COMMENTS,
+          startTimer(),
+          'issuesAndComments',
+        ),
+      ];
+    }
+    replicator.processTransaction(
+      '134',
+      messages.insert('comments', {id: '41', issueID: '1', upvotes: 10}),
+      messages.insert('comments', {id: '42', issueID: '2', upvotes: 20}),
+    );
+    for (const driver of drivers) {
+      [...driver.advance(startTimer()).changes];
+    }
+
+    const distribution = {
+      count: 2,
+      sumMs: expect.any(Number),
+      minMs: expect.any(Number),
+      maxMs: expect.any(Number),
+    };
+    const counts = {
+      timeMs: expect.any(Number),
+      hydrations: distribution,
+      hydrationsAborted: 0,
+      hydrationsFailed: 0,
+      hydrationRowCount: 14,
+      hydrationRowsRead: expect.any(Number),
+      advances: distribution,
+      advanceChanges: 4,
+      advanceTimeouts: 0,
+    };
+    expect(flushQueryStats(queryStats)).toEqual([
+      {
+        zeroEvent: 'query-stats',
+        intervalMs: expect.any(Number),
+        queryName: 'issuesAndComments',
+        queryShape: expect.any(String),
+        ...counts,
+        zql:
+          "issues.related('comments', q => q.orderBy('id', 'desc'))" +
+          ".orderBy('id', 'desc')",
+      },
+      {
+        zeroEvent: 'query-stats-summary',
+        intervalMs: expect.any(Number),
+        shapes: 1,
+        shapesReported: 1,
+        ...counts,
+      },
+    ]);
+    // The next interval starts empty.
+    expect(flushQueryStats(queryStats)).toEqual([]);
+  });
 
   function warnings(zeroEvent: string) {
     return logSink.messages.filter(
@@ -1555,9 +1633,12 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('logs the slowest queries of an advancement that times out', () => {
-    const [driver] = warnLoggingDrivers(['cg1'], {
-      slowAdvanceThreshold: 60_000,
-    });
+    const queryStats = new QueryStats();
+    const [driver] = warnLoggingDrivers(
+      ['cg1'],
+      {slowAdvanceThreshold: 60_000},
+      queryStats,
+    );
     const hydrationTimer = {totalElapsed: () => 50, elapsedLap: () => 50};
     [
       ...driver.addQuery(
@@ -1620,6 +1701,33 @@ describe('view-syncer/pipeline-driver', () => {
           },
         ],
       ],
+    ]);
+
+    // The timed out advancement is accounted to the queries it pushed to.
+    expect(
+      flushQueryStats(queryStats).map(fields => {
+        const {zeroEvent, queryName, advances, advanceTimeouts} = fields as {
+          zeroEvent: string;
+          queryName?: string;
+          advances: {count: number};
+          advanceTimeouts: number;
+        };
+        return {
+          zeroEvent,
+          queryName,
+          advances: advances.count,
+          advanceTimeouts,
+        };
+      }),
+    ).toEqual([
+      expect.objectContaining({advances: 1, advanceTimeouts: 1}),
+      expect.objectContaining({advances: 0, advanceTimeouts: 0}),
+      {
+        zeroEvent: 'query-stats-summary',
+        queryName: undefined,
+        advances: 1,
+        advanceTimeouts: 1,
+      },
     ]);
   });
 

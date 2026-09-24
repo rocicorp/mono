@@ -29,6 +29,7 @@ import {
 import {DeferredWritesBudget} from '../services/view-syncer/deferred-writes-budget.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
+import {QueryStats} from '../services/view-syncer/query-stats.ts';
 import {SnapshotRowCache} from '../services/view-syncer/snapshot-row-cache.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
@@ -216,6 +217,17 @@ export default async function runWorker(
     }).addCallback(o => o.observe(deferredWritesBudget.heldBytes));
   }
 
+  // Shared by all of the view-syncers on this worker, so that the work done
+  // for each query shape is logged once per worker per interval.
+  const queryStats =
+    config.log.queryStatsIntervalSeconds > 0 ? new QueryStats() : undefined;
+  const stopQueryStats = queryStats?.start(
+    lc
+      .withContext('taskID', config.taskID)
+      .withContext('component', 'view-syncer'),
+    config.log.queryStatsIntervalSeconds * 1000,
+  );
+
   const viewSyncerFactory = (
     id: string,
     sub: Subscription<ReplicaState>,
@@ -280,6 +292,7 @@ export default async function runWorker(
         config.enableQueryPlanner,
         config,
         deferredWritesBudget,
+        queryStats,
       ),
       sub,
       drainCoordinator,
@@ -330,7 +343,12 @@ export default async function runWorker(
 
   void dbWarmup.then(() => parent.send(['ready', {ready: true}]));
 
-  return runUntilKilled(lc, parent, syncer);
+  try {
+    return await runUntilKilled(lc, parent, syncer);
+  } finally {
+    // Logs the work done since the last interval.
+    stopQueryStats?.();
+  }
 }
 
 // fork()
