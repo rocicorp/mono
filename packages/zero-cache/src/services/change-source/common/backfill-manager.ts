@@ -1,9 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {Queue} from '../../../../../shared/src/queue.ts';
 import {randInt} from '../../../../../shared/src/rand.ts';
 import {JSON_STRINGIFIED, type JSONFormat} from '../../../types/lite.ts';
 import {
@@ -48,6 +50,60 @@ type BackfillStreamer = (
  * COMMIT/checkpoint so it can't monopolize the replica.
  */
 const COMMIT_THRESHOLD_BYTES = 8 * 1024 * 1024;
+
+/**
+ * How many backfill messages the prefetch producer may read ahead of the
+ * reservation-holding consumer loop. This bounds the in-memory buffer (~this
+ * many {@link BackfillMessage}s, each up to the stream's flush threshold, e.g.
+ * 64 KiB) while giving the consumer a supply of ready messages so it never
+ * has to wait on the upstream COPY while holding the change-stream reservation.
+ */
+const BACKFILL_PREFETCH_CREDITS = 16;
+
+/**
+ * While the backfill holds an open transaction but its prefetch queue is empty
+ * (i.e. the upstream is momentarily behind), the consumer polls for the next
+ * message at this interval so that a replication transaction that begins
+ * waiting mid-fetch can preempt the backfill within this bound, rather than
+ * being blocked for the entire (possibly slow) upstream read.
+ *
+ * If stats indicate that these stalls are highly correlative with replication
+ * lag (indicating that replication changes are waiting on these polls), we
+ * can address this by adding an API to the change stream multiplexer that
+ * would allow backfill to relinquish an in-progress commit on demand (i.e.
+ * only if replication asks for a reservation).
+ */
+const BACKFILL_WAITER_POLL_MS = 10;
+
+/** Interval at which in-progress backfill timing stats are logged. */
+const BACKFILL_STATS_LOG_INTERVAL_MS = 10_000;
+
+/** Sentinel enqueued by the prefetch producer when the backfill stream ends. */
+const DONE = Symbol('backfill-done');
+/** Sentinel returned by a polled dequeue that timed out (see {@link BACKFILL_WAITER_POLL_MS}). */
+const POLL = Symbol('backfill-poll');
+
+type Pull = BackfillMessage | typeof DONE | typeof POLL;
+
+/**
+ * Accumulated timing attribution for a single backfill run, logged
+ * periodically to reveal where the backfill spends its time (and, in
+ * particular, where the change-stream reservation is held). `produceMs`
+ * accrues on the prefetch producer task and thus overlaps with the consumer's
+ * `pushMs`; the others accrue on the reservation-holding consumer loop.
+ */
+type BackfillTimingStats = {
+  start: number;
+  lastLogged: number;
+  messages: number;
+  bytes: number;
+  commits: number;
+  stalls: number;
+  produceMs: number;
+  pushMs: number;
+  reserveMs: number;
+  stallMs: number;
+};
 
 type RunningBackfillState = {
   request: BackfillRequest;
@@ -111,8 +167,17 @@ export class BackfillManager implements Cancelable, Listener {
 
   readonly #commitThresholdBytes: number;
 
-  /** Set when the change stream is canceled. No further backfills are run. */
-  #canceled = false;
+  /**
+   * Aborted when the change stream is canceled. No further backfills are run.
+   *
+   * TODO: Thread this into the backfillStream so that upstream I/O can be
+   * aborted.
+   */
+  readonly #controller = new AbortController();
+
+  get #canceled() {
+    return this.#controller.signal.aborted;
+  }
 
   constructor(
     lc: LogContext,
@@ -237,6 +302,19 @@ export class BackfillManager implements Cancelable, Listener {
     let backfillTx: string | null = null;
     let uncommittedBytes = 0;
 
+    const stats: BackfillTimingStats = {
+      start: performance.now(),
+      lastLogged: performance.now(),
+      messages: 0,
+      bytes: 0,
+      commits: 0,
+      stalls: 0,
+      produceMs: 0,
+      pushMs: 0,
+      reserveMs: 0,
+      stallMs: 0,
+    };
+
     /**
      * @returns the new tx watermark, or null if backfill was cancelled
      */
@@ -295,70 +373,225 @@ export class BackfillManager implements Cancelable, Listener {
           {watermark: backfillTx},
         ]);
         changeStream.release(backfillTx);
+        stats.commits++;
       }
       backfillTx = null;
       uncommittedBytes = 0;
     };
 
-    for await (const {message: msg, byteSize} of this.#backfillStreamer(
-      state.request,
-    )) {
-      if (this.#canceled) {
-        // Exiting the loop finalizes the backfill stream (and the upstream
-        // resources it holds). The reservation, if held, does not need to be
-        // released since the change stream is gone.
-        lc.info?.(`backfill stream canceled: change stream canceled`);
-        return;
-      }
-      // Before sending `backfill-completed`, the main replication stream
-      // may need to catch up, and/or the current transaction may need to be
-      // committed to open a new transaction that's up to backfill watermark.
-      const mustWaitBeforeFlush =
-        msg.tag === 'backfill-completed' &&
-        (this.#changeStreamReached(lc, msg.watermark) ||
-          (backfillTx !== null && backfillTx < msg.watermark));
+    // === Prefetch producer ===
+    //
+    // The backfill stream (an upstream Postgres COPY) is drained on a separate
+    // task into a bounded queue, so that the reservation-holding consumer loop
+    // below never blocks on the upstream read while it holds the change-stream
+    // reservation. `credits` bounds how far the producer runs ahead; the
+    // consumer returns a credit for every message it takes.
+    const ready = new Queue<Pull>();
+    const credits = new Queue<1>();
+    for (let i = 0; i < BACKFILL_PREFETCH_CREDITS; i++) {
+      credits.enqueue(1);
+    }
+    let stopProducer = false;
 
-      // Commit (and later reopen) the transaction if the main stream is
-      // waiting on the reservation, if we must catch up before completing, or
-      // if the size of current transaction has reached the commit threshold.
-      if (
-        backfillTx &&
-        (changeStream.waiterDelay() > 0 ||
-          mustWaitBeforeFlush ||
-          uncommittedBytes >= this.#commitThresholdBytes)
-      ) {
-        commitTx();
-      }
-
-      mustWaitBeforeFlush && (await mustWaitBeforeFlush);
-
-      if (
-        msg.tag === 'backfill' &&
-        msg.rowValues.length > 0 &&
-        msg.relation.rowKey.columns.length === 0
-      ) {
-        throw new MissingRowKeyError(state.request);
-      }
-
-      // Reserve the changeStreamer if not in a transaction.
-      if ((backfillTx ??= await beginTxFor(msg)) === null) {
-        lc.info?.(
-          `backfill stream canceled: ${state.canceledReason}`,
-          state.request,
-        );
-        this.#checkAndStartBackfill(); // start the next backfill if present
-        return; // this backfill is canceled
-      }
-
-      // `await` to allow the change streamer to exert back pressure
-      // on backfills.
-      await changeStream.push(['data', msg]);
-      uncommittedBytes += byteSize;
+    // Wakes a consumer blocked awaiting the next prefetched message so a
+    // canceled backfill unwinds promptly.
+    const onCancel = () =>
+      ready.enqueueRejection(new AbortError('backfill canceled'));
+    if (!this.#canceled) {
+      this.#controller.signal.addEventListener('abort', onCancel);
     }
 
-    // Flush any final tx and release the stream.
-    backfillTx && commitTx();
-    lc.debug?.(`backfill stream exited`, state.canceledReason ?? '');
+    const producer = (async () => {
+      try {
+        let t0 = performance.now();
+        for await (const value of this.#backfillStreamer(state.request)) {
+          stats.produceMs += performance.now() - t0;
+          await credits.dequeue(); // wait for buffer space (flow control)
+          if (stopProducer || this.#canceled) {
+            ready.enqueueRejection(new AbortError('backfill canceled'));
+            return;
+          }
+          ready.enqueue(value);
+          t0 = performance.now();
+        }
+        ready.enqueue(DONE);
+      } catch (e) {
+        ready.enqueueRejection(e);
+      }
+    })();
+    // The producer routes errors through `ready` and never rejects; guard
+    // anyway so that leaving it un-awaited on the cancellation path (below)
+    // cannot surface as an unhandled rejection.
+    void producer.catch(() => {});
+
+    // === Consumer ===
+
+    // Fetches the next item from the prefetch queue. If a transaction is open
+    // but the queue is empty (the producer/upstream is momentarily behind),
+    // polls so that a replication transaction that begins waiting during the
+    // upstream read can preempt the backfill: rather than hold the reservation
+    // for the whole read, commit and release, letting replication proceed.
+    const nextItem = async (): Promise<BackfillMessage | typeof DONE> => {
+      // Fast path: a message is already buffered, or there's no reservation to
+      // protect. Take it without altering transaction boundaries. `POLL` is
+      // never enqueued (only used as a dequeue timeout value), so the result is
+      // always a message or DONE.
+      if (backfillTx === null || ready.size() > 0) {
+        const n = ready.dequeue();
+        const v = n instanceof Promise ? await n : n;
+        return v as BackfillMessage | typeof DONE;
+      }
+      // Slow path: holding a reservation with an empty queue.
+      for (;;) {
+        if (backfillTx !== null && changeStream.waiterDelay() > 0) {
+          commitTx(); // yield the stream to the waiting replication txn
+        }
+        const n =
+          backfillTx !== null
+            ? ready.dequeue(POLL, BACKFILL_WAITER_POLL_MS)
+            : ready.dequeue(); // released: just wait for the next message
+        const t0 = performance.now();
+        const v = n instanceof Promise ? await n : n;
+        if (v === POLL) {
+          stats.stallMs += performance.now() - t0; // timed out; re-check waiter
+          continue;
+        }
+        if (n instanceof Promise) {
+          stats.stallMs += performance.now() - t0;
+          stats.stalls++;
+        }
+        return v;
+      }
+    };
+
+    try {
+      for (;;) {
+        const item = await nextItem();
+        if (item === DONE) {
+          break;
+        }
+        // Allow the producer to fetch the next message concurrently with the
+        // processing (and downstream push) of this one.
+        credits.enqueue(1);
+
+        if (this.#canceled) {
+          // Returning finalizes the backfill stream (and the upstream resources
+          // it holds) via the producer's `finally`. The reservation, if held,
+          // does not need to be released since the change stream is gone.
+          lc.info?.(`backfill stream canceled: change stream canceled`);
+          return;
+        }
+        const {message: msg, byteSize} = item;
+
+        // Before sending `backfill-completed`, the main replication stream
+        // may need to catch up, and/or the current transaction may need to be
+        // committed to open a new transaction that's up to backfill watermark.
+        const mustWaitBeforeFlush =
+          msg.tag === 'backfill-completed' &&
+          (this.#changeStreamReached(lc, msg.watermark) ||
+            (backfillTx !== null && backfillTx < msg.watermark));
+
+        // Commit (and later reopen) the transaction if the main stream is
+        // waiting on the reservation, if we must catch up before completing, or
+        // if the size of current transaction has reached the commit threshold.
+        if (
+          backfillTx &&
+          (changeStream.waiterDelay() > 0 ||
+            mustWaitBeforeFlush ||
+            uncommittedBytes >= this.#commitThresholdBytes)
+        ) {
+          commitTx();
+        }
+
+        if (mustWaitBeforeFlush) {
+          await mustWaitBeforeFlush;
+        }
+
+        if (
+          msg.tag === 'backfill' &&
+          msg.rowValues.length > 0 &&
+          msg.relation.rowKey.columns.length === 0
+        ) {
+          throw new MissingRowKeyError(state.request);
+        }
+
+        // Reserve the changeStreamer if not in a transaction.
+        if (backfillTx === null) {
+          const t0 = performance.now();
+          backfillTx = await beginTxFor(msg);
+          stats.reserveMs += performance.now() - t0;
+          if (backfillTx === null) {
+            lc.info?.(
+              `backfill stream canceled: ${state.canceledReason}`,
+              state.request,
+            );
+            this.#checkAndStartBackfill(); // start the next backfill if present
+            return; // this backfill is canceled
+          }
+        }
+
+        // `await` to allow the change streamer to exert back pressure
+        // on backfills.
+        const t0 = performance.now();
+        await changeStream.push(['data', msg]);
+        stats.pushMs += performance.now() - t0;
+        uncommittedBytes += byteSize;
+        stats.messages++;
+        stats.bytes += byteSize;
+
+        this.#maybeLogBackfillStats(lc, stats);
+      }
+
+      // Flush any final tx and release the stream.
+      if (backfillTx) {
+        commitTx();
+      }
+      lc.debug?.(`backfill stream exited`, state.canceledReason ?? '');
+    } finally {
+      stopProducer = true;
+      credits.enqueue(1);
+      // The producer can potentially be hung on upstream I/O.
+      // TODO: Thread AbortSignal logic into the backfillStreamer.
+      if (!this.#canceled) {
+        await producer;
+      }
+      this.#controller.signal.removeEventListener('abort', onCancel);
+      this.#logBackfillStats(lc, stats);
+    }
+  }
+
+  #maybeLogBackfillStats(lc: LogContext, stats: BackfillTimingStats) {
+    const now = performance.now();
+    if (now - stats.lastLogged >= BACKFILL_STATS_LOG_INTERVAL_MS) {
+      this.#logBackfillStats(lc, stats);
+      stats.lastLogged = now;
+    }
+  }
+
+  /**
+   * Logs where the backfill spent its time. `produceMs` (upstream read +
+   * parse/decode) accrues on the prefetch producer concurrently with the
+   * consumer's `pushMs` (downstream backpressure), so the two can overlap and
+   * their sum can exceed `elapsedMs`. `reserveMs` is time spent (re)acquiring
+   * the change-stream reservation, and `stallMs` is time the consumer waited on
+   * an empty prefetch queue (i.e. blocked on the upstream) — a large `stallMs`
+   * indicates an upstream-bound backfill.
+   */
+  #logBackfillStats(lc: LogContext, stats: BackfillTimingStats) {
+    const elapsed = performance.now() - stats.start;
+    lc.info?.(`backfill timing`, {
+      messages: stats.messages,
+      bytes: stats.bytes,
+      commits: stats.commits,
+      stalls: stats.stalls,
+      elapsedMs: Math.round(elapsed),
+      produceMs: Math.round(stats.produceMs),
+      pushMs: Math.round(stats.pushMs),
+      reserveMs: Math.round(stats.reserveMs),
+      stallMs: Math.round(stats.stallMs),
+      throughputKBps:
+        elapsed > 0 ? Math.round(stats.bytes / 1024 / (elapsed / 1000)) : 0,
+    });
   }
 
   #backfillRunningFor(table: Identifier): RunningBackfillState | null {
@@ -609,7 +842,7 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   cancel(): void {
-    this.#canceled = true;
+    this.#controller.abort('canceled');
     this.#stopRunningBackfill(`change stream canceled`);
     clearTimeout(this.#backfillRetryTimer);
     this.#backfillRetryTimer = undefined;
