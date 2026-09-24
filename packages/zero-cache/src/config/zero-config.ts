@@ -656,7 +656,7 @@ export const zeroOptions = {
   },
 
   deferIvmWrites: {
-    type: v.boolean().default(false),
+    type: v.boolean().default(true),
     desc: [
       `Derive IVM advancements without writing to the replica snapshot.`,
       ``,
@@ -666,10 +666,11 @@ export const zeroOptions = {
       `replicator is the only committer -- so they exist only to serve reads`,
       `for the rest of the advancement.`,
       ``,
-      `When enabled, the changes are held in memory and merged into each leaf`,
-      `scan instead, leaving the snapshot read-only. This is a performance`,
-      `experiment; the two modes are required to be indistinguishable to the`,
-      `pipelines above the source.`,
+      `When enabled (the default), the changes are held in memory and merged`,
+      `into each leaf scan instead, leaving the snapshot read-only, within the`,
+      `budget set by {bold deferIvmWritesHeapProportion}. Disable it to write`,
+      `every advancement through to the snapshot. The two modes are required`,
+      `to be indistinguishable to the pipelines above the source.`,
     ],
     hidden: true,
   },

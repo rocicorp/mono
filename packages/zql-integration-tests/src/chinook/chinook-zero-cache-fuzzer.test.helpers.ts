@@ -465,7 +465,8 @@ export async function startZeroCacheReplica(
      * their advancements hold their changes in memory or write them through
      * to the replica snapshot. Without one, `ZERO_TEST_DEFER_IVM_WRITES`
      * decides, as in the zero-cache tests; if it is unset, every advancement
-     * writes through.
+     * holds its changes in memory, as with `deferIvmWrites` on (the
+     * default).
      */
     async function startSyncWorker({
       production,

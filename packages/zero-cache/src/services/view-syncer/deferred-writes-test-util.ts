@@ -37,8 +37,9 @@ class CyclingBudget extends DeferredWritesBudget {
  * The deferred writes budget for a pipeline driver under test, as selected by
  * `ZERO_TEST_DEFER_IVM_WRITES`:
  *
- * - unset: none, so every advancement is written through;
- * - `1`: every advancement is held in memory;
+ * - unset (as `deferIvmWrites` is on by default) or `1`: every advancement
+ *   is held in memory;
+ * - `0`: none, so every advancement is written through;
  * - `mixed`: advancements cycle between being held in memory, written
  *   through, and written through from their second change.
  *
@@ -53,9 +54,10 @@ export function testDeferredWritesBudget(): DeferredWritesBudget | undefined {
   switch (mode) {
     case undefined:
     case '':
-      return undefined;
     case '1':
       return new DeferredWritesBudget(maxRows, maxBytes);
+    case '0':
+      return undefined;
     case 'mixed':
       return new CyclingBudget(maxRows, maxBytes);
     default:

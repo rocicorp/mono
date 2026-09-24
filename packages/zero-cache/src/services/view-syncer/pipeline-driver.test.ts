@@ -59,11 +59,12 @@ const NO_TIME_ADVANCEMENT_TIMER: Timer = {
   totalElapsed: () => 0,
 };
 
-// `vitest.config.deferred-ivm.ts` and `vitest.config.mixed-ivm.ts` run this
-// whole file again with view-syncer derivation held in an in-memory batch
-// overlay instead of written to (and rolled back out of) the replica snapshot,
-// for every advancement or for some, and some switch partway. Every result
-// here must be identical either way.
+// By default, as with `deferIvmWrites` on, view-syncer derivation is held in
+// an in-memory batch overlay. `vitest.config.write-through-ivm.ts` and
+// `vitest.config.mixed-ivm.ts` run this whole file again with it written to
+// (and rolled back out of) the replica snapshot, for every advancement or for
+// some, and some switch partway. Every result here must be identical either
+// way.
 const deferredWritesBudget = testDeferredWritesBudget;
 
 describe('view-syncer/pipeline-driver', () => {
