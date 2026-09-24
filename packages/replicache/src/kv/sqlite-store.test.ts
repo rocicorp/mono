@@ -207,23 +207,21 @@ function makeScriptedDatabase() {
 }
 
 // "granted" when the lock request is granted within `ms` (releasing the handle
-// so the probe holds nothing itself), otherwise "still waiting".
+// so the probe holds nothing itself), otherwise "still waiting". A rejected
+// request propagates so a failed transaction start is not mistaken for a grant.
 function grantedWithin(
   promise: Promise<{release(): void}>,
   ms: number,
 ): Promise<'granted' | 'still waiting'> {
   return Promise.race([
-    promise.then(
-      handle => {
-        try {
-          handle.release();
-        } catch {
-          // A refused ROLLBACK on the scripted database is not what is measured.
-        }
-        return 'granted' as const;
-      },
-      () => 'granted' as const,
-    ),
+    promise.then(handle => {
+      try {
+        handle.release();
+      } catch {
+        // A refused ROLLBACK on the scripted database is not what is measured.
+      }
+      return 'granted' as const;
+    }),
     sleep(ms).then(() => 'still waiting' as const),
   ]);
 }
