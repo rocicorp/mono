@@ -1,5 +1,4 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {binarySearch} from '../../../shared/src/binary-search.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
@@ -17,10 +16,10 @@ import {
   buildJoinConstraint,
   canonicalKey,
   canonicalKeyForTest,
-  generateWithOverlayNoYield,
   getMatchingParentEntries,
   indexParentInStorage,
-  isJoinMatch,
+  makePartitionStorageKey,
+  makeUnpartitionedStorageKey,
   rowEqualsForCompoundKey,
   unindexParentInStorage,
   type JoinStorage,
@@ -36,12 +35,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
-import {
-  isInParentFetch,
-  readParentFetchBounds,
-  type ParentFetchBound,
-  type TakeBoundProvider,
-} from './take-gate.ts';
+import type {TakeBoundProvider} from './take-gate.ts';
 
 /**
  * Maximum number of entries sent in a single batched `parent.fetch`
@@ -118,10 +112,6 @@ export class FlippedJoin implements Input {
   readonly #storage: JoinStorage;
 
   #output: Output = throwOutput;
-
-  #inprogressChildChange: Change | undefined;
-  #inprogressChildChangePosition: Row | undefined;
-  #inprogressParentFetchBounds: ParentFetchBound[] | undefined;
 
   constructor({
     parent,
@@ -217,24 +207,6 @@ export class FlippedJoin implements Input {
       }
       childNodes.push(node);
     }
-
-    // FlippedJoin's split-push change overlay logic is largely
-    // the same as Join's with the exception of remove.  For remove,
-    // the change is undone here, and then re-applied to parents with order
-    // less than or equal to change.position below.  This is necessary
-    // because if the removed node was the last related child, the
-    // related parents with position greater than change.position
-    // (which should not yet have the node removed), would not even
-    // be fetched here, and would be absent from the output all together.
-    if (this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-      const removedNode = this.#inprogressChildChange[ChangeIndex.NODE];
-      const compare = this.#child.getSchema().compareRows;
-      const insertPos = binarySearch(childNodes.length, i =>
-        compare(removedNode.row, childNodes[i].row),
-      );
-      childNodes.splice(insertPos, 0, removedNode);
-    }
-
     yield* this.#fetchBatched(req, childNodes);
   }
 
@@ -324,6 +296,7 @@ export class FlippedJoin implements Input {
         yield 'yield';
         continue;
       }
+
       const key = canonicalKey(node.row, parentKey);
       const idxs = childIndexesByKey.get(key);
       if (idxs === undefined) {
@@ -338,7 +311,7 @@ export class FlippedJoin implements Input {
       // Children retain their original input order within the group
       // because we appended to `idxs` in iteration order.
       const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
-      yield* this.#yieldParentWithOverlay(node, relatedChildNodes);
+      yield* this.#yieldParent(node, relatedChildNodes);
     }
   }
 
@@ -363,64 +336,14 @@ export class FlippedJoin implements Input {
     return mergeSortedStreams(chunkStreams, compare);
   }
 
-  *#yieldParentWithOverlay(
-    minParentNode: Node,
-    relatedChildNodes: Node[],
-  ): Stream<Node> {
-    let overlaidRelatedChildNodes = relatedChildNodes;
-
-    // The parent has yet to get the in-progress child change if it comes
-    // after the current position and a parent fetch of the push yields it.
-    // With a TakeGate the fetches are capped at the bounds read when they
-    // started.
-    const {compareRows} = this.#parent.getSchema();
-    const isParentInPushQueue =
-      this.#inprogressChildChangePosition !== undefined &&
-      compareRows(minParentNode.row, this.#inprogressChildChangePosition) > 0 &&
-      (this.#inprogressParentFetchBounds === undefined ||
-        isInParentFetch(
-          this.#inprogressParentFetchBounds,
-          minParentNode.row,
-          compareRows,
-        ));
-
-    if (
-      this.#inprogressChildChange &&
-      this.#inprogressChildChangePosition &&
-      isJoinMatch(
-        this.#inprogressChildChange[ChangeIndex.NODE].row,
-        this.#childKey,
-        minParentNode.row,
-        this.#parentKey,
-      )
-    ) {
-      if (this.#inprogressChildChange[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-        if (!isParentInPushQueue) {
-          // Remove from relatedChildNodes since the removed child
-          // was inserted into childNodes above.
-          overlaidRelatedChildNodes = relatedChildNodes.filter(
-            n => n !== this.#inprogressChildChange?.[ChangeIndex.NODE],
-          );
-        }
-      } else if (isParentInPushQueue) {
-        overlaidRelatedChildNodes = [
-          ...generateWithOverlayNoYield(
-            relatedChildNodes,
-            this.#inprogressChildChange,
-            this.#child.getSchema(),
-          ),
-        ];
-      }
-    }
-
-    // yield node if after the overlay it still has relationship nodes
-    if (overlaidRelatedChildNodes.length > 0) {
+  *#yieldParent(minParentNode: Node, relatedChildNodes: Node[]): Stream<Node> {
+    if (relatedChildNodes.length > 0) {
       this.#indexParentRow(minParentNode.row);
       yield {
         ...minParentNode,
         relationships: {
           ...minParentNode.relationships,
-          [this.#relationshipName]: () => overlaidRelatedChildNodes,
+          [this.#relationshipName]: () => relatedChildNodes,
         },
       };
     }
@@ -451,140 +374,184 @@ export class FlippedJoin implements Input {
   }
 
   *#pushChildChange(change: Change, exists?: boolean): Stream<'yield'> {
-    this.#inprogressChildChange = change;
-    this.#inprogressChildChangePosition = undefined;
-    try {
-      const constraint = buildJoinConstraint(
-        change[ChangeIndex.NODE].row,
-        this.#childKey,
-        this.#parentKey,
-      );
-      if (!constraint) {
+    const constraint = buildJoinConstraint(
+      change[ChangeIndex.NODE].row,
+      this.#childKey,
+      this.#parentKey,
+    );
+    if (!constraint) {
+      return;
+    }
+    const childRow = change[ChangeIndex.NODE].row;
+    const changeType = change[ChangeIndex.TYPE];
+
+    const matching = getMatchingParentEntries(
+      this.#storage,
+      childRow,
+      this.#childKey,
+      this.#parentPartitionKey,
+    );
+    if (!matching) {
+      // If no matching parent is resident in the view, REMOVE and EDIT
+      // cannot affect any view-resident parent. (ADD and CHILD can qualify
+      // previously absent parents).
+      if (changeType !== ChangeType.ADD && changeType !== ChangeType.CHILD) {
         return;
       }
-      const childRow = change[ChangeIndex.NODE].row;
-      const changeType = change[ChangeIndex.TYPE];
+    }
 
-      const matching = getMatchingParentEntries(
-        this.#storage,
-        childRow,
-        this.#childKey,
-        this.#parentPartitionKey,
+    let fetchConstraints: Constraint[];
+    if (changeType !== ChangeType.ADD && changeType !== ChangeType.CHILD) {
+      assert(matching, 'Matching entries must exist for non-add child change');
+      fetchConstraints = matching.map(entry =>
+        entry.partitionConstraint
+          ? {...constraint, ...entry.partitionConstraint}
+          : constraint,
       );
-      if (!matching) {
-        // If no matching parent is resident in the view, REMOVE and EDIT
-        // cannot affect any view-resident parent. (ADD and CHILD can qualify
-        // previously absent parents).
-        if (changeType !== ChangeType.ADD && changeType !== ChangeType.CHILD) {
-          return;
+    } else {
+      fetchConstraints = [constraint];
+    }
+
+    let parentNodeStream: Stream<Node | 'yield'>;
+    if (fetchConstraints.length === 1) {
+      parentNodeStream = this.#parent.fetch({
+        constraint: fetchConstraints[0],
+      });
+    } else {
+      const streams = fetchConstraints.map(c =>
+        this.#parent.fetch({constraint: c}),
+      );
+      const compare = (a: Node, b: Node) =>
+        this.#schema.compareRows(a.row, b.row);
+      parentNodeStream = mergeSortedStreams(streams, compare);
+    }
+
+    const visitedPks = new Set<string>();
+
+    for (const parentNode of parentNodeStream) {
+      if (parentNode === 'yield') {
+        yield 'yield';
+        continue;
+      }
+      const childNodeStream = () => {
+        const constraint = buildJoinConstraint(
+          parentNode.row,
+          this.#parentKey,
+          this.#childKey,
+        );
+        return constraint ? this.#child.fetch({constraint}) : [];
+      };
+      const parentPk = canonicalKey(
+        parentNode.row,
+        this.#parent.getSchema().primaryKey,
+      );
+      visitedPks.add(parentPk);
+      let parentInStorage =
+        matching?.some(entry => entry.pks.has(parentPk)) ?? false;
+      if (parentInStorage && this.#boundProvider) {
+        const bound = this.#boundProvider.getBound();
+        if (
+          bound !== undefined &&
+          this.#schema.compareRows(parentNode.row, bound) > 0
+        ) {
+          this.#unindexParentRow(parentNode.row);
+          parentInStorage = false;
         }
       }
 
-      let fetchConstraints: Constraint[];
-      if (changeType !== ChangeType.ADD && changeType !== ChangeType.CHILD) {
-        assert(
-          matching,
-          'Matching entries must exist for non-add child change',
-        );
-        fetchConstraints = matching.map(entry =>
-          entry.partitionConstraint
-            ? {...constraint, ...entry.partitionConstraint}
-            : constraint,
-        );
-      } else {
-        fetchConstraints = [constraint];
-      }
-      if (this.#boundProvider) {
-        this.#inprogressParentFetchBounds = readParentFetchBounds(
-          this.#boundProvider,
-          fetchConstraints,
-        );
+      if (changeType === ChangeType.REMOVE && !parentInStorage) {
+        continue;
       }
 
-      let parentNodeStream: Stream<Node | 'yield'>;
-      if (fetchConstraints.length === 1) {
-        parentNodeStream = this.#parent.fetch({
-          constraint: fetchConstraints[0],
-        });
-      } else {
-        const streams = fetchConstraints.map(c =>
-          this.#parent.fetch({constraint: c}),
-        );
-        const compare = (a: Node, b: Node) =>
-          this.#schema.compareRows(a.row, b.row);
-        parentNodeStream = mergeSortedStreams(streams, compare);
-      }
-
-      for (const parentNode of parentNodeStream) {
-        if (parentNode === 'yield') {
-          yield 'yield';
-          continue;
-        }
-        this.#inprogressChildChange = change;
-        this.#inprogressChildChangePosition = parentNode.row;
-        const childNodeStream = () => {
-          const constraint = buildJoinConstraint(
+      let parentExists = exists;
+      if (parentExists === undefined) {
+        if (changeType === ChangeType.ADD) {
+          parentExists = parentInStorage;
+        } else if (changeType === ChangeType.REMOVE) {
+          const childConstraint = buildJoinConstraint(
             parentNode.row,
             this.#parentKey,
             this.#childKey,
           );
-          return constraint ? this.#child.fetch({constraint}) : [];
-        };
-        let parentExists = exists;
-        if (!parentExists) {
-          for (const childNode of childNodeStream()) {
-            if (childNode === 'yield') {
-              yield 'yield';
-              continue;
-            }
-            if (
-              this.#child
-                .getSchema()
-                .compareRows(childNode.row, change[ChangeIndex.NODE].row) !== 0
-            ) {
-              parentExists = true;
-              break;
+          if (childConstraint) {
+            for (const childNode of this.#child.fetch({
+              constraint: childConstraint,
+            })) {
+              if (childNode === 'yield') {
+                yield 'yield';
+                continue;
+              }
+              if (
+                this.#child
+                  .getSchema()
+                  .compareRows(childNode.row, change[ChangeIndex.NODE].row) !==
+                0
+              ) {
+                parentExists = true;
+                break;
+              }
             }
           }
-        }
-        if (parentExists) {
-          yield* this.#output.push(
-            makeChildChange(
-              {
-                ...parentNode,
-                relationships: {
-                  ...parentNode.relationships,
-                  [this.#relationshipName]: childNodeStream,
-                },
-              },
-              {
-                relationshipName: this.#relationshipName,
-                change,
-              },
-            ),
-            this,
-          );
+          parentExists ??= false;
         } else {
-          const newNode = {
-            ...parentNode,
-            relationships: {
-              ...parentNode.relationships,
-              [this.#relationshipName]: () => [change[ChangeIndex.NODE]],
+          parentExists = true;
+        }
+      }
+
+      if (parentExists) {
+        yield* this.#output.push(
+          makeChildChange(
+            {
+              ...parentNode,
+              relationships: {
+                ...parentNode.relationships,
+                [this.#relationshipName]: childNodeStream,
+              },
             },
-          };
-          if (change[ChangeIndex.TYPE] === ChangeType.ADD) {
-            this.#indexParentRow(parentNode.row);
-            yield* this.#output.push(makeAddChange(newNode), this);
-          } else {
-            this.#unindexParentRow(parentNode.row);
-            yield* this.#output.push(makeRemoveChange(newNode), this);
+            {
+              relationshipName: this.#relationshipName,
+              change,
+            },
+          ),
+          this,
+        );
+      } else {
+        const newNode = {
+          ...parentNode,
+          relationships: {
+            ...parentNode.relationships,
+            [this.#relationshipName]: () => [change[ChangeIndex.NODE]],
+          },
+        };
+        if (change[ChangeIndex.TYPE] === ChangeType.ADD) {
+          this.#indexParentRow(parentNode.row);
+          yield* this.#output.push(makeAddChange(newNode), this);
+        } else {
+          this.#unindexParentRow(parentNode.row);
+          yield* this.#output.push(makeRemoveChange(newNode), this);
+        }
+      }
+    }
+
+    if (matching) {
+      const joinKey = canonicalKey(childRow, this.#childKey);
+      for (const entry of matching) {
+        for (const pk of entry.pks) {
+          if (!visitedPks.has(pk)) {
+            const storageKey = this.#parentPartitionKey
+              ? makePartitionStorageKey(
+                  joinKey,
+                  canonicalKey(
+                    entry.partitionConstraint!,
+                    this.#parentPartitionKey,
+                  ),
+                  pk,
+                )
+              : makeUnpartitionedStorageKey(joinKey, pk);
+            this.#storage.del(storageKey);
           }
         }
       }
-    } finally {
-      this.#inprogressChildChange = undefined;
-      this.#inprogressChildChangePosition = undefined;
-      this.#inprogressParentFetchBounds = undefined;
     }
   }
 

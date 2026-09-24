@@ -746,7 +746,9 @@ function removeAndUpdateRefCount<M extends Mutate>(
   mutate: M,
 ): MutableMetaEntryList {
   const pos = binarySearch(view, row, compareRows);
-  assert(pos >= 0, 'node does not exist');
+  if (pos < 0) {
+    return view as MutableMetaEntryList;
+  }
   const oldEntry = view[pos];
   const rc = oldEntry[refCountSymbol];
   if (rc === 1) {

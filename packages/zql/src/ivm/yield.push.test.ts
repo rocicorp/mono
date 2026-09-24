@@ -207,10 +207,12 @@ describe('Yield Propagation (Push)', () => {
       consume(take.fetch({}));
 
       // Push add '0'. This should displace '1'.
-      const result = collectPush(source, makeAdd('0'));
-      // Take fetches to find bound to remove. It finds 1 node and stops.
-      // YieldMemorySource yields before each node (1) + at end (but not reached due to early break).
-      expect(result).toEqual(['yield']);
+      // With limit 1, displacement removes old bound and adds new row without fetching.
+      const result = [
+        ...collectPush(source, makeAdd('0')),
+        ...take.reconcile(),
+      ];
+      expect(result).toEqual([]);
     });
 
     test('propagates yield from fetch during push (remove)', () => {
@@ -232,9 +234,12 @@ describe('Yield Propagation (Push)', () => {
       consume(take.fetch({}));
 
       // Push remove '0'.
-      const result = collectPush(source, makeRemove('0'));
-      // Take fetches to find replacement.
-      expect(result).toEqual(['yield', 'yield']);
+      // With mid-push fetches eliminated, Take fetches replacement during reconcile.
+      const result = [
+        ...collectPush(source, makeRemove('0')),
+        ...take.reconcile(),
+      ];
+      expect(result).toEqual(['yield']);
     });
 
     test('propagates yield from fetch during push (edit, move out)', () => {
@@ -255,9 +260,10 @@ describe('Yield Propagation (Push)', () => {
       consume(take.fetch({}));
 
       // Edit '0' to '2' (move out of bounds).
-      const result = collectPush(source, makeEdit('2', '0'));
-      // Take fetches to find replacement. It finds 1 node and stops.
-      // YieldMemorySource yields before each node (1).
+      const result = [
+        ...collectPush(source, makeEdit('2', '0')),
+        ...take.reconcile(),
+      ];
       expect(result).toEqual(['yield']);
     });
 
@@ -279,10 +285,11 @@ describe('Yield Propagation (Push)', () => {
       consume(take.fetch({}));
 
       // Edit '2' to '0' (move into bounds).
-      const result = collectPush(source, makeEdit('0', '2'));
-      // Take fetches to find old bound to remove.
-      // Test shows 2 yields.
-      expect(result).toEqual(['yield', 'yield']);
+      const result = [
+        ...collectPush(source, makeEdit('0', '2')),
+        ...take.reconcile(),
+      ];
+      expect(result).toEqual([]);
     });
   });
 

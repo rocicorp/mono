@@ -60,6 +60,7 @@ export class Cap implements Operator {
   readonly #primaryKey: PrimaryKey;
 
   #output: Output = throwOutput;
+  readonly #dirtyPartitions = new Map<string, Constraint | undefined>();
 
   constructor(
     input: Input,
@@ -110,8 +111,6 @@ export class Cap implements Operator {
     if (capState.size === 0) {
       return;
     }
-    // PK-based point lookups: fetch each tracked row by its PK directly,
-    // rather than scanning the partition and filtering.
     for (const pk of capState.pks) {
       const pkConstraint = deserializePKToConstraint(pk, this.#primaryKey);
       // Preserve req.constraint (the partition key) so upstream partitioned
@@ -218,9 +217,6 @@ export class Cap implements Operator {
       pks.splice(pkIndex, 1);
       const newSize = capState.size - 1;
 
-      // Try to refill: fetch from input with partition constraint,
-      // find first row NOT in PK set
-      const pkSet = new Set(pks);
       const constraint = this.#partitionKey
         ? (Object.fromEntries(
             this.#partitionKey.map(
@@ -229,33 +225,9 @@ export class Cap implements Operator {
           ) as Constraint)
         : undefined;
 
-      let replacement: Node | undefined;
-      for (const node of this.#input.fetch({constraint})) {
-        if (node === 'yield') {
-          yield node;
-          continue;
-        }
-        const nodePK = serializePK(node.row, this.#primaryKey);
-        if (!pkSet.has(nodePK)) {
-          replacement = node;
-          break;
-        }
-      }
-
-      if (replacement) {
-        // Store state WITHOUT replacement during remove forward,
-        // matching Take's pattern of hiding in-flight changes from re-fetches.
-        this.#storage.set(capStateKey, {size: newSize, pks});
-        yield* this.#output.push(change, this);
-        // Now add replacement to set and forward the add.
-        const replacementPK = serializePK(replacement.row, this.#primaryKey);
-        pks.push(replacementPK);
-        this.#storage.set(capStateKey, {size: newSize + 1, pks});
-        yield* this.#output.push(makeAddChange(replacement), this);
-      } else {
-        this.#storage.set(capStateKey, {size: newSize, pks});
-        yield* this.#output.push(change, this);
-      }
+      this.#dirtyPartitions.set(capStateKey, constraint);
+      this.#storage.set(capStateKey, {size: newSize, pks});
+      yield* this.#output.push(change, this);
     } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
       const pkSet = new Set(capState.pks);
       if (pkSet.has(pk)) {
@@ -305,6 +277,49 @@ export class Cap implements Operator {
   }
 
   *reconcile(_pusher: InputBase): Stream<'yield'> {
+    if (this.#dirtyPartitions.size > 0) {
+      const dirty = [...this.#dirtyPartitions.entries()];
+      this.#dirtyPartitions.clear();
+
+      for (const [capStateKey, constraint] of dirty) {
+        const capState = this.#storage.get(capStateKey);
+        if (!capState) {
+          continue;
+        }
+        const deficit = this.#limit - capState.size;
+        if (deficit <= 0) {
+          continue;
+        }
+
+        const pkSet = new Set(capState.pks);
+        const replacements: Node[] = [];
+        for (const node of this.#input.fetch({constraint})) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
+          const nodePK = serializePK(node.row, this.#primaryKey);
+          if (!pkSet.has(nodePK)) {
+            replacements.push(node);
+            pkSet.add(nodePK);
+            if (replacements.length === deficit) {
+              break;
+            }
+          }
+        }
+
+        let newSize = capState.size;
+        const pks = [...capState.pks];
+        for (const replacement of replacements) {
+          const replacementPK = serializePK(replacement.row, this.#primaryKey);
+          pks.push(replacementPK);
+          newSize++;
+          this.#storage.set(capStateKey, {size: newSize, pks});
+          yield* this.#output.push(makeAddChange(replacement), this);
+        }
+      }
+    }
+
     if (this.#output.reconcile) {
       yield* this.#output.reconcile(this);
     }

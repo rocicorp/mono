@@ -42,15 +42,12 @@ export type PartitionKey = PrimaryKey;
 type DirtyPartitionState = {
   constraint: Constraint | undefined;
   /**
-   * The bound to report to upstream TakeGate via getBound() until Phase 2
-   * reconciliation completes.
-   *
-   * When removals reduce partition size below limit in Phase 1, normal getBound()
-   * would return undefined (unbounded), which would cause upstream TakeGate to open
-   * and allow unbounded parent pushes through. Preserving gateBound keeps TakeGate
-   * capped at the pre-removal boundary until Phase 2 refills the deficit.
+   * The active bound before any removals in this push cycle reduced the partition
+   * size below limit. Upstream operators (like TakeGate) consult getBound() during
+   * Phase 1 to cap child pushes. Preserving lastBound prevents TakeGate from prematurely
+   * opening (becoming unbounded) while the partition has an unresolved deficit.
    */
-  gateBound: Row | undefined;
+  lastBound: Row | undefined;
 };
 
 /**
@@ -70,8 +67,6 @@ export class Take implements Operator, TakeBoundProvider {
   readonly #limit: number;
   readonly #partitionKey: PartitionKey | undefined;
   readonly #partitionKeyComparator: Comparator | undefined;
-  // Fetch overlay needed for some split push cases.
-  #rowHiddenFromFetch: Row | undefined;
 
   #takeGate: TakeGate | undefined;
   /**
@@ -125,9 +120,9 @@ export class Take implements Operator, TakeBoundProvider {
     const takeStateKey = getTakeStateKey(this.#partitionKey, constraint);
     const dirty = this.#dirtyPartitions.get(takeStateKey);
     if (dirty) {
-      // While dirty in Phase 1, return gateBound (the bound prior to removals) so
-      // upstream operators (e.g. TakeGate) remain capped rather than unbounding during push.
-      return dirty.gateBound;
+      // While dirty in Phase 1, return the bound prior to any removals so upstream
+      // operators (e.g. TakeGate) remain capped rather than unbounding during push.
+      return dirty.lastBound;
     }
     const takeState = this.#storage.get(takeStateKey);
     if (!takeState || takeState.size < this.#limit) {
@@ -152,7 +147,9 @@ export class Take implements Operator, TakeBoundProvider {
       }
       return;
     }
-    if (takeState.bound === undefined) {
+    const bound =
+      takeState.bound ?? this.#dirtyPartitions.get(takeStateKey)?.lastBound;
+    if (bound === undefined) {
       return;
     }
     let count = 0;
@@ -161,17 +158,8 @@ export class Take implements Operator, TakeBoundProvider {
         yield inputNode;
         continue;
       }
-      if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
+      if (this.getSchema().compareRows(bound, inputNode.row) < 0) {
         return;
-      }
-      if (
-        this.#rowHiddenFromFetch &&
-        this.getSchema().compareRows(
-          this.#rowHiddenFromFetch,
-          inputNode.row,
-        ) === 0
-      ) {
-        continue;
       }
       yield inputNode;
       count++;
@@ -279,150 +267,105 @@ export class Take implements Operator, TakeBoundProvider {
     if (change[ChangeIndex.TYPE] === ChangeType.ADD) {
       if (takeState.size < this.#limit) {
         if (this.#dirtyPartitions.has(takeStateKey)) {
-          // While dirty with an unresolved deficit in Phase 1, only admit rows that
-          // sort strictly before the current window boundary. We refuse to expand the
-          // bound forward during Phase 1 so that Phase 2 can backfill earlier candidate
-          // rows from storage in sort order.
+          const dirty = this.#dirtyPartitions.get(takeStateKey)!;
           if (
-            takeState.bound === undefined ||
-            compareRows(change[ChangeIndex.NODE].row, takeState.bound) >= 0
+            dirty.lastBound !== undefined &&
+            compareRows(change[ChangeIndex.NODE].row, dirty.lastBound) > 0
           ) {
             return;
           }
         }
         const nextSize = takeState.size + 1;
-        if (nextSize === this.#limit) {
-          this.#dirtyPartitions.delete(takeStateKey);
-        }
-        this.#setTakeState(
-          takeStateKey,
-          nextSize,
-          takeState.bound === undefined ||
-            compareRows(takeState.bound, change[ChangeIndex.NODE].row) < 0
-            ? change[ChangeIndex.NODE].row
-            : takeState.bound,
-        );
+        const nextBound =
+          takeState.bound === undefined
+            ? takeState.size === 0
+              ? change[ChangeIndex.NODE].row
+              : undefined
+            : compareRows(takeState.bound, change[ChangeIndex.NODE].row) < 0
+              ? change[ChangeIndex.NODE].row
+              : takeState.bound;
+        this.#setTakeState(takeStateKey, nextSize, nextBound);
         yield* this.#output.push(change, this);
         return;
       }
-      // size === limit
+
+      // size >= limit
+      const activeBound =
+        takeState.bound ?? this.#dirtyPartitions.get(takeStateKey)?.lastBound;
       if (
-        takeState.bound === undefined ||
-        compareRows(change[ChangeIndex.NODE].row, takeState.bound) >= 0
+        activeBound === undefined ||
+        compareRows(change[ChangeIndex.NODE].row, activeBound) >= 0
       ) {
         return;
       }
-      // added row < bound
-      let beforeBoundNode: Node | undefined;
-      let boundNode: Node | undefined;
+
+      // added row < activeBound
       if (this.#limit === 1) {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
-          }
-          boundNode = node;
-          break;
-        }
-      } else {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-          reverse: true,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
-          } else if (boundNode === undefined) {
-            boundNode = node;
-          } else {
-            beforeBoundNode = node;
-            break;
-          }
-        }
+        const removeChange = makeRemoveChange({
+          row: takeState.bound ?? activeBound,
+          relationships: {},
+        });
+        this.#setTakeState(takeStateKey, 1, change[ChangeIndex.NODE].row);
+        yield* this.#output.push(removeChange, this);
+        yield* this.#output.push(change, this);
+        return;
       }
-      assert(
-        boundNode !== undefined,
-        'Take: boundNode must be found during fetch',
-      );
-      const removeChange = makeRemoveChange(boundNode);
-      // Remove before add to maintain invariant that
-      // output size <= limit.
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size,
-        beforeBoundNode === undefined ||
-          compareRows(change[ChangeIndex.NODE].row, beforeBoundNode.row) > 0
-          ? change[ChangeIndex.NODE].row
-          : beforeBoundNode.row,
-      );
-      yield* this.#pushWithRowHiddenFromFetch(
-        change[ChangeIndex.NODE].row,
-        removeChange,
-      );
+
+      if (!this.#dirtyPartitions.has(takeStateKey)) {
+        this.#dirtyPartitions.set(takeStateKey, {
+          constraint,
+          lastBound: activeBound,
+        });
+      }
+
+      this.#setTakeState(takeStateKey, takeState.size + 1, undefined);
       yield* this.#output.push(change, this);
+      return;
     } else if (change[ChangeIndex.TYPE] === ChangeType.REMOVE) {
-      if (takeState.bound === undefined) {
-        // change is after bound
+      if (
+        takeState.bound === undefined &&
+        !this.#dirtyPartitions.has(takeStateKey)
+      ) {
+        return;
+      }
+      const activeBound =
+        takeState.bound ?? this.#dirtyPartitions.get(takeStateKey)?.lastBound;
+      if (activeBound === undefined) {
         return;
       }
       const compToBound = compareRows(
         change[ChangeIndex.NODE].row,
-        takeState.bound,
+        activeBound,
       );
       if (compToBound > 0 || (compToBound < 0 && this.#limit === 1)) {
         // change is not in window
         return;
       }
-      let beforeBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'after',
-        },
-        constraint,
-        reverse: true,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
-        }
-        beforeBoundNode = node;
-        break;
-      }
 
+      if (!this.#dirtyPartitions.has(takeStateKey)) {
+        this.#dirtyPartitions.set(takeStateKey, {
+          constraint,
+          lastBound: activeBound,
+        });
+      }
+      const nextSize = takeState.size - 1;
       const finalBound =
-        takeState.size - 1 === 0
+        nextSize === 0
           ? undefined
           : compToBound < 0
             ? takeState.bound
-            : beforeBoundNode?.row;
-      if (!this.#dirtyPartitions.has(takeStateKey)) {
-        // Snapshot the pre-removal bound as the gate bound on the first removal that
-        // dirties this partition. Subsequent getBound() calls throughout Phase 1 will return
-        // this bound to keep upstream TakeGate bounded until Phase 2 refills deficits.
-        this.#dirtyPartitions.set(takeStateKey, {
-          constraint,
-          gateBound: takeState.bound,
-        });
-      }
-      this.#setTakeState(takeStateKey, takeState.size - 1, finalBound);
+            : undefined;
+      this.#setTakeState(takeStateKey, nextSize, finalBound);
       yield* this.#output.push(change, this);
+      return;
     } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
       // A 'child' change should be pushed to output if its row
       // is <= bound.
+      const activeBound =
+        takeState.bound ?? this.#dirtyPartitions.get(takeStateKey)?.lastBound;
       if (
-        takeState.bound &&
-        compareRows(change[ChangeIndex.NODE].row, takeState.bound) <= 0
+        activeBound &&
+        compareRows(change[ChangeIndex.NODE].row, activeBound) <= 0
       ) {
         yield* this.#output.push(change, this);
       }
@@ -446,230 +389,59 @@ export class Take implements Operator, TakeBoundProvider {
       return;
     }
 
-    assert(takeState.bound, 'Bound should be set');
+    const activeBound =
+      takeState.bound ?? this.#dirtyPartitions.get(takeStateKey)?.lastBound;
+    assert(activeBound, 'Bound should be set');
     const {compareRows} = this.getSchema();
-    const oldCmp = compareRows(
-      change[ChangeIndex.OLD_NODE].row,
-      takeState.bound,
-    );
-    const newCmp = compareRows(change[ChangeIndex.NODE].row, takeState.bound);
+    const oldCmp = compareRows(change[ChangeIndex.OLD_NODE].row, activeBound);
+    const newCmp = compareRows(change[ChangeIndex.NODE].row, activeBound);
 
-    const replaceBoundAndForwardChange = () => {
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size,
-        change[ChangeIndex.NODE].row,
-      );
-      return this.#output.push(change, this);
-    };
+    // Both outside bounds
+    if (oldCmp > 0 && newCmp > 0) {
+      return;
+    }
 
-    // The bounds row was changed.
-    if (oldCmp === 0) {
-      // The new row is the new bound.
-      if (newCmp === 0) {
-        // no need to update the state since we are keeping the bounds
-        yield* this.#output.push(change, this);
-        return;
-      }
+    // Both inside bounds (or unchanged bound)
+    if ((oldCmp < 0 && newCmp < 0) || (oldCmp === 0 && newCmp === 0)) {
+      yield* this.#output.push(change, this);
+      return;
+    }
 
-      if (newCmp < 0) {
-        if (this.#limit === 1) {
-          yield* replaceBoundAndForwardChange();
-          return;
-        }
+    // Old was inside/at bounds, new is outside bounds: old row leaves window
+    if (oldCmp <= 0 && newCmp > 0) {
+      yield* this.push(makeRemoveChange(change[ChangeIndex.OLD_NODE]));
+      return;
+    }
 
-        // New row will be in the result but it might not be the bounds any
-        // more. We need to find the row before the bounds to determine the new
-        // bounds.
+    // Old was outside bounds, new is inside bounds: new row enters window
+    if (oldCmp > 0 && newCmp < 0) {
+      yield* this.push(makeAddChange(change[ChangeIndex.NODE]));
+      return;
+    }
 
-        let beforeBoundNode: Node | undefined;
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'after',
-          },
-          constraint,
-          reverse: true,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
-          }
-          beforeBoundNode = node;
-          break;
-        }
-        assert(
-          beforeBoundNode !== undefined,
-          'Take: beforeBoundNode must be found during fetch',
+    // Old was the bound, new is inside bounds
+    if (oldCmp === 0 && newCmp < 0) {
+      if (this.#limit === 1) {
+        this.#setTakeState(
+          takeStateKey,
+          takeState.size,
+          change[ChangeIndex.NODE].row,
         );
-
-        this.#setTakeState(takeStateKey, takeState.size, beforeBoundNode.row);
         yield* this.#output.push(change, this);
         return;
       }
-
-      assert(newCmp > 0, 'New comparison must be greater than 0');
-      // Find the first item at the old bounds. This will be the new bounds.
-      let newBoundNode: Node | undefined;
-      this.#takeGate?.open();
-      try {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
+      if (!this.#dirtyPartitions.has(takeStateKey)) {
+        this.#dirtyPartitions.set(takeStateKey, {
           constraint,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
-          }
-          newBoundNode = node;
-          break;
-        }
-      } finally {
-        this.#takeGate?.close();
+          lastBound: activeBound,
+        });
       }
-      assert(
-        newBoundNode !== undefined,
-        'Take: newBoundNode must be found during fetch',
-      );
-
-      // The next row is the new row. We can replace the bounds and keep the
-      // edit change.
-      if (compareRows(newBoundNode.row, change[ChangeIndex.NODE].row) === 0) {
-        yield* replaceBoundAndForwardChange();
-        return;
-      }
-
-      // The new row is now outside the bounds, so we need to remove the old
-      // row and add the new bounds row.
-      this.#setTakeState(takeStateKey, takeState.size, newBoundNode.row);
-      yield* this.#pushWithRowHiddenFromFetch(
-        newBoundNode.row,
-        makeRemoveChange(change[ChangeIndex.OLD_NODE]),
-      );
-      yield* this.#output.push(makeAddChange(newBoundNode), this);
-      return;
-    }
-
-    if (oldCmp > 0) {
-      assert(newCmp !== 0, 'Invalid state. Row has duplicate primary key');
-
-      // Both old and new outside of bounds
-      if (newCmp > 0) {
-        return;
-      }
-
-      // old was outside, new is inside. Pushing out the old bounds
-      assert(newCmp < 0, 'New comparison must be less than 0');
-
-      let oldBoundNode: Node | undefined;
-      let newBoundNode: Node | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'at',
-        },
-        constraint,
-        reverse: true,
-      })) {
-        if (node === 'yield') {
-          yield node;
-          continue;
-        } else if (oldBoundNode === undefined) {
-          oldBoundNode = node;
-        } else {
-          newBoundNode = node;
-          break;
-        }
-      }
-      assert(
-        oldBoundNode !== undefined,
-        'Take: oldBoundNode must be found during fetch',
-      );
-      assert(
-        newBoundNode !== undefined,
-        'Take: newBoundNode must be found during fetch',
-      );
-
-      // Remove before add to maintain invariant that
-      // output size <= limit.
-      this.#setTakeState(takeStateKey, takeState.size, newBoundNode.row);
-      yield* this.#pushWithRowHiddenFromFetch(
-        change[ChangeIndex.NODE].row,
-        makeRemoveChange(oldBoundNode),
-      );
-      yield* this.#output.push(makeAddChange(change[ChangeIndex.NODE]), this);
-
-      return;
-    }
-
-    if (oldCmp < 0) {
-      assert(newCmp !== 0, 'Invalid state. Row has duplicate primary key');
-
-      // Both old and new inside of bounds
-      if (newCmp < 0) {
-        yield* this.#output.push(change, this);
-        return;
-      }
-
-      // old was inside, new is larger than old bound
-
-      assert(newCmp > 0, 'New comparison must be greater than 0');
-
-      // at this point we need to find the row after the bound and use that or
-      // the newRow as the new bound.
-      let afterBoundNode: Node | undefined;
-      this.#takeGate?.open();
-      try {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'after',
-          },
-          constraint,
-        })) {
-          if (node === 'yield') {
-            yield node;
-            continue;
-          }
-          afterBoundNode = node;
-          break;
-        }
-      } finally {
-        this.#takeGate?.close();
-      }
-      assert(
-        afterBoundNode !== undefined,
-        'Take: afterBoundNode must be found during fetch',
-      );
-
-      // The new row is the new bound. Use an edit change.
-      if (compareRows(afterBoundNode.row, change[ChangeIndex.NODE].row) === 0) {
-        yield* replaceBoundAndForwardChange();
-        return;
-      }
-
-      yield* this.#output.push(
-        makeRemoveChange(change[ChangeIndex.OLD_NODE]),
-        this,
-      );
-      this.#setTakeState(takeStateKey, takeState.size, afterBoundNode.row);
-      yield* this.#output.push(makeAddChange(afterBoundNode), this);
+      this.#setTakeState(takeStateKey, takeState.size, undefined);
+      yield* this.#output.push(change, this);
       return;
     }
 
     unreachable();
-  }
-
-  *#pushWithRowHiddenFromFetch(row: Row, change: Change) {
-    this.#rowHiddenFromFetch = row;
-    try {
-      yield* this.#output.push(change, this);
-    } finally {
-      this.#rowHiddenFromFetch = undefined;
-    }
   }
 
   #setTakeState(takeStateKey: string, size: number, bound: Row | undefined) {
@@ -686,50 +458,115 @@ export class Take implements Operator, TakeBoundProvider {
   *reconcile(_pusher?: InputBase): Stream<'yield'> {
     if (this.#dirtyPartitions.size > 0) {
       const dirty = [...this.#dirtyPartitions.entries()];
-      this.#dirtyPartitions.clear();
 
-      for (const [takeStateKey, {constraint}] of dirty) {
-        const takeState = this.#storage.get(takeStateKey);
-        assert(
-          takeState !== undefined,
-          'Take: dirty partition must exist in storage',
-        );
-        const deficit = this.#limit - takeState.size;
-        assert(deficit > 0, 'Take: dirty partition must have a deficit');
+      for (const [takeStateKey, {constraint, lastBound}] of dirty) {
+        let takeState = this.#storage.get(takeStateKey);
+        if (!takeState) {
+          continue;
+        }
 
-        const toPush: Node[] = [];
-        this.#takeGate?.open();
-        try {
-          const stream = this.#input.fetch({
-            start: takeState.bound
-              ? {
-                  row: takeState.bound,
-                  basis: 'after',
+        // 1. Handle overflow (if multiple adds at capacity caused size > limit)
+        if (takeState.size > this.#limit) {
+          const toRemove: Node[] = [];
+          let newBound: Row | undefined;
+          let count = 0;
+          this.#takeGate?.open();
+          try {
+            for (const node of this.#input.fetch({
+              constraint,
+            })) {
+              if (node === 'yield') {
+                yield 'yield';
+                continue;
+              }
+              count++;
+              if (count === this.#limit) {
+                newBound = node.row;
+              } else if (count > this.#limit) {
+                toRemove.push(node);
+                if (count === takeState.size) {
+                  break;
                 }
-              : undefined,
-            constraint,
-          });
+              }
+            }
+          } finally {
+            this.#takeGate?.close();
+          }
 
-          for (const node of stream) {
+          for (const node of toRemove) {
+            yield* this.#output.push(makeRemoveChange(node), this);
+          }
+          this.#setTakeState(takeStateKey, this.#limit, newBound);
+          takeState = this.#storage.get(takeStateKey)!;
+        }
+
+        // 2. Handle deficit (removals reduced size below limit)
+        const deficit = this.#limit - takeState.size;
+        if (deficit > 0) {
+          const toPush: Node[] = [];
+          this.#takeGate?.open();
+          try {
+            const stream = this.#input.fetch({
+              start: lastBound
+                ? {
+                    row: lastBound,
+                    basis: 'after',
+                  }
+                : undefined,
+              constraint,
+            });
+
+            for (const node of stream) {
+              if (node === 'yield') {
+                yield 'yield';
+                continue;
+              }
+              toPush.push(node);
+              if (toPush.length === deficit) {
+                break;
+              }
+            }
+          } finally {
+            this.#takeGate?.close();
+          }
+
+          const finalNode = toPush.at(-1);
+          if (finalNode) {
+            this.#setTakeState(
+              takeStateKey,
+              takeState.size + toPush.length,
+              finalNode.row,
+            );
+            this.#dirtyPartitions.delete(takeStateKey);
+          } else if (takeState.size === 0) {
+            this.#dirtyPartitions.delete(takeStateKey);
+          }
+
+          for (const node of toPush) {
+            yield* this.#output.push(makeAddChange(node), this);
+          }
+          takeState = this.#storage.get(takeStateKey)!;
+        }
+
+        // 3. If bound is still undefined but size > 0 (bound was removed or evicted and not yet updated):
+        if (takeState.bound === undefined && takeState.size > 0) {
+          let count = 0;
+          for (const node of this.#input.fetch({
+            constraint,
+          })) {
             if (node === 'yield') {
               yield 'yield';
               continue;
             }
-            toPush.push(node);
-            if (toPush.length === deficit) {
+            count++;
+            if (count === takeState.size) {
+              this.#setTakeState(takeStateKey, takeState.size, node.row);
               break;
             }
           }
-        } finally {
-          this.#takeGate?.close();
         }
 
-        let currentSize = takeState.size;
-        for (const node of toPush) {
-          currentSize++;
-          this.#setTakeState(takeStateKey, currentSize, node.row);
-          yield* this.#output.push(makeAddChange(node), this);
-        }
+        this.#dirtyPartitions.delete(takeStateKey);
       }
     }
 

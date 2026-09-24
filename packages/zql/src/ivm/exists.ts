@@ -1,6 +1,7 @@
 import {areEqual} from '../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {makeAddChange, makeRemoveChange, type Change} from './change.ts';
@@ -11,6 +12,7 @@ import {
   type FilterOperator,
   type FilterOutput,
 } from './filter-operators.ts';
+import {canonicalKey} from './join-utils.ts';
 import type {InputBase} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
@@ -25,7 +27,9 @@ export class Exists implements FilterOperator {
   readonly #not: boolean;
   readonly #parentJoinKey: CompoundKey;
   readonly #noSizeReuse: boolean;
-  #cache: Map<string, boolean>;
+  readonly #primaryKey: PrimaryKey;
+  readonly #counts = new Map<string, number>();
+  #sizeCache: Map<string, number>;
   #cacheHitCountsForTesting: Map<string, number> | undefined;
   #output: FilterOutput = throwFilterOutput;
 
@@ -33,9 +37,6 @@ export class Exists implements FilterOperator {
    * This instance variable is `true` when this operator is processing a `push`,
    * and is used to disable reuse of cached sizes across rows with the
    * same parent join key value.
-   * This is necessary because during a push relationships can be inconsistent
-   * due to push communicating changes (which may change multiple Nodes) one
-   * Node at a time.
    */
   #inPush = false;
 
@@ -49,7 +50,7 @@ export class Exists implements FilterOperator {
     this.#input = input;
     this.#relationshipName = relationshipName;
     this.#input.setFilterOutput(this);
-    this.#cache = new Map();
+    this.#sizeCache = new Map();
     this.#cacheHitCountsForTesting = cacheHitCountsForTesting;
     assert(
       this.#input.getSchema().relationships[relationshipName],
@@ -58,6 +59,7 @@ export class Exists implements FilterOperator {
     );
     this.#not = type === 'NOT EXISTS';
     this.#parentJoinKey = parentJoinKey;
+    this.#primaryKey = input.getSchema().primaryKey;
 
     // If the parentJoinKey is the primary key, no sense in trying to reuse.
     this.#noSizeReuse = areEqual(
@@ -75,32 +77,40 @@ export class Exists implements FilterOperator {
   }
 
   endFilter() {
-    this.#cache = new Map();
+    this.#sizeCache = new Map();
     this.#output.endFilter();
   }
 
   *filter(node: Node): IterableIterator<'yield', boolean> {
-    let exists: boolean | undefined;
+    let size: number | undefined;
     if (!this.#noSizeReuse && !this.#inPush) {
       const key = this.#getCacheKey(node, this.#parentJoinKey);
-      exists = this.#cache.get(key);
-      if (exists === undefined) {
-        exists = yield* this.#fetchExists(node);
-        this.#cache.set(key, exists);
+      size = this.#sizeCache.get(key);
+      if (size === undefined) {
+        size = yield* this.#fetchSize(node);
+        this.#sizeCache.set(key, size);
       } else if (this.#cacheHitCountsForTesting) {
         this.#cacheHitCountsForTesting.set(
           key,
           (this.#cacheHitCountsForTesting.get(key) ?? 0) + 1,
         );
       }
+    } else {
+      size = yield* this.#fetchSize(node);
     }
 
-    const result =
-      (yield* this.#filter(node, exists)) && (yield* this.#output.filter(node));
+    const pk = canonicalKey(node.row, this.#primaryKey);
+    this.#counts.set(pk, size);
+
+    const exists = size > 0;
+    const passes = this.#not ? !exists : exists;
+    const result = passes && (yield* this.#output.filter(node));
     return result;
   }
 
   destroy(): void {
+    this.#counts.clear();
+    this.#sizeCache.clear();
     this.#input.destroy();
   }
 
@@ -119,19 +129,55 @@ export class Exists implements FilterOperator {
     this.#inPush = true;
     try {
       switch (change[ChangeIndex.TYPE]) {
-        // add, remove and edit cannot change the size of the
-        // this.#relationshipName relationship, so simply #pushWithFilter
-        case ChangeType.ADD:
-        case ChangeType.EDIT:
-        case ChangeType.REMOVE: {
-          yield* this.#pushWithFilter(change);
+        case ChangeType.ADD: {
+          const pk = canonicalKey(
+            change[ChangeIndex.NODE].row,
+            this.#primaryKey,
+          );
+          let size = 0;
+          const rel =
+            change[ChangeIndex.NODE].relationships[this.#relationshipName];
+          if (rel) {
+            for (const n of rel()) {
+              if (n === 'yield') {
+                yield 'yield';
+                continue;
+              }
+              size++;
+            }
+          }
+          this.#counts.set(pk, size);
+          yield* this.#pushWithFilter(change, size > 0);
           return;
         }
-        case ChangeType.CHILD:
-          // Only add and remove child changes for the
-          // this.#relationshipName relationship, can change the size
-          // of the this.#relationshipName relationship, for other
-          // child changes simply #pushWithFilter
+        case ChangeType.REMOVE: {
+          const pk = canonicalKey(
+            change[ChangeIndex.NODE].row,
+            this.#primaryKey,
+          );
+          const size = this.#counts.get(pk) ?? 0;
+          this.#counts.delete(pk);
+          yield* this.#pushWithFilter(change, size > 0);
+          return;
+        }
+        case ChangeType.EDIT: {
+          const oldPk = canonicalKey(
+            change[ChangeIndex.OLD_NODE].row,
+            this.#primaryKey,
+          );
+          const newPk = canonicalKey(
+            change[ChangeIndex.NODE].row,
+            this.#primaryKey,
+          );
+          const size = this.#counts.get(oldPk) ?? 0;
+          if (oldPk !== newPk) {
+            this.#counts.delete(oldPk);
+          }
+          this.#counts.set(newPk, size);
+          yield* this.#pushWithFilter(change, size > 0);
+          return;
+        }
+        case ChangeType.CHILD: {
           if (
             change[ChangeIndex.CHILD_DATA].relationshipName !==
               this.#relationshipName ||
@@ -140,18 +186,25 @@ export class Exists implements FilterOperator {
             change[ChangeIndex.CHILD_DATA].change[ChangeIndex.TYPE] ===
               ChangeType.CHILD
           ) {
-            yield* this.#pushWithFilter(change);
+            const pk = canonicalKey(
+              change[ChangeIndex.NODE].row,
+              this.#primaryKey,
+            );
+            const size = this.#counts.get(pk) ?? 0;
+            yield* this.#pushWithFilter(change, size > 0);
             return;
           }
+          const pk = canonicalKey(
+            change[ChangeIndex.NODE].row,
+            this.#primaryKey,
+          );
+          const currentSize = this.#counts.get(pk) ?? 0;
           switch (change[ChangeIndex.CHILD_DATA].change[ChangeIndex.TYPE]) {
             case ChangeType.ADD: {
-              const size = yield* this.#fetchSize(change[ChangeIndex.NODE]);
-              if (size === 1) {
+              const newSize = currentSize + 1;
+              this.#counts.set(pk, newSize);
+              if (currentSize === 0) {
                 if (this.#not) {
-                  // Since the add child change currently being processed is not
-                  // pushed to output, the added child needs to be excluded from
-                  // the remove being pushed to output (since the child has
-                  // never been added to the output).
                   yield* this.#output.push(
                     makeRemoveChange({
                       row: change[ChangeIndex.NODE].row,
@@ -169,22 +222,20 @@ export class Exists implements FilterOperator {
                   );
                 }
               } else {
-                yield* this.#pushWithFilter(change, size > 0);
+                yield* this.#pushWithFilter(change, true);
               }
               return;
             }
             case ChangeType.REMOVE: {
-              const size = yield* this.#fetchSize(change[ChangeIndex.NODE]);
-              if (size === 0) {
+              const newSize = Math.max(0, currentSize - 1);
+              this.#counts.set(pk, newSize);
+              if (currentSize === 1 && newSize === 0) {
                 if (this.#not) {
                   yield* this.#output.push(
                     makeAddChange(change[ChangeIndex.NODE]),
                     this,
                   );
                 } else {
-                  // Since the remove child change currently being processed is
-                  // not pushed to output, the removed child needs to be added to
-                  // the remove being pushed to output.
                   yield* this.#output.push(
                     makeRemoveChange({
                       row: change[ChangeIndex.NODE].row,
@@ -201,12 +252,13 @@ export class Exists implements FilterOperator {
                   );
                 }
               } else {
-                yield* this.#pushWithFilter(change, size > 0);
+                yield* this.#pushWithFilter(change, newSize > 0);
               }
               return;
             }
           }
           return;
+        }
         default:
           unreachable(change);
       }
@@ -215,15 +267,6 @@ export class Exists implements FilterOperator {
     }
   }
 
-  /**
-   * Returns whether or not the node's this.#relationshipName
-   * relationship passes the exist/not exists filter condition.
-   * If the optional `size` is passed it is used.
-   * Otherwise, if there is a stored size for the row it is used.
-   * Otherwise the size is computed by streaming the node's
-   * relationship with this.#relationshipName (this computed size is also
-   * stored).
-   */
   *#filter(node: Node, exists?: boolean): IterableIterator<'yield', boolean> {
     exists = exists ?? (yield* this.#fetchExists(node));
     return this.#not ? !exists : exists;
@@ -237,9 +280,6 @@ export class Exists implements FilterOperator {
     return JSON.stringify(values);
   }
 
-  /**
-   * Pushes a change if this.#filter is true for its row.
-   */
   *#pushWithFilter(change: Change, exists?: boolean): Stream<'yield'> {
     if (yield* this.#filter(change[ChangeIndex.NODE], exists)) {
       yield* this.#output.push(change, this);
@@ -247,9 +287,6 @@ export class Exists implements FilterOperator {
   }
 
   *#fetchExists(node: Node): IterableIterator<'yield', boolean> {
-    // While it seems like this should be able to fetch just 1 node
-    // to check for exists, we can't because Take does not support
-    // early return during initial fetch.
     return (yield* this.#fetchSize(node)) > 0;
   }
 
