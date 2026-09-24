@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790255683257,
+  "lastUpdate": 1790257211475,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -58029,6 +58029,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/2d12faafb7fc03bc7ccef8b78112ad48fcf25959"
         },
         "date": 1790255670420,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 326494,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 59167,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 119478,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34097,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pawarren95@gmail.com",
+            "name": "Paul Warren",
+            "username": "pawarren"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a951fd4938f5e104906cc6672f26d0e5c3bc3890",
+          "message": "fix(replicache): make the op-sqlite store's destroy() open the database with the options it was created with (#6656)\n\n## Summary\n\n`opSQLiteStoreProvider({location})` opens the store at `location` (and\nwith `encryptionKey` when given), but `OpSQLiteDatabase.destroy()`\nreopens the database with `{name}` alone before calling `delete()`.\nUnder any non-default location — or an encrypted database — the drop\ndeletes a freshly created empty file at the default path and leaves the\nreal database in place, and reports success.\n\n`destroy()` is what `dropAllDatabases`, the client-side corruption\nrecovery in #6558 (`Dropping database …` on an invalid ref count) and\n`dropOpSQLiteStore` all end in. With a non-default location none of them\nremoves the replica they mean to, so a corrupt store is reopened, as\ncorrupt, by the rebuild that was supposed to replace it.\n\nThe fix keeps the options the store was opened with and uses them for\nthe delete connection.\n\n## Test\n\n`store.test.node.ts`: `drop reopens the database with the same options\nit was created with`. The op-sqlite mock now records every `open()` it\nis asked for; the test creates a store with `location:\n'custom-location'`, drops it, and asserts every connection opened for\nthat store carried the location. Fails on `main` (`expected undefined to\nbe 'custom-location'`), passes here.\n\nWe run the default location precisely because of this, so there is no\nproduction trace to attach; it was found reading the adapter while\nswitching to op-sqlite.",
+          "timestamp": "2026-09-24T13:18:50Z",
+          "tree_id": "88e670f71e908423420bc95c4a354646a51a2167",
+          "url": "https://github.com/rocicorp/mono/commit/a951fd4938f5e104906cc6672f26d0e5c3bc3890"
+        },
+        "date": 1790257202221,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
