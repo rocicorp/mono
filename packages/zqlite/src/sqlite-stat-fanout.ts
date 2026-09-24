@@ -1,6 +1,7 @@
 import {newArray} from '../../shared/src/arrays.ts';
 import {getOrInsertComputed} from '../../shared/src/map.ts';
 import type {Database} from './db.ts';
+import {isSampleNull} from './sqlite-stat4-sample.ts';
 
 /**
  * Result of fanout calculation from SQLite statistics.
@@ -253,7 +254,7 @@ export class SQLiteStatFanout {
         const neqParts = s.neq.split(' ');
         return {
           fanout: parseInt(neqParts[neqIndex] ?? neqParts[0], 10),
-          isNull: this.#decodeSampleIsNull(s.sample),
+          isNull: isSampleNull(s.sample),
         };
       });
 
@@ -429,43 +430,5 @@ export class SQLiteStatFanout {
 
     // Check if ALL query columns exist in the index prefix
     return queryColumnsLower.every(queryCol => indexPrefixLower.has(queryCol));
-  }
-
-  /**
-   * Decodes a sqlite_stat4 sample value to check if it's NULL.
-   *
-   * SQLite record format (simplified):
-   * - Varint: header size
-   * - Serial types for each column (one byte each typically)
-   * - Actual data
-   *
-   * Serial type 0 = NULL
-   * Serial type 1 = 8-bit int
-   * Serial type 2 = 16-bit int
-   * Serial type 3 = 24-bit int
-   * etc.
-   *
-   * We only need to check the first column's serial type.
-   *
-   * @param sample Binary-encoded sample from stat4
-   * @returns true if the sample value is NULL
-   */
-  #decodeSampleIsNull(sample: Buffer): boolean {
-    if (sample.length === 0) {
-      return true;
-    }
-
-    // Read header size (varint - simplified: assume single byte)
-    const headerSize = sample[0];
-
-    if (headerSize === 0 || headerSize >= sample.length) {
-      return true;
-    }
-
-    // Read first serial type (at position 1)
-    const serialType = sample[1];
-
-    // Serial type 0 = NULL
-    return serialType === 0;
   }
 }
