@@ -142,6 +142,8 @@ export type HydrationStats = {
   readonly rowsRead: number;
   /** What the planner warned about the plan it chose for the query. */
   readonly planWarnings: readonly PlanWarning[];
+  /** The {@link queryShape} of the query, computed when it was hydrated. */
+  readonly shape: QueryShape;
 };
 
 type QueryLogInfo = {
@@ -624,6 +626,7 @@ export class PipelineDriver {
           rowCount: pipeline.hydrationRowCount,
           rowsRead: pipeline.hydrationRowsRead,
           planWarnings: pipeline.planWarnings,
+          shape: pipeline.shape,
         }
       : undefined;
   }

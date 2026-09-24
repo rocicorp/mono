@@ -49,6 +49,7 @@ import {getMutationResultsQuery} from './cvr.ts';
 import {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {testDeferredWritesBudget} from './deferred-writes-test-util.ts';
 import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
+import {queryShape} from './query-shape.ts';
 import {QueryStats} from './query-stats.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {RowID} from './schema/types.ts';
@@ -2757,7 +2758,12 @@ describe('view-syncer/pipeline-driver', () => {
     ];
     const stats2 = must(pipelines.hydrationStats('queryID2'));
     // 3 issues and 4 comments, each read once.
-    expect(stats2).toEqual({rowCount: 7, rowsRead: 7, planWarnings: []});
+    expect(stats2).toEqual({
+      rowCount: 7,
+      rowsRead: 7,
+      planWarnings: [],
+      shape: queryShape(ISSUES_AND_COMMENTS),
+    });
     expect(pipelines.hydrationStats('queryID')).toEqual(stats);
 
     pipelines.removeQuery('queryID');
