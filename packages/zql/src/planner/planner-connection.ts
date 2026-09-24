@@ -138,6 +138,12 @@ export class PlannerConnection {
    */
   #cachedConstraintCosts: Map<string, CostEstimate> = new Map();
 
+  /**
+   * How the source reads rows for each constraint key with a cached cost.
+   * Cleared along with {@link #cachedConstraintCosts}.
+   */
+  #cachedAccesses: Map<string, ConnectionAccess> = new Map();
+
   constructor(
     table: string,
     model: ConnectionCostModel,
@@ -207,7 +213,7 @@ export class PlannerConnection {
     const key = path.join(',');
     this.#constraints.set(key, c);
     // Constraints changed, invalidate cost caches
-    this.#cachedConstraintCosts.clear();
+    this.#clearCostCaches();
 
     planDebugger?.log({
       type: 'node-constraint',
@@ -228,7 +234,7 @@ export class PlannerConnection {
   setPerBranchFilter(path: number[], filter: NoSubqueryCondition): void {
     this.#perBranchFilters.set(path.join(','), filter);
     // The cost depends on the filter, so invalidate caches.
-    this.#cachedConstraintCosts.clear();
+    this.#clearCostCaches();
   }
 
   estimateCost(
@@ -256,10 +262,14 @@ export class PlannerConnection {
     // simple OR branch in UFI mode) with the connection-time filter so
     // the cost model sees the same effective filter the runtime applies.
     const perBranchFilter = this.#perBranchFilters.get(key);
-    const {startupCost, fanout, rows} = this.#model(
+    const filters = andFilters(
+      this.#filtersFor(mergedConstraint),
+      perBranchFilter,
+    );
+    const {startupCost, fanout, rows, plan} = this.#model(
       this.table,
       this.#sort,
-      andFilters(this.#filtersFor(mergedConstraint), perBranchFilter),
+      filters,
       mergedConstraint,
     );
     const selectivity = perBranchFilter
@@ -280,6 +290,12 @@ export class PlannerConnection {
       fanout,
     };
     this.#cachedConstraintCosts.set(key, cost);
+    this.#cachedAccesses.set(key, {
+      constraint: mergedConstraint,
+      filters,
+      rows,
+      plan,
+    });
 
     if (planDebugger) {
       planDebugger.log({
@@ -380,7 +396,12 @@ export class PlannerConnection {
     this.#perBranchFilters.clear();
     this.limit = this.#baseLimit;
     // Clear all cost caches
+    this.#clearCostCaches();
+  }
+
+  #clearCostCaches(): void {
     this.#cachedConstraintCosts.clear();
+    this.#cachedAccesses.clear();
   }
 
   /**
@@ -409,7 +430,20 @@ export class PlannerConnection {
       this.#constraints.set(key, value);
     }
     // Constraints changed, invalidate cost caches
-    this.#cachedConstraintCosts.clear();
+    this.#clearCostCaches();
+  }
+
+  get sort(): Ordering {
+    return this.#sort;
+  }
+
+  /**
+   * How the source reads rows for the current plan: one access per branch
+   * pattern this connection was costed for since its constraints last
+   * changed. Estimate the plan's cost first to populate them.
+   */
+  accesses(): Iterable<ConnectionAccess> {
+    return this.#cachedAccesses.values();
   }
 
   /** Get current constraints for debugging. */
@@ -489,10 +523,50 @@ type FanoutEst = {
 };
 export type FanoutCostModel = (columns: string[]) => FanoutEst;
 
+/**
+ * How a source would read the rows of a connection, as far as the cost model
+ * can tell. This is used to warn about slow plans, not to choose between
+ * them.
+ */
+export type AccessPlan = {
+  /**
+   * `search` if the source uses an index to find the matching rows. `scan`
+   * if it reads the whole table (or a whole index, for its order) and tests
+   * each row, stopping early only if the reader stops.
+   */
+  readonly access: 'search' | 'scan';
+
+  /**
+   * Whether the rows are sorted after they are read. `full` means that every
+   * matching row is read and sorted before the first one is returned, so
+   * reading fewer rows (e.g. for a limit) does not help. `partial` means that
+   * only runs of rows that tie on a prefix of the ordering are sorted.
+   */
+  readonly sort: 'none' | 'partial' | 'full';
+
+  /** The number of rows in the table, if the cost model knows it. */
+  readonly tableRows: number | undefined;
+};
+
 export type CostModelCost = {
   startupCost: number;
   rows: number;
   fanout: FanoutCostModel;
+  /** Omitted by cost models that cannot tell. */
+  plan?: AccessPlan | undefined;
+};
+
+/**
+ * A read of a connection's source under a particular constraint, as costed
+ * by the cost model.
+ */
+export type ConnectionAccess = {
+  /** The columns bound to a single value by the time of the read. */
+  readonly constraint: PlannerConstraint | undefined;
+  readonly filters: Condition | undefined;
+  /** The estimated number of rows returned. */
+  readonly rows: number;
+  readonly plan: AccessPlan | undefined;
 };
 export type ConnectionCostModel = (
   table: string,

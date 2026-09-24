@@ -4,4 +4,7 @@ export const testLogConfig = {
   ivmSampling: 0,
   slowRowThreshold: 0,
   slowHydrateThreshold: 0,
+  slowAdvanceThreshold: 0,
+  planWarningRowThreshold: 0,
+  planWarningCostThreshold: 0,
 };

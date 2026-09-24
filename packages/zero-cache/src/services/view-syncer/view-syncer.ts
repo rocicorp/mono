@@ -50,6 +50,7 @@ import type {
   CustomQueryTransformer,
   HashedTransformResponse,
 } from '../../custom-queries/transform-query.ts';
+import {LogThrottle} from '../../observability/log-throttle.ts';
 import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
@@ -103,7 +104,9 @@ import {HydrationBudget, type MonotonicClock} from './hydration-budget.ts';
 import {HydrationCircuitBreaker} from './hydration-circuit-breaker.ts';
 import {handleInspect} from './inspect-handler.ts';
 import type {PipelineDriver, QueryInfo, RowChange} from './pipeline-driver.ts';
+import {planWarningMessage} from './plan-warnings.ts';
 import {QueryCoveringIndex} from './query-covering.ts';
+import {queryShape} from './query-shape.ts';
 import {parseSignature} from './row-set-signature.ts';
 import {
   cmpVersions,
@@ -238,6 +241,19 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  * next tick of the timer.
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
+
+/**
+ * A slow query is typically slow for every client group that runs it, so
+ * slow hydrations are logged at most once per query shape per this window,
+ * per process. See {@link LogThrottle}.
+ */
+const SLOW_HYDRATION_LOG_WINDOW_MS = 5 * 60_000;
+
+// Shared by all ViewSyncers in the process, so that a query shape is
+// throttled across client groups.
+const slowHydrationLogThrottle = new LogThrottle({
+  windowMs: SLOW_HYDRATION_LOG_WINDOW_MS,
+});
 
 type CustomQueryTransformMode = 'all' | 'missing';
 
@@ -2129,7 +2145,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // the query and errors it to the client instead of hydrating it again.
         this.#recordHydrationTimeout(
           lc,
-          {id: queryID, transformationHash, name: queryName},
+          {
+            id: queryID,
+            ast: transformedAst,
+            transformationHash,
+            name: queryName,
+          },
           elapsed,
           count,
         );
@@ -2143,6 +2164,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#addQueryMaterializationServerMetric(queryID, elapsed);
       this.#inspectorDelegate.addQuery(queryID, transformedAst);
       lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
+      if (elapsed > this.#slowHydrateThreshold) {
+        this.#logSlowHydration(
+          lc,
+          {
+            id: queryID,
+            ast: transformedAst,
+            transformationHash,
+            name: queryName,
+          },
+          elapsed,
+        );
+      }
 
       let drifted = false;
       // Drift detection: compare the just-computed candidate signature against
@@ -2784,21 +2817,72 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    */
   #recordHydrationTimeout(
     lc: LogContext,
-    query: {id: string; transformationHash: string; name?: string | undefined},
+    query: HydrationQuery,
     elapsedMs: number,
     rowCount?: number,
   ): void {
     this.#hydrationCircuitBreaker.trip(query.transformationHash);
     this.#hydrationTimeouts.add(1);
-    lc.warn?.('Query hydration aborted for exceeding the hydration timeout', {
+    if (!lc.warn) {
+      return;
+    }
+    const shape = queryShape(query.ast);
+    lc.warn('Query hydration aborted for exceeding the hydration timeout', {
       clientGroupID: this.id,
       queryHash: query.id,
       transformationHash: query.transformationHash,
       ...(query.name !== undefined && {queryName: query.name}),
+      queryShape: shape.hash,
       hydrationTimeoutMs: this.#hydrationCircuitBreaker.timeoutMs,
       hydrationElapsedMs: elapsedMs,
       ...(rowCount !== undefined && {hydrationRowCount: rowCount}),
       circuitBreakerOpenMs: this.#hydrationCircuitBreaker.openMs,
+      zql: shape.zql,
+    });
+  }
+
+  /**
+   * Logs a hydration that exceeded the slow hydration threshold.
+   *
+   * The query is logged as its {@link queryShape}, with literal values
+   * redacted, and each shape is logged at most once per
+   * {@link SLOW_HYDRATION_LOG_WINDOW_MS}. The next log of a shape reports how
+   * many slow hydrations of it were suppressed in the meantime.
+   */
+  #logSlowHydration(
+    lc: LogContext,
+    query: HydrationQuery,
+    elapsedMs: number,
+  ): void {
+    if (!lc.warn) {
+      return;
+    }
+    const shape = queryShape(query.ast);
+    const suppressed = slowHydrationLogThrottle.admit(
+      `${query.name ?? ''}:${shape.hash}`,
+    );
+    if (suppressed === undefined) {
+      return;
+    }
+    const stats = this.#pipelines.hydrationStats(query.id);
+    lc.warn('Slow query materialization', {
+      zeroEvent: 'query-slow-hydration',
+      clientGroupID: this.id,
+      queryHash: query.id,
+      transformationHash: query.transformationHash,
+      ...(query.name !== undefined && {queryName: query.name}),
+      queryShape: shape.hash,
+      hydrationTimeMs: elapsedMs,
+      ...(stats && {
+        hydrationRowCount: stats.rowCount,
+        hydrationRowsRead: stats.rowsRead,
+      }),
+      ...(stats !== undefined &&
+        stats.planWarnings.length > 0 && {
+          planWarnings: stats.planWarnings.map(planWarningMessage),
+        }),
+      ...(suppressed > 0 && {suppressedSinceLastLog: suppressed}),
+      zql: shape.zql,
     });
   }
 
@@ -3131,7 +3215,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           });
 
           if (elapsed > slowHydrateThreshold) {
-            queryLC.warn?.('Slow query materialization', elapsed, q.ast);
+            self.#logSlowHydration(queryLC, q, elapsed);
           }
           manualSpan(tracer, 'vs.addAndConsumeQuery', elapsed, {
             hash: q.id,

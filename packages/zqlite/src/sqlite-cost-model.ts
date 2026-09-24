@@ -5,6 +5,7 @@ import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
 import {transformFilters} from '../../zql/src/builder/filter.ts';
 import type {
+  AccessPlan,
   ConnectionCostModel,
   CostModelCost,
 } from '../../zql/src/planner/planner-connection.ts';
@@ -42,6 +43,7 @@ export function createSQLiteCostModel(
   tableSpecs: Map<string, {zqlSpec: Record<string, SchemaValue>}>,
 ): ConnectionCostModel {
   const fanoutEstimator = new SQLiteStatFanout(db);
+  const tableRows = tableRowsReader(db);
   return (
     tableName: string,
     sort: Ordering,
@@ -101,7 +103,73 @@ export function createSQLiteCostModel(
       fanoutEstimator.getFanout(tableName, columns),
     );
 
-    return ret;
+    return {...ret, plan: accessPlan(loops, tableRows(tableName))};
+  };
+}
+
+/**
+ * Returns a function that reads the number of rows in a table from
+ * `sqlite_stat1`, or `undefined` if the table has not been analyzed.
+ *
+ * The counts are cached: they only feed plan warnings, for which the count
+ * as of the first plan is close enough.
+ */
+function tableRowsReader(db: Database): (table: string) => number | undefined {
+  let stmt: Statement | undefined;
+  const read = (table: string): number | undefined => {
+    try {
+      stmt ??= db.prepare(
+        'SELECT stat FROM sqlite_stat1 WHERE tbl = ? LIMIT 1',
+      );
+      // Every row for a table starts with the number of rows in the table.
+      const row = stmt.get<{stat: string} | undefined>(table);
+      const rows = row ? parseInt(row.stat, 10) : NaN;
+      return Number.isNaN(rows) ? undefined : rows;
+    } catch {
+      // sqlite_stat1 does not exist until the database is analyzed.
+      return undefined;
+    }
+  };
+  // Tables without statistics are cached too, as `undefined`.
+  const cache = new Map<string, number | undefined>();
+  return table => {
+    if (!cache.has(table)) {
+      cache.set(table, read(table));
+    }
+    return cache.get(table);
+  };
+}
+
+/**
+ * Describes how SQLite reads the rows, from the EXPLAIN text of the
+ * statement's top-level loops, e.g.:
+ *
+ * - `SEARCH issue USING INDEX issue_project (projectID=?)`
+ * - `SCAN comment USING INDEX sqlite_autoindex_comment_1` (every row, in the
+ *   order of the index)
+ * - `SCAN issue` (every row, in table order)
+ * - `USE TEMP B-TREE FOR ORDER BY` (a full sort)
+ * - `USE TEMP B-TREE FOR LAST TERM OF ORDER BY` or `... RIGHT PART OF ORDER
+ *   BY` (sorting runs of rows that tie on the index)
+ */
+function accessPlan(
+  loops: ScanstatusLoop[],
+  tableRows: number | undefined,
+): AccessPlan {
+  const [first, ...rest] = loops.filter(loop => loop.parentId === 0);
+  let sort: AccessPlan['sort'] = 'none';
+  for (const {explain} of rest) {
+    if (
+      explain.startsWith('USE TEMP B-TREE FOR') &&
+      explain.includes('ORDER BY')
+    ) {
+      sort = explain === 'USE TEMP B-TREE FOR ORDER BY' ? 'full' : 'partial';
+    }
+  }
+  return {
+    access: first?.explain.startsWith('SCAN ') ? 'scan' : 'search',
+    sort,
+    tableRows,
   };
 }
 

@@ -21,6 +21,11 @@ import {PlannerGraph} from './planner-graph.ts';
 import {PlannerJoin} from './planner-join.ts';
 import type {PlannerNode} from './planner-node.ts';
 import {PlannerTerminus} from './planner-terminus.ts';
+import {
+  collectPlanWarnings,
+  type PlanWarning,
+  type PlanWarningThresholds,
+} from './planner-warnings.ts';
 
 function wireOutput(from: PlannerNode, to: PlannerNode): void {
   switch (from.kind) {
@@ -364,9 +369,20 @@ function planRecursively(
 }
 
 /**
+ * Where the planner reports the {@link PlanWarning}s for the plan it chose.
+ */
+export type PlanWarningSink = {
+  readonly thresholds: PlanWarningThresholds;
+  /** Called once per planned query, and only if there are warnings. */
+  report(warnings: readonly PlanWarning[]): void;
+};
+
+/**
  * @param pushed The conditions that correlated predicate pushdown copied into
  * a child (see `pushDownCorrelatedPredicates`). The planner counts each one
  * only where it removes rows.
+ * @param planWarnings Receives warnings about the chosen plan. Collecting them
+ * costs extra cost model calls, so this is best left out when unused.
  */
 export function planQuery(
   ast: AST,
@@ -374,9 +390,20 @@ export function planQuery(
   planDebugger?: PlanDebugger,
   lc?: LogContext,
   pushed?: ReadonlySet<SimpleCondition>,
+  planWarnings?: PlanWarningSink,
 ): AST {
   const plans = buildPlanGraph(ast, model, true, undefined, pushed);
   planRecursively(plans, planDebugger, lc);
+  if (planWarnings) {
+    const warnings = collectPlanWarnings(
+      ast.table,
+      plans,
+      planWarnings.thresholds,
+    );
+    if (warnings.length > 0) {
+      planWarnings.report(warnings);
+    }
+  }
   return applyPlansToAST(ast, plans);
 }
 

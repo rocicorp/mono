@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {
   AST,
   Condition,
@@ -1450,6 +1451,178 @@ describe('view-syncer/pipeline-driver', () => {
     ]).not.toThrow();
   });
 
+  function warnLoggingDrivers(
+    clientGroupIDs: string[],
+    logConfig: Partial<typeof testLogConfig>,
+  ): PipelineDriver[] {
+    const warnLC = new LogContext('warn', undefined, logSink);
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    const databaseStorage = new DatabaseStorage(storage);
+    return clientGroupIDs.map(clientGroupID => {
+      const driver = new PipelineDriver(
+        warnLC,
+        {...testLogConfig, ...logConfig},
+        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        databaseStorage.createClientGroupStorage(clientGroupID),
+        clientGroupID,
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+      );
+      driver.init(clientSchema);
+      return driver;
+    });
+  }
+
+  function warnings(zeroEvent: string) {
+    return logSink.messages.filter(
+      ([level, , args]) =>
+        level === 'warn' &&
+        (args[1] as {zeroEvent?: string} | undefined)?.zeroEvent === zeroEvent,
+    );
+  }
+
+  test('logs slow query advancements once per query shape across client groups', () => {
+    const drivers = warnLoggingDrivers(['cg1', 'cg2'], {
+      slowAdvanceThreshold: 0,
+    });
+    for (const driver of drivers) {
+      [
+        ...driver.addQuery(
+          'hash1',
+          'queryID1',
+          ISSUES_AND_COMMENTS,
+          startTimer(),
+        ),
+      ];
+    }
+
+    replicator.processTransaction(
+      '134',
+      messages.insert('comments', {id: '41', issueID: '1', upvotes: 10}),
+      messages.insert('comments', {id: '42', issueID: '2', upvotes: 20}),
+    );
+    for (const driver of drivers) {
+      [...driver.advance(startTimer()).changes];
+    }
+
+    // Only the first client group logs the shape.
+    expect(warnings('query-slow-advance')).toEqual([
+      [
+        'warn',
+        {clientGroupID: 'cg1'},
+        [
+          expect.stringMatching(
+            /^Slow query advancement: \d+ ms for 2 of 2 changes$/,
+          ),
+          {
+            zeroEvent: 'query-slow-advance',
+            queryHash: 'queryID1',
+            transformationHash: 'hash1',
+            queryShape: expect.any(String),
+            advanceTimeMs: expect.any(Number),
+            changes: 2,
+            advancementChanges: 2,
+            timeMsByTable: {comments: expect.any(Number)},
+            zql:
+              "issues.related('comments', q => q.orderBy('id', 'desc'))" +
+              ".orderBy('id', 'desc')",
+          },
+        ],
+      ],
+    ]);
+  });
+
+  test('does not log advancements within the slow advance threshold', () => {
+    const [driver] = warnLoggingDrivers(['cg1'], {
+      slowAdvanceThreshold: 60_000,
+    });
+    [
+      ...driver.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    ];
+    replicator.processTransaction(
+      '134',
+      messages.insert('comments', {id: '41', issueID: '1', upvotes: 10}),
+    );
+    [...driver.advance(startTimer()).changes];
+    expect(warnings('query-slow-advance')).toEqual([]);
+  });
+
+  test('logs the slowest queries of an advancement that times out', () => {
+    const [driver] = warnLoggingDrivers(['cg1'], {
+      slowAdvanceThreshold: 60_000,
+    });
+    const hydrationTimer = {totalElapsed: () => 50, elapsedLap: () => 50};
+    [
+      ...driver.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        hydrationTimer,
+      ),
+    ];
+    [
+      ...driver.addQuery(
+        'hash2',
+        'queryID2',
+        ISSUES_QUERY_WITH_EXISTS,
+        hydrationTimer,
+      ),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      messages.insert('comments', {id: '41', issueID: '1', upvotes: 10}),
+    );
+
+    // The advancement is on time until the comment is being pushed: the
+    // first two reads of the timer are before the push starts. Then 60ms is
+    // larger than half of the total hydration time of 100ms.
+    let timerReads = 0;
+    const advanceTimer = {
+      totalElapsed: () => (++timerReads <= 2 ? 0 : 60),
+      elapsedLap: () => 0,
+    };
+    expect(() => [...driver.advance(advanceTimer).changes]).toThrow(
+      ResetPipelinesSignal,
+    );
+
+    // The comment is pushed only to the query that reads comments. The
+    // timeout is logged regardless of the slow advance threshold.
+    expect(warnings('query-advance-timeout')).toEqual([
+      [
+        'warn',
+        {clientGroupID: 'cg1'},
+        [
+          expect.stringMatching(
+            /^Advancement of 1 changes timed out\. The queries that took the most time: queryID1 \(\d+ ms\)$/,
+          ),
+          {
+            zeroEvent: 'query-advance-timeout',
+            reason: expect.stringContaining('Advancement exceeded timeout'),
+            advancementChanges: 1,
+            queries: [
+              {
+                queryHash: 'queryID1',
+                transformationHash: 'hash1',
+                queryShape: expect.any(String),
+                advanceTimeMs: expect.any(Number),
+                changes: 1,
+                zql: expect.stringContaining("related('comments'"),
+              },
+            ],
+          },
+        ],
+      ],
+    ]);
+  });
+
   test('advanceWithoutDiff picks up a schema change before hydration', () => {
     // The client schema only covers `issues`, so dropping a `comments`
     // column is not a client-visible schema error, but it does invalidate
@@ -2444,6 +2617,122 @@ describe('view-syncer/pipeline-driver', () => {
         },
       ]
     `);
+  });
+
+  test('hydrationStats counts rows output and rows read', () => {
+    pipelines.init(clientSchema);
+    expect(pipelines.hydrationStats('queryID')).toBeUndefined();
+
+    const rows = [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID',
+        ISSUES_QUERY_WITH_EXISTS,
+        startTimer(),
+      ),
+    ].filter(change => change !== 'yield');
+
+    const stats = must(pipelines.hydrationStats('queryID'));
+    expect(stats.rowCount).toBe(rows.length);
+    // Only issue 1 has a label, but every issue and its label edges are read
+    // to find that out.
+    expect(stats.rowsRead).toBeGreaterThan(stats.rowCount);
+
+    // A second hydration only counts its own reads.
+    [
+      ...pipelines.addQuery(
+        'hash2',
+        'queryID2',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    ];
+    const stats2 = must(pipelines.hydrationStats('queryID2'));
+    // 3 issues and 4 comments, each read once.
+    expect(stats2).toEqual({rowCount: 7, rowsRead: 7, planWarnings: []});
+    expect(pipelines.hydrationStats('queryID')).toEqual(stats);
+
+    pipelines.removeQuery('queryID');
+    expect(pipelines.hydrationStats('queryID')).toBeUndefined();
+  });
+
+  test('logs plan warnings once per query shape across client groups', () => {
+    // Plan warnings need table statistics.
+    db.exec('ANALYZE');
+    const warnLC = new LogContext('warn', undefined, logSink);
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    const databaseStorage = new DatabaseStorage(storage);
+    const [cg1, cg2] = ['cg1', 'cg2'].map(clientGroupID => {
+      const driver = new PipelineDriver(
+        warnLC,
+        // SQLite sorts the tiny comments table (~1 row per issue) rather than
+        // scan it by id, which a threshold of 2 rows leaves out.
+        {...testLogConfig, planWarningRowThreshold: 2},
+        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        databaseStorage.createClientGroupStorage(clientGroupID),
+        clientGroupID,
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+        true /** enablePlanner */,
+      );
+      driver.init(clientSchema);
+      return driver;
+    });
+
+    // The comments of each issue are looked up by issueID, which has no
+    // index.
+    const commentsWarning = {
+      type: 'missing-index',
+      table: 'comments',
+      path: ['comments'],
+      perRow: true,
+      columns: ['issueID'],
+      rows: 4,
+      suggestedIndex: ['issueID', 'id'],
+    };
+    for (const driver of [cg1, cg2]) {
+      [
+        ...driver.addQuery(
+          'hash1',
+          'queryID',
+          ISSUES_AND_COMMENTS,
+          startTimer(),
+        ),
+      ];
+      expect(driver.hydrationStats('queryID')?.planWarnings).toEqual([
+        commentsWarning,
+      ]);
+    }
+
+    const planWarningLogs = logSink.messages.filter(
+      ([level, context]) =>
+        level === 'warn' && context?.zeroEvent === undefined,
+    );
+    // Only the first client group logs the shape.
+    expect(planWarningLogs).toEqual([
+      [
+        'warn',
+        {clientGroupID: 'cg1'},
+        [
+          "Query plan warning: Each lookup of comments (related 'comments') " +
+            'by issueID scans all ~4 rows because no index covers issueID, ' +
+            'and it runs once per parent row. Consider adding an index on ' +
+            'comments (issueID, id) upstream.',
+          {
+            zeroEvent: 'query-plan-warning',
+            queryHash: 'queryID',
+            transformationHash: 'hash1',
+            queryShape: expect.any(String),
+            warnings: [commentsWarning],
+            zql:
+              "issues.related('comments', q => q.orderBy('id', 'desc'))" +
+              ".orderBy('id', 'desc')",
+          },
+        ],
+      ],
+    ]);
   });
 
   test('subset client schema can hydrate whereExists helper tables', () => {

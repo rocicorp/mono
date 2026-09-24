@@ -9,7 +9,7 @@ import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerFilter} from './planner-filter.ts';
 import type {PlannerJoin} from './planner-join.ts';
 import {omitFanout} from './planner-node.ts';
-import type {PlannerNode} from './planner-node.ts';
+import type {CostEstimate, PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 import type {PlannerTerminus} from './planner-terminus.ts';
 
@@ -125,6 +125,21 @@ export class PlannerGraph {
   getTotalCost(planDebugger?: PlanDebugger): number {
     const estimate = must(this.#terminus).estimateCost(planDebugger);
     return estimate.cost + estimate.startupCost;
+  }
+
+  /**
+   * Estimates the cost of the current plan, e.g. the one {@link plan} chose,
+   * leaving each connection's {@link PlannerConnection.accesses} for it.
+   *
+   * This derives the same state that {@link plan} derives for each plan it
+   * tries, so it also works for a graph {@link plan} had nothing to choose
+   * for. For a plan that {@link plan} restored it changes nothing.
+   */
+  estimateCurrentPlan(): CostEstimate {
+    checkAndConvertFOFI(buildFOFICache(this));
+    propagateUnlimitForFlippedJoins(this);
+    this.propagateConstraints();
+    return must(this.#terminus).estimateCost();
   }
 
   /**

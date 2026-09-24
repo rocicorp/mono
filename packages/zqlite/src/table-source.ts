@@ -131,6 +131,7 @@ export class TableSource implements Source {
    * {@link PendingDelta}.
    */
   #delta: PendingDelta | undefined;
+  #rowsRead = 0;
 
   /**
    * @param shouldYield a function called after each row is read from the database,
@@ -167,6 +168,14 @@ export class TableSource implements Source {
       this.#uniqueIndexes.has(primaryKeyStr),
       `primary key ${primaryKeyStr} does not have a UNIQUE index`,
     );
+  }
+
+  /**
+   * The number of rows read from SQLite by fetches, over the lifetime of this
+   * source. Rows that SQLite scans and filters out itself are not counted.
+   */
+  get rowsRead(): number {
+    return this.#rowsRead;
   }
 
   get tableSchema() {
@@ -571,6 +580,7 @@ export class TableSource implements Source {
       if (result.done) {
         break;
       }
+      this.#rowsRead++;
       const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
       debug?.rowVended(this.#table, query, row);
       yield row;

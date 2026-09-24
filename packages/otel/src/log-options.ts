@@ -25,6 +25,46 @@ export const logOptions = {
     type: v.number().default(100),
     desc: [
       `The number of milliseconds a query hydration must take to print a slow warning.`,
+      ``,
+      `The warning logs the query with its literal values redacted, and is logged`,
+      `at most once every 5 minutes per query shape (the query with its values`,
+      `redacted), with a count of the slow hydrations suppressed in between.`,
+    ],
+  },
+
+  slowAdvanceThreshold: {
+    type: v.number().default(100),
+    desc: [
+      `The number of milliseconds a query must take to process one advancement`,
+      `(the changes of a replicated transaction, or a batch of them) to print a`,
+      `slow warning.`,
+      ``,
+      `Like {bold slowHydrateThreshold}, the warning logs the query with its values`,
+      `redacted, at most once every 5 minutes per query shape. When an advancement`,
+      `times out and resets the pipelines, the queries that took the most time are`,
+      `logged regardless of this threshold.`,
+    ],
+  },
+
+  planWarningRowThreshold: {
+    type: v.number().default(10_000),
+    desc: [
+      `Log a warning when the query planner estimates that one read of a table`,
+      `scans or sorts at least this many rows: a read that scans the whole`,
+      `table because no index covers the columns it looks rows up by, or that`,
+      `sorts every matching row because no index covers the ordering.`,
+      ``,
+      `The warning is logged at most once an hour per query shape (the query`,
+      `with its values redacted). Set to 0 to disable. Requires the query planner.`,
+    ],
+  },
+
+  planWarningCostThreshold: {
+    type: v.number().default(1_000_000),
+    desc: [
+      `Log a warning when the best plan the query planner finds for a query is`,
+      `still estimated to process at least this many rows. Throttled like`,
+      `{bold planWarningRowThreshold}. Set to 0 to disable.`,
     ],
   },
 
