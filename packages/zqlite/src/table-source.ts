@@ -920,21 +920,31 @@ function collides(
   primaryKey: PrimaryKey,
   columns: Record<string, SchemaValue>,
 ): boolean {
-  if (primaryKey.every(col => sqliteValuesEqual(a[col], b[col], columns[col].type))) {
+  if (
+    primaryKey.every(col =>
+      sqliteValuesEqual(a[col], b[col], columns[col].type),
+    )
+  ) {
     return true;
   }
   for (const key of uniqueKeys) {
     if (key.some(col => b[col] === null || b[col] === undefined)) {
       continue;
     }
-    if (key.every(col => sqliteValuesEqual(a[col], b[col], columns[col].type))) {
+    if (
+      key.every(col => sqliteValuesEqual(a[col], b[col], columns[col].type))
+    ) {
       return true;
     }
   }
   return false;
 }
 
-function sqliteValuesEqual(a: Value | undefined, b: Value | undefined, type: ValueType) {
+function sqliteValuesEqual(
+  a: Value | undefined,
+  b: Value | undefined,
+  type: ValueType,
+) {
   return toSQLiteType(a, type) === toSQLiteType(b, type);
 }
 
