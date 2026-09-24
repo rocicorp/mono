@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790254344768,
+  "lastUpdate": 1790255683257,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -58005,6 +58005,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 34123,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2d12faafb7fc03bc7ccef8b78112ad48fcf25959",
+          "message": "perf(replicache): only fork Zero's IVM data in persist when the snapshot may be persisted (#6671)\n\nFollow-up to #6670.\n\n## Summary\n\nAfter #6670, `persistDD31` forks Zero's IVM data to the memdag base\nsnapshot while it holds the memdag read. It did that on every persist,\nbut the fork is only used when the memdag snapshot is newer than the\nperdag's and may be persisted. Otherwise the perdag rebase forks to the\nperdag head instead (`zeroDataForPerdagHeadCommit`), so in the common\nsteady state the fork was a wasted b-tree diff that also held up queued\nmemdag writes (pokes, mutations).\n\nThis PR moves the fork into the branch that gathers the snapshot's\nchunks. Nothing changes when the snapshot is persisted.\n\n## Test\n\n- The test stub now types its read options as `ZeroReadOptions` instead\nof an inline shape.\n- The memdag write-lock probe (a 20ms race) now runs only on the first\n`getZeroData` call, the one the test asserts on.\n\nThe test still fails against `persist.ts` from `main`. The replicache\n(838) and zero-client (696) suites pass.\n\n## Not covered\n\n`maybeEndPull`'s replay path (`replicache-impl.ts`) calls\n`getTxData(syncHead)` without a memdag read, so it has the same IVM-fork\nrace #6670 fixed for persist. Left for a separate PR.",
+          "timestamp": "2026-09-24T13:06:59Z",
+          "tree_id": "60720a3c194de37f2d5ca48c61f2fb6fcfcc5d4f",
+          "url": "https://github.com/rocicorp/mono/commit/2d12faafb7fc03bc7ccef8b78112ad48fcf25959"
+        },
+        "date": 1790255670420,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 326494,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 59167,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 119478,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34097,
             "unit": "bytes"
           }
         ]
