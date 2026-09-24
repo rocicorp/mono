@@ -128,6 +128,7 @@ export async function persistDD31(
     assertSnapshotCommitDD31(memdagBaseSnapshot);
 
     let gatheredChunks: ReadonlyMap<Hash, Chunk> | undefined;
+    let zeroData: ZeroTxData | undefined;
     if (
       compareCookiesForSnapshots(memdagBaseSnapshot, perdagBaseSnapshot) > 0
     ) {
@@ -139,22 +140,24 @@ export async function persistDD31(
       const visitor = new GatherMemoryOnlyVisitor(memdagRead);
       await visitor.visit(memdagBaseSnapshotHash);
       gatheredChunks = visitor.gatheredChunks;
-    }
 
-    // Fork Zero's IVM state to the base snapshot while this read is still
-    // held. The fork is a diff from the IVM's current head (the memdag main
-    // head) to the base snapshot, and both are memdag chunks that a
-    // concurrent poke is free to collect the moment this read is released:
-    // moving the main head drops the superseded local commits, and a
-    // snapshot commit carries no ref to its basis. Taking the fork under
-    // the same lock that fixed `memdagBaseSnapshot` is what keeps the
-    // diff's endpoints alive; taken afterwards it raced every poke, and
-    // lost as `ChunkNotFoundError` out of persist.
-    const zeroData =
-      getZeroData &&
-      (await getZeroData(memdagBaseSnapshot.chunk.hash, {
-        openLazyRead: memdagRead,
-      }));
+      // Fork Zero's IVM state to the base snapshot while this read is still
+      // held. The fork is a diff from the IVM's current head (the memdag main
+      // head) to the base snapshot, and both are memdag chunks that a
+      // concurrent poke is free to collect the moment this read is released:
+      // moving the main head drops the superseded local commits, and a
+      // snapshot commit carries no ref to its basis. Taking the fork under
+      // the same lock that fixed `memdagBaseSnapshot` is what keeps the
+      // diff's endpoints alive; taken afterwards it raced every poke, and
+      // lost as `ChunkNotFoundError` out of persist. It is only needed when
+      // the snapshot may be persisted; otherwise the perdag rebase below
+      // forks to the perdag head instead.
+      zeroData =
+        getZeroData &&
+        (await getZeroData(memdagBaseSnapshotHash, {
+          openLazyRead: memdagRead,
+        }));
+    }
 
     return [newMutations, memdagBaseSnapshot, gatheredChunks, zeroData];
   });
