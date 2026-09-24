@@ -819,9 +819,74 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       assertNotInternal(query);
     }
 
-    // Unref the rows received for the aborted queries. The version of each
-    // unref is the version the row currently has in this update, so a row that
-    // stays referenced does not get a spurious patch version bump.
+    const patches = await this.#unreferenceReceivedRows(lc, aborted);
+
+    for (const queryID of aborted) {
+      delete this._cvr.queries[queryID];
+      const patch = {type: 'query', op: 'del', id: queryID} as const;
+      this._cvrStore.markQueryAsDeleted(this._cvr.version, patch);
+      patches.push({patch, toVersion: this._cvr.version});
+    }
+    return patches;
+  }
+
+  /**
+   * Tracks executed queries after rows have already been {@link received},
+   * i.e. in an update that started without {@link trackQueries} (an
+   * advancement). This is used to re-execute queries whose pipelines were
+   * dropped (and rebuilt) during the advancement.
+   *
+   * The queries' references are removed from the rows received so far,
+   * including any deltas received for them, as if the queries had been
+   * tracked from the start: rows received from now on have them stripped
+   * on first receipt, and {@link deleteUnreferencedRows} strips them from
+   * the rows that are not received. The re-executed queries' rows must then
+   * be received in full, in batches separate from the ones received so far.
+   *
+   * The queries must be tracked with the transformation hashes they already
+   * have. A new hash would change the query's transformation version, and
+   * possibly the CVR version, which the poke has already started with.
+   *
+   * @returns The patches for rows that are no longer referenced.
+   */
+  trackQueriesAfterReceived(
+    lc: LogContext,
+    executed: {id: string; transformationHash: string}[],
+  ): Promise<PatchToVersion[]> {
+    return startAsyncSpan(
+      tracer,
+      'CVRQueryDrivenUpdater.trackQueriesAfterReceived',
+      async () => {
+        for (const {id, transformationHash} of executed) {
+          const current = this._cvr.queries[id]?.transformationHash;
+          assert(
+            current === transformationHash,
+            () =>
+              `Query ${id} must keep its transformation hash (${current}) ` +
+              `when tracked after rows were received, not ${transformationHash}`,
+          );
+        }
+        this.trackQueries(lc, executed, []);
+        const patches = await this.#unreferenceReceivedRows(
+          lc,
+          new Set(executed.map(({id}) => id)),
+        );
+        return patches;
+      },
+    );
+  }
+
+  /**
+   * Removes the references of `queryIDs` from the rows received so far. A
+   * row left with no references is deleted, and the 'del' patch cancels any
+   * 'put' the client has already received, while a row still referenced by
+   * other queries keeps its patch version: the version of each unref is the
+   * version the row currently has in this update.
+   */
+  async #unreferenceReceivedRows(
+    lc: LogContext,
+    queryIDs: ReadonlySet<string>,
+  ): Promise<PatchToVersion[]> {
     const existingRows = await this._cvrStore.getRowRecords();
     const unrefs = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
     for (const [id, refCounts] of this.#receivedRows) {
@@ -829,7 +894,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         continue;
       }
       let unref: RowUpdate | undefined;
-      for (const queryID of aborted) {
+      for (const queryID of queryIDs) {
         const count = refCounts[queryID];
         if (!count) {
           continue;
@@ -844,18 +909,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         unref.refCounts[queryID] = -count;
       }
     }
-    const patches =
-      unrefs.size > 0
-        ? await this.received(lc, unrefs)
-        : ([] as PatchToVersion[]);
-
-    for (const queryID of aborted) {
-      delete this._cvr.queries[queryID];
-      const patch = {type: 'query', op: 'del', id: queryID} as const;
-      this._cvrStore.markQueryAsDeleted(this._cvr.version, patch);
-      patches.push({patch, toVersion: this._cvr.version});
-    }
-    return patches;
+    return unrefs.size > 0 ? this.received(lc, unrefs) : [];
   }
 
   /**

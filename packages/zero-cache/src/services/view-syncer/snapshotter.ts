@@ -295,6 +295,13 @@ export interface SnapshotDiff extends Iterable<Change> {
    *       may not be worth it for a presumable rare operation.
    */
   readonly changes: number;
+
+  /**
+   * The number of ChangeLog entries between the snapshots for each table,
+   * with the same caveats as {@link changes}, which is their sum. Tables
+   * without entries are absent.
+   */
+  readonly changesByTable: ReadonlyMap<string, number>;
 }
 
 /**
@@ -397,12 +404,12 @@ class Snapshot {
     this.version = stateVersion;
   }
 
-  numChangesSince(prevVersion: string) {
-    const {count} = this.db.get(
-      'SELECT COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ?',
+  numChangesByTableSince(prevVersion: string): Map<string, number> {
+    const rows: {table: string; count: number}[] = this.db.all(
+      'SELECT "table", COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ? GROUP BY "table"',
       prevVersion,
     );
-    return count;
+    return new Map(rows.map(({table, count}) => [table, count]));
   }
 
   /**
@@ -591,6 +598,7 @@ class Diff implements SnapshotDiff {
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
+  readonly changesByTable: ReadonlyMap<string, number>;
 
   constructor(
     appID: string,
@@ -609,7 +617,12 @@ class Diff implements SnapshotDiff {
     this.#observedTables = observedTables;
     this.prev = prev;
     this.curr = curr;
-    this.changes = curr.numChangesSince(prev.version);
+    this.changesByTable = curr.numChangesByTableSince(prev.version);
+    let changes = 0;
+    for (const count of this.changesByTable.values()) {
+      changes += count;
+    }
+    this.changes = changes;
     // Row values are only shared (via the cache) between Diffs that do not
     // straddle a table-wide op. This guarantees that any two Diffs that
     // encounter the same change log entry read the row from tables with

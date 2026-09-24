@@ -643,6 +643,19 @@ export const zeroOptions = {
     hidden: true,
   },
 
+  partialPipelineReset: {
+    type: v.boolean().default(false),
+    desc: [
+      `Reset only the query pipelines whose advancement is projected to take`,
+      `longer than their own hydration, instead of every pipeline of the`,
+      `client group. The other pipelines finish advancing, the reset ones are`,
+      `rebuilt at the new version, and clients receive both in one update.`,
+      `The whole client group is still reset when its pipelines together go`,
+      `over the group's budget.`,
+    ],
+    hidden: true,
+  },
+
   enableQueryCovering: {
     type: v.boolean().default(true),
     desc: [

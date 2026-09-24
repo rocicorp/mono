@@ -589,6 +589,8 @@ type SetupOptions = Readonly<{
   authConfig?: Partial<NormalizedZeroConfig['auth']> | undefined;
   hydrationBudgetMs?: number | undefined;
   queryHydrationTimeoutMs?: number | undefined;
+  /** Enables partial pipeline resets (ZERO_PARTIAL_PIPELINE_RESET). */
+  partialPipelineReset?: boolean | undefined;
   lc?: LogContext | undefined;
   monotonicClock?: MonotonicClock | undefined;
   /**
@@ -645,6 +647,7 @@ export async function setup(
     authConfig = {},
     hydrationBudgetMs = 0,
     queryHydrationTimeoutMs = 0,
+    partialPipelineReset = false,
     lc = createSilentLogContext(),
     monotonicClock,
     queryFetchMode = 'none',
@@ -781,6 +784,7 @@ export async function setup(
     },
     viewSyncerHydrationBudgetMs: hydrationBudgetMs,
     viewSyncerQueryHydrationTimeoutMs: queryHydrationTimeoutMs,
+    partialPipelineReset,
   } as NormalizedZeroConfig;
 
   // Create the custom query transformer if configured
@@ -830,6 +834,8 @@ export async function setup(
       'view-syncer.pg.test.ts',
       inspectorDelegate,
       () => YIELD_THRESHOLD_MS,
+      undefined,
+      config,
     ),
     stateChanges,
     drainCoordinator,
@@ -1018,6 +1024,8 @@ export function restartViewSyncer(params: {
       'view-syncer-restart',
       inspectorDelegate,
       () => YIELD_THRESHOLD_MS,
+      undefined,
+      config,
     ),
     stateChanges,
     drainCoordinator,
