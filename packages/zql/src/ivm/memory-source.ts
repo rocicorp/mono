@@ -1079,11 +1079,11 @@ function rowMatchesPK(a: Row, b: Row, primaryKey: PrimaryKey): boolean {
  * or the min or max possible value for the type. This is used to start a scan
  * at the beginning of the rows matching a constraint.
  */
-type Bound = Value | MinValue | MaxValue;
-type RowBound = Record<string, Bound>;
-const minValue = Symbol('min-value');
+export type Bound = Value | MinValue | MaxValue;
+export type RowBound = Record<string, Bound>;
+export const minValue = Symbol('min-value');
 type MinValue = typeof minValue;
-const maxValue = Symbol('max-value');
+export const maxValue = Symbol('max-value');
 type MaxValue = typeof maxValue;
 
 function isAscending(rows: Row[], comparator: Comparator): boolean {
@@ -1095,7 +1095,7 @@ function isAscending(rows: Row[], comparator: Comparator): boolean {
   return true;
 }
 
-function makeBoundComparator(sort: Ordering): Comparator {
+export function makeBoundComparator(sort: Ordering): Comparator {
   // Pre-extract the first two keys/directions to avoid per-call array access.
   // All paths share one function literal (single SFI) so the BTree comparator call site
   // stays monomorphic across indexes with different sort orderings, preventing V8 IC deopt.
@@ -1138,7 +1138,7 @@ function compareBounds(a: Bound, b: Bound): number {
   return compareValues(a, b);
 }
 
-function generateRows(
+export function generateRows(
   data: BTreeSet<Row>,
   scanStart: RowBound | undefined,
   reverse: boolean | undefined,

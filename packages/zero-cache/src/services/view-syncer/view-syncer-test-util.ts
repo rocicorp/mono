@@ -53,6 +53,7 @@ import type {ReplicaState} from '../replicator/replicator.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.ts';
 import {ConnectionContextManagerImpl} from './connection-context-manager.ts';
+import {testDeferredWritesBudget} from './deferred-writes-test-util.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
 import type {MonotonicClock} from './hydration-budget.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
@@ -830,6 +831,10 @@ export async function setup(
       'view-syncer.pg.test.ts',
       inspectorDelegate,
       () => YIELD_THRESHOLD_MS,
+      undefined,
+      undefined,
+      // Selected by ZERO_TEST_DEFER_IVM_WRITES.
+      testDeferredWritesBudget(),
     ),
     stateChanges,
     drainCoordinator,
@@ -1018,6 +1023,10 @@ export function restartViewSyncer(params: {
       'view-syncer-restart',
       inspectorDelegate,
       () => YIELD_THRESHOLD_MS,
+      undefined,
+      undefined,
+      // Selected by ZERO_TEST_DEFER_IVM_WRITES.
+      testDeferredWritesBudget(),
     ),
     stateChanges,
     drainCoordinator,

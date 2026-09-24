@@ -66,6 +66,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
+import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
@@ -153,9 +154,23 @@ type AdvanceContext = {
   readonly timer: Timer;
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
+  /**
+   * The rows reserved from the {@link DeferredWritesBudget} while the
+   * advancement's changes are held in memory.
+   */
+  reservedRows: number | undefined;
+  /** The bytes the advancement has added to the budget's held bytes. */
+  heldBytes: number;
   currentChangeStartMs: number | undefined;
   pos: number;
 };
+
+/**
+ * Whether the rows an advancement holds in memory fit in the budget, or why
+ * they do not: the bytes held, a change that needed more rows than were left
+ * to reserve, or more rows held than reserved.
+ */
+type HeldRows = 'fits' | 'bytes' | 'rows' | 'row-overrun';
 
 type HydrateContext = {
   readonly timer: Timer;
@@ -274,6 +289,7 @@ export class PipelineDriver {
   readonly #shardID: ShardID;
   readonly #logConfig: LogConfig;
   readonly #config: ZeroConfig | undefined;
+  readonly #deferredWrites: DeferredWritesBudget | undefined;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #allTableNames = new Set<string>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
@@ -297,6 +313,15 @@ export class PipelineDriver {
     'Number of rows deleted because they conflicted with added row',
   );
 
+  readonly #deferredWritesFallbacks = getOrCreateCounter(
+    'sync',
+    'ivm.deferred-writes-fallbacks',
+    'Number of advancements written through to the replica snapshot because ' +
+      'their changes did not fit in the deferred IVM writes budget, from the ' +
+      'start or partway (because of the bytes held, a change that needed ' +
+      'more rows than were left, or more rows held than reserved)',
+  );
+
   readonly #inspectorDelegate: InspectorDelegate;
 
   constructor(
@@ -310,6 +335,7 @@ export class PipelineDriver {
     yieldThresholdMs: () => number,
     enablePlanner?: boolean,
     config?: ZeroConfig,
+    deferredWrites?: DeferredWritesBudget,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
@@ -317,6 +343,7 @@ export class PipelineDriver {
     this.#shardID = shardID;
     this.#logConfig = logConfig;
     this.#config = config;
+    this.#deferredWrites = deferredWrites;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
@@ -488,6 +515,31 @@ export class PipelineDriver {
     let total = 0;
     for (const pipeline of this.#pipelines.values()) {
       total += pipeline.hydrationTimeMs;
+    }
+    return total;
+  }
+
+  /**
+   * The rows the sources hold in memory for the advancement in progress.
+   * The advancement's reservation from the {@link DeferredWritesBudget}
+   * bounds this.
+   */
+  get pendingRows(): number {
+    let total = 0;
+    for (const source of this.#tables.values()) {
+      total += source.pendingRows;
+    }
+    return total;
+  }
+
+  /**
+   * The estimated bytes of {@link pendingRows}, which are added to the
+   * {@link DeferredWritesBudget}'s held bytes as the advancement goes.
+   */
+  get pendingBytes(): number {
+    let total = 0;
+    for (const source of this.#tables.values()) {
+      total += source.pendingBytes;
     }
     return total;
   }
@@ -1025,6 +1077,7 @@ export class PipelineDriver {
       this.#tables,
       // Sources skip changes that none of this client group's pipelines can
       // observe, so a `prev` they write to diverges from other groups'.
+      // #advance() overrides this if it holds the changes in memory.
       'divergent',
     );
     const {prev, curr, changes} = diff;
@@ -1049,20 +1102,40 @@ export class PipelineDriver {
       'Cannot advance while hydration is in progress',
     );
     const totalHydrationTimeMs = this.totalHydrationTimeMs();
-    this.#advanceContext = {
+    const advanceContext: AdvanceContext = {
       timer,
       totalHydrationTimeMs,
       numChanges,
+      reservedRows: undefined,
+      heldBytes: 0,
       currentChangeStartMs: undefined,
       pos: 0,
     };
-    this.#lc.debug?.(
-      `starting pipeline advancement of ${numChanges} changes with an ` +
-        `advancement time limited based on total hydration time of ` +
-        `${totalHydrationTimeMs} ms.`,
-    );
+    this.#advanceContext = advanceContext;
+    // The reservation is made here rather than in advance(), so that the
+    // finally below is guaranteed to release it: a generator that is never
+    // started never runs its finally.
     try {
-      for (const {table, prevValues, nextValue} of diff) {
+      advanceContext.reservedRows = this.#reserveDeferredWrites(numChanges);
+      const deferWrites = advanceContext.reservedRows !== undefined;
+      if (deferWrites) {
+        // `prev` is not written, so all of its reads can be shared.
+        diff.setPrevWrites('none');
+      }
+      for (const table of this.#tables.values()) {
+        table.setDeferWrites(deferWrites);
+      }
+      this.#lc.debug?.(
+        `starting pipeline advancement of ${numChanges} changes with an ` +
+          `advancement time limited based on total hydration time of ` +
+          `${totalHydrationTimeMs} ms (${deferWrites ? 'deferred' : 'write-through'}).`,
+      );
+      for (const {
+        table,
+        prevValues: probedPrevValues,
+        nextValue,
+        rowKey,
+      } of diff) {
         // Advance progress is checked each time a row is fetched
         // from a TableSource during push processing, but some pushes
         // don't read any rows.  Check progress here before processing
@@ -1071,9 +1144,9 @@ export class PipelineDriver {
           yield 'yield';
         }
         const start = timer.totalElapsed();
-        const advanceContext = must(this.#advanceContext);
         advanceContext.currentChangeStartMs = start;
 
+        let holds: HeldRows = 'fits';
         try {
           try {
             const tableSource = this.#tables.get(table);
@@ -1082,6 +1155,23 @@ export class PipelineDriver {
               continue;
             }
             const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+            if (
+              nextValue !== null &&
+              !this.#reserveSecondRow(advanceContext, rowKey, primaryKey)
+            ) {
+              holds = 'rows';
+            }
+            // The diff probed the `prev` snapshot for the rows this change
+            // collides with. If the source is deferring its writes, the
+            // earlier changes of this advancement are not in that snapshot,
+            // so the probe has to be reconciled against them. A no-op for a
+            // write-through source, which has already applied them to `prev`.
+            const prevValues = tableSource.reconcilePendingConflicts(
+              probedPrevValues,
+              nextValue,
+              rowKey as Row,
+              this.#tableSpecs.get(table)?.tableSpec.uniqueKeys ?? [],
+            );
             let editOldRow: Row | undefined = undefined;
             for (const prevValue of prevValues) {
               if (
@@ -1120,6 +1210,9 @@ export class PipelineDriver {
           }
 
           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
+          if (holds === 'fits') {
+            holds = this.#holdPendingRows(advanceContext);
+          }
         } finally {
           advanceContext.currentChangeStartMs = undefined;
         }
@@ -1128,6 +1221,11 @@ export class PipelineDriver {
         this.#advanceTime.recordMs(elapsed, {
           table,
         });
+
+        if (holds !== 'fits') {
+          // Before the diff reads the next change from `prev`.
+          yield* this.#writeThrough(advanceContext, diff, holds);
+        }
       }
 
       // Set the new snapshot on all TableSources.
@@ -1138,7 +1236,106 @@ export class PipelineDriver {
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
       this.#lc.debug?.(`Advanced to ${curr.version}`);
     } finally {
+      if (advanceContext.reservedRows !== undefined) {
+        // An advancement that completed has moved its sources to `curr`,
+        // which dropped what they held. One that was abandoned is followed by
+        // a reset of the pipelines, but not right away, and what they hold
+        // must not outlast its release from the budget.
+        for (const table of this.#tables.values()) {
+          table.discardPendingChanges();
+        }
+      }
+      this.#releaseDeferredWrites(advanceContext);
       this.#advanceContext = null;
+    }
+  }
+
+  /**
+   * Decides how the sources apply an advancement's changes: in memory if
+   * they fit in the worker's {@link DeferredWritesBudget}, and otherwise
+   * written through to the `prev` snapshot. Returns the number of rows
+   * reserved if they are held in memory.
+   */
+  #reserveDeferredWrites(numChanges: number): number | undefined {
+    const budget = this.#deferredWrites;
+    if (!budget) {
+      return undefined;
+    }
+    // An entry sets or removes one row, and a row that it displaces has an
+    // entry of its own. Entries of tables that no pipeline of this group reads
+    // are counted too: excluding them would take a scan of the entries (see
+    // #reserveSecondRow for the one kind of entry that can need two rows).
+    if (budget.tryReserve(numChanges)) {
+      return numChanges;
+    }
+    this.#deferredWritesFallbacks.add(1, {stage: 'start'});
+    this.#lc.debug?.(
+      `writing through ${numChanges} changes: ${budget.reservedRows} rows ` +
+        `of the deferred writes budget are reserved`,
+    );
+    return undefined;
+  }
+
+  /**
+   * If the change log identifies the rows of a table by a key other than its
+   * primary key here, an entry that sets a row can change its primary key,
+   * which is two rows to a source: the old and the new. (An entry that removes
+   * a row removes the one row its key identifies.) Reserves the second row for
+   * such an entry, if the advancement holds its changes in memory, and
+   * returns whether it fit.
+   */
+  #reserveSecondRow(
+    advanceContext: AdvanceContext,
+    rowKey: RowKey,
+    primaryKey: PrimaryKey,
+  ): boolean {
+    if (
+      advanceContext.reservedRows === undefined ||
+      isKeyedBy(rowKey, primaryKey)
+    ) {
+      return true;
+    }
+    if (!must(this.#deferredWrites).tryReserveMore(1)) {
+      return false;
+    }
+    advanceContext.reservedRows++;
+    return true;
+  }
+
+  /**
+   * Writes the changes that an advancement holds in memory through to the
+   * `prev` snapshot, and the rest of its changes after them, when they no
+   * longer fit (see {@link HeldRows}). The advancement then continues as if
+   * it had written through from the start.
+   */
+  *#writeThrough(
+    advanceContext: AdvanceContext,
+    diff: SnapshotDiff,
+    reason: Exclude<HeldRows, 'fits'>,
+  ): Iterable<'yield'> {
+    const budget = must(this.#deferredWrites);
+    this.#deferredWritesFallbacks.add(1, {stage: 'partway', reason});
+    this.#lc.debug?.(
+      `writing through (${reason}) at ${advanceContext.pos} of ` +
+        `${advanceContext.numChanges} changes, holding ` +
+        `${advanceContext.heldBytes} of the ${budget.heldBytes} estimated ` +
+        `bytes held on this worker (budget: ${budget.maxBytes})`,
+    );
+    // `prev` is about to be written, so the reads that its writes can affect
+    // can no longer be shared.
+    diff.setPrevWrites('divergent');
+    for (const source of this.#tables.values()) {
+      yield* source.writePendingChanges();
+    }
+    this.#releaseDeferredWrites(advanceContext);
+  }
+
+  #releaseDeferredWrites(advanceContext: AdvanceContext) {
+    const {reservedRows, heldBytes} = advanceContext;
+    if (reservedRows !== undefined) {
+      must(this.#deferredWrites).release(reservedRows, heldBytes);
+      advanceContext.reservedRows = undefined;
+      advanceContext.heldBytes = 0;
     }
   }
 
@@ -1159,6 +1356,7 @@ export class PipelineDriver {
         () => this.#shouldYield(),
         // Pipelines only read tables through their connections, and the
         // sources are moved to the next snapshot after every advancement.
+        // How writes are applied is set per advancement, by #advance().
         {skipUnobservableChanges: true},
       );
       this.#lc.debug?.(`created TableSource for ${tableName}`);
@@ -1245,6 +1443,37 @@ export class PipelineDriver {
       );
     }
     return checkYield && advanceTimer.elapsedLap() > this.#yieldThresholdMs();
+  }
+
+  /**
+   * The rows an advancement holds in memory are bounded by its reservation,
+   * but their width is not known in advance. So the bytes they are estimated
+   * to hold are added to those held by the other advancements on this worker.
+   * Says whether that takes them past the budget, or if the rows are not
+   * bounded by the reservation after all.
+   */
+  #holdPendingRows(advanceContext: AdvanceContext): HeldRows {
+    const {reservedRows, heldBytes, pos, numChanges} = advanceContext;
+    if (reservedRows === undefined) {
+      return 'fits';
+    }
+    const budget = must(this.#deferredWrites);
+    const rows = this.pendingRows;
+    const bytes = this.pendingBytes;
+    // Recorded first, so that the bytes are released even if they do not fit.
+    advanceContext.heldBytes = bytes;
+    const bytesFit = budget.holdBytes(bytes - heldBytes);
+    if (rows > reservedRows) {
+      // The reservation is supposed to bound the rows held (see
+      // DeferredWritesBudget), so this is a bug, but not one to crash on.
+      budget.recordRowOverrun();
+      this.#lc.error?.(
+        `Advancement holds ${rows} rows at ${pos} of ${numChanges} changes, ` +
+          `more than the ${reservedRows} it reserved. Writing through the rest.`,
+      );
+      return 'row-overrun';
+    }
+    return bytesFit ? 'fits' : 'bytes';
   }
 
   #throwSlowCurrentChangeReset(
@@ -1635,6 +1864,18 @@ function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
 
 function getRowKey(cols: PrimaryKey, row: Row): RowKey {
   return Object.fromEntries(cols.map(col => [col, must(row[col])]));
+}
+
+/** Whether `rowKey` has exactly the columns of `primaryKey`. */
+function isKeyedBy(rowKey: RowKey, primaryKey: PrimaryKey): boolean {
+  let cols = 0;
+  for (const col in rowKey) {
+    if (!primaryKey.includes(col)) {
+      return false;
+    }
+    cols++;
+  }
+  return cols === primaryKey.length;
 }
 
 /**
