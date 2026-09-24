@@ -336,7 +336,7 @@ describe('sendError', () => {
 
   const lastLogLevel = (): LogLevel | undefined => sink.messages.at(-1)?.[0];
 
-  test('ClientNotFound errors are logged as warnings', () => {
+  test('ClientNotFound errors are logged as info', () => {
     sendError(
       lc,
       ws,
@@ -347,7 +347,7 @@ describe('sendError', () => {
       },
       undefined,
     );
-    expect(lastLogLevel()).toBe('warn');
+    expect(lastLogLevel()).toBe('info');
   });
 
   test('TransformFailed errors are logged as warnings', () => {
