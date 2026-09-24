@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react';
 import {defineConfig, type PluginOption, type ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
 import {makeDefine} from '../../packages/shared/src/build.ts';
-import {fastify} from './api/index.ts';
 
 const zeroReactPath = fileURLToPath(
   new URL('../../packages/zero/src/react.ts', import.meta.url),
@@ -21,6 +20,7 @@ function isFastifyPath(url: string): boolean {
 }
 
 async function configureServer(server: ViteDevServer) {
+  const {fastify} = await server.ssrLoadModule('/api/index.ts');
   await fastify.ready();
   server.middlewares.use((req, res, next) => {
     if (!req.url || !isFastifyPath(req.url)) {
