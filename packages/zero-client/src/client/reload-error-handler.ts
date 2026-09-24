@@ -1,6 +1,6 @@
-import type {LogContext} from '@rocicorp/logger';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import * as v from '../../../shared/src/valita.ts';
-import type {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {errorKindSchema} from '../../../zero-protocol/src/error.ts';
 import {updateNeededReasonTypeSchema} from './options.ts';
 import type {UpdateNeededReasonType} from './update-needed-reason-type.ts';
@@ -53,7 +53,7 @@ export function reloadWithReason(
   }
 
   const delay = backoff.lastReloadTime - now;
-  lc.error?.(
+  lc[reloadLogLevel(reason)]?.(
     reason,
     '\n',
     'reloading',
@@ -65,6 +65,13 @@ export function reloadWithReason(
   }, delay);
 }
 
+// ClientNotFound is expected (e.g. the client's state was purged on the server
+// or the client switched zero-cache instances), so reloads caused by it are not
+// logged as errors.
+function reloadLogLevel(reason: UpdateNeededReasonType | ErrorKind): LogLevel {
+  return reason === ErrorKind.ClientNotFound ? 'warn' : 'error';
+}
+
 export function reportReloadReason(lc: LogContext) {
   if (typeof sessionStorage !== 'undefined') {
     const value = sessionStorage.getItem(RELOAD_REASON_STORAGE_KEY);
@@ -73,7 +80,11 @@ export function reportReloadReason(lc: LogContext) {
       try {
         const parsed = JSON.parse(value);
         const [reasonType, message] = v.parse(parsed, reloadReasonSchema);
-        lc.error?.(reasonType, 'Zero reloaded the page.', message);
+        lc[reloadLogLevel(reasonType)]?.(
+          reasonType,
+          'Zero reloaded the page.',
+          message,
+        );
       } catch (e) {
         lc.error?.('Zero reloaded the page.', e);
         // ignore if not able to parse
