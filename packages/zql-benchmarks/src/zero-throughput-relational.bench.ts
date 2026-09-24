@@ -448,6 +448,8 @@ function setupZqlite(): BenchState {
       ivmSampling: 0,
       slowHydrateThreshold: 0,
       slowRowThreshold: 0,
+      planWarningRowThreshold: 0,
+      planWarningCostThreshold: 0,
     },
   );
   const queries = Array.from({length: QUERIES_PER_USER}, (_, queryIndex) =>

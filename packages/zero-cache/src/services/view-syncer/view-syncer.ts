@@ -104,6 +104,7 @@ import {HydrationBudget, type MonotonicClock} from './hydration-budget.ts';
 import {HydrationCircuitBreaker} from './hydration-circuit-breaker.ts';
 import {handleInspect} from './inspect-handler.ts';
 import type {PipelineDriver, QueryInfo, RowChange} from './pipeline-driver.ts';
+import {planWarningMessage} from './plan-warnings.ts';
 import {QueryCoveringIndex} from './query-covering.ts';
 import {queryShape} from './query-shape.ts';
 import {parseSignature} from './row-set-signature.ts';
@@ -2876,6 +2877,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         hydrationRowCount: stats.rowCount,
         hydrationRowsRead: stats.rowsRead,
       }),
+      ...(stats !== undefined &&
+        stats.planWarnings.length > 0 && {
+          planWarnings: stats.planWarnings.map(planWarningMessage),
+        }),
       ...(suppressed > 0 && {suppressedSinceLastLog: suppressed}),
       zql: shape.zql,
     });

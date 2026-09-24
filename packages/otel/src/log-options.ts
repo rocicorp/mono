@@ -32,6 +32,28 @@ export const logOptions = {
     ],
   },
 
+  planWarningRowThreshold: {
+    type: v.number().default(10_000),
+    desc: [
+      `Log a warning when the query planner estimates that one read of a table`,
+      `scans or sorts at least this many rows: a read that scans the whole`,
+      `table because no index covers the columns it looks rows up by, or that`,
+      `sorts every matching row because no index covers the ordering.`,
+      ``,
+      `The warning is logged at most once an hour per query shape (the query`,
+      `with its values redacted). Set to 0 to disable. Requires the query planner.`,
+    ],
+  },
+
+  planWarningCostThreshold: {
+    type: v.number().default(1_000_000),
+    desc: [
+      `Log a warning when the best plan the query planner finds for a query is`,
+      `still estimated to process at least this many rows. Throttled like`,
+      `{bold planWarningRowThreshold}. Set to 0 to disable.`,
+    ],
+  },
+
   ivmSampling: {
     type: v.number().default(5000),
     desc: [

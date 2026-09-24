@@ -37,7 +37,7 @@ import {TakeGate, type TakeBoundProvider} from '../ivm/take-gate.ts';
 import {Take} from '../ivm/take.ts';
 import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
-import {planQuery} from '../planner/planner-builder.ts';
+import {planQuery, type PlanWarningSink} from '../planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../planner/planner-connection.ts';
 import type {PlanDebugger} from '../planner/planner-debug.ts';
 import {completeOrdering} from '../query/complete-ordering.ts';
@@ -118,6 +118,12 @@ export interface BuilderDelegate {
   decorateSourceInput(input: SourceInput, queryID: string): Input;
 
   /**
+   * Receives warnings about the plan the planner chose for the query, when
+   * there is a cost model to plan with. Only zero-cache sets this.
+   */
+  readonly planWarnings?: PlanWarningSink | undefined;
+
+  /**
    * The AST is mapped on-the-wire between client and server names.
    *
    * There is no "wire" for zqlite tests so this function is provided
@@ -166,19 +172,34 @@ export function buildPipeline(
 
   const columnsOf = (tableName: string) =>
     must(delegate.getSource(tableName)).tableSchema.columns;
+  const {planWarnings} = delegate;
   if (delegate.disableCorrelatedPredicatePushdown) {
     if (costModel) {
-      ast = planQuery(ast, costModel, planDebugger, lc);
+      ast = planQuery(
+        ast,
+        costModel,
+        planDebugger,
+        lc,
+        undefined,
+        planWarnings,
+      );
     }
   } else if (delegate.enablePlannerAwarePushdown) {
     const pushed = new Set<SimpleCondition>();
     ast = pushDownCorrelatedPredicates(ast, columnsOf, pushed);
     if (costModel) {
-      ast = planQuery(ast, costModel, planDebugger, lc, pushed);
+      ast = planQuery(ast, costModel, planDebugger, lc, pushed, planWarnings);
     }
   } else {
     if (costModel) {
-      ast = planQuery(ast, costModel, planDebugger, lc);
+      ast = planQuery(
+        ast,
+        costModel,
+        planDebugger,
+        lc,
+        undefined,
+        planWarnings,
+      );
     }
     // After planning, so that the planner does not read the pushed conditions
     // as selective filters.

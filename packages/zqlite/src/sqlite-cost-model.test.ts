@@ -43,7 +43,7 @@ describe('SQLite cost model', () => {
   test('table scan ordered by primary key requires no sort', () => {
     // SELECT * FROM foo ORDER BY a
     // Ordered by primary key, so no sort needed - expected cost is just the table scan (~2000 rows)
-    const {rows, startupCost} = costModel(
+    const {rows, startupCost, plan} = costModel(
       'foo',
       [['a', 'asc']],
       undefined,
@@ -52,11 +52,12 @@ describe('SQLite cost model', () => {
     // Expected: (SQLite estimate) = 1920
     expect(rows).toBe(1920);
     expect(startupCost).toBe(0);
+    expect(plan).toEqual({access: 'scan', sort: 'none', tableRows: 2000});
   });
 
   test('table scan ordered by non-indexed column includes sort cost', () => {
     // SELECT * FROM foo ORDER BY b
-    const {startupCost, rows} = costModel(
+    const {startupCost, rows, plan} = costModel(
       'foo',
       [['b', 'asc']],
       undefined,
@@ -64,6 +65,7 @@ describe('SQLite cost model', () => {
     );
     expect(rows).toBe(1920);
     expect(startupCost).toBeCloseTo(btreeCost(rows), 3); // Allow some variance in sort cost estimate
+    expect(plan).toEqual({access: 'scan', sort: 'full', tableRows: 2000});
   });
 
   test('primary key lookup via condition', () => {
@@ -83,11 +85,17 @@ describe('SQLite cost model', () => {
   });
 
   test('primary key lookup via constraint', () => {
-    const {rows, startupCost} = costModel('foo', [['a', 'asc']], undefined, {
-      a: undefined,
-    });
+    const {rows, startupCost, plan} = costModel(
+      'foo',
+      [['a', 'asc']],
+      undefined,
+      {
+        a: undefined,
+      },
+    );
     expect(rows).toBe(1);
     expect(startupCost).toBe(0);
+    expect(plan).toEqual({access: 'search', sort: 'none', tableRows: 2000});
   });
 
   test('range check on primary key', () => {
@@ -229,6 +237,78 @@ describe('SQLite cost model', () => {
     // SQLite can estimate based on the array size
     expect(rows).toBeGreaterThan(0);
     expect(rows).toBeLessThan(1920);
+  });
+});
+
+describe('SQLite cost model access plans', () => {
+  let db: Database;
+  let costModel: ReturnType<typeof createSQLiteCostModel>;
+
+  beforeEach(() => {
+    const lc = createSilentLogContext();
+    db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE issue (id TEXT PRIMARY KEY, "projectID" TEXT, title TEXT, modified INTEGER);
+      CREATE INDEX issue_project_modified ON issue("projectID", modified);
+      CREATE TABLE comment (id TEXT PRIMARY KEY, "issueID" TEXT, created INTEGER);
+    `);
+    db.exec(CREATE_TABLE_METADATA_TABLE);
+    const insertIssue = db.prepare('INSERT INTO issue VALUES (?, ?, ?, ?)');
+    const insertComment = db.prepare('INSERT INTO comment VALUES (?, ?, ?)');
+    for (let i = 0; i < 1_000; i++) {
+      insertIssue.run(`i${i}`, `p${i % 10}`, `t${i}`, i);
+      insertComment.run(`c${i}`, `i${i % 100}`, i);
+    }
+    db.exec('ANALYZE');
+    // Created after ANALYZE, so it has no statistics.
+    db.exec('CREATE TABLE label (id TEXT PRIMARY KEY, name TEXT)');
+
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}, tableSpecs);
+    costModel = createSQLiteCostModel(db, tableSpecs);
+  });
+
+  test('a lookup by an unindexed column scans the table', () => {
+    // SCAN comment USING INDEX sqlite_autoindex_comment_1
+    const {plan} = costModel('comment', [['id', 'asc']], undefined, {
+      issueID: undefined,
+    });
+    expect(plan).toEqual({access: 'scan', sort: 'none', tableRows: 1000});
+  });
+
+  test('an index that covers the lookup but not the whole ordering sorts partially', () => {
+    // SEARCH issue USING INDEX issue_project_modified (projectID=?)
+    // USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+    const {plan} = costModel(
+      'issue',
+      [
+        ['modified', 'asc'],
+        ['id', 'asc'],
+      ],
+      undefined,
+      {projectID: undefined},
+    );
+    expect(plan).toEqual({access: 'search', sort: 'partial', tableRows: 1000});
+  });
+
+  test('an ordering no index covers sorts fully', () => {
+    // SEARCH issue USING INDEX issue_project_modified (projectID=?)
+    // USE TEMP B-TREE FOR ORDER BY
+    const {plan} = costModel(
+      'issue',
+      [
+        ['title', 'asc'],
+        ['id', 'asc'],
+      ],
+      undefined,
+      {projectID: undefined},
+    );
+    expect(plan).toEqual({access: 'search', sort: 'full', tableRows: 1000});
+  });
+
+  test('a table without statistics has no row count', () => {
+    const {plan} = costModel('label', [['id', 'asc']], undefined, undefined);
+    expect(plan).toEqual({access: 'scan', sort: 'none', tableRows: undefined});
   });
 });
 

@@ -2477,11 +2477,90 @@ describe('view-syncer/pipeline-driver', () => {
     ];
     const stats2 = must(pipelines.hydrationStats('queryID2'));
     // 3 issues and 4 comments, each read once.
-    expect(stats2).toEqual({rowCount: 7, rowsRead: 7});
+    expect(stats2).toEqual({rowCount: 7, rowsRead: 7, planWarnings: []});
     expect(pipelines.hydrationStats('queryID')).toEqual(stats);
 
     pipelines.removeQuery('queryID');
     expect(pipelines.hydrationStats('queryID')).toBeUndefined();
+  });
+
+  test('logs plan warnings once per query shape across client groups', () => {
+    // Plan warnings need table statistics.
+    db.exec('ANALYZE');
+    const warnLC = new LogContext('warn', undefined, logSink);
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    const databaseStorage = new DatabaseStorage(storage);
+    const [cg1, cg2] = ['cg1', 'cg2'].map(clientGroupID => {
+      const driver = new PipelineDriver(
+        warnLC,
+        // SQLite sorts the tiny comments table (~1 row per issue) rather than
+        // scan it by id, which a threshold of 2 rows leaves out.
+        {...testLogConfig, planWarningRowThreshold: 2},
+        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        databaseStorage.createClientGroupStorage(clientGroupID),
+        clientGroupID,
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+        true /** enablePlanner */,
+      );
+      driver.init(clientSchema);
+      return driver;
+    });
+
+    // The comments of each issue are looked up by issueID, which has no
+    // index.
+    const commentsWarning = {
+      type: 'missing-index',
+      table: 'comments',
+      path: ['comments'],
+      perRow: true,
+      columns: ['issueID'],
+      rows: 4,
+      suggestedIndex: ['issueID', 'id'],
+    };
+    for (const driver of [cg1, cg2]) {
+      [
+        ...driver.addQuery(
+          'hash1',
+          'queryID',
+          ISSUES_AND_COMMENTS,
+          startTimer(),
+        ),
+      ];
+      expect(driver.hydrationStats('queryID')?.planWarnings).toEqual([
+        commentsWarning,
+      ]);
+    }
+
+    const planWarningLogs = logSink.messages.filter(
+      ([level, context]) =>
+        level === 'warn' && context?.zeroEvent === undefined,
+    );
+    // Only the first client group logs the shape.
+    expect(planWarningLogs).toEqual([
+      [
+        'warn',
+        {clientGroupID: 'cg1'},
+        [
+          "Query plan warning: Each lookup of comments (related 'comments') " +
+            'by issueID scans all ~4 rows because no index covers issueID, ' +
+            'and it runs once per parent row. Consider adding an index on ' +
+            'comments (issueID, id) upstream.',
+          {
+            zeroEvent: 'query-plan-warning',
+            queryHash: 'queryID',
+            transformationHash: 'hash1',
+            queryShape: expect.any(String),
+            warnings: [commentsWarning],
+            zql:
+              "issues.related('comments', q => q.orderBy('id', 'desc'))" +
+              ".orderBy('id', 'desc')",
+          },
+        ],
+      ],
+    ]);
   });
 
   test('subset client schema can hydrate whereExists helper tables', () => {

@@ -37,6 +37,10 @@ import {
 } from '../../../../zql/src/ivm/source.ts';
 import type {Stream} from '../../../../zql/src/ivm/stream.ts';
 import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
+import type {
+  PlanWarning,
+  PlanWarningThresholds,
+} from '../../../../zql/src/planner/planner-warnings.ts';
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
 import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
@@ -54,6 +58,7 @@ import {
 import type {LogConfig, ZeroConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
+import {LogThrottle} from '../../observability/log-throttle.ts';
 import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
@@ -67,6 +72,8 @@ import {
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
 import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
+import {planWarningMessage} from './plan-warnings.ts';
+import {queryShape} from './query-shape.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
@@ -98,6 +105,7 @@ type Pipeline = {
   readonly hydrationTimeMs: number;
   readonly hydrationRowCount: number;
   readonly hydrationRowsRead: number;
+  readonly planWarnings: readonly PlanWarning[];
   readonly hydrationReason: PipelineHydrationReason;
   readonly pipelineRunID: string;
   readonly pipelineReadyAtMs: number;
@@ -125,6 +133,8 @@ export type HydrationStats = {
    * the query does a lot of work for the rows it returns.
    */
   readonly rowsRead: number;
+  /** What the planner warned about the plan it chose for the query. */
+  readonly planWarnings: readonly PlanWarning[];
 };
 
 type QueryLogInfo = {
@@ -207,6 +217,20 @@ const MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS = 5;
 const MIN_PROJECTED_ADVANCEMENT_CHANGES = 16;
 const PROJECTED_ADVANCEMENT_RESET_MULTIPLIER = 1.5;
 const LATE_ADVANCEMENT_FINISH_PROGRESS = 0.8;
+
+/**
+ * The planner warns about a query each time it is planned, i.e. for every
+ * client group that hydrates it, and the warnings only change when the data
+ * does. So they are logged at most once per query shape per this window,
+ * per process.
+ */
+const PLAN_WARNING_LOG_WINDOW_MS = 60 * 60_000;
+
+// Shared by all PipelineDrivers in the process, so that a query shape is
+// throttled across client groups.
+const planWarningLogThrottle = new LogThrottle({
+  windowMs: PLAN_WARNING_LOG_WINDOW_MS,
+});
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -307,6 +331,7 @@ export class PipelineDriver {
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #allTableNames = new Set<string>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
+  readonly #planWarningThresholds: PlanWarningThresholds | undefined;
   readonly #yieldThresholdMs: () => number;
   #streamer: Streamer | null = null;
   #hydrateContext: HydrateContext | null = null;
@@ -360,6 +385,14 @@ export class PipelineDriver {
     this.#deferredWrites = deferredWrites;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
+    const planWarningThresholds = {
+      rows: logConfig.planWarningRowThreshold,
+      cost: logConfig.planWarningCostThreshold,
+    };
+    this.#planWarningThresholds =
+      planWarningThresholds.rows > 0 || planWarningThresholds.cost > 0
+        ? planWarningThresholds
+        : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
   }
 
@@ -535,8 +568,45 @@ export class PipelineDriver {
       ? {
           rowCount: pipeline.hydrationRowCount,
           rowsRead: pipeline.hydrationRowsRead,
+          planWarnings: pipeline.planWarnings,
         }
       : undefined;
+  }
+
+  /**
+   * Logs what the planner warned about the plan it chose for `query`, at
+   * most once per query shape per {@link PLAN_WARNING_LOG_WINDOW_MS}.
+   */
+  #logPlanWarnings(
+    query: AST,
+    {queryHash, transformationHash, queryName}: QueryLogInfo,
+    warnings: readonly PlanWarning[],
+  ): void {
+    if (!this.#lc.warn) {
+      return;
+    }
+    const shape = queryShape(query);
+    const suppressed = planWarningLogThrottle.admit(
+      `${queryName ?? ''}:${shape.hash}`,
+    );
+    if (suppressed === undefined) {
+      return;
+    }
+    const messages = warnings.map(planWarningMessage);
+    this.#lc.warn(
+      `Query plan warning${queryName === undefined ? '' : ` for ${queryName}`}: ` +
+        messages.join(' '),
+      {
+        zeroEvent: 'query-plan-warning',
+        queryHash,
+        transformationHash,
+        ...(queryName !== undefined && {queryName}),
+        queryShape: shape.hash,
+        warnings,
+        ...(suppressed > 0 && {suppressedSinceLastLog: suppressed}),
+        zql: shape.zql,
+      },
+    );
   }
 
   #totalRowsRead(): number {
@@ -795,6 +865,8 @@ export class PipelineDriver {
     let hydrationFinished = false;
     let hydrationFailed = false;
     let hydrationRowCount = 0;
+    let planWarnings: readonly PlanWarning[] = [];
+    const planWarningThresholds = this.#planWarningThresholds;
     // The inputs built so far, held outside the try so that a hydration that
     // does not finish (aborted by the consumer or failed) can tear them down.
     // Only a finished hydration hands them over to #pipelines.
@@ -838,11 +910,24 @@ export class PipelineDriver {
           decorateInput: input => input,
           addEdge() {},
           decorateFilterInput: input => input,
+          planWarnings: planWarningThresholds && {
+            thresholds: planWarningThresholds,
+            report: warnings => {
+              planWarnings = warnings;
+            },
+          },
         },
         queryID,
         costModel,
       );
       builtInputs.push(input);
+      if (planWarnings.length > 0) {
+        this.#logPlanWarnings(
+          query,
+          {queryHash: queryID, transformationHash, queryName},
+          planWarnings,
+        );
+      }
       const schema = input.getSchema();
       input.setOutput({
         push: change => this.#streamPushed(queryID, schema, change),
@@ -940,6 +1025,7 @@ export class PipelineDriver {
         hydrationTimeMs,
         hydrationRowCount,
         hydrationRowsRead,
+        planWarnings,
         hydrationReason,
         pipelineRunID,
         pipelineReadyAtMs,
