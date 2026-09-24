@@ -32,7 +32,10 @@ export class QueryDelegateImpl extends QueryDelegateBase {
       ivmSampling: 0,
       level: 'info',
       slowHydrateThreshold: 0,
+      slowAdvanceThreshold: 0,
       slowRowThreshold: 0,
+      planWarningRowThreshold: 0,
+      planWarningCostThreshold: 0,
     };
   }
 
