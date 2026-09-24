@@ -203,12 +203,6 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('09');
     expect(diff.changes).toBe(3);
-    expect(diff.changesByTable()).toEqual(
-      new Map([
-        ['backfilling', {count: 1, rowKeyColumns: ['id']}],
-        ['users', {count: 2, rowKeyColumns: ['id']}],
-      ]),
-    );
 
     expect([...diff]).toMatchInlineSnapshot(`
       [
@@ -591,10 +585,6 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
-    // A table-wide entry has no row key.
-    expect(diff.changesByTable()).toEqual(
-      new Map([['users', {count: 1, rowKeyColumns: []}]]),
-    );
 
     expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
   });
@@ -979,69 +969,6 @@ describe('view-syncer/snapshotter', () => {
 
       s1.destroy();
       s2.destroy();
-    });
-
-    test('changes by table are shared across Snapshotters', () => {
-      const cache = new SnapshotRowCache(1000);
-      const snapshotters = [1, 2, 3].map(() =>
-        new Snapshotter(
-          lc,
-          dbFile.path,
-          {appID: 'my_app'},
-          undefined,
-          cache,
-        ).init(),
-      );
-      const [s1, s2, s3] = snapshotters;
-
-      replicator.processTransaction(
-        '09',
-        messages.insert('issues', {id: 4, owner: 20}),
-        messages.update('users', {id: 10, handle: 'alicia'}),
-      );
-
-      const diff1 = s1.advance(tableSpecs, allTableNames);
-      const changes1 = diff1.changesByTable();
-      expect(changes1).toEqual(
-        new Map([
-          ['issues', {count: 1, rowKeyColumns: ['id']}],
-          ['users', {count: 1, rowKeyColumns: ['id']}],
-        ]),
-      );
-      expect(cache.stats()).toEqual({hits: 0, misses: 1, size: 1});
-
-      // Another Snapshotter advancing between the same versions does not
-      // query the change log.
-      const diff2 = s2.advance(tableSpecs, allTableNames);
-      const allSpy = vi.spyOn(diff2.curr.db, 'all');
-      expect(diff2.changesByTable()).toBe(changes1);
-      expect(allSpy).not.toHaveBeenCalled();
-      expect(cache.stats()).toEqual({hits: 1, misses: 1, size: 1});
-      allSpy.mockRestore();
-
-      // Nor are the counts shared with a diff to a different version.
-      replicator.processTransaction('0b', messages.insert('comments', {id: 1}));
-      const diff3 = s3.advance(tableSpecs, allTableNames);
-      expect(diff3.curr.version).toBe('0b');
-      expect(diff3.changesByTable()).toEqual(
-        new Map([
-          ['comments', {count: 1, rowKeyColumns: ['id']}],
-          ['issues', {count: 1, rowKeyColumns: ['id']}],
-          ['users', {count: 1, rowKeyColumns: ['id']}],
-        ]),
-      );
-      expect(cache.stats()).toEqual({hits: 1, misses: 2, size: 2});
-
-      // Once its `curr` connection has been reset to head, a diff can no
-      // longer read (and share) its counts.
-      const stale = s2.advance(tableSpecs, allTableNames);
-      s2.advance(tableSpecs, allTableNames);
-      s2.advance(tableSpecs, allTableNames);
-      expect(() => stale.changesByTable()).toThrow(InvalidDiffError);
-
-      for (const s of snapshotters) {
-        s.destroy();
-      }
     });
 
     test('replaying a diff after advancing throws despite cache hits', () => {

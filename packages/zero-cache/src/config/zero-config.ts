@@ -675,14 +675,20 @@ export const zeroOptions = {
   },
 
   deferIvmWritesHeapProportion: {
-    type: v.number().default(0.25),
+    type: v
+      .number()
+      .assert(
+        value => value > 0 && value <= 1,
+        'must be greater than 0 and at most 1',
+      )
+      .default(0.25),
     desc: [
       `With {bold deferIvmWrites}, the proportion of {bold --max-old-space-size}`,
       `that the client groups of one sync worker may hold in memory at once.`,
       `Each client group holds its own copy of the changes it is advancing`,
       `through. Before an advancement starts, the number of rows it will`,
-      `change in the tables its queries read is reserved from this budget, at`,
-      `an assumed 1 KiB per row; an advancement that does not fit is written`,
+      `change is reserved from this budget, at an assumed 1 KiB per row; an`,
+      `advancement that does not fit is written`,
       `through to the replica snapshot instead, as when {bold deferIvmWrites}`,
       `is off. The bytes the rows are estimated to hold are also added up as`,
       `the client groups go, and a client group that takes the total past the`,

@@ -84,9 +84,6 @@ const MISS = {result: 'miss'} as const;
  *   are tagged with that version (and, when the result can depend on the
  *   changes applied to the snapshot before the read, the `curr` version
  *   as well). See `Diff` in `snapshotter.ts` for the details.
- * - The change log entries by table between two versions (see
- *   `SnapshotDiff.changesByTable()`) are read from the `curr` snapshot, and
- *   are tagged with its version (the `prev` version is an argument).
  *
  * Because every key includes the version(s) that the result depends on,
  * entries never go stale and are never invalidated; they are only evicted.

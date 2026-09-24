@@ -10,8 +10,8 @@
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
-    "test": "vitest run --config vitest.config.write-through.ts && vitest run --config vitest.config.deferred-writes.ts",
-    "test:watch": "vitest watch --config vitest.config.write-through.ts",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },

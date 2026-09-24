@@ -52,6 +52,13 @@ export class PendingDelta {
   readonly #singleColumnKey: string | undefined;
 
   /**
+   * For a composite primary key, the first key column's value of every key in
+   * `#byKey`. {@link overrides} runs for every base row of a merged fetch, and
+   * building a composite key allocates, so this rules most rows out first.
+   */
+  readonly #firstKeyValues = new Set<Value>();
+
+  /**
    * The coalesced net state, keyed by primary key. A `undefined` value is a
    * tombstone: the batch removed the row, so the base copy is suppressed and
    * nothing replaces it. Membership alone is what suppresses a base row, so
@@ -106,13 +113,21 @@ export class PendingDelta {
     return JSON.stringify(key);
   }
 
+  #track(row: Row, key: unknown): void {
+    if (this.#byKey.has(key)) {
+      return;
+    }
+    this.#rowBytes += 64 + estimateBytes(key as Value);
+    if (this.#singleColumnKey === undefined) {
+      this.#firstKeyValues.add(row[this.#primaryKey[0]]);
+    }
+  }
+
   /** Records that `row` is now present with this value. */
   set(row: Row): void {
     const key = this.#key(row);
     const existing = this.#byKey.get(key);
-    if (!this.#byKey.has(key)) {
-      this.#rowBytes += 64 + estimateBytes(key as Value);
-    }
+    this.#track(row, key);
     this.#rowBytes +=
       estimateBytes(row) -
       (existing === undefined ? 0 : estimateBytes(existing));
@@ -131,9 +146,7 @@ export class PendingDelta {
   delete(row: Row): void {
     const key = this.#key(row);
     const existing = this.#byKey.get(key);
-    if (!this.#byKey.has(key)) {
-      this.#rowBytes += 64 + estimateBytes(key as Value);
-    }
+    this.#track(row, key);
     if (existing !== undefined) {
       this.#rowBytes -= estimateBytes(existing);
       this.#removeFromIndexes(existing);
@@ -148,6 +161,12 @@ export class PendingDelta {
    * carried by the base row is exactly what the delta is replacing.
    */
   overrides(row: Row): boolean {
+    if (
+      this.#singleColumnKey === undefined &&
+      !this.#firstKeyValues.has(row[this.#primaryKey[0]])
+    ) {
+      return false;
+    }
     return this.#byKey.has(this.#key(row));
   }
 
@@ -212,7 +231,9 @@ export class PendingDelta {
    *
    * `constraint`, `multiConstraints` and `filterPredicate` are the ones SQL
    * already applied to the base rows; they are applied here so the delta rows
-   * are subject to the same query.
+   * are subject to the same query. `start` is the fetch's start row: the scan
+   * begins there rather than at the start of the constraint span. It is
+   * inclusive, so the caller still applies an `after` basis.
    */
   *rowsFor(
     sort: Ordering,
@@ -220,6 +241,7 @@ export class PendingDelta {
     reverse: boolean | undefined,
     filterPredicate: ((row: Row) => boolean | undefined) | undefined,
     multiConstraints: readonly MultiConstraint[] | undefined,
+    start?: Row | undefined,
   ): Iterable<Row> {
     if (this.#liveCount === 0) {
       return;
@@ -236,17 +258,25 @@ export class PendingDelta {
     }
     // Constraining by the whole primary key admits at most one row, so the
     // requested sort adds nothing.
-    if (
-      !constraint ||
-      !constraintMatchesPrimaryKey(constraint, this.#primaryKey)
-    ) {
+    const sorted =
+      !constraint || !constraintMatchesPrimaryKey(constraint, this.#primaryKey);
+    if (sorted) {
       indexSort.push(...sort);
     }
 
     const data = this.#getOrCreateIndex(indexSort);
 
     let scanStart: RowBound | undefined;
-    if (constraint) {
+    if (
+      start !== undefined &&
+      sorted &&
+      (!constraint || constraintMatchesRow(constraint, start))
+    ) {
+      // `start` carries every index column, and within the constraint span it
+      // agrees with the constraint, so it is the scan's bound as it stands.
+      // A `start` outside the span bounds nothing the scan can use.
+      scanStart = start;
+    } else if (constraint) {
       // The first row matching the constraint is not simply the constraint
       // values with everything else absent: a `desc` part puts absent values
       // last. The min/max sentinels say "the first row with these constraint
@@ -277,14 +307,6 @@ export class PendingDelta {
       }
       yield row;
     }
-  }
-
-  /**
-   * The batch's identity for a row, for callers that need to de-duplicate
-   * rows drawn from both the base and the batch.
-   */
-  keyOf(row: Row): unknown {
-    return this.#key(row);
   }
 
   /**
@@ -319,6 +341,7 @@ export class PendingDelta {
   /** Drops the batch. Called when the source moves to a snapshot that has it. */
   clear(): void {
     this.#byKey.clear();
+    this.#firstKeyValues.clear();
     this.#indexes.clear();
     this.#liveCount = 0;
     this.#rowBytes = 0;

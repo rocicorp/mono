@@ -15,16 +15,17 @@ export const BYTES_PER_ROW = 1024;
  * Each client group holds its own in-memory copy of the changes of the
  * advancement it is processing, so the copies add up across the groups that
  * advance at the same time. Before an advancement starts, its pipeline driver
- * reserves the number of change log entries of the tables it reads. That
- * number bounds the rows its sources can hold: the change log has one entry
- * per row key (a truncation, which does not, resets the pipelines instead),
- * and a row displaced through a unique key must itself have changed in the
- * same interval, so it has its own entry. (An entry counts twice for a table
- * whose primary key in the client schema is not the key the change log uses,
- * since the entry can change its row's primary key.) An advancement that does
- * not fit is
- * written through to the replica snapshot instead, which SQLite bounds with
- * its page cache and spills to disk.
+ * reserves the number of change log entries it advances through (of every
+ * table, since counting only the tables it reads would take a scan of the
+ * entries). That number bounds the rows its sources can hold: the change log
+ * has one entry per row key (a truncation, which does not, resets the
+ * pipelines instead), and a row displaced through a unique key must itself
+ * have changed in the same interval, so it has its own entry. (An entry of a
+ * table whose primary key in the client schema is not the key the change log
+ * uses can change its row's primary key, which is two rows, so the driver
+ * reserves a second row for it as it gets to it.) An advancement that does
+ * not fit is written through to the replica snapshot instead, which SQLite
+ * bounds with its page cache and spills to disk.
  *
  * The rows are reserved at an assumed {@link BYTES_PER_ROW}, but their width
  * is not known until they are held. So the advancements also add up the

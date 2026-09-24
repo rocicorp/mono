@@ -962,6 +962,52 @@ test('pending changes can be written through partway', () => {
   expect([...deferred.source.writePendingChanges()]).toEqual([]);
 });
 
+test('a deferred delete ignores the columns of its change log key that are not synced', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(/* sql */ `
+    CREATE TABLE foo (id TEXT PRIMARY KEY, a INTEGER, upstream BLOB);
+    INSERT INTO foo VALUES ('x', 1, x'01'), ('y', 2, x'02');
+  `);
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'foo',
+    // `upstream`, the key the change log uses, is not synced.
+    {id: {type: 'string'}, a: {type: 'number'}},
+    ['id'],
+  );
+  source.setDeferWrites(true);
+  consume(source.push(makeSourceChangeEdit({id: 'x', a: 3}, {id: 'x', a: 1})));
+
+  expect(
+    source.reconcilePendingConflicts(
+      [{id: 'y', a: 2}],
+      null,
+      {id: 'y', upstream: '\\x02'},
+      [],
+    ),
+  ).toEqual([{id: 'y', a: 2}]);
+  // The batch's copy of the row replaces the probed one.
+  expect(
+    source.reconcilePendingConflicts(
+      [{id: 'x', a: 1}],
+      null,
+      {id: 'x', upstream: '\\x01'},
+      [],
+    ),
+  ).toEqual([{id: 'x', a: 3}]);
+  // A synced key column the batch changed no longer matches.
+  expect(
+    source.reconcilePendingConflicts(
+      [{id: 'x', a: 1}],
+      null,
+      {a: 1, upstream: '\\x01'},
+      [],
+    ),
+  ).toEqual([]);
+});
+
 test('pending changes can be discarded', () => {
   const db = new Database(createSilentLogContext(), ':memory:');
   db.exec(/* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a INTEGER);`);

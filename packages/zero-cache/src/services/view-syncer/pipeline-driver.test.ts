@@ -2155,6 +2155,31 @@ describe('view-syncer/pipeline-driver', () => {
       });
     });
 
+    test('an entry whose second row does not fit writes through', () => {
+      const byName = new ReplicationMessages({uniques: 'name'});
+      // Room for the one entry, but not for the second row it changes.
+      const budget = new DeferredWritesBudget(1, Infinity);
+      const tryReserve = vi.spyOn(budget, 'tryReserve');
+      const writeThrough = makeDriver('write-through', undefined);
+      const driver = makeDriver('by-name', budget);
+      replicator.processTransaction(
+        '134',
+        byName.update('uniques', {id: 'foo2', name: 'bar'}),
+      );
+
+      const expected = summarize(
+        writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+      );
+      expect(
+        summarize(driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+      ).toEqual(expected);
+      expect(tryReserve.mock.calls).toEqual([[1], [1]]);
+      expect(tryReserve.mock.results.map(r => r.value)).toEqual([true, false]);
+      expect(driver.pendingRows).toBe(0);
+      expect(budget.rowOverruns).toBe(0);
+      expect([budget.reservedRows, budget.heldBytes]).toEqual([0, 0]);
+    });
+
     test('an advancement that holds more rows than it reserved writes through the rest', () => {
       // Undercounts the changes, which the reservation is based on.
       const advance = Snapshotter.prototype.advance;
@@ -2163,7 +2188,7 @@ describe('view-syncer/pipeline-driver', () => {
         ...args
       ) {
         const diff = advance.apply(this, args);
-        diff.changesByTable = () => new Map();
+        Object.defineProperty(diff, 'changes', {value: 0});
         return diff;
       });
       const budget = new DeferredWritesBudget(Infinity, Infinity);
@@ -2213,7 +2238,9 @@ describe('view-syncer/pipeline-driver', () => {
       },
     );
 
-    test('reserves only the changes to tables the client group reads', () => {
+    // Counting only the tables the client group reads would take a scan of
+    // the change log entries.
+    test('reserves the changes to every table', () => {
       const budget = new DeferredWritesBudget(Infinity, Infinity);
       const tryReserve = vi.spyOn(budget, 'tryReserve');
       const driver = makeDriver('uniques-only', budget);
@@ -2227,7 +2254,7 @@ describe('view-syncer/pipeline-driver', () => {
       const {numChanges, changes} = driver.advance(NO_TIME_ADVANCEMENT_TIMER);
       [...changes];
       expect(numChanges).toBe(3);
-      expect(tryReserve.mock.calls).toEqual([[1]]);
+      expect(tryReserve.mock.calls).toEqual([[3]]);
     });
 
     test.each(['switching', 'deferring'] as const)(

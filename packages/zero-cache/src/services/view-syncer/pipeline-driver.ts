@@ -167,9 +167,10 @@ type AdvanceContext = {
 
 /**
  * Whether the rows an advancement holds in memory fit in the budget, or why
- * they do not.
+ * they do not: the bytes held, a change that needed more rows than were left
+ * to reserve, or more rows held than reserved.
  */
-type HeldRows = 'fits' | 'bytes' | 'row-overrun';
+type HeldRows = 'fits' | 'bytes' | 'rows' | 'row-overrun';
 
 type HydrateContext = {
   readonly timer: Timer;
@@ -317,8 +318,8 @@ export class PipelineDriver {
     'ivm.deferred-writes-fallbacks',
     'Number of advancements written through to the replica snapshot because ' +
       'their changes did not fit in the deferred IVM writes budget, from the ' +
-      'start or partway (because of the bytes held, or more rows held than ' +
-      'reserved)',
+      'start or partway (because of the bytes held, a change that needed ' +
+      'more rows than were left, or more rows held than reserved)',
   );
 
   readonly #inspectorDelegate: InspectorDelegate;
@@ -1115,7 +1116,7 @@ export class PipelineDriver {
     // finally below is guaranteed to release it: a generator that is never
     // started never runs its finally.
     try {
-      advanceContext.reservedRows = this.#reserveDeferredWrites(diff);
+      advanceContext.reservedRows = this.#reserveDeferredWrites(numChanges);
       const deferWrites = advanceContext.reservedRows !== undefined;
       if (deferWrites) {
         // `prev` is not written, so all of its reads can be shared.
@@ -1154,6 +1155,9 @@ export class PipelineDriver {
               continue;
             }
             const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+            if (!this.#reserveSecondRow(advanceContext, rowKey, primaryKey)) {
+              holds = 'rows';
+            }
             // The diff probed the `prev` snapshot for the rows this change
             // collides with. If the source is deferring its writes, the
             // earlier changes of this advancement are not in that snapshot,
@@ -1203,7 +1207,9 @@ export class PipelineDriver {
           }
 
           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
-          holds = this.#holdPendingRows(advanceContext);
+          if (holds === 'fits') {
+            holds = this.#holdPendingRows(advanceContext);
+          }
         } finally {
           advanceContext.currentChangeStartMs = undefined;
         }
@@ -1247,36 +1253,49 @@ export class PipelineDriver {
    * written through to the `prev` snapshot. Returns the number of rows
    * reserved if they are held in memory.
    */
-  #reserveDeferredWrites(diff: SnapshotDiff): number | undefined {
+  #reserveDeferredWrites(numChanges: number): number | undefined {
     const budget = this.#deferredWrites;
     if (!budget) {
       return undefined;
     }
-    // Only the changes to tables that this group's pipelines read reach its
-    // sources. An entry sets or removes one row, and a row that it displaces
-    // has an entry of its own. But if the change log identifies the rows of a
-    // table by a key other than its primary key here, an entry can change the
-    // primary key of its row, which is two rows to a source: the old and the
-    // new.
-    let rows = 0;
-    for (const [table, {count, rowKeyColumns}] of diff.changesByTable()) {
-      if (this.#tables.has(table)) {
-        const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
-        const sameKey =
-          primaryKey.length === rowKeyColumns.length &&
-          primaryKey.every(col => rowKeyColumns.includes(col));
-        rows += sameKey ? count : 2 * count;
-      }
-    }
-    if (budget.tryReserve(rows)) {
-      return rows;
+    // An entry sets or removes one row, and a row that it displaces has an
+    // entry of its own. Entries of tables that no pipeline of this group reads
+    // are counted too: excluding them would take a scan of the entries (see
+    // #reserveSecondRow for the one kind of entry that can need two rows).
+    if (budget.tryReserve(numChanges)) {
+      return numChanges;
     }
     this.#deferredWritesFallbacks.add(1, {stage: 'start'});
     this.#lc.debug?.(
-      `writing through ${rows} changes: ${budget.reservedRows} rows ` +
+      `writing through ${numChanges} changes: ${budget.reservedRows} rows ` +
         `of the deferred writes budget are reserved`,
     );
     return undefined;
+  }
+
+  /**
+   * If the change log identifies the rows of a table by a key other than its
+   * primary key here, an entry can change the primary key of its row, which is
+   * two rows to a source: the old and the new. Reserves the second row for
+   * such an entry, if the advancement holds its changes in memory, and
+   * returns whether it fit.
+   */
+  #reserveSecondRow(
+    advanceContext: AdvanceContext,
+    rowKey: RowKey,
+    primaryKey: PrimaryKey,
+  ): boolean {
+    if (
+      advanceContext.reservedRows === undefined ||
+      isKeyedBy(rowKey, primaryKey)
+    ) {
+      return true;
+    }
+    if (!must(this.#deferredWrites).tryReserve(1)) {
+      return false;
+    }
+    advanceContext.reservedRows++;
+    return true;
   }
 
   /**
@@ -1435,12 +1454,8 @@ export class PipelineDriver {
       return 'fits';
     }
     const budget = must(this.#deferredWrites);
-    let rows = 0;
-    let bytes = 0;
-    for (const source of this.#tables.values()) {
-      rows += source.pendingRows;
-      bytes += source.pendingBytes;
-    }
+    const rows = this.pendingRows;
+    const bytes = this.pendingBytes;
     // Recorded first, so that the bytes are released even if they do not fit.
     advanceContext.heldBytes = bytes;
     const bytesFit = budget.holdBytes(bytes - heldBytes);
@@ -1845,6 +1860,18 @@ function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
 
 function getRowKey(cols: PrimaryKey, row: Row): RowKey {
   return Object.fromEntries(cols.map(col => [col, must(row[col])]));
+}
+
+/** Whether `rowKey` has exactly the columns of `primaryKey`. */
+function isKeyedBy(rowKey: RowKey, primaryKey: PrimaryKey): boolean {
+  let cols = 0;
+  for (const col in rowKey) {
+    if (!primaryKey.includes(col)) {
+      return false;
+    }
+    cols++;
+  }
+  return cols === primaryKey.length;
 }
 
 /**

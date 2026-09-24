@@ -299,13 +299,6 @@ export interface SnapshotDiff extends Iterable<Change> {
   readonly changes: number;
 
   /**
-   * The change log entries by table. Computed on the first call, as it costs
-   * a scan of the entries, and shared through the {@link SnapshotRowCache}
-   * with the diffs of other client groups between the same versions.
-   */
-  changesByTable(): ReadonlyMap<string, TableChanges>;
-
-  /**
    * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
    * caller that decides how to write to `prev` once it knows the number of
    * {@link changes}. Must be called before the diff is iterated, except to
@@ -314,17 +307,6 @@ export interface SnapshotDiff extends Iterable<Change> {
    */
   setPrevWrites(prevWrites: PrevWrites): void;
 }
-
-/** The change log entries of one table in a {@link SnapshotDiff}. */
-export type TableChanges = {
-  readonly count: number;
-  /**
-   * The columns of the key by which the change log identifies the table's
-   * rows (its upstream key), which need not be the primary key that a client
-   * schema gives the table. Empty if the table has only table-wide entries.
-   */
-  readonly rowKeyColumns: readonly string[];
-};
 
 /**
  * Thrown during an iteration of a {@link SnapshotDiff} when a schema
@@ -377,9 +359,6 @@ function readsFor(table: LiteTableSpecWithKeysAndVersion): TableReads {
     byUniqueKeys: new Map(),
   }));
 }
-
-const CHANGES_BY_TABLE_SQL =
-  'SELECT "table", COUNT(*) AS count, MAX("rowKey") AS rowKey FROM "_zero.changeLog2" WHERE stateVersion > ? GROUP BY "table"';
 
 // The byUniqueKeys bitmask must fit in a (positive) 31-bit integer.
 const MAX_MEMOIZED_UNIQUE_KEYS = 30;
@@ -435,49 +414,6 @@ class Snapshot {
       prevVersion,
     );
     return count;
-  }
-
-  /**
-   * The change log entries logged after `prevVersion`, by table.
-   *
-   * @param cache An optional {@link SnapshotRowCache} through which the
-   *        result is shared with the other client groups on the worker that
-   *        advance from `prevVersion` to this snapshot's version. It is
-   *        shared by reference and must not be modified.
-   */
-  changesByTableSince(
-    prevVersion: string,
-    cache?: SnapshotRowCache,
-  ): ReadonlyMap<string, TableChanges> {
-    const read = () => {
-      // A row key is a JSON object, and the key of a table-wide entry is a
-      // version, which sorts before it. So the maximum is a row key if there
-      // is one, and its columns are the table's.
-      const tables: {table: string; count: number; rowKey: string}[] =
-        this.db.all(CHANGES_BY_TABLE_SQL, prevVersion);
-      return new Map(
-        tables.map(({table, count, rowKey}) => [
-          table,
-          {
-            count,
-            rowKeyColumns: rowKey.startsWith('{')
-              ? Object.keys(JSON.parse(rowKey))
-              : [],
-          },
-        ]),
-      );
-    };
-    // The change log as of this snapshot is determined by its version, so
-    // the result depends only on the two versions.
-    return cache
-      ? cache.getOrRead(
-          `c:${this.version}`,
-          CHANGES_BY_TABLE_SQL,
-          'all',
-          [prevVersion],
-          read,
-        )
-      : read();
   }
 
   /**
@@ -664,7 +600,6 @@ class Diff implements SnapshotDiff {
   readonly #rowCache: SnapshotRowCache | undefined;
   #prevWrites: PrevWrites;
   #iterated = false;
-  #changesByTable: ReadonlyMap<string, TableChanges> | undefined;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
@@ -697,26 +632,6 @@ class Diff implements SnapshotDiff {
       rowCache && !curr.hasTableWideOpSince(prev.version)
         ? rowCache
         : undefined;
-  }
-
-  changesByTable(): ReadonlyMap<string, TableChanges> {
-    if (this.#changesByTable === undefined) {
-      // The second advance() after this Diff was created resets the `curr`
-      // connection to head, after which a read reflects a later version and
-      // must not be shared with the client groups at `curr.version`.
-      if (this.curr.reset) {
-        throw new InvalidDiffError(
-          `Diff is no longer valid. curr db has advanced past ${this.curr.version}.`,
-        );
-      }
-      // Shared with the other client groups on the worker that advance
-      // between the same versions (e.g. to reserve deferred IVM writes).
-      this.#changesByTable = this.curr.changesByTableSince(
-        this.prev.version,
-        this.#rowCache,
-      );
-    }
-    return this.#changesByTable;
   }
 
   setPrevWrites(prevWrites: PrevWrites): void {

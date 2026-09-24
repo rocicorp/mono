@@ -47,6 +47,48 @@ test('touched keys include removed rows, for single and composite keys', () => {
   expect([...composite.liveRows()]).toEqual([{x: 'a', y: 2, v: 2}]);
 });
 
+test('overrides answers by the whole composite key', () => {
+  const composite = new PendingDelta(['x', 'y']);
+  composite.set({x: 'a', y: 1, v: 1});
+  composite.delete({x: 'b', y: 2, v: 2});
+  expect(composite.overrides({x: 'a', y: 1, v: 0})).toBe(true);
+  expect(composite.overrides({x: 'b', y: 2, v: 0})).toBe(true);
+  // A shared first column is not enough.
+  expect(composite.overrides({x: 'a', y: 2, v: 0})).toBe(false);
+  expect(composite.overrides({x: 'c', y: 1, v: 0})).toBe(false);
+  composite.clear();
+  expect(composite.overrides({x: 'a', y: 1, v: 0})).toBe(false);
+});
+
+test('rowsFor begins at the start row', () => {
+  const delta = new PendingDelta(['id']);
+  for (const [id, g] of [
+    ['a', 1],
+    ['b', 2],
+    ['c', 1],
+    ['d', 2],
+    ['e', 1],
+  ] as const) {
+    delta.set({id, g});
+  }
+  const ids = (
+    constraint: {g: number} | undefined,
+    reverse: boolean,
+    start: Row | undefined,
+  ) =>
+    Array.from(
+      delta.rowsFor(byID, constraint, reverse, undefined, undefined, start),
+      r => r.id,
+    );
+
+  expect(ids(undefined, false, {id: 'c', g: 1})).toEqual(['c', 'd', 'e']);
+  expect(ids(undefined, true, {id: 'c', g: 1})).toEqual(['c', 'b', 'a']);
+  expect(ids({g: 1}, false, {id: 'b', g: 1})).toEqual(['c', 'e']);
+  expect(ids({g: 1}, true, {id: 'd', g: 1})).toEqual(['c', 'a']);
+  // A start outside the constraint span leaves the caller to apply it.
+  expect(ids({g: 1}, false, {id: 'b', g: 2})).toEqual(['a', 'c', 'e']);
+});
+
 test('pending byte estimate tracks replacements, tombstones, indexes, and clear', () => {
   const delta = new PendingDelta(['id']);
   const row = {id: 'a', value: {items: ['small', 1, true, null]}};
@@ -324,6 +366,38 @@ describe('ordering and constraints see the batch', () => {
     });
     input.destroy();
     expect(rows).toEqual(['c', 'bb', 'b', 'a']);
+  });
+});
+
+describe('a fetch with a start', () => {
+  test('sees the batch rows from the start on', () => {
+    const db = newDB(initial);
+    const source = newSource(db, true);
+    apply(source, [
+      makeSourceChangeAdd({id: 'aa', a: 1, b: 'x'}),
+      makeSourceChangeAdd({id: 'bb', a: 1, b: 'y'}),
+      makeSourceChangeAdd({id: 'd', a: 1, b: 'z'}),
+      makeSourceChangeRemove(initial[2]),
+    ]);
+    const input = source.connect(byID);
+    const out = new Catch(input);
+    input.setOutput(out);
+    const fetch = (basis: 'at' | 'after', reverse = false) =>
+      out
+        .fetch({
+          constraint: {a: 1},
+          start: {row: {id: 'aa', a: 1, b: 'x'}, basis},
+          reverse,
+        })
+        .map(r => {
+          assert(r !== 'yield', 'Expected a row, not a yield');
+          return r.row.id;
+        });
+    expect(fetch('at')).toEqual(['aa', 'bb', 'd']);
+    expect(fetch('after')).toEqual(['bb', 'd']);
+    expect(fetch('at', true)).toEqual(['aa', 'a']);
+    expect(fetch('after', true)).toEqual(['a']);
+    input.destroy();
   });
 });
 

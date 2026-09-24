@@ -22,7 +22,6 @@ import {
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {ConnectionIndex} from '../../zql/src/ivm/connection-index.ts';
-import type {Constraint} from '../../zql/src/ivm/constraint.ts';
 import {
   makeComparator,
   type Comparator,
@@ -545,6 +544,7 @@ export class TableSource implements Source {
       sort ? req.reverse : false,
       predicate,
       req.multiConstraints,
+      sort ? req.start?.row : undefined,
     );
     return compare
       ? generateWithPendingDelta(baseRows, deltaRows, delta, compare)
@@ -720,10 +720,14 @@ export class TableSource implements Source {
    * that contradicts its own state (a delete of a row the batch already
    * removed, an edit whose old row is stale).
    *
-   * Three ways the batch can disagree with the probe, all handled here:
-   * a probed row may have been removed, may have been edited (so the caller's
-   * copy is stale, or it no longer collides at all), and a row the probe could
-   * not have seen may have been edited *into* collision.
+   * Two ways the batch can disagree with the probe, both handled here: a
+   * probed row may have been removed, or may have been edited (so the
+   * caller's copy is stale, or it no longer collides at all).
+   *
+   * The batch cannot have edited a row the probe missed *into* collision. The
+   * change log keeps one entry per row key, so every row the batch holds is
+   * that row's value at the advancement's target version, as is `next`, and
+   * two distinct rows of one version cannot share a non-null unique key.
    *
    * Returns `base` untouched when derivation is not deferred, which is what
    * makes this a no-op for the write-through path.
@@ -739,13 +743,12 @@ export class TableSource implements Source {
       return base;
     }
 
-    // The change-log key uses SQLite values, while pending rows use ZQL values.
-    const deleteKey =
-      next === null
-        ? fromSQLiteTypes(this.#columns, rowKey, this.#table)
-        : null;
+    // The change-log key uses SQLite values, while pending rows use ZQL
+    // values. It is the upstream replica identity, which may include columns
+    // the source does not sync. The batch cannot have changed those (nor can a
+    // write-through `UPDATE`), so only the synced columns are compared.
+    const deleteKey = next === null ? this.#syncedDeleteKey(rowKey) : undefined;
     const out: Row[] = [];
-    const seen = new Set<unknown>();
     for (const row of base) {
       const pending = delta.get(row);
       const current = pending === NOT_OVERRIDDEN ? row : pending;
@@ -753,47 +756,25 @@ export class TableSource implements Source {
         continue; // the batch removed it
       }
       if (
-        next === null
-          ? !Object.entries(must(deleteKey)).every(
-              ([col, value]) => current[col] === value,
-            )
-          : !collides(current, next, uniqueKeys, this.#primaryKey)
+        deleteKey !== undefined
+          ? !deleteKey.every(([col, value]) => current[col] === value)
+          : !collides(current, must(next), uniqueKeys, this.#primaryKey)
       ) {
         continue; // the batch edited it out of collision
       }
-      seen.add(delta.keyOf(current));
       out.push(current);
     }
+    return out;
+  }
 
-    if (next !== null) {
-      // Rows the batch edited *into* collision. The caller's probe ran against
-      // the snapshot, so it could not have seen these.
-      for (const key of uniqueKeys) {
-        // A NULL can never collide (NULL != NULL), matching the filter the
-        // snapshot-side probe applies for the same reason.
-        if (key.some(col => next[col] === null || next[col] === undefined)) {
-          continue;
-        }
-        const constraint: Record<string, Value> = {};
-        for (const col of key) {
-          constraint[col] = next[col];
-        }
-        for (const row of delta.rowsFor(
-          this.#primaryKeySort,
-          constraint as Constraint,
-          false,
-          undefined,
-          undefined,
-        )) {
-          const k = delta.keyOf(row);
-          if (!seen.has(k)) {
-            seen.add(k);
-            out.push(row);
-          }
-        }
+  #syncedDeleteKey(rowKey: Row): [string, Value][] {
+    const synced: Writable<Row> = {};
+    for (const [col, value] of Object.entries(rowKey)) {
+      if (Object.hasOwn(this.#columns, col)) {
+        synced[col] = value;
       }
     }
-    return out;
+    return Object.entries(fromSQLiteTypes(this.#columns, synced, this.#table));
   }
 
   /**
