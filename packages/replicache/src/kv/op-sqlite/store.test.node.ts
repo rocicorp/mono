@@ -10,6 +10,13 @@ import {
 import {clearAllNamedStoresForTesting, safeFilename} from '../sqlite-store.ts';
 import {opSQLiteStoreProvider, type OpSQLiteStoreOptions} from './store.ts';
 
+// Every `open()` the store asks the driver for, in order, so a test can see
+// which options a connection was opened with (the driver mock below keys files
+// on `name` alone, so `location` is only observable here).
+const {openCalls} = vi.hoisted(() => ({
+  openCalls: [] as {name: string; location?: string; encryptionKey?: string}[],
+}));
+
 // Mock the @op-engineering/op-sqlite module with Node SQLite implementation
 vi.mock('@op-engineering/op-sqlite', () => {
   const mockModule = {
@@ -18,6 +25,7 @@ vi.mock('@op-engineering/op-sqlite', () => {
       location?: string;
       encryptionKey?: string;
     }) => {
+      openCalls.push({...options});
       const {name} = options;
       // Add op_ prefix to match the actual store implementation
       const prefixedName = `op_${name}`;
@@ -163,4 +171,36 @@ test('withWriteNoImplicitCommit reports both operation and rollback errors', asy
   expect(String((err as Error).cause)).toContain('auto rollback put failure');
 
   await store.close();
+});
+
+test('drop reopens the database with the same options it was created with', async () => {
+  // A store under a non-default `location` and with an `encryptionKey`: the
+  // connection that performs the delete must be opened with those same
+  // options, or the driver deletes a fresh empty file at the default path and
+  // leaves the real database in place.
+  const provider = opSQLiteStoreProvider({
+    ...defaultStoreOptions,
+    location: 'Library',
+    encryptionKey: 'secret',
+  });
+  const name = `drop-with-location-${Date.now()}`;
+  openCalls.length = 0;
+
+  const store = provider.create(name);
+  await withWrite(store, async write => {
+    await write.put('k', 'v');
+  });
+  await store.close();
+  await provider.drop(name);
+
+  // Every connection opened for this store — the one the store used and the
+  // temporary one `destroy()` opens to delete — carries the same options.
+  const forThisStore = openCalls.filter(
+    call => call.name === safeFilename(name),
+  );
+  expect(forThisStore.length).toBeGreaterThanOrEqual(2);
+  for (const call of forThisStore) {
+    expect(call.location).toBe('Library');
+    expect(call.encryptionKey).toBe('secret');
+  }
 });
