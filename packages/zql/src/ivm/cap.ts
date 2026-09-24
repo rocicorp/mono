@@ -2,6 +2,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {CapGate} from './cap-gate.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {makeAddChange, type Change, type EditChange} from './change.ts';
@@ -19,12 +20,13 @@ import {
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
 import {
+  constraintContainsPartitionKey,
   constraintMatchesPartitionKey,
   makePartitionKeyComparator,
   type PartitionKey,
 } from './take.ts';
 
-type CapState = {
+export type CapState = {
   size: number;
   pks: string[];
 };
@@ -59,6 +61,7 @@ export class Cap implements Operator {
   readonly #partitionKeyComparator: Comparator | undefined;
   readonly #primaryKey: PrimaryKey;
 
+  #capGate: CapGate | undefined;
   #output: Output = throwOutput;
 
   constructor(
@@ -76,6 +79,29 @@ export class Cap implements Operator {
     this.#partitionKeyComparator =
       partitionKey && makePartitionKeyComparator(partitionKey);
     this.#primaryKey = input.getSchema().primaryKey;
+  }
+
+  setCapGate(gate: CapGate): void {
+    this.#capGate = gate;
+  }
+
+  getCapState(constraint?: Constraint): CapState | undefined {
+    if (
+      this.#partitionKey &&
+      !constraintContainsPartitionKey(constraint, this.#partitionKey)
+    ) {
+      return undefined;
+    }
+    const key = getCapStateKey(this.#partitionKey, constraint);
+    return this.#storage.get(key);
+  }
+
+  get limit(): number {
+    return this.#limit;
+  }
+
+  get partitionKey(): PartitionKey | undefined {
+    return this.#partitionKey;
   }
 
   setOutput(output: Output): void {
@@ -112,20 +138,25 @@ export class Cap implements Operator {
     }
     // PK-based point lookups: fetch each tracked row by its PK directly,
     // rather than scanning the partition and filtering.
-    for (const pk of capState.pks) {
-      const pkConstraint = deserializePKToConstraint(pk, this.#primaryKey);
-      // Preserve req.constraint (the partition key) so upstream partitioned
-      // operators (e.g. Take) retain their partition scope and do not throw.
-      const constraint = req.constraint
-        ? {...req.constraint, ...pkConstraint}
-        : pkConstraint;
-      for (const inputNode of this.#input.fetch({constraint})) {
-        if (inputNode === 'yield') {
+    this.#capGate?.open();
+    try {
+      for (const pk of capState.pks) {
+        const pkConstraint = deserializePKToConstraint(pk, this.#primaryKey);
+        // Preserve req.constraint (the partition key) so upstream partitioned
+        // operators (e.g. Take) retain their partition scope and do not throw.
+        const constraint = req.constraint
+          ? {...req.constraint, ...pkConstraint}
+          : pkConstraint;
+        for (const inputNode of this.#input.fetch({constraint})) {
+          if (inputNode === 'yield') {
+            yield inputNode;
+            continue;
+          }
           yield inputNode;
-          continue;
         }
-        yield inputNode;
       }
+    } finally {
+      this.#capGate?.close();
     }
   }
 
@@ -149,6 +180,7 @@ export class Cap implements Operator {
     const pks: string[] = [];
     let downstreamEarlyReturn = true;
     let exceptionThrown = false;
+    this.#capGate?.open();
     try {
       for (const inputNode of this.#input.fetch(req)) {
         if (inputNode === 'yield') {
@@ -167,6 +199,7 @@ export class Cap implements Operator {
       exceptionThrown = true;
       throw e;
     } finally {
+      this.#capGate?.close();
       if (!exceptionThrown) {
         this.#storage.set(capStateKey, {size, pks});
         // If it becomes necessary to support downstream early return, this
@@ -230,16 +263,21 @@ export class Cap implements Operator {
         : undefined;
 
       let replacement: Node | undefined;
-      for (const node of this.#input.fetch({constraint})) {
-        if (node === 'yield') {
-          yield node;
-          continue;
+      this.#capGate?.open();
+      try {
+        for (const node of this.#input.fetch({constraint})) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
+          const nodePK = serializePK(node.row, this.#primaryKey);
+          if (!pkSet.has(nodePK)) {
+            replacement = node;
+            break;
+          }
         }
-        const nodePK = serializePK(node.row, this.#primaryKey);
-        if (!pkSet.has(nodePK)) {
-          replacement = node;
-          break;
-        }
+      } finally {
+        this.#capGate?.close();
       }
 
       if (replacement) {
@@ -311,7 +349,7 @@ export class Cap implements Operator {
   }
 }
 
-function getCapStateKey(
+export function getCapStateKey(
   partitionKey: PartitionKey | undefined,
   rowOrConstraint: Row | Constraint | undefined,
 ): string {
@@ -330,7 +368,7 @@ function serializePK(row: Row, primaryKey: PrimaryKey): string {
   return JSON.stringify(primaryKey.map(k => row[k]));
 }
 
-function deserializePKToConstraint(
+export function deserializePKToConstraint(
   pk: string,
   primaryKey: PrimaryKey,
 ): Constraint {

@@ -131,4 +131,89 @@ describe('runaway push reproduction', () => {
       {id: 'i006', projectID: 'p2'},
     ]);
   });
+
+  test('nested exists with CapGate bounds intermediate parent fetches', () => {
+    const nestedSources: Sources = {
+      project: {
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      issue: {
+        columns: {
+          id: {type: 'string'},
+          projectID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      comment: {
+        columns: {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+    };
+
+    const nestedIssues = Array.from({length: 100}, (_, i) => ({
+      id: `i${String(i).padStart(3, '0')}`,
+      projectID: 'p1',
+    }));
+
+    const nestedSourceContents: SourceContents = {
+      project: [{id: 'p1', name: 'Alpha'}],
+      issue: nestedIssues,
+      comment: [{id: 'c1', issueID: 'i000'}],
+    };
+
+    // Query: project WHERE EXISTS (issue WHERE EXISTS (comment))
+    const nestedAst: AST = {
+      table: 'project',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        flip: false,
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['projectID']},
+          subquery: {
+            table: 'issue',
+            alias: 'issues',
+            where: {
+              type: 'correlatedSubquery',
+              op: 'EXISTS',
+              flip: false,
+              related: {
+                system: 'client',
+                correlation: {parentField: ['id'], childField: ['issueID']},
+                subquery: {
+                  table: 'comment',
+                  alias: 'comments',
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const {log, data} = runPushTest({
+      sources: nestedSources,
+      sourceContents: nestedSourceContents,
+      ast: nestedAst,
+      format,
+      pushes: [
+        ['comment', makeSourceChangeRemove({id: 'c1', issueID: 'i000'})],
+      ],
+    });
+
+    const joinPushes = log.filter(
+      entry => entry[0]?.includes('join') && entry[1] === 'push',
+    );
+    expect(data).toEqual([]);
+    expect(joinPushes.length).toBeLessThanOrEqual(2);
+  });
 });

@@ -19,6 +19,7 @@ import type {
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {CapGate} from '../ivm/cap-gate.ts';
 import {Cap} from '../ivm/cap.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
@@ -378,6 +379,14 @@ function buildPipelineInternal(
     end = delegate.decorateInput(takeGate, takeGateName);
   }
 
+  let capGate: CapGate | undefined;
+  if (ast.limit !== undefined && useCap) {
+    const capGateName = `${name}:cap-gate`;
+    capGate = new CapGate(end);
+    delegate.addEdge(end, capGate);
+    end = delegate.decorateInput(capGate, capGateName);
+  }
+
   for (const csqCondition of csqConditions) {
     // flipped EXISTS are handled in applyWhere
     if (!csqCondition.flip) {
@@ -423,6 +432,10 @@ function buildPipelineInternal(
       );
       delegate.addEdge(end, cap);
       end = delegate.decorateInput(cap, capName);
+      if (capGate) {
+        capGate.setCap(cap);
+        cap.setCapGate(capGate);
+      }
     } else {
       const takeName = `${name}:take`;
       const take = new Take(
