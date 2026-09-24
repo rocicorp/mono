@@ -128,6 +128,34 @@ class ShapeStats extends Totals {
   }
 }
 
+/** A fixed-size linear-counting sketch for shapes beyond the tracking limit. */
+class OverflowShapeCounter {
+  readonly #buckets = new Uint8Array(4096);
+  #occupied = 0;
+
+  add(key: string): void {
+    // FNV-1a gives a stable bucket without retaining the key.
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+      hash = Math.imul(hash ^ key.charCodeAt(i), 0x01000193);
+    }
+    const bucket = (hash >>> 0) % this.#buckets.length;
+    if (this.#buckets[bucket] === 0) {
+      this.#buckets[bucket] = 1;
+      this.#occupied++;
+    }
+  }
+
+  get estimatedCount(): number {
+    const empty = this.#buckets.length - this.#occupied;
+    return empty === 0
+      ? this.#buckets.length
+      : Math.round(
+          -this.#buckets.length * Math.log(empty / this.#buckets.length),
+        );
+  }
+}
+
 /**
  * Aggregates the work done for each query shape (the query with its values
  * redacted, see {@link QueryShape}) on a worker, and periodically logs it,
@@ -155,7 +183,7 @@ export class QueryStats {
 
   #shapes = new Map<string, ShapeStats>();
   #totals = new Totals();
-  #untrackedShapes = new Set<string>();
+  #overflowShapes = new OverflowShapeCounter();
   #intervalStart: number;
 
   constructor({
@@ -192,7 +220,7 @@ export class QueryStats {
     let stats = this.#shapes.get(key);
     if (stats === undefined) {
       if (this.#shapes.size >= this.#maxShapes) {
-        this.#untrackedShapes.add(key);
+        this.#overflowShapes.add(key);
         return undefined;
       }
       stats = new ShapeStats(query);
@@ -210,13 +238,13 @@ export class QueryStats {
     const intervalMs = now - this.#intervalStart;
     const shapes = this.#shapes;
     const totals = this.#totals;
-    const untrackedShapes = this.#untrackedShapes.size;
+    const overflowShapes = this.#overflowShapes.estimatedCount;
     this.#shapes = new Map();
     this.#totals = new Totals();
-    this.#untrackedShapes = new Set();
+    this.#overflowShapes = new OverflowShapeCounter();
     this.#intervalStart = now;
 
-    if (shapes.size === 0 && untrackedShapes === 0) {
+    if (shapes.size === 0 && overflowShapes === 0) {
       return;
     }
     const reported = [...shapes.values()]
@@ -238,7 +266,7 @@ export class QueryStats {
     lc.info?.('query stats summary', {
       zeroEvent: 'query-stats-summary',
       intervalMs,
-      shapes: shapes.size + untrackedShapes,
+      shapes: shapes.size + overflowShapes,
       shapesReported: reported.length,
       ...totals.toJSON(),
     });
