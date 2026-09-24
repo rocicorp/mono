@@ -28,7 +28,11 @@ import {
 } from '../db/test-helpers.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {type Hash, assertHash, makeNewFakeHashFunction} from '../hash.ts';
-import type {ZeroReadOptions, ZeroTxData} from '../replicache-options.ts';
+import type {
+  ZeroOption,
+  ZeroReadOptions,
+  ZeroTxData,
+} from '../replicache-options.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import {
   type WriteTransaction,
@@ -890,8 +894,58 @@ describe('persistDD31', () => {
     );
   });
 
+  type GetZeroDataCall = {
+    desiredHead: Hash;
+    readOptions: ZeroReadOptions | undefined;
+    writeGranted?: 'granted' | 'blocked' | undefined;
+  };
+
+  // Records every getZeroData call. The call for `probeWriteLockFor` also
+  // asks for the memdag write lock and records whether it was granted within
+  // 20ms; `writeProbe` settles once that write has been granted and released.
+  function makeRecordingGetZeroData(probeWriteLockFor: Hash | undefined): {
+    getZeroData: ZeroOption['getTxData'];
+    seen: GetZeroDataCall[];
+    writeProbe: Promise<unknown>;
+  } {
+    const seen: GetZeroDataCall[] = [];
+    const result = {
+      seen,
+      writeProbe: promiseVoid as Promise<unknown>,
+      getZeroData: async (
+        desiredHead: Hash,
+        readOptions?: ZeroReadOptions,
+      ): Promise<ZeroTxData> => {
+        if (desiredHead === probeWriteLockFor) {
+          const writeProbe = memdag.write().then(write => {
+            write.release();
+            return 'granted' as const;
+          });
+          result.writeProbe = writeProbe;
+          const writeGranted = await Promise.race([
+            writeProbe,
+            sleep(20).then(() => 'blocked' as const),
+          ]);
+          seen.push({desiredHead, readOptions, writeGranted});
+        } else {
+          seen.push({desiredHead, readOptions});
+        }
+        const txData: ZeroTxData = {
+          ivmSources: undefined,
+          token: undefined,
+          context: undefined,
+          fork: () => txData,
+        };
+        return txData;
+      },
+    };
+    return result;
+  }
+
   test('getZeroData for the memdag base snapshot is taken under the memdag read lock', async () => {
-    await setupSnapshots({memdagCookie: 'cookie2'});
+    const {memdagHeadHash: memdagBaseSnapshotHash} = await setupSnapshots({
+      memdagCookie: 'cookie2',
+    });
 
     // Zero forks its IVM branch by diffing from the IVM head (the memdag main
     // head) to the requested base snapshot, and both are memdag chunks that a
@@ -899,38 +953,40 @@ describe('persistDD31', () => {
     // the moved head drops superseded local commits, and a snapshot commit
     // carries no ref to its basis. So the fork must run while persist still
     // holds the read that fixed the base snapshot. The probe below asks for
-    // the memdag write lock from inside getZeroData; while the read is held it
-    // cannot be granted.
-    const seen: {
-      readOptions: ZeroReadOptions | undefined;
-      writeGranted?: string | undefined;
-    }[] = [];
-    const getZeroData = async (
-      _desiredHead: Hash,
-      readOptions?: ZeroReadOptions,
-    ): Promise<ZeroTxData> => {
-      // Only the first call, the fork to the memdag base snapshot, is probed.
-      if (seen.length === 0) {
-        const writeProbe = memdag.write().then(write => {
-          write.release();
-          return 'granted' as const;
-        });
-        const writeGranted = await Promise.race([
-          writeProbe,
-          sleep(20).then(() => 'blocked' as const),
-        ]);
-        seen.push({readOptions, writeGranted});
-      } else {
-        seen.push({readOptions});
-      }
-      const txData: ZeroTxData = {
-        ivmSources: undefined,
-        token: undefined,
-        context: undefined,
-        fork: () => txData,
-      };
-      return txData;
-    };
+    // the memdag write lock from inside that getZeroData call; while the read
+    // is held it cannot be granted.
+    const recorder = makeRecordingGetZeroData(memdagBaseSnapshotHash);
+    const {getZeroData, seen} = recorder;
+
+    await persistDD31(
+      new LogContext(),
+      clients[0].clientID,
+      memdag,
+      perdag,
+      {},
+      () => false,
+      FormatVersion.Latest,
+      getZeroData,
+    );
+    // Read after persist: the probe is only started inside getZeroData.
+    await recorder.writeProbe;
+
+    const forkToBaseSnapshot = seen.find(
+      s => s.desiredHead === memdagBaseSnapshotHash,
+    );
+    expect(forkToBaseSnapshot).toBeDefined();
+    expect(forkToBaseSnapshot?.readOptions).toEqual(
+      expect.objectContaining({openLazyRead: expect.anything()}),
+    );
+    expect(forkToBaseSnapshot?.writeGranted).toBe('blocked');
+  });
+
+  test('getZeroData is not called for the memdag base snapshot when it is not newer than the perdag one', async () => {
+    const {memdagHeadHash: memdagBaseSnapshotHash} = await setupSnapshots();
+
+    // With equal snapshot cookies nothing is persisted, so the only fork
+    // needed is the one to the perdag head, taken inside the perdag write.
+    const {getZeroData, seen} = makeRecordingGetZeroData(undefined);
 
     await persistDD31(
       new LogContext(),
@@ -943,13 +999,14 @@ describe('persistDD31', () => {
       getZeroData,
     );
 
-    // The first call is the fork to the memdag base snapshot: it must arrive
-    // with the open memdag read and while a memdag write cannot be granted.
     expect(seen.length).toBeGreaterThanOrEqual(1);
-    expect(seen[0].readOptions).toEqual(
-      expect.objectContaining({openLazyRead: expect.anything()}),
-    );
-    expect(seen[0].writeGranted).toBe('blocked');
+    expect(
+      seen.filter(
+        s =>
+          s.desiredHead === memdagBaseSnapshotHash ||
+          s.readOptions?.openLazyRead !== undefined,
+      ),
+    ).toEqual([]);
   });
 
   test('persist throws a ClientStateNotFoundError if client is missing', async () => {
