@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790014489824,
+  "lastUpdate": 1790254344768,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57961,6 +57961,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 34130,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4f00d8014170a1223f4e904dcd9732c98bede3d7",
+          "message": "fix(replicache): fork Zero's IVM data for the base snapshot while persist still holds the memdag read (#6670)\n\nSupersedes #6654 by @pawarren (Paul Warren), who wrote this fix. His\ncommit is re-signed with my key so it passes\n`verify-signed-commit-authors`. Paul is still the commit author, and the\nchange is identical apart from the rebase onto current `main`.\n\n---\n\n## Summary\n\n`persistDD31` takes Zero's IVM fork for the memdag base snapshot\n**after** releasing the memdag read that produced it. The fork\n(`IVMSourceBranch.forkToHead`) is a diff from the IVM head — the memdag\nmain head — to that base snapshot, and both endpoints are memdag chunks\na concurrent poke is free to collect in between. When it loses that\nrace, persist throws:\n\n```\nError during persist ChunkNotFoundError: Chunk not found <hash>\n```\n\nfor a replica that is perfectly healthy. This PR takes the fork inside\nthe same `withRead(memdag)` that fixed `memdagBaseSnapshot`, passing\nthat read as `openLazyRead`, so the diff runs under the lock that keeps\nits endpoints alive.\n\n## How it happens\n\n1. `persistDD31` reads the memdag under `withRead`: base snapshot S0,\nthe pending local mutation L1 on top of it, the chunks to gather. The\nread is released.\n2. It calls `getZeroData(S0.hash)` → `ZeroRep.getTxData` →\n`IVMSourceBranch.forkToHead(memdag, S0)`. `forkToHead` copies\n`this.hash` (L1) synchronously, sees L1 ≠ S0, and calls\n`withRead(memdag)` to compute the diff L1 → S0.\n3. `@rocicorp/lock`'s RWLock is FIFO. A poke that was mid-flight already\nhas its final `maybeEndPull` write queued: main head := L1' (L1 rebased\nonto the new snapshot). `LazyWrite.commit` deletes every mem-only chunk\nwhose ref count reaches zero — L1, and S0 as well, since a snapshot\ncommit's refs do not include its `basisHash` (`getRefs`, meta type 5).\n4. The diff read runs after that write, `commitFromHash(L1)` misses in\n`_memOnlyChunks`, the source cache and the perdag, and `mustGetChunk`\nthrows. `ReplicacheImpl.persist` rethrows anything that is not\n`ClientStateNotFoundError` / `InvalidRefCountError`, so the scheduler\nlogs the line above.\n\nThe interleaving is: persist's memdag read is granted between the poke's\nrebase write and its head-moving write. That needs a pending local\nmutation and a poke landing while persist is scheduled, which is\nordinary at app open.\n\n## Evidence\n\nSeen on five iOS devices in one day on `@rocicorp/zero@1.10.0-canary.24`\n(React Native, op-sqlite store), each 2–5 s after `Starting Zero`, with\nno SQLite error anywhere. Every missing hash ends in a tiny\n`newRandomHash` counter (`…000000000e`, `…000000000k`), i.e. a chunk\ncreated by that process within its first twenty hashes — a memdag chunk,\nnot a replica row. A retry succeeds.\n\nWe reproduced it deterministically outside the app with a\n`ReplicacheImpl` on the `mem` kv store and a `zero` delegate that\nmirrors `ZeroRep` over a real `IVMSourceBranch`: poke #1, one local\nmutation, poke #2 started, `rep.persist()` called while the poke's\nrebase write holds the lock, and the poke's final lock request held back\nuntil persist's read is granted (only fixing the FIFO order the\nscheduler produces on its own). Result on `canary.24`:\n\n```\nChunkNotFoundError: Chunk not found oda384nt0uq90000000009   (the pending local commit L1)\n```\n\nand the very next `persist()` resolves.\n\n## Test\n\n`persist.test.ts`: `getZeroData for the memdag base snapshot is taken\nunder the memdag read lock`. The `getZeroData` stub probes for the\nmemdag write lock from inside the call; with the fix it arrives with\n`openLazyRead` set and the write cannot be granted while it runs. Fails\non `main` (`readOptions` is `undefined`), passes here.\n\n## What this does not cover\n\nThe same fork can still race in a much narrower window: between a memdag\nwrite committing a new head and `ReplicacheImpl` calling `zero.advance`\nfor it (a few microtasks in `maybeEndPull`), the IVM head names a chunk\nthe commit has already collected. A `forkToHead` that starts inside that\nwindow has the same failure. Closing it fully means advancing the IVM\ninside the write (or pinning the IVM head chunk until `advance`), which\nis a larger change than this one; happy to follow up if you want it.\nThis PR closes the window that is actually being hit.\n\nCo-authored-by: Paul Warren <pawarren95@gmail.com>",
+          "timestamp": "2026-09-24T12:37:56Z",
+          "tree_id": "b66b69330234ab4c66fdc23442a2f418a984ded2",
+          "url": "https://github.com/rocicorp/mono/commit/4f00d8014170a1223f4e904dcd9732c98bede3d7"
+        },
+        "date": 1790254332791,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 326483,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 59154,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 119491,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34123,
             "unit": "bytes"
           }
         ]
