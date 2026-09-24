@@ -70,7 +70,7 @@ const BACKFILL_PREFETCH_CREDITS = 16;
  * If stats indicate that these stalls are highly correlative with replication
  * lag (indicating that replication changes are waiting on these polls), we
  * can address this by adding an API to the change stream multiplexer that
- * would allow backfill to reliquish an in-progress commit on demand (i.e.
+ * would allow backfill to relinquish an in-progress commit on demand (i.e.
  * only if replication asks for a reservation).
  */
 const BACKFILL_WAITER_POLL_MS = 10;
@@ -167,8 +167,17 @@ export class BackfillManager implements Cancelable, Listener {
 
   readonly #commitThresholdBytes: number;
 
-  /** Set when the change stream is canceled. No further backfills are run. */
-  #canceled = false;
+  /**
+   * Aborted when the change stream is canceled. No further backfills are run.
+   *
+   * TODO: Thread this into the backfillStream so that upstream I/O can be
+   * aborted.
+   */
+  readonly #controller = new AbortController();
+
+  get #canceled() {
+    return this.#controller.signal.aborted;
+  }
 
   constructor(
     lc: LogContext,
@@ -384,6 +393,14 @@ export class BackfillManager implements Cancelable, Listener {
     }
     let stopProducer = false;
 
+    // Wakes a consumer blocked awaiting the next prefetched message so a
+    // canceled backfill unwinds promptly.
+    const onCancel = () =>
+      ready.enqueueRejection(new AbortError('backfill canceled'));
+    if (!this.#canceled) {
+      this.#controller.signal.addEventListener('abort', onCancel);
+    }
+
     const producer = (async () => {
       try {
         let t0 = performance.now();
@@ -402,6 +419,10 @@ export class BackfillManager implements Cancelable, Listener {
         ready.enqueueRejection(e);
       }
     })();
+    // The producer routes errors through `ready` and never rejects; guard
+    // anyway so that leaving it un-awaited on the cancellation path (below)
+    // cannot surface as an unhandled rejection.
+    void producer.catch(() => {});
 
     // === Consumer ===
 
@@ -527,13 +548,14 @@ export class BackfillManager implements Cancelable, Listener {
       }
       lc.debug?.(`backfill stream exited`, state.canceledReason ?? '');
     } finally {
-      // Stop and finalize the prefetch producer (and thus the upstream stream).
-      // Enqueuing a credit wakes a producer blocked awaiting one; awaiting the
-      // producer ensures the backfill stream's `finally` (releasing the upstream
-      // replication slot / connection) has run before this backfill resolves.
       stopProducer = true;
       credits.enqueue(1);
-      await producer;
+      // The producer can potentially be hung on upstream I/O.
+      // TODO: Thread AbortSignal logic into the backfillStreamer.
+      if (!this.#canceled) {
+        await producer;
+      }
+      this.#controller.signal.removeEventListener('abort', onCancel);
       this.#logBackfillStats(lc, stats);
     }
   }
@@ -820,7 +842,7 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   cancel(): void {
-    this.#canceled = true;
+    this.#controller.abort('canceled');
     this.#stopRunningBackfill(`change stream canceled`);
     clearTimeout(this.#backfillRetryTimer);
     this.#backfillRetryTimer = undefined;
