@@ -1129,7 +1129,12 @@ export class PipelineDriver {
           `advancement time limited based on total hydration time of ` +
           `${totalHydrationTimeMs} ms (${deferWrites ? 'deferred' : 'write-through'}).`,
       );
-      for (const {table, prevValues: probedPrevValues, nextValue} of diff) {
+      for (const {
+        table,
+        prevValues: probedPrevValues,
+        nextValue,
+        rowKey,
+      } of diff) {
         // Advance progress is checked each time a row is fetched
         // from a TableSource during push processing, but some pushes
         // don't read any rows.  Check progress here before processing
@@ -1157,6 +1162,7 @@ export class PipelineDriver {
             const prevValues = tableSource.reconcilePendingConflicts(
               probedPrevValues,
               nextValue,
+              rowKey as Row,
               this.#tableSpecs.get(table)?.tableSpec.uniqueKeys ?? [],
             );
             let editOldRow: Row | undefined = undefined;

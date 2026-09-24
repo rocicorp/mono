@@ -2093,6 +2093,32 @@ describe('view-syncer/pipeline-driver', () => {
       });
     });
 
+    test('a deferred delete preserves a row moved away from the change-log key', () => {
+      const byName = new ReplicationMessages({uniques: 'name'});
+      const writeThrough = makeDriver('write-through', undefined);
+      const deferred = makeDriver(
+        'deferred',
+        new DeferredWritesBudget(Infinity, Infinity),
+      );
+
+      // The log compresses this to SET(baz), DEL(bar). The delete's snapshot
+      // probe still finds foo/bar, but the pending row is now foo/baz.
+      replicator.processTransaction(
+        '134',
+        byName.update('uniques', {id: 'foo', name: 'baz'}, {name: 'bar'}),
+        byName.insert('uniques', {id: 'temporary', name: 'bar'}),
+        byName.delete('uniques', {name: 'bar'}),
+      );
+
+      const expected = summarize(
+        writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+      );
+      expect(expected).toEqual([`${ChangeType.EDIT}:foo:baz`]);
+      const {numChanges, changes} = deferred.advance(NO_TIME_ADVANCEMENT_TIMER);
+      expect(numChanges).toBe(2);
+      expect(summarize(changes)).toEqual(expected);
+    });
+
     test('an entry counts twice when the change log is keyed by another unique key', () => {
       // `uniques` has `id` as its primary key in the client schema, but is
       // keyed by its other unique key, `name`, upstream and in the change log.

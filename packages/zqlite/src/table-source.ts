@@ -712,7 +712,7 @@ export class TableSource implements Source {
    * with the changes this source has applied but not written.
    *
    * A view-syncer computes the rows a replicated change collides with -- by
-   * primary key for a delete, by every unique key for a set -- against the
+   * change-log key for a delete, by every unique key for a set -- against the
    * snapshot it is reading. When derivation writes through, that snapshot has
    * already absorbed the earlier changes of the same advancement, so the
    * probe sees them. When derivation is deferred they live here instead, and
@@ -731,6 +731,7 @@ export class TableSource implements Source {
   reconcilePendingConflicts(
     base: readonly Row[],
     next: Row | null,
+    rowKey: Row,
     uniqueKeys: readonly (readonly string[])[],
   ): readonly Row[] {
     const delta = this.#delta;
@@ -738,6 +739,11 @@ export class TableSource implements Source {
       return base;
     }
 
+    // The change-log key uses SQLite values, while pending rows use ZQL values.
+    const deleteKey =
+      next === null
+        ? fromSQLiteTypes(this.#columns, rowKey, this.#table)
+        : null;
     const out: Row[] = [];
     const seen = new Set<unknown>();
     for (const row of base) {
@@ -747,8 +753,11 @@ export class TableSource implements Source {
         continue; // the batch removed it
       }
       if (
-        next !== null &&
-        !collides(current, next, uniqueKeys, this.#primaryKey)
+        next === null
+          ? !Object.entries(must(deleteKey)).every(
+              ([col, value]) => current[col] === value,
+            )
+          : !collides(current, next, uniqueKeys, this.#primaryKey)
       ) {
         continue; // the batch edited it out of collision
       }
