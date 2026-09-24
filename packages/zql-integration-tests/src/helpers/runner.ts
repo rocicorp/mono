@@ -82,6 +82,12 @@ type DBs<TSchema extends Schema> = {
 export type Delegates = {
   pg: TestPGQueryDelegate;
   sqlite: QueryDelegate;
+  /**
+   * Within a {@link Queries.transact}, a second SQLite delegate whose sources
+   * hold what is pushed to them in memory instead of writing it to their
+   * database (`deferIvmWrites`), for callers that push to check both modes.
+   */
+  sqliteDeferred?: QueryDelegate | undefined;
   memory: QueryDelegate;
   mapper: NameMapper;
 };
@@ -392,13 +398,17 @@ export async function bootstrap<TSchema extends Schema>({
         sqlite: newQueryDelegate(
           lc,
           testLogConfig,
-          (() => {
-            const db = new Database(lc, dbs.sqliteFile);
-            db.exec('BEGIN CONCURRENT');
-            return db;
-          })(),
+          beginConcurrent(dbs.sqliteFile),
           zqlSchema,
           sourceWrapper,
+        ),
+        sqliteDeferred: newQueryDelegate(
+          lc,
+          testLogConfig,
+          beginConcurrent(dbs.sqliteFile),
+          zqlSchema,
+          sourceWrapper,
+          {deferWrites: true},
         ),
       };
       await cb(scopedDelegates);
@@ -411,6 +421,12 @@ export async function bootstrap<TSchema extends Schema>({
     queries,
     transact,
   };
+}
+
+function beginConcurrent(file: string): Database {
+  const db = new Database(lc, file);
+  db.exec('BEGIN CONCURRENT');
+  return db;
 }
 
 function makeBenchmark<TSchema extends Schema>({

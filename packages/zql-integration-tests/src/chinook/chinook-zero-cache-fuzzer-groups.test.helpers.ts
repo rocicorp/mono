@@ -2,9 +2,9 @@
  * The client-group lane of the zero-cache fuzzer: several client groups on one
  * sync worker, which is configured like a production one (the view-syncers
  * share a `SnapshotRowCache` and plan queries with the query planner), stay
- * query-equivalent to PostgreSQL through the generated write stream, swaps of
- * a unique key within one transaction, client reconnects and view-syncer
- * restarts. The tests live in `chinook-zero-cache-fuzzer-groups.pg.test.ts`.
+ * query-equivalent to PostgreSQL through the generated write stream, swaps
+ * and renames of a unique key within one transaction, changes of primary
+ * keys, client reconnects and view-syncer restarts. The tests live in `chinook-zero-cache-fuzzer-groups.pg.test.ts`.
  *
  * The groups desire different but overlapping queries, so that they read the
  * same replica rows through the shared cache while their pipelines skip
@@ -12,7 +12,9 @@
  * show, e.g. one pinned to another primary key). That is the setting of
  * #6647, where a group that skipped a write shared a stale read of a table
  * with a second unique key. The upstream `customer` table gets such a key
- * (`email`), and the swaps move an email from one customer to another:
+ * (`email`), and the swaps move an email from one customer to another (the
+ * renames change both, see {@link renameCustomerEmails}, and the re-ids
+ * change their ids, see {@link moveCustomerIDs}):
  *
  * - `narrow` (created first, so it tends to advance first) pins every table
  *   to a primary key, including `customer` to one the swaps never edit;
@@ -86,9 +88,25 @@ import {builder, schema} from './schema.ts';
 
 type Harness = Awaited<ReturnType<typeof startZeroCacheReplica>>;
 
-/** Gives `customer` a second unique key, which the swaps move between rows. */
-export const GROUPS_UPSTREAM_SETUP =
-  'CREATE UNIQUE INDEX customer_email_key ON customer (email);';
+/**
+ * Gives `customer` a second unique key, which the swaps move between rows,
+ * and makes upstream identify its rows by that key plus a `bytea` column
+ * (`REPLICA IDENTITY USING INDEX`), so that its change log entries are keyed
+ * by email rather than by the `id` that the client schema keys it by:
+ *
+ * - a swap's entry for an email changes the `id` of the row that has it,
+ *   which is two rows to a source (a remove and an add), so an advancement
+ *   holding its changes in memory reserves a second row for it;
+ * - `bytea` has no ZQL type, so the column is in the change log key of a
+ *   delete (the email a swap parks and frees) but not in the source.
+ */
+export const GROUPS_UPSTREAM_SETUP = /*sql*/ `
+  CREATE UNIQUE INDEX customer_email_key ON customer (email);
+  ALTER TABLE customer
+    ADD COLUMN email_tag BYTEA NOT NULL DEFAULT '\\x00'::bytea;
+  CREATE UNIQUE INDEX customer_identity ON customer (email, email_tag);
+  ALTER TABLE customer REPLICA IDENTITY USING INDEX customer_identity;
+`;
 
 /** The `mediaType` row every group desires, updated by each barrier. */
 const BARRIER_MEDIA_TYPE_ID = 2;
@@ -117,7 +135,9 @@ type Step =
       readonly label: string;
       readonly mutation: Mutation;
     }
-  | {readonly kind: 'swap'};
+  | {readonly kind: 'swap'}
+  | {readonly kind: 'rename'}
+  | {readonly kind: 're-id'};
 
 type Event = {
   readonly kind: EventKind;
@@ -137,6 +157,8 @@ type LaneGroup = {
 export type GroupsFuzzStats = {
   writes: number;
   swaps: number;
+  renames: number;
+  reIDs: number;
   events: Record<EventKind, number>;
   stepChecks: number;
   fullChecks: number;
@@ -145,6 +167,8 @@ export type GroupsFuzzStats = {
   starts: Record<string, number>;
   /** How the advancements applied their changes. */
   advancements: SeededDeferredWritesBudget['advancements'];
+  /** How the reservations of second rows went. */
+  secondRows: SeededDeferredWritesBudget['secondRows'];
 };
 
 /**
@@ -158,6 +182,14 @@ export type GroupsFuzzStats = {
  * - `switched`: in memory for its first 1-3 changes, then written through,
  *   as when the bytes held on the worker exceed the budget partway.
  *
+ * A held advancement also reserves a second row for each change log entry
+ * that can change the primary key of the row it sets (see
+ * {@link GROUPS_UPSTREAM_SETUP}), and a refused one writes the rest of its
+ * advancement through. The seed refuses the first or the second, so that both
+ * outcomes occur as soon as there are two, and then one in four: refusing
+ * more would rarely leave an advancement holding its changes past two of
+ * these entries, as a rename needs (see {@link renameCustomerEmails}).
+ *
  * The budget itself is unlimited, but still accounts for the rows and bytes
  * held, and counts the advancements that hold more rows than they reserved.
  */
@@ -166,12 +198,28 @@ export class SeededDeferredWritesBudget extends DeferredWritesBudget {
   /** The byte checks left before the advancement is made to write through. */
   #checksBeforeSwitch: number | undefined;
   readonly advancements = {held: 0, writtenThrough: 0, switched: 0};
+  readonly secondRows = {reserved: 0, refused: 0};
+  readonly #refuseFirst: boolean;
 
   constructor(seed: number) {
     super(Infinity, Infinity);
     // Separate from the lane's generator: advancements interleave
     // nondeterministically, and must not shift the lane's schedule.
     this.#r = rng(seed ^ 0x3c6ef372);
+    this.#refuseFirst = this.#r.int(2) === 0;
+  }
+
+  override tryReserveMore(rows: number): boolean {
+    const {reserved, refused} = this.secondRows;
+    const n = reserved + refused;
+    const refuse =
+      n < 2 ? (n === 0) === this.#refuseFirst : this.#r.int(4) === 0;
+    if (refuse) {
+      this.secondRows.refused++;
+      return false;
+    }
+    this.secondRows.reserved++;
+    return super.tryReserveMore(rows);
   }
 
   override tryReserve(rows: number): boolean {
@@ -300,12 +348,15 @@ class GroupsLane {
   readonly #stats: GroupsFuzzStats = {
     writes: 0,
     swaps: 0,
+    renames: 0,
+    reIDs: 0,
     events: {'reconnect-shared': 0, 'reconnect-solo': 0, 'restart': 0},
     stepChecks: 0,
     fullChecks: 0,
     freshChecks: 0,
     starts: {},
     advancements: {held: 0, writtenThrough: 0, switched: 0},
+    secondRows: {reserved: 0, refused: 0},
   };
   #watermark = '';
   #barriers = 0;
@@ -364,6 +415,7 @@ class GroupsLane {
       this.#stats.starts[g.group.id] = g.group.starts;
     }
     this.#stats.advancements = {...this.#deferredWrites.advancements};
+    this.#stats.secondRows = {...this.#deferredWrites.secondRows};
     return this.#stats;
   }
 
@@ -412,16 +464,24 @@ class GroupsLane {
   }
 
   #steps(): Step[] {
-    // The swaps are the only writes to `customer`: the four-phase writes
-    // would violate its unique email key.
+    // The swaps, renames and re-ids are the only writes to `customer`: the
+    // four-phase writes would violate its unique email key.
     const steps: Step[] = this.#writeCases.flatMap(c =>
       c.mutations
         .filter(mutation => mutation.table !== 'customer')
         .map(mutation => ({kind: 'write' as const, label: c.label, mutation})),
     );
-    // An even number of swaps leaves the emails where they started.
+    // An even number of swaps leaves the emails where they started, and so
+    // does an even number of renames.
     for (let i = 0; i < 2 * this.#budget; i++) {
       steps.splice(this.#r.int(steps.length + 1), 0, {kind: 'swap'});
+    }
+    for (let i = 0; i < 2 * this.#budget; i++) {
+      steps.splice(this.#r.int(steps.length + 1), 0, {kind: 'rename'});
+    }
+    // Each re-id moves the ids back before the step ends.
+    for (let i = 0; i < 2 * this.#budget; i++) {
+      steps.splice(this.#r.int(steps.length + 1), 0, {kind: 're-id'});
     }
     return steps;
   }
@@ -490,6 +550,26 @@ class GroupsLane {
       this.#note(description);
       await swapCustomerEmails(this.#harness.upstream);
       this.#stats.swaps++;
+      await this.#barrier(description);
+      await this.#stepChecks(description, ['customer'], CUSTOMER_CASES);
+      return;
+    }
+    if (step.kind === 're-id') {
+      for (const offset of [RE_ID_OFFSET, -RE_ID_OFFSET]) {
+        const description = `step ${i}: move customer ids by ${offset}`;
+        this.#note(description);
+        await moveCustomerIDs(this.#harness.upstream, offset);
+        await this.#barrier(description);
+        await this.#stepChecks(description, ['customer'], CUSTOMER_CASES);
+      }
+      this.#stats.reIDs++;
+      return;
+    }
+    if (step.kind === 'rename') {
+      const description = `step ${i}: rename customer emails`;
+      this.#note(description);
+      await renameCustomerEmails(this.#harness.upstream);
+      this.#stats.renames++;
       await this.#barrier(description);
       await this.#stepChecks(description, ['customer'], CUSTOMER_CASES);
       return;
@@ -730,6 +810,50 @@ async function swapCustomerEmails(upstream: PostgresDB) {
     await tx`UPDATE customer SET email = 'swap@example.com' WHERE customer_id = ${a}`;
     await tx`UPDATE customer SET email = ${emailA} WHERE customer_id = ${b}`;
     await tx`UPDATE customer SET email = ${emailB} WHERE customer_id = ${a}`;
+  });
+}
+
+const RE_ID_OFFSET = 1000;
+
+/**
+ * Moves the ids of the {@link SWAPPED_CUSTOMERS} (or, with a negative
+ * `offset`, moves them back) in one transaction. The change log is keyed by
+ * email (see {@link GROUPS_UPSTREAM_SETUP}), so each of its two entries
+ * changes the primary key of its row: four rows to a source, which an
+ * advancement that holds its changes in memory can hold only by reserving a
+ * second row for each entry. The step checks run in between, so the swaps and
+ * renames only ever see the original ids.
+ */
+async function moveCustomerIDs(upstream: PostgresDB, offset: number) {
+  const ids = SWAPPED_CUSTOMERS.map(id => (offset > 0 ? id : id - offset));
+  await upstream`
+    UPDATE customer SET customer_id = customer_id + ${offset}::int
+     WHERE customer_id IN ${upstream(ids)}`;
+}
+
+const RENAMED = '.renamed';
+
+/**
+ * Toggles a suffix on the emails of the {@link SWAPPED_CUSTOMERS} in one
+ * transaction. The change log (keyed by email, see
+ * {@link GROUPS_UPSTREAM_SETUP}) then deletes the second customer's old
+ * email, which existed before the transaction, after the first customer's
+ * new email is set: an advancement that still holds its changes in memory
+ * there reconciles the delete, whose key has the `bytea` column, against the
+ * changes it holds. (A swap never does: the email it parks is not in the
+ * snapshot the advancement starts from, so its delete is skipped.)
+ */
+async function renameCustomerEmails(upstream: PostgresDB) {
+  await upstream.begin(async tx => {
+    for (const id of SWAPPED_CUSTOMERS.toReversed()) {
+      await tx`
+        UPDATE customer SET email = CASE
+          WHEN email LIKE ${'%' + RENAMED}
+            THEN left(email, ${-RENAMED.length}::int)
+          ELSE email || ${RENAMED}
+        END
+        WHERE customer_id = ${id}`;
+    }
   });
 }
 

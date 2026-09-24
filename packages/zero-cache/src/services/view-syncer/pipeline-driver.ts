@@ -1155,7 +1155,10 @@ export class PipelineDriver {
               continue;
             }
             const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
-            if (!this.#reserveSecondRow(advanceContext, rowKey, primaryKey)) {
+            if (
+              nextValue !== null &&
+              !this.#reserveSecondRow(advanceContext, rowKey, primaryKey)
+            ) {
               holds = 'rows';
             }
             // The diff probed the `prev` snapshot for the rows this change
@@ -1275,8 +1278,9 @@ export class PipelineDriver {
 
   /**
    * If the change log identifies the rows of a table by a key other than its
-   * primary key here, an entry can change the primary key of its row, which is
-   * two rows to a source: the old and the new. Reserves the second row for
+   * primary key here, an entry that sets a row can change its primary key,
+   * which is two rows to a source: the old and the new. (An entry that removes
+   * a row removes the one row its key identifies.) Reserves the second row for
    * such an entry, if the advancement holds its changes in memory, and
    * returns whether it fit.
    */
@@ -1291,7 +1295,7 @@ export class PipelineDriver {
     ) {
       return true;
     }
-    if (!must(this.#deferredWrites).tryReserve(1)) {
+    if (!must(this.#deferredWrites).tryReserveMore(1)) {
       return false;
     }
     advanceContext.reservedRows++;

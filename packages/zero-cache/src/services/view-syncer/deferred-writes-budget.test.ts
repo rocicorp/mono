@@ -17,6 +17,16 @@ describe('view-syncer/deferred-writes-budget', () => {
     );
   });
 
+  test('reserves more rows from the same pool', () => {
+    const budget = new DeferredWritesBudget(3, Infinity);
+    expect(budget.tryReserve(2)).toBe(true);
+    expect(budget.tryReserveMore(1)).toBe(true);
+    expect(budget.tryReserveMore(1)).toBe(false);
+    expect(budget.reservedRows).toBe(3);
+    budget.release(3, 0);
+    expect(budget.reservedRows).toBe(0);
+  });
+
   test('holds bytes until they are released', () => {
     const budget = new DeferredWritesBudget(Infinity, 100);
     expect(budget.tryReserve(1)).toBe(true);

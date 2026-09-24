@@ -29,7 +29,7 @@ import {formatSeed, fuzzBudget} from './fuzz/seed.ts';
 const BUDGET = fuzzBudget();
 
 test(
-  'zero-cache client groups sharing a worker stay query-equivalent to PostgreSQL through writes, unique-key swaps, reconnects and restarts',
+  'zero-cache client groups sharing a worker stay query-equivalent to PostgreSQL through writes, unique-key swaps and renames, primary key changes, reconnects and restarts',
   {timeout: TIMEOUT_MS * BUDGET},
   async ({testDBs}: PgTest) => {
     const harness = await startZeroCacheReplica(
@@ -52,6 +52,8 @@ test(
       console.log('client groups:', stats);
       expect(stats.writes).toBeGreaterThan(40);
       expect(stats.swaps).toBe(2 * BUDGET);
+      expect(stats.renames).toBe(2 * BUDGET);
+      expect(stats.reIDs).toBe(2 * BUDGET);
       // Every group was checked against a fresh hydration at the start, at
       // the end, and after each solo reconnect and restart.
       expect(stats.freshChecks).toBe(6 + 2 * BUDGET);

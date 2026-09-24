@@ -20,10 +20,10 @@ export const BYTES_PER_ROW = 1024;
  * entries). That number bounds the rows its sources can hold: the change log
  * has one entry per row key (a truncation, which does not, resets the
  * pipelines instead), and a row displaced through a unique key must itself
- * have changed in the same interval, so it has its own entry. (An entry of a
- * table whose primary key in the client schema is not the key the change log
- * uses can change its row's primary key, which is two rows, so the driver
- * reserves a second row for it as it gets to it.) An advancement that does
+ * have changed in the same interval, so it has its own entry. (An entry that
+ * sets a row of a table whose primary key in the client schema is not the key
+ * the change log uses can change the row's primary key, which is two rows, so
+ * the driver reserves a second row for it as it gets to it.) An advancement that does
  * not fit is written through to the replica snapshot instead, which SQLite
  * bounds with its page cache and spills to disk.
  *
@@ -87,6 +87,20 @@ export class DeferredWritesBudget {
    * whether they did. A successful reservation must be {@link release}d.
    */
   tryReserve(rows: number): boolean {
+    return this.#tryReserve(rows);
+  }
+
+  /**
+   * Reserves `rows` more for an advancement that is already holding rows, if
+   * they fit. An advancement reserves a row this way for each change log entry
+   * that can change the primary key of the row it sets, as it gets to it, and
+   * writes through if it does not fit. The rows are {@link release}d with the rest.
+   */
+  tryReserveMore(rows: number): boolean {
+    return this.#tryReserve(rows);
+  }
+
+  #tryReserve(rows: number): boolean {
     if (this.#reservedRows + rows > this.#maxRows) {
       return false;
     }

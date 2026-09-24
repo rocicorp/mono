@@ -2155,11 +2155,33 @@ describe('view-syncer/pipeline-driver', () => {
       });
     });
 
+    test('an entry that removes a row does not count twice', () => {
+      const byName = new ReplicationMessages({uniques: 'name'});
+      const budget = new DeferredWritesBudget(Infinity, Infinity);
+      const tryReserveMore = vi.spyOn(budget, 'tryReserveMore');
+      const writeThrough = makeDriver('write-through', undefined);
+      const driver = makeDriver('by-name', budget);
+      replicator.processTransaction(
+        '134',
+        byName.delete('uniques', {name: 'bar'}),
+      );
+
+      const expected = summarize(
+        writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes,
+      );
+      expect(
+        summarize(driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+      ).toEqual(expected);
+      expect(expected).toEqual([`${ChangeType.REMOVE}:foo:undefined`]);
+      expect(tryReserveMore).not.toHaveBeenCalled();
+    });
+
     test('an entry whose second row does not fit writes through', () => {
       const byName = new ReplicationMessages({uniques: 'name'});
       // Room for the one entry, but not for the second row it changes.
       const budget = new DeferredWritesBudget(1, Infinity);
       const tryReserve = vi.spyOn(budget, 'tryReserve');
+      const tryReserveMore = vi.spyOn(budget, 'tryReserveMore');
       const writeThrough = makeDriver('write-through', undefined);
       const driver = makeDriver('by-name', budget);
       replicator.processTransaction(
@@ -2173,8 +2195,10 @@ describe('view-syncer/pipeline-driver', () => {
       expect(
         summarize(driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
       ).toEqual(expected);
-      expect(tryReserve.mock.calls).toEqual([[1], [1]]);
-      expect(tryReserve.mock.results.map(r => r.value)).toEqual([true, false]);
+      expect(tryReserve.mock.calls).toEqual([[1]]);
+      expect(tryReserve.mock.results.map(r => r.value)).toEqual([true]);
+      expect(tryReserveMore.mock.calls).toEqual([[1]]);
+      expect(tryReserveMore.mock.results.map(r => r.value)).toEqual([false]);
       expect(driver.pendingRows).toBe(0);
       expect(budget.rowOverruns).toBe(0);
       expect([budget.reservedRows, budget.heldBytes]).toEqual([0, 0]);
