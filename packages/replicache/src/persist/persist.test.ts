@@ -8,6 +8,7 @@ import {
 import type {Enum} from '../../../shared/src/enum.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import {BTreeRead} from '../btree/read.ts';
 import {LazyStore, LazyWrite} from '../dag/lazy-store.ts';
 import {TestStore} from '../dag/test-store.ts';
@@ -887,6 +888,60 @@ describe('persistDD31', () => {
     expect(seen.map(rows => rows.length)).toEqual(
       seen.map((_, index) => index),
     );
+  });
+
+  test('getZeroData for the memdag base snapshot is taken under the memdag read lock', async () => {
+    await setupSnapshots({memdagCookie: 'cookie2'});
+
+    // Zero forks its IVM branch by diffing from the IVM head (the memdag main
+    // head) to the requested base snapshot, and both are memdag chunks that a
+    // poke landing between persist's memdag read and that fork would collect:
+    // the moved head drops superseded local commits, and a snapshot commit
+    // carries no ref to its basis. So the fork must run while persist still
+    // holds the read that fixed the base snapshot. The probe below asks for
+    // the memdag write lock from inside getZeroData; while the read is held it
+    // cannot be granted.
+    const seen: {readOptions: unknown; writeGranted: string}[] = [];
+    const getZeroData = async (
+      _desiredHead: Hash,
+      readOptions?: {openLazyRead?: unknown; openLazySourceRead?: unknown},
+    ): Promise<ZeroTxData> => {
+      const writeProbe = memdag.write().then(write => {
+        write.release();
+        return 'granted' as const;
+      });
+      const writeGranted = await Promise.race([
+        writeProbe,
+        sleep(20).then(() => 'blocked' as const),
+      ]);
+      seen.push({readOptions, writeGranted});
+      const txData: ZeroTxData = {
+        ivmSources: undefined,
+        token: undefined,
+        context: undefined,
+        fork: () => txData,
+      };
+      return txData;
+    };
+
+    await persistDD31(
+      new LogContext(),
+      clients[0].clientID,
+      memdag,
+      perdag,
+      {},
+      () => false,
+      FormatVersion.Latest,
+      getZeroData,
+    );
+
+    // The first call is the fork to the memdag base snapshot: it must arrive
+    // with the open memdag read and while a memdag write cannot be granted.
+    expect(seen.length).toBeGreaterThanOrEqual(1);
+    expect(seen[0].readOptions).toEqual(
+      expect.objectContaining({openLazyRead: expect.anything()}),
+    );
+    expect(seen[0].writeGranted).toBe('blocked');
   });
 
   test('persist throws a ClientStateNotFoundError if client is missing', async () => {
