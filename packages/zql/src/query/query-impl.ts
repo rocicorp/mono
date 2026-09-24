@@ -26,6 +26,7 @@ import {
 import {hashOfQueryInternals} from '../../../zero-protocol/src/query-hash-visitor.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {NotImplementedError} from '../error.ts';
+import {encodeRow} from '../ivm/codec.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {
@@ -33,6 +34,7 @@ import {
   ExpressionBuilder,
   and,
   cmp,
+  encodeFilterValue,
   simplifyCondition,
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
@@ -633,11 +635,18 @@ export class QueryImpl<
       cond = fieldOrExpressionFactory(this.expressionBuilder());
     } else {
       assert(arguments.length >= 2, 'Invalid condition. Too few arguments.');
+      const column =
+        this.#schema.tables[this.#tableName]?.columns[fieldOrExpressionFactory];
       // Distinguish between 2-arg form (field, value) and 3-arg form (field, op, value)
       // using arguments.length to allow explicit undefined in 3-arg form.
       const twoArg = arguments.length === 2;
       const op = (twoArg ? '=' : opOrValue) as SimpleOperator;
       const raw = twoArg ? opOrValue : value;
+      // Encode the compared value through the column's codec (a no-op without
+      // one). Parameter references pass through and `IN`/`NOT IN` arrays are
+      // encoded element-wise. The encoded value is what is compared, keyed, and
+      // recorded, so the memoization below stays consistent.
+      const encoded = encodeFilterValue(raw, column, op);
 
       // Comparing a column to a primitive is by far the most common thing anyone
       // does with a query, and the transition it names is fully determined by
@@ -645,10 +654,10 @@ export class QueryImpl<
       // this returns without allocating the `Condition` at all. Objects are
       // excluded, which covers both parameter references and `IN` arrays; `cmp`
       // maps a missing value to null, so this must too.
-      if (raw === null || typeof raw !== 'object') {
+      if (encoded === null || typeof encoded !== 'object') {
         const hit = this.#transitions?.lookup(
           whereKey(fieldOrExpressionFactory, op),
-          (raw ?? null) as TransitionValue,
+          (encoded ?? null) as TransitionValue,
           undefined,
         );
         if (hit !== undefined) {
@@ -657,8 +666,8 @@ export class QueryImpl<
       }
 
       cond = twoArg
-        ? cmp(fieldOrExpressionFactory, opOrValue)
-        : cmp(fieldOrExpressionFactory, opOrValue, value);
+        ? cmp(fieldOrExpressionFactory, encoded)
+        : cmp(fieldOrExpressionFactory, op, encoded);
     }
 
     // The delta is the condition as built here, *before* it is merged with the
@@ -711,11 +720,16 @@ export class QueryImpl<
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
   ): Query<TTable, TSchema, TReturn> {
+    // Start rows usually come from decoded query results, so encode codec
+    // columns back to their stored values before they reach the AST (a no-op
+    // for tables without codecs).
+    const columns = this.#schema.tables[this.#tableName]?.columns;
+    const encodedRow = columns ? encodeRow(row, columns) : row;
     // The row is an object, so it is encoded to a string to serve as the
     // lookup key. Property order is part of that string.
     return this.#derive(
       opts?.inclusive ? 'start:inclusive' : 'start:exclusive',
-      valueTag(row as ReadonlyJSONValue),
+      valueTag(encodedRow as ReadonlyJSONValue),
       undefined,
       () =>
         this.#newQuery(
@@ -723,7 +737,7 @@ export class QueryImpl<
           {
             ...this.#ast,
             start: {
-              row,
+              row: encodedRow,
               exclusive: !opts?.inclusive,
             },
           },
@@ -909,6 +923,8 @@ export class QueryImpl<
       this.#exists.bind(this) as ConstructorParameters<
         typeof ExpressionBuilder<TTable, TSchema>
       >[0],
+      // Pass the column schema so the builder's `cmp` can encode codec values.
+      this.#schema.tables[this.#tableName]?.columns,
     ));
   }
 }

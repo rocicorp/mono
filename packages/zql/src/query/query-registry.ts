@@ -6,17 +6,21 @@ import {
 } from '../../../shared/src/deep-merge.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import {getValueAtPath} from '../../../shared/src/object-traversal.ts';
+import {
+  getValueAtPath,
+  type ValueAtPath,
+} from '../../../shared/src/object-traversal.ts';
 import type {
   BaseDefaultSchema,
   DefaultContext,
   DefaultSchema,
   IsUnknown,
 } from '../../../zero-types/src/default-types.ts';
+import {isCodec, type Codec} from '../../../zero-types/src/schema-value.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from './query-internals.ts';
 import type {PullRow, Query} from './query.ts';
-import {validateInput} from './validate-input.ts';
+import {decodeInput, encodeInput} from './validate-input.ts';
 
 // ----------------------------------------------------------------------------
 // CustomQuery and QueryRequest types
@@ -43,35 +47,47 @@ export type CustomQueryTypes<
 export type CustomQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined = TInput,
+  TOutput = TInput,
   TSchema extends Schema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
+  // The type the callable accepts. Equals TInput for plain / validator queries;
+  // the decoded app type for codec queries. The stored/wire args stay TInput.
+  TCallArgs = TInput,
 > = {
   readonly 'queryName': string;
   readonly 'fn': QueryExecutionFunction<TTable, TInput, TReturn, TContext>;
   readonly '~': CustomQueryTypes<TTable, TInput, TSchema, TReturn, TContext>;
-} & CustomQueryCallable<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
+} & CustomQueryCallable<
+  TTable,
+  TCallArgs,
+  TInput,
+  TOutput,
+  TSchema,
+  TReturn,
+  TContext
+>;
 
 type CustomQueryCallable<
   TTable extends keyof TSchema['tables'] & string,
+  TCallArgs,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
-> = [TInput] extends [undefined]
+> = [TCallArgs] extends [undefined]
   ? () => QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-  : undefined extends TInput
+  : undefined extends TCallArgs
     ? {
         (): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
         (
-          args?: TInput,
+          args?: TCallArgs,
         ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
       }
     : {
         (
-          args: TInput,
+          args: TCallArgs,
         ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
       };
 
@@ -92,7 +108,7 @@ export function isQuery<S extends Schema>(
 export type QueryRequestTypes<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -108,7 +124,7 @@ export type QueryRequestTypes<
 export type QueryRequest<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -141,7 +157,7 @@ export type QueryRequest<
 export type QueryOrQueryRequest<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -159,7 +175,7 @@ export type QueryOrQueryRequest<
 export const addContextToQuery = <
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -213,12 +229,39 @@ type ToQueryTree<QD extends QueryDefinitions, S extends Schema> = {
         QD[K]['~']['$output'],
         S,
         QD[K]['~']['$return'],
-        QD[K]['~']['$context']
+        QD[K]['~']['$context'],
+        QD[K]['~']['$callArgs']
       >
     : QD[K] extends QueryDefinitions
       ? ToQueryTree<QD[K], S>
       : never;
 };
+
+/** Legacy query names may use `|` as a separator; see {@link getQuery}. */
+type DottedQueryName<N extends string> = N extends `${infer A}|${infer B}`
+  ? DottedQueryName<`${A}.${B}`>
+  : N;
+
+/**
+ * The type {@link getQuery} / {@link mustGetQuery} return for `TName`.
+ *
+ * For a literal name that resolves to a query this is that query's exact type,
+ * so for a codec query the callable takes the decoded args. For a runtime
+ * `string` (e.g. server-side dispatch by name), or a name that does not
+ * resolve to a query, it falls back to {@link FromQueryTree}: the union of all
+ * queries with widened JSON args, whose `fn` takes the wire args.
+ */
+export type QueryAtName<
+  QD extends QueryDefinitions,
+  S extends Schema,
+  TName extends string,
+> = string extends TName
+  ? FromQueryTree<QD, S>
+  : ValueAtPath<DottedQueryName<TName>, ToQueryTree<QD, S>, '.'> extends infer Q
+    ? [Q] extends [{readonly queryName: string}]
+      ? Q
+      : FromQueryTree<QD, S>
+    : never;
 
 export type FromQueryTree<QD extends QueryDefinitions, S extends Schema> = {
   readonly [K in keyof QD]: QD[K] extends AnyQueryDefinition
@@ -250,10 +293,14 @@ export type QueryDefinitionTypes<
   TOutput,
   TReturn,
   TContext,
+  // The type the generated query callable accepts. Equals TInput for plain /
+  // validator queries; equals the decoded TOutput for codec queries.
+  TCallArgs = TInput,
 > = 'QueryDefinition' & {
   readonly $tableName: TTable;
   readonly $input: TInput;
   readonly $output: TOutput;
+  readonly $callArgs: TCallArgs;
   readonly $return: TReturn;
   readonly $context: TContext;
 };
@@ -264,18 +311,23 @@ export type QueryDefinitionTypes<
 export type QueryDefinition<
   TTable extends string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  // TOutput (the decoded args) may be a non-JSON app type when a codec is used,
+  // so it is unconstrained. TInput (the wire type) stays JSON-bound.
+  TOutput,
   TReturn,
   TContext = DefaultContext,
+  TCallArgs = TInput,
 > = {
   readonly 'fn': QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>;
   readonly 'validator': StandardSchemaV1<TInput, TOutput> | undefined;
+  readonly 'codec': Codec<TInput, TOutput> | undefined;
   readonly '~': QueryDefinitionTypes<
     TTable,
     TInput,
     TOutput,
     TReturn,
-    TContext
+    TContext,
+    TCallArgs
   >;
 };
 
@@ -292,7 +344,9 @@ export function isQueryDefinition(f: unknown): f is AnyQueryDefinition {
 
 export type QueryDefinitionFunction<
   TTable extends string,
-  TInput extends ReadonlyJSONValue | undefined,
+  // Unconstrained: the decoded args may be a non-JSON app type when a codec is
+  // used.
+  TInput,
   TReturn,
   TContext,
 > = (options: {args: TInput; ctx: TContext}) => Query<TTable, Schema, TReturn>;
@@ -377,7 +431,7 @@ export function defineQuery<
 // Overload for validator parameter - Input and Output can be different
 export function defineQuery<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TContext = DefaultContext,
   TSchema extends Schema = DefaultSchema,
   TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
@@ -388,23 +442,49 @@ export function defineQuery<
   queryFn: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
 ): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext>;
 
-// Implementation
+// Overload for codec parameter. The codec encodes the decoded args (`TOutput`,
+// e.g. a `Date`) to their JSON wire form (`TInput`) before the query is sent,
+// and decodes back before the query fn runs. Strictly an alternative to a
+// validator.
 export function defineQuery<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TContext = DefaultContext,
   TSchema extends Schema = DefaultSchema,
   TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
     string,
   TReturn = PullRow<TTable, TSchema>,
 >(
-  validatorOrQueryFn:
+  codec: Codec<TInput, TOutput>,
+  queryFn: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
+): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext, TOutput>;
+
+// Implementation
+export function defineQuery<
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput,
+  TContext = DefaultContext,
+  TSchema extends Schema = DefaultSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
+  TReturn = PullRow<TTable, TSchema>,
+>(
+  validatorCodecOrQueryFn:
     | StandardSchemaV1<TInput, TOutput>
+    | Codec<TInput, TOutput>
     | QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
   queryFn?: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
-): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext> {
+): QueryDefinition<
+  TTable,
+  TInput,
+  TOutput,
+  TReturn,
+  TContext,
+  TInput | TOutput
+> {
   // Handle different parameter patterns
   let validator: StandardSchemaV1<TInput, TOutput> | undefined;
+  let codec: Codec<TInput, TOutput> | undefined;
   let actualQueryFn: QueryDefinitionFunction<
     TTable,
     TOutput,
@@ -412,14 +492,25 @@ export function defineQuery<
     TContext
   >;
 
-  if ('~standard' in validatorOrQueryFn) {
+  // The validator check comes first: Standard Schema implementations (e.g. Zod
+  // 4) also expose `decode`/`encode` methods, which would otherwise make them
+  // look like a codec.
+  if ('~standard' in validatorCodecOrQueryFn) {
     // defineQuery(validator, queryFn) - with validator
-    validator = validatorOrQueryFn;
+    validator = validatorCodecOrQueryFn as StandardSchemaV1<TInput, TOutput>;
+    actualQueryFn = must(queryFn);
+  } else if (isCodec(validatorCodecOrQueryFn)) {
+    // defineQuery(codec, queryFn) - with codec
+    codec = validatorCodecOrQueryFn as Codec<TInput, TOutput>;
     actualQueryFn = must(queryFn);
   } else {
-    // defineQuery(queryFn) - no validator
-    validator = undefined;
-    actualQueryFn = validatorOrQueryFn;
+    // defineQuery(queryFn) - no validator or codec
+    actualQueryFn = validatorCodecOrQueryFn as QueryDefinitionFunction<
+      TTable,
+      TOutput,
+      TReturn,
+      TContext
+    >;
   }
 
   const queryDefinition: QueryDefinition<
@@ -427,16 +518,19 @@ export function defineQuery<
     TInput,
     TOutput,
     TReturn,
-    TContext
+    TContext,
+    TInput | TOutput
   > = {
     'fn': actualQueryFn,
     'validator': validator,
+    'codec': codec,
     '~': 'QueryDefinition' as unknown as QueryDefinitionTypes<
       TTable,
       TInput,
       TOutput,
       TReturn,
-      TContext
+      TContext,
+      TInput | TOutput
     >,
   };
   return queryDefinition;
@@ -490,6 +584,35 @@ export function defineQueryWithType() {
  * defineQuery overloads but with Schema and Context pre-bound.
  */
 type TypedDefineQuery<TSchema extends Schema, TContext> = {
+  // The validator signature must precede the codec one: Standard Schema
+  // implementations such as Zod 4 also expose `.decode()` / `.encode()`, so
+  // they would otherwise resolve to the codec signature at the type level
+  // (the runtime already prefers the validator path).
+
+  // With validator
+  <
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput,
+    TReturn,
+    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+      string,
+  >(
+    validator: StandardSchemaV1<TInput, TOutput>,
+    queryFn: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
+  ): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext>;
+
+  // With codec
+  <
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput,
+    TReturn,
+    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+      string,
+  >(
+    codec: Codec<TInput, TOutput>,
+    queryFn: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
+  ): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext, TOutput>;
+
   // Without validator
   <
     TArgs extends ReadonlyJSONValue | undefined,
@@ -499,18 +622,6 @@ type TypedDefineQuery<TSchema extends Schema, TContext> = {
   >(
     queryFn: QueryDefinitionFunction<TTable, TArgs, TReturn, TContext>,
   ): QueryDefinition<TTable, TArgs, TArgs, TReturn, TContext>;
-
-  // With validator
-  <
-    TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
-    TReturn,
-    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
-      string,
-  >(
-    validator: StandardSchemaV1<TInput, TOutput>,
-    queryFn: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
-  ): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext>;
 };
 
 // ----------------------------------------------------------------------------
@@ -520,7 +631,8 @@ type TypedDefineQuery<TSchema extends Schema, TContext> = {
 export function createQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  // The decoded args may be a non-JSON app type when a codec is used.
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -528,35 +640,40 @@ export function createQuery<
   name: string,
   definition: QueryDefinition<TTable, TInput, TOutput, TReturn, TContext>,
 ): CustomQuery<TTable, TInput, TOutput, TSchema, TReturn, TContext> {
-  const {validator} = definition;
+  const {validator, codec} = definition;
 
   const fn: QueryExecutionFunction<
     TTable,
     TInput,
     TReturn,
     TContext
-  > = options => {
-    const validatedArgs = validator
-      ? validateInput(name, options.args, validator, 'query')
-      : (options.args as unknown as TOutput);
-
-    return asQueryInternals(
+  > = options =>
+    asQueryInternals(
       definition.fn({
-        args: validatedArgs,
+        // Codec decoding / validation happens here. `options.args` is the
+        // encoded (JSON wire) value.
+        args: decodeInput(
+          name,
+          options.args as TInput,
+          validator,
+          codec,
+          'query',
+        ),
         ctx: options.ctx as TContext,
       }),
     ).nameAndArgs(
       name,
       // TODO(arv): Get rid of the array?
-      // Send original input args to server (not transformed output)
+      // Send original (encoded) input args to server (not decoded output)
       options.args === undefined ? [] : [options.args],
     );
-  };
 
   const query = (
     args: TInput,
   ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext> => ({
-    args,
+    // Encode the decoded args to their JSON wire form. No-op without a codec
+    // or when there are no args.
+    'args': encodeInput(args as unknown as TOutput, codec),
     '~': 'QueryRequest' as QueryRequestTypes<
       TTable,
       TInput,
@@ -757,18 +874,23 @@ const separatorRe = /[.|]/;
 // getQuery / mustGetQuery
 // ----------------------------------------------------------------------------
 
-export function getQuery<QD extends QueryDefinitions, S extends Schema>(
+export function getQuery<
+  QD extends QueryDefinitions,
+  S extends Schema,
+  TName extends string,
+>(
   queries: QueryRegistry<QD, S>,
-  name: string,
-): FromQueryTree<QD, S> | undefined {
-  const q = getValueAtPath(queries, name, separatorRe);
-  return q as FromQueryTree<QD, S> | undefined;
+  name: TName,
+): QueryAtName<QD, S, TName> | undefined {
+  const q: unknown = getValueAtPath(queries as object, name, separatorRe);
+  return q as QueryAtName<QD, S, TName> | undefined;
 }
 
-export function mustGetQuery<QD extends QueryDefinitions, S extends Schema>(
-  queries: QueryRegistry<QD, S>,
-  name: string,
-): FromQueryTree<QD, S> {
+export function mustGetQuery<
+  QD extends QueryDefinitions,
+  S extends Schema,
+  TName extends string,
+>(queries: QueryRegistry<QD, S>, name: TName): QueryAtName<QD, S, TName> {
   const query = getQuery(queries, name);
   if (query === undefined) {
     throw new Error(`Query not found: ${name}`);

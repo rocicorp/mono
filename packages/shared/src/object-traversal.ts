@@ -16,7 +16,11 @@ type GetAtPath<T, Parts extends readonly string[]> = Parts extends readonly [
     : undefined
   : T;
 
-type ValueAtPath<Path extends string, T, Sep extends string> = GetAtPath<
+/**
+ * The type at `Path` (split on `Sep`) inside `T`, or `undefined` when the
+ * path does not exist. Mirrors {@link getValueAtPath}.
+ */
+export type ValueAtPath<Path extends string, T, Sep extends string> = GetAtPath<
   T,
   Split<Path, Sep>
 >;

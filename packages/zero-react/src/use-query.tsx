@@ -68,7 +68,7 @@ type StableQueryCache = {
 function useStableQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema,
   TReturn,
   TContext extends BaseDefaultContext,
@@ -169,7 +169,7 @@ const suspend: (p: Promise<unknown>) => void = reactUse
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -189,7 +189,7 @@ export function useQuery<
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -204,7 +204,7 @@ export function useQuery<
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -243,7 +243,7 @@ export function useQuery<
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -263,7 +263,7 @@ export function useSuspenseQuery<
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -278,7 +278,7 @@ export function useSuspenseQuery<
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext extends BaseDefaultContext = DefaultContext,
@@ -667,6 +667,7 @@ class ViewWrapper<
   ) => {
     // applyChange now returns immutable data structures, so no deep clone needed.
     // Unchanged rows preserve their object identity for React.memo optimization.
+    // Codec columns are already decoded by the view.
     const data = snap as HumanReadable<TReturn>;
     const wasCached = this.#snapshot[1].type === 'cached';
     this.#snapshot = getSnapshot(

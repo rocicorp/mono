@@ -34,5 +34,8 @@ export async function executePostgresQuery<TReturn>(
     return undefined as unknown as HumanReadable<TReturn>;
   }
 
+  // Codec columns are returned in their stored form. Callers (tx.run,
+  // ZQLDatabase.run) decode, so that custom `runQuery` adapters are covered
+  // too.
   return extractZqlResult(pgArrayResult) as HumanReadable<TReturn>;
 }

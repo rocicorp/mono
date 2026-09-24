@@ -7,6 +7,7 @@ import {must} from '../../../shared/src/must.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import {columnsHaveCodecs, decodeRowFields} from './codec.ts';
 import {type Comparator, type Node} from './data.ts';
 import {skipYields} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -14,10 +15,12 @@ import type {Entry, Format} from './view.ts';
 
 export const refCountSymbol = Symbol('rc');
 export const idSymbol = Symbol('id');
+export const encodedRowSymbol = Symbol('encodedRow');
 
 type ReadonlyMetaEntry = Entry & {
   readonly [refCountSymbol]: number;
   readonly [idSymbol]?: string | undefined;
+  readonly [encodedRowSymbol]?: Row | undefined;
 };
 
 type MutableMetaEntry = Writable<ReadonlyMetaEntry>;
@@ -281,9 +284,13 @@ export function applyChangeInternal<M extends Mutate>(
       if (singular) {
         const oldEntry = getOptionalSingularEntry(parentEntry, relationship);
         if (oldEntry !== undefined) {
-          // Duplicate add: increment refCount
+          // Duplicate add: increment refCount. Compare the raw (encoded) row
+          // when the schema has codecs: the entry's own fields are decoded.
           assert(
-            schema.compareRows(oldEntry, change.node.row) === 0,
+            schema.compareRows(
+              oldEntry[encodedRowSymbol] ?? (oldEntry as unknown as Row),
+              change.node.row,
+            ) === 0,
             `Singular relationship '${relationship}' should not have multiple rows. You may need to declare this relationship with the \`many\` helper instead of the \`one\` helper in your schema.`,
           );
 
@@ -581,14 +588,26 @@ function applyEdit<M extends Mutate>(
   withIDs: WithIDs,
   mutate: Mutate,
 ): MetaEntry<M> {
+  // Decode new row fields; when the schema has codecs, always refresh the raw
+  // row back-pointer used by binary search. It must track the schema, not
+  // whether decoding copied: an edit that nulls every codec column decodes to
+  // the same object, and `existing` may still carry the previous raw row.
+  const {columns} = schema;
+  const hasCodecs = columnsHaveCodecs(columns);
+  const decodedRow = hasCodecs
+    ? decodeRowFields(change.node.row, columns)
+    : change.node.row;
+  const encodedRowProp = hasCodecs
+    ? {[encodedRowSymbol]: change.node.row}
+    : undefined;
   // In-place edit is safe when fully mutating or when `existing` was already
   // created/cloned in this transaction (copy-on-write). A primary-key change
   // always needs a fresh entry so identity tracks the new key.
   const canMutate = mutate || owns(existing);
   const newEntry: MutableMetaEntry =
     canMutate && schema.compareRows(change.oldNode.row, change.node.row) === 0
-      ? Object.assign(existing, change.node.row)
-      : track({...existing, ...change.node.row});
+      ? Object.assign(existing, decodedRow, encodedRowProp)
+      : track({...existing, ...decodedRow, ...encodedRowProp});
 
   if (withIDs) {
     return setProperty(
@@ -779,8 +798,13 @@ function binarySearch(
   // largest cost in hydration on Hermes, so collapsing those eleven to one is
   // worth the one extra comparison this costs when the row does land inside
   // the view, which is a single push rather than a bulk load.
-  // MetaEntry has all Row props; comparator only reads string keys
-  const last = comparator(view[high] as Row, target);
+  // MetaEntry has all Row props; comparator only reads string keys.
+  // Use the raw encoded row back-pointer when present (codec schemas), so the
+  // probe compares stored values even when the entry holds decoded ones.
+  const last = comparator(
+    view[high][encodedRowSymbol] ?? (view[high] as unknown as Row),
+    target,
+  );
   if (last < 0) {
     return ~(high + 1);
   }
@@ -792,7 +816,12 @@ function binarySearch(
   high -= 1;
   while (low <= high) {
     const mid = (low + high) >>> 1;
-    const comparison = comparator(view[mid] as Row, target);
+    // Use the raw encoded row back-pointer when present (codec schemas),
+    // otherwise the entry's own fields are already the raw stored values.
+    const comparison = comparator(
+      view[mid][encodedRowSymbol] ?? (view[mid] as unknown as Row),
+      target,
+    );
     if (comparison < 0) {
       low = mid + 1;
     } else if (comparison > 0) {
@@ -847,24 +876,30 @@ function getChildEntryList<M extends Mutate>(
   return view as MetaEntryList<M>;
 }
 
-/** Create MetaEntry from row with given refCount. */
+/** Create MetaEntry from row with given refCount. Decodes codec columns. */
 function makeNewMetaEntry(
   row: Row,
   schema: SourceSchema,
   withIDs: WithIDs,
   rc: number,
 ): MutableMetaEntry {
-  // This creates a new MetaEntry from a Row. We never mutate Rows.
+  // Decode codec columns; when the schema has codecs the raw row is kept as a
+  // back-pointer so binary search compares stored values.
+  const {columns} = schema;
+  const hasCodecs = columnsHaveCodecs(columns);
+  const decodedRow = hasCodecs ? decodeRowFields(row, columns) : row;
   if (withIDs) {
     return track({
-      ...row,
+      ...decodedRow,
       [refCountSymbol]: rc,
       [idSymbol]: makeID(row, schema),
+      ...(hasCodecs ? {[encodedRowSymbol]: row} : undefined),
     });
   }
   return track({
-    ...row,
+    ...decodedRow,
     [refCountSymbol]: rc,
+    ...(hasCodecs ? {[encodedRowSymbol]: row} : undefined),
   });
 }
 

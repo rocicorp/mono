@@ -2,6 +2,7 @@ import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
 import type {CleanupResultsArg} from '../../zero-protocol/src/mutation.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import {decodeQueryResult} from '../../zql/src/ivm/codec.ts';
 import type {
   DBConnection,
   DBTransaction,
@@ -164,7 +165,7 @@ export class ZQLDatabase<
   ): Promise<HumanReadable<TReturn>> {
     const {ast, format} = asQueryInternals(query);
     const serverSchema = await this.#crudFactory.getOrFetchServerSchema(target);
-    return target.runQuery
+    const result = await (target.runQuery
       ? target.runQuery<TReturn>(ast, format, this.#schema, serverSchema)
       : executePostgresQuery<TReturn>(
           target,
@@ -172,7 +173,16 @@ export class ZQLDatabase<
           format,
           this.#schema,
           serverSchema,
-        );
+        ));
+    // `runQuery` returns codec columns in their stored form (it may be a custom
+    // adapter); decode here so server reads see the same app-typed values as
+    // the client's IVM views.
+    return decodeQueryResult(
+      result,
+      ast,
+      format,
+      this.#schema,
+    ) as HumanReadable<TReturn>;
   }
 }
 

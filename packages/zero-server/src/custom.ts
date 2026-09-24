@@ -13,6 +13,7 @@ import type {
   ServerSchema,
   ServerTableSchema,
 } from '../../zero-types/src/server-schema.ts';
+import {decodeQueryResult} from '../../zql/src/ivm/codec.ts';
 import {
   type CRUDExecutor,
   type CRUDKind,
@@ -88,13 +89,21 @@ class ServerTransactionQueryDelegate extends QueryDelegateBase {
     query: Query<TTable, TSchema, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    const queryInternals = asQueryInternals(query);
-    return this.#dbTransaction.runQuery<TReturn>(
-      queryInternals.ast,
-      queryInternals.format,
-      this.#schema,
-      this.#serverSchema,
-    );
+    const {ast, format} = asQueryInternals(query);
+    // `runQuery` returns codec columns in their stored form (it may be a custom
+    // adapter); decode here so server reads see the same app-typed values as
+    // the client's IVM views.
+    return this.#dbTransaction
+      .runQuery<TReturn>(ast, format, this.#schema, this.#serverSchema)
+      .then(
+        r =>
+          decodeQueryResult(
+            r,
+            ast,
+            format,
+            this.#schema,
+          ) as HumanReadable<TReturn>,
+      );
   }
 
   override preload(): never {
@@ -151,15 +160,23 @@ export class TransactionImpl<
     query: Query<TTable, TSchema, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    const queryInternals = asQueryInternals(query);
+    const {ast, format} = asQueryInternals(query);
 
-    // Execute the query using the database-specific executor
-    return this.dbTransaction.runQuery<TReturn>(
-      queryInternals.ast,
-      queryInternals.format,
-      this.#schema,
-      this.#serverSchema,
-    );
+    // Execute the query using the database-specific executor.
+    // `runQuery` returns codec columns in their stored form (it may be a custom
+    // adapter); decode here so server reads see the same app-typed values as
+    // the client's IVM views.
+    return this.dbTransaction
+      .runQuery<TReturn>(ast, format, this.#schema, this.#serverSchema)
+      .then(
+        r =>
+          decodeQueryResult(
+            r,
+            ast,
+            format,
+            this.#schema,
+          ) as HumanReadable<TReturn>,
+      );
   }
 }
 

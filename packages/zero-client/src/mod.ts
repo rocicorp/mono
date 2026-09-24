@@ -95,7 +95,9 @@ export type {
 } from '../../zero-schema/src/compiled-permissions.ts';
 export {type TableSchema} from '../../zero-schema/src/table-schema.ts';
 export type {
+  Codec,
   SchemaValue,
+  SchemaValueWithCodec,
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';

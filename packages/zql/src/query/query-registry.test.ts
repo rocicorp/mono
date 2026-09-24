@@ -1134,24 +1134,17 @@ describe('getQuery', () => {
 
     // The runtime of this property is not the same as the type.
     expect(query1['~']).toEqual('Query');
-    expectTypeOf(query1['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
+    // A literal name resolves to that query's exact type.
+    expectTypeOf(query1['~']['$tableName']).toEqualTypeOf<'foo'>();
     expectTypeOf(query1['~']['$schema']).toEqualTypeOf<Schema>();
-    expectTypeOf(query1['~']['$input']).toEqualTypeOf<
-      ReadonlyJSONValue | undefined
-    >();
+    expectTypeOf(query1['~']['$input']).toEqualTypeOf<string>();
     expectTypeOf(query1['~']['$context']).toEqualTypeOf<unknown>();
-    expectTypeOf(query1['~']['$return']).toEqualTypeOf<
-      | {
-          readonly id: string;
-          readonly val: number;
-        }
-      | {
-          readonly id: string;
-          readonly val: string;
-        }
-    >();
+    expectTypeOf(query1['~']['$return']).toEqualTypeOf<{
+      readonly id: string;
+      readonly val: number;
+    }>();
 
-    expectTypeOf(query2['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
+    expectTypeOf(query2['~']['$tableName']).toEqualTypeOf<'bar'>();
     expectTypeOf(query2['~']['$schema']).toEqualTypeOf<Schema>();
     expectTypeOf(query2['~']['$input']).toEqualTypeOf<
       ReadonlyJSONValue | undefined
@@ -1188,12 +1181,18 @@ describe('mustGetQuery', () => {
 
     expect(query1).toBe(queries.getUser);
     expect(query2).toBe(queries.nested.getBar);
-    expectTypeOf(query1['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
-    expectTypeOf(query2['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
-    expectTypeOf(query1['~']['$input']).toEqualTypeOf<
+    expectTypeOf(query1['~']['$tableName']).toEqualTypeOf<'foo'>();
+    expectTypeOf(query2['~']['$tableName']).toEqualTypeOf<'bar'>();
+    expectTypeOf(query1['~']['$input']).toEqualTypeOf<string>();
+    expectTypeOf(query1['~']['$context']).toEqualTypeOf<Context1>();
+
+    // A runtime string falls back to the widened union.
+    const name: string = 'getUser';
+    const wide = mustGetQuery(queries, name);
+    expectTypeOf(wide['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
+    expectTypeOf(wide['~']['$input']).toEqualTypeOf<
       ReadonlyJSONValue | undefined
     >();
-    expectTypeOf(query1['~']['$context']).toEqualTypeOf<unknown>();
 
     expectTypeOf(query2['~']['$schema']).toEqualTypeOf<typeof schema>();
   });

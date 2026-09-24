@@ -12,6 +12,7 @@ import {
 } from '../../../zero-protocol/src/mutation.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import {encodeRow} from '../../../zql/src/ivm/codec.ts';
 import type {
   CRUDExecutor,
   DeleteID,
@@ -82,7 +83,7 @@ export function addTableCRUDProperties<TSchema extends Schema>(
     assignProperty(
       mutate as Record<string, unknown>,
       name,
-      makeEntityCRUDMutate(name, tableSchema.primaryKey, zeroCRUD),
+      makeEntityCRUDMutate(name, tableSchema, zeroCRUD),
     );
   }
 }
@@ -93,47 +94,10 @@ export function addTableCRUDProperties<TSchema extends Schema>(
  */
 function makeEntityCRUDMutate<S extends TableSchema>(
   tableName: string,
-  primaryKey: S['primaryKey'],
+  tableSchema: TableSchema,
   zeroCRUD: CRUDMutate,
 ): TableMutator<S> {
-  return {
-    insert: (value: InsertValue<S>) => {
-      const op: InsertOp = {
-        op: 'insert',
-        tableName,
-        primaryKey,
-        value,
-      };
-      return zeroCRUD({ops: [op]});
-    },
-    upsert: (value: UpsertValue<S>) => {
-      const op: UpsertOp = {
-        op: 'upsert',
-        tableName,
-        primaryKey,
-        value,
-      };
-      return zeroCRUD({ops: [op]});
-    },
-    update: (value: UpdateValue<S>) => {
-      const op: UpdateOp = {
-        op: 'update',
-        tableName,
-        primaryKey,
-        value,
-      };
-      return zeroCRUD({ops: [op]});
-    },
-    delete: (id: DeleteID<S>) => {
-      const op: DeleteOp = {
-        op: 'delete',
-        tableName,
-        primaryKey,
-        value: id,
-      };
-      return zeroCRUD({ops: [op]});
-    },
-  };
+  return makeTableMutator(tableName, tableSchema, op => zeroCRUD({ops: [op]}));
 }
 
 /**
@@ -145,47 +109,60 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
   schema: Schema,
   ops: CRUDOp[],
 ): TableMutator<S> {
-  const {primaryKey} = schema.tables[tableName];
+  return makeTableMutator(tableName, schema.tables[tableName], op => {
+    ops.push(op);
+    return promiseVoid;
+  });
+}
+
+/**
+ * Builds the CRUD op for each kind and hands it to `emit`. Values are encoded
+ * through the table's column codecs first (a no-op for codec-free tables):
+ * the value types accept the decoded app type (e.g. `Date`), but the op is
+ * persisted, replayed into the IVM sources, and pushed to the server, all of
+ * which expect the stored JSON form.
+ */
+function makeTableMutator<S extends TableSchema>(
+  tableName: string,
+  {primaryKey, columns}: TableSchema,
+  emit: (op: CRUDOp) => Promise<void>,
+): TableMutator<S> {
   return {
     insert: (value: InsertValue<S>) => {
       const op: InsertOp = {
         op: 'insert',
         tableName,
         primaryKey,
-        value,
+        value: encodeRow(value, columns),
       };
-      ops.push(op);
-      return promiseVoid;
+      return emit(op);
     },
     upsert: (value: UpsertValue<S>) => {
       const op: UpsertOp = {
         op: 'upsert',
         tableName,
         primaryKey,
-        value,
+        value: encodeRow(value, columns),
       };
-      ops.push(op);
-      return promiseVoid;
+      return emit(op);
     },
     update: (value: UpdateValue<S>) => {
       const op: UpdateOp = {
         op: 'update',
         tableName,
         primaryKey,
-        value,
+        value: encodeRow(value, columns),
       };
-      ops.push(op);
-      return promiseVoid;
+      return emit(op);
     },
     delete: (id: DeleteID<S>) => {
       const op: DeleteOp = {
         op: 'delete',
         tableName,
         primaryKey,
-        value: id,
+        value: encodeRow(id, columns),
       };
-      ops.push(op);
-      return promiseVoid;
+      return emit(op);
     },
   };
 }
