@@ -11,9 +11,9 @@ import {
   type FilterInput,
   type FilterOperator,
   type FilterOutput,
+  type FilterStart,
 } from './filter-operators.ts';
 import {canonicalKey} from './join-utils.ts';
-import type {InputBase} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
 
@@ -23,12 +23,15 @@ import {type Stream} from './stream.ts';
  */
 export class Exists implements FilterOperator {
   readonly #input: FilterInput;
+  readonly #filterStart: FilterStart | undefined;
   readonly #relationshipName: string;
   readonly #not: boolean;
   readonly #parentJoinKey: CompoundKey;
   readonly #noSizeReuse: boolean;
   readonly #primaryKey: PrimaryKey;
   readonly #counts = new Map<string, number>();
+  readonly #deferredRemovals = new Map<string, Change>();
+  #isFlushingDeferred = false;
   #sizeCache: Map<string, number>;
   #cacheHitCountsForTesting: Map<string, number> | undefined;
   #output: FilterOutput = throwFilterOutput;
@@ -48,6 +51,7 @@ export class Exists implements FilterOperator {
     cacheHitCountsForTesting?: Map<string, number>,
   ) {
     this.#input = input;
+    this.#filterStart = input.getFilterStart?.();
     this.#relationshipName = relationshipName;
     this.#input.setFilterOutput(this);
     this.#sizeCache = new Map();
@@ -110,6 +114,7 @@ export class Exists implements FilterOperator {
 
   destroy(): void {
     this.#counts.clear();
+    this.#deferredRemovals.clear();
     this.#sizeCache.clear();
     this.#input.destroy();
   }
@@ -118,10 +123,8 @@ export class Exists implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+  getFilterStart(): FilterStart | undefined {
+    return this.#filterStart;
   }
 
   *push(change: Change): Stream<'yield'> {
@@ -157,6 +160,7 @@ export class Exists implements FilterOperator {
           );
           const size = this.#counts.get(pk) ?? 0;
           this.#counts.delete(pk);
+          this.#deferredRemovals.delete(pk);
           yield* this.#pushWithFilter(change, size > 0);
           return;
         }
@@ -172,6 +176,11 @@ export class Exists implements FilterOperator {
           const size = this.#counts.get(oldPk) ?? 0;
           if (oldPk !== newPk) {
             this.#counts.delete(oldPk);
+            const deferred = this.#deferredRemovals.get(oldPk);
+            if (deferred) {
+              this.#deferredRemovals.delete(oldPk);
+              this.#deferredRemovals.set(newPk, deferred);
+            }
           }
           this.#counts.set(newPk, size);
           yield* this.#pushWithFilter(change, size > 0);
@@ -204,6 +213,12 @@ export class Exists implements FilterOperator {
               const newSize = currentSize + 1;
               this.#counts.set(pk, newSize);
               if (currentSize === 0) {
+                if (this.#deferredRemovals.has(pk)) {
+                  if (!this.#not) {
+                    yield* this.#pushWithFilter(change, true);
+                  }
+                  return;
+                }
                 if (this.#not) {
                   yield* this.#output.push(
                     makeRemoveChange({
@@ -227,12 +242,61 @@ export class Exists implements FilterOperator {
               return;
             }
             case ChangeType.REMOVE: {
+              if (this.#isFlushingDeferred) {
+                const count = this.#counts.get(pk) ?? 0;
+                if (count === 0) {
+                  if (this.#not) {
+                    yield* this.#output.push(
+                      makeAddChange({
+                        row: change[ChangeIndex.NODE].row,
+                        relationships: {
+                          ...change[ChangeIndex.NODE].relationships,
+                          [this.#relationshipName]: () => [],
+                        },
+                      }),
+                      this,
+                    );
+                  } else {
+                    yield* this.#output.push(
+                      makeRemoveChange({
+                        row: change[ChangeIndex.NODE].row,
+                        relationships: {
+                          ...change[ChangeIndex.NODE].relationships,
+                          [this.#relationshipName]: () => [
+                            change[ChangeIndex.CHILD_DATA].change[
+                              ChangeIndex.NODE
+                            ],
+                          ],
+                        },
+                      }),
+                      this,
+                    );
+                  }
+                } else {
+                  if (!this.#not) {
+                    yield* this.#pushWithFilter(change, true);
+                  }
+                }
+                return;
+              }
+
               const newSize = Math.max(0, currentSize - 1);
               this.#counts.set(pk, newSize);
               if (currentSize === 1 && newSize === 0) {
-                if (this.#not) {
+                if (this.#filterStart) {
+                  this.#deferredRemovals.set(pk, change);
+                  this.#filterStart.registerDeferredFlush(() =>
+                    this.#flushDeferredRemoval(pk),
+                  );
+                } else if (this.#not) {
                   yield* this.#output.push(
-                    makeAddChange(change[ChangeIndex.NODE]),
+                    makeAddChange({
+                      row: change[ChangeIndex.NODE].row,
+                      relationships: {
+                        ...change[ChangeIndex.NODE].relationships,
+                        [this.#relationshipName]: () => [],
+                      },
+                    }),
                     this,
                   );
                 } else {
@@ -264,6 +328,20 @@ export class Exists implements FilterOperator {
       }
     } finally {
       this.#inPush = false;
+    }
+  }
+
+  *#flushDeferredRemoval(pk: string): Stream<'yield'> {
+    const change = this.#deferredRemovals.get(pk);
+    if (!change || !this.#filterStart) {
+      return;
+    }
+    this.#deferredRemovals.delete(pk);
+    this.#isFlushingDeferred = true;
+    try {
+      yield* this.#filterStart.pushFromFilterStart(change);
+    } finally {
+      this.#isFlushingDeferred = false;
     }
   }
 

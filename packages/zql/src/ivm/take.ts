@@ -77,6 +77,13 @@ export class Take implements Operator, TakeBoundProvider {
    */
   readonly #dirtyPartitions = new Map<string, DirtyPartitionState>();
 
+  /**
+   * When limit === 1, stores the currently active in-window Node for each partition
+   * so that inline displacement during Phase 1 emits a complete REMOVE change with
+   * relationships intact rather than stripping relationships.
+   */
+  readonly #boundNodes = new Map<string, Node>();
+
   #output: Output = throwOutput;
 
   setTakeGate(gate: TakeGate): void {
@@ -161,6 +168,9 @@ export class Take implements Operator, TakeBoundProvider {
       if (this.getSchema().compareRows(bound, inputNode.row) < 0) {
         return;
       }
+      if (this.#limit === 1) {
+        this.#boundNodes.set(takeStateKey, inputNode);
+      }
       yield inputNode;
       count++;
       if (count >= this.#limit) {
@@ -190,6 +200,7 @@ export class Take implements Operator, TakeBoundProvider {
 
     let size = 0;
     let bound: Row | undefined;
+    let singleNode: Node | undefined;
     let downstreamEarlyReturn = true;
     let exceptionThrown = false;
     try {
@@ -200,6 +211,9 @@ export class Take implements Operator, TakeBoundProvider {
         }
         yield inputNode;
         bound = inputNode.row;
+        if (this.#limit === 1) {
+          singleNode = inputNode;
+        }
         size++;
         if (size === this.#limit) {
           break;
@@ -212,6 +226,9 @@ export class Take implements Operator, TakeBoundProvider {
     } finally {
       if (!exceptionThrown) {
         this.#setTakeState(takeStateKey, size, bound);
+        if (this.#limit === 1 && singleNode) {
+          this.#boundNodes.set(takeStateKey, singleNode);
+        }
         // If it becomes necessary to support downstream early return, this
         // assert should be removed, and replaced with code that consumes
         // the input stream until limit is reached or the input stream is
@@ -285,6 +302,9 @@ export class Take implements Operator, TakeBoundProvider {
               ? change[ChangeIndex.NODE].row
               : takeState.bound;
         this.#setTakeState(takeStateKey, nextSize, nextBound);
+        if (this.#limit === 1) {
+          this.#boundNodes.set(takeStateKey, change[ChangeIndex.NODE]);
+        }
         yield* this.#output.push(change, this);
         return;
       }
@@ -301,10 +321,14 @@ export class Take implements Operator, TakeBoundProvider {
 
       // added row < activeBound
       if (this.#limit === 1) {
-        const removeChange = makeRemoveChange({
-          row: takeState.bound ?? activeBound,
-          relationships: {},
-        });
+        const oldNode = this.#boundNodes.get(takeStateKey);
+        const removeChange = makeRemoveChange(
+          oldNode ?? {
+            row: takeState.bound ?? activeBound,
+            relationships: {},
+          },
+        );
+        this.#boundNodes.set(takeStateKey, change[ChangeIndex.NODE]);
         this.#setTakeState(takeStateKey, 1, change[ChangeIndex.NODE].row);
         yield* this.#output.push(removeChange, this);
         yield* this.#output.push(change, this);
@@ -337,7 +361,7 @@ export class Take implements Operator, TakeBoundProvider {
         change[ChangeIndex.NODE].row,
         activeBound,
       );
-      if (compToBound > 0 || (compToBound < 0 && this.#limit === 1)) {
+      if (compToBound > 0) {
         // change is not in window
         return;
       }
@@ -356,6 +380,9 @@ export class Take implements Operator, TakeBoundProvider {
             ? takeState.bound
             : undefined;
       this.#setTakeState(takeStateKey, nextSize, finalBound);
+      if (this.#limit === 1) {
+        this.#boundNodes.delete(takeStateKey);
+      }
       yield* this.#output.push(change, this);
       return;
     } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
@@ -367,6 +394,9 @@ export class Take implements Operator, TakeBoundProvider {
         activeBound &&
         compareRows(change[ChangeIndex.NODE].row, activeBound) <= 0
       ) {
+        if (this.#limit === 1) {
+          this.#boundNodes.set(takeStateKey, change[ChangeIndex.NODE]);
+        }
         yield* this.#output.push(change, this);
       }
     }
@@ -403,6 +433,9 @@ export class Take implements Operator, TakeBoundProvider {
 
     // Both inside bounds (or unchanged bound)
     if ((oldCmp < 0 && newCmp < 0) || (oldCmp === 0 && newCmp === 0)) {
+      if (this.#limit === 1) {
+        this.#boundNodes.set(takeStateKey, change[ChangeIndex.NODE]);
+      }
       yield* this.#output.push(change, this);
       return;
     }
@@ -422,6 +455,7 @@ export class Take implements Operator, TakeBoundProvider {
     // Old was the bound, new is inside bounds
     if (oldCmp === 0 && newCmp < 0) {
       if (this.#limit === 1) {
+        this.#boundNodes.set(takeStateKey, change[ChangeIndex.NODE]);
         this.#setTakeState(
           takeStateKey,
           takeState.size,
@@ -452,6 +486,7 @@ export class Take implements Operator, TakeBoundProvider {
   }
 
   destroy(): void {
+    this.#boundNodes.clear();
     this.#input.destroy();
   }
 
@@ -537,8 +572,14 @@ export class Take implements Operator, TakeBoundProvider {
               takeState.size + toPush.length,
               finalNode.row,
             );
+            if (this.#limit === 1) {
+              this.#boundNodes.set(takeStateKey, finalNode);
+            }
             this.#dirtyPartitions.delete(takeStateKey);
           } else if (takeState.size === 0) {
+            if (this.#limit === 1) {
+              this.#boundNodes.delete(takeStateKey);
+            }
             this.#dirtyPartitions.delete(takeStateKey);
           }
 
@@ -561,6 +602,9 @@ export class Take implements Operator, TakeBoundProvider {
             count++;
             if (count === takeState.size) {
               this.#setTakeState(takeStateKey, takeState.size, node.row);
+              if (this.#limit === 1) {
+                this.#boundNodes.set(takeStateKey, node);
+              }
               break;
             }
           }

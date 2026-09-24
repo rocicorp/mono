@@ -444,8 +444,8 @@ describe('Yield Propagation (Push)', () => {
       flippedJoin.setOutput(output);
 
       // When pushing to parent, FlippedJoin fetches children to check if any exist (inner join).
-      // No children exist, so fetch yields 1 (only end yield).
-      expect(collectPush(parent, makeAdd('1'))).toEqual(['yield']);
+      // 1 matching child exists, so fetch yields 2 (1 matching child + 1 at end).
+      expect(collectPush(parent, makeAdd('1'))).toEqual(['yield', 'yield']);
     });
 
     test('propagates yield from output push', () => {

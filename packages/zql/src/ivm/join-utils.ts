@@ -163,26 +163,123 @@ export function decodePartitionConstraint(
   return constraint;
 }
 
+export class JoinIndex {
+  readonly #storage: JoinStorage;
+  readonly #parentKey: CompoundKey;
+  readonly #primaryKey: CompoundKey;
+  readonly #parentPartitionKey?: CompoundKey | undefined;
+
+  constructor(
+    storage: JoinStorage,
+    parentKey: CompoundKey,
+    primaryKey: CompoundKey,
+    parentPartitionKey?: CompoundKey,
+  ) {
+    this.#storage = storage;
+    this.#parentKey = parentKey;
+    this.#primaryKey = primaryKey;
+    this.#parentPartitionKey = parentPartitionKey;
+  }
+
+  index(row: Row, value: number = 1): void {
+    const key = this.#makeKey(row);
+    if (key) {
+      this.#storage.set(key, value);
+    }
+  }
+
+  unindex(row: Row): void {
+    const key = this.#makeKey(row);
+    if (key) {
+      this.#storage.del(key);
+    }
+  }
+
+  get(row: Row): number | undefined {
+    const key = this.#makeKey(row);
+    return key ? (this.#storage.get(key) as number | undefined) : undefined;
+  }
+
+  has(row: Row): boolean {
+    return this.get(row) !== undefined;
+  }
+
+  increment(row: Row): {oldCount: number; newCount: number} {
+    const oldCount = this.get(row) ?? 0;
+    const newCount = oldCount + 1;
+    this.index(row, newCount);
+    return {oldCount, newCount};
+  }
+
+  decrement(row: Row): {oldCount: number | undefined; newCount: number} {
+    const current = this.get(row);
+    if (current === undefined) {
+      return {oldCount: undefined, newCount: 0};
+    }
+    const newCount = current - 1;
+    if (newCount > 0) {
+      this.index(row, newCount);
+    } else {
+      this.unindex(row);
+    }
+    return {oldCount: current, newCount: Math.max(0, newCount)};
+  }
+
+  getMatching(
+    childRow: Row,
+    childKey: CompoundKey,
+  ): MatchingParentEntry[] | undefined {
+    return getMatchingParentEntries(
+      this.#storage,
+      childRow,
+      childKey,
+      this.#parentPartitionKey,
+    );
+  }
+
+  delEntry(
+    joinKey: string,
+    pk: string,
+    partitionConstraint?: Record<string, Value | undefined>,
+  ): void {
+    const storageKey = this.#parentPartitionKey
+      ? makePartitionStorageKey(
+          joinKey,
+          canonicalKey(partitionConstraint!, this.#parentPartitionKey),
+          pk,
+        )
+      : makeUnpartitionedStorageKey(joinKey, pk);
+    this.#storage.del(storageKey);
+  }
+
+  #makeKey(row: Row): string | undefined {
+    if (this.#parentKey.some(k => row[k] === null)) {
+      return undefined;
+    }
+    const joinKey = canonicalKey(row, this.#parentKey);
+    const parentPk = canonicalKey(row, this.#primaryKey);
+    return this.#parentPartitionKey
+      ? makePartitionStorageKey(
+          joinKey,
+          canonicalKey(row, this.#parentPartitionKey),
+          parentPk,
+        )
+      : makeUnpartitionedStorageKey(joinKey, parentPk);
+  }
+}
+
 export function indexParentInStorage(
   storage: JoinStorage,
   row: Row,
   parentKey: CompoundKey,
   primaryKey: CompoundKey,
   parentPartitionKey?: CompoundKey,
+  count: number = 1,
 ): void {
-  if (parentKey.some(k => row[k] === null)) {
-    return;
-  }
-  const joinKey = canonicalKey(row, parentKey);
-  const parentPk = canonicalKey(row, primaryKey);
-  const storageKey = parentPartitionKey
-    ? makePartitionStorageKey(
-        joinKey,
-        canonicalKey(row, parentPartitionKey),
-        parentPk,
-      )
-    : makeUnpartitionedStorageKey(joinKey, parentPk);
-  storage.set(storageKey, 1);
+  new JoinIndex(storage, parentKey, primaryKey, parentPartitionKey).index(
+    row,
+    count,
+  );
 }
 
 export function unindexParentInStorage(
@@ -192,19 +289,9 @@ export function unindexParentInStorage(
   primaryKey: CompoundKey,
   parentPartitionKey?: CompoundKey,
 ): void {
-  if (parentKey.some(k => row[k] === null)) {
-    return;
-  }
-  const joinKey = canonicalKey(row, parentKey);
-  const parentPk = canonicalKey(row, primaryKey);
-  const storageKey = parentPartitionKey
-    ? makePartitionStorageKey(
-        joinKey,
-        canonicalKey(row, parentPartitionKey),
-        parentPk,
-      )
-    : makeUnpartitionedStorageKey(joinKey, parentPk);
-  storage.del(storageKey);
+  new JoinIndex(storage, parentKey, primaryKey, parentPartitionKey).unindex(
+    row,
+  );
 }
 
 export type MatchingParentEntry = {
