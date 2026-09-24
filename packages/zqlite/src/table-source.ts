@@ -757,8 +757,16 @@ export class TableSource implements Source {
       }
       if (
         deleteKey !== undefined
-          ? !deleteKey.every(([col, value]) => current[col] === value)
-          : !collides(current, must(next), uniqueKeys, this.#primaryKey)
+          ? !deleteKey.every(([col, value]) =>
+              sqliteValuesEqual(current[col], value, this.#columns[col].type),
+            )
+          : !collides(
+              current,
+              must(next),
+              uniqueKeys,
+              this.#primaryKey,
+              this.#columns,
+            )
       ) {
         continue; // the batch edited it out of collision
       }
@@ -910,19 +918,24 @@ function collides(
   b: Row,
   uniqueKeys: readonly (readonly string[])[],
   primaryKey: PrimaryKey,
+  columns: Record<string, SchemaValue>,
 ): boolean {
-  if (primaryKey.every(col => a[col] === b[col])) {
+  if (primaryKey.every(col => sqliteValuesEqual(a[col], b[col], columns[col].type))) {
     return true;
   }
   for (const key of uniqueKeys) {
     if (key.some(col => b[col] === null || b[col] === undefined)) {
       continue;
     }
-    if (key.every(col => a[col] === b[col])) {
+    if (key.every(col => sqliteValuesEqual(a[col], b[col], columns[col].type))) {
       return true;
     }
   }
   return false;
+}
+
+function sqliteValuesEqual(a: Value | undefined, b: Value | undefined, type: ValueType) {
+  return toSQLiteType(a, type) === toSQLiteType(b, type);
 }
 
 function getUniqueIndexes(
