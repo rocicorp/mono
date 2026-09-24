@@ -10,7 +10,12 @@ import {
 import type {Codec} from '../../../zero-types/src/schema-value.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Transaction} from './custom.ts';
-import {defineMutators, defineMutatorsWithType} from './mutator-registry.ts';
+import {
+  defineMutators,
+  defineMutatorsWithType,
+  getMutator,
+  mustGetMutator,
+} from './mutator-registry.ts';
 import {defineMutator} from './mutator.ts';
 
 const schema = createSchema({
@@ -249,4 +254,37 @@ test('a validator with a non-JSON output resolves as a validator, not a codec (t
     id: 'a',
     at: 1,
   });
+});
+
+test('a codec mutator looked up by literal name takes decoded args and encodes once', () => {
+  const mutators = defineMutators({
+    event: {
+      create: defineMutator(argsCodec, async () => {}),
+      plain: defineMutator(
+        async ({args}: {args: {id: string}; ctx: unknown; tx: unknown}) => {
+          void args;
+        },
+      ),
+    },
+  });
+
+  const create = mustGetMutator(mutators, 'event.create');
+  expectTypeOf(create).parameter(0).toEqualTypeOf<DecodedArgs>();
+  expect(create({id: 'a', at: new Date(1000)}).args).toEqual({
+    id: 'a',
+    at: 1000,
+  });
+
+  // A plain mutator in the same registry keeps its own args type.
+  const plain = getMutator(mutators, 'event.plain');
+  assert(plain);
+  expectTypeOf(plain).parameter(0).toEqualTypeOf<{id: string}>();
+  expect(plain({id: 'b'}).args).toEqual({id: 'b'});
+
+  // Type-only (never executed): the encoded form would be encoded again.
+  const _rejectsEncoded = () => {
+    // @ts-expect-error - a codec mutator takes the decoded args
+    create({id: 'a', at: 1});
+  };
+  void _rejectsEncoded;
 });

@@ -51,8 +51,14 @@ describe('stress test types', () => {
   });
 
   test('can resolve mutator types', () => {
+    // A literal name resolves to the mutator's exact type.
     const mutator = mustGetMutator(mutators, 'updateThing');
-    expectTypeOf<typeof mutator>().toEqualTypeOf<
+    expectTypeOf<typeof mutator>().toEqualTypeOf<typeof mutators.updateThing>();
+
+    // A runtime string resolves to the widened union over the whole registry.
+    const name: string = 'updateThing';
+    const anyMutator = mustGetMutator(mutators, name);
+    expectTypeOf<typeof anyMutator>().toEqualTypeOf<
       Mutator<
         ReadonlyJSONValue | undefined,
         typeof zeroStressSchema,
@@ -91,9 +97,16 @@ describe('stress test types', () => {
   });
 
   test('can resolve query types', () => {
+    // A literal name resolves to the query's exact type.
     const query = mustGetQuery(queries, 'wide');
+    expectTypeOf<
+      ReturnType<typeof query>['~']['$tableName']
+    >().toEqualTypeOf<'workspace'>();
 
-    type TableName = ReturnType<typeof query>['~']['$tableName'];
+    // A runtime string resolves to the union over the whole registry.
+    const name: string = 'wide';
+    const anyQuery = mustGetQuery(queries, name);
+    type TableName = ReturnType<typeof anyQuery>['~']['$tableName'];
 
     expectTypeOf<'workspace'>().toExtend<TableName>();
     expectTypeOf<'user'>().toExtend<TableName>();

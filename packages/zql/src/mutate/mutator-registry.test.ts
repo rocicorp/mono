@@ -258,7 +258,13 @@ test('getMutator looks up by dot-separated name and returns the correct type', (
   expect(getMutator(mutators, 'post.publish')).toBe(mutators.post.publish);
   expect(getMutator(mutators, 'nonexistent')).toBeUndefined();
   expect(getMutator(mutators, 'user.nonexistent')).toBeUndefined();
+  // A literal name resolves to that mutator's exact type.
   expectTypeOf(getMutator(mutators, 'user.create')).toEqualTypeOf<
+    Mutator<{name: string}, typeof schema, Context, DbTransaction> | undefined
+  >();
+  // A runtime string falls back to the widened union.
+  const name: string = 'user.create';
+  expectTypeOf(getMutator(mutators, name)).toEqualTypeOf<
     | Mutator<
         ReadonlyJSONValue | undefined,
         typeof schema,
@@ -279,12 +285,7 @@ test('mustGetMutator throws for unknown names and returns the correct type', () 
 
   expect(mustGetMutator(mutators, 'user.create')).toBe(mutators.user.create);
   expectTypeOf(mustGetMutator(mutators, 'user.create')).toEqualTypeOf<
-    Mutator<
-      ReadonlyJSONValue | undefined,
-      typeof schema,
-      Context,
-      DbTransaction
-    >
+    Mutator<{name: string}, typeof schema, Context, DbTransaction>
   >();
   expect(() => mustGetMutator(mutators, 'nonexistent')).toThrow(
     'Mutator not found: nonexistent',

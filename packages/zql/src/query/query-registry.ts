@@ -6,7 +6,10 @@ import {
 } from '../../../shared/src/deep-merge.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import {getValueAtPath} from '../../../shared/src/object-traversal.ts';
+import {
+  getValueAtPath,
+  type ValueAtPath,
+} from '../../../shared/src/object-traversal.ts';
 import type {
   BaseDefaultSchema,
   DefaultContext,
@@ -233,6 +236,32 @@ type ToQueryTree<QD extends QueryDefinitions, S extends Schema> = {
       ? ToQueryTree<QD[K], S>
       : never;
 };
+
+/** Legacy query names may use `|` as a separator; see {@link getQuery}. */
+type DottedQueryName<N extends string> = N extends `${infer A}|${infer B}`
+  ? DottedQueryName<`${A}.${B}`>
+  : N;
+
+/**
+ * The type {@link getQuery} / {@link mustGetQuery} return for `TName`.
+ *
+ * For a literal name that resolves to a query this is that query's exact type,
+ * so for a codec query the callable takes the decoded args. For a runtime
+ * `string` (e.g. server-side dispatch by name), or a name that does not
+ * resolve to a query, it falls back to {@link FromQueryTree}: the union of all
+ * queries with widened JSON args, whose `fn` takes the wire args.
+ */
+export type QueryAtName<
+  QD extends QueryDefinitions,
+  S extends Schema,
+  TName extends string,
+> = string extends TName
+  ? FromQueryTree<QD, S>
+  : ValueAtPath<DottedQueryName<TName>, ToQueryTree<QD, S>, '.'> extends infer Q
+    ? [Q] extends [{readonly queryName: string}]
+      ? Q
+      : FromQueryTree<QD, S>
+    : never;
 
 export type FromQueryTree<QD extends QueryDefinitions, S extends Schema> = {
   readonly [K in keyof QD]: QD[K] extends AnyQueryDefinition
@@ -845,18 +874,23 @@ const separatorRe = /[.|]/;
 // getQuery / mustGetQuery
 // ----------------------------------------------------------------------------
 
-export function getQuery<QD extends QueryDefinitions, S extends Schema>(
+export function getQuery<
+  QD extends QueryDefinitions,
+  S extends Schema,
+  TName extends string,
+>(
   queries: QueryRegistry<QD, S>,
-  name: string,
-): FromQueryTree<QD, S> | undefined {
-  const q = getValueAtPath(queries, name, separatorRe);
-  return q as FromQueryTree<QD, S> | undefined;
+  name: TName,
+): QueryAtName<QD, S, TName> | undefined {
+  const q: unknown = getValueAtPath(queries as object, name, separatorRe);
+  return q as QueryAtName<QD, S, TName> | undefined;
 }
 
-export function mustGetQuery<QD extends QueryDefinitions, S extends Schema>(
-  queries: QueryRegistry<QD, S>,
-  name: string,
-): FromQueryTree<QD, S> {
+export function mustGetQuery<
+  QD extends QueryDefinitions,
+  S extends Schema,
+  TName extends string,
+>(queries: QueryRegistry<QD, S>, name: TName): QueryAtName<QD, S, TName> {
   const query = getQuery(queries, name);
   if (query === undefined) {
     throw new Error(`Query not found: ${name}`);

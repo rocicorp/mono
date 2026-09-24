@@ -13,6 +13,8 @@ import {
   addContextToQuery,
   defineQueries,
   defineQueryWithType,
+  getQuery,
+  mustGetQuery,
 } from './query-registry.ts';
 import {defineQuery} from './query-registry.ts';
 
@@ -213,4 +215,38 @@ test('defineQueryWithType: a validator with decode/encode resolves as a validato
   const queries = defineQueries({byTime: def});
   // Call site takes the (validated) input type, not the decoded type.
   expectTypeOf(queries.byTime).parameter(0).toEqualTypeOf<EncodedArgs>();
+});
+
+test('a codec query looked up by literal name takes decoded args and encodes once', () => {
+  const queries = defineQueries({
+    event: {
+      byTime: defineQuery(argsCodec, ({args}: {args: DecodedArgs}) =>
+        builder.event.where('at', '=', args.at.getTime()),
+      ),
+      byId: defineQuery(({args}: {args: string}) =>
+        builder.event.where('id', '=', args),
+      ),
+    },
+  });
+
+  const byTime = mustGetQuery(queries, 'event.byTime');
+  expectTypeOf(byTime).parameter(0).toEqualTypeOf<DecodedArgs>();
+  expect(byTime({at: new Date(1000)}).args).toEqual({at: 1000});
+  // Legacy '|' separators resolve the same way.
+  expectTypeOf(mustGetQuery(queries, 'event|byTime'))
+    .parameter(0)
+    .toEqualTypeOf<DecodedArgs>();
+
+  // A plain query in the same registry keeps its own args type.
+  const byId = getQuery(queries, 'event.byId');
+  assert(byId);
+  expectTypeOf(byId).parameter(0).toEqualTypeOf<string>();
+  expect(byId('x').args).toBe('x');
+
+  // Type-only (never executed): the encoded form would be encoded again.
+  const _rejectsEncoded = () => {
+    // @ts-expect-error - a codec query takes the decoded args
+    byTime({at: 1});
+  };
+  void _rejectsEncoded;
 });

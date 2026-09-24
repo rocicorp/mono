@@ -7,6 +7,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   getValueAtPath,
   iterateLeaves,
+  type ValueAtPath,
 } from '../../../shared/src/object-traversal.ts';
 import type {
   BaseDefaultSchema,
@@ -248,6 +249,27 @@ export type ToMutatorTree<
       : never;
 };
 
+/**
+ * The type {@link getMutator} / {@link mustGetMutator} return for `TName`.
+ *
+ * For a literal name that resolves to a mutator this is that mutator's exact
+ * type, so for a codec mutator the callable takes the decoded args. For a
+ * runtime `string` (e.g. server-side dispatch by name), or a name that does not
+ * resolve to a mutator, it falls back to {@link FromMutatorTree}: the union of
+ * all mutators with widened JSON args, whose `fn` takes the wire args.
+ */
+export type MutatorAtName<
+  MD extends MutatorDefinitions,
+  TSchema extends Schema,
+  TName extends string,
+> = string extends TName
+  ? FromMutatorTree<MD, TSchema>
+  : ValueAtPath<TName, ToMutatorTree<MD, TSchema>, '.'> extends infer M
+    ? [M] extends [{readonly mutatorName: string}]
+      ? M
+      : FromMutatorTree<MD, TSchema>
+    : never;
+
 export type FromMutatorTree<
   MD extends MutatorDefinitions,
   TSchema extends Schema,
@@ -354,15 +376,18 @@ export function iterateMutators(
  * Gets a Mutator by its dot-separated name from a MutatorRegistry.
  * Returns undefined if not found.
  */
+const dotRe = /\./;
+
 export function getMutator<
   MD extends MutatorDefinitions,
   TSchema extends Schema,
+  TName extends string,
 >(
   registry: MutatorRegistry<MD, TSchema>,
-  name: string,
-): FromMutatorTree<MD, TSchema> | undefined {
-  const m = getValueAtPath(registry, name, '.');
-  return m as FromMutatorTree<MD, TSchema> | undefined;
+  name: TName,
+): MutatorAtName<MD, TSchema, TName> | undefined {
+  const m: unknown = getValueAtPath(registry as object, name, dotRe);
+  return m as MutatorAtName<MD, TSchema, TName> | undefined;
 }
 
 /**
@@ -372,10 +397,11 @@ export function getMutator<
 export function mustGetMutator<
   MD extends MutatorDefinitions,
   TSchema extends Schema,
+  TName extends string,
 >(
   registry: MutatorRegistry<MD, TSchema>,
-  name: string,
-): FromMutatorTree<MD, TSchema> {
+  name: TName,
+): MutatorAtName<MD, TSchema, TName> {
   const mutator = getMutator(registry, name);
   if (mutator === undefined) {
     throw new Error(`Mutator not found: ${name}`);
