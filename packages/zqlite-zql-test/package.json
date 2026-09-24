@@ -2,7 +2,7 @@
   "name": "zqlite-zql-test",
   "version": "0.0.0",
   "private": true,
-  "description": "zql tests against zqlite TableSource",
+  "description": "zql tests against zqlite TableSource, write-through and deferred-writes",
   "type": "module",
   "scripts": {
     "format": "oxfmt .",

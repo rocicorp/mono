@@ -22,7 +22,11 @@ import {
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {ConnectionIndex} from '../../zql/src/ivm/connection-index.ts';
-import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
+import {
+  makeComparator,
+  type Comparator,
+  type Node,
+} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
   generateWithOverlayUnordered,
@@ -44,6 +48,12 @@ import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts
 import type {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
+import {
+  generateWithPendingDelta,
+  generateWithPendingDeltaUnordered,
+  NOT_OVERRIDDEN,
+  PendingDelta,
+} from './pending-delta.ts';
 import {
   buildSelectQuery,
   toSQLiteType,
@@ -72,6 +82,14 @@ export type TableSourceOptions = {
    * pipeline driver does when it advances to the next snapshot.
    */
   skipUnobservableChanges?: boolean | undefined;
+
+  /**
+   * When set, pushed changes are held in an in-memory {@link PendingDelta}
+   * merged into every read instead of being written to the backing table.
+   * The delta is dropped when the source moves to the next snapshot. This is
+   * the initial mode; see {@link TableSource.setDeferWrites}.
+   */
+  deferWrites?: boolean | undefined;
 };
 
 /**
@@ -103,9 +121,16 @@ export class TableSource implements Source {
   readonly #lc: LogContext;
   readonly #shouldYield: () => boolean;
   readonly #skipUnobservableChanges: boolean;
+  readonly #primaryKeySort: Ordering;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
   #pushEpoch = 0;
+  /**
+   * When present, derivation is read-only: changes accumulate here instead of
+   * being written to (and later rolled back out of) the backing snapshot. See
+   * {@link PendingDelta}.
+   */
+  #delta: PendingDelta | undefined;
 
   /**
    * @param shouldYield a function called after each row is read from the database,
@@ -129,9 +154,13 @@ export class TableSource implements Source {
     this.#columns = columns;
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
     this.#primaryKey = primaryKey;
+    this.#primaryKeySort = primaryKey.map(k => [k, 'asc']);
     this.#stmts = this.#getStatementsFor(db);
     this.#shouldYield = shouldYield;
     this.#skipUnobservableChanges = options.skipUnobservableChanges ?? false;
+    this.#delta = options.deferWrites
+      ? new PendingDelta(primaryKey)
+      : undefined;
 
     const primaryKeyStr = JSON.stringify(primaryKey.toSorted());
     assert(
@@ -154,6 +183,71 @@ export class TableSource implements Source {
    */
   setDB(db: Database) {
     this.#stmts = this.#getStatementsFor(db);
+    // The new snapshot already contains everything the batch was standing in
+    // for, so the batch is done.
+    this.#delta?.clear();
+  }
+
+  /**
+   * Sets whether the changes pushed from now on are held in memory (see
+   * {@link TableSourceOptions.deferWrites}) or written to the backing
+   * snapshot. The two must not be mixed within one snapshot, so this may only
+   * be called before the first push after construction or {@link setDB}. To
+   * switch to writing through partway, see {@link writePendingChanges}.
+   */
+  setDeferWrites(deferWrites: boolean) {
+    assert(
+      this.#delta === undefined || this.#delta.isEmpty,
+      'Cannot change how writes are applied while changes are pending',
+    );
+    if (!deferWrites) {
+      this.#delta = undefined;
+    } else {
+      this.#delta ??= new PendingDelta(this.#primaryKey);
+    }
+  }
+
+  /**
+   * Drops the changes held in memory (see {@link setDeferWrites}), for an
+   * advancement that has been abandoned. The source then no longer reflects
+   * the changes pushed to it, so it must not be read again until it has moved
+   * to another snapshot ({@link setDB}), if it is used again at all.
+   */
+  discardPendingChanges(): void {
+    this.#delta?.clear();
+  }
+
+  /**
+   * Writes the changes held in memory (see {@link setDeferWrites}) to the
+   * backing snapshot, which is left as if they had been written through (in
+   * the source's columns), and writes the changes pushed from then on through
+   * to it. Yields when the
+   * source's `shouldYield` says to, and must not be interleaved with a push.
+   */
+  *writePendingChanges(): Stream<'yield'> {
+    const delta = this.#delta;
+    if (delta === undefined) {
+      return;
+    }
+    // The rows the delta holds satisfy the table's unique keys, but one may
+    // take a unique value from another row that the delta also changed. So
+    // every row it touched is deleted before any is inserted.
+    for (const key of delta.touchedKeys()) {
+      this.#stmts.delete.run(
+        ...toSQLiteTypes(this.#primaryKey, key, this.#columns),
+      );
+      if (this.#shouldYield()) {
+        yield 'yield';
+      }
+    }
+    const columns = Object.keys(this.#columns);
+    for (const row of delta.liveRows()) {
+      this.#stmts.insert.run(...toSQLiteTypes(columns, row, this.#columns));
+      if (this.#shouldYield()) {
+        yield 'yield';
+      }
+    }
+    this.#delta = undefined;
   }
 
   #getStatementsFor(db: Database) {
@@ -258,7 +352,7 @@ export class TableSource implements Source {
     const unordered = sort === undefined;
     // PK comparator is used for source-level overlay matching (remove by PK
     // equality) even when no ordering is requested.
-    const primaryKeySort: Ordering = this.#primaryKey.map(k => [k, 'asc']);
+    const primaryKeySort: Ordering = this.#primaryKeySort;
 
     const input: SourceInput = {
       getSchema: () => schema,
@@ -333,11 +427,17 @@ export class TableSource implements Source {
           generateWithYields(
             generateWithOverlay(
               req.start?.row,
-              this.#mapFromSQLiteTypes(
-                this.#columns,
-                rowIterator,
-                sqlAndBindings.text,
-                debug,
+              this.#withPendingDelta(
+                this.#mapFromSQLiteTypes(
+                  this.#columns,
+                  rowIterator,
+                  sqlAndBindings.text,
+                  debug,
+                ),
+                req,
+                overlayPredicate,
+                sort,
+                comparator,
               ),
               req.constraint,
               this.#overlay,
@@ -358,11 +458,17 @@ export class TableSource implements Source {
       } else {
         yield* generateWithYields(
           generateWithOverlayUnordered(
-            this.#mapFromSQLiteTypes(
-              this.#columns,
-              rowIterator,
-              sqlAndBindings.text,
-              debug,
+            this.#withPendingDelta(
+              this.#mapFromSQLiteTypes(
+                this.#columns,
+                rowIterator,
+                sqlAndBindings.text,
+                debug,
+              ),
+              req,
+              overlayPredicate,
+              undefined,
+              undefined,
             ),
             req.constraint,
             this.#overlay,
@@ -411,6 +517,40 @@ export class TableSource implements Source {
     }
   }
 
+  /**
+   * Splices the batch overlay into a base row stream, if there is one. When
+   * derivation is not deferred, or the batch is empty -- every fetch during
+   * hydration, and every fetch before the first change of a pass -- this is
+   * the identity and the source behaves exactly as it did before.
+   *
+   * `predicate` is the connection's filters ANDed with `req.filter`, which
+   * SQL applies to the base rows. `sort` and `compare` are absent for
+   * unordered fetches, where nothing downstream depends on position.
+   */
+  #withPendingDelta(
+    baseRows: IterableIterator<Row>,
+    req: FetchRequest,
+    predicate: ((row: Row) => boolean) | undefined,
+    sort: Ordering | undefined,
+    compare: Comparator | undefined,
+  ): IterableIterator<Row> {
+    const delta = this.#delta;
+    if (delta === undefined || delta.isEmpty) {
+      return baseRows;
+    }
+    const deltaRows = delta.rowsFor(
+      sort ?? this.#primaryKeySort,
+      req.constraint,
+      sort ? req.reverse : false,
+      predicate,
+      req.multiConstraints,
+      sort ? req.start?.row : undefined,
+    );
+    return compare
+      ? generateWithPendingDelta(baseRows, deltaRows, delta, compare)
+      : generateWithPendingDeltaUnordered(baseRows, deltaRows, delta);
+  }
+
   *#mapFromSQLiteTypes(
     valueTypes: Record<string, SchemaValue>,
     rowIterator: IterableIterator<Row>,
@@ -445,6 +585,19 @@ export class TableSource implements Source {
     }
   }
 
+  /**
+   * The number of rows held in memory for changes that have been pushed but
+   * not written, i.e. with `deferWrites`, since the last {@link setDB}.
+   */
+  get pendingRows(): number {
+    return this.#delta?.size ?? 0;
+  }
+
+  /** Estimated bytes retained by deferred changes and their indexes. */
+  get pendingBytes(): number {
+    return this.#delta?.estimatedBytes ?? 0;
+  }
+
   *genPush(change: SourceChange): Stream<'yield' | undefined> {
     if (
       this.#skipUnobservableChanges &&
@@ -458,10 +611,20 @@ export class TableSource implements Source {
       return;
     }
 
-    const exists = (row: Row) =>
-      this.#stmts.checkExists.get<{exists: number} | undefined>(
-        ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
-      )?.exists === 1;
+    const exists = (row: Row) => {
+      const delta = this.#delta;
+      if (delta !== undefined && !delta.isEmpty) {
+        const overridden = delta.get(row);
+        if (overridden !== NOT_OVERRIDDEN) {
+          return overridden !== undefined;
+        }
+      }
+      return (
+        this.#stmts.checkExists.get<{exists: number} | undefined>(
+          ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
+        )?.exists === 1
+      );
+    };
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
 
@@ -476,6 +639,11 @@ export class TableSource implements Source {
   }
 
   #writeChange(change: SourceChange) {
+    const delta = this.#delta;
+    if (delta !== undefined) {
+      this.#writeChangeToDelta(delta, change);
+      return;
+    }
     switch (change[SourceChangeIndex.TYPE]) {
       case ChangeType.ADD:
         this.#stmts.insert.run(
@@ -539,6 +707,117 @@ export class TableSource implements Source {
     }
   }
 
+  /**
+   * Reconciles a set of rows that the caller found in the *backing snapshot*
+   * with the changes this source has applied but not written.
+   *
+   * A view-syncer computes the rows a replicated change collides with -- by
+   * change-log key for a delete, by every unique key for a set -- against the
+   * snapshot it is reading. When derivation writes through, that snapshot has
+   * already absorbed the earlier changes of the same advancement, so the
+   * probe sees them. When derivation is deferred they live here instead, and
+   * the probe has to be brought up to date or the source is pushed a change
+   * that contradicts its own state (a delete of a row the batch already
+   * removed, an edit whose old row is stale).
+   *
+   * Two ways the batch can disagree with the probe, both handled here: a
+   * probed row may have been removed, or may have been edited (so the
+   * caller's copy is stale, or it no longer collides at all).
+   *
+   * The batch cannot have edited a row the probe missed *into* collision. The
+   * change log keeps one entry per row key, so every row the batch holds is
+   * that row's value at the advancement's target version, as is `next`, and
+   * two distinct rows of one version cannot share a non-null unique key.
+   *
+   * Returns `base` untouched when derivation is not deferred, which is what
+   * makes this a no-op for the write-through path.
+   */
+  reconcilePendingConflicts(
+    base: readonly Row[],
+    next: Row | null,
+    rowKey: Row,
+    uniqueKeys: readonly (readonly string[])[],
+  ): readonly Row[] {
+    const delta = this.#delta;
+    if (delta === undefined || delta.isEmpty) {
+      return base;
+    }
+
+    // The change-log key uses SQLite values, while pending rows use ZQL
+    // values. It is the upstream replica identity, which may include columns
+    // the source does not sync. The batch cannot have changed those (nor can a
+    // write-through `UPDATE`), so only the synced columns are compared.
+    const deleteKey = next === null ? this.#syncedDeleteKey(rowKey) : undefined;
+    const out: Row[] = [];
+    for (const row of base) {
+      const pending = delta.get(row);
+      const current = pending === NOT_OVERRIDDEN ? row : pending;
+      if (current === undefined) {
+        continue; // the batch removed it
+      }
+      if (
+        deleteKey !== undefined
+          ? !deleteKey.every(([col, value]) =>
+              sqliteValuesEqual(current[col], value, this.#columns[col].type),
+            )
+          : !collides(
+              current,
+              must(next),
+              uniqueKeys,
+              this.#primaryKey,
+              this.#columns,
+            )
+      ) {
+        continue; // the batch edited it out of collision
+      }
+      out.push(current);
+    }
+    return out;
+  }
+
+  #syncedDeleteKey(rowKey: Row): [string, Value][] {
+    const synced: Writable<Row> = {};
+    for (const [col, value] of Object.entries(rowKey)) {
+      if (Object.hasOwn(this.#columns, col)) {
+        synced[col] = value;
+      }
+    }
+    return Object.entries(fromSQLiteTypes(this.#columns, synced, this.#table));
+  }
+
+  /**
+   * The batch-overlay counterpart of {@link #writeChange}. It must reproduce
+   * that method's semantics exactly, including its treatment of an edit that
+   * cannot be expressed as an `UPDATE` -- a changed primary key, or a table
+   * whose columns are all part of the key -- as a delete followed by an
+   * insert.
+   */
+  #writeChangeToDelta(delta: PendingDelta, change: SourceChange) {
+    switch (change[SourceChangeIndex.TYPE]) {
+      case ChangeType.ADD:
+        delta.set(change[SourceChangeIndex.ROW]);
+        break;
+      case ChangeType.REMOVE:
+        delta.delete(change[SourceChangeIndex.ROW]);
+        break;
+      case ChangeType.EDIT: {
+        const oldRow = change[SourceChangeIndex.OLD_ROW];
+        const row = change[SourceChangeIndex.ROW];
+        if (canUseUpdate(oldRow, row, this.#columns, this.#primaryKey)) {
+          // `UPDATE` sets only the non-primary columns, so the row keeps any
+          // column the change did not mention.
+          delta.set({...oldRow, ...row});
+        } else {
+          delta.delete(oldRow);
+          delta.set(row);
+        }
+        break;
+      }
+      default:
+        unreachable(change);
+    }
+  }
+
   #getRowStmtCache = new Map<string, string>();
 
   #getRowStmt(keyCols: string[]): string {
@@ -566,15 +845,34 @@ export class TableSource implements Source {
     const keyCols = Object.keys(rowKey);
 
     const stmt = this.#getRowStmt(keyCols);
-    const row = this.#stmts.cache.use(stmt, cached =>
+    const raw = this.#stmts.cache.use(stmt, cached =>
       cached.statement
         .safeIntegers(true)
         .get<Row>(...toSQLiteTypes(keyCols, rowKey, this.#columns)),
     );
-    if (row) {
-      return fromSQLiteTypes(this.#columns, row, this.#table);
+    const row = raw ? fromSQLiteTypes(this.#columns, raw, this.#table) : raw;
+
+    const delta = this.#delta;
+    if (delta === undefined || delta.isEmpty) {
+      return row;
     }
-    return row;
+    if (row !== undefined) {
+      // The batch may have edited or removed the base row out from under this
+      // lookup. Its own primary key is what identifies it in the batch.
+      const overridden = delta.get(row);
+      if (overridden === NOT_OVERRIDDEN) {
+        return row;
+      }
+      if (
+        overridden !== undefined &&
+        keyCols.every(c => overridden[c] === rowKey[c])
+      ) {
+        return overridden;
+      }
+    }
+    // The base match is absent, removed, or no longer matches this key. Another
+    // pending row may now own the key.
+    return delta.getByColumns(keyCols, rowKey);
   }
 
   #requestToSQL(
@@ -608,6 +906,46 @@ function mergeOverlayPredicate(
     return reqPredicate;
   }
   return row => connPredicate(row) && reqPredicate(row);
+}
+
+/**
+ * Whether `a` occupies the same row identity as `b` -- the same primary key,
+ * or the same value on any unique key, which is what a replicated write
+ * conflicts on.
+ */
+function collides(
+  a: Row,
+  b: Row,
+  uniqueKeys: readonly (readonly string[])[],
+  primaryKey: PrimaryKey,
+  columns: Record<string, SchemaValue>,
+): boolean {
+  if (
+    primaryKey.every(col =>
+      sqliteValuesEqual(a[col], b[col], columns[col].type),
+    )
+  ) {
+    return true;
+  }
+  for (const key of uniqueKeys) {
+    if (key.some(col => b[col] === null || b[col] === undefined)) {
+      continue;
+    }
+    if (
+      key.every(col => sqliteValuesEqual(a[col], b[col], columns[col].type))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function sqliteValuesEqual(
+  a: Value | undefined,
+  b: Value | undefined,
+  type: ValueType,
+) {
+  return toSQLiteType(a, type) === toSQLiteType(b, type);
 }
 
 function getUniqueIndexes(

@@ -655,6 +655,50 @@ export const zeroOptions = {
     ],
   },
 
+  deferIvmWrites: {
+    type: v.boolean().default(true),
+    desc: [
+      `Derive IVM advancements without writing to the replica snapshot.`,
+      ``,
+      `A view-syncer normally makes each change durable in the SQLite snapshot`,
+      `it is reading from, because the next change has to read a base that`,
+      `includes the previous ones. Those writes are always rolled back -- the`,
+      `replicator is the only committer -- so they exist only to serve reads`,
+      `for the rest of the advancement.`,
+      ``,
+      `When enabled (the default), the changes are held in memory and merged`,
+      `into each leaf scan instead, leaving the snapshot read-only, within the`,
+      `budget set by {bold deferIvmWritesHeapProportion}. Disable it to write`,
+      `every advancement through to the snapshot. The two modes are required`,
+      `to be indistinguishable to the pipelines above the source.`,
+    ],
+    hidden: true,
+  },
+
+  deferIvmWritesHeapProportion: {
+    type: v
+      .number()
+      .assert(
+        value => value > 0 && value <= 1,
+        'must be greater than 0 and at most 1',
+      )
+      .default(0.25),
+    desc: [
+      `With {bold deferIvmWrites}, the proportion of {bold --max-old-space-size}`,
+      `that the client groups of one sync worker may hold in memory at once.`,
+      `Each client group holds its own copy of the changes it is advancing`,
+      `through. Before an advancement starts, the number of rows it will`,
+      `change is reserved from this budget, at an assumed 1 KiB per row; an`,
+      `advancement that does not fit is written`,
+      `through to the replica snapshot instead, as when {bold deferIvmWrites}`,
+      `is off. The bytes the rows are estimated to hold are also added up as`,
+      `the client groups go, and a client group that takes the total past the`,
+      `budget writes the rows it holds through to the replica snapshot, and`,
+      `the rest of its changes after them.`,
+    ],
+    hidden: true,
+  },
+
   yieldThresholdMs: {
     type: v.number().default(10),
     desc: [

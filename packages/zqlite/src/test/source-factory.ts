@@ -42,8 +42,26 @@ export const createSource: SourceFactory = (
     )}));`,
   );
   db.exec(query);
-  return new TableSource(lc, logConfig, db, tableName, columns, primaryKey);
+  return new TableSource(
+    lc,
+    logConfig,
+    db,
+    tableName,
+    columns,
+    primaryKey,
+    undefined,
+    {deferWrites: DEFER_WRITES},
+  );
 };
+
+/**
+ * Runs the shared ZQL suite against a `TableSource` whose derivation is
+ * read-only -- changes accumulate in a `PendingDelta` and are merged into each
+ * leaf scan rather than being written to the backing database. The two modes
+ * must be indistinguishable to every operator above the source, which is
+ * exactly what this suite checks when run both ways.
+ */
+const DEFER_WRITES = process.env.ZQLITE_TEST_DEFER_WRITES === '1';
 
 export function mapResultToClientNames<T, S extends Schema>(
   result: unknown,
@@ -105,15 +123,18 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
   readonly #schema: Schema;
   readonly #cgs;
   readonly #sourceWrapper: ((source: Source) => Source) | undefined;
+  readonly #deferWrites: boolean;
 
   constructor(
     lc: LogContext,
     logConfig: LogConfig,
     db: Database,
     schema: Schema,
-    sourceWrapper?: (source: Source) => Source,
+    sourceWrapper: ((source: Source) => Source) | undefined,
+    deferWrites: boolean,
   ) {
     super();
+    this.#deferWrites = deferWrites;
     this.#lc = lc;
     const dbs = new Database(lc, ':memory:');
     dbs.prepare(CREATE_STORAGE_TABLE).run();
@@ -176,6 +197,8 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
       tableSchema.primaryKey.map(k =>
         this.#clientToServerMapper.columnName(clientTableName, k),
       ) as unknown as CompoundKey,
+      undefined,
+      {deferWrites: this.#deferWrites},
     );
 
     // Apply wrapper if provided (e.g., for random yield injection)
@@ -193,12 +216,19 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
   }
 }
 
+/**
+ * @param options.deferWrites Whether the sources hold the changes pushed to
+ *        them in memory rather than writing them to `db` (see
+ *        `TableSourceOptions.deferWrites`). They never move to another
+ *        snapshot, so they hold them for as long as they live.
+ */
 export function newQueryDelegate(
   lc: LogContext,
   logConfig: LogConfig,
   db: Database,
   schema: Schema,
   sourceWrapper?: (source: Source) => Source,
+  options?: {deferWrites?: boolean | undefined},
 ): QueryDelegate {
   return new SourceFactoryQueryDelegate(
     lc,
@@ -206,5 +236,6 @@ export function newQueryDelegate(
     db,
     schema,
     sourceWrapper,
+    options?.deferWrites ?? false,
   );
 }

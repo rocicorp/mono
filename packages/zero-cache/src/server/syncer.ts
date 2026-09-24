@@ -17,6 +17,7 @@ import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink} from '../observability/events.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
@@ -25,6 +26,7 @@ import {
   type ConnectionContextManager,
   ConnectionContextManagerImpl,
 } from '../services/view-syncer/connection-context-manager.ts';
+import {DeferredWritesBudget} from '../services/view-syncer/deferred-writes-budget.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {SnapshotRowCache} from '../services/view-syncer/snapshot-row-cache.ts';
@@ -187,6 +189,33 @@ export default async function runWorker(
       ? new SnapshotRowCache(config.snapshotRowCacheSize)
       : undefined;
 
+  // Shared by all of the view-syncers on this worker, which each hold their
+  // own copy of the changes they are advancing through.
+  const deferredWritesBudget = config.deferIvmWrites
+    ? DeferredWritesBudget.forHeapProportion(
+        config.deferIvmWritesHeapProportion,
+      )
+    : undefined;
+  if (deferredWritesBudget) {
+    lc.info?.(
+      `Deferred IVM writes may hold up to ${deferredWritesBudget.maxRows} ` +
+        `rows (~${(deferredWritesBudget.maxBytes / 1024 ** 2).toFixed(2)} MB) ` +
+        `across client groups`,
+    );
+    getOrCreateGauge(
+      'sync',
+      'ivm.deferred-writes-reserved-rows',
+      'Rows reserved by the client groups of a sync worker to hold IVM ' +
+        'changes in memory (deferIvmWrites)',
+    ).addCallback(o => o.observe(deferredWritesBudget.reservedRows));
+    getOrCreateGauge('sync', 'ivm.deferred-writes-held-bytes', {
+      description:
+        'Estimated bytes of the IVM changes that the client groups of a sync ' +
+        'worker hold in memory (deferIvmWrites)',
+      unit: 'By',
+    }).addCallback(o => o.observe(deferredWritesBudget.heldBytes));
+  }
+
   const viewSyncerFactory = (
     id: string,
     sub: Subscription<ReplicaState>,
@@ -250,6 +279,7 @@ export default async function runWorker(
             : normalYieldThresholdMs,
         config.enableQueryPlanner,
         config,
+        deferredWritesBudget,
       ),
       sub,
       drainCoordinator,

@@ -1060,6 +1060,49 @@ test.each(['-1', '1.5'])(
   },
 );
 
+test('deferred IVM writes are on by default and can be turned off', () => {
+  const parse = (env: Record<string, string>) =>
+    parseOptionsAdvanced(zeroOptions, {
+      envNamePrefix: 'ZERO_',
+      allowUnknown: false,
+      allowPartial: true,
+      env,
+    }).config.deferIvmWrites;
+  expect(parse({})).toBe(true);
+  expect(parse({ZERO_DEFER_IVM_WRITES: 'false'})).toBe(false);
+});
+
+test.each(['0', '-0.1', '2'])(
+  'deferred IVM writes heap proportion rejects %s',
+  proportion => {
+    expect(() =>
+      parseOptionsAdvanced(zeroOptions, {
+        envNamePrefix: 'ZERO_',
+        allowUnknown: false,
+        allowPartial: true,
+        env: {
+          ZERO_DEFER_IVM_WRITES_HEAP_PROPORTION: proportion,
+        },
+      }),
+    ).toThrow();
+  },
+);
+
+test.each(['0.25', '1'])(
+  'deferred IVM writes heap proportion accepts %s',
+  proportion => {
+    const {config} = parseOptionsAdvanced(zeroOptions, {
+      envNamePrefix: 'ZERO_',
+      allowUnknown: false,
+      allowPartial: true,
+      env: {
+        ZERO_DEFER_IVM_WRITES_HEAP_PROPORTION: proportion,
+      },
+    });
+    expect(config.deferIvmWritesHeapProportion).toBe(Number(proportion));
+  },
+);
+
 test('PG change log is enabled by default and can be disabled by env', () => {
   const defaults = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: 'ZERO_',

@@ -36,6 +36,8 @@ import type {ReplicaState} from '../../../zero-cache/src/services/replicator/rep
 import {ReplicatorService} from '../../../zero-cache/src/services/replicator/replicator.ts';
 import {ThreadWriteWorkerClient} from '../../../zero-cache/src/services/replicator/write-worker-client.ts';
 import {ConnectionContextManagerImpl} from '../../../zero-cache/src/services/view-syncer/connection-context-manager.ts';
+import type {DeferredWritesBudget} from '../../../zero-cache/src/services/view-syncer/deferred-writes-budget.ts';
+import {testDeferredWritesBudget} from '../../../zero-cache/src/services/view-syncer/deferred-writes-test-util.ts';
 import {DrainCoordinator} from '../../../zero-cache/src/services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import {initViewSyncerSchema} from '../../../zero-cache/src/services/view-syncer/schema/init.ts';
@@ -458,11 +460,20 @@ export async function startZeroCacheReplica(
      * storage database. A `production` worker is also configured like a
      * production one: its view-syncers share a {@link SnapshotRowCache} and
      * plan their queries with the query planner (both on by default).
+     *
+     * The view-syncers also share `deferredWrites`, which decides whether
+     * their advancements hold their changes in memory or write them through
+     * to the replica snapshot. Without one, `ZERO_TEST_DEFER_IVM_WRITES`
+     * decides, as in the zero-cache tests; if it is unset, every advancement
+     * holds its changes in memory, as with `deferIvmWrites` on (the
+     * default).
      */
     async function startSyncWorker({
       production,
+      deferredWrites = testDeferredWritesBudget(),
     }: {
       production: boolean;
+      deferredWrites?: DeferredWritesBudget | undefined;
     }): Promise<SyncWorker> {
       const worker = workers++;
       const cvrDB = await testDBs.create(
@@ -533,6 +544,7 @@ export async function startZeroCacheReplica(
             () => 200,
             production,
             production ? config : undefined,
+            deferredWrites,
           ),
           replicator.subscribe() as Subscription<ReplicaState>,
           new DrainCoordinator(),

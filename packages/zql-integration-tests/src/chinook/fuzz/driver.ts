@@ -523,48 +523,46 @@ function mapRow(row: Row, table: string, mapper: NameMapper): Row {
   return out;
 }
 
-/** Apply one mutation to the Postgres oracle + both IVM sources (memory + sqlite). */
+/**
+ * Apply one mutation to the Postgres oracle + every IVM source (memory, sqlite, and
+ * deferred-write sqlite when the delegates have it).
+ */
 async function applyMutation(
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   serverTx: any,
   delegates: Delegates,
   m: Mutation,
 ): Promise<void> {
+  const {mapper} = delegates;
   const memSrc = must(delegates.memory.getSource(m.table));
-  const sqlSrc = must(
-    delegates.sqlite.getSource(delegates.mapper.tableName(m.table)),
-  );
+  const sqlSrcs = [delegates.sqlite, delegates.sqliteDeferred]
+    .filter(d => d !== undefined)
+    .map(d => must(d.getSource(mapper.tableName(m.table))));
+  const row = mapRow(m.row, m.table, mapper);
   switch (m.kind) {
     case 'remove':
       await serverTx.mutate[m.table].delete(m.row);
-      consume(
-        sqlSrc.push(
-          makeSourceChangeRemove(mapRow(m.row, m.table, delegates.mapper)),
-        ),
-      );
+      for (const src of sqlSrcs) {
+        consume(src.push(makeSourceChangeRemove(row)));
+      }
       consume(memSrc.push(makeSourceChangeRemove(m.row)));
       break;
     case 'add':
       await serverTx.mutate[m.table].insert(m.row);
-      consume(
-        sqlSrc.push(
-          makeSourceChangeAdd(mapRow(m.row, m.table, delegates.mapper)),
-        ),
-      );
+      for (const src of sqlSrcs) {
+        consume(src.push(makeSourceChangeAdd(row)));
+      }
       consume(memSrc.push(makeSourceChangeAdd(m.row)));
       break;
-    case 'edit':
+    case 'edit': {
       await serverTx.mutate[m.table].update(m.row);
-      consume(
-        sqlSrc.push(
-          makeSourceChangeEdit(
-            mapRow(m.row, m.table, delegates.mapper),
-            mapRow(m.old, m.table, delegates.mapper),
-          ),
-        ),
-      );
+      const old = mapRow(m.old, m.table, mapper);
+      for (const src of sqlSrcs) {
+        consume(src.push(makeSourceChangeEdit(row, old)));
+      }
       consume(memSrc.push(makeSourceChangeEdit(m.row, m.old)));
       break;
+    }
   }
 }
 
@@ -573,6 +571,10 @@ async function applyMutation(
  * re-checking parity against the (recomputed) oracle **after every step** — catching an
  * accumulation drift or a transient wrong state a single end-of-batch comparison would
  * mask. Throws (a parity assertion) on the first divergence.
+ *
+ * When the delegates have a deferred-write sqlite delegate (every `transact` does), its
+ * view is walked and checked too: its sources hold the mutations in memory and merge
+ * them into every fetch, which is how zero-cache derives with `deferIvmWrites`.
  */
 async function pushWalk(
   delegates: Delegates,
@@ -582,6 +584,7 @@ async function pushWalk(
   const table = asQueryInternals(query).ast.table;
   const memView = delegates.memory.materialize(query);
   const sqliteView = delegates.sqlite.materialize(query);
+  const deferredView = delegates.sqliteDeferred?.materialize(query);
   const serverTx = await makeServerTransaction(
     delegates.pg.transaction,
     'test-client',
@@ -594,6 +597,13 @@ async function pushWalk(
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       mapResultToClientNames(sqliteView.data, schema, table as any),
     ).toEqualPg(pg);
+    if (deferredView) {
+      expect(
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        mapResultToClientNames(deferredView.data, schema, table as any),
+        'deferred-write sqlite view',
+      ).toEqualPg(pg);
+    }
     expect(memView.data).toEqualPg(pg);
   };
   try {
@@ -605,6 +615,7 @@ async function pushWalk(
   } finally {
     memView.destroy();
     sqliteView.destroy();
+    deferredView?.destroy();
   }
 }
 
