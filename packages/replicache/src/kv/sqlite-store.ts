@@ -88,18 +88,33 @@ export class SQLiteStore implements Store {
 
     // Start shared read transaction if this is the first reader
     // This ensures consistent reads across all concurrent readers
-    if (entry.activeReaders === 0) {
-      db.execSync('BEGIN');
+    try {
+      if (entry.activeReaders === 0) {
+        db.execSync('BEGIN');
+      }
+    } catch (e) {
+      // The lock was acquired above; without this every later read() and
+      // write() on the store waits for a release that never comes.
+      release();
+      throw e;
     }
     entry.activeReaders++;
 
     return new SQLiteStoreRead(() => {
       entry.activeReaders--;
-      // Commit shared read transaction when last reader finishes
-      if (entry.activeReaders === 0) {
-        db.execSync('COMMIT');
+      // Commit shared read transaction when last reader finishes. SQLite may
+      // already have rolled the transaction back on its own (an I/O error
+      // inside any reader's statement does that), in which case COMMIT
+      // throws "cannot commit - no transaction is active". The error is
+      // reported to the releasing reader, but the RWLock must be released
+      // regardless or the store hangs for the rest of the process.
+      try {
+        if (entry.activeReaders === 0) {
+          db.execSync('COMMIT');
+        }
+      } finally {
+        release();
       }
-      release();
     }, preparedStatements);
   }
 
@@ -112,7 +127,14 @@ export class SQLiteStore implements Store {
     // At this point, RWLock guarantees no active readers
     // The last reader would have already committed the shared transaction
 
-    db.execSync('BEGIN IMMEDIATE');
+    try {
+      db.execSync('BEGIN IMMEDIATE');
+    } catch (e) {
+      // SQLITE_BUSY once busy_timeout expires, or an I/O error. The caller
+      // gets the error; the write lock must not stay held.
+      release();
+      throw e;
+    }
 
     return new SQLiteWrite(release, db, preparedStatements);
   }
