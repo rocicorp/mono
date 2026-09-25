@@ -58,7 +58,6 @@ import {
 } from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
-import {publicationRowFilter} from './backfill-resume.ts';
 import {toStateVersionString} from './lsn.ts';
 import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
@@ -773,6 +772,25 @@ export function verifyShadowReplica(
       `${columnsChecked} columns, ` +
       `${rowsChecked.toLocaleString()} rows`,
   );
+}
+
+/**
+ * The row filter of the table's publications, as a parenthesized boolean
+ * expression, or `null` if the table is published without a filter.
+ */
+
+export function publicationRowFilter(table: PublishedTableSpec): string | null {
+  const rowFilters = Object.values(table.publications).map(
+    ({rowFilter}) => rowFilter,
+  );
+  // PostgreSQL publishes the union of all publications. An unfiltered
+  // publication therefore makes every row eligible, regardless of filters on
+  // any other publication containing the table.
+  if (rowFilters.some(filter => filter === null)) {
+    return null;
+  }
+  const filters = rowFilters.filter((filter): filter is string => !!filter);
+  return filters.length === 0 ? null : `(${filters.join(' OR ')})`;
 }
 
 // Verified empirically that batches of 50 seem to be the sweet spot,
