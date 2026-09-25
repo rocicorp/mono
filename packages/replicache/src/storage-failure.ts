@@ -10,8 +10,11 @@
  *   that has gone away; or `indexedDB.open` failing).
  * - `io-error`: a read or write to the file failed (SQLite's `SQLITE_IOERR`).
  *
- * None of them is corruption of the data, and none is cleared by dropping
- * the database and rebuilding: the rebuild opens the same failing storage.
+ * None of them is by itself evidence that the data is corrupt, and dropping
+ * the database and rebuilding does not clear `cannot-open` or `io-error`: the
+ * rebuild opens the same failing storage. A write torn by a `full` disk can
+ * corrupt the data, though, and dropping the database is also what frees the
+ * space, so an invalid ref count under `full` still drops it.
  */
 export type StorageFailureKind = 'full' | 'cannot-open' | 'io-error';
 
