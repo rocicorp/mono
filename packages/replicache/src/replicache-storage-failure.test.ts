@@ -407,3 +407,41 @@ test('mutation recovery does not touch the store once it has failed', async () =
   expect(Array.from(stores.values(), s => s.readAttempts)).toEqual(reads);
   expect(Array.from(stores.values(), s => s.writeAttempts)).toEqual(writes);
 });
+
+test('drops clear the memory stores instances fell back to, not those of kvStore mem instances', async () => {
+  const memRep = await replicacheForTesting(
+    'live-mem',
+    {kvStore: 'mem', mutators: {addData}},
+    disableAllBackgroundProcesses,
+  );
+  await memRep.mutate.addData({a: 1});
+  await memRep.persist();
+
+  const openError = new StorageFailureError(
+    'cannot-open',
+    'unable to open database file',
+  );
+  const fallenBack = new ReplicacheTest(
+    {
+      name: 'fell-back',
+      pullURL: '',
+      pushURL: '',
+      kvStore: {
+        create: () => {
+          throw openError;
+        },
+        drop: () => Promise.resolve(),
+      },
+      mutators: {addData},
+    },
+    disableAllBackgroundProcesses,
+  );
+  await fallenBack.clientGroupID;
+  await fallenBack.close();
+  expect(hasMemStore(fallenBack.idbName)).toBe(true);
+
+  await dropAllDatabases();
+  expect(hasMemStore(fallenBack.idbName)).toBe(false);
+  expect(hasMemStore(memRep.idbName)).toBe(true);
+  expect(await memRep.query(tx => tx.get('a'))).toBe(1);
+});

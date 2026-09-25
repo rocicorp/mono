@@ -7,6 +7,27 @@ import {dropMemStore, MemStore} from './mem-store.ts';
 import type {Read, Store, StoreProvider, Write} from './store.ts';
 
 /**
+ * The names of the memory stores instances moved onto after a storage
+ * failure, in this process. Unlike the stores of a `kvStore: 'mem'` instance,
+ * these are cleared by drops whatever store they are asked to drop from.
+ */
+const fellBack = new Set<string>();
+
+/** Whether an instance moved onto a memory store of this name. */
+export function isFallbackStore(name: string): boolean {
+  return fellBack.has(name);
+}
+
+/** Creates and drops the memory stores instances fell back to. */
+export const fallbackStoreProvider: StoreProvider = {
+  create: name => new MemStore(name),
+  drop: name => {
+    fellBack.delete(name);
+    return dropMemStore(name);
+  },
+};
+
+/**
  * Wraps a {@link StoreProvider} so that the stores it creates move onto memory
  * together when their storage fails while the instance is opening (see
  * `onStorageFailure`): a store whose `create` throws a
@@ -88,11 +109,14 @@ export class MemFallbackStoreProvider implements StoreProvider {
         }
       }
     }
+    fellBack.add(name);
     return new MemFallbackStore(name, new MemStore(name), this);
   };
 
   drop = (name: string): Promise<void> =>
-    this.#failure === undefined ? this.#inner.drop(name) : dropMemStore(name);
+    this.#failure === undefined
+      ? this.#inner.drop(name)
+      : fallbackStoreProvider.drop(name);
 }
 
 export class MemFallbackStore implements Store {
@@ -139,6 +163,7 @@ export class MemFallbackStore implements Store {
       this.#store.close().catch(() => undefined);
       this.#store = new MemStore(this.#name);
       this.#onMemory = true;
+      fellBack.add(this.#name);
     }
     return this.#store;
   }

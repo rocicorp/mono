@@ -16,7 +16,10 @@ import {
 import * as FormatVersion from '../format-version-enum.ts';
 import {getKVStoreProvider} from '../get-kv-store-provider.ts';
 import {assertHash, newRandomHash} from '../hash.ts';
-import {hasMemStore} from '../kv/mem-store.ts';
+import {
+  fallbackStoreProvider,
+  isFallbackStore,
+} from '../kv/mem-fallback-store.ts';
 import type {CreateStore, DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
@@ -293,10 +296,13 @@ export async function dropDatabase(dbName: string, opts?: DropDatabaseOptions) {
   const logContext = createLogContext(opts?.logLevel, opts?.logSinks, {
     dropDatabase: undefined,
   });
-  for (const kvStoreProvider of storeProvidersToDrop(logContext, opts)) {
-    const store = new IDBDatabasesStore(kvStoreProvider.create);
+  for (const {provider, drops} of dropTargets(logContext, opts)) {
+    if (!drops(dbName)) {
+      continue;
+    }
+    const store = new IDBDatabasesStore(provider.create);
     try {
-      await dropDatabaseInternal(dbName, store, kvStoreProvider.drop);
+      await dropDatabaseInternal(dbName, store, provider.drop);
     } finally {
       await closeIgnoringErrors(store);
     }
@@ -335,14 +341,14 @@ export async function dropMatchingDatabases(
   });
   const dropped = new Set<string>();
   const errors: unknown[] = [];
-  for (const kvStoreProvider of storeProvidersToDrop(logContext, opts)) {
-    const store = new IDBDatabasesStore(kvStoreProvider.create);
+  for (const {provider, drops} of dropTargets(logContext, opts)) {
+    const store = new IDBDatabasesStore(provider.create);
     try {
       const databases = await store.getDatabases();
       const dbNames = Object.values(databases)
-        .filter(predicate)
+        .filter(db => predicate(db) && drops(db.name))
         .map(db => db.name);
-      const result = await dropDatabases(store, dbNames, kvStoreProvider.drop);
+      const result = await dropDatabases(store, dbNames, provider.drop);
       result.dropped.forEach(name => dropped.add(name));
       errors.push(...result.errors);
     } finally {
@@ -352,27 +358,36 @@ export async function dropMatchingDatabases(
   return {dropped: [...dropped], errors};
 }
 
+type DropTarget = {
+  provider: StoreProvider;
+  /** Whether a database of this name is dropped from `provider`. */
+  drops: (name: string) => boolean;
+};
+
 /**
- * The memory stores first, then the configured ones. An instance whose store
- * failed to open runs on memory stores of the same names (see
- * `onStorageFailure`), and memory stores outlive the instance for the life of
- * the process, so a drop clears them whatever the configured store is. They
- * are only looked at when some instance registered itself in memory. The
- * configured store is still dropped, and its failure is reported: it may hold
- * data on disk.
+ * The memory stores instances fell back to first, then the configured store.
+ * An instance whose store failed to open runs on memory stores of the same
+ * names (see `onStorageFailure`), and memory stores outlive the instance for
+ * the life of the process, so a drop clears them whatever the configured
+ * store is. Only those: the memory stores of `kvStore: 'mem'` instances are
+ * left alone unless `'mem'` is the store being dropped from. The configured
+ * store is still dropped, and its failure is reported: it may hold data on
+ * disk.
  */
-function storeProvidersToDrop(
+function dropTargets(
   lc: LogContext,
   opts: DropDatabaseOptions | undefined,
-): StoreProvider[] {
-  const providers: StoreProvider[] = [];
-  if (opts?.kvStore === 'mem' || hasMemStore(getIDBDatabasesDBName())) {
-    providers.push(getKVStoreProvider(lc, 'mem'));
+): DropTarget[] {
+  const all = () => true;
+  if (opts?.kvStore === 'mem') {
+    return [{provider: getKVStoreProvider(lc, 'mem'), drops: all}];
   }
-  if (opts?.kvStore !== 'mem') {
-    providers.push(getKVStoreProvider(lc, opts?.kvStore));
+  const targets: DropTarget[] = [];
+  if (isFallbackStore(getIDBDatabasesDBName())) {
+    targets.push({provider: fallbackStoreProvider, drops: isFallbackStore});
   }
-  return providers;
+  targets.push({provider: getKVStoreProvider(lc, opts?.kvStore), drops: all});
+  return targets;
 }
 
 /**
