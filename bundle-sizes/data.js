@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790332551073,
+  "lastUpdate": 1790350688664,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -58137,6 +58137,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 34097,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pawarren95@gmail.com",
+            "name": "Paul Warren",
+            "username": "pawarren"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "7a5f5d12a01a7db4319f7bc25588c8ceb36bbfaf",
+          "message": "feat(replicache): report SQLite storage failures once and stop retrying against them (#6657)\n\n## Summary\n\nReplicache has a typed signal for a lost client\n(`onClientStateNotFound`) and none for a failing store. When SQLite\nrefuses a write with `SQLITE_FULL`, `SQLITE_CANTOPEN` or `SQLITE_IOERR`,\nthe engine logs `Error during persist`, retries at the next persist, and\n— since #6558 — reads the `InvalidRefCountError` a half-working store\nproduces as corruption, drops the database and fires\n`onClientStateNotFound`. The app rebuilds onto the same failing disk,\nand the cycle repeats for as long as the app is open.\n\nThis PR makes storage failures a first-class signal:\n\n- **Stores report them as a typed `StorageFailureError`** (`kind: 'full'\n| 'cannot-open' | 'io-error'`, the driver's error as `cause`).\n`SQLiteStore` wraps its driver once, so expo-sqlite, op-sqlite and\nzero-sqlite are covered; SQLite's errmsg matching lives in\n`sqlite-store.ts`. `IDBOpenError` is one too. A custom `StoreProvider`\ncan throw it to get the same handling. `SQLITE_BUSY` is deliberately not\none.\n- **`onStorageFailure(error)`** on `Replicache`, `ReplicacheImpl` and\n`ZeroOptions`, called once per instance; the default logs.\n- **A failure while opening moves the instance onto memory for the\nsession.** `MemFallbackStoreProvider` wraps the configured provider: a\nstore whose `create` throws starts on memory, and a failure during the\nopen moves every store onto memory and runs the open again on the same\nstores. This replaces `IDBStoreWithMemFallback`, so IndexedDB and SQLite\ntake the same path.\n- **A failure after the open stops persistence.** Scheduled and explicit\n`persist()`/`refresh()` become no-ops, the store-using background\nprocesses stop (including mutation recovery on reconnect), and queries\nand mutations keep running against the in-memory dag and pushing to the\nserver.\n- **No drop for an invalid ref count while the store fails with\n`cannot-open` or `io-error`**, so `onClientStateNotFound` is not fired\nfor a reading the failing storage produced. A `full` disk keeps the\ndrop: a torn write there is real corruption, and deleting the database\nis what frees the space.\n- **Drops clear the memory stores too.** `dropDatabase`,\n`dropAllDatabases` and `Zero.delete()` drop the memory stores an\ninstance fell back to (they outlive it for the life of the process),\nthen the configured store, whose failures are still reported.\n\n## Evidence\n\nProduction, React Native, op-sqlite 18.2.1 on\n`@rocicorp/zero@1.10.0-canary.24`, over 24 hours: 292 `disk I/O error`\npersist failures across 34 Android devices, each followed within a\nsecond by `Client state is corrupt … Dropping database …\nInvalidRefCountError`, then a rebuild, then the same I/O error on the\nnext persist. One device went through that cycle 39 times in a day. On\niOS the same pattern starts from `SQLite error code: 14, description:\nunable to open database file`. None of these replicas was corrupt.\n\n## Tests\n\n- `storage-failure.test.ts`, `kv/sqlite-store.test.ts`: SQLite\nclassification in each driver's spelling; a fake driver failing at open,\nin a transaction step and in a statement yields the right kind; other\nerrors pass through; `IDBOpenError` kinds.\n- `kv/mem-fallback-store.test.ts`: fallback at `create`, stores\nswitching together (reporting `kind` `'mem'` immediately), no switching\nafter the open, drops.\n- `replicache-storage-failure.test.ts`: a runtime failure is reported\nonce and stops persistence without firing `onClientStateNotFound`;\nopen-time failures (async, sync `create`, IndexedDB) run on memory; the\nnew-client channel still runs; drops; a throwing callback; mutation\nrecovery.\n- `zero-storage-failure.test.ts`, `zero-idb.test.ts`: a `Zero` connects\nafter falling back; `Zero.delete()` clears its memory databases.\n\n## Not in this PR\n\n- Recovery without a new instance: once storage is available again the\napp creates a new `Replicache` / `Zero`.\n- A failure in the open after the client group ID was already handed out\ngives the in-memory instance a new client group, while `clientGroupID`\nkeeps the old one.\n\n---------\n\nCo-authored-by: Erik Arvidsson <arv@roci.dev>",
+          "timestamp": "2026-09-25T15:28:08Z",
+          "tree_id": "5caa2f13aeab0bd3dd487ac8ec7c9d728003d4c0",
+          "url": "https://github.com/rocicorp/mono/commit/7a5f5d12a01a7db4319f7bc25588c8ceb36bbfaf"
+        },
+        "date": 1790350679463,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 338811,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 61873,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 122551,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34838,
             "unit": "bytes"
           }
         ]
