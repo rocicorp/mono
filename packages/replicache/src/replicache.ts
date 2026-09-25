@@ -6,6 +6,7 @@ import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import {ReplicacheImpl} from './replicache-impl.ts';
 import type {ReplicacheOptions} from './replicache-options.ts';
+import type {StorageFailureError} from './storage-failure.ts';
 import type {
   SubscribeOptions,
   WatchCallbackForOptions,
@@ -85,9 +86,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
   /**
    * The KV store backing this Replicache instance. Its `kind` is the storage
    * currently in use: `'idb'`, `'mem'`, `'op-sqlite'`, `'expo-sqlite'`, or
-   * whatever a custom store reports. An IndexedDB store that fails to open
-   * falls back to memory, so `kind` can change from `'idb'` to `'mem'` after
-   * the first read or write.
+   * whatever a custom store reports. A store whose storage fails while the
+   * instance opens falls back to memory (see `onStorageFailure`), so the store
+   * and its `kind` can change to `'mem'` after the first read or write.
    */
   get kvStore(): KVStore {
     return this.#impl.kvStore;
@@ -196,6 +197,35 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
   set onClientStateNotFound(value: (() => void) | null) {
     this.#impl.onClientStateNotFound = value;
+  }
+
+  /**
+   * `onStorageFailure` is called once, the first time the local kv store
+   * reports that its storage has failed rather than its data, with the
+   * {@link StorageFailureError} it threw: the device is out of space
+   * (`full`), the database cannot be opened (`cannot-open`, including an
+   * IndexedDB that fails to open), or a read or write to it failed
+   * (`io-error`). A custom `StoreProvider` can throw a
+   * `StorageFailureError` itself to get the same handling.
+   *
+   * A failure while the instance is opening runs it on memory for the
+   * session, as with `kvStore: 'mem'`. A failure after that stops persisting and refreshing, and an
+   * invalid ref count under `cannot-open` / `io-error` is not treated as
+   * corruption, because a rebuild would open the same failing storage and a
+   * wipe would destroy an intact replica. A `full` disk keeps the drop, since
+   * deleting the database is also what frees the space. Queries and mutations
+   * keep running against what the in-memory dag holds and mutations keep
+   * pushing to the server; a read that needs a chunk not yet loaded from the
+   * store (or since evicted from the in-memory cache) still fails the way any
+   * store read does. Create a new instance once the condition is cleared.
+   *
+   * The default behavior is to log the failure and nothing else.
+   */
+  get onStorageFailure(): ((failure: StorageFailureError) => void) | null {
+    return this.#impl.onStorageFailure;
+  }
+  set onStorageFailure(value: ((failure: StorageFailureError) => void) | null) {
+    this.#impl.onStorageFailure = value;
   }
 
   /**

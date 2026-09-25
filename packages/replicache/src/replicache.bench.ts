@@ -27,7 +27,7 @@ import {
   type ReplicacheWithPopulate,
   valSize,
 } from './bench-util.ts';
-import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
+import {dropIDBStore} from './kv/idb-store.ts';
 import tmcwData from './resources/tmcw.json';
 import type {ReadTransaction, WriteTransaction} from './transactions.ts';
 
@@ -274,7 +274,7 @@ describe('replicache', () => {
       } finally {
         await Promise.all(openedReps.map(r => r.close()));
         if (openedReps.length > 0) {
-          await dropIDBStoreWithMemFallback(openedReps[0].idbName);
+          await dropIDBStore(openedReps[0].idbName);
         }
       }
     },
