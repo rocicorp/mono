@@ -592,7 +592,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#lc.debug?.('Open failed because the persistent store is corrupt');
         return;
       }
-      throw e;
+      // Report rather than rethrow. The promise this `catch` returns is
+      // discarded (`void` above), so a rethrow here is an unhandled rejection:
+      // nothing observes it, and the failure reaches neither the log sinks the
+      // caller configured nor any recovery they wired up — while `#ready` stays
+      // pending, so every read, write and subscription blocks for the life of
+      // the instance. `#schedule` already reports persist and refresh failures
+      // this way, with the same `Error during <what>` shape.
+      this.#lc.error?.('Error during open', e);
     });
   }
 
