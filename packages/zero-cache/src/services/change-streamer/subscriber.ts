@@ -8,6 +8,7 @@ import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
+import type {BackfillState} from './backfill-state.ts';
 import type {PreSerializedBatch} from './broadcast.ts';
 import type {
   ChangeTag,
@@ -33,6 +34,27 @@ export type SubscriberOptions = {
    * therefore lags the subscriber's replica rather than leading it.
    */
   onAck?: ((watermark: string) => void) | undefined;
+
+  /**
+   * The subscriber's pending backfills (protocol v8+), which are tracked
+   * over the changes sent to the subscriber.
+   */
+  backfills?: BackfillState | undefined;
+
+  /**
+   * Called once the subscriber has been sent all changes up to the head of
+   * the stream, i.e. its catchup and backlog have been flushed. From this
+   * point on, the subscriber's tracked {@link backfills} reflect the same
+   * position in the stream as that of the change-streamer.
+   */
+  onAligned?: ((subscriber: Subscriber) => void) | undefined;
+
+  /**
+   * Called when a `backfill` or `backfill-completed` message is ignored for
+   * some of the subscriber's pending backfill columns, after the subscriber
+   * is aligned.
+   */
+  onBackfillIgnored?: ((columns: string[]) => void) | undefined;
 };
 
 export type BacklogFullWait = {
@@ -75,6 +97,10 @@ export class Subscriber {
   readonly #backlogBackpressure: ByteBackpressureGate;
   readonly #backlogFullWaiters = new Set<Resolver<void>>();
   readonly #onAck: ((watermark: string) => void) | undefined;
+  readonly #backfills: BackfillState | undefined;
+  readonly #onAligned: ((subscriber: Subscriber) => void) | undefined;
+  readonly #onBackfillIgnored: ((columns: string[]) => void) | undefined;
+  #aligned = false;
 
   constructor(
     protocolVersion: number,
@@ -99,6 +125,34 @@ export class Subscriber {
       options.backlogLowWaterRatio ?? DEFAULT_BACKLOG_LOW_WATER_RATIO,
     );
     this.#onAck = options.onAck;
+    this.#backfills = options.backfills;
+    this.#onAligned = options.onAligned;
+    this.#onBackfillIgnored = options.onBackfillIgnored;
+  }
+
+  /**
+   * The subscriber's tracked pending backfills, or `undefined` if the
+   * subscriber does not report them (i.e. protocol < v8).
+   */
+  get backfills(): BackfillState | undefined {
+    return this.#backfills;
+  }
+
+  /**
+   * Whether the subscriber has been sent all changes up to the head of the
+   * stream (see {@link SubscriberOptions.onAligned}).
+   */
+  get aligned(): boolean {
+    return this.#aligned;
+  }
+
+  #trackBackfills(change: WatermarkedChange) {
+    if (this.#backfills) {
+      const ignored = this.#backfills.applySerialized(change);
+      if (ignored.length && this.#aligned) {
+        this.#onBackfillIgnored?.(ignored);
+      }
+    }
   }
 
   get watermark() {
@@ -191,6 +245,9 @@ export class Subscriber {
       if (commitWatermark) {
         this.#watermark = commitWatermark;
       }
+      for (const change of changes) {
+        this.#trackBackfills(change);
+      }
       return this.#sendPreSerializedDownstream(preSerialized, commitWatermark);
     }
 
@@ -266,6 +323,7 @@ export class Subscriber {
     if (tag === 'commit') {
       this.#watermark = watermark;
     }
+    this.#trackBackfills(change);
     const result = await this.#sendStringifiedDownstream(json);
     if (tag === 'commit' && result === 'consumed') {
       // Sends can complete out of order (e.g. the bounded window in
@@ -513,11 +571,18 @@ export class Subscriber {
       for (;;) {
         const change = this.#backlog?.shift();
         if (!change) {
+          const closed = this.#backlog === null;
           this.#backlog = null;
           this.#backlogBytes = 0;
           this.#backlogBackpressure.releaseIfUnderLowWater(
             this.#bufferedBacklogBytes,
           );
+          if (!closed && !this.#aligned) {
+            // All changes up to the head have been handed to #sendChange()
+            // (and thus tracked), and subsequent changes are sent directly.
+            this.#aligned = true;
+            this.#onAligned?.(this);
+          }
           break;
         }
 

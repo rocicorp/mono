@@ -529,7 +529,7 @@ export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
       };
       requests.push(curr);
     }
-    curr.columns[column] = backfill;
+    curr.columns[column] = {id: backfill};
   }
   return v.parse(requests, backfillRequestsSchema);
 }

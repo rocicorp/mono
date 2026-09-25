@@ -6,6 +6,7 @@ import {
   changeStreamDataSchema,
   type ChangeStreamData,
 } from '../change-source/protocol/current/downstream.ts';
+import type {BackfillRequest} from '../change-source/protocol/current/upstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
@@ -118,8 +119,17 @@ export interface ChangeStreamer {
 //     v4-v6 subscribers during rollout.
 //   - Drops the legacy "initial" and "logsChangeStream" query parameters from the
 //     subscriber context
+// v8:
+//   - Adds `backfills` to the `start-subscription` context, with which the
+//     subscriber reports its pending backfills (and their progress).
+//   - Adds `progressMarks` to `backfill` and `backfill-completed` messages,
+//     which subscribers use to ignore backfill data that would otherwise
+//     create a gap (see `acceptBackfill()`).
+//   Both fields are optional in the schemas so that v7 peers (and changes
+//   persisted in the change-log by v7 replication-managers) remain compatible,
+//   but they should be considered non-optional as of v8.
 
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 export type SubscriberContext = {
   /**
@@ -162,6 +172,12 @@ export type SubscriberContext = {
    * Whether the subscriber supports batched WebSocket frames.
    */
   wsBatched?: boolean | undefined;
+
+  /**
+   * The subscriber's pending backfills as of its `watermark`. Reported by
+   * subscribers as of protocol v8. `undefined` for older subscribers.
+   */
+  backfills?: BackfillRequest[] | undefined;
 };
 
 /**

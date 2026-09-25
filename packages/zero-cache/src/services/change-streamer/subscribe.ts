@@ -26,6 +26,7 @@
  */
 
 import * as v from '../../../../shared/src/valita.ts';
+import {backfillRequestSchema} from '../change-source/protocol/current.ts';
 import {downstreamSchema} from './change-streamer.ts';
 import {statusSchema} from './snapshot-message.ts';
 
@@ -65,6 +66,12 @@ export const subscribeContextSchema = v.object({
   replicaVersion: v.string(),
   /** The watermark up to which the subscriber is up to date. */
   watermark: v.string(),
+  /**
+   * The subscriber's pending backfills (and their progress) as of its
+   * `watermark`. This should be considered non-optional as of protocol v8;
+   * it is only absent from v7 subscribers.
+   */
+  backfills: v.array(backfillRequestSchema).optional(),
 });
 
 export type SubscribeContext = v.Infer<typeof subscribeContextSchema>;

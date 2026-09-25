@@ -14,7 +14,7 @@ import {
 } from '../../../db/sqlite-corruption.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
-  CREATE_BACKFILLING_TABLE,
+  BACKFILLING_TABLE,
   populateBackfillingFromColumnMetadata,
 } from '../../replicator/schema/backfilling.ts';
 import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
@@ -128,6 +128,16 @@ export const CREATE_V9_TABLE_METADATA_TABLE = /*sql*/ `
     "table"     TEXT NOT NULL,
     "metadata"  TEXT NOT NULL,
     PRIMARY KEY ("schema", "table")
+  );
+`;
+
+export const CREATE_V17_BACKFILLING_TABLE = /*sql*/ `
+  CREATE TABLE "${BACKFILLING_TABLE}" (
+    "schema"   TEXT NOT NULL,
+    "table"    TEXT NOT NULL,
+    "column"   TEXT NOT NULL,
+    "backfill" TEXT NOT NULL,
+    PRIMARY KEY ("schema", "table", "column")
   );
 `;
 
@@ -343,11 +353,26 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   // forward again, so a rollback costs nothing but the re-seed.
   17: {
     migrateSchema: (_, db) => {
-      db.exec(CREATE_BACKFILLING_TABLE);
+      db.exec(CREATE_V17_BACKFILLING_TABLE);
     },
 
     migrateData: (lc, db) => {
       populateBackfillingFromColumnMetadata(lc, db);
+    },
+  },
+
+  // Adds `_zero.backfilling.progress`, with which the replica tracks the
+  // progress of its pending backfills and reports it to the change-streamer
+  // (protocol v8).
+  //
+  // No `minSafeVersion`: an older zero-cache ignores the column (its writes
+  // name their columns explicitly), and a `progress` left stale by one is at
+  // or before the actual progress, which only results in redundant backfill.
+  18: {
+    migrateSchema: (_, db) => {
+      db.exec(
+        /*sql*/ `ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "progress" TEXT`,
+      );
     },
   },
 };

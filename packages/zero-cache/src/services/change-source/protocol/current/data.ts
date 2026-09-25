@@ -168,6 +168,27 @@ export const backfillIDSchema = jsonObjectSchema;
 
 export type BackfillID = v.Infer<typeof backfillIDSchema>;
 
+export const backfillProgressMarkSchema = v
+  .object({
+    // A lexicographically sortable string delineating the progress of a
+    // backfill. This is used to resume a backfill that did not complete.
+    progressMark: v.string(),
+
+    // Optionally, a timeline with which the progressMark is associated.
+    // A timeline is an opaque string that determines if backfill streams
+    // are "compatible" with each other, i.e. can be merged in a way that
+    // avoids gaps. progressMarks from different timelines are not
+    // compatible. If two timelines differ, a new backfill is started
+    // from scratch in order to get all subscribers on the same timeline.
+    //
+    // Timeline changes should be rare events (e.g. Postgres VACUUM FULL).
+    timeline: v.string().optional(),
+  })
+  // All other fields should be preserved and returned in BackfillRequests.
+  .rest(v.union(v.number(), v.string()));
+
+export type BackfillProgressMark = v.Infer<typeof backfillProgressMarkSchema>;
+
 export const createTableSchema = v.object({
   tag: v.literal('create-table'),
   spec: tableSpec,
@@ -296,6 +317,48 @@ export const backfillSchema = v.object({
   // ```
   rowValues: v.array(v.array(jsonValueSchema)),
 
+  // Progress marks indicating the position of this backfill message
+  // within the stream, for resumption / continuity enforcement.
+  //
+  // This should be considered non-optional as of protocol v8. It is only
+  // absent in messages from pre-v8 replication-managers (including messages
+  // persisted in a change-log by one), in which case subscribers accept the
+  // message unconditionally (i.e. the legacy behavior).
+  progressMarks: v
+    .object({
+      // The progress mark of the preceding backfill message, from which
+      // the current backfill message is a continuation. (This may be a
+      // "logical" continuation at which a new backfill stream is started when
+      // resuming from a previous stream.)
+      //
+      // For the first backfill message of a stream starting from scratch,
+      // this field is unset. When the field is unset, subscribers should
+      // accept the backfill message unconditionally (i.e. starting a
+      // backfill from scratch is always safe).
+      //
+      // If the field is set, subscribers should only accept the message if
+      // it is of the same timeline as that of its own tracked progressMark,
+      // and is contiguous with or earlier than its own progressMark.
+      //
+      // In other words, it should _ignore_ backfill messages from other
+      // timelines, or messages that create a gap; this can happen when
+      // receiving messages from before this subscriber's backfill requests
+      // are taken into account.
+      //
+      // Implementation note: The change-streamer applies this same policy
+      // (see `acceptBackfill()` in `protocol/backfill-progress.ts`) to track
+      // the backfill state of each subscriber, which it uses to determine the
+      // BackfillRequests with which to (re)start change streams.
+      previous: backfillProgressMarkSchema.optional(),
+
+      // The progressMark delineating the position of the last row in this
+      // message. In the steady state, this will be the `previous`
+      // progressMark of the next backfill message, unless a rewind is
+      // requested, or new timeline encountered.
+      current: backfillProgressMarkSchema,
+    })
+    .optional(),
+
   // Optionally includes the progress of the backfill operation,
   // for display purposes.
   status: downloadStatusSchema.optional(),
@@ -317,6 +380,23 @@ export const backfillCompletedSchema = v.object({
   // stream, and in particular, the commit watermark of the backfill change's
   // enclosing transaction.
   watermark: v.string(),
+
+  // The progress mark of the last backfill message of the run, i.e. the
+  // `current` progressMark of the last `backfill` message, or the progressMark
+  // from which the run was resumed if it produced no `backfill` messages.
+  // Subscribers apply the same continuity policy as for `backfill` messages,
+  // and only consider the columns backfilled if the run is contiguous with
+  // their own progress.
+  //
+  // `previous` is only unset for a run that started from scratch and
+  // produced no rows (e.g. an empty table), which is always safe to accept.
+  //
+  // This should be considered non-optional as of protocol v8. It is only
+  // absent in messages from pre-v8 replication-managers, in which case
+  // subscribers accept the message unconditionally (i.e. legacy behavior).
+  progressMarks: v
+    .object({previous: backfillProgressMarkSchema.optional()})
+    .optional(),
 
   // Optionally includes the final status of the backfill operation,
   // for display purposes.

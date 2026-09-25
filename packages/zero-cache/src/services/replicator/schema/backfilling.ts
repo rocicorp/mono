@@ -43,6 +43,7 @@ import {getOrCreateCounter} from '../../../observability/metrics.ts';
 import {liteTableName} from '../../../types/names.ts';
 import type {
   BackfillID,
+  BackfillProgressMark,
   Identifier,
   SchemaChange,
   TableMetadata,
@@ -60,12 +61,20 @@ export const BACKFILLING_TABLE = '_zero.backfilling';
 // `backfill` holds the JSON that `cdc.backfilling` holds as JSONB. SQLite has
 // no JSONB, and nothing here queries into the document: it is stored to be
 // handed back to the change source verbatim.
+//
+// `progress` holds the JSON of the BackfillProgressMark up to which the
+// column's backfill data has been received contiguously (see
+// `acceptBackfill()`), or NULL if no data has been received (i.e. the backfill
+// must start from scratch). It is deliberately a separate column from
+// `backfill` so that the cookie set (and its comparison with the change log's
+// cookie jars) is unaffected by it.
 export const CREATE_BACKFILLING_TABLE = /*sql*/ `
   CREATE TABLE "${BACKFILLING_TABLE}" (
     "schema"   TEXT NOT NULL,
     "table"    TEXT NOT NULL,
     "column"   TEXT NOT NULL,
     "backfill" TEXT NOT NULL,
+    "progress" TEXT,
     PRIMARY KEY ("schema", "table", "column")
   );
 `;
@@ -97,6 +106,8 @@ export class BackfillingTracker {
   #dropTable: Statement | undefined;
   #renameColumn: Statement | undefined;
   #dropColumn: Statement | undefined;
+  #getProgress: Statement | undefined;
+  #setProgress: Statement | undefined;
 
   constructor(db: Database) {
     this.#db = db;
@@ -127,7 +138,7 @@ export class BackfillingTracker {
           INSERT INTO "${BACKFILLING_TABLE}"
             ("schema", "table", "column", "backfill") VALUES (?, ?, ?, ?)
             ON CONFLICT ("schema", "table", "column")
-            DO UPDATE SET "backfill" = excluded."backfill"
+            DO UPDATE SET "backfill" = excluded."backfill", "progress" = NULL
         `)).run(
           op.table.schema,
           op.table.name,
@@ -175,6 +186,56 @@ export class BackfillingTracker {
     }
   }
 
+  /**
+   * Returns the tracked progress of the backfilling columns of the `table`,
+   * keyed by column name. Columns that are not backfilling are absent.
+   */
+  getProgress(
+    table: Identifier,
+  ): Map<string, BackfillProgressMark | undefined> {
+    const rows = (this.#getProgress ??= this.#db.prepare(/*sql*/ `
+      SELECT "column", "progress" FROM "${BACKFILLING_TABLE}"
+        WHERE "schema" = ? AND "table" = ?
+    `)).all<{column: string; progress: string | null}>(
+      table.schema,
+      table.name,
+    );
+    return new Map(
+      rows.map(({column, progress}) => [
+        column,
+        progress === null
+          ? undefined
+          : (BigIntJSON.parse(progress) as BackfillProgressMark),
+      ]),
+    );
+  }
+
+  /** Sets (or clears) the tracked progress of a backfilling column. */
+  setProgress(
+    table: Identifier,
+    column: string,
+    progress: BackfillProgressMark | undefined,
+  ): void {
+    (this.#setProgress ??= this.#db.prepare(/*sql*/ `
+      UPDATE "${BACKFILLING_TABLE}" SET "progress" = ?
+        WHERE "schema" = ? AND "table" = ? AND "column" = ?
+    `)).run(
+      progress === undefined ? null : BigIntJSON.stringify(progress),
+      table.schema,
+      table.name,
+      column,
+    );
+  }
+
+  /**
+   * Marks the backfill of the `columns` as complete. This is the subset of
+   * a `backfill-completed` message's columns (including row key columns)
+   * whose progress is contiguous with the message.
+   */
+  complete(table: Identifier, columns: readonly string[]): void {
+    this.#run({op: 'complete-backfill', table, columns});
+  }
+
   #deleteColumn(table: Identifier, column: string): void {
     (this.#dropColumn ??= this.#db.prepare(/*sql*/ `
       DELETE FROM "${BACKFILLING_TABLE}"
@@ -193,6 +254,33 @@ export class BackfillingTracker {
  */
 export function readBackfillRequests(db: Database): BackfillRequest[] {
   return backfillRequestsFrom(readReplicaCookies(db));
+}
+
+/**
+ * Returns the {@link BackfillRequest}s of the replica's pending backfills,
+ * including the tracked progress of each column. These are the backfills that
+ * a subscriber reports to the change-streamer when starting a subscription.
+ *
+ * The caller must pair this snapshot with the replica state version.
+ */
+export function readReplicaBackfills(db: Database): BackfillRequest[] {
+  const requests = readBackfillRequests(db);
+  const progress = db
+    .prepare(/*sql*/ `
+      SELECT "schema", "table", "column", "progress"
+        FROM "${BACKFILLING_TABLE}" WHERE "progress" IS NOT NULL
+    `)
+    .all<{schema: string; table: string; column: string; progress: string}>();
+  for (const {schema, table, column, progress: mark} of progress) {
+    const req = requests.find(
+      r => r.table.schema === schema && r.table.name === table,
+    );
+    const col = req?.columns[column];
+    if (col) {
+      col.progress = BigIntJSON.parse(mark) as BackfillProgressMark;
+    }
+  }
+  return requests;
 }
 
 /**

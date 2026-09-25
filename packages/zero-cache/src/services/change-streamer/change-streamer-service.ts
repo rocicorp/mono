@@ -38,6 +38,7 @@ import {
   RunningState,
   UnrecoverableError,
 } from '../running-state.ts';
+import {BackfillStateTracker} from './backfill-state-tracker.ts';
 import type {PreSerializedBatch} from './broadcast.ts';
 import {serializeChangeStreamDataWithChange} from './change-log-codec.ts';
 import {
@@ -436,6 +437,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #autoReset: boolean;
   readonly #state: RunningState;
 
+  /** Determines the BackfillRequests with which to (re)start streams. */
+  readonly #backfills: BackfillStateTracker;
+
   // Starting the (Postgres) ChangeStream results in killing the previous
   // Postgres subscriber, potentially creating a gap in which the old
   // change-streamer has shut down and the new change-streamer has not yet
@@ -532,6 +536,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   ) {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
+    this.#backfills = new BackfillStateTracker(this.#lc);
     this.#shard = shard;
     this.#changeDBProvider = changeDBProvider;
     this.#replicaVersion = replicaVersion;
@@ -740,8 +745,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         // Initialization reconciles the change log for every stream
         // connection. It completes before `startStream`, so no change can
         // arrive during reconciliation.
-        const {lastWatermark, backfillRequests} =
+        const {lastWatermark, backfillRequests: logBackfillRequests} =
           await this.#initializer.initialize();
+        const backfillRequests = this.#backfills.startStream(
+          // Backfill requests from the change-log are only necessary for
+          // backwards compatibility with protocol v7 and RMv1. On RMv2,
+          // all of the beginning state comes from the (backup) replica,
+          // which contains the progress marks, so there is no need to
+          // downgrade to the change-log version which does not have
+          // progress marks.
+          this.#pgChangeLogEnabled ? logBackfillRequests : [],
+        );
         // SQLite catchup must not be eligible until this has been initialized
         // from the selected durable head. Commits observed only since process
         // startup are insufficient after a change-streamer restart.
@@ -782,6 +796,16 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           this.#acker.trackDownstream(change);
 
           const [type, msg] = change;
+          if (
+            type === 'status' &&
+            watermark === null &&
+            this.#backfills.restartReason !== null
+          ) {
+            // A restart can happen at a status message outside of a
+            // transaction, e.g. when the replication stream is otherwise idle.
+            // Exiting the iteration cancels the stream.
+            break;
+          }
           switch (type) {
             case 'status':
               if (
@@ -824,6 +848,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
               }
               break;
           }
+
+          this.#backfills.track(change);
 
           const serialized = serializeChangeStreamDataWithChange(change);
           const {json} = serialized;
@@ -886,6 +912,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
               this.#state.signal,
             );
           }
+
+          // Restarts happen at transaction boundaries, so that the pending
+          // backfills of the aligned subscribers (and the change log) are
+          // consistent with the watermark from which the stream restarts.
+          if (type === 'commit' && this.#backfills.restartReason !== null) {
+            // Exiting the iteration cancels the stream.
+            break;
+          }
         }
       } catch (e) {
         err = e;
@@ -909,19 +943,26 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#purgeScheduler?.onWriterIdle();
         this.#forwarder.forward([watermark, 'rollback', ROLLBACK_JSON]);
         this.#recordForwardedTransactionBoundary('rollback', watermark);
+        this.#backfills.track(['rollback', {tag: 'rollback'}]);
       }
 
-      // Backoff and drain any pending entries in the storer before reconnecting.
-      await Promise.all([
-        this.#storer.stop(),
-        this.#state.backoff(this.#lc, err),
-        this.#state.retryDelay > REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
-          ? publishCriticalEvent(
-              this.#lc,
-              replicationStatusError(this.#lc, 'Replicating', err),
-            )
-          : promiseVoid,
-      ]);
+      if (this.#backfills.restartReason !== null && err === undefined) {
+        // A planned restart: drain the storer and reconnect immediately.
+        this.#backfills.recordRestart();
+        await this.#storer.stop();
+      } else {
+        // Backoff and drain any pending entries in the storer before reconnecting.
+        await Promise.all([
+          this.#storer.stop(),
+          this.#state.backoff(this.#lc, err),
+          this.#state.retryDelay > REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
+            ? publishCriticalEvent(
+                this.#lc,
+                replicationStatusError(this.#lc, 'Replicating', err),
+              )
+            : promiseVoid,
+        ]);
+      }
     }
 
     this.#forwarder.stopProgressMonitor();
@@ -970,6 +1011,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     // No subscriber's ACK advances the SQLite change log's head any more: the
     // writer runs in this process, so the barrier is notified from the commit
     // itself (see #changeLogWriter's onCommit).
+    const lc = this.#lc.withContext('subscriber', id);
     const subscriber = new Subscriber(
       protocolVersion,
       id,
@@ -977,11 +1019,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       watermark,
       downstream,
       () => this.#latestStatus,
-      {
-        wsBatched,
-      },
+      {wsBatched, ...this.#backfills.subscriberOptions(lc, ctx)},
     );
-    const lc = this.#lc.withContext('subscriber', subscriber.id);
+    this.#backfills.register(subscriber, downstream);
     const removeFromForwarder = () => {
       lc.info?.(`removing subscriber ${subscriber.id}`);
       this.#forwarder.remove(subscriber);

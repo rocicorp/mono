@@ -325,7 +325,9 @@ export class Storer implements Service {
 
             // Formats a BackfillRequest using json_object_agg() to construct the
             // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
-            // to make it optional and possibly `null`.
+            // to make it optional and possibly `null`. The change log does not
+            // track backfill progress, so the columns have no `progress`
+            // (i.e. they are backfilled from scratch).
             sql`
         SELECT
             json_build_object(
@@ -333,7 +335,7 @@ export class Storer implements Service {
               'name', b."table",
               'metadata', t."metadata"
             ) as "table",
-            json_object_agg(b."column", b."backfill")
+            json_object_agg(b."column", json_build_object('id', b."backfill"))
               as "columns"
           FROM ${this.#cdc('backfilling')} as b
           LEFT JOIN ${this.#cdc('tableMetadata')} as t

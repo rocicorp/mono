@@ -683,7 +683,9 @@ export class BackfillManager implements Cancelable, Listener {
         if (backfill) {
           this.#setRequiredBackfill(tag, {
             table: {schema, name, metadata},
-            columns: backfill,
+            columns: Object.fromEntries(
+              Object.entries(backfill).map(([col, id]) => [col, {id}]),
+            ),
           });
         }
         break;
@@ -727,7 +729,7 @@ export class BackfillManager implements Cancelable, Listener {
           if (!backfillRequest) {
             this.#setRequiredBackfill(tag, {
               table: {...table, metadata},
-              columns: {[column.name]: backfill},
+              columns: {[column.name]: {id: backfill}},
             });
           } else {
             this.#setRequiredBackfill(tag, {
@@ -735,7 +737,7 @@ export class BackfillManager implements Cancelable, Listener {
               table: {...backfillRequest.table, metadata},
               columns: {
                 ...backfillRequest.columns,
-                [column.name]: backfill,
+                [column.name]: {id: backfill},
               },
             });
             // Note: The running backfill need not be canceled if a

@@ -5,6 +5,7 @@ import type {LogConfig} from '../../../../shared/src/logging.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {WRITE_WORKER_URL} from '../../server/worker-urls.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {BackfillRequest} from '../change-source/protocol/current/upstream.ts';
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
 
@@ -39,8 +40,16 @@ type ErrorHandler = (err: Error) => void;
 /**
  * Interface for a write worker that processes replication messages.
  */
+/**
+ * The replica's {@link SubscriptionState}, along with its pending backfills,
+ * read in the same snapshot.
+ */
+export type SubscriptionStateWithBackfills = SubscriptionState & {
+  backfills: BackfillRequest[];
+};
+
 export interface WriteWorkerClient {
-  getSubscriptionState(): Promise<SubscriptionState>;
+  getSubscriptionState(): Promise<SubscriptionStateWithBackfills>;
   processMessages(
     downstream: readonly ChangeStreamData[],
   ): Promise<CommitResult | null>;
@@ -128,7 +137,7 @@ export type Request<M extends Method = Method> = {method: M; args: ArgsMap[M]};
 
 export type ResultMap = {
   init: void;
-  getSubscriptionState: SubscriptionState;
+  getSubscriptionState: SubscriptionStateWithBackfills;
   processMessages: CommitResult | null;
   abort: void;
   stop: void;
@@ -219,7 +228,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     return this.#call('init', [dbPath, mode, pragmas, logConfig, checkpoint]);
   }
 
-  getSubscriptionState(): Promise<SubscriptionState> {
+  getSubscriptionState(): Promise<SubscriptionStateWithBackfills> {
     return this.#call('getSubscriptionState', []);
   }
 
