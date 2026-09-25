@@ -166,7 +166,7 @@ class FailingStore extends RealStore {
       throw this.failBegin;
     }
     const write = await super.write();
-    const failCommit = this.failCommit;
+    const {failCommit} = this;
     if (failCommit) {
       write.commit = () => Promise.reject(failCommit);
     }
@@ -175,7 +175,7 @@ class FailingStore extends RealStore {
   }
 
   #failReleaseOf(tx: {release(): void}) {
-    const failRelease = this.failRelease;
+    const {failRelease} = this;
     if (failRelease) {
       const release = tx.release.bind(tx);
       tx.release = () => {
