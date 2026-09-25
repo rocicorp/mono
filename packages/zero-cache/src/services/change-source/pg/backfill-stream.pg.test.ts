@@ -362,6 +362,73 @@ describe('backfill-stream', () => {
     ).toBeUndefined();
   });
 
+  async function insertToastedRow() {
+    // A large, poorly compressible value is stored out-of-line in TOAST.
+    await upstream.unsafe(/*sql*/ `
+      INSERT INTO foo (id1, id2, a) VALUES (11, 12,
+        (SELECT string_agg(md5(i::text), '') FROM generate_series(1, 1000) i));
+    `);
+    const [{toasted}] = await upstream<{toasted: boolean}[]>`
+      SELECT pg_relation_size(reltoastrelid) > 0 AS toasted
+        FROM pg_class WHERE oid = 'foo'::regclass`;
+    expect(toasted).toBe(true);
+  }
+
+  test('restarts from scratch if TOAST-able columns may be TOASTed', async () => {
+    await insertToastedRow();
+    const timeline = await currentTimeline();
+    const results = await streamAll(
+      withProgress(columnBackfillRequest, {
+        progressMark: ctidToProgressMark('(0,6)'),
+        timeline,
+      }),
+    );
+    expect(results).toMatchObject([
+      {
+        tag: 'backfill',
+        status: {rows: 11},
+        progressMarks: {current: {timeline}},
+      },
+      {tag: 'backfill-completed'},
+    ]);
+    const [first] = results;
+    expect(
+      first.tag === 'backfill' && first.progressMarks?.previous,
+    ).toBeUndefined();
+  });
+
+  test('resumes non-TOAST-able columns of a table with TOASTed values', async () => {
+    await insertToastedRow();
+    await upstream.unsafe(`ALTER TABLE foo ADD COLUMN d INT4 DEFAULT 5`);
+    const [{attnum}] = await upstream<{attnum: number}[]>`
+      SELECT attnum FROM pg_attribute
+        WHERE attrelid = 'foo'::regclass AND attname = 'd'`;
+
+    const timeline = await currentTimeline();
+    const start = {progressMark: ctidToProgressMark('(0,6)'), timeline};
+    const results = await streamAll(
+      withProgress(
+        {...columnBackfillRequest, columns: {d: {id: {attNum: attnum}}}},
+        start,
+      ),
+    );
+    expect(results).toMatchObject([
+      {
+        tag: 'backfill',
+        rowValues: [
+          [7n, 8, 5],
+          [8n, 9, 5],
+          [9n, 10, 5],
+          [10n, 11, 5],
+          [11n, 12, 5],
+        ],
+        status: {rows: 5},
+        progressMarks: {previous: start, current: mark(0, 11, timeline)},
+      },
+      {tag: 'backfill-completed'},
+    ]);
+  });
+
   test('empty table', async () => {
     await upstream.unsafe(`TRUNCATE foo`);
     expect(await streamAll(columnBackfillRequest)).toEqual([

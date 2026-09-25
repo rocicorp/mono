@@ -645,5 +645,79 @@ async function getProgress(
     );
     return {timeline, resumable: true, start: undefined};
   }
+  if (requested && !(await canResume(sql, relationOID, bf))) {
+    lc.info?.(
+      `restarting backfill from scratch: the table has TOASTed values ` +
+        `and backfilling columns [${Object.keys(bf.columns).join(',')}] ` +
+        `are TOAST-able`,
+    );
+    return {timeline, resumable: true, start: undefined};
+  }
   return {timeline, resumable: true, start: requested};
+}
+
+/**
+ * Whether resuming a backfill (in a new snapshot) is guaranteed to deliver
+ * the values of every row that the preceding snapshot(s) had not reached.
+ *
+ * Within a single snapshot, every row is scanned exactly once, since the
+ * version visible to the snapshot stays in place while it is held. Across
+ * snapshots, however, a row that had not yet been reached (i.e. beyond the
+ * resume mark `M`) can be updated between the snapshots, with its new
+ * version placed at or before `M` (a non-HOT update into free space in an
+ * earlier page, or a HOT update into a lower line pointer of `M`'s page).
+ * Neither snapshot then scans the row, and it is only delivered by the
+ * replication stream. The stream's UPDATE contains the full row, _except_
+ * for unchanged values stored out-of-line in TOAST, which pgoutput omits
+ * (unless the table has REPLICA IDENTITY FULL). A backfilling column with
+ * such a value would be published without it.
+ *
+ * Resuming is therefore only done if no backfilling column can be TOASTed
+ * (i.e. all have `attstorage = 'p'`, as for fixed-width types), or if the
+ * table has no TOAST data. The latter is safe because an omitted value must
+ * still be in the TOAST relation at the new snapshot (unless its row has since
+ * been deleted, which the replication stream does deliver), and conservative
+ * because the TOAST relation does not shrink to empty without a heap rewrite,
+ * which changes the timeline.
+ *
+ * Potential optimization for TOAST-able backfills: have the resumed run also
+ * deliver the rows at or before `M` that were modified since the snapshot of
+ * the run that started the backfill from scratch. That run's snapshot `xmin`
+ * (`T_origin`, as an xid8) would be encoded in the timeline, i.e.
+ * `timeline = "<relfilenode>:<T_origin>"`, and carried over (rather than
+ * replaced) by resumed runs, so that:
+ * * Within a chain of runs, every row version with `xmin < T_origin` stayed
+ *   in place across all of the runs' snapshots and was therefore scanned
+ *   exactly once, and all other rows are re-delivered by the resumed run
+ *   (`ctid > M OR xmin >= T_origin`).
+ * * Continuations from a different chain (i.e. with a newer `T_origin`) are
+ *   not accepted by subscribers, and requests from different chains are
+ *   merged into a backfill from scratch, as the timelines differ. Note that
+ *   using the _latest_ `T` would be incorrect: rows that moved before `M`
+ *   between the earlier snapshots would never be re-delivered.
+ * The resumed run would scan the whole table (but only deliver the modified
+ * rows), comparing the 32-bit `xmin` with `T_origin` modulo 2^32, which
+ * requires falling back to a backfill from scratch once the current xid is
+ * 2^31 or more past `T_origin` (i.e. wraparound). This also relies on the
+ * `xmin` system column returning the raw xmin of frozen tuples, which should
+ * be verified.
+ */
+async function canResume(
+  sql: postgres.Sql,
+  relationOID: number,
+  bf: BackfillRequest,
+): Promise<boolean> {
+  const [{toastable, toasted}] = await sql<
+    {toastable: boolean; toasted: boolean}[]
+  >`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM pg_attribute
+          WHERE attrelid = ${relationOID}
+            AND attname IN ${sql(Object.keys(bf.columns))}
+            AND attstorage <> 'p'
+      ) AS toastable,
+      reltoastrelid <> 0 AND pg_relation_size(reltoastrelid) > 0 AS toasted
+      FROM pg_class WHERE oid = ${relationOID}`;
+  return !toastable || !toasted;
 }
