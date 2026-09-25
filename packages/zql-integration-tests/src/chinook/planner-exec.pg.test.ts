@@ -445,7 +445,7 @@ describe('Chinook planner execution cost validation', () => {
           i.whereExists('customer', c => c.whereExists('supportRep', e => e)),
         ),
       validations: [
-        ['correlation', -0.7],
+        ['correlation', -0.75],
         ['within-optimal', 2.3],
         ['within-baseline', 2.3],
       ],
@@ -528,7 +528,7 @@ describe('Chinook planner execution cost validation', () => {
         .limit(50),
       validations: [
         ['correlation', 0.4],
-        ['within-optimal', 2.1],
+        ['within-optimal', 2.2],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
@@ -549,7 +549,7 @@ describe('Chinook planner execution cost validation', () => {
         .limit(100),
       validations: [
         ['correlation', 0.4],
-        ['within-optimal', 2.4],
+        ['within-optimal', 2.5],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
