@@ -109,8 +109,11 @@ export class MemFallbackStore implements Store {
     this.#provider = provider;
   }
 
-  read(): Promise<Read> {
-    return this.backing.read().catch(this.#reportAndRethrow);
+  async read(): Promise<Read> {
+    return new ReportingRead(
+      await this.backing.read().catch(this.#reportAndRethrow),
+      this.#reportAndRethrow,
+    );
   }
 
   async write(): Promise<Write> {
@@ -156,44 +159,51 @@ export class MemFallbackStore implements Store {
 }
 
 /**
- * Reports a commit that fails on a storage failure. Only the commit: reads
- * and writes before it are per key, and the SQLite store runs its statements
- * in the commit.
+ * Reports a transaction that fails to end on a storage failure: its commit,
+ * or its release (the SQLite store commits a read transaction and rolls back
+ * an uncommitted write there). Not the per-key reads and writes: they are on
+ * the hot path, and the SQLite store runs a write's statements in the commit.
  */
-class ReportingWrite implements Write {
-  readonly #write: Write;
-  readonly #reportAndRethrow: (e: unknown) => never;
+class ReportingRead<R extends Read> implements Read {
+  protected readonly _tx: R;
+  protected readonly _reportAndRethrow: (e: unknown) => never;
 
-  constructor(write: Write, reportAndRethrow: (e: unknown) => never) {
-    this.#write = write;
-    this.#reportAndRethrow = reportAndRethrow;
+  constructor(tx: R, reportAndRethrow: (e: unknown) => never) {
+    this._tx = tx;
+    this._reportAndRethrow = reportAndRethrow;
   }
 
   has(key: string): Promise<boolean> {
-    return this.#write.has(key);
+    return this._tx.has(key);
   }
 
   get(key: string): Promise<ReadonlyJSONValue | undefined> {
-    return this.#write.get(key);
-  }
-
-  put(key: string, value: ReadonlyJSONValue): Promise<void> {
-    return this.#write.put(key, value);
-  }
-
-  del(key: string): Promise<void> {
-    return this.#write.del(key);
-  }
-
-  commit(): Promise<void> {
-    return this.#write.commit().catch(this.#reportAndRethrow);
+    return this._tx.get(key);
   }
 
   release(): void {
-    this.#write.release();
+    try {
+      this._tx.release();
+    } catch (e) {
+      this._reportAndRethrow(e);
+    }
   }
 
   get closed(): boolean {
-    return this.#write.closed;
+    return this._tx.closed;
+  }
+}
+
+class ReportingWrite extends ReportingRead<Write> implements Write {
+  put(key: string, value: ReadonlyJSONValue): Promise<void> {
+    return this._tx.put(key, value);
+  }
+
+  del(key: string): Promise<void> {
+    return this._tx.del(key);
+  }
+
+  commit(): Promise<void> {
+    return this._tx.commit().catch(this._reportAndRethrow);
   }
 }

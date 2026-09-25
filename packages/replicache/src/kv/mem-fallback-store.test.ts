@@ -153,6 +153,13 @@ test('drop goes to the memory stores once they are in use', async () => {
 class FailingStore extends RealStore {
   failBegin: Error | undefined;
   failCommit: Error | undefined;
+  failRelease: Error | undefined;
+
+  override async read() {
+    const read = await super.read();
+    this.#failReleaseOf(read);
+    return read;
+  }
 
   override async write() {
     if (this.failBegin) {
@@ -163,11 +170,23 @@ class FailingStore extends RealStore {
     if (failCommit) {
       write.commit = () => Promise.reject(failCommit);
     }
+    this.#failReleaseOf(write);
     return write;
+  }
+
+  #failReleaseOf(tx: {release(): void}) {
+    const failRelease = this.failRelease;
+    if (failRelease) {
+      const release = tx.release.bind(tx);
+      tx.release = () => {
+        release();
+        throw failRelease;
+      };
+    }
   }
 }
 
-test('after opened a transaction that fails to begin or commit on a storage failure is reported', async () => {
+test('after opened a transaction that fails to begin, commit or end on a storage failure is reported', async () => {
   const onFailureAfterOpen = vi.fn();
   const inner = new FailingStore('after-open');
   const provider = new MemFallbackStoreProvider(
@@ -197,8 +216,21 @@ test('after opened a transaction that fails to begin or commit on a storage fail
   expect(onFailureAfterOpen).toHaveBeenCalledTimes(2);
   expect(store.kind).toBe('real');
 
+  // A read or write that fails as it ends: the SQLite store commits a read
+  // transaction, and rolls back an uncommitted write, in release().
+  inner.failBegin = undefined;
+  inner.failRelease = failure();
+  await expect(withRead(store, () => undefined)).rejects.toBe(
+    inner.failRelease,
+  );
+  expect(onFailureAfterOpen).toHaveBeenCalledTimes(3);
+  const write = await store.write();
+  expect(() => write.release()).toThrow(inner.failRelease);
+  expect(onFailureAfterOpen).toHaveBeenCalledTimes(4);
+  inner.failRelease = undefined;
+
   // Other errors are not storage failures.
   inner.failBegin = new Error('something else');
   await expect(store.write()).rejects.toBe(inner.failBegin);
-  expect(onFailureAfterOpen).toHaveBeenCalledTimes(2);
+  expect(onFailureAfterOpen).toHaveBeenCalledTimes(4);
 });
