@@ -2,10 +2,12 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 
 export function completeOrdering(
   ast: AST,
   getPrimaryKey: (tableName: string) => PrimaryKey,
+  protocolVersion: number = PROTOCOL_VERSION,
 ): AST {
   const primaryKey = must(getPrimaryKey(ast.table));
   return {
@@ -14,16 +16,24 @@ export function completeOrdering(
       ? {
           related: ast.related?.map(r => ({
             ...r,
-            subquery: completeOrdering(r.subquery, getPrimaryKey),
+            subquery: completeOrdering(
+              r.subquery,
+              getPrimaryKey,
+              protocolVersion,
+            ),
           })),
         }
       : undefined),
     ...(ast.where
       ? {
-          where: completeOrderingInCondition(ast.where, getPrimaryKey),
+          where: completeOrderingInCondition(
+            ast.where,
+            getPrimaryKey,
+            protocolVersion,
+          ),
         }
       : undefined),
-    orderBy: addPrimaryKeys(primaryKey, ast.orderBy),
+    orderBy: addPrimaryKeys(primaryKey, ast.orderBy, protocolVersion),
   };
 }
 
@@ -46,6 +56,7 @@ export function assertOrderingIncludesPK(
 function completeOrderingInCondition<C extends Condition | undefined>(
   condition: C,
   getPrimaryKey: (tableName: string) => PrimaryKey,
+  protocolVersion: number = PROTOCOL_VERSION,
 ): C {
   if (!condition) {
     return condition;
@@ -58,7 +69,11 @@ function completeOrderingInCondition<C extends Condition | undefined>(
       ...condition,
       related: {
         ...condition.related,
-        subquery: completeOrdering(condition.related.subquery, getPrimaryKey),
+        subquery: completeOrdering(
+          condition.related.subquery,
+          getPrimaryKey,
+          protocolVersion,
+        ),
       },
     };
   }
@@ -66,7 +81,7 @@ function completeOrderingInCondition<C extends Condition | undefined>(
   return {
     ...condition,
     conditions: condition.conditions.map(c =>
-      completeOrderingInCondition(c, getPrimaryKey),
+      completeOrderingInCondition(c, getPrimaryKey, protocolVersion),
     ),
   };
 }
@@ -74,6 +89,7 @@ function completeOrderingInCondition<C extends Condition | undefined>(
 function addPrimaryKeys(
   primaryKey: PrimaryKey,
   orderBy: Ordering | undefined,
+  protocolVersion: number = PROTOCOL_VERSION,
 ): Ordering {
   orderBy = orderBy ?? [];
   const primaryKeysToAdd = new Set(primaryKey);
@@ -86,7 +102,8 @@ function addPrimaryKeys(
     return orderBy;
   }
 
-  const trailingDirection: 'asc' | 'desc' = orderBy.at(-1)?.[1] ?? 'asc';
+  const trailingDirection: 'asc' | 'desc' =
+    protocolVersion >= 54 ? (orderBy.at(-1)?.[1] ?? 'asc') : 'asc';
 
   return [
     ...orderBy,

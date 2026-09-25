@@ -3024,3 +3024,46 @@ test('enablePlannerAwarePushdown pushes before planning', () => {
   expect(before.userStatesFilters).toContainEqual(pushed);
   expect(before.ids).toEqual([3]);
 });
+
+test('buildPipeline respects delegate.protocolVersion for primary key ordering', () => {
+  const {sources} = testBuilderDelegate();
+  class VersionDelegate extends TestBuilderDelegate {
+    readonly protocolVersion: number;
+    constructor(
+      srcs: ReturnType<typeof testBuilderDelegate>['sources'],
+      protocolVersion: number,
+    ) {
+      super(srcs);
+      this.protocolVersion = protocolVersion;
+    }
+  }
+
+  const query: AST = {
+    table: 'users',
+    where: {
+      type: 'simple',
+      left: {type: 'column', name: 'recruiterID'},
+      op: '=',
+      right: {type: 'literal', value: 1},
+    },
+    orderBy: [['recruiterID', 'desc']],
+  };
+
+  const v53Sink = new Catch(
+    buildPipeline(query, new VersionDelegate(sources, 53), 'q-v53'),
+  );
+  expect(
+    v53Sink
+      .fetch()
+      .map(node => node !== 'yield' && (node.row as {id: number}).id),
+  ).toEqual([2, 3, 4, 7]);
+
+  const v54Sink = new Catch(
+    buildPipeline(query, new VersionDelegate(sources, 54), 'q-v54'),
+  );
+  expect(
+    v54Sink
+      .fetch()
+      .map(node => node !== 'yield' && (node.row as {id: number}).id),
+  ).toEqual([7, 4, 3, 2]);
+});

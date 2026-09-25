@@ -160,6 +160,23 @@ export class IndexMetadataStore {
     this.#renameTableStmt.run(newTableName, oldTableName);
   }
 
+  renameColumn(tableName: string, oldName: string, newName: string): void {
+    const indexes = this.getIndexesForTable(tableName);
+    for (const {name, spec} of indexes) {
+      if (oldName in spec.columns) {
+        const updatedColumns: Record<string, 'ASC' | 'DESC'> = {};
+        for (const [col, dir] of Object.entries(spec.columns)) {
+          updatedColumns[col === oldName ? newName : col] = dir;
+        }
+        const updatedSpec: IndexSpec = {
+          ...spec,
+          columns: updatedColumns,
+        };
+        this.setIndex(tableName, name, updatedSpec);
+      }
+    }
+  }
+
   listIndexes(): {tableName: string; name: string; spec: IndexSpec}[] {
     const rows = this.#listStmt.all() as {
       tableName: string;

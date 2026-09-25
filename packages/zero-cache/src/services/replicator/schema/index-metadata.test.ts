@@ -133,4 +133,24 @@ describe('IndexMetadataStore', () => {
       unique: false,
     });
   });
+
+  test('renameColumn updates indexed columns in IndexSpec', () => {
+    const store = IndexMetadataStore.getInstance(db)!;
+    store.setIndex('tasks', 'idx_task_col', {
+      schema: 'public',
+      tableName: 'tasks',
+      name: 'idx_task_col',
+      columns: {old_col: 'DESC', other_col: 'ASC'},
+      unique: false,
+    });
+
+    store.renameColumn('tasks', 'old_col', 'new_col');
+    expect(store.getIndex('idx_task_col')).toEqual({
+      schema: 'public',
+      tableName: 'tasks',
+      name: 'idx_task_col',
+      columns: {new_col: 'DESC', other_col: 'ASC'},
+      unique: false,
+    });
+  });
 });

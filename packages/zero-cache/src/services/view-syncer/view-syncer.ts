@@ -2117,6 +2117,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             await timer.start(),
             queryName,
             'unchanged-query-rehydrate',
+            connCtx.protocolVersion,
           )) {
             if (change === 'yield') {
               if (
@@ -2765,6 +2766,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           hydrationBudget,
           hydrationPassStats,
           driftedQueryIDs,
+          connCtx.protocolVersion,
         );
         if (addQueries.length > 0) {
           this.#viewSyncerHydration.recordMs(performance.now() - start);
@@ -3004,6 +3006,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     hydrationBudget: HydrationBudget,
     hydrationPassStats: HydrationPassStats,
     driftedQueryIDs: Set<string> = new Set(),
+    protocolVersion?: number,
   ): Promise<void> {
     return startAsyncSpan(tracer, 'vs.#addAndRemoveQueries', async () => {
       const addQueries = [...requiredQueries, ...optionalQueries];
@@ -3176,6 +3179,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             timer.startWithoutYielding(),
             q.name,
             'query-set-sync',
+            protocolVersion,
           )) {
             if (
               change === 'yield' &&

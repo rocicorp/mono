@@ -819,6 +819,9 @@ class TransactionProcessor {
       msg.new.name,
       msg.new.spec,
     );
+    if (msg.old.name !== msg.new.name) {
+      this.#indexMetadata?.renameColumn(table, msg.old.name, msg.new.name);
+    }
 
     this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, msg.new);
