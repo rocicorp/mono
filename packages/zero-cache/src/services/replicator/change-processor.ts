@@ -63,6 +63,7 @@ import type {ReplicatorMode} from './replicator.ts';
 import {BackfillingTracker} from './schema/backfilling.ts';
 import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
+import {IndexMetadataStore} from './schema/index-metadata.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
   updateReplicationWatermark,
@@ -77,6 +78,13 @@ const MAX_SQLITE_BIND_BYTES = Math.min(
   bufferConstants.MAX_LENGTH,
   bufferConstants.MAX_STRING_LENGTH,
 );
+
+function extractRowKeyColumns(rowKey: Record<string, unknown>): string[] {
+  if (Array.isArray(rowKey.columns)) {
+    return rowKey.columns as string[];
+  }
+  return Object.keys(rowKey);
+}
 
 export type CommitResult = {
   watermark: string;
@@ -355,6 +363,7 @@ class TransactionProcessor {
   readonly #tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>;
   readonly #jsonFormat: JSONFormat;
   readonly #columnMetadata: ColumnMetadataStore;
+  readonly #indexMetadata: IndexMetadataStore | undefined;
 
   #pos = 0;
   #schemaChanged = false;
@@ -407,6 +416,7 @@ class TransactionProcessor {
     // The column_metadata table is guaranteed to exist since the
     // replica-schema.ts migration to v8.
     this.#columnMetadata = must(ColumnMetadataStore.getInstance(db.db));
+    this.#indexMetadata = IndexMetadataStore.getInstance(db.db);
 
     if (this.#tableSpecs.size === 0) {
       this.#reloadTableSpecs();
@@ -637,6 +647,28 @@ class TransactionProcessor {
     // opinion about and this store never sees, which is the drift the fold
     // exists to make impossible.
     this.#backfilling.apply(msg);
+
+    const oldPK = extractRowKeyColumns(msg.old.rowKey);
+    const newPK = extractRowKeyColumns(msg.new.rowKey);
+    const pkChanged =
+      oldPK.length !== newPK.length || oldPK.some((col, i) => col !== newPK[i]);
+
+    if (pkChanged && this.#indexMetadata) {
+      const tableName = liteTableName(msg.table);
+      const indexes = this.#indexMetadata.getIndexesForTable(tableName);
+      for (const {spec} of indexes) {
+        if (!spec.unique) {
+          const targetIndex = mapPostgresToLiteIndex(spec, newPK);
+          this.#db.db.exec(`DROP INDEX IF EXISTS ${id(targetIndex.name)}`);
+          this.#db.db.exec(createLiteIndexStatement(targetIndex));
+          this.#lc.info?.(
+            `Rebuilt index ${targetIndex.name} on ${tableName} for updated primary key [${newPK.join(', ')}]`,
+          );
+        }
+      }
+      this.#reloadTableSpecs();
+      this.#logResetOp(tableName);
+    }
   }
 
   processRenameTable(rename: TableRename) {
@@ -649,6 +681,7 @@ class TransactionProcessor {
 
     // Rename in metadata table
     this.#columnMetadata.renameTable(oldName, newName);
+    this.#indexMetadata?.renameTable(oldName, newName, rename.new);
 
     this.#bumpVersions(rename.new);
     this.#logResetOp(oldName);
@@ -786,6 +819,9 @@ class TransactionProcessor {
       msg.new.name,
       msg.new.spec,
     );
+    if (msg.old.name !== msg.new.name) {
+      this.#indexMetadata?.renameColumn(table, msg.old.name, msg.new.name);
+    }
 
     this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, msg.new);
@@ -813,13 +849,20 @@ class TransactionProcessor {
 
     // Delete from metadata table
     this.#columnMetadata.deleteTable(name);
+    this.#indexMetadata?.deleteTable(name);
 
     this.#logResetOp(name);
     this.#lc.info?.(drop.tag, name);
   }
 
   processCreateIndex(create: IndexCreate) {
-    const index = mapPostgresToLiteIndex(create.spec);
+    const tableName = liteTableName({
+      schema: create.spec.schema,
+      name: create.spec.tableName,
+    });
+    const tableSpec = this.#tableSpecs.get(tableName);
+    const index = mapPostgresToLiteIndex(create.spec, tableSpec?.primaryKey);
+    this.#indexMetadata?.setIndex(tableName, index.name, create.spec);
     this.#db.db.exec(createLiteIndexStatement(index));
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
@@ -830,6 +873,7 @@ class TransactionProcessor {
 
   processDropIndex(drop: IndexDrop) {
     const name = liteTableName(drop.id);
+    this.#indexMetadata?.deleteIndex(name);
     this.#db.db.exec(`DROP INDEX IF EXISTS ${id(name)}`);
     this.#lc.info?.(drop.tag, name);
   }

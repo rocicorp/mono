@@ -765,7 +765,10 @@ export class PipelineDriver {
     return this.#config?.enableCorrelatedPredicatePushdown === false;
   }
 
-  #resolveScalarSubqueries(ast: AST): {
+  #resolveScalarSubqueries(
+    ast: AST,
+    protocolVersion?: number,
+  ): {
     ast: AST;
     companionRows: {table: string; row: Row}[];
     companions: CompanionSubquery[];
@@ -784,6 +787,7 @@ export class PipelineDriver {
         {
           disableCorrelatedPredicatePushdown:
             this.#disableCorrelatedPredicatePushdown(),
+          protocolVersion,
           getSource: name => this.#getSource(name),
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput): Input => input,
@@ -857,6 +861,7 @@ export class PipelineDriver {
     timer: Timer,
     queryName?: string,
     hydrationReason: PipelineHydrationReason = 'query-set-sync',
+    protocolVersion?: number,
   ): Iterable<RowChange | 'yield'> {
     return this.#trackRowSetSignatures(
       this.#addQueryImpl(
@@ -866,6 +871,7 @@ export class PipelineDriver {
         timer,
         queryName,
         hydrationReason,
+        protocolVersion,
       ),
     );
   }
@@ -877,6 +883,7 @@ export class PipelineDriver {
     timer: Timer,
     queryName?: string,
     hydrationReason: PipelineHydrationReason = 'query-set-sync',
+    protocolVersion?: number,
   ): Iterable<RowChange | 'yield'> {
     assert(
       this.initialized(),
@@ -927,7 +934,7 @@ export class PipelineDriver {
         companions: companionMeta,
         companionInputs,
         ignoredScalarHints,
-      } = this.#resolveScalarSubqueries(query);
+      } = this.#resolveScalarSubqueries(query, protocolVersion);
       builtInputs = [...companionInputs];
 
       this.#warnIgnoredScalarHints(queryID, ignoredScalarHints);
@@ -941,6 +948,7 @@ export class PipelineDriver {
             this.#disableCorrelatedPredicatePushdown(),
           enablePlannerAwarePushdown:
             this.#config?.enablePlannerAwarePushdown !== false,
+          protocolVersion,
           getSource: name => this.#getSource(name),
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput, _queryID: string): Input =>

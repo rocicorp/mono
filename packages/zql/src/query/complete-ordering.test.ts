@@ -726,4 +726,66 @@ describe('completeOrdering', () => {
       ['connectionId', 'asc'],
     ]);
   });
+
+  test('appends missing primary keys with direction of trailing order column for protocolVersion >= 54', () => {
+    const issueQueryDesc = newQuery(schema, 'issue').orderBy('title', 'desc');
+    expect(
+      completeOrdering(ast(issueQueryDesc), getPrimaryKey, 54).orderBy,
+    ).toEqual([
+      ['title', 'desc'],
+      ['id', 'desc'],
+    ]);
+
+    const partialCompoundDesc = newQuery(schema, 'issueLabel').orderBy(
+      'labelId',
+      'desc',
+    );
+    expect(
+      completeOrdering(ast(partialCompoundDesc), getPrimaryKey, 54).orderBy,
+    ).toEqual([
+      ['labelId', 'desc'],
+      ['issueId', 'desc'],
+    ]);
+
+    const mixedOrder = newQuery(schema, 'issueLabel')
+      .orderBy('issueId', 'asc')
+      .orderBy('labelId', 'desc');
+    expect(
+      completeOrdering(ast(mixedOrder), getPrimaryKey, 54).orderBy,
+    ).toEqual([
+      ['issueId', 'asc'],
+      ['labelId', 'desc'],
+    ]);
+  });
+
+  test('appends missing primary keys with asc for protocolVersion < 54 (legacy behavior)', () => {
+    const issueQueryDesc = newQuery(schema, 'issue').orderBy('title', 'desc');
+    expect(
+      completeOrdering(ast(issueQueryDesc), getPrimaryKey, 53).orderBy,
+    ).toEqual([
+      ['title', 'desc'],
+      ['id', 'asc'],
+    ]);
+
+    const partialCompoundDesc = newQuery(schema, 'issueLabel').orderBy(
+      'labelId',
+      'desc',
+    );
+    expect(
+      completeOrdering(ast(partialCompoundDesc), getPrimaryKey, 53).orderBy,
+    ).toEqual([
+      ['labelId', 'desc'],
+      ['issueId', 'asc'],
+    ]);
+
+    const mixedOrder = newQuery(schema, 'issueLabel')
+      .orderBy('issueId', 'asc')
+      .orderBy('labelId', 'desc');
+    expect(
+      completeOrdering(ast(mixedOrder), getPrimaryKey, 53).orderBy,
+    ).toEqual([
+      ['issueId', 'asc'],
+      ['labelId', 'desc'],
+    ]);
+  });
 });

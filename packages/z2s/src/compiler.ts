@@ -69,10 +69,12 @@ export function compile(
   zqlSchema: Schema,
   ast: AST,
   format?: Format,
+  protocolVersion?: number,
 ): SQLQuery {
   ast = completeOrdering(
     ast,
     tableName => zqlSchema.tables[tableName].primaryKey,
+    protocolVersion,
   );
   const spec: Spec = {
     aliasCount: 0,

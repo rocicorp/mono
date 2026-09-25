@@ -261,10 +261,9 @@ describe('compiler with PostgreSQL', () => {
     );
 
     expect(compiled).toEqual([
-      {id: 'e', owner: null, rank: 2},
-      {id: 'a', owner: null, rank: 1},
-      {id: 'b', owner: 'alice', rank: 1},
       {id: 'c', owner: 'bob', rank: 1},
+      {id: 'b', owner: 'alice', rank: 1},
+      {id: 'a', owner: null, rank: 1},
     ]);
   });
 });

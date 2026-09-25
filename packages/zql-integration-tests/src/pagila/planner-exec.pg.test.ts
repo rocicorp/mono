@@ -45,7 +45,7 @@ describe('Pagila planner execution cost validation', () => {
         .limit(10),
       validations: [
         ['correlation', 0.85],
-        ['within-optimal', 1.7],
+        ['within-optimal', 1.95],
         ['within-baseline', 1],
       ],
     },

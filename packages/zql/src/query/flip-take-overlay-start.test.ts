@@ -189,5 +189,5 @@ test('flipped self-join exists in an OR, with start + limit: an edit adds the ro
       ),
     ),
   );
-  expect(view.data.map(r => r.id)).toEqual([1, 2]);
+  expect(view.data.map(r => r.id)).toEqual([2, 1]);
 });

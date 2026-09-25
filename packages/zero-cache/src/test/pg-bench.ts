@@ -642,6 +642,8 @@ function expectedIndexes(fixture: InitialSyncBenchmarkFixture) {
       return [
         benchmarkIndex('bench_composite_amount_idx', 'bench_composite', false, [
           ['amount', 'ASC'],
+          ['account_id', 'ASC'],
+          ['seq', 'ASC'],
         ]),
         benchmarkIndex('bench_composite_pkey', 'bench_composite', true, [
           ['account_id', 'ASC'],
@@ -649,6 +651,7 @@ function expectedIndexes(fixture: InitialSyncBenchmarkFixture) {
         ]),
         benchmarkIndex('bench_lookup_active_idx', 'bench_lookup', false, [
           ['active', 'ASC'],
+          ['id', 'ASC'],
         ]),
         benchmarkIndex('bench_lookup_pkey', 'bench_lookup', true, [
           ['id', 'ASC'],
@@ -656,6 +659,7 @@ function expectedIndexes(fixture: InitialSyncBenchmarkFixture) {
         benchmarkIndex('bench_rows_pkey', 'bench_rows', true, [['id', 'ASC']]),
         benchmarkIndex('bench_wide_group_idx', 'bench_wide', false, [
           ['group_id', 'ASC'],
+          ['id', 'ASC'],
         ]),
         benchmarkIndex('bench_wide_pkey', 'bench_wide', true, [['id', 'ASC']]),
       ];
@@ -699,7 +703,10 @@ function expectedIndexes(fixture: InitialSyncBenchmarkFixture) {
           'benchmark.bench_large_payload_format_idx',
           'benchmark.bench_large_payload',
           false,
-          [['format', 'ASC']],
+          [
+            ['format', 'ASC'],
+            ['id', 'ASC'],
+          ],
         ),
         benchmarkIndex(
           'benchmark.bench_large_payload_partition_id_idx',
@@ -714,7 +721,10 @@ function expectedIndexes(fixture: InitialSyncBenchmarkFixture) {
           'benchmark.bench_large_payload_partition_idx',
           'benchmark.bench_large_payload',
           false,
-          [['partition_id', 'ASC']],
+          [
+            ['partition_id', 'ASC'],
+            ['id', 'ASC'],
+          ],
         ),
         benchmarkIndex(
           'benchmark.bench_large_payload_partition_source_created_idx',
@@ -724,6 +734,7 @@ function expectedIndexes(fixture: InitialSyncBenchmarkFixture) {
             ['partition_id', 'ASC'],
             ['source_type', 'ASC'],
             ['created_at', 'DESC'],
+            ['id', 'DESC'],
           ],
         ),
         benchmarkIndex(
@@ -733,6 +744,7 @@ function expectedIndexes(fixture: InitialSyncBenchmarkFixture) {
           [
             ['partition_id', 'ASC'],
             ['source_type', 'ASC'],
+            ['id', 'ASC'],
           ],
         ),
         benchmarkIndex(

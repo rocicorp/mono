@@ -1577,3 +1577,37 @@ test('compound primary key ORDER BY preserves user-defined column order', () => 
     'ORDER BY "connected_calls_0"."callId" ASC NULLS FIRST, "connected_calls_0"."connectionId" ASC NULLS FIRST, "connected_calls_0"."userId" ASC NULLS FIRST',
   );
 });
+
+test('compile respects protocolVersion for trailing primary key ordering', () => {
+  const v53Result = formatPgInternalConvert(
+    compile(
+      serverSchema,
+      schema,
+      {
+        table: 'user',
+        orderBy: [['name', 'desc']],
+      },
+      undefined,
+      53,
+    ),
+  );
+  expect(v53Result.text).toContain(
+    'ORDER BY "user_0"."name" DESC NULLS LAST, "user_0"."id" ASC NULLS FIRST',
+  );
+
+  const v54Result = formatPgInternalConvert(
+    compile(
+      serverSchema,
+      schema,
+      {
+        table: 'user',
+        orderBy: [['name', 'desc']],
+      },
+      undefined,
+      54,
+    ),
+  );
+  expect(v54Result.text).toContain(
+    'ORDER BY "user_0"."name" DESC NULLS LAST, "user_0"."id" DESC NULLS LAST',
+  );
+});

@@ -19,6 +19,10 @@ import {
 } from '../../replicator/schema/backfilling.ts';
 import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
 import {
+  CREATE_INDEX_METADATA_TABLE,
+  migrateIndexesToIncludePrimaryKey,
+} from '../../replicator/schema/index-metadata.ts';
+import {
   CREATE_RUNTIME_EVENTS_TABLE,
   recordEvent,
 } from '../../replicator/schema/replication-state.ts';
@@ -348,6 +352,25 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
 
     migrateData: (lc, db) => {
       populateBackfillingFromColumnMetadata(lc, db);
+    },
+  },
+
+  // `_zero.index_metadata` tracks upstream PostgreSQL index definitions so that
+  // when primary keys change, secondary indexes can be rebuilt with the new PK
+  // without re-syncing from Postgres.
+  //
+  // No `minSafeVersion`: an older zero-cache runs fine against a v18 replica,
+  // since it ignores `_zero.index_metadata` and SQLite handles `(col, pk)`
+  // indexes without issues. On rollback then rollforward, existing definitions
+  // in `_zero.index_metadata` are preserved, indexes added during rollback are
+  // adopted, and indexes dropped during rollback are pruned.
+  18: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_INDEX_METADATA_TABLE);
+    },
+
+    migrateData: (lc, db) => {
+      migrateIndexesToIncludePrimaryKey(lc, db);
     },
   },
 };

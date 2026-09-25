@@ -290,9 +290,10 @@ export const publishedSchema = v
         ),
       ),
     }));
+    const rawLiteIndexes = indexes.map(idx => mapPostgresToLiteIndex(idx));
     const zqlSpecs = computeZqlSpecsFromLiteSpecs(
       tables.map(t => mapPostgresToLite(t)),
-      indexes.map(mapPostgresToLiteIndex),
+      rawLiteIndexes,
       {includeBackfillingColumns: true},
     );
     const result = {

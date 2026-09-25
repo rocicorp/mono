@@ -130,6 +130,14 @@ export interface BuilderDelegate {
    * to allow tests to remap the AST.
    */
   mapAst?: ((ast: AST) => AST) | undefined;
+
+  /**
+   * Sync protocol version of the client this pipeline is serving.
+   * When >= 54, primary keys added by completeOrdering match the trailing sort
+   * direction. When < 54, primary keys default to 'asc'.
+   * Defaults to PROTOCOL_VERSION if unset.
+   */
+  readonly protocolVersion?: number | undefined;
 }
 
 /**
@@ -168,6 +176,7 @@ export function buildPipeline(
   ast = completeOrdering(
     ast,
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
+    delegate.protocolVersion,
   );
 
   const columnsOf = (tableName: string) =>
