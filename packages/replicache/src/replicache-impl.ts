@@ -430,8 +430,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * custom `StoreProvider` can throw a `StorageFailureError` itself.
    *
    * A failure while the instance is opening moves it onto memory for the
-   * session: queries, mutations and subscriptions work, mutations push to the
-   * server, and nothing is persisted.
+   * session, where it runs as with `kvStore: 'mem'`: it persists and
+   * refreshes against the memory stores, and nothing reaches the disk.
    *
    * A failure after that stops persisting and refreshing: a rebuild would
    * open the same failing storage, and a wipe would destroy an intact replica
@@ -1358,12 +1358,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     // Prevent multiple persist calls from running at the same time.
     return this.#persistLock.withLock(async () => {
       const {clientID} = this;
-      // After a storage failure nothing is persisted. Checked before awaiting
-      // readiness, which an open that failed for good never reaches.
-      if (this.#storageFailure) {
-        return;
-      }
       await this.#ready;
+      // After a storage failure nothing is persisted.
       if (this.#closed || this.#storageFailure) {
         return;
       }
@@ -1407,9 +1403,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   async refresh(): Promise<void> {
-    if (this.#storageFailure) {
-      return;
-    }
     await this.#ready;
     const {clientID} = this;
     if (this.#closed || this.#storageFailure || !this.#enableRefresh()) {
@@ -1489,14 +1482,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   /**
    * A storage failure during the open: the stores have moved onto memory, so
-   * the instance works for the session and persists nothing. Reported on a
+   * the instance runs on them for the session, as with `kvStore: 'mem'`.
+   * Reported on a
    * later microtask: the SQLite stores open in `create`, while the
    * constructor is still running and before the app can attach the callback.
    */
   #onMemFallBack(failure: StorageFailureError): void {
-    this.#storageFailure = failure;
     this.#lc.warn?.(
-      `Local store storage failed (${failure.kind}) opening ${this.idbName}; running this instance in memory with persistence stopped`,
+      `Local store storage failed (${failure.kind}) opening ${this.idbName}; running this instance in memory`,
       failure,
     );
     queueMicrotask(() => this.#fireOnStorageFailure(failure));

@@ -4,6 +4,7 @@ import {IDBOpenError} from './kv/idb-store.ts';
 import {MemStore, dropMemStore, hasMemStore} from './kv/mem-store.ts';
 import type {Read, Store, Write} from './kv/store.ts';
 import {makeChannelNameV1ForTesting} from './new-client-channel.ts';
+import {getClientGroup} from './persist/client-groups.ts';
 import {
   dropAllDatabases,
   dropDatabase,
@@ -16,6 +17,7 @@ import {
   initReplicacheTesting,
   replicacheForTesting,
 } from './test-util.ts';
+import {withRead} from './with-transactions.ts';
 
 initReplicacheTesting();
 
@@ -186,8 +188,8 @@ test('a storage failure during the initial open is reported and moves the instan
 
   // The open fails on the first write. The app is told once, nothing is
   // rethrown (vitest fails the test on an unhandled rejection), and the
-  // instance reopens on memory: readiness arrives, queries, mutations and
-  // subscriptions work for the session, and persist and refresh are no-ops.
+  // instance reopens on memory: readiness arrives, and queries, mutations,
+  // subscriptions, persist and refresh work against the memory stores.
   await vi.waitFor(() => expect(failures).toHaveLength(1));
   expect(failures[0]).toBe(diskError);
   expect(rep.kvStore.kind).toBe('mem');
@@ -202,6 +204,13 @@ test('a storage failure during the initial open is reported and moves the instan
   await expect(rep.persist()).resolves.toBeUndefined();
   await expect(rep.impl.refresh()).resolves.toBeUndefined();
   expect(failures).toHaveLength(1);
+  // The mutation was persisted, to memory: without that the in-memory dag
+  // could never evict what it holds.
+  const clientGroupID = await rep.clientGroupID;
+  const clientGroup = await withRead(rep.impl.perdag, read =>
+    getClientGroup(clientGroupID, read),
+  );
+  expect(clientGroup?.mutationIDs[rep.clientID]).toBe(1);
   // Nothing reached the failing stores after the fallback.
   const attempts = Array.from(stores.values(), s => s.writeAttempts);
   await rep.mutate.addData({b: 2});

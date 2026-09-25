@@ -209,7 +209,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * `StorageFailureError` itself to get the same handling.
    *
    * A failure while the instance is opening runs it on memory for the
-   * session. A failure after that stops persisting and refreshing, and an
+   * session, as with `kvStore: 'mem'`. A failure after that stops persisting and refreshing, and an
    * invalid ref count under `cannot-open` / `io-error` is not treated as
    * corruption, because a rebuild would open the same failing storage and a
    * wipe would destroy an intact replica. A `full` disk keeps the drop, since

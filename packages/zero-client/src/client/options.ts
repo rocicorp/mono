@@ -269,10 +269,11 @@ export type ZeroOptions<
    * (`io-error`).
    *
    * A failure while this `Zero` instance is opening runs it on memory for the
-   * session. A failure after that stops persisting locally. Either way
-   * queries and mutations keep running against what the in-memory dag holds,
-   * and mutations keep pushing to zero-cache, but nothing is written to disk
-   * until a new instance is created; a read that needs a chunk not yet loaded
+   * session, as with `kvStore: 'mem'`: nothing is written to disk. A failure
+   * after that stops persisting locally: queries and mutations keep running
+   * against what the in-memory dag holds, and mutations keep pushing to
+   * zero-cache, but nothing is written to disk until a new instance is
+   * created; a read that needs a chunk not yet loaded
    * from the store (or since evicted from the in-memory cache) still fails
    * the way any store read does. An invalid ref count seen while the store is
    * failing with `cannot-open` or `io-error` is not treated as corruption, so
