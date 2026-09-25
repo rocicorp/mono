@@ -223,6 +223,75 @@ describe('storage failures', () => {
     expect(error.cause).toBe(driverError);
   });
 
+  test('a transaction that fails to begin does not strand the lock', async () => {
+    let failBegin = true;
+    const db: SQLiteDatabase = {
+      close: () => undefined,
+      destroy: () => undefined,
+      execSync: sql => {
+        if (failBegin && (sql === 'BEGIN IMMEDIATE' || sql === 'BEGIN')) {
+          throw new Error('disk I/O error');
+        }
+      },
+      prepare: () => ({
+        all: () => Promise.resolve([]),
+        exec: () => Promise.resolve(),
+      }),
+    };
+    const store = new SQLiteStore('begin-fails', () => db);
+    await expect(store.write()).rejects.toBeInstanceOf(StorageFailureError);
+    await expect(store.read()).rejects.toBeInstanceOf(StorageFailureError);
+
+    failBegin = false;
+    await withWrite(store, write => write.put('k', 'v'));
+    await store.close();
+  });
+
+  test('a read transaction whose COMMIT fails still releases the lock', async () => {
+    let failCommit = true;
+    const db: SQLiteDatabase = {
+      close: () => undefined,
+      destroy: () => undefined,
+      execSync: sql => {
+        if (failCommit && sql === 'COMMIT') {
+          throw new Error('disk I/O error');
+        }
+      },
+      prepare: () => ({
+        all: () => Promise.resolve([]),
+        exec: () => Promise.resolve(),
+      }),
+    };
+    const store = new SQLiteStore('read-commit-fails', () => db);
+    const read = await store.read();
+    expect(() => read.release()).toThrow(StorageFailureError);
+
+    failCommit = false;
+    await withWrite(store, write => write.put('k', 'v'));
+    await store.close();
+  });
+
+  test('a database whose setup fails is closed', () => {
+    const close = vi.fn();
+    const db: SQLiteDatabase = {
+      close,
+      destroy: () => undefined,
+      execSync: sql => {
+        if (sql.startsWith('PRAGMA')) {
+          throw new Error('disk I/O error');
+        }
+      },
+      prepare: () => ({
+        all: () => Promise.resolve([]),
+        exec: () => Promise.resolve(),
+      }),
+    };
+    expect(() => new SQLiteStore('setup-fails', () => db)).toThrow(
+      StorageFailureError,
+    );
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   test('other SQLite errors pass through unchanged', async () => {
     const driverError = new Error(
       'SQLite error code: 5, description: database is locked',

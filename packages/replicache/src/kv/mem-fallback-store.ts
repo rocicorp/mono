@@ -1,3 +1,4 @@
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   getStorageFailure,
   type StorageFailureError,
@@ -15,20 +16,25 @@ import type {Read, Store, StoreProvider, Write} from './store.ts';
  *
  * Only before {@link opened}. After that the in-memory dag holds data loaded
  * from the real store and loads more on demand, which an empty memory store
- * cannot serve, so a failure is left to the caller.
+ * cannot serve, so a failure is left to the caller. It is still reported, the
+ * first time a transaction fails to begin or to commit on a storage failure,
+ * whichever caller ran it (persist, heartbeat, garbage collection, ...).
  */
 export class MemFallbackStoreProvider implements StoreProvider {
   readonly #inner: StoreProvider;
   readonly #onFallBack: (failure: StorageFailureError) => void;
+  readonly #onFailureAfterOpen: (failure: StorageFailureError) => void;
   #failure: StorageFailureError | undefined;
   #opened = false;
 
   constructor(
     inner: StoreProvider,
     onFallBack: (failure: StorageFailureError) => void,
+    onFailureAfterOpen: (failure: StorageFailureError) => void,
   ) {
     this.#inner = inner;
     this.#onFallBack = onFallBack;
+    this.#onFailureAfterOpen = onFailureAfterOpen;
   }
 
   /** Set once the stores have moved onto memory. */
@@ -57,6 +63,19 @@ export class MemFallbackStoreProvider implements StoreProvider {
     this.#failure = failure;
     this.#onFallBack(failure);
     return true;
+  }
+
+  /**
+   * Reports `error` if it is a storage failure after the open. Before it,
+   * the open's own error handling decides whether to fall back.
+   */
+  report(error: unknown): void {
+    if (this.#opened && this.#failure === undefined) {
+      const failure = getStorageFailure(error);
+      if (failure !== undefined) {
+        this.#onFailureAfterOpen(failure);
+      }
+    }
   }
 
   create = (name: string): MemFallbackStore => {
@@ -91,12 +110,20 @@ export class MemFallbackStore implements Store {
   }
 
   read(): Promise<Read> {
-    return this.backing.read();
+    return this.backing.read().catch(this.#reportAndRethrow);
   }
 
-  write(): Promise<Write> {
-    return this.backing.write();
+  async write(): Promise<Write> {
+    return new ReportingWrite(
+      await this.backing.write().catch(this.#reportAndRethrow),
+      this.#reportAndRethrow,
+    );
   }
+
+  readonly #reportAndRethrow = (e: unknown): never => {
+    this.#provider.report(e);
+    throw e;
+  };
 
   /** The store currently backing this one: the real store, or memory. */
   get backing(): Store {
@@ -125,5 +152,48 @@ export class MemFallbackStore implements Store {
   /** `'mem'` from the moment the stores are on memory. */
   get kind(): string | undefined {
     return this.backing.kind;
+  }
+}
+
+/**
+ * Reports a commit that fails on a storage failure. Only the commit: reads
+ * and writes before it are per key, and the SQLite store runs its statements
+ * in the commit.
+ */
+class ReportingWrite implements Write {
+  readonly #write: Write;
+  readonly #reportAndRethrow: (e: unknown) => never;
+
+  constructor(write: Write, reportAndRethrow: (e: unknown) => never) {
+    this.#write = write;
+    this.#reportAndRethrow = reportAndRethrow;
+  }
+
+  has(key: string): Promise<boolean> {
+    return this.#write.has(key);
+  }
+
+  get(key: string): Promise<ReadonlyJSONValue | undefined> {
+    return this.#write.get(key);
+  }
+
+  put(key: string, value: ReadonlyJSONValue): Promise<void> {
+    return this.#write.put(key, value);
+  }
+
+  del(key: string): Promise<void> {
+    return this.#write.del(key);
+  }
+
+  commit(): Promise<void> {
+    return this.#write.commit().catch(this.#reportAndRethrow);
+  }
+
+  release(): void {
+    this.#write.release();
+  }
+
+  get closed(): boolean {
+    return this.#write.closed;
   }
 }

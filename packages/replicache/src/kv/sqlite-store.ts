@@ -93,17 +93,22 @@ export class SQLiteStore implements Store {
     // Start shared read transaction if this is the first reader
     // This ensures consistent reads across all concurrent readers
     if (entry.activeReaders === 0) {
-      db.execSync('BEGIN');
+      // A failing BEGIN must not strand the lock: close() and every later
+      // transaction on this file would wait on it forever.
+      withReleaseOnThrow(release, () => db.execSync('BEGIN'));
     }
     entry.activeReaders++;
 
     return new SQLiteStoreRead(() => {
       entry.activeReaders--;
       // Commit shared read transaction when last reader finishes
-      if (entry.activeReaders === 0) {
-        db.execSync('COMMIT');
+      try {
+        if (entry.activeReaders === 0) {
+          db.execSync('COMMIT');
+        }
+      } finally {
+        release();
       }
-      release();
     }, preparedStatements);
   }
 
@@ -116,7 +121,7 @@ export class SQLiteStore implements Store {
     // At this point, RWLock guarantees no active readers
     // The last reader would have already committed the shared transaction
 
-    db.execSync('BEGIN IMMEDIATE');
+    withReleaseOnThrow(release, () => db.execSync('BEGIN IMMEDIATE'));
 
     return new SQLiteWrite(release, db, preparedStatements);
   }
@@ -140,6 +145,15 @@ export class SQLiteStore implements Store {
 
   get closed(): boolean {
     return this.#closed;
+  }
+}
+
+function withReleaseOnThrow(release: () => void, f: () => void): void {
+  try {
+    f();
+  } catch (e) {
+    release();
+    throw e;
   }
 }
 
@@ -626,7 +640,18 @@ function getOrCreateEntry(
   const dbDelegate = reportingStorageFailures(
     rethrowingStorageFailures(() => create(filename, opts)),
   );
-  const preparedStatements = setupDatabase(dbDelegate, opts);
+  let preparedStatements: PreparedStatements;
+  try {
+    preparedStatements = setupDatabase(dbDelegate, opts);
+  } catch (e) {
+    // Not in `stores` yet, so nothing else would close this connection.
+    try {
+      dbDelegate.close();
+    } catch {
+      // The setup error is the one to report.
+    }
+    throw e;
+  }
 
   const lock = new RWLock();
 

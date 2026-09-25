@@ -61,7 +61,7 @@ test('a store whose create throws a storage failure starts on memory', async () 
   const {provider: inner} = trackingProvider(() => {
     throw failure();
   });
-  const provider = new MemFallbackStoreProvider(inner, onFallBack);
+  const provider = new MemFallbackStoreProvider(inner, onFallBack, vi.fn());
 
   const store = provider.create('create-throws');
   expect(store.kind).toBe('mem');
@@ -79,7 +79,7 @@ test('other errors from create are rethrown', () => {
   const {provider: inner} = trackingProvider(() => {
     throw error;
   });
-  const provider = new MemFallbackStoreProvider(inner, vi.fn());
+  const provider = new MemFallbackStoreProvider(inner, vi.fn(), vi.fn());
   expect(() => provider.create('other-error')).toThrow(error);
   expect(provider.failure).toBeUndefined();
 });
@@ -87,7 +87,7 @@ test('other errors from create are rethrown', () => {
 test('fallBack moves every store onto memory together, closing the real ones', async () => {
   const onFallBack = vi.fn();
   const {provider: inner, created} = trackingProvider();
-  const provider = new MemFallbackStoreProvider(inner, onFallBack);
+  const provider = new MemFallbackStoreProvider(inner, onFallBack, vi.fn());
   const replica = provider.create('replica');
   const registry = provider.create('registry');
   expect(replica.kind).toBe('real');
@@ -112,6 +112,7 @@ test('fallBack ignores errors that are not storage failures', () => {
   const provider = new MemFallbackStoreProvider(
     trackingProvider().provider,
     vi.fn(),
+    vi.fn(),
   );
   expect(provider.fallBack(new Error('Chunk not found'))).toBe(false);
   expect(provider.failure).toBeUndefined();
@@ -122,6 +123,7 @@ test('after opened a storage failure no longer moves the stores', async () => {
   const provider = new MemFallbackStoreProvider(
     trackingProvider().provider,
     onFallBack,
+    vi.fn(),
   );
   const store = provider.create('opened');
   provider.opened();
@@ -133,7 +135,7 @@ test('after opened a storage failure no longer moves the stores', async () => {
 
 test('drop goes to the memory stores once they are in use', async () => {
   const {provider: inner, dropped} = trackingProvider();
-  const provider = new MemFallbackStoreProvider(inner, vi.fn());
+  const provider = new MemFallbackStoreProvider(inner, vi.fn(), vi.fn());
   await provider.drop('before');
   expect(dropped).toEqual(['before']);
 
@@ -145,4 +147,58 @@ test('drop goes to the memory stores once they are in use', async () => {
   expect(hasMemStore('after')).toBe(false);
   expect(dropped).toEqual(['before']);
   await dropMemStore('real-before');
+});
+
+/** A RealStore whose transactions can be made to fail to begin or commit. */
+class FailingStore extends RealStore {
+  failBegin: Error | undefined;
+  failCommit: Error | undefined;
+
+  override async write() {
+    if (this.failBegin) {
+      throw this.failBegin;
+    }
+    const write = await super.write();
+    const failCommit = this.failCommit;
+    if (failCommit) {
+      write.commit = () => Promise.reject(failCommit);
+    }
+    return write;
+  }
+}
+
+test('after opened a transaction that fails to begin or commit on a storage failure is reported', async () => {
+  const onFailureAfterOpen = vi.fn();
+  const inner = new FailingStore('after-open');
+  const provider = new MemFallbackStoreProvider(
+    {create: () => inner, drop: () => Promise.resolve()},
+    vi.fn(),
+    onFailureAfterOpen,
+  );
+  const store = provider.create('after-open');
+
+  // Before the open finishes, the open's own error handling decides.
+  inner.failCommit = failure();
+  await expect(withWrite(store, write => write.put('k', 'v'))).rejects.toBe(
+    inner.failCommit,
+  );
+  expect(onFailureAfterOpen).not.toHaveBeenCalled();
+
+  provider.opened();
+  await expect(withWrite(store, write => write.put('k', 'v'))).rejects.toBe(
+    inner.failCommit,
+  );
+  expect(onFailureAfterOpen).toHaveBeenCalledTimes(1);
+  expect(onFailureAfterOpen.mock.calls[0][0]).toBe(inner.failCommit);
+
+  inner.failCommit = undefined;
+  inner.failBegin = failure();
+  await expect(store.write()).rejects.toBe(inner.failBegin);
+  expect(onFailureAfterOpen).toHaveBeenCalledTimes(2);
+  expect(store.kind).toBe('real');
+
+  // Other errors are not storage failures.
+  inner.failBegin = new Error('something else');
+  await expect(store.write()).rejects.toBe(inner.failBegin);
+  expect(onFailureAfterOpen).toHaveBeenCalledTimes(2);
 });

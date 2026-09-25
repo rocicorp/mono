@@ -449,12 +449,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * there is real corruption, and deleting the database is also what frees
    * the space.
    *
-   * After the open, the failure is detected on the persist path: `persist()`
-   * and `refresh()`, which every local write reaches within a persist
-   * interval. The background maintenance processes (heartbeat, client and
-   * client-group GC, database collection, mutation recovery) do not classify
-   * their own errors; they stop on the first detected failure instead of
-   * retrying against the store at their interval.
+   * After the open, the failure is detected when a transaction on the store
+   * fails to begin or to commit, whichever caller ran it (`persist()`, the
+   * heartbeat, garbage collection, ...), and when `persist()` or `refresh()`
+   * fails. The background maintenance processes (heartbeat, client and
+   * client-group GC, database collection, mutation recovery) stop on it
+   * instead of retrying against the store at their interval.
    *
    * There is no default behavior other than logging. An app that shows a
    * "free up space" or "restart" screen can do so from here.
@@ -572,6 +572,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const kvStoreProvider = new MemFallbackStoreProvider(
       getKVStoreProvider(this.#lc, options.kvStore),
       failure => this.#onMemFallBack(failure),
+      failure => this.#handleStorageFailure(failure),
     );
     this.#kvStoreProvider = kvStoreProvider;
 
