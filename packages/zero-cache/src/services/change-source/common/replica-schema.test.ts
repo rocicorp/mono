@@ -896,6 +896,7 @@ describe('replica-schema-migrations', () => {
     // Metadata store must have the clean upstream definition (created ASC)
     const storeV18 = IndexMetadataStore.getInstance(replica)!;
     expect(storeV18.getIndex('issues_created_idx')).toEqual({
+      schema: 'public',
       tableName: 'issues',
       name: 'issues_created_idx',
       columns: {created: 'ASC'},
@@ -966,6 +967,7 @@ describe('replica-schema-migrations', () => {
 
     // Metadata store must still have the clean upstream definition, NOT double-appended
     expect(storeV18.getIndex('issues_created_idx')).toEqual({
+      schema: 'public',
       tableName: 'issues',
       name: 'issues_created_idx',
       columns: {created: 'ASC'},
@@ -1110,16 +1112,181 @@ describe('replica-schema-migrations', () => {
     const store = IndexMetadataStore.getInstance(replica)!;
     expect(store.getIndex('tasks_a_idx')).toBeUndefined();
     expect(store.getIndex('tasks_b_idx')).toEqual({
+      schema: 'public',
       tableName: 'tasks',
       name: 'tasks_b_idx',
       columns: {b: 'DESC'},
       unique: false,
     });
     expect(store.getIndex('tasks_c_idx')).toEqual({
+      schema: 'public',
       tableName: 'tasks',
       name: 'tasks_c_idx',
       columns: {c: 'ASC'},
       unique: false,
     });
+  });
+
+  test('upgrade -> downgrade -> table rename in v17 -> upgrade (updates metadata spec and rebuilds index)', async () => {
+    const replica = replicaFile.connect(lc);
+    initLiteDB(replica, CREATE_VERSION_HISTORY, {});
+
+    await initReplica(lc, 'test', replicaFile.path, (_, db) => {
+      initReplicationState(db, ['foo_publication'], '123');
+      db.exec(/*sql*/ `
+        CREATE TABLE "issues" (
+          "id" TEXT NOT NULL,
+          "created" INTEGER NOT NULL,
+          PRIMARY KEY ("id")
+        );
+        CREATE INDEX "issues_created_idx" ON "issues" ("created" ASC);
+      `);
+      return promiseVoid;
+    });
+
+    const v17MigrationMap = Object.fromEntries(
+      Object.entries(schemaVersionMigrationMap).filter(
+        ([version]) => Number(version) <= 17,
+      ),
+    );
+
+    // 1. Upgrade to v18
+    await runSchemaMigrations(
+      lc,
+      'test',
+      replicaFile.path,
+      {
+        migrateSchema: () => {
+          throw new Error('already synced');
+        },
+      },
+      schemaVersionMigrationMap,
+    );
+
+    // 2. Downgrade to v17
+    await runSchemaMigrations(
+      lc,
+      'test',
+      replicaFile.path,
+      {
+        migrateSchema: () => {
+          throw new Error('already synced');
+        },
+      },
+      v17MigrationMap,
+    );
+
+    // 3. Rename table while downgraded
+    replica.exec(/*sql*/ `
+      ALTER TABLE issues RENAME TO tickets;
+      UPDATE "_zero.tableMetadata" SET "table" = 'tickets' WHERE "table" = 'issues';
+    `);
+
+    // 4. Upgrade back to v18
+    await runSchemaMigrations(
+      lc,
+      'test',
+      replicaFile.path,
+      {
+        migrateSchema: () => {
+          throw new Error('already synced');
+        },
+      },
+      schemaVersionMigrationMap,
+    );
+
+    // Metadata store must have updated tableName to tickets
+    const store = IndexMetadataStore.getInstance(replica)!;
+    expect(store.getIndex('issues_created_idx')).toEqual({
+      schema: 'public',
+      tableName: 'tickets',
+      name: 'issues_created_idx',
+      columns: {created: 'ASC'},
+      unique: false,
+    });
+    expect(store.getIndexesForTable('tickets')).toHaveLength(1);
+    expect(store.getIndexesForTable('issues')).toHaveLength(0);
+
+    // Index in SQLite is on tickets with (created ASC, id ASC)
+    expect(
+      listIndexes(replica).filter(i => !i.name.startsWith('sqlite_')),
+    ).toEqual([
+      {
+        tableName: 'tickets',
+        name: 'issues_created_idx',
+        columns: {created: 'ASC', id: 'ASC'},
+        unique: false,
+      },
+    ]);
+  });
+
+  test('upgrade preserves partial index predicate', async () => {
+    const replica = replicaFile.connect(lc);
+    initLiteDB(replica, CREATE_VERSION_HISTORY, {});
+
+    await initReplica(lc, 'test', replicaFile.path, (_, db) => {
+      initReplicationState(db, ['foo_publication'], '123');
+      db.exec(/*sql*/ `
+        CREATE TABLE "items" (
+          "id" TEXT NOT NULL,
+          "score" INTEGER NOT NULL,
+          PRIMARY KEY ("id")
+        );
+        CREATE INDEX "items_score_partial_idx" ON "items" ("score" ASC) WHERE score > 50;
+      `);
+      return promiseVoid;
+    });
+
+    const v17MigrationMap = Object.fromEntries(
+      Object.entries(schemaVersionMigrationMap).filter(
+        ([version]) => Number(version) <= 17,
+      ),
+    );
+
+    // Downgrade to v17 simulated state
+    await runSchemaMigrations(
+      lc,
+      'test',
+      replicaFile.path,
+      {
+        migrateSchema: () => {
+          throw new Error('already synced');
+        },
+      },
+      v17MigrationMap,
+    );
+
+    replica.exec(/*sql*/ `
+      DROP INDEX IF EXISTS "items_score_partial_idx";
+      CREATE INDEX "items_score_partial_idx" ON "items" ("score" ASC) WHERE score > 50;
+      DROP TABLE IF EXISTS "${INDEX_METADATA_TABLE}";
+    `);
+
+    // Upgrade to v18
+    await runSchemaMigrations(
+      lc,
+      'test',
+      replicaFile.path,
+      {
+        migrateSchema: () => {
+          throw new Error('already synced');
+        },
+      },
+      schemaVersionMigrationMap,
+    );
+
+    // SQLite index must still be partial (not stripped)
+    const indexes = listIndexes(replica).filter(
+      i => !i.name.startsWith('sqlite_'),
+    );
+    expect(indexes).toEqual([
+      {
+        tableName: 'items',
+        name: 'items_score_partial_idx',
+        columns: {score: 'ASC'},
+        unique: false,
+        partial: true,
+      },
+    ]);
   });
 });

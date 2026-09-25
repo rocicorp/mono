@@ -8,6 +8,7 @@ import {
 } from '../../../db/lite-tables.ts';
 import {mapPostgresToLiteIndex} from '../../../db/pg-to-lite.ts';
 import type {IndexSpec} from '../../../db/specs.ts';
+import {liteTableName} from '../../../types/names.ts';
 import {id} from '../../../types/sql.ts';
 
 export const INDEX_METADATA_TABLE = '_zero.index_metadata';
@@ -131,7 +132,31 @@ export class IndexMetadataStore {
     this.#deleteTableStmt.run(tableName);
   }
 
-  renameTable(oldTableName: string, newTableName: string): void {
+  renameTable(
+    oldTableName: string,
+    newTableName: string,
+    upstreamNew?: {schema: string; name: string},
+  ): void {
+    const newSchema =
+      upstreamNew?.schema ??
+      (newTableName.includes('.')
+        ? newTableName.slice(0, newTableName.indexOf('.'))
+        : 'public');
+    const newName =
+      upstreamNew?.name ??
+      (newTableName.includes('.')
+        ? newTableName.slice(newTableName.indexOf('.') + 1)
+        : newTableName);
+
+    const indexes = this.getIndexesForTable(oldTableName);
+    for (const {name, spec} of indexes) {
+      const updatedSpec: IndexSpec = {
+        ...spec,
+        schema: newSchema,
+        tableName: newName,
+      };
+      this.setIndex(newTableName, name, updatedSpec);
+    }
     this.#renameTableStmt.run(newTableName, oldTableName);
   }
 
@@ -154,7 +179,8 @@ export class IndexMetadataStore {
  *
  * 1. Prunes metadata for any indexes dropped from SQLite (e.g. during rollback).
  * 2. Seeds upstream IndexSpec definitions for any index not yet tracked.
- *    Pre-existing definitions in `_zero.index_metadata` are preserved as canonical.
+ *    Pre-existing definitions in `_zero.index_metadata` are preserved as canonical,
+ *    updating table references if the table was renamed.
  * 3. Rebuilds non-unique indexes in SQLite to append the table's primary key
  *    if they do not already include it.
  */
@@ -173,6 +199,25 @@ export function migrateIndexesToIncludePrimaryKey(
     tablePKs.set(table.name, pk);
   }
 
+  // Look up upstream table names from _zero.tableMetadata if available
+  const liteToUpstream = new Map<string, {schema: string; name: string}>();
+  const tableMetadataExists = db
+    .prepare(
+      `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_zero.tableMetadata'`,
+    )
+    .get();
+  if (tableMetadataExists) {
+    const rows = db
+      .prepare(`SELECT "schema", "table" FROM "_zero.tableMetadata"`)
+      .all<{schema: string; table: string}>();
+    for (const row of rows) {
+      liteToUpstream.set(liteTableName({schema: row.schema, name: row.table}), {
+        schema: row.schema,
+        name: row.table,
+      });
+    }
+  }
+
   const existingIndexes = listIndexes(db).filter(
     idx => !idx.name.startsWith('sqlite_'),
   );
@@ -185,22 +230,42 @@ export function migrateIndexesToIncludePrimaryKey(
     }
   }
 
-  // 2. Seed any missing index metadata from SQLite's index catalog.
-  // For indexes already in `_zero.index_metadata`, do NOT overwrite (preserves clean upstream definition).
+  // 2. Seed any missing index metadata from SQLite's index catalog or update renamed tables.
   for (const idx of existingIndexes) {
-    if (!store.getIndex(idx.name)) {
-      const dot = idx.tableName.indexOf('.');
-      const schema = dot === -1 ? 'public' : idx.tableName.slice(0, dot);
-      const tableName =
-        dot === -1 ? idx.tableName : idx.tableName.slice(dot + 1);
+    const dot = idx.tableName.indexOf('.');
+    const upstream = liteToUpstream.get(idx.tableName) ?? {
+      schema: dot === -1 ? 'public' : idx.tableName.slice(0, dot),
+      name: dot === -1 ? idx.tableName : idx.tableName.slice(dot + 1),
+    };
+
+    const existingSpec = store.getIndex(idx.name);
+    if (!existingSpec) {
       const upstreamSpec: IndexSpec = {
-        schema,
-        tableName,
+        schema: upstream.schema,
+        tableName: upstream.name,
         name: idx.name,
         columns: idx.columns,
         unique: idx.unique,
       };
       store.setIndex(idx.tableName, idx.name, upstreamSpec);
+    } else {
+      // Check if table was renamed while downgraded or out of sync
+      const currentLiteTable = liteTableName({
+        schema: existingSpec.schema,
+        name: existingSpec.tableName,
+      });
+      if (
+        currentLiteTable !== idx.tableName ||
+        existingSpec.tableName !== upstream.name ||
+        existingSpec.schema !== upstream.schema
+      ) {
+        const updatedSpec: IndexSpec = {
+          ...existingSpec,
+          schema: upstream.schema,
+          tableName: upstream.name,
+        };
+        store.setIndex(idx.tableName, idx.name, updatedSpec);
+      }
     }
   }
 
@@ -215,6 +280,10 @@ export function migrateIndexesToIncludePrimaryKey(
     }
     const upstreamSpec = store.getIndex(idx.name);
     if (!upstreamSpec) {
+      continue;
+    }
+    if (idx.partial && !upstreamSpec.predicate) {
+      // Cannot rebuild a partial index without its structured predicate.
       continue;
     }
     const target = mapPostgresToLiteIndex(upstreamSpec, pk);

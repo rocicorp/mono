@@ -681,7 +681,7 @@ class TransactionProcessor {
 
     // Rename in metadata table
     this.#columnMetadata.renameTable(oldName, newName);
-    this.#indexMetadata?.renameTable(oldName, newName);
+    this.#indexMetadata?.renameTable(oldName, newName, rename.new);
 
     this.#bumpVersions(rename.new);
     this.#logResetOp(oldName);

@@ -97,7 +97,7 @@ describe('IndexMetadataStore', () => {
     expect(store.getIndexesForTable('users')).toHaveLength(1);
   });
 
-  test('renameTable', () => {
+  test('renameTable updates index lookup and serialized IndexSpec', () => {
     const store = IndexMetadataStore.getInstance(db)!;
     store.setIndex('issues', 'idx_1', {
       schema: 'public',
@@ -110,5 +110,27 @@ describe('IndexMetadataStore', () => {
     store.renameTable('issues', 'tasks');
     expect(store.getIndexesForTable('issues')).toEqual([]);
     expect(store.getIndexesForTable('tasks')).toHaveLength(1);
+    expect(store.getIndex('idx_1')).toEqual({
+      schema: 'public',
+      tableName: 'tasks',
+      name: 'idx_1',
+      columns: {a: 'ASC'},
+      unique: false,
+    });
+
+    // Test with explicit upstream schema and name
+    store.renameTable('tasks', 'auth.user_accounts', {
+      schema: 'auth',
+      name: 'user_accounts',
+    });
+    expect(store.getIndexesForTable('tasks')).toEqual([]);
+    expect(store.getIndexesForTable('auth.user_accounts')).toHaveLength(1);
+    expect(store.getIndex('idx_1')).toEqual({
+      schema: 'auth',
+      tableName: 'user_accounts',
+      name: 'idx_1',
+      columns: {a: 'ASC'},
+      unique: false,
+    });
   });
 });
