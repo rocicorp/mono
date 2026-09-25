@@ -4,7 +4,13 @@ import {assert} from '../../shared/src/asserts.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import {
+  buildPipeline,
+  type BuilderDelegate,
+} from '../../zql/src/builder/builder.ts';
 import {
   Debug,
   type DebugDelegate,
@@ -27,6 +33,7 @@ import {Database, Statement} from './db.ts';
 import {explainQueries} from './explain-queries.ts';
 import {format} from './internal/sql.ts';
 import {filtersToSQL} from './query-builder.ts';
+import {QueryDelegateImpl} from './query-delegate.ts';
 import {
   bufferAndSortRuns,
   fromSQLiteTypes,
@@ -2154,5 +2161,86 @@ describe('Phase 3: run-buffering fallback for secondary indexes lacking PK', () 
     const [sqlQuery] = Object.entries(plans)[0];
     // Falls back to sending full sort to SQLite
     expect(sqlQuery).toContain('ORDER BY "title" asc, "id" asc');
+  });
+
+  test('buildPipeline with related subquery ordering by secondary column uses run-buffering and eliminates temp b-tree', () => {
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        name TEXT
+      );
+      CREATE TABLE comments (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        created_at INTEGER
+      );
+      -- Secondary index on comments(created_at) without PK
+      CREATE INDEX idx_comments_created ON comments(created_at DESC);
+
+      INSERT INTO users (id, name) VALUES ('u1', 'Alice');
+      INSERT INTO comments (id, user_id, created_at) VALUES ('c1', 'u1', 100);
+    `);
+
+    const schema: Schema = {
+      tables: {
+        users: {
+          name: 'users',
+          columns: {
+            id: {type: 'string'},
+            name: {type: 'string'},
+          },
+          primaryKey: ['id'],
+        },
+        comments: {
+          name: 'comments',
+          columns: {
+            id: {type: 'string'},
+            user_id: {type: 'string'},
+            created_at: {type: 'number'},
+          },
+          primaryKey: ['id'],
+        },
+      },
+      relationships: {},
+    };
+
+    const delegate: BuilderDelegate = new QueryDelegateImpl(lc, db, schema);
+    const debug = new Debug(false);
+    delegate.debug = debug;
+
+    const ast: AST = {
+      table: 'users',
+      orderBy: [['name', 'asc']],
+      related: [
+        {
+          correlation: {
+            parentField: ['id'],
+            childField: ['user_id'],
+          },
+          subquery: {
+            table: 'comments',
+            alias: 'comments',
+            orderBy: [['created_at', 'desc']],
+          },
+        },
+      ],
+    };
+
+    const sink = new Catch(buildPipeline(ast, delegate, 'q-subquery-order'));
+    sink.fetch();
+
+    const plans = debug.getSQLitePlans();
+    // Verify that comments query used idx_comments_created and NO temp b-tree
+    const commentsPlanEntry = Object.entries(plans).find(([sql]) =>
+      sql.includes('"comments"'),
+    );
+    expect(commentsPlanEntry).toBeDefined();
+    const [sqlQuery, planLines] = commentsPlanEntry!;
+    expect(sqlQuery).toContain('ORDER BY "created_at" desc');
+    expect(sqlQuery.split('ORDER BY')[1]).not.toContain('"id"');
+    const planText = planLines.join('\n');
+    expect(planText).toContain('USING INDEX idx_comments_created');
+    expect(planText).not.toContain('TEMP B-TREE');
   });
 });
