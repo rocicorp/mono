@@ -57,6 +57,7 @@ import {
   ReplicationStatusPublisher,
 } from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
+import {IndexMetadataStore} from '../../replicator/schema/index-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {publicationRowFilter} from './backfill-resume.ts';
 import {toStateVersionString} from './lsn.ts';
@@ -320,7 +321,13 @@ export async function initialSync(
         5000,
       );
       // Excludes the time spent reporting progress.
-      const index = await createLiteIndices(lc, tx, indexes, statusPublisher);
+      const index = await createLiteIndices(
+        lc,
+        tx,
+        indexes,
+        statusPublisher,
+        published.tables,
+      );
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
       if (slotName && replicaID) {
@@ -639,11 +646,18 @@ export async function createLiteIndices(
   tx: Database,
   indices: IndexSpec[],
   statusPublisher: ReplicationStatusPublisher,
+  tables?: readonly PublishedTableSpec[],
 ): Promise<number> {
   let totalMs = 0;
   const progress = new IndexingProgress(indices.length);
+  const pkByTable = new Map(
+    tables?.map(t => [`${t.schema}.${t.name}`, t.primaryKey ?? []]),
+  );
+  const indexMetadata = IndexMetadataStore.getOrCreateInstance(tx);
   for (const [i, index] of indices.entries()) {
-    const liteIndex = mapPostgresToLiteIndex(index);
+    const pk = pkByTable.get(`${index.schema}.${index.tableName}`);
+    const liteIndex = mapPostgresToLiteIndex(index, pk);
+    indexMetadata.setIndex(liteIndex.tableName, liteIndex.name, index);
     const stmt = createLiteIndexStatement(liteIndex);
     const n = `${i + 1}/${indices.length}`;
     lc.info?.(`Creating index ${n}: ${stmt}`);
@@ -719,8 +733,12 @@ export function verifyShadowReplica(
 
   //    Every published index exists in the replica.
   const liteIndexNames = new Set(listIndexes(db).map(i => i.name));
+  const pkByTable = new Map(
+    published.tables.map(t => [`${t.schema}.${t.name}`, t.primaryKey ?? []]),
+  );
   for (const ix of published.indexes) {
-    const mapped = mapPostgresToLiteIndex(ix);
+    const pk = pkByTable.get(`${ix.schema}.${ix.tableName}`);
+    const mapped = mapPostgresToLiteIndex(ix, pk);
     if (!liteIndexNames.has(mapped.name)) {
       issues.push(
         `missing index in replica: ${mapped.name} on ${mapped.tableName}`,

@@ -2492,6 +2492,52 @@ describe('replicator/change-processor', () => {
       indexSpecs: [],
     },
     {
+      name: 'update table metadata rebuilds secondary indexes with new primary key',
+      setup: `
+        CREATE TABLE foo(id INT8, new_id INT8, val TEXT, _0_version TEXT);
+      
+        INSERT INTO "_zero.tableMetadata" ("schema", "table", "upstreamMetadata") VALUES
+          ('public', 'foo', '{"rowKey":{"columns":["id"]}}');
+
+        INSERT INTO "_zero.index_metadata" ("tableName", "name", "spec") VALUES
+          ('foo', 'foo_val_idx', '{"tableName":"foo","name":"foo_val_idx","columns":{"val":"ASC"},"unique":false}');
+
+        CREATE INDEX foo_val_idx ON foo(val ASC, id ASC);
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
+        [
+          'data',
+          {
+            tag: 'update-table-metadata',
+            table: {schema: 'public', name: 'foo'},
+            old: {rowKey: {columns: ['id']}},
+            new: {rowKey: {columns: ['new_id']}},
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            upstreamMetadata: '{"rowKey":{"columns":["new_id"]}}',
+            minRowVersion: '00',
+            metadata: null,
+          },
+        ],
+      },
+      indexSpecs: [
+        {
+          tableName: 'foo',
+          name: 'foo_val_idx',
+          columns: {val: 'ASC', new_id: 'ASC'},
+          unique: false,
+        },
+      ],
+    },
+    {
       name: 'create index',
       setup: `
         CREATE TABLE foo(id INT8, handle TEXT, _0_version TEXT);

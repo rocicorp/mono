@@ -209,7 +209,11 @@ function buildReplica(model: SchemaModel): Database {
     metadata.insert(model.tableName, name, spec);
   }
   for (const index of model.indexes) {
-    db.exec(createLiteIndexStatement(mapPostgresToLiteIndex(index)));
+    db.exec(
+      createLiteIndexStatement(
+        mapPostgresToLiteIndex(index, pgTable.primaryKey),
+      ),
+    );
   }
 
   const columns = model.columns.map(({name}) => name);

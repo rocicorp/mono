@@ -290,9 +290,17 @@ export const publishedSchema = v
         ),
       ),
     }));
+    const pkByTable = new Map(
+      tables.map(t => [`${t.schema}.${t.name}`, t.primaryKey ?? []]),
+    );
     const zqlSpecs = computeZqlSpecsFromLiteSpecs(
       tables.map(t => mapPostgresToLite(t)),
-      indexes.map(mapPostgresToLiteIndex),
+      indexes.map(idx =>
+        mapPostgresToLiteIndex(
+          idx,
+          pkByTable.get(`${idx.schema}.${idx.tableName}`),
+        ),
+      ),
       {includeBackfillingColumns: true},
     );
     const result = {

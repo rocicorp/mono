@@ -2891,13 +2891,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         );
 
         const syncedIndexes = listIndexes(replica);
+        const pkByTable = new Map(
+          tables.map(table => [table.name, table.primaryKey ?? []]),
+        );
         // Test stringified indexes to verify field ordering.
         expect(JSON.stringify(syncedIndexes, null, 2)).toEqual(
           JSON.stringify(
             c.replicatedIndexes.map(idx => {
               // The replica reports a `partial` flag rather than the
               // structured predicate.
-              const {predicate, ...lite} = mapPostgresToLiteIndex(idx);
+              const pk = pkByTable.get(idx.tableName);
+              const {predicate, ...lite} = mapPostgresToLiteIndex(idx, pk);
               return predicate ? {...lite, partial: true} : lite;
             }),
             null,
@@ -3042,7 +3046,9 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     expect(indexMs).toBeLessThan(200);
     expect(
       replica
-        .prepare(`SELECT name FROM sqlite_master WHERE type = 'index'`)
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'foo'`,
+        )
         .all(),
     ).toEqual([{name: 'foo_a'}, {name: 'foo_b'}]);
   });

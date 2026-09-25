@@ -1318,13 +1318,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tableName: 'your.pred',
           name: 'your.pred_flag',
-          columns: {other: 'ASC'},
+          columns: {other: 'ASC', id: 'ASC'},
           unique: false,
           partial: true,
         },
       ],
       {
-        ['your.pred_flag']: `CREATE INDEX "your.pred_flag" ON "your.pred" ("other" ASC) WHERE "flag" > 0`,
+        ['your.pred_flag']: `CREATE INDEX "your.pred_flag" ON "your.pred" ("other" ASC,"id" ASC) WHERE "flag" > 0`,
       },
     ],
     [

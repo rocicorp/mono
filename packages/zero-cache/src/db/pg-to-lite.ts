@@ -206,11 +206,27 @@ export function mapPostgresToLite(
   };
 }
 
-export function mapPostgresToLiteIndex(index: IndexSpec): LiteIndexSpec {
-  const {schema, tableName, name, ...liteIndex} = index;
+export function mapPostgresToLiteIndex(
+  index: IndexSpec,
+  primaryKey?: readonly string[],
+): LiteIndexSpec {
+  const {schema = 'public', tableName, name, columns, ...liteIndex} = index;
+  const mappedColumns = {...columns};
+  if (!index.unique && primaryKey && primaryKey.length > 0) {
+    const existingCols = new Set(Object.keys(mappedColumns));
+    const missingPKs = primaryKey.filter(pk => !existingCols.has(pk));
+    if (missingPKs.length > 0) {
+      const colEntries = Object.entries(columns);
+      const trailingDirection = colEntries.at(-1)?.[1] ?? 'ASC';
+      for (const pk of missingPKs) {
+        mappedColumns[pk] = trailingDirection;
+      }
+    }
+  }
   return {
     tableName: liteTableName({schema, name: tableName}),
     name: liteTableName({schema, name}),
+    columns: mappedColumns,
     ...liteIndex,
   };
 }

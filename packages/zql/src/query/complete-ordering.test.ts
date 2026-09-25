@@ -726,4 +726,33 @@ describe('completeOrdering', () => {
       ['connectionId', 'asc'],
     ]);
   });
+
+  test('appends missing primary keys with direction of trailing order column', () => {
+    const issueQueryDesc = newQuery(schema, 'issue').orderBy('title', 'desc');
+    expect(
+      completeOrdering(ast(issueQueryDesc), getPrimaryKey).orderBy,
+    ).toEqual([
+      ['title', 'desc'],
+      ['id', 'desc'],
+    ]);
+
+    const partialCompoundDesc = newQuery(schema, 'issueLabel').orderBy(
+      'labelId',
+      'desc',
+    );
+    expect(
+      completeOrdering(ast(partialCompoundDesc), getPrimaryKey).orderBy,
+    ).toEqual([
+      ['labelId', 'desc'],
+      ['issueId', 'desc'],
+    ]);
+
+    const mixedOrder = newQuery(schema, 'issueLabel')
+      .orderBy('issueId', 'asc')
+      .orderBy('labelId', 'desc');
+    expect(completeOrdering(ast(mixedOrder), getPrimaryKey).orderBy).toEqual([
+      ['issueId', 'asc'],
+      ['labelId', 'desc'],
+    ]);
+  });
 });

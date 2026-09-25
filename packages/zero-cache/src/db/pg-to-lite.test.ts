@@ -3,6 +3,7 @@ import {
   mapPostgresToLite,
   mapPostgresToLiteColumn,
   mapPostgresToLiteDefault,
+  mapPostgresToLiteIndex,
   UnsupportedColumnDefaultError,
 } from './pg-to-lite.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
@@ -481,4 +482,77 @@ test.each([
   ["'{}'::integer[]", "'[]'"],
 ])('supported column default %s', (input, output) => {
   expect(mapPostgresToLiteDefault('foo', 'bar', input)).toEqual(output);
+});
+
+test('mapPostgresToLiteIndex appends missing primary key columns to non-unique indexes', () => {
+  const baseIndex = {
+    schema: 'public',
+    tableName: 'issues',
+    name: 'issues_created_idx',
+    unique: false,
+    columns: {created: 'DESC' as const},
+  };
+
+  // 1. Missing PK 'id' is appended inheriting trailing direction 'DESC'
+  expect(mapPostgresToLiteIndex(baseIndex, ['id'])).toEqual({
+    tableName: 'issues',
+    name: 'issues_created_idx',
+    unique: false,
+    columns: {created: 'DESC', id: 'DESC'},
+  });
+
+  // 2. Trailing direction ASC is inherited
+  const ascIndex = {
+    ...baseIndex,
+    columns: {created: 'ASC' as const},
+  };
+  expect(mapPostgresToLiteIndex(ascIndex, ['id'])).toEqual({
+    tableName: 'issues',
+    name: 'issues_created_idx',
+    unique: false,
+    columns: {created: 'ASC', id: 'ASC'},
+  });
+
+  // 3. Multi-column PK columns appended in order
+  expect(mapPostgresToLiteIndex(baseIndex, ['orgId', 'id'])).toEqual({
+    tableName: 'issues',
+    name: 'issues_created_idx',
+    unique: false,
+    columns: {created: 'DESC', orgId: 'DESC', id: 'DESC'},
+  });
+
+  // 4. If index already includes some PK columns, only missing PK columns are appended
+  const partialPKIndex = {
+    schema: 'public',
+    tableName: 'issues',
+    name: 'issues_org_created_idx',
+    unique: false,
+    columns: {orgId: 'ASC' as const, created: 'DESC' as const},
+  };
+  expect(mapPostgresToLiteIndex(partialPKIndex, ['orgId', 'id'])).toEqual({
+    tableName: 'issues',
+    name: 'issues_org_created_idx',
+    unique: false,
+    columns: {orgId: 'ASC', created: 'DESC', id: 'DESC'},
+  });
+
+  // 5. Unique indexes do NOT get PK appended (must preserve uniqueness semantics)
+  const uniqueIndex = {
+    ...baseIndex,
+    unique: true,
+  };
+  expect(mapPostgresToLiteIndex(uniqueIndex, ['id'])).toEqual({
+    tableName: 'issues',
+    name: 'issues_created_idx',
+    unique: true,
+    columns: {created: 'DESC'},
+  });
+
+  // 6. When no primaryKey is supplied, columns are unchanged
+  expect(mapPostgresToLiteIndex(baseIndex)).toEqual({
+    tableName: 'issues',
+    name: 'issues_created_idx',
+    unique: false,
+    columns: {created: 'DESC'},
+  });
 });

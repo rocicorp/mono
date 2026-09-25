@@ -86,8 +86,13 @@ function addPrimaryKeys(
     return orderBy;
   }
 
+  const trailingDirection: 'asc' | 'desc' = orderBy.at(-1)?.[1] ?? 'asc';
+
   return [
     ...orderBy,
-    ...Array.from(primaryKeysToAdd, key => [key, 'asc'] as [string, 'asc']),
+    ...Array.from(
+      primaryKeysToAdd,
+      key => [key, trailingDirection] as [string, 'asc' | 'desc'],
+    ),
   ];
 }
