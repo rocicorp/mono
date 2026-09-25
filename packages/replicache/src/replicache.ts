@@ -6,6 +6,7 @@ import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import {ReplicacheImpl} from './replicache-impl.ts';
 import type {ReplicacheOptions} from './replicache-options.ts';
+import type {StorageFailure} from './storage-failure.ts';
 import type {
   SubscribeOptions,
   WatchCallbackForOptions,
@@ -196,6 +197,36 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
   set onClientStateNotFound(value: (() => void) | null) {
     this.#impl.onClientStateNotFound = value;
+  }
+
+  /**
+   * `onStorageFailure` is called once, the first time the local kv store
+   * reports that its storage has failed rather than its data: the device is
+   * out of space (`SQLITE_FULL`), the database file cannot be opened
+   * (`SQLITE_CANTOPEN`), or a read or write to it failed (`SQLITE_IOERR`).
+   *
+   * From then on this instance stops persisting and refreshing, and an
+   * invalid ref count under `cannot-open` / `io-error` is not treated as
+   * corruption, because a rebuild would open the same failing storage and a
+   * wipe would destroy an intact replica. A `full` disk keeps the drop, since
+   * deleting the database is also what frees the space.
+   * Queries and mutations keep running against what the in-memory dag holds
+   * and mutations keep pushing to the server; a read that needs a chunk not
+   * yet loaded from the store still fails the way any store read does. Create
+   * a new instance once the condition is cleared.
+   *
+   * Detection is on the persist path (the open, `persist()`, `refresh()`);
+   * the background maintenance processes do not classify their own errors,
+   * and stop on the first detected failure rather than retry against the
+   * store.
+   *
+   * The default behavior is to log the failure and nothing else.
+   */
+  get onStorageFailure(): ((failure: StorageFailure) => void) | null {
+    return this.#impl.onStorageFailure;
+  }
+  set onStorageFailure(value: ((failure: StorageFailure) => void) | null) {
+    this.#impl.onStorageFailure = value;
   }
 
   /**

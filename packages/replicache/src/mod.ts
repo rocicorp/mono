@@ -51,6 +51,7 @@ export type {Puller, PullerResult, PullResponse} from './puller.ts';
 export type {Pusher, PusherResult, PushError, PushResponse} from './pusher.ts';
 export type {ReplicacheOptions} from './replicache-options.ts';
 export {Replicache} from './replicache.ts';
+export type {StorageFailure, StorageFailureKind} from './storage-failure.ts';
 export {makeScanResult} from './scan-iterator.ts';
 export type {
   AsyncIterableIteratorToArray,

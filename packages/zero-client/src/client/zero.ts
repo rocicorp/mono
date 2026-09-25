@@ -533,6 +533,7 @@ export class Zero<
       onOnlineChange,
       onUpdateNeeded,
       onClientStateNotFound,
+      onStorageFailure,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       pingTimeoutMs = DEFAULT_PING_TIMEOUT_MS,
       disconnectTimeoutMs = DEFAULT_DISCONNECT_TIMEOUT_MS,
@@ -783,6 +784,7 @@ export class Zero<
         ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
       );
     };
+    this.#rep.onStorageFailure = onStorageFailure ?? null;
 
     const mutatorProxy = new MutatorProxy(
       this.#lc,

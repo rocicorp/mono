@@ -1,5 +1,6 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
+import type {StorageFailure} from '../../../replicache/src/storage-failure.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {
   BaseDefaultContext,
@@ -258,6 +259,35 @@ export type ZeroOptions<
    * Provide your own function to prevent this functionality.
    */
   onClientStateNotFound?: (() => void) | undefined;
+
+  /**
+   * `onStorageFailure` is called once, the first time the local persistent
+   * store reports that its storage has failed rather than its data: the
+   * device is out of space (`SQLITE_FULL`), the database file cannot be
+   * opened (`SQLITE_CANTOPEN`), or a read or write to it failed
+   * (`SQLITE_IOERR`).
+   *
+   * From then on this `Zero` instance stops persisting locally. Queries and
+   * mutations keep running against what the in-memory dag holds, and
+   * mutations keep pushing to zero-cache, but nothing is written to disk
+   * until a new instance is created; a read that needs a chunk not yet loaded
+   * from the store still fails the way any store read does. An invalid ref count seen while
+   * the store is failing with `cannot-open` or `io-error` is not treated as
+   * corruption, so {@link onClientStateNotFound} is not called for it: a store
+   * that cannot complete its reads and writes produces such readings without
+   * the data being corrupt, and dropping the database would rebuild onto the
+   * same failing storage. A `full` disk keeps the drop, since deleting the
+   * database is also what frees the space.
+   *
+   * Detection is on the persist path (the open, persist and refresh); the
+   * background maintenance processes do not classify their own errors, and
+   * stop on the first detected failure rather than retry against the store.
+   *
+   * The default behavior is to log the failure and nothing else. Provide a
+   * function to show the user what to do — free up space, or restart the
+   * app once the storage is available again.
+   */
+  onStorageFailure?: ((failure: StorageFailure) => void) | undefined;
 
   /**
    * The number of milliseconds to wait before disconnecting a Zero

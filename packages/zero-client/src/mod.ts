@@ -239,6 +239,10 @@ export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
+export type {
+  StorageFailure,
+  StorageFailureKind,
+} from '../../replicache/src/storage-failure.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
 export {Zero, type ZeroMutate} from './client/zero.ts';
 export type {
