@@ -38,7 +38,6 @@ export type { PullRequest } from './sync/pull.ts';
 export type { Pusher, PusherResult, PushError, PushResponse } from './pusher.ts';
 export { Replicache } from './replicache.ts';
 export type { ReplicacheOptions } from './replicache-options.ts';
-export { StorageFailureError, type StorageFailureKind, } from './storage-failure.ts';
 export { TEST_LICENSE_KEY } from './test-license-key.ts';
 export { TransactionClosedError } from './transaction-closed-error.ts';
 export { version } from './version.ts';

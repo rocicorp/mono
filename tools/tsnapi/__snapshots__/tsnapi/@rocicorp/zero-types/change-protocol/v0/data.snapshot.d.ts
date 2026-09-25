@@ -1,6 +1,7 @@
 // #region Types
 export type BackfillCompleted = v.Infer<typeof backfillCompletedSchema>;
 export type BackfillID = v.Infer<typeof backfillIDSchema>;
+export type BackfillProgressMark = v.Infer<typeof backfillProgressMarkSchema>;
 export type Change = MessageBegin | DataOrSchemaChange | MessageCommit | MessageRollback;
 export type ChangeTag = Change['tag'];
 export type ColumnAdd = v.Infer<typeof addColumnSchema>;
@@ -74,6 +75,13 @@ export declare const backfillCompletedSchema: v.ObjectType<{
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
+    progressMarks: v.Optional<{
+        previous?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+    }>;
     status: v.Optional<{
         rows: number;
         totalRows: number;
@@ -81,6 +89,10 @@ export declare const backfillCompletedSchema: v.ObjectType<{
     }>;
 }, undefined>;
 export declare const backfillIDSchema: v.Type<Record<string, import("./json.ts").JSONValue | undefined>>;
+export declare const backfillProgressMarkSchema: v.ObjectType<{
+    progressMark: v.Type<string>;
+    timeline: v.Optional<string>;
+}, v.UnionType<[v.Type<number>, v.Type<string>]>>;
 export declare const backfillSchema: v.ObjectType<{
     tag: v.Type<"backfill">;
     relation: v.ObjectType<{
@@ -94,6 +106,18 @@ export declare const backfillSchema: v.ObjectType<{
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     rowValues: v.ArrayType<v.ArrayType<v.Type<import("../../../../../../shared/src/bigint-json.ts").JSONValue>>>;
+    progressMarks: v.Optional<{
+        previous?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+        current: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        };
+    }>;
     status: v.Optional<{
         rows: number;
         totalRows: number;
@@ -209,6 +233,18 @@ export declare const dataChangeSchema: v.UnionType<[v.ObjectType<{
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     rowValues: v.ArrayType<v.ArrayType<v.Type<import("../../../../../../shared/src/bigint-json.ts").JSONValue>>>;
+    progressMarks: v.Optional<{
+        previous?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+        current: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        };
+    }>;
     status: v.Optional<{
         rows: number;
         totalRows: number;
@@ -446,6 +482,13 @@ export declare const schemaChangeSchema: v.UnionType<[v.ObjectType<{
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
+    progressMarks: v.Optional<{
+        previous?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+    }>;
     status: v.Optional<{
         rows: number;
         totalRows: number;

@@ -14,7 +14,14 @@ export declare const backfillRequestSchema: v.ObjectType<{
             rowKey: Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>;
         } | null>;
     }, undefined>;
-    columns: v.Type<Record<string, Record<string, import("./json.ts").JSONValue | undefined>>>;
+    columns: v.Type<Record<string, {
+        id: Record<string, import("./json.ts").JSONValue | undefined>;
+        progress?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+    }>>;
 }, undefined>;
 export declare const changeSourceUpstreamSchema: v.TupleType<[v.Type<"status">, v.UnionType<[v.ObjectType<{
     ack: v.Type<boolean>;

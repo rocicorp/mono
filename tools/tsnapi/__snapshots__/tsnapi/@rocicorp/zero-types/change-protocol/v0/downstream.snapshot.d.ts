@@ -85,6 +85,18 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     rowValues: v.ArrayType<v.ArrayType<v.Type<import("../../../../../../shared/src/bigint-json.ts").JSONValue>>>;
+    progressMarks: v.Optional<{
+        previous?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+        current: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        };
+    }>;
     status: v.Optional<{
         rows: number;
         totalRows: number;
@@ -229,6 +241,13 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
+    progressMarks: v.Optional<{
+        previous?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+    }>;
     status: v.Optional<{
         rows: number;
         totalRows: number;
@@ -313,6 +332,18 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     rowValues: v.ArrayType<v.ArrayType<v.Type<import("../../../../../../shared/src/bigint-json.ts").JSONValue>>>;
+    progressMarks: v.Optional<{
+        previous?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+        current: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        };
+    }>;
     status: v.Optional<{
         rows: number;
         totalRows: number;
@@ -457,6 +488,13 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
+    progressMarks: v.Optional<{
+        previous?: {
+            [x: string]: string | number;
+            progressMark: string;
+            timeline?: string | undefined;
+        } | undefined;
+    }>;
     status: v.Optional<{
         rows: number;
         totalRows: number;
