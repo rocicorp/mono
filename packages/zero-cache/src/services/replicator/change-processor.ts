@@ -681,8 +681,11 @@ class TransactionProcessor {
   }
 
   processUpdateColumn(msg: ColumnUpdate) {
-    // A no-op unless this is a rename, which is the only part of a column
-    // update that moves the backfill cookie.
+    if (msg.tableMetadata) {
+      this.#tableMetadata.setUpstreamMetadata(msg.table, msg.tableMetadata);
+    }
+    // Moves the backfill cookie on a rename, and starts one if the column's
+    // values must be backfilled.
     this.#backfilling.apply(msg);
 
     const table = liteTableName(msg.table);
@@ -698,7 +701,7 @@ class TransactionProcessor {
     // upstream metadata needs to be updated. This includes changes such as a
     // varchar character limit and nullability, which SQLite does not enforce
     // but a freshly built replica still records.
-    if (oldName === newName && !storageTypesDiffer) {
+    if (oldName === newName && !storageTypesDiffer && !msg.backfill) {
       this.#columnMetadata.update(
         table,
         msg.old.name,
@@ -786,6 +789,11 @@ class TransactionProcessor {
       msg.new.name,
       msg.new.spec,
     );
+    if (msg.backfill) {
+      // The existing values are stale. Hide the column from clients until
+      // the backfill completes, which bumps the versions again.
+      this.#columnMetadata.setBackfilling(table, newName, msg.backfill);
+    }
 
     this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, msg.new);

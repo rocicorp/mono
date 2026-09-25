@@ -840,6 +840,195 @@ describe('backfill-manager', () => {
     ]);
   });
 
+  test('backfill canceled and retried because of column rewrite', async () => {
+    testStreams.push(
+      [
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          columns: ['b'],
+          watermark: '120',
+        },
+      ],
+      [
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          columns: ['b'],
+          watermark: '130',
+        },
+      ],
+    );
+    await changeStream.reserve('main');
+
+    // Backfill manager will start the first request and block on the
+    // 'main' change-stream reservation.
+    backfillManager.run('123', [
+      {
+        columns: {b: {id: '234'}},
+        table: {
+          schema: 'foo',
+          name: 'bar',
+          metadata: {rowKey: {a: 123}},
+        },
+      },
+    ]);
+
+    // In the meantime, the type of the column being backfilled changes on the
+    // main stream, so its values must be re-read at a new snapshot.
+    const rewrite = {
+      tag: 'update-column',
+      table: {schema: 'foo', name: 'bar'},
+      old: {name: 'b', spec: {dataType: 'int4', pos: 2}},
+      new: {name: 'b', spec: {dataType: 'int8', pos: 2}},
+      tableMetadata: {rowKey: {a: 456}},
+      backfill: {id: '345'},
+    } as const;
+    for (const msg of [
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      ['data', rewrite],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+    ] satisfies ChangeStreamMessage[]) {
+      void changeStream.push(msg);
+    }
+    changeStream.release('125');
+    changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
+
+    // The first request is canceled and only the changes from
+    // the updated request are streamed.
+    await expectChanges([
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      ['data', rewrite],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+      ['begin', {tag: 'begin'}, {commitWatermark: '130'}],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          columns: ['b'],
+          watermark: '130',
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
+    ] satisfies ChangeStreamMessage[]);
+
+    expect(backfillRequests).toEqual([
+      // Canceled request
+      {
+        table: {
+          schema: 'foo',
+          name: 'bar',
+          metadata: {rowKey: {a: 123}},
+        },
+        columns: {b: {id: '234'}},
+      },
+      // Updated request
+      {
+        table: {
+          schema: 'foo',
+          name: 'bar',
+          metadata: {rowKey: {a: 456}},
+        },
+        columns: {b: {id: '345'}},
+      },
+    ]);
+  });
+
+  test('rewrite of another column does not cancel a running backfill', async () => {
+    testStreams.push(
+      [
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          columns: ['b'],
+          watermark: '125',
+        },
+      ],
+      [
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          columns: ['c'],
+          watermark: '130',
+        },
+      ],
+    );
+    await changeStream.reserve('main');
+
+    backfillManager.run('123', [
+      {
+        columns: {b: {id: '234'}},
+        table: {
+          schema: 'foo',
+          name: 'bar',
+          metadata: {rowKey: {a: 123}},
+        },
+      },
+    ]);
+
+    // The rewritten column is not one that the running backfill is reading,
+    // so the running backfill is left alone and 'c' is backfilled after it.
+    const rewrite = {
+      tag: 'update-column',
+      table: {schema: 'foo', name: 'bar'},
+      old: {name: 'c', spec: {dataType: 'int4', pos: 3}},
+      new: {name: 'c', spec: {dataType: 'int8', pos: 3}},
+      tableMetadata: {rowKey: {a: 123}},
+      backfill: {id: '345'},
+    } as const;
+    for (const msg of [
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      ['data', rewrite],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+    ] satisfies ChangeStreamMessage[]) {
+      void changeStream.push(msg);
+    }
+    changeStream.release('125');
+    changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
+
+    await expectChanges([
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      ['data', rewrite],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+      ['begin', {tag: 'begin'}, {commitWatermark: '125.01'}],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          columns: ['b'],
+          watermark: '125',
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '125.01'}],
+      ['begin', {tag: 'begin'}, {commitWatermark: '130'}],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          columns: ['c'],
+          watermark: '130',
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
+    ] satisfies ChangeStreamMessage[]);
+
+    expect(backfillRequests).toEqual([
+      // The running request, which was not canceled.
+      {
+        table: {schema: 'foo', name: 'bar', metadata: {rowKey: {a: 123}}},
+        columns: {b: {id: '234'}},
+      },
+      // The rewritten column, backfilled after it.
+      {
+        table: {schema: 'foo', name: 'bar', metadata: {rowKey: {a: 123}}},
+        columns: {c: {id: '345'}},
+      },
+    ]);
+  });
+
   test('backfill canceled and retried because of table rename', async () => {
     testStreams.push(
       [

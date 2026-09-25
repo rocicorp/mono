@@ -34,6 +34,8 @@ const ROW_KEY: {columns: string[]; type: 'default'} = {
   type: 'default',
 };
 
+const METADATA = {rowKey: {type: 'index', columns: ['a', 'b']}};
+
 const CREATE_FOO: SchemaChange = {
   tag: 'create-table',
   spec: {schema: 'my', name: 'foo', columns: {}},
@@ -168,8 +170,8 @@ describe('replicator/change-log-cookies', () => {
         ],
       ],
       [
-        // A type change moves nothing: whether a column is backfilling is not a
-        // property of its spec.
+        // A type change without a backfill moves nothing: whether a column is
+        // backfilling is not a property of its spec.
         'update-column that does not rename',
         {
           tag: 'update-column',
@@ -178,6 +180,37 @@ describe('replicator/change-log-cookies', () => {
           new: {name: 'a', spec: {pos: 1, dataType: 'int4'}},
         },
         [],
+      ],
+      [
+        // A column whose values were rewritten upstream is backfilled.
+        'update-column that renames and backfills',
+        {
+          tag: 'update-column',
+          table: {schema: 'my', name: 'foo'},
+          old: {name: 'a', spec: {pos: 1, dataType: 'text'}},
+          new: {name: 'z', spec: {pos: 1, dataType: 'int4'}},
+          tableMetadata: METADATA,
+          backfill: {attNum: 1},
+        },
+        [
+          {
+            op: 'rename-column',
+            table: {schema: 'my', name: 'foo'},
+            old: 'a',
+            new: 'z',
+          },
+          {
+            op: 'upsert-metadata',
+            table: {schema: 'my', name: 'foo'},
+            metadata: METADATA,
+          },
+          {
+            op: 'upsert-backfill',
+            table: {schema: 'my', name: 'foo'},
+            column: 'z',
+            backfill: {attNum: 1},
+          },
+        ],
       ],
       [
         'drop-column',

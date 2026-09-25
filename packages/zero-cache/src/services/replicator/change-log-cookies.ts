@@ -181,12 +181,30 @@ export function cookieOps(change: SchemaChange): CookieOp[] {
     }
 
     case 'update-column': {
-      // Only a rename moves the cookie; the rest of a column update does not
-      // affect whether or how it is being backfilled.
-      const {table, old, new: updated} = change;
-      return old.name === updated.name
-        ? []
-        : [{op: 'rename-column', table, old: old.name, new: updated.name}];
+      // A rename moves the cookie. A column whose values were rewritten
+      // (e.g. by a type change) carries a `backfill` that (re)starts one.
+      const {table, old, new: updated, tableMetadata, backfill} = change;
+      const ops: CookieOp[] = [];
+      if (old.name !== updated.name) {
+        ops.push({
+          op: 'rename-column',
+          table,
+          old: old.name,
+          new: updated.name,
+        });
+      }
+      if (tableMetadata) {
+        ops.push({op: 'upsert-metadata', table, metadata: tableMetadata});
+      }
+      if (backfill) {
+        ops.push({
+          op: 'upsert-backfill',
+          table,
+          column: updated.name,
+          backfill,
+        });
+      }
+      return ops;
     }
 
     case 'drop-column':

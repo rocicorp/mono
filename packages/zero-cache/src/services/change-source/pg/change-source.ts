@@ -50,6 +50,7 @@ import type {
 } from '../protocol/current.ts';
 import type {
   ColumnAdd,
+  ColumnUpdate,
   Identifier,
   MessageRelation,
   SchemaChange,
@@ -1341,12 +1342,42 @@ class ChangeMaker {
         oldSpec.dataType !== newSpec.dataType ||
         oldSpec.notNull !== newSpec.notNull
       ) {
-        changes.push({
+        const updateColumn: ColumnUpdate = {
           tag: 'update-column',
           table,
           old: {name: oldName, spec: oldSpec},
           new: {name: newName, spec: newSpec},
-        });
+        };
+        // A data type change may rewrite the table with values computed by a
+        // `USING` expression. Table rewrites are not visible to logical
+        // replication, so the column's values must be backfilled.
+        if (oldSpec.dataType !== newSpec.dataType) {
+          if (newTable.replicaIdentityColumns.includes(newName)) {
+            // Backfill merges values into rows by their row key, so it cannot
+            // fix values of the row key itself.
+            lc.warn?.(
+              `Not backfilling row key column ${table.name}.${newName} ` +
+                `after its type changed from ${oldSpec.dataType} to ` +
+                `${newSpec.dataType}. If existing values changed, ` +
+                `the replica must be resynced.`,
+            );
+          } else if (newTable.replicaIdentityColumns.length === 0) {
+            lc.warn?.(
+              `Not backfilling column ${table.name}.${newName} ` +
+                `after its type changed because the table has no row key.`,
+            );
+          } else {
+            lc.info?.(
+              `Backfilling column ${table.name}.${newName} after its type ` +
+                `changed from ${oldSpec.dataType} to ${newSpec.dataType}`,
+            );
+            updateColumn.tableMetadata = newMetadata;
+            updateColumn.backfill = {
+              attNum: newSpec.pos,
+            } satisfies ColumnMetadata;
+          }
+        }
+        changes.push(updateColumn);
       }
     }
 
