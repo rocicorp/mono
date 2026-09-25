@@ -1,4 +1,4 @@
-import {type LogLevel} from '@rocicorp/logger';
+import {consoleLogSink, type LogLevel, type LogSink} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
@@ -28,12 +28,25 @@ export class PushProcessor<
 > {
   readonly #dbProvider: D;
   readonly #logLevel: LogLevel;
+  readonly #logSink: LogSink;
   readonly #context: C;
 
-  constructor(dbProvider: D, context?: C, logLevel: LogLevel = 'info') {
+  /**
+   * @param logSink Destination for this processor's log output. When omitted,
+   *   logs are written with `console.log`/`info`/`warn`/`error` etc. Provide a
+   *   custom {@linkcode LogSink} to redirect them into the application's own
+   *   logging pipeline.
+   */
+  constructor(
+    dbProvider: D,
+    context?: C,
+    logLevel: LogLevel = 'info',
+    logSink: LogSink = consoleLogSink,
+  ) {
     this.#dbProvider = dbProvider;
     this.#context = context as C;
     this.#logLevel = logLevel;
+    this.#logSink = logSink;
   }
 
   /**
@@ -72,6 +85,7 @@ export class PushProcessor<
           this.#processMutation(mutators, transact, mutation),
         queryOrQueryString,
         this.#logLevel,
+        this.#logSink,
       );
     }
     return handleMutateRequest(
@@ -81,6 +95,7 @@ export class PushProcessor<
       queryOrQueryString,
       must(body, 'body is required when using query params directly'),
       this.#logLevel,
+      this.#logSink,
     );
   }
 

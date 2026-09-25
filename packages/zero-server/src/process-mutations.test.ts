@@ -1,3 +1,4 @@
+import type {LogLevel, LogSink} from '@rocicorp/logger';
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {MockInstance} from 'vitest';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
@@ -1421,3 +1422,89 @@ describe.each(mutatorInvokers)(
     });
   },
 );
+
+describe('logSink', () => {
+  let consoleWarnSpy: MockInstance<typeof console.warn>;
+
+  beforeEach(() => {
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleWarnSpy.mockRestore();
+  });
+
+  function createCapturingSink(): {
+    sink: LogSink;
+    records: {level: LogLevel; args: unknown[]}[];
+  } {
+    const records: {level: LogLevel; args: unknown[]}[] = [];
+    return {
+      sink: {
+        log: (level, _context, ...args) => {
+          records.push({level, args});
+        },
+      },
+      records,
+    };
+  }
+
+  test('a provided logSink receives the records instead of the console', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+    const {sink, records} = createCapturingSink();
+
+    await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: () => {
+        throw new Error('never got to db tx');
+      },
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      logSink: sink,
+    });
+
+    expect(records.filter(record => record.level === 'warn')).not.toHaveLength(
+      0,
+    );
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+  });
+
+  test('omitting logSink still writes to the console', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: () => {
+        throw new Error('never got to db tx');
+      },
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+    });
+
+    expect(consoleWarnSpy).toHaveBeenCalled();
+  });
+
+  test('the deprecated positional overloads accept a logSink too', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+    const {sink, records} = createCapturingSink();
+
+    // The `query`/`body` overload: the sink follows `logLevel`.
+    await handleMutateRequest(
+      trackingDb,
+      () => {
+        throw new Error('never got to db tx');
+      },
+      baseQuery,
+      makePushBody([makeCustomMutation({id: 1})]),
+      'info',
+      sink,
+    );
+
+    expect(records.filter(record => record.level === 'warn')).not.toHaveLength(
+      0,
+    );
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+  });
+});
