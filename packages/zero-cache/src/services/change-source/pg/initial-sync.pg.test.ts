@@ -35,6 +35,7 @@ import {
   getInitialDownloadState,
   initialSync,
   INSERT_BATCH_SIZE,
+  resolveTablePKs,
   shadowInitialSync,
   verifyShadowReplica,
 } from './initial-sync.ts';
@@ -2891,9 +2892,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         );
 
         const syncedIndexes = listIndexes(replica);
-        const pkByTable = new Map(
-          tables.map(table => [table.name, table.primaryKey ?? []]),
-        );
+        const pkByTable = resolveTablePKs(tables, c.replicatedIndexes);
         // Test stringified indexes to verify field ordering.
         expect(JSON.stringify(syncedIndexes, null, 2)).toEqual(
           JSON.stringify(

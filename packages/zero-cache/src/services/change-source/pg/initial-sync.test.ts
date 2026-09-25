@@ -1,12 +1,13 @@
 import type postgres from 'postgres';
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import type {PublishedTableSpec} from '../../../db/specs.ts';
+import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {
   getInitialDownloadState,
   makeDownloadStatements,
+  resolveTablePKs,
 } from './initial-sync.ts';
 import {createReplicationSlot} from './replication-slots.ts';
 
@@ -338,5 +339,90 @@ describe('createReplicationSlot', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('resolveTablePKs', () => {
+  test('uses explicit primary key when present', () => {
+    const table: PublishedTableSpec = {
+      schema: 'public',
+      name: 'users',
+      oid: 1,
+      columns: {
+        id: {pos: 1, dataType: 'text', typeOID: 25, notNull: true},
+        name: {pos: 2, dataType: 'text', typeOID: 25, notNull: false},
+      },
+      primaryKey: ['id'],
+      publications: {},
+    } as unknown as PublishedTableSpec;
+
+    const pks = resolveTablePKs([table]);
+    expect(pks.get('public.users')).toEqual(['id']);
+    expect(pks.get('users')).toEqual(['id']);
+  });
+
+  test('picks unique index when table has no explicit primary key', () => {
+    const table: PublishedTableSpec = {
+      schema: 'public',
+      name: 'users',
+      oid: 1,
+      columns: {
+        user_id: {pos: 1, dataType: 'text', typeOID: 25, notNull: true},
+        org_id: {pos: 2, dataType: 'text', typeOID: 25, notNull: true},
+        name: {pos: 3, dataType: 'text', typeOID: 25, notNull: false},
+      },
+      primaryKey: undefined,
+      publications: {},
+    } as unknown as PublishedTableSpec;
+
+    const indices: IndexSpec[] = [
+      {
+        schema: 'public',
+        tableName: 'users',
+        name: 'users_unique',
+        unique: true,
+        columns: {user_id: 'ASC', org_id: 'ASC'},
+      },
+    ];
+
+    const pks = resolveTablePKs([table], indices);
+    expect(pks.get('public.users')).toEqual(['user_id', 'org_id']);
+    expect(pks.get('users')).toEqual(['user_id', 'org_id']);
+  });
+
+  test('picks shortest unique index when multiple candidate unique indexes exist', () => {
+    const table: PublishedTableSpec = {
+      schema: 'public',
+      name: 'users',
+      oid: 1,
+      columns: {
+        id: {pos: 1, dataType: 'text', typeOID: 25, notNull: true},
+        email: {pos: 2, dataType: 'text', typeOID: 25, notNull: true},
+        org_id: {pos: 3, dataType: 'text', typeOID: 25, notNull: true},
+      },
+      primaryKey: [],
+      publications: {},
+    } as unknown as PublishedTableSpec;
+
+    const indices: IndexSpec[] = [
+      {
+        schema: 'public',
+        tableName: 'users',
+        name: 'users_composite_idx',
+        unique: true,
+        columns: {org_id: 'ASC', email: 'ASC'},
+      },
+      {
+        schema: 'public',
+        tableName: 'users',
+        name: 'users_id_idx',
+        unique: true,
+        columns: {id: 'ASC'},
+      },
+    ];
+
+    const pks = resolveTablePKs([table], indices);
+    expect(pks.get('public.users')).toEqual(['id']);
+    expect(pks.get('users')).toEqual(['id']);
   });
 });

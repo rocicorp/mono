@@ -14,7 +14,11 @@ import {
   createLiteIndexStatement,
   createLiteTableStatement,
 } from '../../../db/create.ts';
-import {listIndexes, listTables} from '../../../db/lite-tables.ts';
+import {
+  computeZqlSpecsFromLiteSpecs,
+  listIndexes,
+  listTables,
+} from '../../../db/lite-tables.ts';
 import * as Mode from '../../../db/mode-enum.ts';
 import {
   BinaryCopyParser,
@@ -29,7 +33,11 @@ import {
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import {runTx} from '../../../db/run-transaction.ts';
-import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
+import type {
+  IndexSpec,
+  LiteAndZqlSpec,
+  PublishedTableSpec,
+} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {
   getOrCreateCounter,
@@ -641,6 +649,35 @@ function createLiteTables(
  *
  * Exported for testing.
  */
+/**
+ * Resolves the primary key (or fallback canonical unique index) for each table.
+ * If a table has no explicit primary key constraint, the best candidate unique index
+ * is chosen via {@link computeZqlSpecsFromLiteSpecs}.
+ */
+export function resolveTablePKs(
+  tables?: readonly PublishedTableSpec[],
+  indices?: readonly IndexSpec[],
+): Map<string, readonly string[]> {
+  let zqlSpecs: Map<string, LiteAndZqlSpec> | undefined;
+  if (tables?.some(t => !t.primaryKey?.length) && indices) {
+    zqlSpecs = computeZqlSpecsFromLiteSpecs(
+      tables.map(t => mapPostgresToLite(t)),
+      indices.map(idx => mapPostgresToLiteIndex(idx)),
+      {includeBackfillingColumns: true},
+    );
+  }
+  const map = new Map<string, readonly string[]>();
+  for (const t of tables ?? []) {
+    const pk =
+      t.primaryKey && t.primaryKey.length > 0
+        ? t.primaryKey
+        : (zqlSpecs?.get(liteTableName(t))?.tableSpec.primaryKey ?? []);
+    map.set(`${t.schema}.${t.name}`, pk);
+    map.set(t.name, pk);
+  }
+  return map;
+}
+
 export async function createLiteIndices(
   lc: LogContext,
   tx: Database,
@@ -650,9 +687,7 @@ export async function createLiteIndices(
 ): Promise<number> {
   let totalMs = 0;
   const progress = new IndexingProgress(indices.length);
-  const pkByTable = new Map(
-    tables?.map(t => [`${t.schema}.${t.name}`, t.primaryKey ?? []]),
-  );
+  const pkByTable = resolveTablePKs(tables, indices);
   const indexMetadata = IndexMetadataStore.getOrCreateInstance(tx);
   for (const [i, index] of indices.entries()) {
     const pk = pkByTable.get(`${index.schema}.${index.tableName}`);
@@ -733,9 +768,7 @@ export function verifyShadowReplica(
 
   //    Every published index exists in the replica.
   const liteIndexNames = new Set(listIndexes(db).map(i => i.name));
-  const pkByTable = new Map(
-    published.tables.map(t => [`${t.schema}.${t.name}`, t.primaryKey ?? []]),
-  );
+  const pkByTable = resolveTablePKs(published.tables, published.indexes);
   for (const ix of published.indexes) {
     const pk = pkByTable.get(`${ix.schema}.${ix.tableName}`);
     const mapped = mapPostgresToLiteIndex(ix, pk);
