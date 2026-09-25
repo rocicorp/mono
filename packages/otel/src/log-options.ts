@@ -68,6 +68,21 @@ export const logOptions = {
     ],
   },
 
+  queryStatsIntervalSeconds: {
+    type: v.number().default(60),
+    desc: [
+      `How often each view-syncer worker logs the work done per query shape (the`,
+      `query with its values redacted): the number of hydrations and`,
+      `advancements, the time they took, and the rows they read and output.`,
+      ``,
+      `Unlike the slow query warnings, every query is counted, so the logs can be`,
+      `summed across workers and over time to rank queries by the time they take.`,
+      `Logged at the info level as {bold query-stats} events, for the 100 shapes`,
+      `that took the most time in the interval, plus a {bold query-stats-summary}`,
+      `event with the totals. Set to 0 to disable.`,
+    ],
+  },
+
   ivmSampling: {
     type: v.number().default(5000),
     desc: [

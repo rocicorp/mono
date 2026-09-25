@@ -2826,6 +2826,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (!lc.warn) {
       return;
     }
+    // The aborted hydration has torn its pipeline down, so the shape is
+    // computed again. A timeout opens the query's circuit breaker, so this is
+    // at most once per query per breaker window.
     const shape = queryShape(query.ast);
     lc.warn('Query hydration aborted for exceeding the hydration timeout', {
       clientGroupID: this.id,
@@ -2857,14 +2860,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (!lc.warn) {
       return;
     }
-    const shape = queryShape(query.ast);
+    // The pipeline computed the shape when it hydrated the query.
+    const stats = this.#pipelines.hydrationStats(query.id);
+    const shape = stats?.shape ?? queryShape(query.ast);
     const suppressed = slowHydrationLogThrottle.admit(
       `${query.name ?? ''}:${shape.hash}`,
     );
     if (suppressed === undefined) {
       return;
     }
-    const stats = this.#pipelines.hydrationStats(query.id);
     lc.warn('Slow query materialization', {
       zeroEvent: 'query-slow-hydration',
       clientGroupID: this.id,

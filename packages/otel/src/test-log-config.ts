@@ -5,6 +5,7 @@ export const testLogConfig = {
   slowRowThreshold: 0,
   slowHydrateThreshold: 0,
   slowAdvanceThreshold: 0,
+  queryStatsIntervalSeconds: 0,
   planWarningRowThreshold: 0,
   planWarningCostThreshold: 0,
 };

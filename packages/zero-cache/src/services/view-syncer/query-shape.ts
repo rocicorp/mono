@@ -22,7 +22,27 @@ export type QueryShape = {
   readonly hash: string;
 };
 
+/**
+ * Never throws: it is computed for every hydration, and a query that cannot be
+ * rendered as ZQL (e.g. a subquery without an alias) must still hydrate. Such
+ * a query is shaped by its AST with the literal values redacted instead.
+ */
 export function queryShape(ast: AST): QueryShape {
-  const zql = ast.table + astToZQL(ast, {redactLiterals: true});
+  let zql: string;
+  try {
+    zql = ast.table + astToZQL(ast, {redactLiterals: true});
+  } catch {
+    zql = JSON.stringify(ast, redactLiterals);
+  }
   return {zql, hash: h64(zql).toString(36)};
+}
+
+function redactLiterals(this: unknown, key: string, value: unknown) {
+  if (
+    (key === 'value' && (this as {type?: unknown}).type === 'literal') ||
+    key === 'start'
+  ) {
+    return '?';
+  }
+  return value;
 }

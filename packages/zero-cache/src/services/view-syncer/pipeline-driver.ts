@@ -77,7 +77,8 @@ import {
 import {checkClientSchema} from './client-schema.ts';
 import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {planWarningMessage} from './plan-warnings.ts';
-import {queryShape} from './query-shape.ts';
+import {queryShape, type QueryShape} from './query-shape.ts';
+import type {QueryStats} from './query-stats.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
@@ -115,6 +116,8 @@ type Pipeline = {
   readonly pipelineReadyAtMs: number;
   readonly transformedAst: AST;
   readonly originalAst: AST;
+  /** The {@link queryShape} of {@link originalAst}. */
+  readonly shape: QueryShape;
   readonly transformationHash: string;
   readonly queryName?: string | undefined;
   readonly companions: readonly CompanionPipeline[];
@@ -139,6 +142,8 @@ export type HydrationStats = {
   readonly rowsRead: number;
   /** What the planner warned about the plan it chose for the query. */
   readonly planWarnings: readonly PlanWarning[];
+  /** The {@link queryShape} of the query, computed when it was hydrated. */
+  readonly shape: QueryShape;
 };
 
 type QueryLogInfo = {
@@ -394,6 +399,7 @@ export class PipelineDriver {
   );
 
   readonly #inspectorDelegate: InspectorDelegate;
+  readonly #queryStats: QueryStats | undefined;
 
   /**
    * Passes the pipelines' metrics on to the inspector, and accounts the time
@@ -424,6 +430,7 @@ export class PipelineDriver {
     enablePlanner?: boolean,
     config?: ZeroConfig,
     deferredWrites?: DeferredWritesBudget,
+    queryStats?: QueryStats | undefined,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
@@ -443,6 +450,7 @@ export class PipelineDriver {
         ? planWarningThresholds
         : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
+    this.#queryStats = queryStats;
   }
 
   /**
@@ -618,6 +626,7 @@ export class PipelineDriver {
           rowCount: pipeline.hydrationRowCount,
           rowsRead: pipeline.hydrationRowsRead,
           planWarnings: pipeline.planWarnings,
+          shape: pipeline.shape,
         }
       : undefined;
   }
@@ -627,14 +636,13 @@ export class PipelineDriver {
    * most once per query shape per {@link PLAN_WARNING_LOG_WINDOW_MS}.
    */
   #logPlanWarnings(
-    query: AST,
+    shape: QueryShape,
     {queryHash, transformationHash, queryName}: QueryLogInfo,
     warnings: readonly PlanWarning[],
   ): void {
     if (!this.#lc.warn) {
       return;
     }
-    const shape = queryShape(query);
     const suppressed = planWarningLogThrottle.admit(
       `${queryName ?? ''}:${shape.hash}`,
     );
@@ -884,6 +892,7 @@ export class PipelineDriver {
     );
     this.removeQuery(queryID, 'replace-query');
     const pipelineRunID = randomID();
+    const shape = queryShape(query);
     this.#logQueryPipelineLifecycle({
       zeroEvent: 'query-pipeline-hydrate-start',
       pipelineRunID,
@@ -972,7 +981,7 @@ export class PipelineDriver {
       builtInputs.push(input);
       if (planWarnings.length > 0) {
         this.#logPlanWarnings(
-          query,
+          shape,
           {queryHash: queryID, transformationHash, queryName},
           planWarnings,
         );
@@ -1080,11 +1089,22 @@ export class PipelineDriver {
         pipelineReadyAtMs,
         transformedAst: resolvedQuery,
         originalAst: query,
+        shape,
         transformationHash,
         ...(queryName !== undefined && {queryName}),
         companions: liveCompanions,
       });
       hydrationFinished = true;
+      this.#queryStats?.recordHydration(
+        {queryName, shape},
+        {
+          outcome: 'finished',
+          timeMs: hydrationTimeMs,
+          rowCount: hydrationRowCount,
+          rowsRead: hydrationRowsRead,
+          planWarnings,
+        },
+      );
       this.#logQueryPipelineLifecycle({
         zeroEvent: 'query-pipeline-hydrate-finish',
         pipelineRunID,
@@ -1098,6 +1118,10 @@ export class PipelineDriver {
       });
     } catch (e) {
       hydrationFailed = true;
+      this.#queryStats?.recordHydration(
+        {queryName, shape},
+        {outcome: 'failed', timeMs: timer.totalElapsed()},
+      );
       this.#logQueryPipelineLifecycle({
         zeroEvent: 'query-pipeline-hydrate-failed',
         pipelineRunID,
@@ -1117,6 +1141,10 @@ export class PipelineDriver {
       throw e;
     } finally {
       if (!hydrationFinished && !hydrationFailed) {
+        this.#queryStats?.recordHydration(
+          {queryName, shape},
+          {outcome: 'aborted', timeMs: timer.totalElapsed()},
+        );
         this.#logQueryPipelineLifecycle({
           zeroEvent: 'query-pipeline-hydrate-aborted',
           pipelineRunID,
@@ -1299,6 +1327,7 @@ export class PipelineDriver {
     // The reservation is made here rather than in advance(), so that the
     // finally below is guaranteed to release it: a generator that is never
     // started never runs its finally.
+    let timedOut = false;
     try {
       advanceContext.reservedRows = this.#reserveDeferredWrites(numChanges);
       const deferWrites = advanceContext.reservedRows !== undefined;
@@ -1426,6 +1455,7 @@ export class PipelineDriver {
         e instanceof ResetPipelinesSignal &&
         e.reason === 'advancement-timeout'
       ) {
+        timedOut = true;
         this.#logAdvanceTimeout(advanceContext, e);
       }
       throw e;
@@ -1441,6 +1471,20 @@ export class PipelineDriver {
       }
       this.#releaseDeferredWrites(advanceContext);
       this.#advanceContext = null;
+      this.#recordAdvanceStats(advanceContext, timedOut);
+    }
+  }
+
+  /** Accounts the time each query took in an advancement to its shape. */
+  #recordAdvanceStats({queryStats}: AdvanceContext, timedOut: boolean): void {
+    if (this.#queryStats === undefined) {
+      return;
+    }
+    for (const [queryID, {timeMs, changes}] of queryStats) {
+      const pipeline = this.#pipelines.get(queryID);
+      if (pipeline !== undefined) {
+        this.#queryStats.recordAdvance(pipeline, {timeMs, changes, timedOut});
+      }
     }
   }
 
@@ -1567,8 +1611,7 @@ export class PipelineDriver {
     if (pipeline === undefined) {
       return undefined;
     }
-    const {transformationHash, queryName, originalAst} = pipeline;
-    const shape = queryShape(originalAst);
+    const {transformationHash, queryName, shape} = pipeline;
     return {
       queryName,
       shape,
