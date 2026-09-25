@@ -51,3 +51,28 @@ test('queries that differ in structure have different shapes', () => {
   const hashes = new Set([a, b, c].map(ast => queryShape(ast).hash));
   expect(hashes.size).toBe(3);
 });
+
+test('shapes a query that cannot be rendered as ZQL by its redacted AST', () => {
+  const unaliased = (projectID: string): AST => ({
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        correlation: {parentField: ['projectID'], childField: ['id']},
+        subquery: {
+          table: 'project',
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: projectID},
+          },
+        },
+      },
+    },
+  });
+  const a = queryShape(unaliased('secret-project'));
+  expect(a.zql).not.toContain('secret-project');
+  expect(a).toEqual(queryShape(unaliased('other-project')));
+});

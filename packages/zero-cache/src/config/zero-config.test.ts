@@ -378,6 +378,18 @@ test('zero-cache --help', () => {
                                                                                    still estimated to process at least this many rows. Throttled like                                                         
                                                                                    planWarningRowThreshold. Set to 0 to disable.                                                                              
                                                                                                                                                                                                               
+     --log-query-stats-interval-seconds number                                     default: 60                                                                                                                
+       ZERO_LOG_QUERY_STATS_INTERVAL_SECONDS env                                                                                                                                                              
+                                                                                   How often each view-syncer worker logs the work done per query shape (the                                                  
+                                                                                   query with its values redacted): the number of hydrations and                                                              
+                                                                                   advancements, the time they took, and the rows they read and output.                                                       
+                                                                                                                                                                                                              
+                                                                                   Unlike the slow query warnings, every query is counted, so the logs can be                                                 
+                                                                                   summed across workers and over time to rank queries by the time they take.                                                 
+                                                                                   Logged at the info level as query-stats events, for the 100 shapes                                                         
+                                                                                   that took the most time in the interval, plus a query-stats-summary                                                        
+                                                                                   event with the totals. Set to 0 to disable.                                                                                
+                                                                                                                                                                                                              
      --log-ivm-sampling number                                                     default: 5000                                                                                                              
        ZERO_LOG_IVM_SAMPLING env                                                                                                                                                                              
                                                                                    How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.                               
