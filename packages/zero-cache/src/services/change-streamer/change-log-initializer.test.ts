@@ -554,7 +554,11 @@ describe('change-streamer/change-log-initializer', () => {
             name: 'foo',
             metadata: {rowKey: {type: 'default', columns: ['id']}},
           },
-          columns: {a: {fooID: 987}, b: {fooID: 843}, d: {fooID: 123}},
+          columns: {
+            a: {id: {fooID: 987}},
+            b: {id: {fooID: 843}},
+            d: {id: {fooID: 123}},
+          },
         },
       ]);
     });
@@ -623,7 +627,7 @@ describe('change-streamer/change-log-initializer', () => {
           name: 'foo',
           metadata: {rowKey: {type: 'default', columns: ['id']}},
         },
-        columns: {a: {fooID: 987}, b: {fooID: 843}},
+        columns: {a: {id: {fooID: 987}}, b: {id: {fooID: 843}}},
       },
     ]);
     expect(init.lastComparison()).toBeUndefined();

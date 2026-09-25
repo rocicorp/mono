@@ -9,6 +9,7 @@ import {
   CREATE_BACKFILLING_TABLE,
   populateBackfillingFromColumnMetadata,
   readBackfillRequests,
+  readReplicaBackfills,
 } from './backfilling.ts';
 import {CREATE_COLUMN_METADATA_TABLE} from './column-metadata.ts';
 import {CREATE_TABLE_METADATA_TABLE} from './table-metadata.ts';
@@ -30,7 +31,9 @@ describe('replicator/schema/backfilling', () => {
 
   /** Every assertion below is about this one table's rows. */
   function expectBackfilling(rows: Record<string, unknown>[]) {
-    expectTables(db, {[BACKFILLING_TABLE]: rows});
+    expectTables(db, {
+      [BACKFILLING_TABLE]: rows.map(row => ({progress: null, ...row})),
+    });
   }
 
   describe('BackfillingTracker', () => {
@@ -218,12 +221,12 @@ describe('replicator/schema/backfilling', () => {
             name: 'foo',
             metadata: {rowKey: {type: 'default', columns: ['id']}},
           },
-          columns: {a: {fooID: 1}, b: {fooID: 2}},
+          columns: {a: {id: {fooID: 1}}, b: {id: {fooID: 2}}},
         },
         // A table can be backfilling with no metadata of its own.
         {
           table: {schema: 'public', name: 'bar', metadata: null},
-          columns: {c: {barID: 'three'}},
+          columns: {c: {id: {barID: 'three'}}},
         },
       ]);
     });
@@ -247,7 +250,56 @@ describe('replicator/schema/backfilling', () => {
       expect(readBackfillRequests(db)).toEqual([
         {
           table: {schema: 'public', name: 'foo', metadata: null},
-          columns: {a: {fooID: 1}},
+          columns: {a: {id: {fooID: 1}}},
+        },
+      ]);
+    });
+
+    test('readReplicaBackfills includes tracked progress', () => {
+      const tracker = new BackfillingTracker(db);
+      tracker.apply({
+        tag: 'create-table',
+        spec: {schema: 'my', name: 'foo', columns: {}},
+        backfill: {a: {fooID: 1}, b: {fooID: 2}},
+      });
+      const table = {schema: 'my', name: 'foo'};
+      tracker.setProgress(table, 'a', {progressMark: '10', timeline: 't1'});
+
+      expect(tracker.getProgress(table)).toEqual(
+        new Map([
+          ['a', {progressMark: '10', timeline: 't1'}],
+          ['b', undefined],
+        ]),
+      );
+      expect(readReplicaBackfills(db)).toEqual([
+        {
+          table: {schema: 'my', name: 'foo', metadata: null},
+          columns: {
+            a: {id: {fooID: 1}, progress: {progressMark: '10', timeline: 't1'}},
+            b: {id: {fooID: 2}},
+          },
+        },
+      ]);
+      // The cookie set (compared with the change log's) is unaffected.
+      expect(readBackfillRequests(db)).toEqual([
+        {
+          table: {schema: 'my', name: 'foo', metadata: null},
+          columns: {a: {id: {fooID: 1}}, b: {id: {fooID: 2}}},
+        },
+      ]);
+
+      // Re-announcing a backfill resets its progress; completing removes it.
+      tracker.apply({
+        tag: 'add-column',
+        table,
+        column: {name: 'a', spec: {pos: 1, dataType: 'text'}},
+        backfill: {fooID: 3},
+      });
+      tracker.complete(table, ['b']);
+      expect(readReplicaBackfills(db)).toEqual([
+        {
+          table: {schema: 'my', name: 'foo', metadata: null},
+          columns: {a: {id: {fooID: 3}}},
         },
       ]);
     });

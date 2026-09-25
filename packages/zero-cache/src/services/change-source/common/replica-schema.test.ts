@@ -18,6 +18,7 @@ import {
   CREATE_V7_CHANGE_LOG,
   CREATE_V9_TABLE_METADATA_TABLE,
   CREATE_V14_CHANGE_LOG_STREAM,
+  CREATE_V17_BACKFILLING_TABLE,
   CURRENT_SCHEMA_VERSION,
   initReplica,
   schemaVersionMigrationMap,
@@ -607,13 +608,21 @@ describe('replica-schema-migrations', () => {
             table: 'bar',
             column: 'c',
             backfill: '{"fooID":2}',
+            progress: null,
           },
-          {schema: 'my', table: 'foo', column: 'a', backfill: '{"fooID":1}'},
+          {
+            schema: 'my',
+            table: 'foo',
+            column: 'a',
+            backfill: '{"fooID":1}',
+            progress: null,
+          },
           {
             schema: 'your',
             table: 'baz',
             column: 'd',
             backfill: '{"fooID":3}',
+            progress: null,
           },
         ],
       },
@@ -630,13 +639,7 @@ describe('replica-schema-migrations', () => {
         CREATE_V15_REPLICATION_STATE_TABLE +
         CREATE_COLUMN_METADATA_TABLE +
         CREATE_TABLE_METADATA_TABLE +
-        /*sql*/ `CREATE TABLE "${BACKFILLING_TABLE}" (
-          "schema"   TEXT NOT NULL,
-          "table"    TEXT NOT NULL,
-          "column"   TEXT NOT NULL,
-          "backfill" TEXT NOT NULL,
-          PRIMARY KEY ("schema", "table", "column")
-        );`,
+        CREATE_V17_BACKFILLING_TABLE,
       replicaPreState: {
         ['_zero.replicationState']: V15_REPLICATION_STATE,
         ['_zero.column_metadata']: [
@@ -659,6 +662,7 @@ describe('replica-schema-migrations', () => {
             table: 'foo',
             column: 'z',
             backfill: '{"fooID":9}',
+            progress: null,
           },
         ],
       },
@@ -789,7 +793,11 @@ describe('replica-schema-migrations', () => {
     expectMatchingObjectsInTables(replica, {
       // The data version rolls back; the schema version never moves backwards.
       ['_zero.versionHistory']: [
-        {dataVersion: 16, schemaVersion: 17, minSafeVersion: 1},
+        {
+          dataVersion: 16,
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          minSafeVersion: 1,
+        },
       ],
       // The table is left alone rather than dropped, so rolling forward does
       // not have to recreate it.

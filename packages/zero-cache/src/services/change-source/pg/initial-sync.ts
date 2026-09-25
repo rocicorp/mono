@@ -58,7 +58,6 @@ import {
 } from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
-import {publicationRowFilter} from './backfill-resume.ts';
 import {toStateVersionString} from './lsn.ts';
 import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
@@ -775,6 +774,25 @@ export function verifyShadowReplica(
   );
 }
 
+/**
+ * The row filter of the table's publications, as a parenthesized boolean
+ * expression, or `null` if the table is published without a filter.
+ */
+
+export function publicationRowFilter(table: PublishedTableSpec): string | null {
+  const rowFilters = Object.values(table.publications).map(
+    ({rowFilter}) => rowFilter,
+  );
+  // PostgreSQL publishes the union of all publications. An unfiltered
+  // publication therefore makes every row eligible, regardless of filters on
+  // any other publication containing the table.
+  if (rowFilters.some(filter => filter === null)) {
+    return null;
+  }
+  const filters = rowFilters.filter((filter): filter is string => !!filter);
+  return filters.length === 0 ? null : `(${filters.join(' OR ')})`;
+}
+
 // Verified empirically that batches of 50 seem to be the sweet spot,
 // similar to the report in https://sqlite.org/forum/forumpost/8878a512d3652655
 //
@@ -832,8 +850,12 @@ export function makeBinarySelectExprs(
  * that order. Used by resumable backfills; see `backfill-resume.ts`.
  */
 export type DownloadOrder = {
-  /** The `ORDER BY` expression, e.g. from `orderByRowKey()`. */
-  readonly by: string;
+  /**
+   * The `ORDER BY` expression, e.g. from `orderByRowKey()`. If unset, the
+   * natural order of the scan is used (e.g. physical order for `ctid`-based
+   * resumption).
+   */
+  readonly by?: string | undefined;
 
   /**
    * A boolean SQL expression restricting the download to rows after a mark,
@@ -864,7 +886,7 @@ export function makeDownloadStatements(
   const where = conditions === null ? '' : /*sql*/ `WHERE ${conditions}`;
   const sample = tableSampleClause(sampleRate);
   const limit = limitClause(maxRowsPerTable);
-  const orderBy = order ? /*sql*/ ` ORDER BY ${order.by}` : '';
+  const orderBy = order?.by ? /*sql*/ ` ORDER BY ${order.by}` : '';
   const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)}${sample} ${where}`;
   const select = /*sql*/ `SELECT ${(selectExprs ?? cols.map(id)).join(',')} ${fromTable}${orderBy}${limit}`;
   if (limit) {

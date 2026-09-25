@@ -1,5 +1,6 @@
 import {describe, expect, test, vi} from 'vitest';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {BackfillState} from './backfill-state.ts';
 import {preSerializeBatch} from './broadcast.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
@@ -765,6 +766,89 @@ describe('change-streamer/subscriber', () => {
 
       sub.close();
       expect(stream).toHaveLength(3);
+    });
+  });
+
+  test('tracks backfills and signals alignment', () => {
+    const table = {schema: 'public', name: 'issues'};
+    const backfills = new BackfillState([
+      {
+        table: {...table, metadata: null},
+        columns: {a: {id: {a: 1}, progress: {progressMark: '05'}}},
+      },
+    ]);
+    const onAligned = vi.fn();
+    const onBackfillIgnored = vi.fn();
+    const [sub] = createSubscriber('00', false, {
+      backfills,
+      onAligned,
+      onBackfillIgnored,
+    });
+    const backfill = (
+      watermark: string,
+      previous: string,
+      current: string,
+    ): WatermarkedChange => [
+      watermark,
+      'backfill',
+      json([
+        'data',
+        {
+          tag: 'backfill',
+          relation: {...table, rowKey: {columns: ['id']}},
+          columns: ['a'],
+          watermark: '01',
+          rowValues: [],
+          progressMarks: {
+            previous: {progressMark: previous},
+            current: {progressMark: current},
+          },
+        },
+      ]),
+    ];
+    const tx = (watermark: string, ...changes: WatermarkedChange[]) => [
+      [
+        watermark,
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: watermark}]),
+      ] satisfies WatermarkedChange,
+      ...changes,
+      [
+        watermark,
+        'commit',
+        json(['commit', messages.commit(), {watermark}]),
+      ] satisfies WatermarkedChange,
+    ];
+
+    // Live changes during catchup are backlogged.
+    for (const change of tx('03', backfill('03', '07', '09'))) {
+      void sub.send(change);
+    }
+    // Catchup messages are tracked.
+    for (const change of tx('02', backfill('02', '05', '07'))) {
+      void sub.catchup(change);
+    }
+    expect(backfills.requests()[0].columns.a.progress).toEqual({
+      progressMark: '07',
+    });
+    expect(onAligned).not.toHaveBeenCalled();
+
+    void sub.setCaughtUp();
+    // The backlog is tracked before alignment is signaled.
+    expect(backfills.requests()[0].columns.a.progress).toEqual({
+      progressMark: '09',
+    });
+    expect(onAligned).toHaveBeenCalledExactlyOnceWith(sub);
+    expect(sub.aligned).toBe(true);
+    expect(onBackfillIgnored).not.toHaveBeenCalled();
+
+    // Ignored backfill data after alignment is reported.
+    for (const change of tx('04', backfill('04', '10', '12'))) {
+      void sub.send(change);
+    }
+    expect(onBackfillIgnored).toHaveBeenCalledWith(['public.issues.a']);
+    expect(backfills.requests()[0].columns.a.progress).toEqual({
+      progressMark: '09',
     });
   });
 });

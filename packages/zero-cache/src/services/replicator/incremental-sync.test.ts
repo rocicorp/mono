@@ -205,6 +205,7 @@ describe('replicator/incremental-sync', () => {
     await versionReady.next(); // Get the initial nextStateVersion.
     await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
     expect(subscribeFn.mock.calls[0][0]).toEqual({
+      backfills: [],
       protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'incremental_sync_test_id',
@@ -499,6 +500,7 @@ describe('replicator/incremental-sync', () => {
     await versionReady.next(); // Get the initial nextStateVersion.
     await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
     expect(subscribeFn.mock.calls[0][0]).toEqual({
+      backfills: [],
       protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'incremental_sync_test_id',
@@ -814,6 +816,7 @@ describe('replicator/incremental-sync', () => {
     await versionReady.next(); // Get the initial nextStateVersion.
     await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
     expect(subscribeFn.mock.calls[0][0]).toEqual({
+      backfills: [],
       protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'incremental_sync_test_id',

@@ -59,7 +59,101 @@ describe('write-worker', () => {
       replicaVersion: '02',
       publications: ['zero_data'],
       watermark: '02',
+      backfills: [],
     });
+  });
+
+  test('getSubscriptionState reports pending backfills and their progress', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    const relation = {
+      schema: 'public',
+      name: 'issues',
+      rowKey: {columns: ['issueID', 'bool']},
+    };
+
+    // Adding a column with a `backfill` id marks it as pending.
+    await worker.processMessages([
+      ['begin', issues.begin(), {commitWatermark: '03'}],
+      [
+        'data',
+        issues.addColumn(
+          'issues',
+          'note',
+          {dataType: 'text', pos: 3},
+          {
+            tableMetadata: {rowKey: {columns: ['issueID', 'bool']}},
+            backfill: {noteID: 1},
+          },
+        ),
+      ],
+      ['commit', issues.commit(), {watermark: '03'}],
+    ]);
+
+    let state = await worker.getSubscriptionState();
+    expect(state.backfills).toEqual([
+      {
+        table: {
+          schema: 'public',
+          name: 'issues',
+          metadata: {rowKey: {columns: ['issueID', 'bool']}},
+        },
+        columns: {note: {id: {noteID: 1}}},
+      },
+    ]);
+
+    // A contiguous `backfill` message advances the tracked progress.
+    await worker.processMessages([
+      ['begin', issues.begin(), {commitWatermark: '04'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation,
+          watermark: '04',
+          columns: ['note'],
+          rowValues: [[123, true, 'hello']],
+          progressMarks: {current: {progressMark: '01', timeline: 't1'}},
+        },
+      ],
+      ['commit', issues.commit(), {watermark: '04'}],
+    ]);
+
+    state = await worker.getSubscriptionState();
+    expect(state.backfills).toEqual([
+      {
+        table: {
+          schema: 'public',
+          name: 'issues',
+          metadata: {rowKey: {columns: ['issueID', 'bool']}},
+        },
+        columns: {
+          note: {
+            id: {noteID: 1},
+            progress: {progressMark: '01', timeline: 't1'},
+          },
+        },
+      },
+    ]);
+
+    // Completing the backfill (contiguous with the tracked progress)
+    // removes it from the pending state.
+    await worker.processMessages([
+      ['begin', issues.begin(), {commitWatermark: '05'}],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation,
+          watermark: '05',
+          columns: ['note'],
+          progressMarks: {previous: {progressMark: '01', timeline: 't1'}},
+        },
+      ],
+      ['commit', issues.commit(), {watermark: '05'}],
+    ]);
+
+    state = await worker.getSubscriptionState();
+    expect(state.backfills).toEqual([]);
   });
 
   test('processMessage handles a full transaction', async () => {

@@ -102,7 +102,7 @@ export class IncrementalSyncer {
     });
 
     while (this.#state.shouldRun()) {
-      const {replicaVersion, watermark} =
+      const {replicaVersion, watermark, backfills} =
         await this.#worker.getSubscriptionState();
 
       let downstream: Source<Sized<SubscribeDownstream>> | undefined;
@@ -117,6 +117,7 @@ export class IncrementalSyncer {
           mode: this.#mode,
           watermark,
           replicaVersion,
+          backfills,
         };
         // The first connection reuses the still-open reservation connection
         // (if any) from the backup restore, so the replication-manager that

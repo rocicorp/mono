@@ -9,6 +9,7 @@ import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON, stringify} from '../../../../shared/src/bigint-json.ts';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -26,6 +27,7 @@ import type {
   Data,
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import type {BackfillRequest} from '../change-source/protocol/current/upstream.ts';
 import {exitAfter} from '../life-cycle.ts';
 import type {LitestreamVersion} from '../litestream/metrics.ts';
 import {
@@ -4854,5 +4856,157 @@ describe('change-streamer/service', () => {
 
     // No more messages should have been sent
     await verifyNoMoreChanges(msgs);
+  });
+
+  test('restarts the stream to rewind backfills for uncovered subscribers', async () => {
+    await streamer.stop();
+
+    const streams: Subscription<ChangeStreamMessage>[] = [];
+    const startStream = vi.fn(
+      (_watermark: string, _requests?: BackfillRequest[]) => {
+        const stream = Subscription.create<ChangeStreamMessage>();
+        streams.push(stream);
+        return Promise.resolve({changes: stream, acks: {push: () => {}}});
+      },
+    );
+    const s = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream,
+        startLagReporter: () => Promise.resolve(null),
+        stop: () => Promise.resolve(),
+      },
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      null,
+      null,
+      true,
+      opts,
+      setTimeoutFn as unknown as typeof setTimeout,
+    );
+    await run(s);
+    await vi.waitFor(() => expect(startStream).toHaveBeenCalledTimes(1));
+    // Nothing pending in the change log.
+    expect(startStream.mock.calls[0][1]).toEqual([]);
+
+    const table = {schema: 'public', name: 'foo'};
+    const relation = {...table, rowKey: {columns: ['id']}};
+    const mark = (progressMark: string) => ({progressMark, timeline: 't'});
+    const backfills = (progress: string) => [
+      {
+        table: {...table, metadata: {rowKey: {id: 1}}},
+        columns: {b: {id: {id: 'b'}, progress: mark(progress)}},
+      },
+    ];
+
+    let version = 0x10;
+    const tx = (...changes: ChangeStreamMessage[]) => {
+      const watermark = (version++).toString(16);
+      const stream = must(streams.at(-1));
+      stream.push(['begin', messages.begin(), {commitWatermark: watermark}]);
+      changes.forEach(c => stream.push(c));
+      stream.push(['commit', messages.commit(), {watermark}]);
+      return watermark;
+    };
+
+    // A column is added and partially backfilled up to '05'.
+    tx([
+      'data',
+      messages.addColumn(
+        'foo',
+        'b',
+        {dataType: 'int', pos: 1},
+        {tableMetadata: {rowKey: {id: 1}}, backfill: {id: 'b'}},
+      ),
+    ]);
+    const head = tx([
+      'data',
+      {
+        tag: 'backfill',
+        relation,
+        columns: ['b'],
+        watermark: '03',
+        rowValues: [],
+        progressMarks: {current: mark('05')},
+      },
+    ]);
+
+    // A subscriber whose backfill is behind the stream ('02' < '05').
+    const behind = drainToQueue(
+      await s.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
+        id: 'behind',
+        mode: 'serving',
+        watermark: head,
+        replicaVersion: REPLICA_VERSION,
+        backfills: backfills('02'),
+      }),
+    );
+    expect(await nextChange(behind)).toMatchObject({tag: 'status'});
+
+    // Coverage is checked when the subscriber is aligned, and the stream is
+    // restarted at the next transaction boundary. With the replication stream
+    // otherwise idle, that is a status message.
+    await vi.waitFor(() => {
+      if (startStream.mock.calls.length < 2) {
+        must(streams.at(-1)).push(['status', {ack: false}, {watermark: head}]);
+      }
+      expect(startStream).toHaveBeenCalledTimes(2);
+    });
+    // The new stream rewinds to the subscriber's progress.
+    expect(startStream.mock.calls[1][1]).toEqual(backfills('02'));
+    expect(
+      logSink.messages.some(m =>
+        JSON.stringify(m).includes(
+          'restarting change stream: subscriber behind needs backfills',
+        ),
+      ),
+    ).toBe(true);
+
+    // A subscriber whose backfill is covered by the stream does not
+    // result in a restart.
+    const ahead = drainToQueue(
+      await s.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
+        id: 'ahead',
+        mode: 'serving',
+        watermark: (version - 1).toString(16),
+        replicaVersion: REPLICA_VERSION,
+        backfills: backfills('07'),
+      }),
+    );
+    expect(await nextChange(ahead)).toMatchObject({tag: 'status'});
+    for (let i = 0; i < 3; i++) {
+      const watermark = tx();
+      for (;;) {
+        const change = await nextChange(ahead);
+        if (change.tag === 'commit' && version.toString(16) > watermark) {
+          break;
+        }
+      }
+    }
+    expect(startStream).toHaveBeenCalledTimes(2);
+
+    // A v7 subscriber (without backfills) does not affect the stream.
+    await s.subscribe({
+      protocolVersion: 7,
+      taskID: 'task-id',
+      id: 'v7',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+    });
+    tx();
+    tx();
+    expect(startStream).toHaveBeenCalledTimes(2);
+
+    await s.stop();
   });
 });

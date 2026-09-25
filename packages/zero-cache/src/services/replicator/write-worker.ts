@@ -16,6 +16,7 @@ import type {ChangeStreamData} from '../change-source/protocol/current/downstrea
 import {LitestreamCheckpointer} from '../litestream/litestream-checkpointer.ts';
 import {LitestreamController} from '../litestream/litestream-controller.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
+import {readReplicaBackfills} from './schema/backfilling.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
   applyPragmas,
@@ -126,7 +127,12 @@ function createAPI(): API {
 
     getSubscriptionState() {
       try {
-        return getSubscriptionState(must(runner));
+        // The write worker is the replica's only writer, so these reads are
+        // of the same snapshot.
+        return {
+          ...getSubscriptionState(must(runner)),
+          backfills: readReplicaBackfills(must(runner).db),
+        };
       } catch (e) {
         handleCorruptedDb(e);
         throw e;

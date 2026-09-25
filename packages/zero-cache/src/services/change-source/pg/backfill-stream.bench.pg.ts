@@ -90,7 +90,7 @@ function makeBackfillRequest(
   const columns = Object.fromEntries(
     Object.entries(table.columns).map(([column, spec]) => [
       column,
-      {attNum: spec.pos},
+      {id: {attNum: spec.pos}},
     ]),
   );
 

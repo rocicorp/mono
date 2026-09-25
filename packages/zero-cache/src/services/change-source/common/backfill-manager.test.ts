@@ -129,7 +129,7 @@ describe('backfill-manager', () => {
 
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -192,7 +192,7 @@ describe('backfill-manager', () => {
 
     expect(backfillRequests).toMatchObject([
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -249,7 +249,7 @@ describe('backfill-manager', () => {
 
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {metadata: {rowKey: {a: 123}}, name: 'bar', schema: 'foo'},
       },
     ]);
@@ -434,7 +434,7 @@ describe('backfill-manager', () => {
 
     expect(backfillRequests).toMatchObject([
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -559,7 +559,7 @@ describe('backfill-manager', () => {
 
     expect(backfillRequests).toMatchObject([
       {
-        columns: {b: {id: '789'}},
+        columns: {b: {id: {id: '789'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -723,9 +723,9 @@ describe('backfill-manager', () => {
     expect(backfillRequests).toMatchObject([
       {
         columns: {
-          c: {id: '765'},
-          d: {id: '234'},
-          z: {id: '123'},
+          c: {id: {id: '765'}},
+          d: {id: {id: '234'}},
+          z: {id: {id: '123'}},
         },
         table: {
           metadata: {rowKey: {z: 123}},
@@ -761,7 +761,7 @@ describe('backfill-manager', () => {
     // 'main' change-stream reservation.
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           schema: 'foo',
           name: 'bar',
@@ -826,7 +826,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
       // Updated request
       {
@@ -835,7 +835,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}},
+        columns: {a: {id: {id: '123'}}},
       },
     ]);
   });
@@ -865,7 +865,7 @@ describe('backfill-manager', () => {
     // 'main' change-stream reservation.
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           schema: 'foo',
           name: 'bar',
@@ -930,7 +930,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
       // Updated request
       {
@@ -939,7 +939,7 @@ describe('backfill-manager', () => {
           name: 'far',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
     ]);
   });
@@ -969,7 +969,7 @@ describe('backfill-manager', () => {
     // 'main' change-stream reservation.
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           schema: 'foo',
           name: 'bar',
@@ -1037,7 +1037,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
       // Updated request
       {
@@ -1046,7 +1046,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {b: 234}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
     ]);
   });
@@ -1100,7 +1100,7 @@ describe('backfill-manager', () => {
     // 'main' change-stream reservation.
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           schema: 'foo',
           name: 'bar',
@@ -1189,7 +1189,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
       // Retry
       {
@@ -1198,7 +1198,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
     ]);
   });
@@ -1218,7 +1218,7 @@ describe('backfill-manager', () => {
     // 'main' change-stream reservation.
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           schema: 'foo',
           name: 'bar',
@@ -1264,7 +1264,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
     ]);
   });
@@ -1284,7 +1284,7 @@ describe('backfill-manager', () => {
     // 'main' change-stream reservation.
     backfillManager.run('123', [
       {
-        columns: {b: {id: '234'}},
+        columns: {b: {id: {id: '234'}}},
         table: {
           schema: 'foo',
           name: 'bar',
@@ -1332,7 +1332,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {b: {id: '234'}},
+        columns: {b: {id: {id: '234'}}},
       },
     ]);
   });
@@ -1386,7 +1386,7 @@ describe('backfill-manager', () => {
     // 'main' change-stream reservation.
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           schema: 'foo',
           name: 'bar',
@@ -1520,7 +1520,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
       },
       // More columns
       {
@@ -1529,7 +1529,7 @@ describe('backfill-manager', () => {
           name: 'bar',
           metadata: {rowKey: {a: 123}},
         },
-        columns: {c: {id: '777'}, d: {id: '888'}},
+        columns: {c: {id: {id: '777'}}, d: {id: {id: '888'}}},
       },
     ]);
   });
@@ -1551,7 +1551,7 @@ describe('backfill-manager', () => {
 
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -1582,7 +1582,7 @@ describe('backfill-manager', () => {
 
     expect(backfillRequests).toMatchObject([
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -1590,7 +1590,7 @@ describe('backfill-manager', () => {
         },
       },
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -1598,7 +1598,7 @@ describe('backfill-manager', () => {
         },
       },
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -1606,7 +1606,7 @@ describe('backfill-manager', () => {
         },
       },
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -1668,7 +1668,7 @@ describe('backfill-manager', () => {
 
     backfillManager.run('123', [
       {
-        columns: {id: {id: '123'}},
+        columns: {id: {id: {id: '123'}}},
         table: {
           metadata: {rowKey: {}},
           name: 'bar',
@@ -1715,7 +1715,7 @@ describe('backfill-manager', () => {
 
     expect(backfillRequests).toMatchObject([
       {
-        columns: {id: {id: '123'}},
+        columns: {id: {id: {id: '123'}}},
         table: {
           metadata: {rowKey: {}},
           name: 'bar',
@@ -1723,7 +1723,7 @@ describe('backfill-manager', () => {
         },
       },
       {
-        columns: {id: {id: '123'}},
+        columns: {id: {id: {id: '123'}}},
         table: {
           metadata: {rowKey: {}},
           name: 'bar',
@@ -1731,7 +1731,7 @@ describe('backfill-manager', () => {
         },
       },
       {
-        columns: {id: {id: '123'}},
+        columns: {id: {id: {id: '123'}}},
         table: {
           metadata: {rowKey: {}},
           name: 'bar',
@@ -1783,7 +1783,7 @@ describe('backfill-manager', () => {
     // Start the backfill with the table already reserved.
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -1930,7 +1930,7 @@ describe('backfill-manager', () => {
 
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -1996,7 +1996,7 @@ describe('backfill-manager', () => {
 
     expect(backfillRequests).toMatchObject([
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -2028,7 +2028,7 @@ describe('backfill-manager', () => {
 
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -2082,7 +2082,7 @@ describe('backfill-manager', () => {
 
     expect(backfillRequests).toMatchObject([
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -2115,7 +2115,7 @@ describe('backfill-manager', () => {
 
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
@@ -2164,7 +2164,7 @@ describe('backfill-manager', () => {
 
     backfillManager.run('123', [
       {
-        columns: {a: {id: '123'}, b: {id: '234'}},
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
         table: {
           metadata: {rowKey: {a: 123}},
           name: 'bar',
