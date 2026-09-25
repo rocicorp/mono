@@ -122,6 +122,80 @@ test('SQLiteWrite splits a commit wider than MAX_BATCH across statement widths',
   expect(preparedStatements.del.exec).not.toHaveBeenCalled();
 });
 
+/**
+ * Three puts and three deletes, so each kind splits into a 2-wide statement plus
+ * a 1-wide remainder and there is a second statement of each to observe. `order`
+ * records every batch statement as it executes, which is what says whether two
+ * of them were ever in flight together.
+ */
+async function writeWithTwoBatchesOfEach() {
+  const release = vi.fn();
+  const db: SQLiteDatabase = {
+    close: vi.fn(),
+    destroy: vi.fn(),
+    prepare: vi.fn(),
+    execSync: vi.fn(),
+  };
+  const preparedStatements = makePreparedStatements();
+  const order: string[] = [];
+  for (const [kind, statementFor] of [
+    ['put', preparedStatements.putN],
+    ['del', preparedStatements.delN],
+  ] as const) {
+    for (const width of [2, 1]) {
+      vi.mocked(statementFor(width).exec).mockImplementation(() => {
+        order.push(`${kind}:${width}`);
+        return Promise.resolve();
+      });
+    }
+  }
+
+  const write = new SQLiteWrite(release, db, preparedStatements);
+  for (let i = 0; i < 3; i++) {
+    await write.put(`put-${i}`, i);
+    await write.del(`del-${i}`);
+  }
+  return {write, db, release, preparedStatements, order};
+}
+
+test('SQLiteWrite runs every put statement before the first delete', async () => {
+  const {write, db, order} = await writeWithTwoBatchesOfEach();
+
+  await write.commit();
+  write.release();
+
+  // No two statements of one commit may be in flight together: SQLite rolls the
+  // transaction back itself on an I/O error, and a statement that reaches the
+  // connection after that runs in autocommit mode, so it would persist on its
+  // own and half-apply a commit the caller was told had failed.
+  expect(order).toEqual(['put:2', 'put:1', 'del:2', 'del:1']);
+  expect(db.execSync).toHaveBeenCalledWith('COMMIT');
+});
+
+test('SQLiteWrite issues nothing after a statement fails', async () => {
+  const {write, db, release, preparedStatements, order} =
+    await writeWithTwoBatchesOfEach();
+
+  const ioError = new Error('disk I/O error');
+  vi.mocked(preparedStatements.putN(2).exec).mockImplementation(() => {
+    order.push('put:2');
+    return Promise.reject(ioError);
+  });
+
+  await expect(write.commit()).rejects.toBe(ioError);
+
+  // Nothing follows the failure: not the rest of the puts, and no delete. A
+  // delete landing here would be the dag case — a head kept while the chunks it
+  // reaches are deleted, or a refcount row dropped while its chunk and referrer
+  // remain.
+  expect(order).toEqual(['put:2']);
+  expect(db.execSync).not.toHaveBeenCalledWith('COMMIT');
+
+  write.release();
+  expect(db.execSync).toHaveBeenCalledWith('ROLLBACK');
+  expect(release).toHaveBeenCalledTimes(1);
+});
+
 test('SQLiteStoreRead rejects pending get and has operations when closed', async () => {
   const release = vi.fn();
   const preparedStatements = makePreparedStatements();
