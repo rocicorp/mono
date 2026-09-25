@@ -44,12 +44,14 @@ export class RandomYieldSource implements Source {
     filters?: Condition,
     splitEditKeys?: Set<string>,
     debug?: DebugDelegate,
+    userSort?: Ordering | undefined,
   ): SourceInput {
     const sourceInput = this.#source.connect(
       sort,
       filters,
       splitEditKeys,
       debug,
+      userSort,
     );
     const rng = this.#rng;
     const yieldProbability = this.#yieldProbability;

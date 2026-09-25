@@ -75,6 +75,7 @@ export type Connection = {
   input: Input;
   output: Output | undefined;
   sort?: Ordering | undefined;
+  userSort?: Ordering | undefined;
   splitEditKeys: Set<string> | undefined;
   compareRows: Comparator;
   filters:
@@ -161,6 +162,8 @@ export class MemorySource implements Source {
     sort: Ordering | undefined,
     filters?: Condition,
     splitEditKeys?: Set<string>,
+    _debug?: DebugDelegate,
+    userSort?: Ordering | undefined,
   ): SourceInput {
     const transformedFilters = transformFilters(filters);
     const unordered = sort === undefined;
@@ -182,6 +185,7 @@ export class MemorySource implements Source {
       input,
       output: undefined,
       sort: internalSort,
+      userSort,
       splitEditKeys,
       compareRows: makeComparator(internalSort),
       filters: transformedFilters.filters

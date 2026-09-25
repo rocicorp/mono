@@ -70,6 +70,7 @@ export interface Source {
     filters?: Condition,
     splitEditKeys?: Set<string>,
     debug?: DebugDelegate,
+    userSort?: Ordering | undefined,
   ): SourceInput;
 
   /**

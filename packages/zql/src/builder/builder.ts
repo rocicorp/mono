@@ -165,6 +165,7 @@ export function buildPipeline(
   planDebugger?: PlanDebugger,
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
+  const userOrderBy = ast.orderBy;
   ast = completeOrdering(
     ast,
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
@@ -205,7 +206,15 @@ export function buildPipeline(
     // as selective filters.
     ast = pushDownCorrelatedPredicates(ast, columnsOf);
   }
-  return buildPipelineInternal(ast, delegate, queryID, '');
+  return buildPipelineInternal(
+    ast,
+    delegate,
+    queryID,
+    '',
+    undefined,
+    undefined,
+    userOrderBy,
+  );
 }
 
 export function bindStaticParameters(
@@ -325,6 +334,7 @@ function buildPipelineInternal(
   name: string,
   partitionKey?: CompoundKey,
   isNonFlippedExistsChild?: boolean,
+  userOrderBy?: Ordering | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -379,6 +389,7 @@ function buildPipelineInternal(
     ast.where,
     splitEditKeys,
     delegate.debug,
+    useCap ? undefined : userOrderBy,
   );
 
   let end: Input = delegate.decorateSourceInput(conn, queryID);

@@ -52,12 +52,14 @@ export class ModeYieldSource implements Source {
     filters?: Condition,
     splitEditKeys?: Set<string>,
     debug?: DebugDelegate,
+    userSort?: Ordering | undefined,
   ): SourceInput {
     const sourceInput = this.#source.connect(
       sort,
       filters,
       splitEditKeys,
       debug,
+      userSort,
     );
     if (!this.#yieldsInFetch) {
       return sourceInput;
