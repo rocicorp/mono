@@ -223,7 +223,7 @@ export class QueryStats {
         this.#overflowShapes.add(key);
         return undefined;
       }
-      stats = new ShapeStats(query);
+      stats = new ShapeStats({queryName: query.queryName, shape: query.shape});
       this.#shapes.set(key, stats);
     }
     return stats;
