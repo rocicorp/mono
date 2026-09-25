@@ -216,13 +216,13 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v8. Supported protocols: [v4 ... v7]`,
+        `Cannot service client at protocol v9. Supported protocols: [v4 ... v8]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true&id=foo`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v8. Supported protocols: [v4 ... v7]`,
+        `Cannot service client at protocol v9. Supported protocols: [v4 ... v8]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],

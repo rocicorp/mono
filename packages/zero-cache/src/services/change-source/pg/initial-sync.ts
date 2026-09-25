@@ -832,8 +832,12 @@ export function makeBinarySelectExprs(
  * that order. Used by resumable backfills; see `backfill-resume.ts`.
  */
 export type DownloadOrder = {
-  /** The `ORDER BY` expression, e.g. from `orderByRowKey()`. */
-  readonly by: string;
+  /**
+   * The `ORDER BY` expression, e.g. from `orderByRowKey()`. If unset, the
+   * natural order of the scan is used (e.g. physical order for `ctid`-based
+   * resumption).
+   */
+  readonly by?: string | undefined;
 
   /**
    * A boolean SQL expression restricting the download to rows after a mark,
@@ -864,7 +868,7 @@ export function makeDownloadStatements(
   const where = conditions === null ? '' : /*sql*/ `WHERE ${conditions}`;
   const sample = tableSampleClause(sampleRate);
   const limit = limitClause(maxRowsPerTable);
-  const orderBy = order ? /*sql*/ ` ORDER BY ${order.by}` : '';
+  const orderBy = order?.by ? /*sql*/ ` ORDER BY ${order.by}` : '';
   const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)}${sample} ${where}`;
   const select = /*sql*/ `SELECT ${(selectExprs ?? cols.map(id)).join(',')} ${fromTable}${orderBy}${limit}`;
   if (limit) {

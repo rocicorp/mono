@@ -4,6 +4,7 @@ import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
+import {deepEqual} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {mapEntries} from '../../../../shared/src/objects.ts';
 import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
@@ -37,8 +38,13 @@ import {
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
 import {id} from '../../types/sql.ts';
+import {
+  acceptBackfill,
+  type AcceptResult,
+} from '../change-source/protocol/backfill-progress.ts';
 import type {
   BackfillCompleted,
+  BackfillProgressMark,
   Change,
   ColumnAdd,
   ColumnDrop,
@@ -888,28 +894,55 @@ class TransactionProcessor {
     this.#reloadTableSpecs();
   }
 
-  processBackfill({relation, watermark, columns, rowValues}: MessageBackfill) {
+  processBackfill({
+    relation,
+    watermark,
+    columns,
+    rowValues,
+    progressMarks,
+  }: MessageBackfill) {
     const tableName = liteTableName(relation);
     const tableSpec = must(this.#tableSpecs.get(tableName));
     const rowKeyCols = relation.rowKey.columns;
     const cols = [...rowKeyCols, ...columns];
 
-    // Columns that are still being backfilled on _this_ replica. Once a column
-    // has been published (backfill completed), its values strictly follow the
-    // replication timeline, so a subsequent backfill must never overwrite
-    // them. This guards against a redundant backfill, e.g. when the
-    // view-syncer (re)connects to a replication-manager that is (re)running
-    // a backfill this replica already completed.
-    const backfillingSet = new Set(tableSpec.backfilling ?? []);
-    if (!cols.some(c => backfillingSet.has(c))) {
-      // Every delivered column is already published: the backfill is entirely
-      // redundant. Skip it rather than rewind published values to the snapshot.
+    // Only columns that are still being backfilled on _this_ replica are
+    // written, and of those, only the columns for which this message is
+    // contiguous with the data received so far (whose progress is advanced).
+    //
+    // * Once a column has been published (backfill completed), its values
+    //   strictly follow the replication timeline, so a subsequent backfill must
+    //   never overwrite them. This guards against a redundant backfill, e.g.
+    //   when the view-syncer (re)connects to a replication-manager that is
+    //   (re)running a backfill this replica already completed.
+    // * Data for non-contiguous (ignored) columns is necessarily re-delivered
+    //   (by a resumed or from-scratch run) before the column can be published,
+    //   so writing it would be wasted I/O.
+    const {accepted, ignored} = this.#trackBackfillProgress(
+      relation,
+      cols,
+      own => acceptBackfill(own, progressMarks),
+    );
+    if (accepted.length === 0) {
       this.#lc.debug?.(
-        `skipping redundant backfill of ${rowValues.length} rows into ` +
-          `${tableName} (all columns already published)`,
+        ignored.length
+          ? `skipping backfill of ${rowValues.length} rows into ` +
+              `${tableName}: not contiguous with the progress of columns ` +
+              `[${ignored.join(',')}]`
+          : `skipping redundant backfill of ${rowValues.length} rows into ` +
+              `${tableName} (all columns already published)`,
+        progressMarks,
       );
       return;
     }
+    if (ignored.length) {
+      this.#lc.debug?.(
+        `backfill of ${tableName} is not contiguous with the progress ` +
+          `of columns [${ignored.join(',')}]`,
+        progressMarks,
+      );
+    }
+    const acceptedSet = new Set(accepted);
 
     // Common parts of the INSERT sql statement.
     const insertColsStr = [...cols, ZERO_VERSION_COLUMN_NAME].map(id).join(',');
@@ -940,10 +973,9 @@ class TransactionProcessor {
               c => (rowOp.backfillingColumnVersions[c] ?? '') <= watermark,
             )
           : cols
-      ).filter(c => backfillingSet.has(c));
+      ).filter(c => acceptedSet.has(c));
       if (updates.length === 0) {
-        // row already has newer (or published) values for all backfilling
-        // columns.
+        // row already has newer values for all accepted backfilling columns.
         skipped++;
         continue;
       }
@@ -967,32 +999,88 @@ class TransactionProcessor {
 
   #completedBackfill: DownloadStatus | undefined;
 
+  /**
+   * Applies `accept` to the tracked progress of each of the `cols` that are
+   * still backfilling on this replica, updating the progress of the accepted
+   * ones. Columns that are not backfilling (e.g. already published) are
+   * neither accepted nor ignored.
+   */
+  #trackBackfillProgress(
+    relation: Identifier,
+    cols: readonly string[],
+    accept: (progress: BackfillProgressMark | undefined) => AcceptResult,
+  ): {accepted: string[]; ignored: string[]} {
+    const tracked = this.#backfilling.getProgress(relation);
+    const accepted: string[] = [];
+    const ignored: string[] = [];
+    for (const col of cols) {
+      if (!tracked.has(col)) {
+        continue; // not backfilling
+      }
+      const progress = tracked.get(col);
+      const result = accept(progress);
+      if (!result.accept) {
+        ignored.push(col);
+        continue;
+      }
+      accepted.push(col);
+      if (!deepEqual(result.progress, progress)) {
+        this.#backfilling.setProgress(relation, col, result.progress);
+      }
+    }
+    return {accepted, ignored};
+  }
+
   processBackfillCompleted(msg: BackfillCompleted) {
-    const {relation, columns, status} = msg;
+    const {relation, columns, status, progressMarks} = msg;
     const tableName = liteTableName(relation);
     const rowKeyCols = relation.rowKey.columns;
-    const cols = [...rowKeyCols, ...columns];
+
+    // Only complete the columns whose backfill progress is contiguous with
+    // the completed backfill. The others remain backfilling (and will be
+    // re-requested by the change-streamer).
+    const {accepted, ignored} = this.#trackBackfillProgress(
+      relation,
+      [...rowKeyCols, ...columns],
+      own =>
+        acceptBackfill(
+          own,
+          progressMarks ? {previous: progressMarks.previous} : undefined,
+        ),
+    );
+    if (ignored.length) {
+      this.#lc.info?.(
+        `ignoring backfill-completed of ${tableName} for columns ` +
+          `[${ignored.join(',')}], which have not received all of the data`,
+        progressMarks,
+      );
+    }
 
     // If none of the columns are still backfilling on this replica, they were
     // already published (e.g. a redundant backfill from a replication-manager
     // re-running a backfill this replica already completed). Bumping versions
     // again would spuriously reset pipelines and re-report completion, so treat
     // the completion as a no-op.
-    const tableSpec = must(this.#tableSpecs.get(tableName));
-    const backfillingSet = new Set(tableSpec.backfilling ?? []);
-    if (!cols.some(col => backfillingSet.has(col))) {
-      this.#lc.debug?.(
-        `skipping redundant backfill-completed for ${tableName} ` +
-          `(all columns already published)`,
-      );
+    if (accepted.length === 0) {
+      if (ignored.length === 0) {
+        this.#lc.debug?.(
+          `skipping redundant backfill-completed for ${tableName} ` +
+            `(all columns already published)`,
+        );
+      }
       return;
     }
+    const ignoredSet = new Set(ignored);
+    const cols = [
+      ...rowKeyCols.filter(c => !ignoredSet.has(c)),
+      ...columns.filter(c => !ignoredSet.has(c)),
+    ];
 
     const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
     for (const col of cols) {
       columnMetadata.clearBackfilling(tableName, col);
     }
-    this.#backfilling.apply(msg);
+    this.#backfilling.complete(relation, cols);
     // Given that new columns are being exposed for every row in the table, bump the
     // row version for all rows.
     this.#bumpVersions(relation);

@@ -14,6 +14,7 @@ import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
+import {BackfillingTracker} from './schema/backfilling.ts';
 import {DEL_OP, RESET_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
@@ -4990,5 +4991,267 @@ describe('replicator/change-processor redundant backfills', () => {
       },
       'bigint',
     );
+  });
+});
+
+describe('replicator/change-processor backfill progress', () => {
+  let lc: LogContext;
+  let replica: Database;
+  let processor: ChangeProcessor;
+
+  const bff = new ReplicationMessages({bff: ['a']});
+  const relation = {schema: 'public', name: 'bff', rowKey: {columns: ['a']}};
+  let version = 0x100;
+
+  beforeEach(() => {
+    lc = createSilentLogContext();
+    replica = new Database(lc, ':memory:');
+    initReplicationState(replica, ['zero_data'], '02');
+    initDB(
+      replica,
+      /*sql*/ `
+        CREATE TABLE bff(a int, _0_version TEXT, PRIMARY KEY(a));
+        INSERT INTO bff(a, _0_version) VALUES (1, '03');
+        INSERT INTO bff(a, _0_version) VALUES (2, '03');
+      `,
+    );
+    processor = createChangeProcessor(replica);
+    version = 0x100;
+
+    // Add column `d`, to be backfilled.
+    tx([
+      'data',
+      bff.addColumn(
+        'bff',
+        'd',
+        {dataType: 'int', pos: 1},
+        {tableMetadata: {rowKey: {columns: ['a']}}, backfill: {id: 4}},
+      ),
+    ]);
+  });
+
+  function tx(...changes: ChangeStreamData[]) {
+    const watermark = (version++).toString(16);
+    for (const change of [
+      ['begin', bff.begin(), {commitWatermark: watermark}],
+      ...changes,
+      ['commit', bff.commit(), {watermark}],
+    ] satisfies ChangeStreamData[]) {
+      processor.processMessage(lc, change);
+    }
+  }
+
+  function mark(progressMark: string, timeline = 't1') {
+    return {progressMark, timeline};
+  }
+
+  function rows(
+    rowValues: number[][],
+    progressMarks: {
+      previous?: {progressMark: string; timeline: string};
+      current: {progressMark: string; timeline: string};
+    },
+    columns = ['d'],
+  ): ChangeStreamData {
+    return [
+      'data',
+      {
+        tag: 'backfill',
+        relation,
+        watermark: '0f',
+        columns,
+        rowValues,
+        progressMarks,
+      },
+    ];
+  }
+
+  function completed(previous?: {
+    progressMark: string;
+    timeline: string;
+  }): ChangeStreamData {
+    return [
+      'data',
+      {
+        tag: 'backfill-completed',
+        relation,
+        watermark: '0f',
+        columns: ['d'],
+        progressMarks: previous ? {previous} : {},
+      },
+    ];
+  }
+
+  function progress() {
+    return new BackfillingTracker(replica).getProgress(relation).get('d');
+  }
+
+  function isBackfilling() {
+    return must(ColumnMetadataStore.getInstance(replica)).getColumn('bff', 'd')
+      ?.isBackfilling;
+  }
+
+  test('tracks progress of contiguous backfill messages', () => {
+    expect(progress()).toBeUndefined();
+    tx(rows([[1, 10]], {current: mark('01')}));
+    expect(progress()).toEqual(mark('01'));
+    tx(rows([[2, 20]], {previous: mark('01'), current: mark('02')}));
+    expect(progress()).toEqual(mark('02'));
+    tx(completed(mark('02')));
+    expect(isBackfilling()).toBe(false);
+    expectTables(
+      replica,
+      {
+        bff: [
+          {a: 1n, d: 10n},
+          {a: 2n, d: 20n},
+        ].map(r => expect.objectContaining(r)),
+      },
+      'bigint',
+    );
+  });
+
+  test('a gap is not published', () => {
+    tx(rows([[1, 10]], {current: mark('01')}));
+    // The subscriber missed the message ending at '02'.
+    tx(rows([[2, 20]], {previous: mark('02'), current: mark('03')}));
+    expect(progress()).toEqual(mark('01'));
+    // The ignored data is not written.
+    expectTables(
+      replica,
+      {
+        bff: [
+          {a: 1n, d: 10n},
+          {a: 2n, d: null},
+        ].map(r => expect.objectContaining(r)),
+      },
+      'bigint',
+    );
+    tx(completed(mark('03')));
+    expect(isBackfilling()).toBe(true);
+
+    // A resumed run from the subscriber's progress fills the gap.
+    tx(rows([[2, 20]], {previous: mark('01'), current: mark('03')}));
+    expect(progress()).toEqual(mark('03'));
+    tx(completed(mark('03')));
+    expect(isBackfilling()).toBe(false);
+    expectTables(
+      replica,
+      {
+        bff: [
+          {a: 1n, d: 10n},
+          {a: 2n, d: 20n},
+        ].map(r => expect.objectContaining(r)),
+      },
+      'bigint',
+    );
+  });
+
+  test('only the values of contiguous columns are written', () => {
+    tx(rows([[1, 10]], {current: mark('01')}));
+    // Add column `e`, which has no progress yet.
+    tx([
+      'data',
+      bff.addColumn(
+        'bff',
+        'e',
+        {dataType: 'int', pos: 2},
+        {tableMetadata: {rowKey: {columns: ['a']}}, backfill: {id: 5}},
+      ),
+    ]);
+
+    // Contiguous for `d`, but not for `e` (which needs a run from scratch).
+    tx(
+      rows(
+        [
+          [1, 11, 100],
+          [2, 21, 200],
+        ],
+        {previous: mark('01'), current: mark('02')},
+        ['d', 'e'],
+      ),
+    );
+    expect(progress()).toEqual(mark('02'));
+    expect(
+      new BackfillingTracker(replica).getProgress(relation).get('e'),
+    ).toBeUndefined();
+    expectTables(
+      replica,
+      {
+        bff: [
+          {a: 1n, d: 11n, e: null},
+          {a: 2n, d: 21n, e: null},
+        ].map(r => expect.objectContaining(r)),
+      },
+      'bigint',
+    );
+  });
+
+  test('a message that is ignored for all columns is skipped', () => {
+    tx(rows([[1, 10]], {previous: mark('05'), current: mark('06')}));
+    expect(progress()).toBeUndefined();
+    expectTables(
+      replica,
+      {
+        bff: [
+          {a: 1n, d: null},
+          {a: 2n, d: null},
+        ].map(r => expect.objectContaining(r)),
+      },
+      'bigint',
+    );
+  });
+
+  test('a continuation on another timeline is not published', () => {
+    tx(rows([[1, 10]], {current: mark('01')}));
+    tx(
+      rows([[2, 20]], {previous: mark('01', 't2'), current: mark('02', 't2')}),
+    );
+    expect(progress()).toEqual(mark('01'));
+    tx(completed(mark('02', 't2')));
+    expect(isBackfilling()).toBe(true);
+
+    // A run from scratch (e.g. on the new timeline) is always accepted.
+    tx(
+      rows(
+        [
+          [1, 10],
+          [2, 20],
+        ],
+        {current: mark('09', 't2')},
+      ),
+    );
+    expect(progress()).toEqual(mark('09', 't2'));
+    tx(completed(mark('09', 't2')));
+    expect(isBackfilling()).toBe(false);
+  });
+
+  test('an empty run from scratch completes', () => {
+    tx(completed());
+    expect(isBackfilling()).toBe(false);
+  });
+
+  test('a completion without progress is not published', () => {
+    tx(completed(mark('02')));
+    expect(isBackfilling()).toBe(true);
+  });
+
+  test('legacy (pre-v8) messages are accepted unconditionally', () => {
+    tx([
+      'data',
+      {
+        tag: 'backfill',
+        relation,
+        watermark: '0f',
+        columns: ['d'],
+        rowValues: [[1, 10]],
+      },
+    ]);
+    expect(progress()).toBeUndefined();
+    tx([
+      'data',
+      {tag: 'backfill-completed', relation, watermark: '0f', columns: ['d']},
+    ]);
+    expect(isBackfilling()).toBe(false);
   });
 });

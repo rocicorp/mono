@@ -503,6 +503,6 @@ function checkProtocolVersion(pathname: string): number {
 // message payload, dropping the fields that are implicit on the merged
 // connection: protocolVersion (from the request path), wsBatched (always on).
 function toStartSubscriptionContext(ctx: SubscriberContext): SubscribeContext {
-  const {taskID, id, mode, replicaVersion, watermark} = ctx;
-  return {taskID, id, mode, replicaVersion, watermark};
+  const {taskID, id, mode, replicaVersion, watermark, backfills} = ctx;
+  return {taskID, id, mode, replicaVersion, watermark, backfills};
 }

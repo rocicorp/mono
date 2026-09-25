@@ -1,14 +1,25 @@
 import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect} from 'vitest';
+import {assert} from '../../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {getConnectionURI, type PgTest, test} from '../../../test/db.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
-import type {BackfillRequest} from '../protocol/current.ts';
-import {streamBackfill} from './backfill-stream.ts';
+import type {
+  BackfillProgressMark,
+  BackfillRequest,
+} from '../protocol/current.ts';
+import {ctidToProgressMark, streamBackfill} from './backfill-stream.ts';
 import {getPublicationInfo} from './schema/published.ts';
 
 const SLOT_NAME = 'backfill_test_slot';
+
+function mark(block: number, offset: number, timeline?: string) {
+  return {
+    progressMark: ctidToProgressMark(`(${block},${offset})`),
+    timeline: timeline ?? expect.any(String),
+  };
+}
 
 describe('backfill-stream', () => {
   let lc: LogContext;
@@ -71,8 +82,8 @@ describe('backfill-stream', () => {
         },
       },
       columns: {
-        c: {attNum: tableSpec.columns.c.pos},
-        b: {attNum: tableSpec.columns.b.pos},
+        c: {id: {attNum: tableSpec.columns.c.pos}},
+        b: {id: {attNum: tableSpec.columns.b.pos}},
       },
     };
 
@@ -90,11 +101,11 @@ describe('backfill-stream', () => {
         },
       },
       columns: {
-        id1: {attNum: tableSpec.columns.id1.pos},
-        id2: {attNum: tableSpec.columns.id2.pos},
-        a: {attNum: tableSpec.columns.a.pos},
-        c: {attNum: tableSpec.columns.c.pos},
-        b: {attNum: tableSpec.columns.b.pos},
+        id1: {id: {attNum: tableSpec.columns.id1.pos}},
+        id2: {id: {attNum: tableSpec.columns.id2.pos}},
+        a: {id: {attNum: tableSpec.columns.a.pos}},
+        c: {id: {attNum: tableSpec.columns.c.pos}},
+        b: {id: {attNum: tableSpec.columns.b.pos}},
       },
     };
 
@@ -109,8 +120,8 @@ describe('backfill-stream', () => {
   });
 
   test.each([
-    {mode: 'binary', textCopy: false, dataBytes: 922},
-    {mode: 'text', textCopy: true, dataBytes: 474},
+    {mode: 'binary', textCopy: false, dataBytes: 1013},
+    {mode: 'text', textCopy: true, dataBytes: 535},
   ])(`column backfill ($mode)`, async ({textCopy, dataBytes}) => {
     const stream = streamBackfill(
       lc,
@@ -153,6 +164,7 @@ describe('backfill-stream', () => {
             [10n, 11, arr([10, 11, '12', {e: 13}]), '{"d" : 10}'],
           ],
           status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+          progressMarks: {current: mark(0, 10)},
         },
       },
       {
@@ -166,14 +178,20 @@ describe('backfill-stream', () => {
           },
           columns: ['c', 'b'],
           status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+          progressMarks: {previous: mark(0, 10)},
         },
       },
     ]);
+    // A backfill from scratch has no `previous` mark.
+    const [first] = results;
+    expect(
+      first.message.tag === 'backfill' && first.message.progressMarks?.previous,
+    ).toBeUndefined();
   });
 
   test.each([
-    {mode: 'binary', textCopy: false, dataBytes: 1072},
-    {mode: 'text', textCopy: true, dataBytes: 594},
+    {mode: 'binary', textCopy: false, dataBytes: 1163},
+    {mode: 'text', textCopy: true, dataBytes: 655},
   ])(`table backfill ($mode)`, async ({textCopy, dataBytes}) => {
     const stream = streamBackfill(
       lc,
@@ -221,6 +239,7 @@ describe('backfill-stream', () => {
             ],
           ],
           status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+          progressMarks: {current: mark(0, 10)},
         },
       },
       {
@@ -234,9 +253,195 @@ describe('backfill-stream', () => {
           },
           columns: ['a', 'c', 'b'],
           status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+          progressMarks: {previous: mark(0, 10)},
         },
       },
     ]);
+  });
+
+  async function streamAll(
+    req: BackfillRequest,
+    opts?: Parameters<typeof streamBackfill>[4],
+  ) {
+    const results = [];
+    for await (const msg of streamBackfill(
+      lc,
+      upstreamURI,
+      {slot: SLOT_NAME, publications: ['the_pub']},
+      req,
+      opts,
+    )) {
+      results.push(msg.message);
+    }
+    return results;
+  }
+
+  function withProgress(
+    req: BackfillRequest,
+    progress: BackfillProgressMark,
+  ): BackfillRequest {
+    return {
+      ...req,
+      columns: Object.fromEntries(
+        Object.entries(req.columns).map(([col, {id}]) => [col, {id, progress}]),
+      ),
+    };
+  }
+
+  async function currentTimeline() {
+    const [{filenode}] = await upstream<{filenode: string}[]>`
+      SELECT pg_relation_filenode('foo')::text AS filenode`;
+    return filenode;
+  }
+
+  test.each([
+    {mode: 'binary', textCopy: false},
+    {mode: 'text', textCopy: true},
+  ])('resumes from a progress mark ($mode)', async ({textCopy}) => {
+    const timeline = await currentTimeline();
+    const start = {progressMark: ctidToProgressMark('(0,6)'), timeline};
+    const results = await streamAll(
+      withProgress(columnBackfillRequest, start),
+      {textCopy},
+    );
+
+    expect(results).toMatchObject([
+      {
+        tag: 'backfill',
+        rowValues: [
+          [7n, 8, expect.anything(), expect.anything()],
+          [8n, 9, expect.anything(), expect.anything()],
+          [9n, 10, expect.anything(), expect.anything()],
+          [10n, 11, expect.anything(), expect.anything()],
+        ],
+        // Only the remaining rows are counted.
+        status: {rows: 4, totalRows: 4},
+        progressMarks: {previous: start, current: mark(0, 10, timeline)},
+      },
+      {
+        tag: 'backfill-completed',
+        progressMarks: {previous: mark(0, 10, timeline)},
+      },
+    ]);
+  });
+
+  test('resuming at the end of the table only completes', async () => {
+    const timeline = await currentTimeline();
+    const start = {progressMark: ctidToProgressMark('(0,10)'), timeline};
+    expect(
+      await streamAll(withProgress(columnBackfillRequest, start)),
+    ).toMatchObject([
+      {tag: 'backfill-completed', progressMarks: {previous: start}},
+    ]);
+  });
+
+  test('restarts from scratch on a different timeline', async () => {
+    const timeline = await currentTimeline();
+    // A heap rewrite changes the table's relfilenode, and thus its timeline.
+    await upstream.unsafe(`VACUUM FULL foo`);
+    const newTimeline = await currentTimeline();
+    expect(newTimeline).not.toBe(timeline);
+
+    const results = await streamAll(
+      withProgress(columnBackfillRequest, {
+        progressMark: ctidToProgressMark('(0,6)'),
+        timeline,
+      }),
+    );
+    expect(results).toMatchObject([
+      {
+        tag: 'backfill',
+        status: {rows: 10},
+        progressMarks: {current: {timeline: newTimeline}},
+      },
+      {tag: 'backfill-completed'},
+    ]);
+    const [first] = results;
+    expect(
+      first.tag === 'backfill' && first.progressMarks?.previous,
+    ).toBeUndefined();
+  });
+
+  test('empty table', async () => {
+    await upstream.unsafe(`TRUNCATE foo`);
+    expect(await streamAll(columnBackfillRequest)).toEqual([
+      expect.objectContaining({
+        tag: 'backfill-completed',
+        progressMarks: {},
+      }),
+    ]);
+  });
+
+  test('previous and current progress marks across two messages', async () => {
+    // Enough data to span multiple COPY chunks (~64 KiB each).
+    await upstream.unsafe(/*sql*/ `
+      INSERT INTO foo (id1, id2, b)
+        SELECT i, i+1, json_build_object('d', i, 'pad', repeat('x', 200))
+          FROM generate_series(11, 2000) AS i;
+    `);
+    const ctids = new Map(
+      (
+        await upstream<{id1: bigint; ctid: string}[]>`
+          SELECT id1, ctid::text FROM foo`
+      ).map(({id1, ctid}) => [BigInt(id1), ctid]),
+    );
+    // The mark of the last row of a message, looked up by its `id1`.
+    const lastRowMark = (rowValues: unknown[][]) => ({
+      progressMark: ctidToProgressMark(
+        must(ctids.get(BigInt(must(rowValues.at(-1))[0] as bigint))),
+      ),
+      timeline: expect.any(String),
+    });
+
+    const stream = (flushThresholdBytes?: number) => {
+      const results = [];
+      return (async () => {
+        for await (const msg of streamBackfill(
+          lc,
+          upstreamURI,
+          {slot: SLOT_NAME, publications: ['the_pub']},
+          columnBackfillRequest,
+          {flushThresholdBytes},
+        )) {
+          results.push(msg);
+        }
+        return results;
+      })();
+    };
+
+    // Flush at half of the total bytes, which results in exactly two
+    // `backfill` messages (given that no single chunk exceeds that).
+    const totalBytes = (await stream()).reduce((t, m) => t + m.byteSize, 0);
+    const results = (await stream(Math.ceil(totalBytes / 2))).map(
+      m => m.message,
+    );
+    expect(results.map(m => m.tag)).toEqual([
+      'backfill',
+      'backfill',
+      'backfill-completed',
+    ]);
+    const [first, second, completed] = results;
+    assert(
+      first.tag === 'backfill' && second.tag === 'backfill',
+      'expected backfill messages',
+    );
+    expect(first.rowValues.length + second.rowValues.length).toBe(2000);
+
+    const firstMark = lastRowMark(first.rowValues);
+    const secondMark = lastRowMark(second.rowValues);
+    expect(firstMark).not.toEqual(secondMark);
+
+    // The first message of a backfill from scratch has no `previous`.
+    expect(first.progressMarks).toEqual({current: firstMark});
+    // The second continues from the first.
+    expect(second.progressMarks).toEqual({
+      previous: first.progressMarks?.current,
+      current: secondMark,
+    });
+    // The completion continues from the second.
+    expect(completed.progressMarks).toEqual({
+      previous: second.progressMarks?.current,
+    });
   });
 
   test.each([

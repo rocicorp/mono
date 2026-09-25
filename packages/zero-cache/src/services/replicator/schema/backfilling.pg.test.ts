@@ -143,13 +143,13 @@ describe('replicator/schema/backfill request parity', () => {
    */
   const BAR: BackfillRequest = {
     table: {schema: 'your', name: 'bar', metadata: null},
-    columns: {c: {barID: 'zoo'}},
+    columns: {c: {id: {barID: 'zoo'}}},
   };
 
   /** The `my.foo` request: the two halves every step below moves. */
   function foo(
     rowKey: 'default' | 'index',
-    columns: BackfillRequest['columns'],
+    ids: Record<string, BackfillRequest['columns'][string]['id']>,
     schema = 'my',
   ): BackfillRequest {
     return {
@@ -158,7 +158,9 @@ describe('replicator/schema/backfill request parity', () => {
         name: 'foo',
         metadata: {rowKey: {type: rowKey, columns: ['id']}},
       },
-      columns,
+      columns: Object.fromEntries(
+        Object.entries(ids).map(([col, id]) => [col, {id}]),
+      ),
     };
   }
 

@@ -96,7 +96,7 @@ test('a non-transactional foreign-shard message does not interrupt a running bac
 
   const backfillRequest: BackfillRequest = {
     table: {schema: 'public', name: 'foo', metadata: null},
-    columns: {id: {}},
+    columns: {id: {id: {}}},
   };
 
   const shardConfig = {
