@@ -7,7 +7,7 @@ import {assert} from '../../shared/src/asserts.ts';
 import {getBrowserGlobal} from '../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
-import {promiseVoid} from '../../shared/src/resolved-promises.ts';
+import {promiseFalse, promiseVoid} from '../../shared/src/resolved-promises.ts';
 import {TESTING} from '../../shared/src/testing.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.ts';
@@ -40,8 +40,11 @@ import {assertHash, emptyHash, type Hash, newRandomHash} from './hash.ts';
 import type {HTTPRequestInfo} from './http-request-info.ts';
 import {httpStatusUnauthorized} from './http-status-unauthorized.ts';
 import type {IndexDefinitions} from './index-defs.ts';
-import {MemStore, dropMemStore} from './kv/mem-store.ts';
-import type {Store as KVStore, StoreProvider} from './kv/store.ts';
+import {
+  type MemFallbackStore,
+  MemFallbackStoreProvider,
+} from './kv/mem-fallback-store.ts';
+import type {Store as KVStore} from './kv/store.ts';
 import {createLogContext} from './log-options.ts';
 import {makeIDBName} from './make-idb-name.ts';
 import {MutationRecovery} from './mutation-recovery.ts';
@@ -93,9 +96,8 @@ import type {
 import {ReportError} from './report-error.ts';
 import {setIntervalWithSignal} from './set-interval-with-signal.ts';
 import {
-  type StorageFailure,
-  type StorageFailureKind,
-  classifyStorageFailure,
+  getStorageFailure,
+  type StorageFailureError,
 } from './storage-failure.ts';
 import {
   type SubscribeOptions,
@@ -246,8 +248,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    */
   isClientGroupDisabled = false;
 
-  #kvStoreProvider: StoreProvider;
-  #perKVStore: KVStore;
+  readonly #kvStoreProvider: MemFallbackStoreProvider;
+  readonly #perKVStore: MemFallbackStore;
 
   lastMutationID: number = 0;
 
@@ -260,12 +262,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * The KV store backing this instance. Its `kind` reflects the storage
-   * currently in use, e.g. `'mem'` after an IndexedDB store fell back to
-   * memory.
+   * The KV store backing this instance. It is a memory store once a storage
+   * failure while opening moved the instance onto memory (see
+   * `onStorageFailure`).
    */
   get kvStore(): KVStore {
-    return this.#perKVStore;
+    return this.#perKVStore.backing;
   }
 
   set auth(auth: string) {
@@ -342,19 +344,21 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    */
   pusher: Pusher;
 
-  memdag: LazyStore;
-  perdag: Store;
-  #idbDatabases: IDBDatabasesStore;
+  readonly memdag: LazyStore;
+  readonly perdag: Store;
+  readonly #idbDatabases: IDBDatabasesStore;
   readonly #lc: LogContext;
   readonly #zero: ZeroOption | undefined;
 
   readonly #closeAbortController = new AbortController();
   /**
-   * Aborted on close AND on a storage failure. The store-using background
-   * processes (heartbeat, client and client-group GC, database collection,
-   * mutation recovery, the new-client channel's store read) run on this signal, so the first detected failure
-   * stops them instead of letting each retry the fault at its interval and
-   * log `Error running.` every time.
+   * Aborted on close AND on a storage failure after the open. The store-using
+   * background processes (heartbeat, client and client-group GC, database
+   * collection, mutation recovery, the new-client channel's store read) run
+   * on this signal, so the first detected failure stops them instead of
+   * letting each retry the fault at its interval and log `Error running.`
+   * every time. A failure during the open moves the stores onto memory
+   * instead, where they keep running.
    */
   readonly #storeProcessesAbortController = new AbortController();
 
@@ -419,45 +423,50 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   /**
    * `onStorageFailure` is called once, the first time the local kv store
-   * reports that its storage has failed rather than its data: SQLite answered
-   * `SQLITE_FULL` (the device is out of space), `SQLITE_CANTOPEN` (the
-   * database file cannot be opened) or `SQLITE_IOERR` (a read or write to the
-   * file failed) — see {@link StorageFailure}.
+   * reports that its storage has failed rather than its data, by throwing a
+   * {@link StorageFailureError}: the device is out of space (`full`), the
+   * database cannot be opened (`cannot-open`), or a read or write to it failed
+   * (`io-error`). The SQLite stores and the IndexedDB store report these; a
+   * custom `StoreProvider` can throw a `StorageFailureError` itself.
    *
-   * From then on this instance stops persisting and refreshing: a rebuild
-   * would open the same failing storage, and a wipe would destroy an intact
-   * replica for a fault that is not in the data. Queries and mutations keep
-   * running against what the in-memory dag holds, and mutations keep pushing
-   * to the server, but nothing is persisted locally until the app creates a
-   * new instance. A read that needs a chunk the in-memory dag has not loaded
-   * from the store yet still goes to the store and fails the way any store
-   * read does; that failure reaches its caller and is not reclassified here.
-   * An invalid ref count
-   * reported while the store is failing with `cannot-open` or `io-error` is
-   * NOT treated as corruption (the database is not dropped and
-   * {@link onClientStateNotFound} is not called), because a store that cannot
-   * complete a read or write is what produces such readings. A `full` disk
-   * keeps the drop: a torn write there is real corruption, and deleting the
-   * database is also what frees the space.
+   * A failure while the instance is opening moves it onto memory for the
+   * session: queries, mutations and subscriptions work, mutations push to the
+   * server, and nothing is persisted.
    *
-   * The failure is detected on the persist path: the open, `persist()` and
-   * `refresh()`, which every local write reaches within a persist interval.
-   * The background maintenance processes (heartbeat, client and client-group
-   * GC, database collection, mutation recovery) do not classify their own
-   * errors; they stop on the first detected failure instead of retrying
-   * against the store at their interval.
+   * A failure after that stops persisting and refreshing: a rebuild would
+   * open the same failing storage, and a wipe would destroy an intact replica
+   * for a fault that is not in the data. Queries and mutations keep running
+   * against what the in-memory dag holds, and mutations keep pushing to the
+   * server, but nothing is persisted locally until the app creates a new
+   * instance. A read that needs a chunk the in-memory dag has not loaded from
+   * the store yet, or has since evicted from its cache, still goes to the
+   * store and fails the way any store read does; that failure reaches its
+   * caller and is not reclassified here. An invalid ref count reported while
+   * the store is failing with `cannot-open` or `io-error` is NOT treated as
+   * corruption (the database is not dropped and {@link onClientStateNotFound}
+   * is not called), because a store that cannot complete a read or write is
+   * what produces such readings. A `full` disk keeps the drop: a torn write
+   * there is real corruption, and deleting the database is also what frees
+   * the space.
+   *
+   * After the open, the failure is detected on the persist path: `persist()`
+   * and `refresh()`, which every local write reaches within a persist
+   * interval. The background maintenance processes (heartbeat, client and
+   * client-group GC, database collection, mutation recovery) do not classify
+   * their own errors; they stop on the first detected failure instead of
+   * retrying against the store at their interval.
    *
    * There is no default behavior other than logging. An app that shows a
    * "free up space" or "restart" screen can do so from here.
    */
-  onStorageFailure: ((failure: StorageFailure) => void) | null = null;
+  onStorageFailure: ((failure: StorageFailureError) => void) | null = null;
 
   /**
    * Set the first time the kv store reports a storage failure. Read by every
    * path that writes the perdag so none of them retries against storage
    * that has failed.
    */
-  #storageFailure: StorageFailure | undefined;
+  #storageFailure: StorageFailureError | undefined;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -560,48 +569,16 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.#closeAbortController.signal,
     );
 
-    let kvStoreProvider = getKVStoreProvider(this.#lc, options.kvStore);
-    let perKVStore: KVStore | undefined;
-    let idbDatabases: IDBDatabasesStore;
-    try {
-      perKVStore = kvStoreProvider.create(this.idbName);
-      idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
-    } catch (e) {
-      // The replica store may have opened before IDBDatabasesStore threw.
-      // Nothing can reach that handle once the provider is swapped (or the
-      // constructor throws), so close it here rather than leak the connection
-      // for the life of the process. Not awaited: a failing store may not
-      // complete its close.
-      perKVStore?.close().catch(noop);
-      const storageFailureKind = classifyStorageFailure(e);
-      if (storageFailureKind === undefined) {
-        throw e;
-      }
-      // The store cannot even be opened: the SQLite providers open
-      // synchronously in their constructors, and SQLITE_CANTOPEN / IOERR /
-      // FULL surface right here, before the caller can attach
-      // onStorageFailure. Same answer as newIDBStoreWithMemFallback: run this
-      // instance on memory so the app keeps working for the session, persist
-      // nothing, and report once the caller has had a turn to attach the
-      // callback.
-      kvStoreProvider = {
-        create: name => new MemStore(name),
-        drop: dropMemStore,
-      };
-      perKVStore = kvStoreProvider.create(this.idbName);
-      idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
-      const failure: StorageFailure = {kind: storageFailureKind, error: e};
-      this.#storageFailure = failure;
-      this.#storeProcessesAbortController.abort();
-      this.#lc.warn?.(
-        `Local store storage failed (${storageFailureKind}) opening ${this.idbName}; running this instance in memory with persistence stopped`,
-        e,
-      );
-      queueMicrotask(() => this.onStorageFailure?.(failure));
-    }
+    const kvStoreProvider = new MemFallbackStoreProvider(
+      getKVStoreProvider(this.#lc, options.kvStore),
+      failure => this.#onMemFallBack(failure),
+    );
     this.#kvStoreProvider = kvStoreProvider;
+
+    const perKVStore = kvStoreProvider.create(this.idbName);
     this.#perKVStore = perKVStore;
-    this.#idbDatabases = idbDatabases;
+
+    this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
     this.perdag = new StoreImpl(
       perKVStore,
       newRandomHash,
@@ -691,65 +668,25 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#lc.debug?.('Open failed because the persistent store is corrupt');
         return;
       }
-      const storageFailureKind = classifyStorageFailure(e);
-      if (
-        storageFailureKind !== undefined &&
-        this.#storageFailure === undefined &&
-        !this.#closed
-      ) {
-        // The store opened but its first reads or writes failed. Same answer
-        // as the synchronous case above: report once, then run this instance
-        // on memory, so queries, mutations and subscriptions get a working
-        // (unpersisted) replica instead of waiting on a readiness that never
-        // comes. The failing stores are closed without waiting on them; a
-        // store that cannot complete a write may not complete its close.
-        this.#handleStorageFailure(storageFailureKind, e);
-        return this.#reopenInMemory(open);
+      if (!this.#closed && this.#kvStoreProvider.fallBack(e)) {
+        // The storage failed while opening, and the stores are on memory now.
+        // Nothing has been written to the in-memory dag that the memory
+        // stores cannot serve, so open again on the same stores.
+        return open().catch(e => {
+          this.#openFailed.resolve();
+          if (this.#closed) {
+            this.#lc.debug?.('Open on memory ended by close', e);
+          } else {
+            this.#lc.error?.('Open failed again on memory', e);
+          }
+        });
       }
       // Whatever the reason, this open is over: `#ready` stays pending so
       // reads and writes never run against a store that failed to open, but
       // `close()` must still be able to dispose the instance.
       this.#openFailed.resolve();
-      if (storageFailureKind !== undefined) {
-        // Already reported (the instance is on memory, or closing); rethrowing
-        // would only add an unhandled rejection to a fault the app has been
-        // told about.
-        this.#handleStorageFailure(storageFailureKind, e);
-        return;
-      }
       throw e;
     });
-  }
-
-  async #reopenInMemory(open: () => Promise<void>): Promise<void> {
-    const failedStores = [this.memdag, this.perdag, this.#idbDatabases];
-    this.#kvStoreProvider = {
-      create: name => new MemStore(name),
-      drop: dropMemStore,
-    };
-    this.#perKVStore = this.#kvStoreProvider.create(this.idbName);
-    this.#idbDatabases = new IDBDatabasesStore(this.#kvStoreProvider.create);
-    this.perdag = new StoreImpl(
-      this.#perKVStore,
-      newRandomHash,
-      assertHash,
-      this.#onInvalidRefCount,
-    );
-    this.memdag = new LazyStore(
-      this.perdag,
-      LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-      newRandomHash,
-      assertHash,
-    );
-    for (const store of failedStores) {
-      store.close().catch(noop);
-    }
-    try {
-      await open();
-    } catch (e) {
-      this.#openFailed.resolve();
-      this.#lc.error?.('Open failed again on the in-memory fallback', e);
-    }
   }
 
   async #open(
@@ -800,6 +737,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     }
 
     await this.#zero?.init(headHash, this.memdag);
+    this.#kvStoreProvider.opened();
     resolveReady();
 
     if (this.#enablePullAndPushInOpen) {
@@ -807,7 +745,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.push().catch(noop);
     }
 
-    const storeSignal = this.#storeProcessesAbortController.signal;
+    const {signal} = this.#storeProcessesAbortController;
 
     startHeartbeats(
       clientID,
@@ -817,7 +755,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       },
       HEARTBEAT_INTERVAL,
       this.#lc,
-      storeSignal,
+      signal,
     );
     initClientGC(
       clientID,
@@ -826,7 +764,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       GC_INTERVAL,
       onClientsDeleted,
       this.#lc,
-      storeSignal,
+      signal,
     );
     initCollectIDBDatabases(
       this.#idbDatabases,
@@ -837,7 +775,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableMutationRecovery,
       onClientsDeleted,
       this.#lc,
-      storeSignal,
+      signal,
       // Collection writes deleted clients into every surviving database using
       // its own dag store. When that is our database, a corrupt ref count
       // found there must reach the same recovery as writes through `perdag`.
@@ -851,16 +789,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           name === this.idbName ? this.#onInvalidRefCount : undefined,
         ),
     );
-    initClientGroupGC(
-      this.perdag,
-      enableMutationRecovery,
-      this.#lc,
-      storeSignal,
-    );
+    initClientGroupGC(this.perdag, enableMutationRecovery, this.#lc, signal);
     initNewClientChannel(
       this.name,
       this.idbName,
-      storeSignal,
+      signal,
       client.clientGroupID,
       isNewClientGroup,
       () => {
@@ -872,7 +805,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     setIntervalWithSignal(
       () => this.recoverMutations(),
       RECOVER_MUTATIONS_INTERVAL_MS,
-      storeSignal,
+      signal,
     );
     void this.recoverMutations();
 
@@ -1424,9 +1357,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     // Prevent multiple persist calls from running at the same time.
     return this.#persistLock.withLock(async () => {
       const {clientID} = this;
-      // Checked before awaiting readiness: a store that failed during open
-      // never becomes ready, and a persist that waited on it would hang rather
-      // than no-op.
+      // After a storage failure nothing is persisted. Checked before awaiting
+      // readiness, which an open that failed for good never reaches.
       if (this.#storageFailure) {
         return;
       }
@@ -1456,13 +1388,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         } else if (this.#closed) {
           this.#lc.debug?.('Exception persisting during close', e);
         } else {
-          const storageFailureKind = classifyStorageFailure(e);
-          if (storageFailureKind === undefined) {
+          const failure = getStorageFailure(e);
+          if (failure === undefined) {
             throw e;
           }
           // Nothing was persisted, and nothing will be until the app replaces
           // this instance. Do not tell other instances to refresh.
-          this.#handleStorageFailure(storageFailureKind, e);
+          this.#handleStorageFailure(failure);
           return;
         }
       }
@@ -1503,11 +1435,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       } else if (this.#closed) {
         this.#lc.debug?.('Exception refreshing during close', e);
       } else {
-        const storageFailureKind = classifyStorageFailure(e);
-        if (storageFailureKind === undefined) {
+        const failure = getStorageFailure(e);
+        if (failure === undefined) {
           throw e;
         }
-        this.#handleStorageFailure(storageFailureKind, e);
+        this.#handleStorageFailure(failure);
         return;
       }
     }
@@ -1533,25 +1465,53 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #corruptDatabaseRecovery: Promise<void> | undefined;
 
   /**
-   * Records the first storage failure, logs it once, and tells the app.
-   * Later failures of the same instance are the same fault and are not
-   * reported again; the scheduled persist and refresh stop asking.
+   * A storage failure after the open. Records the first one, stops the
+   * store-using background processes, logs it once and tells the app. Later
+   * failures of the same instance are the same fault and are not reported
+   * again; the scheduled persist and refresh stop asking.
    */
-  #handleStorageFailure(kind: StorageFailureKind, error: unknown): void {
+  #handleStorageFailure(failure: StorageFailureError): void {
     if (this.#storageFailure !== undefined) {
       return;
     }
-    const failure: StorageFailure = {kind, error};
     this.#storageFailure = failure;
     this.#storeProcessesAbortController.abort();
     // warn, not error: a full or failing disk is the device's condition, and
     // it is handled here (retries stop, the app is told once through
     // onStorageFailure), so there is nothing for a developer to fix.
     this.#lc.warn?.(
-      `Local store storage failed (${kind}) for ${this.idbName}; persistence is stopped for this instance`,
-      error,
+      `Local store storage failed (${failure.kind}) for ${this.idbName}; persistence is stopped for this instance`,
+      failure,
     );
-    this.onStorageFailure?.(failure);
+    this.#fireOnStorageFailure(failure);
+  }
+
+  /**
+   * A storage failure during the open: the stores have moved onto memory, so
+   * the instance works for the session and persists nothing. Reported on a
+   * later microtask: the SQLite stores open in `create`, while the
+   * constructor is still running and before the app can attach the callback.
+   */
+  #onMemFallBack(failure: StorageFailureError): void {
+    this.#storageFailure = failure;
+    this.#lc.warn?.(
+      `Local store storage failed (${failure.kind}) opening ${this.idbName}; running this instance in memory with persistence stopped`,
+      failure,
+    );
+    queueMicrotask(() => this.#fireOnStorageFailure(failure));
+  }
+
+  /**
+   * The app's callback must not be able to stop the recovery around it: in
+   * the open path, a throw here would skip the open on memory and leave the
+   * instance never ready.
+   */
+  #fireOnStorageFailure(failure: StorageFailureError): void {
+    try {
+      this.onStorageFailure?.(failure);
+    } catch (e) {
+      this.#lc.error?.('onStorageFailure threw', e);
+    }
   }
 
   /**
@@ -2007,6 +1967,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   recoverMutations(): Promise<boolean> | void {
+    // Also reached on every offline->online change, which does not go
+    // through the store-process signal.
+    if (this.#storeProcessesAbortController.signal.aborted) {
+      return promiseFalse;
+    }
     if (!process.env.DISABLE_MUTATION_RECOVERY) {
       // oxlint-disable-next-line no-non-null-assertion
       const result = this.#mutationRecovery!.recoverMutations(

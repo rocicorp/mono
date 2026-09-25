@@ -1,5 +1,5 @@
 import {randomUint64} from '../../../shared/src/random-uint64.ts';
-import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.ts';
+import {dropIDBStore} from '../kv/idb-store.ts';
 
 const IDB_DATABASES_VERSION = 0;
 const IDB_DATABASES_DB_NAME = 'replicache-dbs-v' + IDB_DATABASES_VERSION;
@@ -14,7 +14,7 @@ export function setupForTest(): void {
 export function teardownForTest(): Promise<void> {
   const idbDatabasesDBName = getIDBDatabasesDBName();
   testNamespace = '';
-  return dropIDBStoreWithMemFallback(idbDatabasesDBName);
+  return dropIDBStore(idbDatabasesDBName);
 }
 
 export function getIDBDatabasesDBName(): string {

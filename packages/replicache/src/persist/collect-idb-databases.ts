@@ -16,6 +16,7 @@ import {
 import * as FormatVersion from '../format-version-enum.ts';
 import {getKVStoreProvider} from '../get-kv-store-provider.ts';
 import {assertHash, newRandomHash} from '../hash.ts';
+import {hasMemStore} from '../kv/mem-store.ts';
 import type {CreateStore, DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
@@ -25,6 +26,7 @@ import {
 } from './client-groups.ts';
 import type {OnClientsDeleted} from './clients.ts';
 import {getClients} from './clients.ts';
+import {getIDBDatabasesDBName} from './idb-databases-store-db-name.ts';
 import type {IndexedDBDatabase} from './idb-databases-store.ts';
 import {IDBDatabasesStore} from './idb-databases-store.ts';
 
@@ -281,7 +283,9 @@ export type DropDatabaseOptions = {
 };
 
 /**
- * Drops the specified database.
+ * Drops the specified database, from memory as well as from the configured
+ * store (see `onStorageFailure`). Rejects if the configured store cannot be
+ * opened or dropped.
  * @param dbName The name of the database to drop.
  * @param opts Options for dropping the database.
  */
@@ -289,32 +293,94 @@ export async function dropDatabase(dbName: string, opts?: DropDatabaseOptions) {
   const logContext = createLogContext(opts?.logLevel, opts?.logSinks, {
     dropDatabase: undefined,
   });
-  const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
-  await dropDatabaseInternal(
-    dbName,
-    new IDBDatabasesStore(kvStoreProvider.create),
-    kvStoreProvider.drop,
-  );
+  for (const kvStoreProvider of storeProvidersToDrop(logContext, opts)) {
+    const store = new IDBDatabasesStore(kvStoreProvider.create);
+    try {
+      await dropDatabaseInternal(dbName, store, kvStoreProvider.drop);
+    } finally {
+      await closeIgnoringErrors(store);
+    }
+  }
 }
 
 /**
- * Deletes all IndexedDB data associated with Replicache.
+ * Deletes all IndexedDB data associated with Replicache, and the in-memory
+ * databases instances ran on after a storage failure (see
+ * `onStorageFailure`).
  *
  * Returns an object with the names of the successfully dropped databases
- * and any errors encountered while dropping.
+ * and any errors encountered while dropping. Rejects if the configured store
+ * cannot be opened.
  */
-export async function dropAllDatabases(opts?: DropDatabaseOptions): Promise<{
+export function dropAllDatabases(opts?: DropDatabaseOptions): Promise<{
+  dropped: string[];
+  errors: unknown[];
+}> {
+  return dropMatchingDatabases(() => true, opts);
+}
+
+/**
+ * Like {@link dropAllDatabases}, for the databases whose registry record
+ * matches `predicate`.
+ */
+export async function dropMatchingDatabases(
+  predicate: (db: IndexedDBDatabase) => boolean,
+  opts?: DropDatabaseOptions,
+): Promise<{
   dropped: string[];
   errors: unknown[];
 }> {
   const logContext = createLogContext(opts?.logLevel, opts?.logSinks, {
-    dropAllDatabases: undefined,
+    dropDatabases: undefined,
   });
-  const kvStoreProvider = getKVStoreProvider(logContext, opts?.kvStore);
-  const store = new IDBDatabasesStore(kvStoreProvider.create);
-  const databases = await store.getDatabases();
-  const dbNames = Object.values(databases).map(db => db.name);
-  return dropDatabases(store, dbNames, kvStoreProvider.drop);
+  const dropped = new Set<string>();
+  const errors: unknown[] = [];
+  for (const kvStoreProvider of storeProvidersToDrop(logContext, opts)) {
+    const store = new IDBDatabasesStore(kvStoreProvider.create);
+    try {
+      const databases = await store.getDatabases();
+      const dbNames = Object.values(databases)
+        .filter(predicate)
+        .map(db => db.name);
+      const result = await dropDatabases(store, dbNames, kvStoreProvider.drop);
+      result.dropped.forEach(name => dropped.add(name));
+      errors.push(...result.errors);
+    } finally {
+      await closeIgnoringErrors(store);
+    }
+  }
+  return {dropped: [...dropped], errors};
+}
+
+/**
+ * The memory stores first, then the configured ones. An instance whose store
+ * failed to open runs on memory stores of the same names (see
+ * `onStorageFailure`), and memory stores outlive the instance for the life of
+ * the process, so a drop clears them whatever the configured store is. They
+ * are only looked at when some instance registered itself in memory. The
+ * configured store is still dropped, and its failure is reported: it may hold
+ * data on disk.
+ */
+function storeProvidersToDrop(
+  lc: LogContext,
+  opts: DropDatabaseOptions | undefined,
+): StoreProvider[] {
+  const providers: StoreProvider[] = [];
+  if (opts?.kvStore === 'mem' || hasMemStore(getIDBDatabasesDBName())) {
+    providers.push(getKVStoreProvider(lc, 'mem'));
+  }
+  if (opts?.kvStore !== 'mem') {
+    providers.push(getKVStoreProvider(lc, opts?.kvStore));
+  }
+  return providers;
+}
+
+/**
+ * A store that failed to open may also fail to close; the drop's own result
+ * is what the caller needs.
+ */
+function closeIgnoringErrors(store: IDBDatabasesStore): Promise<void> {
+  return store.close().catch(() => undefined);
 }
 
 /**

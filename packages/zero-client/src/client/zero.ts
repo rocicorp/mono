@@ -1,14 +1,15 @@
 import {LogContext, type LogLevel, type LogSink} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
-import {getKVStoreProvider} from '../../../replicache/src/get-kv-store-provider.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
 } from '../../../replicache/src/impl.ts';
 import type {Store as KVStore} from '../../../replicache/src/kv/store.ts';
-import {dropDatabase as dropReplicacheDatabase} from '../../../replicache/src/persist/collect-idb-databases.ts';
-import {IDBDatabasesStore} from '../../../replicache/src/persist/idb-databases-store.ts';
+import {
+  dropDatabase as dropReplicacheDatabase,
+  dropMatchingDatabases,
+} from '../../../replicache/src/persist/collect-idb-databases.ts';
 import type {Puller, PullerResult} from '../../../replicache/src/puller.ts';
 import type {Pusher, PusherResult} from '../../../replicache/src/pusher.ts';
 import type {ReplicacheOptions} from '../../../replicache/src/replicache-options.ts';
@@ -2833,36 +2834,11 @@ export class Zero<
 
   async delete(): Promise<{deleted: string[]; errors: unknown[]}> {
     await this.close();
-
-    const kvStoreProvider = getKVStoreProvider(this.#lc, this.#kvStore);
-    const idbDatabasesStore = new IDBDatabasesStore(kvStoreProvider.create);
-    try {
-      const databases = await idbDatabasesStore.getDatabases();
-      const dbNamesToDelete = Object.values(databases)
-        .filter(database => database.replicacheName === this.#rep.name)
-        .map(database => database.name);
-
-      const deleteResults = await Promise.allSettled(
-        dbNamesToDelete.map(async dbName => {
-          await dropReplicacheDatabase(dbName, {kvStore: this.#kvStore});
-          return dbName;
-        }),
-      );
-
-      const deleted: string[] = [];
-      const errors: unknown[] = [];
-      for (const result of deleteResults) {
-        if (result.status === 'fulfilled') {
-          deleted.push(result.value);
-        } else {
-          errors.push(result.reason);
-        }
-      }
-
-      return {deleted, errors};
-    } finally {
-      await idbDatabasesStore.close();
-    }
+    const {dropped, errors} = await dropMatchingDatabases(
+      database => database.replicacheName === this.#rep.name,
+      {kvStore: this.#kvStore},
+    );
+    return {deleted: dropped, errors};
   }
 
   #addMetric: <K extends keyof MetricMap>(

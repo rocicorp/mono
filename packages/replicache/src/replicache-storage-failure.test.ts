@@ -1,7 +1,14 @@
-import {expect, test, vi} from 'vitest';
-import {MemStore, dropMemStore} from './kv/mem-store.ts';
+import {afterEach, expect, test, vi} from 'vitest';
+import {assert} from '../../shared/src/asserts.ts';
+import {IDBOpenError} from './kv/idb-store.ts';
+import {MemStore, dropMemStore, hasMemStore} from './kv/mem-store.ts';
 import type {Read, Store, Write} from './kv/store.ts';
-import type {StorageFailure} from './storage-failure.ts';
+import {makeChannelNameV1ForTesting} from './new-client-channel.ts';
+import {
+  dropAllDatabases,
+  dropDatabase,
+} from './persist/collect-idb-databases.ts';
+import {StorageFailureError} from './storage-failure.ts';
 import {
   ReplicacheTest,
   addData,
@@ -12,8 +19,12 @@ import {
 
 initReplicacheTesting();
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 /**
- * A MemStore whose write transactions can be made to fail the way a SQLite
+ * A MemStore whose write transactions can be made to fail the way the SQLite
  * store's do when the storage underneath it fails. Reads keep working, as
  * they do on a device whose disk is full.
  */
@@ -22,12 +33,14 @@ class StorageFailingStore implements Store {
   failWith: Error | undefined;
   failReadsWith: Error | undefined;
   writeAttempts = 0;
+  readAttempts = 0;
 
   constructor(name: string) {
     this.#inner = new MemStore(name);
   }
 
   read(): Promise<Read> {
+    this.readAttempts++;
     if (this.failReadsWith) {
       return Promise.reject(this.failReadsWith);
     }
@@ -68,7 +81,7 @@ test('a storage failure during persist is reported once and stops persistence', 
     },
     disableAllBackgroundProcesses,
   );
-  const failures: StorageFailure[] = [];
+  const failures: StorageFailureError[] = [];
   rep.onStorageFailure = failure => failures.push(failure);
   rep.onClientStateNotFound = () => {
     throw new Error('a storage failure must not read as a lost client');
@@ -83,15 +96,14 @@ test('a storage failure during persist is reported once and stops persistence', 
 
   // The disk fails under the next persist, the way it does on a phone that
   // has run out of space or whose storage has gone away.
-  const diskError = new Error(
-    '[op-sqlite] SQLite error code: 10, description: disk I/O error',
-  );
+  const diskError = new StorageFailureError('io-error', 'disk I/O error');
   perdag!.failWith = diskError;
   await rep.mutate.addData({b: 2});
 
   // Reported, not thrown: the app is told once, with the kind and the error.
   await expect(rep.persist()).resolves.toBeUndefined();
-  expect(failures).toEqual([{kind: 'io-error', error: diskError}]);
+  expect(failures).toHaveLength(1);
+  expect(failures[0]).toBe(diskError);
 
   // And not retried: every later persist and refresh on this instance is a
   // no-op, because a rebuild would open the same failing storage.
@@ -131,7 +143,7 @@ test('an error that is not a storage failure still propagates from persist', asy
     },
     disableAllBackgroundProcesses,
   );
-  const failures: StorageFailure[] = [];
+  const failures: StorageFailureError[] = [];
   rep.onStorageFailure = failure => failures.push(failure);
 
   await rep.mutate.addData({a: 1});
@@ -142,10 +154,11 @@ test('an error that is not a storage failure still propagates from persist', asy
 
 test('a storage failure during the initial open is reported and moves the instance to memory', async () => {
   const stores = new Map<string, StorageFailingStore>();
-  const diskError = new Error(
-    '[op-sqlite] SQLite error code: 14, description: unable to open database file',
+  const diskError = new StorageFailureError(
+    'cannot-open',
+    'unable to open database file',
   );
-  const failures: StorageFailure[] = [];
+  const failures: StorageFailureError[] = [];
   // Construct directly: replicacheForTesting awaits readiness, which an
   // instance whose open failed never reaches.
   const rep = new ReplicacheTest(
@@ -176,7 +189,7 @@ test('a storage failure during the initial open is reported and moves the instan
   // instance reopens on memory: readiness arrives, queries, mutations and
   // subscriptions work for the session, and persist and refresh are no-ops.
   await vi.waitFor(() => expect(failures).toHaveLength(1));
-  expect(failures[0]).toEqual({kind: 'cannot-open', error: diskError});
+  expect(failures[0]).toBe(diskError);
   expect(rep.kvStore.kind).toBe('mem');
   const seen: unknown[] = [];
   const unsubscribe = rep.subscribe(tx => tx.get('a'), {
@@ -202,21 +215,23 @@ test('a store that cannot be opened runs the instance in memory and reports once
   // device whose database file cannot be opened throws out of
   // `kvStoreProvider.create` while `new Replicache(...)` is still running —
   // before any callback can exist.
-  const openError = new Error(
-    '[op-sqlite] SQLite error code: 14, description: unable to open database file',
+  const openError = new StorageFailureError(
+    'cannot-open',
+    'unable to open database file',
   );
-  const failures: StorageFailure[] = [];
+  const failingProvider = {
+    create: (): Store => {
+      throw openError;
+    },
+    drop: () => Promise.resolve(),
+  };
+  const failures: StorageFailureError[] = [];
   const rep = new ReplicacheTest(
     {
       name: 'storage-failure-at-create',
       pullURL: '',
       pushURL: '',
-      kvStore: {
-        create: () => {
-          throw openError;
-        },
-        drop: () => Promise.resolve(),
-      },
+      kvStore: failingProvider,
       mutators: {addData},
     },
     disableAllBackgroundProcesses,
@@ -229,11 +244,157 @@ test('a store that cannot be opened runs the instance in memory and reports once
   // Construction did not throw, the report arrived after the callback was
   // attached, and the instance works from memory for the session.
   await vi.waitFor(() => expect(failures).toHaveLength(1));
-  expect(failures[0]).toEqual({kind: 'cannot-open', error: openError});
+  expect(failures[0]).toBe(openError);
   expect(rep.kvStore.kind).toBe('mem');
   await rep.clientGroupID;
   await rep.mutate.addData({a: 1});
   expect(await rep.query(tx => tx.get('a'))).toBe(1);
   await expect(rep.persist()).resolves.toBeUndefined();
   await rep.close();
+
+  // Dropping with the same provider clears the memory store the instance ran
+  // on, and still reports that the SQLite store could not be opened.
+  expect(hasMemStore(rep.idbName)).toBe(true);
+  await expect(
+    dropDatabase(rep.idbName, {kvStore: failingProvider}),
+  ).rejects.toBe(openError);
+  expect(hasMemStore(rep.idbName)).toBe(false);
+});
+
+test('an IndexedDB that cannot be opened runs the instance in memory and reports once', async () => {
+  // `indexedDB.open` fails, and IDBStore's first read or write rejects with
+  // an IDBOpenError.
+  const openError = new DOMException(
+    'A mutation operation was attempted on a database that did not allow mutations.',
+    'InvalidStateError',
+  );
+  const openRequests: IDBOpenDBRequest[] = [];
+  vi.spyOn(indexedDB, 'open').mockImplementation(() => {
+    const req = {error: openError} as IDBOpenDBRequest;
+    openRequests.push(req);
+    queueMicrotask(() => {
+      assert(req.onerror, 'Expected onerror to be defined');
+      req.onerror(new Event('error'));
+    });
+    return req;
+  });
+  const failures: StorageFailureError[] = [];
+  const rep = new ReplicacheTest(
+    {
+      name: 'idb-cannot-open',
+      pullURL: '',
+      pushURL: '',
+      kvStore: 'idb',
+      mutators: {addData},
+    },
+    disableAllBackgroundProcesses,
+  );
+  rep.onStorageFailure = failure => failures.push(failure);
+  rep.onClientStateNotFound = () => {
+    throw new Error('a storage failure must not read as a lost client');
+  };
+
+  await vi.waitFor(() => expect(failures).toHaveLength(1));
+  expect(failures[0].kind).toBe('cannot-open');
+  expect(failures[0].cause).toBe(openError);
+  expect(rep.kvStore.kind).toBe('mem');
+  await rep.clientGroupID;
+  await rep.mutate.addData({a: 1});
+  expect(await rep.query(tx => tx.get('a'))).toBe(1);
+  await expect(rep.persist()).resolves.toBeUndefined();
+  expect(failures).toHaveLength(1);
+  // No IndexedDB was opened after the switch to memory.
+  const opened = openRequests.length;
+  await rep.mutate.addData({b: 2});
+  await rep.persist();
+  expect(openRequests).toHaveLength(opened);
+
+  // The in-memory instance still runs its background processes, including
+  // the new-client channel: a client with a newer idbName asks it to update.
+  let updateNeeded = 0;
+  rep.onUpdateNeeded = () => updateNeeded++;
+  const channel = new BroadcastChannel(
+    makeChannelNameV1ForTesting('idb-cannot-open'),
+  );
+  channel.postMessage({clientGroupID: 'other-cg', idbName: 'newer-idb'});
+  await vi.waitFor(() => expect(updateNeeded).toBe(1));
+  channel.close();
+  await rep.close();
+
+  // Dropping clears the memory stores the instance fell back to, and still
+  // reports that the IndexedDB could not be opened.
+  expect(hasMemStore(rep.idbName)).toBe(true);
+  await expect(dropAllDatabases()).rejects.toBeInstanceOf(IDBOpenError);
+  expect(hasMemStore(rep.idbName)).toBe(false);
+});
+
+test('an onStorageFailure that throws does not stop the open on memory', async () => {
+  const diskError = new StorageFailureError(
+    'cannot-open',
+    'unable to open database file',
+  );
+  const rep = new ReplicacheTest(
+    {
+      name: 'storage-failure-callback-throws',
+      pullURL: '',
+      pushURL: '',
+      kvStore: {
+        create: name => {
+          const store = new StorageFailingStore(name);
+          store.failWith = diskError;
+          return store;
+        },
+        drop: name => dropMemStore(name),
+      },
+      mutators: {addData},
+    },
+    disableAllBackgroundProcesses,
+  );
+  let calls = 0;
+  rep.onStorageFailure = () => {
+    calls++;
+    throw new Error('app bug');
+  };
+
+  await vi.waitFor(() => expect(calls).toBe(1));
+  await rep.mutate.addData({a: 1});
+  expect(await rep.query(tx => tx.get('a'))).toBe(1);
+  await rep.close();
+});
+
+test('mutation recovery does not touch the store once it has failed', async () => {
+  const stores = new Map<string, StorageFailingStore>();
+  const rep = await replicacheForTesting(
+    'storage-failure-recovery',
+    {
+      kvStore: {
+        create: name => {
+          const store = new StorageFailingStore(name);
+          stores.set(name, store);
+          return store;
+        },
+        drop: name => dropMemStore(name),
+      },
+      mutators: {addData},
+    },
+    {
+      ...disableAllBackgroundProcesses,
+      // The reconnect path calls recoverMutations directly, so leave it on.
+      enableMutationRecovery: true,
+    },
+  );
+  const failures: StorageFailureError[] = [];
+  rep.onStorageFailure = failure => failures.push(failure);
+
+  const perdag = stores.get(rep.idbName)!;
+  perdag.failWith = new StorageFailureError('io-error', 'disk I/O error');
+  await rep.mutate.addData({a: 1});
+  await rep.persist();
+  expect(failures).toHaveLength(1);
+
+  const reads = Array.from(stores.values(), s => s.readAttempts);
+  const writes = Array.from(stores.values(), s => s.writeAttempts);
+  await expect(rep.recoverMutations()).resolves.toBe(false);
+  expect(Array.from(stores.values(), s => s.readAttempts)).toEqual(reads);
+  expect(Array.from(stores.values(), s => s.writeAttempts)).toEqual(writes);
 });

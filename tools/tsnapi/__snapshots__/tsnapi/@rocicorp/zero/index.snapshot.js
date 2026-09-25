@@ -40,6 +40,7 @@ export { mustGetQuery }
 export { NOBODY_CAN }
 export { number }
 export { relationships }
+export { StorageFailureError }
 export { string }
 export { syncedQuery }
 export { syncedQueryWithContext }
