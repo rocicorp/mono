@@ -16,7 +16,7 @@ import type {Cookie} from './cookies.ts';
 import type {Store} from './dag/store.ts';
 import {FetchMocker} from './fetch-mocker.ts';
 import type {Hash} from './hash.ts';
-import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
+import {dropIDBStore} from './kv/idb-store.ts';
 import {MemStore} from './kv/mem-store.ts';
 import type {Store as KVStore} from './kv/store.ts';
 import type {PatchOperation} from './patch-operation.ts';
@@ -150,7 +150,7 @@ async function closeAllCloseables(): Promise<void> {
 export const dbsToDrop: Set<string> = new Set();
 export async function deleteAllDatabases(): Promise<void> {
   for (const name of dbsToDrop) {
-    await dropIDBStoreWithMemFallback(name);
+    await dropIDBStore(name);
   }
   dbsToDrop.clear();
 }

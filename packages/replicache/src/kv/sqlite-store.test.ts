@@ -1,10 +1,13 @@
-import {expect, test, vi} from 'vitest';
+import {afterEach, describe, expect, test, vi} from 'vitest';
 import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
+import {StorageFailureError} from '../storage-failure.ts';
+import {withWrite} from '../with-transactions.ts';
 import {
   SQLiteStore,
   SQLiteWrite,
   SQLiteStoreRead,
+  clearAllNamedStoresForTesting,
   type PreparedStatements,
   type SQLiteDatabase,
 } from './sqlite-store.ts';
@@ -149,6 +152,108 @@ test('SQLiteStoreRead rejects pending get and has operations when closed', async
   expect(preparedStatements.has.all).not.toHaveBeenCalled();
   expect(preparedStatements.getMany.all).not.toHaveBeenCalled();
   expect(preparedStatements.hasMany.all).not.toHaveBeenCalled();
+});
+
+describe('storage failures', () => {
+  afterEach(() => {
+    clearAllNamedStoresForTesting();
+  });
+
+  /** A driver whose `execSync` fails on the given statement. */
+  function failingDatabase(
+    failOn: string | undefined,
+    error: Error,
+    failExecWith?: Error | undefined,
+  ): SQLiteDatabase {
+    return {
+      close: () => undefined,
+      destroy: () => undefined,
+      execSync: sql => {
+        if (sql === failOn) {
+          throw error;
+        }
+      },
+      prepare: () => ({
+        all: () => Promise.resolve([]),
+        exec: () =>
+          failExecWith ? Promise.reject(failExecWith) : Promise.resolve(),
+      }),
+    };
+  }
+
+  test('a database that cannot be opened throws a cannot-open StorageFailureError from the constructor', () => {
+    const driverError = new Error(
+      '[op-sqlite] SQLite error code: 14, description: unable to open database file',
+    );
+    let thrown: unknown;
+    try {
+      new SQLiteStore('cannot-open', () => {
+        throw driverError;
+      });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(StorageFailureError);
+    expect((thrown as StorageFailureError).kind).toBe('cannot-open');
+    expect((thrown as StorageFailureError).cause).toBe(driverError);
+  });
+
+  test('a transaction step that fails on the disk rejects with an io-error StorageFailureError', async () => {
+    const driverError = new Error('disk I/O error');
+    const store = new SQLiteStore('io-error', () =>
+      failingDatabase('BEGIN IMMEDIATE', driverError),
+    );
+    const error = await store.write().catch(e => e);
+    expect(error).toBeInstanceOf(StorageFailureError);
+    expect(error.kind).toBe('io-error');
+    expect(error.cause).toBe(driverError);
+  });
+
+  test('a statement that fails on a full disk rejects with a full StorageFailureError', async () => {
+    const driverError = new Error(
+      'Exception in HostFunction: [op-sqlite] SQLite error code: 13, description: database or disk is full',
+    );
+    const store = new SQLiteStore('full', () =>
+      failingDatabase(undefined, new Error('unused'), driverError),
+    );
+    const error = await withWrite(store, write => write.put('k', 'v')).catch(
+      e => e,
+    );
+    expect(error).toBeInstanceOf(StorageFailureError);
+    expect(error.kind).toBe('full');
+    expect(error.cause).toBe(driverError);
+  });
+
+  test('a database whose setup fails is closed', () => {
+    const close = vi.fn();
+    const db: SQLiteDatabase = {
+      close,
+      destroy: () => undefined,
+      execSync: sql => {
+        if (sql.startsWith('PRAGMA')) {
+          throw new Error('disk I/O error');
+        }
+      },
+      prepare: () => ({
+        all: () => Promise.resolve([]),
+        exec: () => Promise.resolve(),
+      }),
+    };
+    expect(() => new SQLiteStore('setup-fails', () => db)).toThrow(
+      StorageFailureError,
+    );
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  test('other SQLite errors pass through unchanged', async () => {
+    const driverError = new Error(
+      'SQLite error code: 5, description: database is locked',
+    );
+    const store = new SQLiteStore('busy', () =>
+      failingDatabase('BEGIN IMMEDIATE', driverError),
+    );
+    await expect(store.write()).rejects.toBe(driverError);
+  });
 });
 
 // A scripted `SQLiteDatabase` that fails exactly the statements a test asks it

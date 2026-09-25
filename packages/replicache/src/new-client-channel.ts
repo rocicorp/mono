@@ -68,8 +68,8 @@ export function initNewClientChannel(
           // Check if this client can see the new client's newClientGroupID in its
           // perdag. It should be able to if the clients share persistent
           // storage. However, with `ReplicacheOption.kvStore`
-          // and `IDBStoreWithMemFallback` clients may not actually share
-          // persistent storage.  If storage is not shared, then there is no point
+          // or a store that failed to open (the instance then runs in memory)
+          // clients may not actually share persistent storage.  If storage is not shared, then there is no point
           // in updating, since clients cannot sync locally.  If clients do update
           // in this case, they can continually cause each other to update, since
           // on each update the clients get assigned a new client group.
@@ -88,7 +88,7 @@ export function initNewClientChannel(
           // newClientGroupID.
           // If storage is not actually shared (i.e. due to
           // `ReplicacheOption.kvStore`
-          // or `IDBStoreWithMemFallback`) the new client will not
+          // or a store that failed to open) the new client will not
           // get assigned to newClientGroupID, but should get the
           // newClientIDBName.
           // Note: we don't try to read from newClientIDBName to see

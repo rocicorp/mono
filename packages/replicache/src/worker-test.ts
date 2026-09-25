@@ -1,10 +1,9 @@
 // This test file is loaded by worker.test.ts
 
-import {LogContext} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../shared/src/json.ts';
 import {asyncIterableToArray} from './async-iterable-to-array.ts';
-import {newIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
+import {IDBStore} from './kv/idb-store.ts';
 import {dropDatabase} from './persist/collect-idb-databases.ts';
 import {IDBDatabasesStore} from './persist/idb-databases-store.ts';
 import {Replicache} from './replicache.ts';
@@ -87,9 +86,7 @@ async function testGetHasScanOnEmptyDB(name: string) {
 
   // Verify the registry record is gone; a record left here leaks into every
   // other browser test file's storage.
-  const store = new IDBDatabasesStore(name =>
-    newIDBStoreWithMemFallback(new LogContext(), name),
-  );
+  const store = new IDBDatabasesStore(name => new IDBStore(name));
   try {
     const dbs = await store.getDatabases();
     assert(

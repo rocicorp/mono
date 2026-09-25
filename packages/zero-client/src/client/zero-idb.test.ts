@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {hasMemStore} from '../../../replicache/src/kv/mem-store.ts';
+import {StorageFailureError} from '../../../replicache/src/storage-failure.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -156,6 +157,43 @@ test('delete closes and removes all databases for the same zero instance', async
 
   await zOther.close();
   await zOther.delete();
+});
+
+test('delete removes the memory stores an instance ran on after its store failed to open', async () => {
+  const openError = new StorageFailureError(
+    'cannot-open',
+    'unable to open database file',
+  );
+  const options = {
+    userID: 'storage-failure-user',
+    storageKey: 'storage-failure-storage',
+    kvStore: {
+      create: () => {
+        throw openError;
+      },
+      drop: () => Promise.resolve(),
+    },
+  };
+  // An older schema version that also ran on memory in this process.
+  const zOld = new Zero({...options, schema});
+  await zOld.close();
+  const z = new Zero({...options, schema: schemaV2});
+  const zOther = new Zero({
+    ...options,
+    userID: 'storage-failure-other-user',
+    schema,
+  });
+  expect(hasMemStore(zOld.idbName)).toBe(true);
+  expect(hasMemStore(z.idbName)).toBe(true);
+  expect(hasMemStore(zOther.idbName)).toBe(true);
+
+  // Every memory database of this Zero is dropped, other Zeros' are kept,
+  // and the store that cannot be opened is still reported.
+  await expect(z.delete()).rejects.toBe(openError);
+  expect(hasMemStore(zOld.idbName)).toBe(false);
+  expect(hasMemStore(z.idbName)).toBe(false);
+  expect(hasMemStore(zOther.idbName)).toBe(true);
+  await zOther.close();
 });
 
 test('logged-out client uses a private storage sentinel for idb naming', async () => {

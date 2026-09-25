@@ -6,8 +6,7 @@ import {StoreImpl} from '../dag/store-impl.ts';
 import type {Read} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
 import {assertHash, fakeHash, newRandomHash} from '../hash.ts';
-import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.ts';
-import {IDBNotFoundError, IDBStore} from '../kv/idb-store.ts';
+import {dropIDBStore, IDBNotFoundError, IDBStore} from '../kv/idb-store.ts';
 import {withRead} from '../with-transactions.ts';
 import {
   makeClientV5,
@@ -275,7 +274,7 @@ test('heartbeat with dropped idb throws', async () => {
 
   await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS / 2);
 
-  await dropIDBStoreWithMemFallback(name);
+  await dropIDBStore(name);
 
   await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS / 2);
 

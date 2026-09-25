@@ -6,6 +6,7 @@ import {
   type FrozenJSONValue,
   deepFreezeAllowUndefined,
 } from '../frozen-json.ts';
+import {StorageFailureError} from '../storage-failure.ts';
 import type {Read, Store, Write} from './store.ts';
 import {
   storeIsClosedRejection,
@@ -246,11 +247,33 @@ export class IDBNotFoundError extends Error {
   name = 'IDBNotFoundError';
 }
 
+const DISK_FULL = /database or disk is full/;
+
 /**
  * `read()` and `write()` reject with this error when the initial
  * `indexedDB.open` failed. The browser's error is the `cause`. A failure after
  * the database opened, such as a transaction error, is not wrapped.
+ *
+ * It is a `cannot-open` storage failure, or `full` when the browser says so
+ * (WebKit's IndexedDB is SQLite underneath and reports `database or disk is
+ * full`).
  */
-export class IDBOpenError extends Error {
+export class IDBOpenError extends StorageFailureError {
   name = 'IDBOpenError';
+
+  constructor(message: string, options: {cause: unknown}) {
+    super(
+      DISK_FULL.test(String(options.cause)) ? 'full' : 'cannot-open',
+      message,
+      options,
+    );
+  }
+}
+
+export function dropIDBStore(name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(name);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
 }

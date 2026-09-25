@@ -6,8 +6,7 @@ import {chunkRefCountKey} from './dag/key.ts';
 import {StoreImpl, WriteImpl} from './dag/store-impl.ts';
 import type {Store} from './dag/store.ts';
 import {assertHash, type Hash, newRandomHash} from './hash.ts';
-import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
-import {IDBNotFoundError, IDBStore} from './kv/idb-store.ts';
+import {dropIDBStore, IDBNotFoundError, IDBStore} from './kv/idb-store.ts';
 import {dropMemStore, hasMemStore, MemStore} from './kv/mem-store.ts';
 import type {StoreProvider} from './kv/store.ts';
 import {
@@ -604,7 +603,7 @@ test('Persist throws if idb dropped', async () => {
 
   await rep.mutate.addData({foo: 'bar'});
 
-  await dropIDBStoreWithMemFallback(rep.idbName);
+  await dropIDBStore(rep.idbName);
 
   const onClientStateNotFound = vi.fn();
   rep.onClientStateNotFound = onClientStateNotFound;
