@@ -2,6 +2,10 @@ import {RWLock} from '@rocicorp/lock';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {deepFreeze} from '../frozen-json.ts';
+import {
+  StorageFailureError,
+  type StorageFailureKind,
+} from '../storage-failure.ts';
 import type {Read, Store, Write} from './store.ts';
 import {
   maybeTransactionIsClosedRejection,
@@ -641,8 +645,21 @@ function getOrCreateEntry(
     return entry;
   }
 
-  const dbDelegate = create(filename, opts);
-  const preparedStatements = setupDatabase(dbDelegate, opts);
+  const dbDelegate = reportingStorageFailures(
+    rethrowingStorageFailures(() => create(filename, opts)),
+  );
+  let preparedStatements: PreparedStatements;
+  try {
+    preparedStatements = setupDatabase(dbDelegate, opts);
+  } catch (e) {
+    // Not in `stores` yet, so nothing else would close this connection.
+    try {
+      dbDelegate.close();
+    } catch {
+      // The setup error is the one to report.
+    }
+    throw e;
+  }
 
   const lock = new RWLock();
 
@@ -655,6 +672,87 @@ function getOrCreateEntry(
   };
   stores.set(filename, newEntry);
   return newEntry;
+}
+
+const STORAGE_FAILURE_SIGNATURES = [
+  [/database or disk is full|SQLITE_FULL/, 'full'],
+  [/unable to open database file|SQLITE_CANTOPEN/, 'cannot-open'],
+  [/disk I\/O error|SQLITE_IOERR/, 'io-error'],
+] as const;
+
+/**
+ * The storage failure a SQLite error reports, if any. Matched on SQLite's own
+ * `sqlite3_errmsg` text (or its symbolic code), which expo-sqlite, op-sqlite
+ * and zero-sqlite all surface inside whatever wrapper they add.
+ * `SQLITE_BUSY` is deliberately not one: it is contention, and `busy_timeout`
+ * plus a retry is the right answer to it.
+ */
+export function classifySQLiteError(
+  error: unknown,
+): StorageFailureKind | undefined {
+  const message =
+    error instanceof Error
+      ? `${error.name}: ${error.message}`
+      : typeof error === 'string'
+        ? error
+        : '';
+  for (const [signature, kind] of STORAGE_FAILURE_SIGNATURES) {
+    if (signature.test(message)) {
+      return kind;
+    }
+  }
+  return undefined;
+}
+
+function toStorageFailure(error: unknown): unknown {
+  const kind = classifySQLiteError(error);
+  return kind === undefined
+    ? error
+    : new StorageFailureError(
+        kind,
+        error instanceof Error ? error.message : String(error),
+        {cause: error},
+      );
+}
+
+function rethrowingStorageFailures<T>(f: () => T): T {
+  try {
+    return f();
+  } catch (e) {
+    throw toStorageFailure(e);
+  }
+}
+
+/**
+ * Wraps the driver so every SQLite error that reports a storage failure
+ * reaches the store's callers as a {@link StorageFailureError}, whichever
+ * statement or transaction step it came from.
+ */
+function reportingStorageFailures(db: SQLiteDatabase): SQLiteDatabase {
+  return {
+    close: () => db.close(),
+    destroy: () => db.destroy(),
+    execSync: sql => rethrowingStorageFailures(() => db.execSync(sql)),
+    prepare: sql => {
+      const statement = rethrowingStorageFailures(() => db.prepare(sql));
+      return {
+        exec: async params => {
+          try {
+            return await statement.exec(params);
+          } catch (e) {
+            throw toStorageFailure(e);
+          }
+        },
+        all: async params => {
+          try {
+            return await statement.all(params);
+          } catch (e) {
+            throw toStorageFailure(e);
+          }
+        },
+      };
+    },
+  };
 }
 
 /**

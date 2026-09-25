@@ -29,6 +29,8 @@ export class Replicache {
   set onSync(_) {}
   get onClientStateNotFound() {}
   set onClientStateNotFound(_) {}
+  get onStorageFailure() {}
+  set onStorageFailure(_) {}
   get onUpdateNeeded() {}
   set onUpdateNeeded(_) {}
   get getAuth() {}
@@ -72,6 +74,7 @@ export { isScanIndexOptions }
 export { makeIDBName }
 export { makeScanResult }
 export { PullError }
+export { StorageFailureError }
 export { TransactionClosedError }
 export { version }
 // #endregion

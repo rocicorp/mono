@@ -51,6 +51,7 @@ export { relationships } from '../../zero-schema/src/builder/relationship-builde
 export type { ResultType, TypedView } from '../../zql/src/query/typed-view.ts';
 export type { Schema } from '../../zero-types/src/schema.ts';
 export type { SchemaValue, SchemaValueWithCustomType, ValueType, } from '../../zero-schema/src/table-schema.ts';
+export { StorageFailureError, type StorageFailureKind, } from '../../replicache/src/storage-failure.ts';
 export type { Stream } from '../../zql/src/ivm/stream.ts';
 export { syncedQuery, syncedQueryWithContext, withValidation, type CustomQueryID, type HasParseFn, type ParseFn, type Parser, type QueryFn, type SyncedQuery, } from '../../zql/src/query/named.ts';
 export { type TableSchema } from '../../zero-schema/src/table-schema.ts';

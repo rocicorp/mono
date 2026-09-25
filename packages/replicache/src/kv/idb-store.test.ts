@@ -1,13 +1,17 @@
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
-import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.ts';
-import {IDBNotFoundError, IDBOpenError, IDBStore} from './idb-store.ts';
+import {
+  dropIDBStore,
+  IDBNotFoundError,
+  IDBOpenError,
+  IDBStore,
+} from './idb-store.ts';
 import {runAll} from './store-test-util.ts';
 
 async function newRandomIDBStore() {
   const name = `test-idbstore-${Math.random()}`;
-  await dropIDBStoreWithMemFallback(name);
+  await dropIDBStore(name);
   return new IDBStore(name);
 }
 
@@ -15,7 +19,7 @@ runAll('idbstore', newRandomIDBStore);
 
 test('dropStore', async () => {
   const name = `drop-store-${Math.random()}`;
-  await dropIDBStoreWithMemFallback(name);
+  await dropIDBStore(name);
   let store = new IDBStore(name);
 
   // Write a value.
@@ -30,7 +34,7 @@ test('dropStore', async () => {
 
   // Drop db
   await store.close();
-  await dropIDBStoreWithMemFallback(name);
+  await dropIDBStore(name);
 
   // Reopen store, verify data is gone
   store = new IDBStore(name);
@@ -64,7 +68,7 @@ describe('reopening IDB', () => {
 
   beforeEach(async () => {
     name = `reopen-${Math.random()}`;
-    await dropIDBStoreWithMemFallback(name);
+    await dropIDBStore(name);
 
     // Use spy to get a hold of the request object and then the idb instance.
     const openSpy = vi.spyOn(indexedDB, 'open');
@@ -112,7 +116,7 @@ describe('reopening IDB', () => {
       await wt.put('foo', 'bar');
     });
 
-    await dropIDBStoreWithMemFallback(name);
+    await dropIDBStore(name);
 
     let ex;
     try {
@@ -139,7 +143,7 @@ describe('reopening IDB', () => {
   });
 
   test('deletes corrupt IDB and throws error', async () => {
-    await dropIDBStoreWithMemFallback(name);
+    await dropIDBStore(name);
 
     // create a corrupt IDB (ver. 1, no object stores)
     const createReq = new Promise<IDBDatabase>((resolve, reject) => {
@@ -185,7 +189,7 @@ test('Throws if IDB dropped while open', async () => {
 
   const idb = new IDBStore(name);
 
-  await dropIDBStoreWithMemFallback(name);
+  await dropIDBStore(name);
 
   let err;
   try {
