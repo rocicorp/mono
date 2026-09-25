@@ -1,4 +1,9 @@
-import type {LogContext, LogLevel} from '@rocicorp/logger';
+import {
+  consoleLogSink,
+  type LogContext,
+  type LogLevel,
+  type LogSink,
+} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
@@ -140,6 +145,15 @@ export type HandleMutateRequestArgs<
   userID: string | null | undefined;
   /** Optional log level for request parsing and execution. */
   logLevel?: LogLevel | undefined;
+  /**
+   * Destination for this request's log output. When omitted, logs are written
+   * with `console.log`/`info`/`warn`/`error` etc.
+   *
+   * Provide a custom {@linkcode LogSink} to redirect logs — for example into an
+   * application's own structured logging pipeline, so that records emitted while
+   * processing a push carry the same fields as the rest of the server's logs.
+   */
+  logSink?: LogSink | undefined;
 } & (
   | {
       /** Fetch request containing both query params and the JSON body. */
@@ -165,6 +179,7 @@ type NormalizedMutateRequestArgs<
   // from app.
   readonly userID: string | null | undefined;
   readonly logLevel: LogLevel;
+  readonly logSink: LogSink;
 } & (
   | {
       readonly type: 'request';
@@ -196,6 +211,7 @@ export function handleMutateRequest<
   query: MutateSearchParams,
   body: ReadonlyJSONValue,
   logLevel?: LogLevel,
+  logSink?: LogSink,
 ): Promise<MutateResponse>;
 
 /**
@@ -209,6 +225,7 @@ export function handleMutateRequest<
   handler: MutateRequestHandler<D>,
   request: Request,
   logLevel?: LogLevel,
+  logSink?: LogSink,
 ): Promise<MutateResponse>;
 
 export async function handleMutateRequest<
@@ -218,7 +235,8 @@ export async function handleMutateRequest<
   maybeHandler?: MutateRequestHandler<D> | undefined,
   requestOrQuery?: Request | MutateSearchParams | undefined,
   bodyOrLogLevel?: ReadonlyJSONValue | LogLevel | undefined,
-  logLevel?: LogLevel | undefined,
+  logLevelOrLogSink?: LogLevel | LogSink | undefined,
+  maybeLogSink?: LogSink | undefined,
 ): Promise<MutateResponse> {
   const normalized =
     typeof inputOrDbProvider === 'object' && 'handler' in inputOrDbProvider
@@ -228,10 +246,14 @@ export async function handleMutateRequest<
           maybeHandler,
           requestOrQuery,
           bodyOrLogLevel,
-          logLevel,
+          logLevelOrLogSink,
+          maybeLogSink,
         );
 
-  const lc = createLogContext(normalized.logLevel).withContext('PushProcessor');
+  const lc = createLogContext(
+    normalized.logLevel,
+    normalized.logSink,
+  ).withContext('PushProcessor');
   let jsonBody: unknown;
 
   if (normalized.type === 'request') {
@@ -445,6 +467,7 @@ function normalizeMutateRequestInput<
       request: input.request,
       userID: input.userID ?? null,
       logLevel: input.logLevel ?? 'info',
+      logSink: input.logSink ?? consoleLogSink,
     };
   }
 
@@ -459,6 +482,7 @@ function normalizeMutateRequestInput<
         ? Object.fromEntries(input.query)
         : input.query,
     logLevel: input.logLevel ?? 'info',
+    logSink: input.logSink ?? consoleLogSink,
   };
 }
 
@@ -469,7 +493,8 @@ function normalizeLegacyMutateRequestArgs<
   handler: MutateRequestHandler<D> | undefined,
   requestOrQuery: Request | MutateSearchParams | undefined,
   bodyOrLogLevel: ReadonlyJSONValue | LogLevel | undefined,
-  logLevel: LogLevel | undefined,
+  logLevelOrLogSink: LogLevel | LogSink | undefined,
+  maybeLogSink: LogSink | undefined,
 ): NormalizedMutateRequestArgs<D> {
   assert(typeof handler === 'function', 'Handler function is required');
   assert(
@@ -485,6 +510,9 @@ function normalizeLegacyMutateRequestArgs<
       request: requestOrQuery,
       userID: undefined,
       logLevel: (bodyOrLogLevel as LogLevel | undefined) ?? 'info',
+      // The `request` overload has no `body` slot, so the sink arrives one
+      // position earlier than it does in the `query`/`body` overload.
+      logSink: (logLevelOrLogSink as LogSink | undefined) ?? consoleLogSink,
     };
   }
 
@@ -503,7 +531,8 @@ function normalizeLegacyMutateRequestArgs<
       requestOrQuery instanceof URLSearchParams
         ? Object.fromEntries(requestOrQuery)
         : requestOrQuery,
-    logLevel: logLevel ?? 'info',
+    logLevel: (logLevelOrLogSink as LogLevel | undefined) ?? 'info',
+    logSink: maybeLogSink ?? consoleLogSink,
   };
 }
 
