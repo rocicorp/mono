@@ -301,6 +301,7 @@ test('hashAST reads every field of the AST', () => {
     start: {row: {id: 'i1', created: 1}, exclusive: true},
     limit: 10,
     orderBy: [['modified', 'desc']],
+    aggregate: {fn: 'sum', field: 'points'},
   });
   const baseHash = hashAST(full);
 
@@ -365,6 +366,17 @@ test('hashAST reads every field of the AST', () => {
     'orderBy': {...full, orderBy: [['created', 'desc']]},
     'orderBy direction': {...full, orderBy: [['modified', 'asc']]},
     'orderBy absent': {...full, orderBy: undefined},
+    'aggregate': {...full, aggregate: {fn: 'avg', field: 'points'}},
+    'aggregate field': {...full, aggregate: {fn: 'sum', field: 'weight'}},
+    'aggregate field absent': {...full, aggregate: {fn: 'count'}},
+    'aggregate absent': {...full, aggregate: undefined},
+    'related aggregate': {
+      ...full,
+      related: [
+        {...full.related![0], aggregate: {fn: 'count'}},
+        full.related![1],
+      ],
+    },
   };
 
   for (const [field, mutated] of Object.entries(mutations)) {
@@ -475,6 +487,14 @@ test('an optional field is never confusable with its own absence', () => {
   expect(hashAST(ast({orderBy: []}))).not.toBe(hashAST(ast({})));
   expect(hashAST(ast({alias: ''}))).not.toBe(hashAST(ast({})));
   expect(hashAST(ast({schema: ''}))).not.toBe(hashAST(ast({})));
+
+  // An absent aggregate writes nothing, so the hash of an AST without one is
+  // the same as before the field existed. A present one leads with a tag that
+  // nothing following the field's position could write.
+  expect(hashAST(ast({aggregate: {fn: 'count'}}))).not.toBe(hashAST(ast({})));
+  expect(hashAST(ast({aggregate: {fn: 'count', field: ''}}))).not.toBe(
+    hashAST(ast({aggregate: {fn: 'count'}})),
+  );
 });
 
 test('the digest is stable across object key reordering', () => {

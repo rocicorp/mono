@@ -1,0 +1,186 @@
+import type {Value} from '../../../zero-protocol/src/data.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
+import {
+  makeAddChange,
+  makeEditChange,
+  makeRemoveChange,
+  type Change,
+} from './change.ts';
+import type {Node} from './data.ts';
+import {
+  throwOutput,
+  type FetchRequest,
+  type Input,
+  type Operator,
+  type Output,
+} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import type {Stream} from './stream.ts';
+
+/**
+ * The synthetic column {@link LiftField} writes the destination field into.
+ * Internal to the junction-aggregate sub-pipeline
+ * (junction → Join(dest) → LiftField → Aggregate); the Aggregate reads it as an
+ * ordinary flat field. Space-prefixed so it can never collide with a real
+ * column (identifiers don't start with a space).
+ */
+export const LIFTED_FIELD_COLUMN = ' lifted';
+
+/**
+ * Lifts a field from a singular child relationship onto each row as a synthetic
+ * column ({@link LIFTED_FIELD_COLUMN}).
+ *
+ * Used for junction (many-to-many) aggregates: the value being aggregated (e.g.
+ * `label.points`) lives one hop past the junction (`issueLabel`), so the field
+ * isn't on the rows the {@link Aggregate} operator would see. LiftField copies
+ * it onto the junction row, turning a two-hop aggregate into the flat
+ * single-hop that Aggregate already handles (count/sum/avg/min/max).
+ *
+ * Change translation:
+ *  - add/remove/edit of the junction row → same, with the column filled in;
+ *  - a change to the *destination* arrives as a CHILD change on the junction row
+ *    and becomes an EDIT of the lifted column (add/remove of the destination map
+ *    to value↔null).
+ *
+ * The destination is a leaf here (no further relationships), so the output rows
+ * carry no relationships.
+ */
+export class LiftField implements Operator {
+  readonly #input: Input;
+  readonly #sourceRelationship: string;
+  readonly #field: string;
+  readonly #schema: SourceSchema;
+  #output: Output = throwOutput;
+
+  constructor(input: Input, sourceRelationship: string, field: string) {
+    this.#input = input;
+    this.#sourceRelationship = sourceRelationship;
+    this.#field = field;
+    input.setOutput(this);
+
+    const inputSchema = input.getSchema();
+    const destSchema = inputSchema.relationships[sourceRelationship];
+    const fieldSchema = destSchema?.columns[field];
+    this.#schema = {
+      ...inputSchema,
+      columns: {
+        ...inputSchema.columns,
+        // Nullable: a junction row may (transiently) have no destination.
+        [LIFTED_FIELD_COLUMN]: fieldSchema
+          ? {...fieldSchema, optional: true}
+          : {type: 'number', optional: true},
+      },
+      relationships: {},
+    };
+  }
+
+  setOutput(output: Output): void {
+    this.#output = output;
+  }
+
+  getSchema(): SourceSchema {
+    return this.#schema;
+  }
+
+  destroy(): void {
+    this.#input.destroy();
+  }
+
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    for (const node of this.#input.fetch(req)) {
+      if (node === 'yield') {
+        yield 'yield';
+        continue;
+      }
+      yield yield* this.#lift(node);
+    }
+  }
+
+  *push(change: Change): Stream<'yield'> {
+    switch (change[ChangeIndex.TYPE]) {
+      case ChangeType.ADD:
+        yield* this.#output.push(
+          makeAddChange(yield* this.#lift(change[ChangeIndex.NODE])),
+          this,
+        );
+        return;
+      case ChangeType.REMOVE:
+        yield* this.#output.push(
+          makeRemoveChange(yield* this.#lift(change[ChangeIndex.NODE])),
+          this,
+        );
+        return;
+      case ChangeType.EDIT:
+        yield* this.#output.push(
+          makeEditChange(
+            yield* this.#lift(change[ChangeIndex.NODE]),
+            yield* this.#lift(change[ChangeIndex.OLD_NODE]),
+          ),
+          this,
+        );
+        return;
+      case ChangeType.CHILD: {
+        const childData = change[ChangeIndex.CHILD_DATA];
+        if (childData.relationshipName !== this.#sourceRelationship) {
+          return; // a relationship we don't lift from
+        }
+        // The destination changed → an edit of the lifted column. The parent
+        // node already reflects the new destination state.
+        const {row} = change[ChangeIndex.NODE];
+        const newValue = yield* this.#liftValue(change[ChangeIndex.NODE]);
+        const oldValue = this.#oldValueFromChildChange(childData.change);
+        yield* this.#output.push(
+          makeEditChange(
+            {row: {...row, [LIFTED_FIELD_COLUMN]: newValue}, relationships: {}},
+            {row: {...row, [LIFTED_FIELD_COLUMN]: oldValue}, relationships: {}},
+          ),
+          this,
+        );
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  *#lift(node: Node): Generator<'yield', Node> {
+    const value = yield* this.#liftValue(node);
+    return {
+      row: {...node.row, [LIFTED_FIELD_COLUMN]: value},
+      relationships: {},
+    };
+  }
+
+  /** The destination field's value for `node`, or null when there is none. */
+  *#liftValue(node: Node): Generator<'yield', Value> {
+    const rel = node.relationships[this.#sourceRelationship];
+    if (rel === undefined) {
+      return null;
+    }
+    let value: Value = null;
+    // Singular relationship: at most one node.
+    for (const child of rel()) {
+      if (child === 'yield') {
+        yield 'yield';
+        continue;
+      }
+      value = child.row[this.#field] ?? null;
+    }
+    return value;
+  }
+
+  #oldValueFromChildChange(childChange: Change): Value {
+    switch (childChange[ChangeIndex.TYPE]) {
+      case ChangeType.ADD:
+        return null; // the destination did not exist before
+      case ChangeType.REMOVE:
+        return childChange[ChangeIndex.NODE].row[this.#field] ?? null;
+      case ChangeType.EDIT:
+        return childChange[ChangeIndex.OLD_NODE].row[this.#field] ?? null;
+      default:
+        // The destination is a leaf, so nested CHILD changes don't occur.
+        return null;
+    }
+  }
+}

@@ -60,7 +60,9 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 52 replaces JSON pokePart messages with binary poke chunks for
 //    clients using protocol version 52 or newer. Older clients retain pokePart.
 // -- version 53 adds 'filter' node type to AnalyzeQueryResult
-export const PROTOCOL_VERSION = 53;
+// -- version 54 adds `aggregate` {fn,field} (count/sum/avg/min/max) to
+//    CorrelatedSubquery and, top-level, to AST
+export const PROTOCOL_VERSION = 54;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

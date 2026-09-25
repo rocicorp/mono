@@ -34,6 +34,7 @@ describe('building the AST', () => {
     );
     expect(ast(notExists)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -45,6 +46,7 @@ describe('building the AST', () => {
           "flip": undefined,
           "op": "EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "issueId",
@@ -55,6 +57,7 @@ describe('building the AST', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_labels",
               "limit": undefined,
               "orderBy": undefined,
@@ -66,6 +69,7 @@ describe('building the AST', () => {
                 "flip": undefined,
                 "op": "EXISTS",
                 "related": {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -76,6 +80,7 @@ describe('building the AST', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "zsubq_zhidden_labels",
                     "limit": undefined,
                     "orderBy": undefined,
@@ -133,6 +138,7 @@ describe('building the AST', () => {
     const where = issueQuery.where('id', '=', '1');
     expect(ast(where)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -158,6 +164,7 @@ describe('building the AST', () => {
     const where2 = where.where('title', '=', 'foo');
     expect(ast(where2)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -207,6 +214,7 @@ describe('building the AST', () => {
       .where('ownerId', '2');
     expect(ast(where)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -276,6 +284,7 @@ describe('building the AST', () => {
     const start = issueQuery.start({id: '1'});
     expect(ast(start)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -294,6 +303,7 @@ describe('building the AST', () => {
     const start2 = issueQuery.start({id: '2', closed: true}, {inclusive: true});
     expect(ast(start2)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -317,11 +327,13 @@ describe('building the AST', () => {
     const related = issueQuery.related('owner', q => q);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -332,6 +344,7 @@ describe('building the AST', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -357,11 +370,13 @@ describe('building the AST', () => {
     const related = issueQuery.related('labels', q => q);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "issueId",
@@ -372,11 +387,13 @@ describe('building the AST', () => {
             },
             "hidden": true,
             "subquery": {
+              "aggregate": undefined,
               "alias": "labels",
               "limit": undefined,
               "orderBy": undefined,
               "related": [
                 {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -387,6 +404,7 @@ describe('building the AST', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "labels",
                     "limit": undefined,
                     "orderBy": undefined,
@@ -422,11 +440,13 @@ describe('building the AST', () => {
     );
     expect(ast(related)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -437,11 +457,13 @@ describe('building the AST', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "owner",
               "limit": undefined,
               "orderBy": undefined,
               "related": [
                 {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "ownerId",
@@ -452,11 +474,13 @@ describe('building the AST', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "issues",
                     "limit": undefined,
                     "orderBy": undefined,
                     "related": [
                       {
+                        "aggregate": undefined,
                         "correlation": {
                           "childField": [
                             "issueId",
@@ -467,11 +491,13 @@ describe('building the AST', () => {
                         },
                         "hidden": true,
                         "subquery": {
+                          "aggregate": undefined,
                           "alias": "labels",
                           "limit": undefined,
                           "orderBy": undefined,
                           "related": [
                             {
+                              "aggregate": undefined,
                               "correlation": {
                                 "childField": [
                                   "id",
@@ -482,6 +508,7 @@ describe('building the AST', () => {
                               },
                               "hidden": undefined,
                               "subquery": {
+                                "aggregate": undefined,
                                 "alias": "labels",
                                 "limit": undefined,
                                 "orderBy": undefined,
@@ -534,11 +561,13 @@ describe('building the AST', () => {
       .related('labels', lq => lq);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "issueId",
@@ -549,6 +578,7 @@ describe('building the AST', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "comments",
               "limit": undefined,
               "orderBy": undefined,
@@ -561,6 +591,7 @@ describe('building the AST', () => {
             "system": "client",
           },
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "issueId",
@@ -571,11 +602,13 @@ describe('building the AST', () => {
             },
             "hidden": true,
             "subquery": {
+              "aggregate": undefined,
               "alias": "labels",
               "limit": undefined,
               "orderBy": undefined,
               "related": [
                 {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -586,6 +619,7 @@ describe('building the AST', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "labels",
                     "limit": undefined,
                     "orderBy": undefined,
@@ -606,6 +640,7 @@ describe('building the AST', () => {
             "system": "client",
           },
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -616,6 +651,7 @@ describe('building the AST', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -1077,6 +1113,7 @@ describe('expression builder', () => {
     const expr = issueQuery.where(({cmp}) => cmp('id', '=', '1'));
     expect(ast(expr)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1104,6 +1141,7 @@ describe('expression builder', () => {
     const expr2 = issueQuery.where(f);
     expect(ast(expr2)).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1138,6 +1176,7 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1201,6 +1240,7 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1255,6 +1295,7 @@ describe('expression builder', () => {
     expect(ast(issueQuery.where(({cmp, not}) => not(cmp('id', '=', '1')))))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -1289,6 +1330,7 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1392,6 +1434,7 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1436,6 +1479,7 @@ describe('expression builder', () => {
     expect(ast(issueQuery.where(({and, cmp}) => and(cmp('id', '=', '1')))))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -1463,6 +1507,7 @@ describe('expression builder', () => {
     expect(ast(issueQuery.where(({cmp, or}) => or(cmp('id', '=', '1')))))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -1495,6 +1540,7 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1548,6 +1594,7 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1577,6 +1624,7 @@ describe('expression builder', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1626,6 +1674,7 @@ describe('exists', () => {
     expect(ast(issueQuery.where(({exists}) => exists('owner'))))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -1637,6 +1686,7 @@ describe('exists', () => {
             "flip": undefined,
             "op": "EXISTS",
             "related": {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "id",
@@ -1647,6 +1697,7 @@ describe('exists', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "zsubq_owner",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -1667,6 +1718,7 @@ describe('exists', () => {
     // shorthand
     expect(ast(issueQuery.whereExists('owner'))).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1678,6 +1730,7 @@ describe('exists', () => {
           "flip": undefined,
           "op": "EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -1688,6 +1741,7 @@ describe('exists', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -1712,6 +1766,7 @@ describe('exists', () => {
     expect(ast(issueQuery.whereExists('owner', q => q.where('id', '1'))))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -1723,6 +1778,7 @@ describe('exists', () => {
             "flip": undefined,
             "op": "EXISTS",
             "related": {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "id",
@@ -1733,6 +1789,7 @@ describe('exists', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "zsubq_owner",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -1769,6 +1826,7 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1780,6 +1838,7 @@ describe('exists', () => {
           "flip": undefined,
           "op": "EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -1790,6 +1849,7 @@ describe('exists', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -1841,6 +1901,7 @@ describe('exists', () => {
 
     expect(ast(issueQuery.whereExists('labels'))).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1852,6 +1913,7 @@ describe('exists', () => {
           "flip": undefined,
           "op": "EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "issueId",
@@ -1862,6 +1924,7 @@ describe('exists', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_labels",
               "limit": undefined,
               "orderBy": undefined,
@@ -1873,6 +1936,7 @@ describe('exists', () => {
                 "flip": undefined,
                 "op": "EXISTS",
                 "related": {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -1883,6 +1947,7 @@ describe('exists', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "zsubq_zhidden_labels",
                     "limit": undefined,
                     "orderBy": undefined,
@@ -1918,6 +1983,7 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1931,6 +1997,7 @@ describe('exists', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "issueId",
@@ -1941,6 +2008,7 @@ describe('exists', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_comments",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1959,6 +2027,7 @@ describe('exists', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -1969,6 +2038,7 @@ describe('exists', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_owner",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1996,6 +2066,7 @@ describe('exists', () => {
     expect(ast(issueQuery.where(({not, exists}) => not(exists('comments')))))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -2007,6 +2078,7 @@ describe('exists', () => {
             "flip": undefined,
             "op": "NOT EXISTS",
             "related": {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "issueId",
@@ -2017,6 +2089,7 @@ describe('exists', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "zsubq_comments",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -2043,6 +2116,7 @@ describe('exists', () => {
     ).toMatchInlineSnapshot(
       `
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -2054,6 +2128,7 @@ describe('exists', () => {
           "flip": undefined,
           "op": "NOT EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "issueId",
@@ -2064,6 +2139,7 @@ describe('exists', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_labels",
               "limit": undefined,
               "orderBy": undefined,
@@ -2075,6 +2151,7 @@ describe('exists', () => {
                 "flip": undefined,
                 "op": "EXISTS",
                 "related": {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -2085,6 +2162,7 @@ describe('exists', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "zsubq_zhidden_labels",
                     "limit": undefined,
                     "orderBy": undefined,
@@ -2121,6 +2199,7 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -2134,6 +2213,7 @@ describe('exists', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "issueId",
@@ -2144,6 +2224,7 @@ describe('exists', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_comments",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -2162,6 +2243,7 @@ describe('exists', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "issueId",
@@ -2172,6 +2254,7 @@ describe('exists', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_labels",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -2183,6 +2266,7 @@ describe('exists', () => {
                     "flip": undefined,
                     "op": "EXISTS",
                     "related": {
+                      "aggregate": undefined,
                       "correlation": {
                         "childField": [
                           "id",
@@ -2193,6 +2277,7 @@ describe('exists', () => {
                       },
                       "hidden": undefined,
                       "subquery": {
+                        "aggregate": undefined,
                         "alias": "zsubq_zhidden_labels",
                         "limit": undefined,
                         "orderBy": undefined,
@@ -2217,6 +2302,7 @@ describe('exists', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -2227,6 +2313,7 @@ describe('exists', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_owner",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -2255,6 +2342,7 @@ describe('exists', () => {
     expect(ast(issueQuery.whereExists('owner', {flip: true})))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -2266,6 +2354,7 @@ describe('exists', () => {
             "flip": true,
             "op": "EXISTS",
             "related": {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "id",
@@ -2276,6 +2365,7 @@ describe('exists', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "zsubq_owner",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -2302,6 +2392,7 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -2313,6 +2404,7 @@ describe('exists', () => {
           "flip": true,
           "op": "EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -2323,6 +2415,7 @@ describe('exists', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -2347,6 +2440,7 @@ describe('exists', () => {
     expect(ast(issueQuery.whereExists('labels', {flip: true})))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -2358,6 +2452,7 @@ describe('exists', () => {
             "flip": true,
             "op": "EXISTS",
             "related": {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "issueId",
@@ -2368,6 +2463,7 @@ describe('exists', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "zsubq_labels",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -2379,6 +2475,7 @@ describe('exists', () => {
                   "flip": true,
                   "op": "EXISTS",
                   "related": {
+                    "aggregate": undefined,
                     "correlation": {
                       "childField": [
                         "id",
@@ -2389,6 +2486,7 @@ describe('exists', () => {
                     },
                     "hidden": undefined,
                     "subquery": {
+                      "aggregate": undefined,
                       "alias": "zsubq_zhidden_labels",
                       "limit": undefined,
                       "orderBy": undefined,
@@ -2422,6 +2520,7 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -2433,6 +2532,7 @@ describe('exists', () => {
           "flip": true,
           "op": "EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -2443,6 +2543,7 @@ describe('exists', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -2485,6 +2586,7 @@ describe('exists', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -2498,6 +2600,7 @@ describe('exists', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -2508,6 +2611,7 @@ describe('exists', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_owner",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -2537,6 +2641,7 @@ describe('exists', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -2547,6 +2652,7 @@ describe('exists', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_owner",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -2615,6 +2721,7 @@ test('scalar option on two-hop relationship applies to inner condition', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "aggregate": undefined,
       "alias": undefined,
       "limit": undefined,
       "orderBy": undefined,
@@ -2626,6 +2733,7 @@ test('scalar option on two-hop relationship applies to inner condition', () => {
         "flip": true,
         "op": "EXISTS",
         "related": {
+          "aggregate": undefined,
           "correlation": {
             "childField": [
               "issueId",
@@ -2636,6 +2744,7 @@ test('scalar option on two-hop relationship applies to inner condition', () => {
           },
           "hidden": undefined,
           "subquery": {
+            "aggregate": undefined,
             "alias": "zsubq_labels",
             "limit": undefined,
             "orderBy": undefined,
@@ -2647,6 +2756,7 @@ test('scalar option on two-hop relationship applies to inner condition', () => {
               "flip": true,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -2657,6 +2767,7 @@ test('scalar option on two-hop relationship applies to inner condition', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_zhidden_labels",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -2704,6 +2815,7 @@ describe('whereExists with scalar option', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -2715,6 +2827,7 @@ describe('whereExists with scalar option', () => {
           "flip": undefined,
           "op": "EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -2725,6 +2838,7 @@ describe('whereExists with scalar option', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -2765,6 +2879,7 @@ describe('whereExists with scalar option', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -2776,6 +2891,7 @@ describe('whereExists with scalar option', () => {
           "flip": undefined,
           "op": "EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -2786,6 +2902,7 @@ describe('whereExists with scalar option', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -2852,6 +2969,7 @@ describe('whereExists with scalar option', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -2863,6 +2981,7 @@ describe('whereExists with scalar option', () => {
           "flip": undefined,
           "op": "NOT EXISTS",
           "related": {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -2873,6 +2992,7 @@ describe('whereExists with scalar option', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "zsubq_owner",
               "limit": undefined,
               "orderBy": undefined,
@@ -2960,8 +3080,15 @@ describe('normalized by construction', () => {
     'start',
     'limit',
     'orderBy',
+    'aggregate',
   ];
-  const RELATED_FIELDS = ['correlation', 'hidden', 'subquery', 'system'];
+  const RELATED_FIELDS = [
+    'correlation',
+    'hidden',
+    'subquery',
+    'system',
+    'aggregate',
+  ];
 
   function expectNormalizedShape(ast: AST) {
     expect(Object.keys(ast)).toEqual(AST_FIELDS);

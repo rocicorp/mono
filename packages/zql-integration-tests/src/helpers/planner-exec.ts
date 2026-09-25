@@ -589,6 +589,9 @@ export async function createPlannerInfrastructure(config: {
           computeZqlSpecs(createSilentLogContext(), dbs.sqlite, {
             includeBackfillingColumns: false,
           }),
+          // The replica state version stamped onto synthetic aggregate rows;
+          // irrelevant here, where only row counts are read.
+          '00',
         )) {
           // Consume rows to execute the query
         }

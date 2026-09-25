@@ -3,6 +3,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {
+  AggregateFunction,
   AST,
   ColumnReference,
   CompoundKey,
@@ -19,6 +20,13 @@ import type {
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
+import {
+  AGGREGATE_KEY_COLUMN,
+  Aggregate,
+  aggregateSourceSchema,
+  isInvertible,
+} from '../ivm/aggregate.ts';
 import {Cap} from '../ivm/cap.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
@@ -30,6 +38,7 @@ import {
 import {Filter} from '../ivm/filter.ts';
 import {FlippedJoin} from '../ivm/flipped-join.ts';
 import {Join} from '../ivm/join.ts';
+import {LiftField, LIFTED_FIELD_COLUMN} from '../ivm/lift-field.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
@@ -97,11 +106,57 @@ export interface BuilderDelegate {
   readonly enablePlannerAwarePushdown?: boolean | undefined;
 
   /**
+   * When true, an `aggregate` relationship is read from a synthetic,
+   * pre-computed aggregate source (see {@linkcode aggregateTableName}) via a
+   * plain Join, instead of being computed by an {@linkcode Aggregate} operator
+   * over the child rows.
+   *
+   * This is the *synced client* mode: the server computes the aggregate (the
+   * Aggregate operator consumes the child rows so they never sync) and streams
+   * only the per-parent result rows; the client reads them and never holds the
+   * children. Defaults to false (compute locally), which is correct for the
+   * server and for single-process client materialization.
+   */
+  readonly aggregatesFromSource?: boolean | undefined;
+
+  /**
    * Called once for each source needed by the AST.
    * Might be called multiple times with same tableName. It is OK to return
    * same storage instance in that case.
    */
   getSource(tableName: string): Source | undefined;
+
+  /**
+   * Get-or-create the synthetic source for a *relationship* aggregate read in
+   * `aggregatesFromSource` mode. Unlike a top-level aggregate (whose shape is
+   * derivable from the table name), a relationship aggregate's source needs the
+   * correlation-key columns + types, which only the builder knows here — so it
+   * passes them in. Optional: only the synced client implements it; the server
+   * (compute mode) never takes the `aggregatesFromSource` path, and tests may
+   * instead provide the source directly via {@link getSource}.
+   */
+  getAggregateSource?(
+    name: string,
+    columns: Record<string, SchemaValue>,
+    primaryKey: PrimaryKey,
+    /**
+     * When present, the client may optimistically update this aggregate when a
+     * child row in `table` is locally mutated (only supplied for the invertible
+     * cases with a per-row-evaluable `where` — see the call site). Omitted ⇒
+     * server-authoritative only.
+     */
+    optimisticDelta?: {
+      readonly table: string;
+      readonly childField: CompoundKey;
+      readonly fn: AggregateFunction;
+      readonly field: string | undefined;
+      /**
+       * The child `where` compiled to a per-row predicate, or `undefined` when
+       * the aggregate has no `where` (every child contributes).
+       */
+      readonly predicate: ((row: Row) => boolean) | undefined;
+    },
+  ): Source;
 
   /**
    * Called once for each operator that requires storage. Should return a new
@@ -165,6 +220,15 @@ export function buildPipeline(
   planDebugger?: PlanDebugger,
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
+
+  // Synced client reading a top-level (ungrouped) aggregate: the underlying
+  // table is not synced and has no source here, and ordering/planning don't
+  // apply to a scalar result. Read the precomputed row directly from the
+  // synthetic source (see buildPipelineInternal's short-circuit).
+  if (ast.aggregate && delegate.aggregatesFromSource) {
+    return buildPipelineInternal(ast, delegate, queryID, '');
+  }
+
   ast = completeOrdering(
     ast,
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
@@ -326,6 +390,22 @@ function buildPipelineInternal(
   partitionKey?: CompoundKey,
   isNonFlippedExistsChild?: boolean,
 ): Input {
+  // Synced client reading a top-level (ungrouped) aggregate: the precomputed
+  // single row is read from the synthetic source `aggregate:<queryID>`; the
+  // underlying table is never synced, so its pipeline is not built at all.
+  if (ast.aggregate && delegate.aggregatesFromSource) {
+    const aggTable = topLevelAggregateTableName(queryID);
+    const aggSource = delegate.getSource(aggTable);
+    if (!aggSource) {
+      throw new Error(`Aggregate source not found: ${aggTable}`);
+    }
+    const conn = aggSource.connect([[AGGREGATE_KEY_COLUMN, 'asc']]);
+    return delegate.decorateInput(
+      delegate.decorateSourceInput(conn, queryID),
+      `${name}:aggregateSource`,
+    );
+  }
+
   const source = delegate.getSource(ast.table);
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
@@ -426,6 +506,25 @@ function buildPipelineInternal(
 
   if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
     end = applyWhere(end, ast.where, delegate, name, partitionKey, takeGate);
+  }
+
+  if (ast.aggregate) {
+    // Top-level (ungrouped) aggregate, compute mode (server / local): the
+    // Aggregate operator reduces the filtered rows to one synthetic row emitted
+    // to `aggregate:<queryID>`. orderBy / limit / related do not apply to a
+    // scalar result. (The synced client takes the aggregatesFromSource
+    // short-circuit at the top of this function instead.)
+    const aggName = `${name}:aggregate`;
+    const aggregate = new Aggregate(
+      end,
+      delegate.createStorage(aggName),
+      [], // ungrouped — one global group
+      ast.aggregate.fn,
+      ast.aggregate.field,
+      topLevelAggregateTableName(queryID),
+    );
+    delegate.addEdge(end, aggregate);
+    return delegate.decorateInput(aggregate, aggName);
   }
 
   if (ast.limit !== undefined) {
@@ -780,19 +879,166 @@ function applyCorrelatedSubQuery(
   }
 
   assert(sq.subquery.alias, 'Subquery must have an alias');
-  const child = buildPipelineInternal(
-    sq.subquery,
-    delegate,
-    queryID,
-    `${name}.${sq.subquery.alias}`,
-    sq.correlation.childField,
-    fromCondition,
-  );
+
+  // PROTOTYPE: an `aggregate` relationship (count/sum/avg).
+  //
+  // The Join below is unchanged regardless of mode: the aggregate "child" emits
+  // a single synthetic row per parent carrying the correlation key, so Join
+  // routes by childField as usual.
+  //
+  // Two modes (see BuilderDelegate.aggregatesFromSource):
+  //  - compute (server / single-process client): an Aggregate operator reduces
+  //    the child rows. It consumes them, so the children never flow downstream
+  //    (i.e. never sync). Its output rows are routed to a synthetic table.
+  //  - source (synced client): the children are not present at all; read the
+  //    pre-computed results from the synthetic aggregate source.
+  let childInput: Input;
+  if (sq.aggregate) {
+    const aggTable = aggregateTableName(queryID, sq);
+    if (delegate.aggregatesFromSource) {
+      // Always go through getAggregateSource when the delegate has one, even
+      // if the source already exists: on reload it is provisioned from the
+      // persisted rows before the query materializes (see IVMSourceBranch
+      // applyDiffs), and this call is what registers the optimistic-delta
+      // metadata. The delegate hands back the existing source in that case.
+      let source = delegate.getAggregateSource
+        ? undefined
+        : delegate.getSource(aggTable);
+      if (delegate.getAggregateSource) {
+        // The synthetic source isn't a schema table; provision it from the
+        // child's column types + the aggregate fn/field so the synced rows have
+        // a correctly-shaped place to land (key = correlation child field).
+        const childSource = delegate.getSource(sq.subquery.table);
+        if (!childSource) {
+          throw new Error(`Source not found: ${sq.subquery.table}`);
+        }
+        // For a junction (many-to-many) aggregate the key lives on the junction
+        // table but the aggregated field lives on the destination one hop past
+        // it — so merge the destination's columns in for the value-type lookup.
+        let inputColumns = childSource.tableSchema.columns;
+        const isJunction = !!(
+          sq.subquery.related && sq.subquery.related.length
+        );
+        if (isJunction) {
+          const destTable = must(sq.subquery.related)[0].subquery.table;
+          const destSource = delegate.getSource(destTable);
+          if (!destSource) {
+            throw new Error(`Source not found: ${destTable}`);
+          }
+          inputColumns = {
+            ...childSource.tableSchema.columns,
+            ...destSource.tableSchema.columns,
+          };
+        }
+        const {columns} = aggregateSourceSchema(
+          inputColumns,
+          sq.correlation.childField,
+          sq.aggregate.fn,
+          sq.aggregate.field,
+        );
+        const {fn} = sq.aggregate;
+        const invertible = isInvertible(fn);
+        // A `where` is honored optimistically by compiling it to a per-row
+        // predicate, but only when fully per-row evaluable. A correlated
+        // subquery in the `where` can't be judged from a single child row, so
+        // `transformFilters` flags it (`conditionsRemoved`) and the aggregate
+        // stays server-authoritative rather than risk over-counting.
+        let whereEvaluable = true;
+        let wherePredicate: ((row: Row) => boolean) | undefined;
+        if (!isJunction && invertible && sq.subquery.where !== undefined) {
+          const {filters, conditionsRemoved} = transformFilters(
+            sq.subquery.where,
+          );
+          if (conditionsRemoved || filters === undefined) {
+            whereEvaluable = false;
+          } else {
+            wherePredicate = createPredicate(filters);
+          }
+        }
+        source = delegate.getAggregateSource(
+          aggTable,
+          columns,
+          sq.correlation.childField,
+          // Optimistic deltas are only safe for invertible, direct
+          // (non-junction) aggregates: `count` (±1), `sum`/`avg` (±field) per
+          // child add/remove. `min`/`max` aren't invertible, and a junction's
+          // field lives past the junction (an edge mutation doesn't carry it) —
+          // both fall back to the server-authoritative value, as does a `where`
+          // that isn't per-row evaluable (see above).
+          !isJunction && invertible && whereEvaluable
+            ? {
+                table: sq.subquery.table,
+                childField: sq.correlation.childField,
+                fn,
+                field: sq.aggregate.field,
+                predicate: wherePredicate,
+              }
+            : undefined,
+        );
+      }
+      if (!source) {
+        throw new Error(`Aggregate source not found: ${aggTable}`);
+      }
+      const conn = source.connect(
+        sq.correlation.childField.map(f => [f, 'asc'] as const),
+      );
+      childInput = delegate.decorateSourceInput(conn, queryID);
+      childInput = delegate.decorateInput(
+        childInput,
+        `${name}:aggregateSource(${sq.subquery.alias})`,
+      );
+    } else {
+      const child = buildPipelineInternal(
+        sq.subquery,
+        delegate,
+        queryID,
+        `${name}.${sq.subquery.alias}`,
+        sq.correlation.childField,
+        fromCondition,
+      );
+      const aggName = `${name}:aggregate(${sq.subquery.alias})`;
+
+      // Junction (many-to-many) aggregate: the subquery is the junction table
+      // with a related() to the destination, and the aggregated field lives on
+      // that destination. Lift the field onto the junction row so the Aggregate
+      // (which reads a flat field) collapses it as a single hop. `count` never
+      // takes this path — it's collapsed to a plain count over the junction.
+      let aggInput = child;
+      let aggField = sq.aggregate.field;
+      if (sq.subquery.related && sq.subquery.related.length > 0) {
+        const destAlias = must(sq.subquery.related[0].subquery.alias);
+        const lift = new LiftField(child, destAlias, must(sq.aggregate.field));
+        delegate.addEdge(child, lift);
+        aggInput = lift;
+        aggField = LIFTED_FIELD_COLUMN;
+      }
+
+      const aggregate = new Aggregate(
+        aggInput,
+        delegate.createStorage(aggName),
+        sq.correlation.childField,
+        sq.aggregate.fn,
+        aggField,
+        aggTable,
+      );
+      delegate.addEdge(aggInput, aggregate);
+      childInput = delegate.decorateInput(aggregate, aggName);
+    }
+  } else {
+    childInput = buildPipelineInternal(
+      sq.subquery,
+      delegate,
+      queryID,
+      `${name}.${sq.subquery.alias}`,
+      sq.correlation.childField,
+      fromCondition,
+    );
+  }
 
   const joinName = `${name}:join(${sq.subquery.alias})`;
   const join = new Join({
     parent: end,
-    child,
+    child: childInput,
     parentKey: sq.correlation.parentField,
     childKey: sq.correlation.childField,
     relationshipName: sq.subquery.alias,
@@ -803,7 +1049,7 @@ function applyCorrelatedSubQuery(
     storage: delegate.createStorage(joinName),
   });
   delegate.addEdge(end, join);
-  delegate.addEdge(child, join);
+  delegate.addEdge(childInput, join);
   return delegate.decorateInput(join, joinName);
 }
 
@@ -858,6 +1104,66 @@ function gatherCorrelatedSubqueryQueryConditions(
     gather(condition);
   }
   return csqs;
+}
+
+/**
+ * Prefix for the synthetic table that holds the result rows of an `aggregate`
+ * query/relationship. The synthetic name keeps aggregate rows distinct from real
+ * child rows when routed/synced.
+ *
+ * The separator is `:` rather than `/` on purpose: synthetic table names must
+ * contain **no `/`** so they round-trip through the client's Replicache row-key
+ * format (`e/<table>/<pk>`) and {@link sourceNameFromKey} unchanged — those
+ * split on the first `/`, which must be the table↔key delimiter. Real table
+ * names are SQL identifiers and never contain `:`, so collisions are impossible.
+ */
+export const AGGREGATE_TABLE_SEPARATOR = ':';
+export const AGGREGATE_TABLE_PREFIX = `aggregate${AGGREGATE_TABLE_SEPARATOR}`;
+
+/**
+ * Deterministic synthetic table name for an `aggregate` relationship. Must
+ * agree between the server (which produces the rows) and the synced client
+ * (which reads them). It folds in the `queryID` — the client query hash, which
+ * both sides share and which already distinguishes differently-filtered queries
+ * — and the relationship alias, so two aggregates never collide.
+ */
+export function aggregateTableName(
+  queryID: string,
+  sq: CorrelatedSubquery,
+): string {
+  return `${AGGREGATE_TABLE_PREFIX}${queryID}${AGGREGATE_TABLE_SEPARATOR}${sq.subquery.alias}`;
+}
+
+/**
+ * Deterministic synthetic table name for a *top-level* (ungrouped) aggregate
+ * query (e.g. `z.query.issue.count()`). There is no relationship alias, so the
+ * name is just the prefix + `queryID` (`aggregate:<queryID>`). Distinct from
+ * relationship-aggregate names (`aggregate:<queryID>:<alias>`), which always
+ * carry an alias segment — which is how the client tells the two apart by name.
+ */
+export function topLevelAggregateTableName(queryID: string): string {
+  return `${AGGREGATE_TABLE_PREFIX}${queryID}`;
+}
+
+/** True if `name` is a synthetic aggregate table (any kind). */
+export function isAggregateTableName(name: string): boolean {
+  return name.startsWith(AGGREGATE_TABLE_PREFIX);
+}
+
+/**
+ * True if `name` is a *top-level* aggregate table (`aggregate:<queryID>`), as
+ * opposed to a relationship one (`aggregate:<queryID>:<alias>`). Top-level names
+ * have no further separator after the prefix. The client uses this to recognize
+ * a synthetic source it can provision from the name alone (fixed key + value
+ * shape), which relationship aggregates — needing the correlation key — cannot.
+ */
+export function isTopLevelAggregateTableName(name: string): boolean {
+  return (
+    name.startsWith(AGGREGATE_TABLE_PREFIX) &&
+    !name
+      .slice(AGGREGATE_TABLE_PREFIX.length)
+      .includes(AGGREGATE_TABLE_SEPARATOR)
+  );
 }
 
 export function assertOrderingIncludesPK(

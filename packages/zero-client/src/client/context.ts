@@ -4,8 +4,11 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
 import type {DocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {AggregateFunction, AST} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
 import type {DebugDelegate} from '../../../zql/src/builder/debug-delegate.ts';
 import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
@@ -107,6 +110,12 @@ export class ZeroContext extends QueryDelegateBase {
   applyFiltersAnyway?: boolean | undefined;
 
   debug?: DebugDelegate | undefined;
+
+  // The client reads aggregate results from the synthetic source the server
+  // streams (`aggregate:<queryID>`), rather than computing them locally — the
+  // underlying rows are intentionally never synced, so a local computation would
+  // be wrong. See builder.ts `aggregatesFromSource`.
+  readonly aggregatesFromSource = true;
 
   getSource(name: string): Source | undefined {
     return this.#mainSources.getSource(name);
@@ -250,6 +259,26 @@ export class ZeroContext extends QueryDelegateBase {
     } finally {
       this.#endTransaction();
     }
+  }
+
+  getAggregateSource(
+    name: string,
+    columns: Record<string, SchemaValue>,
+    primaryKey: PrimaryKey,
+    optimisticDelta?: {
+      readonly table: string;
+      readonly childField: readonly string[];
+      readonly fn: AggregateFunction;
+      readonly field: string | undefined;
+      readonly predicate: ((row: Row) => boolean) | undefined;
+    },
+  ): Source {
+    return this.#mainSources.getOrCreateAggregateSource(
+      name,
+      columns,
+      primaryKey,
+      optimisticDelta,
+    );
   }
 
   mapAst(ast: AST): AST {

@@ -322,6 +322,18 @@ describe('types', () => {
     >();
   });
 
+  test('top-level aggregate query resolves to a bare scalar', () => {
+    type TableQuery = Query<'test', Schema>;
+    // count() at the root -> number (not an array of rows)
+    expectTypeOf<
+      QueryResultType<ReturnType<TableQuery['count']>>
+    >().toEqualTypeOf<number>();
+    // sum()/avg() -> number | null
+    expectTypeOf<
+      QueryResultType<ReturnType<TableQuery['sum']>>
+    >().toEqualTypeOf<number | null>();
+  });
+
   test('simple select', () => {
     const query = mockQuery as unknown as Query<'test', Schema>;
 
@@ -430,6 +442,58 @@ describe('types', () => {
         n: number;
       }>;
     }>();
+  });
+
+  test('related count yields a bare number', () => {
+    const query = mockQuery as unknown as Query<
+      'testWithRelationships',
+      Schema
+    >;
+
+    const q = query.related('test', t => t.count());
+    // The counted relationship is a bare number, not an array of rows.
+    expectTypeOf<QueryReturn<typeof q>['test']>().toEqualTypeOf<number>();
+
+    // Still composes with the rest of the parent row.
+    expectTypeOf<QueryReturn<typeof q>>().toExtend<
+      Row<Schema['tables']['testWithRelationships']> & {test: number}
+    >();
+  });
+
+  test('related sum/avg yield a nullable number', () => {
+    const query = mockQuery as unknown as Query<
+      'testWithRelationships',
+      Schema
+    >;
+
+    const qs = query.related('test', t => t.sum('n'));
+    expectTypeOf<QueryReturn<typeof qs>['test']>().toEqualTypeOf<
+      number | null
+    >();
+
+    const qa = query.related('test', t => t.avg('n'));
+    expectTypeOf<QueryReturn<typeof qa>['test']>().toEqualTypeOf<
+      number | null
+    >();
+  });
+
+  test('related min/max preserve the field type (nullable)', () => {
+    const query = mockQuery as unknown as Query<
+      'testWithRelationships',
+      Schema
+    >;
+
+    // max over a number column -> number | null
+    const qn = query.related('test', t => t.max('n'));
+    expectTypeOf<QueryReturn<typeof qn>['test']>().toEqualTypeOf<
+      number | null
+    >();
+
+    // min over a string column -> string | null
+    const qs = query.related('test', t => t.min('s'));
+    expectTypeOf<QueryReturn<typeof qs>['test']>().toEqualTypeOf<
+      string | null
+    >();
   });
 
   test('related with enums', () => {

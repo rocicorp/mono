@@ -435,6 +435,7 @@ test('makeSchemaQuery', () => {
   );
   expect(q1.ast).toMatchInlineSnapshot(`
     {
+      "aggregate": undefined,
       "alias": undefined,
       "limit": undefined,
       "orderBy": undefined,
