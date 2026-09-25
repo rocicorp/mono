@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790257211475,
+  "lastUpdate": 1790332551073,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -58073,6 +58073,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/a951fd4938f5e104906cc6672f26d0e5c3bc3890"
         },
         "date": 1790257202221,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 326494,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 59167,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 119478,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 34097,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pawarren95@gmail.com",
+            "name": "Paul Warren",
+            "username": "pawarren"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "16ef03582b0e84c662f3193fc42132fb99036ccc",
+          "message": "fix(replicache): release the SQLite store's RWLock when BEGIN or the read COMMIT throws (#6655)\n\n## Summary\n\n`SQLiteStore` (the store behind the expo-sqlite, op-sqlite and\nzero-sqlite adapters) leaks its `RWLock` in two places when SQLite\nrefuses a transaction statement. After either, every later `write()` on\nthe store — persist, refresh, the heartbeat, client GC — waits forever,\nand after the second every `read()` too. Nothing is logged afterwards\nbecause nothing fails; the store just stops.\n\n1. **Read transaction.** `read()` shares one `BEGIN` across concurrent\nreaders and the last reader's release closure runs `COMMIT`, then the\nlock's `release()`. When SQLite has already rolled the transaction back\non its own (an I/O error inside any reader's statement does that),\n`COMMIT` throws `cannot commit - no transaction is active` — from inside\nthe closure, before `release()` runs. The read lock is held for the rest\nof the process.\n2. **Write transaction.** `write()` acquires the write lock and then\nruns `BEGIN IMMEDIATE`. When that throws (`SQLITE_BUSY` once\n`busy_timeout` expires with another connection holding the file, or an\nI/O error), the caller gets the rejection with the write lock still\nheld.\n\nThe fix wraps the three statements: `BEGIN` and `BEGIN IMMEDIATE`\nrelease on throw and rethrow; the closing `COMMIT` runs in a `try …\nfinally { release() }`, so the reader still sees the error and the lock\nis freed regardless.\n\n## Evidence\n\nProduction, React Native with op-sqlite 18.2.1 on\n`@rocicorp/zero@1.10.0-canary.24`:\n\n```\nError during persist Error: Transaction operation failed and release also failed:\n  operation error = Error: [op-sqlite] SQLite error code: 10, description: disk I/O error;\n  release error = Error: Exception in HostFunction: [op-sqlite] SQLite error code: 1,\n  description: cannot rollback - no transaction is active\n```\n\n`cannot rollback - no transaction is active` is SQLite telling the store\nthat the I/O error already ended the transaction. The same auto-rollback\nends a shared read transaction, and the read's `COMMIT` fails the same\nway. We also see `SQLite error code: 14, description: unable to open\ndatabase file` on iOS. Devices in this state go quiet rather than\nreporting anything further, which is consistent with the hang.\n\n## Test\n\nThree cases in `sqlite-store.test.ts`, against a scripted\n`SQLiteDatabase` that fails exactly the statement the test names and\nmodels SQLite's auto-rollback: read whose closing `COMMIT` is refused,\n`BEGIN IMMEDIATE` refused, `BEGIN` refused. Each asserts the caller sees\nthe error and that the next lock request is granted. All three fail on\n`main` (`expected 'still waiting' to be 'granted'`) and pass here.\n\n---------\n\nCo-authored-by: Erik Arvidsson <arv@roci.dev>",
+          "timestamp": "2026-09-25T10:27:58Z",
+          "tree_id": "5134007b79e625ca4799387be8864e9e7c9a213e",
+          "url": "https://github.com/rocicorp/mono/commit/16ef03582b0e84c662f3193fc42132fb99036ccc"
+        },
+        "date": 1790332535458,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
