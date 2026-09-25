@@ -1474,6 +1474,7 @@ describe('view-syncer/pipeline-driver', () => {
         () => 200 /** yield threshold */,
         undefined,
         undefined,
+        deferredWritesBudget(),
         queryStats,
       );
       driver.init(clientSchema);
