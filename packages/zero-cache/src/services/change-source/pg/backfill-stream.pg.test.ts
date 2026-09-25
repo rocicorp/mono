@@ -362,6 +362,35 @@ describe('backfill-stream', () => {
     ).toBeUndefined();
   });
 
+  test.each([
+    ['VACUUM FULL', `VACUUM FULL foo`],
+    // Not MVCC-safe: the table would appear empty to the snapshot.
+    ['rewriting ALTER TABLE', `ALTER TABLE foo ALTER COLUMN id2 TYPE INT8`],
+  ])(
+    'fails if the table is rewritten after the snapshot (%s)',
+    async (_, stmt) => {
+      await expect(
+        streamAll(columnBackfillRequest, {
+          afterSnapshotForTesting: () => upstream.unsafe(stmt).then(() => {}),
+        }),
+      ).rejects.toThrow(/was rewritten after the backfill snapshot/);
+    },
+  );
+
+  test('fails if the table is replaced after the snapshot', async () => {
+    await expect(
+      streamAll(columnBackfillRequest, {
+        afterSnapshotForTesting: () =>
+          upstream
+            .unsafe(/*sql*/ `ALTER TABLE foo RENAME TO foo_old;
+                       CREATE TABLE foo (LIKE foo_old INCLUDING ALL);`)
+            .then(() => {}),
+      }),
+    ).rejects.toThrow(
+      'Cannot backfill public.foo[c,b]: Table has been renamed or replaced',
+    );
+  });
+
   async function insertToastedRow() {
     // A large, poorly compressible value is stored out-of-line in TOAST.
     await upstream.unsafe(/*sql*/ `

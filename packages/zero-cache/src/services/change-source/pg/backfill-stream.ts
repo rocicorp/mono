@@ -143,6 +143,13 @@ type StreamOptions = {
    * revert to the old code path if needed.
    */
   textCopy?: boolean | undefined;
+
+  /**
+   * @visibleForTesting
+   * Called after the snapshot transaction is opened, before the table is
+   * locked, e.g. to run a concurrent heap rewrite in between.
+   */
+  afterSnapshotForTesting?: (() => Promise<void>) | undefined;
 };
 
 // The size of chunks that Postgres sends on COPY stream.
@@ -172,8 +179,11 @@ export async function* streamBackfill(
     .withContext('component', 'backfill')
     .withContext('table', bf.table.name);
 
-  const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE, textCopy = false} =
-    opts;
+  const {
+    flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE,
+    textCopy = false,
+    afterSnapshotForTesting,
+  } = opts;
   const db = await connectPgClient(lc, upstreamURI, 'backfill-stream', {
     // The COPY is a single stream that must outlive the entire table download,
     // so allow a very long (24h) connection lifetime.
@@ -194,6 +204,7 @@ export async function* streamBackfill(
       db,
       slot,
     ));
+    await afterSnapshotForTesting?.();
     const {tableSpec, backfill, progress} = await validateSchema(
       lc,
       tx,
@@ -614,6 +625,17 @@ function validateSchema(
 /**
  * Determines the timeline of the table's progress marks (as of the snapshot),
  * and whether the backfill can be resumed from the requested progress.
+ *
+ * The table is locked (in ACCESS SHARE mode, as the COPY would, for the rest
+ * of the transaction) so that its storage cannot be rewritten (by `VACUUM
+ * FULL`, `CLUSTER`, `TRUNCATE`, or a rewriting `ALTER TABLE`, all of which
+ * require ACCESS EXCLUSIVE) between reading the timeline and the COPY. Note
+ * that `pg_relation_filenode()` reflects the table's current storage (only
+ * refreshed upon acquiring a lock), whereas `pg_class.relfilenode` is read at
+ * the transaction snapshot. If they differ, the storage was rewritten after the
+ * snapshot, and the COPY would scan the new storage with the old snapshot,
+ * which is not MVCC-safe for all rewrites (e.g. the table appears empty after
+ * a rewriting `ALTER TABLE`). The backfill is then retried at a new snapshot.
  */
 async function getProgress(
   lc: LogContext,
@@ -621,11 +643,28 @@ async function getProgress(
   relationOID: number,
   bf: BackfillRequest,
 ): Promise<Progress> {
-  const [{relkind, filenode}] = await sql<
-    {relkind: string; filenode: string | null}[]
+  const table = `${id(bf.table.schema)}.${id(bf.table.name)}`;
+  await sql.unsafe(`LOCK TABLE ${table} IN ACCESS SHARE MODE`);
+  const [{lockedOID, relkind, snapshotFilenode, filenode}] = await sql<
+    {
+      lockedOID: number | null;
+      relkind: string;
+      snapshotFilenode: string;
+      filenode: string | null;
+    }[]
   >`
-    SELECT relkind, pg_relation_filenode(oid)::text AS filenode
+    SELECT to_regclass(${table})::oid::int8 AS "lockedOID",
+           relkind,
+           relfilenode::text AS "snapshotFilenode",
+           pg_relation_filenode(oid)::text AS filenode
       FROM pg_class WHERE oid = ${relationOID}`;
+  if (Number(lockedOID) !== relationOID) {
+    // The (current) table with the name is not the one at the snapshot.
+    throw new SchemaIncompatibilityError(
+      bf,
+      `Table has been renamed or replaced`,
+    );
+  }
   if (relkind !== 'r' || filenode === null) {
     // Not a plain table (e.g. a partitioned table), for which ctids are not
     // unique. Such backfills are not resumable, which is achieved by using a
@@ -635,6 +674,12 @@ async function getProgress(
       resumable: false,
       start: undefined,
     };
+  }
+  if (filenode !== snapshotFilenode) {
+    throw new Error(
+      `${bf.table.schema}.${bf.table.name} was rewritten after the backfill ` +
+        `snapshot (relfilenode ${snapshotFilenode} => ${filenode})`,
+    );
   }
   const timeline = filenode;
   const requested = resumePoint(bf);

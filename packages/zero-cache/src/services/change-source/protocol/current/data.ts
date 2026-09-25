@@ -181,7 +181,7 @@ export const backfillProgressMarkSchema = v
     // compatible. If two timelines differ, a new backfill is started
     // from scratch in order to get all subscribers on the same timeline.
     //
-    // Timeline changes should be rare events (e.g. Postgres FULL VACCUUM).
+    // Timeline changes should be rare events (e.g. Postgres VACUUM FULL).
     timeline: v.string().optional(),
   })
   // All other fields should be preserved and returned in BackfillRequests.
