@@ -213,7 +213,9 @@ describe('config/normalize SQLite change log', () => {
   });
 
   test('disabling the PG change log requires authoritative SQLite and v5 backup settings', () => {
-    const config = configWith({});
+    const config = configWith({
+      backupURL: 's3://bucket/replica',
+    });
     config.changeStreamer.pgChangeLogEnabled = false;
 
     expect(() => assertNormalized(config)).toThrow(
@@ -245,6 +247,17 @@ describe('config/normalize SQLite change log', () => {
     expect(() => assertNormalized(config)).not.toThrow();
   });
 
+  test('disabling the PG change log does not require a backupURL (e.v. view-syncer)', () => {
+    const config = configWith({});
+    Object.assign(config.litestream, {
+      backupUsingV5: true,
+      restoreUsingV5: true,
+      executableV5: '/bin/litestream-v5',
+      vfsQueryExecutable: '/bin/vfs-query',
+    });
+    expect(() => assertNormalized(config)).not.toThrow();
+  });
+
   test('per-replica-slots requires disabling pg change log', () => {
     const config = configWith({});
     config.upstream.pgReplicationSlotPerReplica = true;
@@ -254,7 +267,9 @@ describe('config/normalize SQLite change log', () => {
   });
 
   test('per-replica-slots requires authoritative SQLite and v5 backup settings', () => {
-    const config = configWith({});
+    const config = configWith({
+      backupURL: 's3://bucket/replica',
+    });
     config.upstream.pgReplicationSlotPerReplica = true;
     config.changeStreamer.pgChangeLogEnabled = false;
 

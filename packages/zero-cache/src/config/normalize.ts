@@ -119,7 +119,8 @@ export function assertNormalized(
       '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-cold-read-percent=100',
     );
     assert(
-      config.litestream.backupURL && config.litestream.backupUsingV5,
+      // Only require backupUsingV5 if a backupURL is set (e.g. replication-manager).
+      config.litestream.backupUsingV5 || !config.litestream.backupURL,
       '--change-streamer-pg-change-log-enabled=false requires a litestream v5 backup',
     );
   }
