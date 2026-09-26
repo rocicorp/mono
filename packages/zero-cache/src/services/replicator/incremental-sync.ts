@@ -176,6 +176,12 @@ export class IncrementalSyncer {
           this.#handleResult(lc, result);
           if (result?.completedBackfill) {
             backfill = undefined;
+          } else if (result?.schemaUpdated && backfill) {
+            // The "Schema updated" status published by #handleResult()
+            // replaces the periodic backfill status (and its timer).
+            // Resume reporting the progress of the ongoing backfill so
+            // that it is not reported as complete until it actually is.
+            publishBackfillStatus(backfill.table);
           }
         };
 

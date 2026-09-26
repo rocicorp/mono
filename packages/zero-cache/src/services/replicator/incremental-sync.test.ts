@@ -952,6 +952,117 @@ describe('replicator/incremental-sync', () => {
     ]);
   });
 
+  test('resumes backfill status after an unrelated schema update', async () => {
+    const messages = new ReplicationMessages({
+      issues: ['issueID'],
+      comments: ['commentID'],
+    });
+
+    initReplicationState(mainDb, ['zero_data'], '09', {}, false);
+    initDB(
+      mainDb,
+      /*sql*/ `
+    CREATE TABLE issues(
+      issueID INTEGER PRIMARY KEY,
+      big INTEGER,
+      _0_version TEXT
+    );
+    CREATE UNIQUE INDEX issues_pkey ON issues ("issueID");
+    CREATE TABLE comments(
+      commentID INTEGER PRIMARY KEY,
+      _0_version TEXT
+    );
+    CREATE UNIQUE INDEX comments_pkey ON comments ("commentID");
+
+    INSERT INTO issues ("issueID", big, _0_version) VALUES (1, 2, '100');
+    INSERT INTO issues ("issueID", big, _0_version) VALUES (2, 3, '100');
+      `,
+    );
+
+    syncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
+
+    for (const change of [
+      ['begin', messages.begin(), {commitWatermark: '110'}],
+      [
+        'data',
+        messages.addColumn(
+          'issues',
+          'new_column',
+          {pos: 4, dataType: 'text'},
+          {backfill: {id: 123}},
+        ),
+      ],
+      ['commit', messages.commit(), {watermark: '110'}],
+      // The first chunk of the backfill starts the periodic backfill status.
+      ['begin', messages.begin(), {commitWatermark: '110.01'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation: {
+            schema: 'public',
+            name: 'issues',
+            rowKey: {columns: ['issueID']},
+          },
+          watermark: '110',
+          columns: ['new_column'],
+          rowValues: [[1, 'hello']],
+          status: {rows: 1, totalRows: 2},
+        },
+      ],
+      ['commit', messages.commit(), {watermark: '110.01'}],
+      // An unrelated schema change arrives while the backfill is in progress.
+      ['begin', messages.begin(), {commitWatermark: '111'}],
+      [
+        'data',
+        messages.addColumn('comments', 'body', {pos: 3, dataType: 'text'}),
+      ],
+    ] satisfies Downstream[]) {
+      downstream.push(change);
+    }
+    const schemaUpdateCommit = downstream.push([
+      'commit',
+      messages.commit(),
+      {watermark: '111'},
+    ]).result;
+    expect(await schemaUpdateCommit).toBe('consumed');
+
+    const backfilling = {
+      description: 'Backfilling issues table',
+      downloadStatus: [
+        {
+          table: 'issues',
+          columns: ['issueID', 'new_column'],
+          rows: 1,
+          totalRows: 2,
+        },
+      ],
+    };
+    const statuses = () =>
+      eventSink.map(e => {
+        const {description, state} = e as ReplicationStatusEvent;
+        return {description, downloadStatus: state?.downloadStatus};
+      });
+
+    // The "Schema updated" status must not be the last word while the
+    // backfill is still in progress: the backfill status resumes after it.
+    await vi.waitFor(() => expect(statuses().length).toBeGreaterThanOrEqual(4));
+    expect(statuses().slice(0, 4)).toEqual([
+      {description: 'Replicating from 09', downloadStatus: undefined},
+      backfilling,
+      {description: 'Schema updated', downloadStatus: undefined},
+      backfilling,
+    ]);
+    // Any subsequent statuses come from the periodic backfill timer.
+    for (const status of statuses().slice(4)) {
+      expect(status).toEqual(backfilling);
+    }
+  });
+
   test('retry on initial change-streamer connection failure', async () => {
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
 
