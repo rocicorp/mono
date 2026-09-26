@@ -557,36 +557,55 @@ export class SQLiteWrite extends WriteImplBase implements Write {
     // pushing the resulting (often megabyte-scale) string across the native
     // bridge, measured as roughly a quarter of persist on device.
     //
-    // Puts and deletes use different statements over disjoint keys (deletes
-    // were removed from _pending above), so they overlap. The batches *within*
-    // each must not: the power-of-two split reuses a width when a commit is
-    // wide enough (300 rows -> 128, 128, 32, 8, 4), and running two of those
-    // concurrently would have two callers on one prepared statement — the
-    // rebind-during-execute hazard described in kv/expo-sqlite/store.ts, which
-    // op-sqlite has no per-statement lock to absorb.
-    const putP =
-      this._pending.size > 0
-        ? execInBatches(
-            [...this._pending] as [string, ReadonlyJSONValue][],
-            this.#preparedStatements.putN,
-            ([key, value], out) => {
-              out.push(key, JSON.stringify(value));
-            },
-          )
-        : undefined;
-    const delP =
-      deleteKeys.length > 0
-        ? execInBatches(
-            deleteKeys,
-            this.#preparedStatements.delN,
-            (key, out) => {
-              out.push(key);
-            },
-          )
-        : undefined;
-
-    if (putP) await putP;
-    if (delP) await delP;
+    // Puts and deletes go out SEQUENTIALLY, and so do the batches within each.
+    // Puts and deletes used to overlap, on the grounds that they use different
+    // statements over disjoint keys (deletes were removed from _pending above).
+    // That is true of the happy path and not of a failing one:
+    //
+    // A commit is several statements and its COMMIT runs only after the last
+    // one. SQLite rolls a transaction back ITSELF on an I/O error — that is what
+    // `cannot rollback - no transaction is active` reports at release() — and a
+    // statement reaching the connection after that runs in autocommit mode. So
+    // while two statements of one commit are in flight together, a failure in
+    // one leaves the other to land OUTSIDE the transaction and persist on its
+    // own: the commit half-applies, durably, while the caller is told it failed.
+    // For a dag write that is a head kept while the chunks it reaches are
+    // deleted, or a chunk's refcount row dropped while the chunk and its
+    // referrer remain — a count that no longer counts what is there, which
+    // computeRefCountUpdates() accepts when it reaches zero (it rejects only a
+    // negative) and #applyRefCountUpdates() then acts on by deleting a live
+    // chunk, inside a transaction that commits cleanly.
+    //
+    // Awaiting both promises would not be enough: by the time one rejects the
+    // other is already at the driver and cannot be recalled. Nothing may be in
+    // flight beside a statement that can fail. Sequencing also means no batch is
+    // left unawaited, which `if (putP) await putP; if (delP) await delP;` did
+    // whenever the puts rejected first — an unhandled rejection on that commit.
+    //
+    // The batches *within* each kind could never overlap anyway: the
+    // power-of-two split reuses a width when a commit is wide enough (300 rows
+    // -> 128, 128, 32, 8, 4), and running two of those concurrently would have
+    // two callers on one prepared statement — the rebind-during-execute hazard
+    // described in kv/expo-sqlite/store.ts, which op-sqlite has no
+    // per-statement lock to absorb.
+    if (this._pending.size > 0) {
+      await execInBatches(
+        [...this._pending] as [string, ReadonlyJSONValue][],
+        this.#preparedStatements.putN,
+        ([key, value], out) => {
+          out.push(key, JSON.stringify(value));
+        },
+      );
+    }
+    if (deleteKeys.length > 0) {
+      await execInBatches(
+        deleteKeys,
+        this.#preparedStatements.delN,
+        (key, out) => {
+          out.push(key);
+        },
+      );
+    }
 
     this.#dbDelegate.execSync('COMMIT');
     this._pending.clear();
