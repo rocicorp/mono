@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {getStorageFailure} from '../../../replicache/src/storage-failure.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
@@ -148,10 +149,21 @@ export class MutatorProxy {
           }
 
           const applicationError = wrapWithApplicationError(error);
-          this.#lc.error?.(
-            `Mutator "${name}" app error on ${origin}`,
-            applicationError,
-          );
+          if (getStorageFailure(error) === undefined) {
+            this.#lc.error?.(
+              `Mutator "${name}" app error on ${origin}`,
+              applicationError,
+            );
+          } else {
+            // The local store's storage failed under the mutation. That is
+            // the device's condition, reported once through
+            // `onStorageFailure`, not the app's mutator throwing and not a
+            // developer's to fix.
+            this.#lc.warn?.(
+              `Mutator "${name}" storage failure on ${origin}`,
+              applicationError,
+            );
+          }
 
           const applicationErrorPromise =
             this.#makeApplicationErrorResultDetails(applicationError);

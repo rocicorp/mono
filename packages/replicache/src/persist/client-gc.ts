@@ -5,6 +5,7 @@ import {
   addDeletedClients,
   type WritableDeletedClients,
 } from '../deleted-clients.ts';
+import type {StorageFailureError} from '../storage-failure.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
 import type {Client, OnClientsDeleted} from './clients.ts';
@@ -35,6 +36,7 @@ export function initClientGC(
   onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
+  onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
 ): void {
   initBgIntervalProcess(
     'ClientGC',
@@ -50,6 +52,7 @@ export function initClientGC(
     () => gcInterval,
     lc,
     signal,
+    onStorageFailure,
   );
 }
 
