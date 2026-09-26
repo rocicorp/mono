@@ -1731,9 +1731,9 @@ export class Zero<
         {
           desiredQueriesPatch: [...queriesPatch.values()],
           deleted: skipEmptyDeletedClients(this.#deletedClients),
-          // The clientSchema only needs to be sent for the very first request.
-          // Henceforth it is stored with the CVR and verified automatically.
-          ...(this.#connectCookie === null ? {clientSchema} : {}),
+          // The clientSchema is sent for the very first request and while the
+          // cookie carries no state version; see needsClientSchema.
+          ...(needsClientSchema(this.#connectCookie) ? {clientSchema} : {}),
           userPushURL: this.#options.mutateURL,
           userPushHeaders: this.#options.mutateHeaders,
           userQueryURL: this.#options.queryURL ?? this.#options.getQueriesURL,
@@ -2883,6 +2883,30 @@ export class OnlineManager extends Subscribable<boolean> {
   }
 }
 
+/**
+ * Whether an `initConnection` message must carry the client schema.
+ *
+ * The server stores the schema with the CVR on a client group's first
+ * connection, so a client that has never connected (a `null` cookie) sends it.
+ * A client whose cookie carries no state version (`00`, or `00:N` after config
+ * pokes only) sends it as well: a CVR at that point can exist without a schema
+ * (a config update processed before `initConnection`, or the group being new
+ * to the cache the client is now connecting to), and the server answers a
+ * connection to such a group without a schema with `InvalidConnectionRequest`
+ * rather than `ClientNotFound`. That kind is terminal for the client, which
+ * keeps the cookie and reconnects into the same answer forever. Sending the
+ * schema is harmless when the CVR already holds it.
+ *
+ * Exported for testing.
+ */
+export function needsClientSchema(baseCookie: NullableVersion): boolean {
+  if (baseCookie === null) {
+    return true;
+  }
+  const [stateVersion] = baseCookie.split(':');
+  return stateVersion === '00' || stateVersion.startsWith('00.');
+}
+
 export async function createSocket(
   rep: ReplicacheImpl,
   queryManager: QueryManager,
@@ -2952,7 +2976,7 @@ export async function createSocket(
         deleted: skipEmptyDeletedClients(deletedClients),
         // The clientSchema only needs to be sent for the very first request.
         // Henceforth it is stored with the CVR and verified automatically.
-        ...(baseCookie === null ? {clientSchema} : {}),
+        ...(needsClientSchema(baseCookie) ? {clientSchema} : {}),
         userPushURL,
         userPushHeaders,
         userQueryURL,
