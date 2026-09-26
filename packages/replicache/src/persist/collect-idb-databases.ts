@@ -22,6 +22,7 @@ import {
 } from '../kv/mem-fallback-store.ts';
 import type {CreateStore, DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
+import type {StorageFailureError} from '../storage-failure.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {
   clientGroupHasPendingMutations,
@@ -54,6 +55,7 @@ export function initCollectIDBDatabases(
   lc: LogContext,
   signal: AbortSignal,
   newDagStore: NewDagStore = defaultNewDagStore,
+  onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
 ): void {
   let initial = true;
   initBgIntervalProcess(
@@ -78,6 +80,7 @@ export function initCollectIDBDatabases(
     },
     lc,
     signal,
+    onStorageFailure,
   );
 }
 

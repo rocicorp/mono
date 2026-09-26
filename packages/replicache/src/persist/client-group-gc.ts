@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import type {Store} from '../dag/store.ts';
+import type {StorageFailureError} from '../storage-failure.ts';
 import type {ClientGroupID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
 import {
@@ -23,6 +24,7 @@ export function initClientGroupGC(
   enableMutationRecovery: boolean,
   lc: LogContext,
   signal: AbortSignal,
+  onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
 ): void {
   initBgIntervalProcess(
     'ClientGroupGC',
@@ -33,6 +35,7 @@ export function initClientGroupGC(
     () => GC_INTERVAL_MS,
     lc,
     signal,
+    onStorageFailure,
   );
 }
 

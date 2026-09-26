@@ -4,6 +4,10 @@ import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {getSizeOfValue} from '../../../shared/src/size-of-value.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import type {Hash} from '../hash.ts';
+import {
+  getStorageFailure,
+  type StorageFailureError,
+} from '../storage-failure.ts';
 import type {Chunk} from './chunk.ts';
 import {type ChunkHasher, type Refs, createChunk} from './chunk.ts';
 import {
@@ -142,12 +146,24 @@ export class LazyStore implements Store {
   protected readonly _refCounts = new Map<Hash, number>();
   protected readonly _refs = new Map<Hash, readonly Hash[]>();
 
+  readonly #onStorageFailure:
+    | ((failure: StorageFailureError) => void)
+    | undefined;
+
+  /**
+   * @param onStorageFailure Called when a read of the source store fails on
+   * its storage (a {@link StorageFailureError}). Every read this store makes
+   * for a chunk it has not cached goes through here, whichever caller asked
+   * for it: a query, a mutation, a poke. The source store's own wrapper
+   * reports only the begin, commit and release of a transaction.
+   */
   constructor(
     sourceStore: Store,
     sourceCacheSizeLimit: number,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
     getSizeOfChunk: (chunk: Chunk) => number = getSizeOfValue,
+    onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
   ) {
     this._sourceChunksCache = new ChunksCache(
       sourceCacheSizeLimit,
@@ -158,6 +174,7 @@ export class LazyStore implements Store {
     this.#sourceStore = sourceStore;
     this.#chunkHasher = chunkHasher;
     this.#assertValidHash = assertValidHash;
+    this.#onStorageFailure = onStorageFailure;
   }
 
   async read(sourceRead?: Read): Promise<LazyRead> {
@@ -170,6 +187,7 @@ export class LazyStore implements Store {
       release,
       this.#assertValidHash,
       sourceRead,
+      this.#onStorageFailure,
     );
   }
 
@@ -185,6 +203,7 @@ export class LazyStore implements Store {
       release,
       this.#chunkHasher,
       this.#assertValidHash,
+      this.#onStorageFailure,
     );
   }
 
@@ -218,6 +237,9 @@ export class LazyRead implements Read {
   #closed = false;
   readonly assertValidHash: (hash: Hash) => void;
   readonly #sourceReadOwnedByCaller: boolean;
+  readonly #onStorageFailure:
+    | ((failure: StorageFailureError) => void)
+    | undefined;
 
   constructor(
     heads: Map<string, Hash>,
@@ -231,6 +253,7 @@ export class LazyRead implements Read {
     // transaction's read. Trying to open our own `sourceRead` will
     // cause the outer transaction to auto-commit.
     sourceRead?: Read,
+    onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
   ) {
     this._heads = heads;
     this._memOnlyChunks = memOnlyChunks;
@@ -241,6 +264,24 @@ export class LazyRead implements Read {
     this.#sourceRead =
       sourceRead !== undefined ? Promise.resolve(sourceRead) : undefined;
     this.#sourceReadOwnedByCaller = sourceRead !== undefined;
+    this.#onStorageFailure = onStorageFailure;
+  }
+
+  /**
+   * Reads `hash` from the source store. A storage failure on the read is
+   * reported before it propagates, so the instance hears of it whichever
+   * caller made the read.
+   */
+  protected async _getSourceChunk(hash: Hash): Promise<Chunk | undefined> {
+    try {
+      return await (await this._getSourceRead()).getChunk(hash);
+    } catch (e) {
+      const failure = getStorageFailure(e);
+      if (failure !== undefined) {
+        this.#onStorageFailure?.(failure);
+      }
+      throw e;
+    }
   }
 
   isMemOnlyChunkHash(hash: Hash): boolean {
@@ -258,7 +299,7 @@ export class LazyRead implements Read {
     }
     let chunk = this._sourceChunksCache.get(hash);
     if (chunk === undefined) {
-      chunk = await (await this._getSourceRead()).getChunk(hash);
+      chunk = await this._getSourceChunk(hash);
       if (chunk !== undefined) {
         this._sourceChunksCache.put(chunk);
       }
@@ -325,6 +366,7 @@ export class LazyWrite
     release: () => void,
     chunkHasher: ChunkHasher,
     assertValidHash: (hash: Hash) => void,
+    onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
   ) {
     super(
       heads,
@@ -333,6 +375,8 @@ export class LazyWrite
       sourceStore,
       release,
       assertValidHash,
+      undefined,
+      onStorageFailure,
     );
     this.#refCounts = refCounts;
     this.#refs = refs;
@@ -404,7 +448,7 @@ export class LazyWrite
     }
     let chunk = this._sourceChunksCache.get(hash);
     if (chunk === undefined) {
-      chunk = await (await this._getSourceRead()).getChunk(hash);
+      chunk = await this._getSourceChunk(hash);
       if (chunk !== undefined) {
         this._pendingCachedChunks.set(chunk.hash, {chunk, size: -1});
       }

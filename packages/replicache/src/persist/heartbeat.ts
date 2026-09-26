@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import type {Store} from '../dag/store.ts';
+import type {StorageFailureError} from '../storage-failure.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
 import {
@@ -21,6 +22,7 @@ export function startHeartbeats(
   heartbeatIntervalMs: number,
   lc: LogContext,
   signal: AbortSignal,
+  onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
 ): void {
   initBgIntervalProcess(
     'Heartbeat',
@@ -39,6 +41,7 @@ export function startHeartbeats(
     () => heartbeatIntervalMs,
     lc,
     signal,
+    onStorageFailure,
   );
 }
 
