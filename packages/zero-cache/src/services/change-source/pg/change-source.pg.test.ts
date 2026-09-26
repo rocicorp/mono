@@ -22,6 +22,7 @@ import {majorVersionFromString} from '../../../types/state-version.ts';
 import type {Source} from '../../../types/streams.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
+import {createChangeProcessor} from '../../replicator/test-utils.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import type {
   Begin,
@@ -79,8 +80,16 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       b TEXT NOT NULL,
       PRIMARY KEY (b, a)
     );
+    CREATE TABLE tenant_rows(
+      id TEXT PRIMARY KEY,
+      tenant INT4 NOT NULL,
+      val TEXT
+    );
+    CREATE UNIQUE INDEX tenant_rows_key ON tenant_rows (id, tenant);
+    ALTER TABLE tenant_rows REPLICA IDENTITY USING INDEX tenant_rows_key;
     CREATE PUBLICATION zero_foo FOR TABLE foo WHERE (id != 'exclude-me'), 
-      TABLE compound_key_same_order, compound_key_reverse_order;
+      TABLE compound_key_same_order, compound_key_reverse_order,
+      TABLE tenant_rows WHERE (tenant = 1);
 
     CREATE SCHEMA IF NOT EXISTS my;
     CREATE TABLE my.boo(
@@ -509,6 +518,63 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     ]);
     acks.push(['status', {ack: true}, commit1[2]]);
   });
+
+  test.each([[withTriggers], [withoutTriggers]])(
+    'rows moving across a publication row filter %o',
+    async init => {
+      await init();
+
+      const replica = replicaDbFile.connect(lc);
+      const replicator = createChangeProcessor(replica);
+      const {changes} = await startStream('00');
+      const downstream = drainToQueue(changes);
+
+      async function nextTransaction() {
+        const msgs: ChangeStreamMessage[] = [];
+        for (;;) {
+          const msg = await downstream.dequeue();
+          if (msg[0] === 'status' || msg[0] === 'control') {
+            continue;
+          }
+          msgs.push(msg);
+          replicator.processMessage(lc, msg);
+          if (msg[0] === 'commit') {
+            return msgs;
+          }
+        }
+      }
+      const replicated = () =>
+        replica.prepare('SELECT id, tenant, val FROM tenant_rows').all();
+
+      await upstream.begin(async tx => {
+        await tx`INSERT INTO tenant_rows(id, tenant, val) VALUES ('a', 2, 'x')`;
+        await tx`INSERT INTO tenant_rows(id, tenant, val) VALUES ('b', 2, 'x')`;
+        // Moves into the filter: replicated as an insert.
+        await tx`UPDATE tenant_rows SET tenant = 1 WHERE id = 'a'`;
+        // Stays within the filter: replicated as an update.
+        await tx`UPDATE tenant_rows SET val = 'y' WHERE id = 'a'`;
+        // Stays outside the filter: not replicated.
+        await tx`UPDATE tenant_rows SET val = 'y' WHERE id = 'b'`;
+        await tx`DELETE FROM tenant_rows WHERE id = 'b'`;
+      });
+      expect(await nextTransaction()).toMatchObject([
+        ['begin', {}, {}],
+        ['data', {tag: 'insert', new: {id: 'a', tenant: 1, val: 'x'}}],
+        ['data', {tag: 'update', new: {id: 'a', tenant: 1, val: 'y'}}],
+        ['commit', {}, {}],
+      ]);
+      expect(replicated()).toEqual([{id: 'a', tenant: 1, val: 'y'}]);
+
+      // Moves out of the filter: replicated as a delete of the old key.
+      await upstream`UPDATE tenant_rows SET tenant = 2 WHERE id = 'a'`;
+      expect(await nextTransaction()).toMatchObject([
+        ['begin', {}, {}],
+        ['data', {tag: 'delete', key: {id: 'a', tenant: 1}}],
+        ['commit', {}, {}],
+      ]);
+      expect(replicated()).toEqual([]);
+    },
+  );
 
   test.each([
     [withTriggers],

@@ -5,6 +5,7 @@ import {
 } from '../../../../db/pg-to-lite.ts';
 import {
   Default,
+  Full,
   Index,
   Nothing,
 } from '../../../../db/postgres-replica-identity-enum.ts';
@@ -62,6 +63,92 @@ export function validate(
     }
     warnIfDataTypeSupported(lc, spec.dataType, table.name, col);
   }
+  warnIfRowFilterOutsideReplicaIdentity(lc, table);
+}
+
+/**
+ * Postgres accepts a publication row filter on any column, but rejects
+ * UPDATE and DELETE on the table (upstream, in the application's own
+ * transactions) when a filtered column is not part of the replica identity.
+ * Tables that only receive INSERTs keep working, so this is a warning.
+ */
+function warnIfRowFilterOutsideReplicaIdentity(
+  lc: LogContext,
+  table: PublishedTableWithReplicaIdentity,
+) {
+  if (table.replicaIdentity === Full) {
+    return;
+  }
+  const identity = new Set(table.replicaIdentityColumns);
+  for (const [publication, {rowFilter}] of Object.entries(table.publications)) {
+    if (rowFilter === null) {
+      continue;
+    }
+    const uncovered = [...rowFilterColumns(rowFilter, table)].filter(
+      col => !identity.has(col),
+    );
+    if (uncovered.length) {
+      lc.warn?.(
+        `Row filter of publication "${publication}" on table "${table.name}" ` +
+          `references ${uncovered.map(c => `"${c}"`).join(', ')}, which ` +
+          `${uncovered.length === 1 ? 'is' : 'are'} not ` +
+          `part of the table's REPLICA IDENTITY. Postgres will reject UPDATE ` +
+          `and DELETE on "${table.name}". Add the column(s) to a unique index ` +
+          `and set it with 'ALTER TABLE ... REPLICA IDENTITY USING INDEX', ` +
+          `or use 'REPLICA IDENTITY FULL'.`,
+      );
+    }
+  }
+}
+
+const ROW_FILTER_TOKEN = /'(?:[^']|'')*'|"(?:[^"]|"")*"|[A-Za-z_]\w*|::|\S/g;
+const LOWER_CASE_NAME = /^[a-z_][a-z0-9_]*$/;
+
+/**
+ * Returns the table columns referenced by a row filter as deparsed by
+ * `pg_get_expr()`, which prints keywords in upper case, double-quotes any
+ * name that is not a plain lower-case identifier, and renders casts as
+ * `::type`. Any other name is a column, unless it is called as a function,
+ * qualifies another name, names a type, or names a collation.
+ */
+function rowFilterColumns(
+  rowFilter: string,
+  table: PublishedTableWithReplicaIdentity,
+): Set<string> {
+  const tokens = rowFilter.match(ROW_FILTER_TOKEN) ?? [];
+  const columns = new Set<string>();
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === '::') {
+      while (isName(tokens[i + 1]) || tokens[i + 1] === '.') {
+        i++;
+      }
+      continue;
+    }
+    if (
+      !isName(token) ||
+      tokens[i + 1] === '(' ||
+      tokens[i + 1] === '.' ||
+      tokens[i - 1] === 'COLLATE'
+    ) {
+      continue;
+    }
+    const name = token.startsWith('"')
+      ? token.slice(1, -1).replaceAll('""', '"')
+      : token;
+    if (Object.hasOwn(table.columns, name)) {
+      columns.add(name);
+    }
+  }
+  return columns;
+}
+
+function isName(token: string | undefined): token is string {
+  return (
+    token !== undefined &&
+    (token.startsWith('"') ||
+      (LOWER_CASE_NAME.test(token) && token !== 'true' && token !== 'false'))
+  );
 }
 
 export class UnsupportedTableSchemaError extends Error {
