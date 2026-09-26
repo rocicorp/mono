@@ -109,9 +109,11 @@ type BackfillTimingStats = {
 
 type RunningBackfillState = {
   request: BackfillRequest;
-  canceledReason?: string | undefined;
   minWatermark: string;
-  /** Aborted when this backfill is stopped (e.g. canceled). */
+  /**
+   * Aborted (with the reason, if any) when this backfill is stopped,
+   * e.g. canceled.
+   */
   stopped: AbortController;
 };
 
@@ -336,10 +338,10 @@ export class BackfillManager implements Cancelable, Listener {
       // After obtaining the changeStream reservation, check if the stream
       // had changes that resulted in invalidating / canceling this backfill.
       if (
-        state.canceledReason ||
+        state.stopped.signal.aborted ||
         (msg.tag === 'backfill' && msg.watermark < state.minWatermark)
       ) {
-        if (state.canceledReason === undefined) {
+        if (!state.stopped.signal.aborted) {
           assert(msg.tag === 'backfill', 'Expected backfill message tag'); // TypeScript should have figured this out.
           this.#stopRunningBackfill(
             `row key change at ${state.minWatermark} ` +
@@ -543,7 +545,7 @@ export class BackfillManager implements Cancelable, Listener {
           stats.reserveMs += performance.now() - t0;
           if (backfillTx === null) {
             lc.info?.(
-              `backfill stream canceled: ${state.canceledReason}`,
+              `backfill stream canceled: ${state.stopped.signal.reason}`,
               state.request,
             );
             this.#checkAndStartBackfill(); // start the next backfill if present
@@ -567,7 +569,7 @@ export class BackfillManager implements Cancelable, Listener {
       if (backfillTx) {
         commitTx();
       }
-      lc.debug?.(`backfill stream exited`, state.canceledReason ?? '');
+      lc.debug?.(`backfill stream exited`);
     } finally {
       stopProducer = true;
       credits.enqueue(1);
@@ -635,7 +637,6 @@ export class BackfillManager implements Cancelable, Listener {
   #stopRunningBackfill(reason?: string, instance?: RunningBackfillState) {
     const backfill = this.#runningBackfill;
     if (backfill && backfill === (instance ?? backfill)) {
-      backfill.canceledReason = reason;
       backfill.stopped.abort(reason);
       this.#runningBackfill = null;
       reason && this.#lc.info?.(`canceling backfill:`, reason);
