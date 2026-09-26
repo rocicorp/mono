@@ -90,36 +90,40 @@ export class SQLiteStore implements Store {
     const {db, lock, preparedStatements} = entry;
     const release = await lock.read();
 
-    // Start shared read transaction if this is the first reader
-    // This ensures consistent reads across all concurrent readers
+    // Everything that can throw runs before anything that would have to be
+    // undone, so a failure here only has to give the lock back: the lock was
+    // acquired above, and without the release every later read() and write()
+    // on the store waits for a release that never comes.
+    let read: SQLiteStoreRead;
     try {
+      read = new SQLiteStoreRead(() => {
+        entry.activeReaders--;
+        // Commit shared read transaction when last reader finishes. SQLite may
+        // already have rolled the transaction back on its own (an I/O error
+        // inside any reader's statement does that), in which case COMMIT
+        // throws "cannot commit - no transaction is active". The error is
+        // reported to the releasing reader, but the RWLock must be released
+        // regardless or the store hangs for the rest of the process.
+        try {
+          if (entry.activeReaders === 0) {
+            db.execSync('COMMIT');
+          }
+        } finally {
+          release();
+        }
+      }, preparedStatements);
+
+      // Start shared read transaction if this is the first reader
+      // This ensures consistent reads across all concurrent readers
       if (entry.activeReaders === 0) {
         db.execSync('BEGIN');
       }
     } catch (e) {
-      // The lock was acquired above; without this every later read() and
-      // write() on the store waits for a release that never comes.
       release();
       throw e;
     }
     entry.activeReaders++;
-
-    return new SQLiteStoreRead(() => {
-      entry.activeReaders--;
-      // Commit shared read transaction when last reader finishes. SQLite may
-      // already have rolled the transaction back on its own (an I/O error
-      // inside any reader's statement does that), in which case COMMIT
-      // throws "cannot commit - no transaction is active". The error is
-      // reported to the releasing reader, but the RWLock must be released
-      // regardless or the store hangs for the rest of the process.
-      try {
-        if (entry.activeReaders === 0) {
-          db.execSync('COMMIT');
-        }
-      } finally {
-        release();
-      }
-    }, preparedStatements);
+    return read;
   }
 
   async write(): Promise<Write> {
