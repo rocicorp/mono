@@ -99,6 +99,7 @@ import {
   CONNECT_TIMEOUT_MS,
   DEFAULT_DISCONNECT_TIMEOUT_MS,
   createSocket,
+  needsClientSchema,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   DEFAULT_PING_TIMEOUT_MS,
   getInternalReplicacheImplForTesting,
@@ -659,6 +660,17 @@ describe('createSocket', () => {
     },
     {
       socketURL: 'ws://example.com/' as WSString,
+      baseCookie: '00:02',
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=00%3A02&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
       baseCookie: null,
       clientID: 'clientID',
       userID: undefined,
@@ -842,7 +854,11 @@ describe('createSocket', () => {
             {
               desiredQueriesPatch: [],
               deleted: {clientIDs: ['old-deleted-client']},
-              ...(baseCookie === null ? {clientSchema} : {}),
+              // Spelled out rather than through needsClientSchema so the
+              // case pins the rule instead of restating it.
+              ...(baseCookie === null || baseCookie.startsWith('00')
+                ? {clientSchema}
+                : {}),
               activeClients: [...activeClients],
             },
           ],
@@ -882,6 +898,16 @@ describe('createSocket', () => {
       expect(deletedClients2?.clientIDs).toEqual(['old-deleted-client']);
     },
   );
+});
+
+test('needsClientSchema', () => {
+  expect(needsClientSchema(null)).toBe(true);
+  expect(needsClientSchema('00')).toBe(true);
+  expect(needsClientSchema('00:02')).toBe(true);
+  expect(needsClientSchema('00.01')).toBe(true);
+  expect(needsClientSchema('1234')).toBe(false);
+  expect(needsClientSchema('8bi1rywsdk:01')).toBe(false);
+  expect(needsClientSchema('8bi1rywsdk.01')).toBe(false);
 });
 
 describe('initConnection', () => {
