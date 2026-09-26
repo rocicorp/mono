@@ -66,9 +66,19 @@ export class MutatorProxy {
   /**
    * Called when the connection state changes.
    *
-   * If the connection state is disconnected, error, or closed, the
-   * mutation rejection error is set and all outstanding `.server` promises in
-   * the mutation tracker are rejected with the error.
+   * If the connection state is disconnected, error, or closed, the mutation
+   * rejection error is set, so a mutation attempted from now on is refused
+   * without running. On error and closed, every outstanding `.server`
+   * promise in the mutation tracker is rejected too: the run loop has
+   * stopped, or the instance is gone, and nothing will push those mutations.
+   *
+   * On disconnected they are left pending. A disconnect is transient — the
+   * socket dropped, the tab was hidden, the device went offline — and the
+   * mutations behind those promises are already applied locally and queued;
+   * the run loop reconnects and pushes them, and the tracker settles each one
+   * from the push response or the reconnect's `lastMutationID`. Rejecting
+   * them here settled the promise with `{type: 'zero'}` while the write went
+   * on to land, and no later signal could tell the caller so.
    */
   #onConnectionStateChange(state: ConnectionManagerState) {
     // we short circuit the rejection if the error is due to a missing cacheURL
@@ -83,6 +93,13 @@ export class MutatorProxy {
 
     switch (state.name) {
       case ConnectionStatus.Disconnected:
+        this.#mutationRejection = {
+          error: state.reason,
+          promise: Promise.resolve(
+            this.#makeZeroErrorResultDetails(state.reason),
+          ),
+        };
+        break;
       case ConnectionStatus.Error:
       case ConnectionStatus.Closed:
         this.#mutationRejection = {

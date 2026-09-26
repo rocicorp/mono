@@ -689,7 +689,7 @@ describe('error handling', () => {
     await z.close();
   });
 
-  test('rejects outstanding custom mutation server promises when connection goes offline', async () => {
+  test('keeps an outstanding custom mutation server promise pending across a disconnect and settles it on reconnect', async () => {
     const noop = vi.fn(async (_tx: MutatorTx) => {});
     const z = zeroForTest({
       schema: legacySchema,
@@ -712,6 +712,56 @@ describe('error handling', () => {
     });
 
     z.connectionManager.disconnected(offlineError);
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+
+    // The mutation is applied locally and queued for the next connection:
+    // its server promise stays pending rather than reporting a failure the
+    // write did not have.
+    let settled = false;
+    void result.server.then(() => {
+      settled = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    expect(noop).toHaveBeenCalledTimes(1);
+
+    // Reconnect; the server applies the queued mutation and confirms it.
+    z.connectionManager.connected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+    await z.triggerPoke({
+      lastMutationIDChanges: {[z.clientID]: 1},
+    });
+
+    const serverResult = await result.server;
+    expect(serverResult.type).toBe('success');
+
+    await z.close();
+  });
+
+  test('rejects an outstanding custom mutation server promise when the client is closed', async () => {
+    const noop = vi.fn(async (_tx: MutatorTx) => {});
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          noop,
+        },
+      } as const,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    const result = z.mutate.issue.noop();
+    await result.client;
+
+    z.connectionManager.disconnected(
+      new ClientError({kind: ClientErrorKind.Offline, message: 'offline'}),
+    );
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+
+    // Nothing will push it now.
+    await z.close();
 
     const serverResult = await result.server;
     assert(
@@ -719,17 +769,6 @@ describe('error handling', () => {
       'Expected server result type to be error',
     );
     expect(serverResult.error.type).toBe('zero');
-    expect(serverResult.error.message).toBe('offline');
-    expect(noop).toHaveBeenCalledTimes(1);
-
-    // client promise was already resolved
-    const clientResult = await result.client;
-    assert(
-      clientResult.type === 'success',
-      'Expected client result type to be success',
-    );
-
-    await z.close();
   });
 
   test('custom mutators short-circuit while offline and resume after reconnect', async () => {
