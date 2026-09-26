@@ -1607,7 +1607,13 @@ export class Zero<
 
     lc.info?.(`${kind}: ${message}}`);
     const error = new ProtocolError(downMessage[1]);
-    lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
+    // Rehome, Rebalance and ServerOverloaded are the server sending the client
+    // to reconnect elsewhere or later: getErrorConnectionTransition keeps the
+    // connection status as it is and the run loop reads its backoff off the
+    // body. They are routine and logged at warn. Every other kind ends the
+    // connection and is logged at error.
+    const level = getBackoffParams(error) === undefined ? 'error' : 'warn';
+    lc[level]?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
     this.#disconnect(lc, error);
 
