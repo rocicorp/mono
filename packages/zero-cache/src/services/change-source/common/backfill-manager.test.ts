@@ -2146,6 +2146,117 @@ describe('backfill-manager', () => {
     expect(backfillRequests).toHaveLength(1);
   });
 
+  test('backfill canceled while awaiting the backfill watermark', async () => {
+    const relation = {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}};
+    testStreams.push(
+      [
+        // More messages than the prefetch buffer holds, so that the producer
+        // (and thus the upstream snapshot) remains open until the backfill
+        // exits.
+        ...Array.from({length: 20}, (_, i) => ({
+          tag: 'backfill' as const,
+          relation,
+          watermark: '150',
+          columns: ['b'],
+          rowValues: [[i, i]],
+        })),
+        {
+          tag: 'backfill-completed',
+          relation,
+          columns: ['b'],
+          watermark: '150',
+        },
+      ],
+      [
+        {
+          tag: 'backfill-completed',
+          relation: {...relation, rowKey: {columns: ['b']}},
+          columns: ['a', 'b'],
+          watermark: '130',
+        },
+      ],
+    );
+
+    backfillManager.run('123', [
+      {
+        columns: {a: {id: {id: '123'}}, b: {id: {id: '234'}}},
+        table: {schema: 'foo', name: 'bar', metadata: {rowKey: {a: 123}}},
+      },
+    ]);
+
+    // The backfill awaits the change stream (at '123') to reach its
+    // watermark ('150'), with its upstream stream held open.
+    await sleep(50);
+    expect(backfillRequests).toHaveLength(1);
+    expect(finalizedStreams).toBe(0);
+    expect(changes.size()).toBe(0);
+
+    // The table metadata is changed on the main stream, invalidating the
+    // backfill before its watermark is reached.
+    await changeStream.reserve('main');
+    for (const msg of [
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      [
+        'data',
+        {
+          tag: 'update-table-metadata',
+          table: {schema: 'foo', name: 'bar'},
+          old: {rowKey: {a: 123}},
+          new: {rowKey: {b: 234}},
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+    ] satisfies ChangeStreamMessage[]) {
+      await changeStream.push(msg);
+    }
+    changeStream.release('125');
+
+    // The canceled backfill must exit (releasing its upstream stream) without
+    // waiting for the change stream to reach its watermark, and the updated
+    // backfill is started (and its short stream fully read) in its place.
+    await vi.waitFor(() => expect(finalizedStreams).toBe(2));
+    expect(backfillRequests).toMatchObject([
+      {table: {metadata: {rowKey: {a: 123}}}},
+      {table: {metadata: {rowKey: {b: 234}}}},
+    ]);
+
+    changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
+
+    await expectChanges([
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      [
+        'data',
+        {
+          tag: 'update-table-metadata',
+          table: {schema: 'foo', name: 'bar'},
+          old: {rowKey: {a: 123}},
+          new: {rowKey: {b: 234}},
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '130'},
+      ],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {...relation, rowKey: {columns: ['b']}},
+          columns: ['a', 'b'],
+          watermark: '130',
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
+    ] satisfies ChangeStreamMessage[]);
+
+    // The canceled backfill is not retried.
+    await sleep(100);
+    expect(backfillRequests).toHaveLength(2);
+    expect(changes.size()).toBe(0);
+  });
+
   test('change stream cancelation unblocks a backfill awaiting a reservation', async () => {
     testStreams.push([
       {

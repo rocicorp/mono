@@ -5,6 +5,7 @@ import {assert} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {promiseOrAbort} from '../../../../../shared/src/promise-race.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
 import {randInt} from '../../../../../shared/src/rand.ts';
 import {JSON_STRINGIFIED, type JSONFormat} from '../../../types/lite.ts';
@@ -110,6 +111,8 @@ type RunningBackfillState = {
   request: BackfillRequest;
   canceledReason?: string | undefined;
   minWatermark: string;
+  /** Aborted when this backfill is stopped (e.g. canceled). */
+  stopped: AbortController;
 };
 
 const MIN_BACKOFF_INTERVAL_MS = 2_000;
@@ -260,7 +263,11 @@ export class BackfillManager implements Cancelable, Listener {
       // problematic backfills.
       const candidates = [...this.#requiredBackfills.values()];
       const request = candidates[randInt(0, candidates.length - 1)];
-      const state = {request, minWatermark: ''};
+      const state = {
+        request,
+        minWatermark: '',
+        stopped: new AbortController(),
+      };
       const lc = this.#lc.withContext('table', request.table.name);
 
       this.#runningBackfill = state;
@@ -352,11 +359,11 @@ export class BackfillManager implements Cancelable, Listener {
 
       if (tx < msg.watermark) {
         // At this point it must be the case that the #changeStreamReached()
-        // the backfill watermark (possiblyvia a status message, which does not
-        // advance the reservation watermark). Given that guarantee, ensure
-        // that the version of the backfill transaction is at least up to the
-        // backfill watermark, so that the database state version is never
-        // earlier than the version of any backfilled rows.
+        // the backfill watermark (possibly via a status message, which does
+        // not advance the reservation watermark). Given that guarantee,
+        // ensure that the version of the backfill transaction is at least up
+        // to the backfill watermark, so that the database state version is
+        // never earlier than the version of any backfilled rows.
         tx = msg.watermark;
       }
 
@@ -510,7 +517,9 @@ export class BackfillManager implements Cancelable, Listener {
 
         if (waitForChangeStream) {
           const t0 = performance.now();
-          await waitForChangeStream;
+          // Exit promptly (via the error path) if the backfill is canceled
+          // while waiting, releasing its upstream resources.
+          await promiseOrAbort(waitForChangeStream, state.stopped.signal);
           const elapsed = performance.now() - t0;
           stats.waitMs += elapsed;
           lc.info?.(
@@ -627,6 +636,7 @@ export class BackfillManager implements Cancelable, Listener {
     const backfill = this.#runningBackfill;
     if (backfill && backfill === (instance ?? backfill)) {
       backfill.canceledReason = reason;
+      backfill.stopped.abort(reason);
       this.#runningBackfill = null;
       reason && this.#lc.info?.(`canceling backfill:`, reason);
     }
