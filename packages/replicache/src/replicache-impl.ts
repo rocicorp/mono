@@ -469,6 +469,19 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #storageFailure: StorageFailureError | undefined;
 
   /**
+   * Set by {@link stopPersistence}. Read by every path that reads or writes
+   * the store, so none of them runs against a database that is about to be
+   * dropped from under this instance.
+   */
+  #persistenceStopped = false;
+
+  /**
+   * The refresh currently running, if any, so {@link stopPersistence} can
+   * wait for it. Settled to `undefined` rather than left rejected.
+   */
+  #refreshInFlight: Promise<void> | undefined;
+
+  /**
    * `onUpdateNeeded` is called when a code update is needed.
    *
    * A code update can be needed because:
@@ -1359,8 +1372,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return this.#persistLock.withLock(async () => {
       const {clientID} = this;
       await this.#ready;
-      // After a storage failure nothing is persisted.
-      if (this.#closed || this.#storageFailure) {
+      // After a storage failure, or once persistence is stopped, nothing is
+      // persisted.
+      if (this.#closed || this.#storageFailure || this.#persistenceStopped) {
         return;
       }
       try {
@@ -1402,10 +1416,21 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     });
   }
 
-  async refresh(): Promise<void> {
+  refresh(): Promise<void> {
+    const run = this.#refresh();
+    this.#refreshInFlight = run.then(noop, noop);
+    return run;
+  }
+
+  async #refresh(): Promise<void> {
     await this.#ready;
     const {clientID} = this;
-    if (this.#closed || this.#storageFailure || !this.#enableRefresh()) {
+    if (
+      this.#closed ||
+      this.#storageFailure ||
+      this.#persistenceStopped ||
+      !this.#enableRefresh()
+    ) {
       return;
     }
     let refreshResult: Awaited<ReturnType<typeof refresh>>;
@@ -1611,6 +1636,33 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#fireOnClientStateNotFound();
   }
 
+  /**
+   * Stops every path that reads or writes the local store, for an instance
+   * whose database is about to be dropped from under it: the store-using
+   * background processes (heartbeat, GC, collection, mutation recovery) are
+   * aborted, a `persist()` or `refresh()` already in flight is waited for,
+   * and every later `persist()` / `refresh()` — scheduled or explicit — is a
+   * no-op. Queries and mutations keep running against what the in-memory dag
+   * holds, until the app replaces the instance (see `onClientStateNotFound`).
+   *
+   * Without this, dropping the database under a live instance (zero-client
+   * does so when the server reports the client ahead of it) has the drop's
+   * own footprint — `database is closed` from the run loop's refresh, the
+   * next scheduled persist and the background processes — logged as errors
+   * against a store that was deleted on purpose.
+   */
+  async stopPersistence(): Promise<void> {
+    if (this.#persistenceStopped) {
+      return;
+    }
+    this.#persistenceStopped = true;
+    this.#storeProcessesAbortController.abort();
+    // A persist in flight holds the lock; taking it waits for that persist to
+    // finish. A refresh in flight is tracked separately since it has no lock.
+    await this.#persistLock.withLock(noop);
+    await this.#refreshInFlight;
+  }
+
   async disableClientGroup(): Promise<void> {
     const clientGroupID = await this.#clientGroupIDPromise;
     assert(clientGroupID, 'Expected clientGroupID to be defined');
@@ -1626,7 +1678,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   async #schedulePersist(): Promise<void> {
-    if (!this.#enableScheduledPersist || this.#storageFailure) {
+    if (
+      !this.#enableScheduledPersist ||
+      this.#storageFailure ||
+      this.#persistenceStopped
+    ) {
       return;
     }
     await this.#schedule('persist', this.#persistScheduler);
@@ -1641,7 +1697,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   async #scheduleRefresh(): Promise<void> {
-    if (!this.#enableScheduledRefresh || this.#storageFailure) {
+    if (
+      !this.#enableScheduledRefresh ||
+      this.#storageFailure ||
+      this.#persistenceStopped
+    ) {
       return;
     }
     await this.#schedule('refresh from storage', this.#refreshScheduler);
