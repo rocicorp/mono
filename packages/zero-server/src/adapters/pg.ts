@@ -10,6 +10,7 @@ import type {
   Row,
 } from '../../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
+import {createLogContext} from '../logging.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
@@ -136,7 +137,20 @@ export function zeroNodePg<S extends Schema>(
   pg: NodePgTransaction | string,
 ) {
   if (typeof pg === 'string') {
-    pg = new Pool({connectionString: pg});
+    const pool = new Pool({connectionString: pg});
+    // node-postgres emits 'error' on the pool when the server terminates an
+    // idle client (an idle-in-transaction timeout, a restart, a failover).
+    // The pool has already discarded that client and will open another; with
+    // no listener the event is an uncaught exception and the process dies
+    // with whatever request it was serving. Log it and carry on.
+    const lc = createLogContext('warn');
+    pool.on('error', e => {
+      lc.warn?.(
+        'node-postgres pool error; the client was removed from the pool',
+        e,
+      );
+    });
+    pg = pool;
   }
   return new ZQLDatabase(new NodePgConnection(pg), schema);
 }
