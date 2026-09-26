@@ -1607,7 +1607,11 @@ export class Zero<
 
     lc.info?.(`${kind}: ${message}}`);
     const error = new ProtocolError(downMessage[1]);
-    lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
+    // ClientNotFound is expected (e.g. the client's state was purged on the
+    // server or the client switched zero-cache instances) and is recovered
+    // from by resetting the client, so don't log it as an error.
+    const logLevel = kind === ErrorKind.ClientNotFound ? 'warn' : 'error';
+    lc[logLevel]?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
     this.#disconnect(lc, error);
 

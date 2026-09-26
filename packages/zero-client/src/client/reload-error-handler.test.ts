@@ -157,6 +157,14 @@ describe('reloadWithReason', () => {
     },
   );
 
+  test('ClientNotFound reloads are logged as warnings', () => {
+    reloadWithReason(lc, reload, ErrorKind.ClientNotFound, 'my reason');
+    vi.advanceTimersByTime(0);
+    expect(reload).toHaveBeenCalledOnce();
+    reportReloadReason(lc);
+    expect(sink.messages.map(([level]) => level)).toEqual(['warn', 'warn']);
+  });
+
   test('reloadWithReason no sessionStorage', () => {
     // @ts-expect-error This isa test so we do not play along with TS
     delete globalThis.sessionStorage;

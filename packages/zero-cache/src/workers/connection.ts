@@ -688,10 +688,9 @@ export function sendError(
     logLevel = 'warn';
   }
   // Fallback: check errorBody.kind for errors that weren't thrown as ProtocolErrorWithLevel
-  else if (
-    errorBody.kind === ErrorKind.ClientNotFound ||
-    errorBody.kind === ErrorKind.TransformFailed
-  ) {
+  else if (errorBody.kind === ErrorKind.ClientNotFound) {
+    logLevel = 'info';
+  } else if (errorBody.kind === ErrorKind.TransformFailed) {
     logLevel = 'warn';
   } else {
     logLevel = thrown ? getLogLevel(thrown) : 'info';

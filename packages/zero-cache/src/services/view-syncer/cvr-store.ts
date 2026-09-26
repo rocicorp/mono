@@ -1414,6 +1414,9 @@ export async function checkVersion(
   }
 }
 
+// ClientNotFound is an expected condition (e.g. the client's CVR was purged,
+// or the client moved to a different zero-cache instance), so it is logged at
+// info rather than warn/error.
 export class ClientNotFoundError extends ProtocolErrorWithLevel {
   constructor(message: string) {
     super(
@@ -1422,7 +1425,7 @@ export class ClientNotFoundError extends ProtocolErrorWithLevel {
         message,
         origin: ErrorOrigin.ZeroCache,
       },
-      'warn',
+      'info',
     );
   }
 }
