@@ -1629,6 +1629,12 @@ export class Zero<
       kind === ErrorKind.InvalidConnectionRequestLastMutationID ||
       kind === ErrorKind.InvalidConnectionRequestBaseCookie
     ) {
+      // The database is about to be dropped from under this instance. Stop
+      // its store activity first: the run loop refreshes from storage after
+      // a connect error, the next scheduled persist is coming, and the
+      // background processes are on their intervals — each would run into
+      // the dropped store and log the drop's own footprint as an error.
+      await this.#rep.stopPersistence();
       await dropReplicacheDatabase(this.#rep.idbName, {
         kvStore: this.#kvStore,
       });

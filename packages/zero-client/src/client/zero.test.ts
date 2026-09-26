@@ -3476,6 +3476,41 @@ test.each(clientStateNotFoundErrorCases)(
   },
 );
 
+test.each(
+  clientStateNotFoundErrorCases.filter(({dropsDatabase}) => dropsDatabase),
+)(
+  '$kind stops the instance persisting before dropping its database',
+  async ({kind, message}) => {
+    const {promise, resolve} = resolver();
+    const z = zeroForTest({onClientStateNotFound: resolve});
+    z.reload = vi.fn();
+    const rep = getInternalReplicacheImplForTesting(z);
+    const stopPersistence = vi.spyOn(rep, 'stopPersistence');
+    let databaseStillThereWhenStopped: boolean | undefined;
+    stopPersistence.mockImplementation(() => {
+      databaseStillThereWhenStopped = hasMemStore(z.idbName);
+      return Promise.resolve();
+    });
+
+    await z.triggerError({kind, message, origin: ErrorOrigin.ZeroCache});
+    await promise;
+
+    // Stopped BEFORE the drop, so nothing of this instance's runs into the
+    // dropped store: the run loop's refresh after the error, the next
+    // scheduled persist, the background processes.
+    expect(stopPersistence).toHaveBeenCalledTimes(1);
+    expect(databaseStillThereWhenStopped).toBe(true);
+    expect(hasMemStore(z.idbName)).toBe(false);
+    expect(
+      z.testLogSink.messages.filter(
+        ([level, , args]) =>
+          level === 'error' &&
+          String(args[0]).includes('Error during refresh from storage'),
+      ),
+    ).toEqual([]);
+  },
+);
+
 test('local onClientStateNotFound default handler', async () => {
   const storage: Record<string, string> = {};
   vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() =>
