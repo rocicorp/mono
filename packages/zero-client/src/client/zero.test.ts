@@ -3445,6 +3445,63 @@ test.each(clientStateNotFoundErrorCases)(
   },
 );
 
+const levelsOfConnectFailureLogs = (z: TestZero<Schema>, kind: string) =>
+  z.testLogSink.messages
+    .filter(
+      ([_level, _context, args]) =>
+        typeof args[0] === 'string' &&
+        (args[0].startsWith(`${kind}:\n\n`) || args[0] === 'Failed to connect'),
+    )
+    .map(([level]) => level);
+
+test('ClientNotFound is logged at warn, not error: the client recovers it', async () => {
+  // A missing client group is an expected outcome (an instance switch, a
+  // purge for inactivity) that onClientStateNotFound recovers, so neither
+  // the error message nor the resulting connect failure is an error.
+  const z = zeroForTest({logLevel: 'debug', onClientStateNotFound: vi.fn()});
+  await z.triggerError({
+    kind: ErrorKind.ClientNotFound,
+    message: 'server test message',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await vi.waitUntil(() =>
+    z.testLogSink.messages.some(
+      ([_level, _context, args]) => args[0] === 'Failed to connect',
+    ),
+  );
+
+  expect(levelsOfConnectFailureLogs(z, ErrorKind.ClientNotFound)).toEqual([
+    'warn',
+    'warn',
+  ]);
+  expect(z.testLogSink.messages.filter(([level]) => level === 'error')).toEqual(
+    [],
+  );
+
+  await z.close();
+});
+
+test('a server error the client cannot recover keeps its error level', async () => {
+  const z = zeroForTest({logLevel: 'debug', onUpdateNeeded: vi.fn()});
+  await z.triggerError({
+    kind: ErrorKind.VersionNotSupported,
+    message: 'server test message',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await vi.waitUntil(() =>
+    z.testLogSink.messages.some(
+      ([_level, _context, args]) => args[0] === 'Failed to connect',
+    ),
+  );
+
+  expect(levelsOfConnectFailureLogs(z, ErrorKind.VersionNotSupported)).toEqual([
+    'error',
+    'error',
+  ]);
+
+  await z.close();
+});
+
 test.each(clientStateNotFoundErrorCases)(
   '$kind custom onClientStateNotFound handler',
   async ({kind, message, dropsDatabase}) => {

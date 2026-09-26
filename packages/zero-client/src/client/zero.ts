@@ -1607,7 +1607,14 @@ export class Zero<
 
     lc.info?.(`${kind}: ${message}}`);
     const error = new ProtocolError(downMessage[1]);
-    lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
+    // A missing client group is an expected outcome rather than a defect: the
+    // cache no longer holds it (an instance switch, a purge for inactivity),
+    // and the client recovers below through onClientStateNotFound. It is
+    // reported at warn so that a fleet-wide occurrence reads as recovery
+    // rather than as an error storm.
+    const level: LogLevel =
+      kind === ErrorKind.ClientNotFound ? 'warn' : 'error';
+    lc[level]?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
     this.#disconnect(lc, error);
 
@@ -2495,6 +2502,11 @@ export class Zero<
               level = 'warn';
           }
           const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
+          // Same reasoning as in #handleErrorMessage: a rejected client group
+          // is recovered, so its connect failure is not an error either.
+          if (kind === ErrorKind.ClientNotFound) {
+            level = 'warn';
+          }
           lc[level]?.('Failed to connect', ex, ...getErrorCauses(ex), kind, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
