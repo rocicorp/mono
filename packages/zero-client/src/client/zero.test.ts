@@ -286,6 +286,34 @@ describe('onOnlineChange callback', () => {
     expect(getOfflineCount()).toBe(1);
   });
 
+  test.each([
+    {kind: ErrorKind.Rehome, message: 'rehomed'},
+    {kind: ErrorKind.Rebalance, message: 'rebalanced'},
+    {kind: ErrorKind.ServerOverloaded, message: 'slow down'},
+  ])('$kind is logged at warn, not error', async ({kind, message}) => {
+    const z = zeroForTest({logLevel: 'info'});
+    await z.triggerConnected();
+    const initialLogCount = z.testLogSink.messages.length;
+    await z.triggerError({
+      kind,
+      message,
+      origin: ErrorOrigin.ZeroCache,
+      maxBackoffMs: 10,
+    });
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+
+    const newLogs = z.testLogSink.messages.slice(initialLogCount);
+    const kindLog = newLogs.find(
+      ([, , args]) =>
+        Array.isArray(args) && String(args[0]).startsWith(`${kind}:\n\n`),
+    );
+    expect(kindLog).toBeDefined();
+    expect(kindLog?.[0]).toBe('warn');
+    expect(newLogs.filter(([level]) => level === 'error')).toEqual([]);
+
+    await z.close().catch(() => {});
+  });
+
   test('respects large backoff directives', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
