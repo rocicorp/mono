@@ -74,7 +74,7 @@ describe('MutatorProxy', () => {
   });
 
   describe('connection state changes', () => {
-    test('sets rejection error and rejects mutations on Disconnected', () => {
+    test('sets rejection error but keeps outstanding mutations pending on Disconnected', () => {
       const {
         manager,
         mutationTracker,
@@ -94,9 +94,30 @@ describe('MutatorProxy', () => {
 
       stateCallback(state);
 
+      // A new mutation is refused while disconnected...
       expect(proxy.mutationRejectionError).toBe(error);
-      expect(rejectAllOutstandingMutations).toHaveBeenCalledWith(error);
-      expect(rejectAllOutstandingMutations).toHaveBeenCalledTimes(1);
+      // ...but the ones already applied and queued stay pending: the run
+      // loop reconnects and pushes them, and the tracker settles them then.
+      expect(rejectAllOutstandingMutations).not.toHaveBeenCalled();
+    });
+
+    test('keeps outstanding mutations pending when the tab is hidden', () => {
+      const {
+        manager,
+        mutationTracker,
+        rejectAllOutstandingMutations,
+        stateCallback,
+      } = createMockConnectionManager();
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
+
+      const error = new ClientError({
+        kind: ClientErrorKind.Hidden,
+        message: 'hidden',
+      });
+      stateCallback({name: ConnectionStatus.Disconnected, reason: error});
+
+      expect(proxy.mutationRejectionError).toBe(error);
+      expect(rejectAllOutstandingMutations).not.toHaveBeenCalled();
     });
 
     test('does not reject mutations when disconnected due to missing socket origin', () => {
@@ -198,7 +219,8 @@ describe('MutatorProxy', () => {
       stateCallback({name: ConnectionStatus.Connected});
 
       expect(proxy.mutationRejectionError).toBeUndefined();
-      expect(rejectAllOutstandingMutations).toHaveBeenCalledTimes(1); // Only called once, not on connected
+      // Never: a disconnect leaves the outstanding mutations pending.
+      expect(rejectAllOutstandingMutations).not.toHaveBeenCalled();
     });
 
     test('clears rejection error on Connecting', () => {
@@ -230,7 +252,7 @@ describe('MutatorProxy', () => {
       });
 
       expect(proxy.mutationRejectionError).toBeUndefined();
-      expect(rejectAllOutstandingMutations).toHaveBeenCalledTimes(1); // Only called once, not on connecting
+      expect(rejectAllOutstandingMutations).not.toHaveBeenCalled();
     });
 
     test('clears rejection error on NeedsAuth', () => {
@@ -266,7 +288,7 @@ describe('MutatorProxy', () => {
       });
 
       expect(proxy.mutationRejectionError).toBeUndefined();
-      expect(rejectAllOutstandingMutations).toHaveBeenCalledTimes(1); // Only called once, not on needs auth
+      expect(rejectAllOutstandingMutations).not.toHaveBeenCalled();
     });
   });
 
