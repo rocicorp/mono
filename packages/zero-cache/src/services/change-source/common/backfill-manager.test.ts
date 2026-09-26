@@ -144,7 +144,7 @@ describe('backfill-manager', () => {
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.01'},
+        {commitWatermark: '130'},
       ],
       [
         'data',
@@ -171,12 +171,6 @@ describe('backfill-manager', () => {
           tag: 'backfill',
           watermark: '130',
         },
-      ],
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '130'},
       ],
       [
         'data',
@@ -273,26 +267,19 @@ describe('backfill-manager', () => {
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.01'},
+        {commitWatermark: '130'},
       ],
       data([[1, 2]]),
       data([[3, 4]]),
       // ...then the threshold forces a commit before the third message.
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
       // Second transaction: the third message opens a fresh transaction.
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.02'},
+        {commitWatermark: '130.01'},
       ],
       data([[5, 6]]),
-      // Committed to reach the backfill watermark before completing.
-      ['commit', {tag: 'commit'}, {watermark: '123.02'}],
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '130'},
-      ],
       [
         'data',
         {
@@ -302,7 +289,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '130'}],
+      ['commit', {tag: 'commit'}, {watermark: '130.01'}],
     ] satisfies ChangeStreamMessage[]);
   });
 
@@ -390,7 +377,7 @@ describe('backfill-manager', () => {
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '125.01'},
+        {commitWatermark: '130'},
       ],
       [
         'data',
@@ -418,8 +405,6 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '125.01'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '130'}],
       [
         'data',
         {
@@ -1131,6 +1116,10 @@ describe('backfill-manager', () => {
     }
     changeStream.release('140');
 
+    // The retried backfill's snapshot (150) is ahead of the change stream,
+    // so it is streamed once the change stream reaches it.
+    changeStream.pushStatus(['status', {ack: false}, {watermark: '150'}]);
+
     // The first request is canceled and only the changes from
     // the updated request are streamed.
     expect(await drainChanges(7)).toMatchObject([
@@ -1152,7 +1141,7 @@ describe('backfill-manager', () => {
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '140.01'},
+        {commitWatermark: '150'},
       ],
       [
         'data',
@@ -1178,7 +1167,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '140.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '150'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -1481,7 +1470,7 @@ describe('backfill-manager', () => {
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '140.02'},
+        {commitWatermark: '150'},
       ],
       [
         'data',
@@ -1498,8 +1487,6 @@ describe('backfill-manager', () => {
           ],
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '140.02'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '150'}],
       [
         'data',
         {
@@ -1683,7 +1670,7 @@ describe('backfill-manager', () => {
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.01'},
+        {commitWatermark: '188'},
       ],
       [
         'data',
@@ -1694,12 +1681,6 @@ describe('backfill-manager', () => {
           watermark: '188',
           rowValues: [[1]],
         },
-      ],
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '188'},
       ],
       [
         'data',
@@ -1908,7 +1889,7 @@ describe('backfill-manager', () => {
     ]);
   });
 
-  test('backfill-completed waits for commit to exceed backfill watermark', async () => {
+  test('backfill waits for commit to exceed backfill watermark', async () => {
     testStreams.push([
       {
         tag: 'backfill',
@@ -1939,9 +1920,10 @@ describe('backfill-manager', () => {
       },
     ]);
 
-    // Let the backfill start streaming before acquiring a reservation
-    // for the main stream.
+    // The backfill must not stream any messages until the change stream
+    // reaches the backfill watermark.
     await sleep(100);
+    expect(changes.size()).toBe(0);
 
     // Move the main replication stream past the backfill LSN
     await changeStream.reserve('main');
@@ -1953,11 +1935,14 @@ describe('backfill-manager', () => {
     }
     changeStream.release('131');
 
-    expect(await drainChanges(8)).toMatchObject([
+    expect(await drainChanges(6)).toMatchObject([
+      ['begin', {tag: 'begin'}, {commitWatermark: '131'}],
+      ['commit', {tag: 'commit'}, {watermark: '131'}],
+
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.01'},
+        {commitWatermark: '131.01'},
       ],
       [
         'data',
@@ -1971,16 +1956,6 @@ describe('backfill-manager', () => {
           tag: 'backfill',
           watermark: '130',
         },
-      ],
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
-
-      ['begin', {tag: 'begin'}, {commitWatermark: '131'}],
-      ['commit', {tag: 'commit'}, {watermark: '131'}],
-
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '131.01'},
       ],
       [
         'data',
@@ -2006,7 +1981,7 @@ describe('backfill-manager', () => {
     ]);
   });
 
-  test('backfill-completed waits for stream status to reach backfill watermark', async () => {
+  test('backfill waits for stream status to reach backfill watermark', async () => {
     testStreams.push([
       {
         tag: 'backfill',
@@ -2037,17 +2012,20 @@ describe('backfill-manager', () => {
       },
     ]);
 
-    // Let the backfill start streaming before acquiring a reservation
-    // for the main stream. It should end its transaction and release
-    // the reservation before flushing the backfill-completed message.
+    // The backfill must not stream any messages until the change stream
+    // reaches the backfill watermark. Because the status message does not
+    // advance the reservation watermark (123), the backfill transaction is
+    // bumped to the backfill watermark, so that the database state version
+    // is never earlier than the version of the backfilled rows.
     await sleep(100);
+    expect(changes.size()).toBe(0);
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
     await expectChanges([
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.01'},
+        {commitWatermark: '130'},
       ],
       [
         'data',
@@ -2061,12 +2039,6 @@ describe('backfill-manager', () => {
           tag: 'backfill',
           watermark: '130',
         },
-      ],
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '130'},
       ],
       [
         'data',
@@ -2090,6 +2062,88 @@ describe('backfill-manager', () => {
         },
       },
     ]);
+  });
+
+  test('backfill rows are streamed after replication changes preceding the backfill watermark', async () => {
+    // "Phantom row" regression: the backfill snapshot (130) sees row 7, which
+    // was moved from row 1 by an UPDATE (125) that the lagging change stream
+    // has yet to deliver. If the backfill row were streamed first, it would
+    // be upserted as a phantom row 7, and the subsequent UPDATE of row 1 to
+    // row 7 would fail on the replica with a UNIQUE constraint violation.
+    const relation = {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}};
+    testStreams.push([
+      {
+        tag: 'backfill',
+        relation,
+        watermark: '130',
+        columns: ['b'],
+        rowValues: [[7, 'x']],
+      },
+      {
+        tag: 'backfill-completed',
+        relation,
+        columns: ['b'],
+        watermark: '130',
+      },
+    ]);
+
+    backfillManager.run('123', [
+      {
+        columns: {b: {id: {id: '234'}}},
+        table: {schema: 'foo', name: 'bar', metadata: {rowKey: {a: 123}}},
+      },
+    ]);
+
+    await vi.waitFor(() => expect(finalizedStreams).toBe(1));
+    expect(changes.size()).toBe(0);
+
+    await changeStream.reserve('main');
+    for (const msg of [
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      ['data', {tag: 'update', relation, key: {a: 1}, new: {a: 7, b: 'x'}}],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+    ] satisfies ChangeStreamMessage[]) {
+      void changeStream.push(msg);
+    }
+    changeStream.release('125');
+
+    // Still behind the backfill watermark.
+    await sleep(50);
+    expect(await drainChanges(3)).toMatchObject([
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      ['data', {tag: 'update', key: {a: 1}, new: {a: 7, b: 'x'}}],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+    ]);
+    expect(changes.size()).toBe(0);
+
+    changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
+
+    await expectChanges([
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '130'},
+      ],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation,
+          watermark: '130',
+          columns: ['b'],
+          rowValues: [[7, 'x']],
+        },
+      ],
+      [
+        'data',
+        {tag: 'backfill-completed', relation, columns: ['b'], watermark: '130'},
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
+    ] satisfies ChangeStreamMessage[]);
+
+    // The key change (125) predates the backfill snapshot (130), so the
+    // backfill is not canceled.
+    expect(backfillRequests).toHaveLength(1);
   });
 
   test('change stream cancelation unblocks a backfill awaiting a reservation', async () => {
@@ -2173,32 +2227,12 @@ describe('backfill-manager', () => {
       },
     ]);
 
-    // The first message is streamed, after which the backfill waits for
-    // the change stream (at '123') to reach the backfill watermark ('130')
-    // before sending the `backfill-completed` message.
-    await expectChanges([
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.01'},
-      ],
-      [
-        'data',
-        {
-          tag: 'backfill',
-          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
-          watermark: '130',
-          columns: ['b'],
-          rowValues: [[1, 2]],
-        },
-      ],
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
-    ]);
-    // The prefetch producer reads the whole (short) upstream stream and
-    // finalizes it, even though the `backfill-completed` message is still
-    // pending the change stream reaching the backfill watermark ('130').
+    // The backfill waits for the change stream (at '123') to reach the
+    // backfill watermark ('130') before sending any messages. The prefetch
+    // producer nonetheless reads the whole (short) upstream stream and
+    // finalizes it.
     await vi.waitFor(() => expect(finalizedStreams).toBe(1));
-    // The completed message has not been emitted (the watermark isn't reached).
+    // Nothing has been emitted (the watermark isn't reached).
     expect(changes.size()).toBe(0);
 
     // The change stream never reaches the watermark. Canceling it must unblock
@@ -2206,8 +2240,8 @@ describe('backfill-manager', () => {
     // remaining suspended forever.
     changeStream.asSource().cancel();
 
-    // The backfill must not be retried after cancelation, nor emit its
-    // `backfill-completed` message.
+    // The backfill must not be retried after cancelation, nor emit any
+    // messages.
     await sleep(100);
     expect(backfillRequests).toHaveLength(1);
     expect(changes.size()).toBe(0);

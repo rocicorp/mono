@@ -103,6 +103,7 @@ type BackfillTimingStats = {
   pushMs: number;
   reserveMs: number;
   stallMs: number;
+  waitMs: number;
 };
 
 type RunningBackfillState = {
@@ -313,6 +314,7 @@ export class BackfillManager implements Cancelable, Listener {
       pushMs: 0,
       reserveMs: 0,
       stallMs: 0,
+      waitMs: 0,
     };
 
     /**
@@ -348,12 +350,13 @@ export class BackfillManager implements Cancelable, Listener {
         minor: BigInt(minor) + 1n,
       });
 
-      if (msg.tag === 'backfill-completed' && tx < msg.watermark) {
-        // At this point it must be the case that the #changeStreamReached() the
-        // backfill watermark. Given that guarantee, ensure that the version of the
-        // transaction containing the backfill-completed message is at least up
-        // to the backfill watermark, so that the final database state version is
-        // never earlier than the version of any backfilled rows.
+      if (tx < msg.watermark) {
+        // At this point it must be the case that the #changeStreamReached()
+        // the backfill watermark (possiblyvia a status message, which does not
+        // advance the reservation watermark). Given that guarantee, ensure
+        // that the version of the backfill transaction is at least up to the
+        // backfill watermark, so that the database state version is never
+        // earlier than the version of any backfilled rows.
         tx = msg.watermark;
       }
 
@@ -483,28 +486,37 @@ export class BackfillManager implements Cancelable, Listener {
         }
         const {message: msg, byteSize} = item;
 
-        // Before sending `backfill-completed`, the main replication stream
-        // may need to catch up, and/or the current transaction may need to be
-        // committed to open a new transaction that's up to backfill watermark.
-        const mustWaitBeforeFlush =
-          msg.tag === 'backfill-completed' &&
-          (this.#changeStreamReached(lc, msg.watermark) ||
-            (backfillTx !== null && backfillTx < msg.watermark));
+        // Before sending any backfill message, the main replication stream
+        // must reach the backfill (snapshot) watermark. Otherwise, snapshot
+        // rows can constitute "future" state (e.g. phantom rows at keys that
+        // the stream has yet to move or insert) that the subsequent
+        // replication changes conflict with (e.g. on unique indexes).
+        const waitForChangeStream = this.#changeStreamReached(
+          lc,
+          msg.watermark,
+        );
 
         // Commit (and later reopen) the transaction if the main stream is
-        // waiting on the reservation, if we must catch up before completing, or
+        // waiting on the reservation, if we must wait for the main stream, or
         // if the size of current transaction has reached the commit threshold.
         if (
           backfillTx &&
           (changeStream.waiterDelay() > 0 ||
-            mustWaitBeforeFlush ||
+            waitForChangeStream ||
             uncommittedBytes >= this.#commitThresholdBytes)
         ) {
           commitTx();
         }
 
-        if (mustWaitBeforeFlush) {
-          await mustWaitBeforeFlush;
+        if (waitForChangeStream) {
+          const t0 = performance.now();
+          await waitForChangeStream;
+          const elapsed = performance.now() - t0;
+          stats.waitMs += elapsed;
+          lc.info?.(
+            `change stream reached ${msg.watermark} ` +
+              `after waiting ${Math.round(elapsed)} ms`,
+          );
         }
 
         if (
@@ -575,7 +587,9 @@ export class BackfillManager implements Cancelable, Listener {
    * their sum can exceed `elapsedMs`. `reserveMs` is time spent (re)acquiring
    * the change-stream reservation, and `stallMs` is time the consumer waited on
    * an empty prefetch queue (i.e. blocked on the upstream) — a large `stallMs`
-   * indicates an upstream-bound backfill.
+   * indicates an upstream-bound backfill. `waitMs` is time spent waiting
+   * (without the reservation) for the change stream to reach the backfill
+   * watermark, during which the upstream snapshot is held open.
    */
   #logBackfillStats(lc: LogContext, stats: BackfillTimingStats) {
     const elapsed = performance.now() - stats.start;
@@ -589,6 +603,7 @@ export class BackfillManager implements Cancelable, Listener {
       pushMs: Math.round(stats.pushMs),
       reserveMs: Math.round(stats.reserveMs),
       stallMs: Math.round(stats.stallMs),
+      waitMs: Math.round(stats.waitMs),
       throughputKBps:
         elapsed > 0 ? Math.round(stats.bytes / 1024 / (elapsed / 1000)) : 0,
     });
