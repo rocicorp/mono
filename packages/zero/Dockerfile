@@ -67,15 +67,22 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	CC="zig cc -target ${ZIG_ARCH}-linux-musl" \
 	go build -tags vfs -o /usr/local/bin/vfs-query ./cmd/vfs-query
 
-FROM node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e
+# Install the zero package natively on $BUILDPLATFORM, then copy node_modules
+# into the per-target-platform runtime stage below. Running Node/pnpm under
+# QEMU for the non-native arch was slow and intermittently crashed V8 with
+# SIGILL ("qemu: uncaught target signal 4"). This is safe to do cross-arch
+# because the install compiles no native code: zero-sqlite3 bundles prebuilds
+# for every platform (node-gyp-build picks one at load time), and
+# supportedArchitectures below makes pnpm fetch the target's platform-specific
+# optional deps (e.g. @oxfmt/binding-linux-arm64-musl) alongside the host's,
+# which postinstall scripts like esbuild's need to validate themselves.
+FROM --platform=$BUILDPLATFORM node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e AS deps
 
 ARG ZERO_VERSION
 ARG ZERO_PACKAGE
+ARG TARGETARCH
 
 RUN test -n "$ZERO_VERSION"
-
-RUN apk add --update curl
-RUN apk add --no-cache readline readline-dev
 
 # Install pnpm via corepack (bundled with Node). Matches the monorepo's
 # packageManager field. pnpm's build-script allowlist (v10+) blocks lifecycle
@@ -94,19 +101,30 @@ RUN cat > package.json <<'EOF'
 EOF
 
 # Allowlist for lifecycle scripts, in pnpm-workspace.yaml because pnpm 11 no
-# longer reads the `pnpm` field from package.json. zero-sqlite3 ships no native
-# binary in its tarball (see its package.json `files`) — its `install` script
-# runs prebuild-install to fetch one, so it must be allowed. esbuild is pulled
-# in transitively via tsx and downloads a platform binary in postinstall; keep
-# it allowlisted unless runtime testing confirms tsx is never invoked. protobufjs
-# is pulled in by OpenTelemetry's gRPC exporters and runs a postinstall script.
-RUN cat > pnpm-workspace.yaml <<'EOF'
+# longer reads the `pnpm` field from package.json. zero-sqlite3's `install`
+# script is node-gyp-build, which only checks for a bundled prebuild. esbuild is
+# pulled in transitively via tsx and validates its platform binary in
+# postinstall; keep it allowlisted unless runtime testing confirms tsx is never
+# invoked. protobufjs is pulled in by OpenTelemetry's gRPC exporters and runs a
+# postinstall script.
+RUN case "$TARGETARCH" in \
+		amd64) NODE_ARCH=x64 ;; \
+		arm64) NODE_ARCH=arm64 ;; \
+		*) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+	esac && \
+	cat > pnpm-workspace.yaml <<EOF
 allowBuilds:
   '@rocicorp/zero-sqlite3': true
   esbuild: true
   protobufjs: true
 patchedDependencies:
   postgres@3.4.7: patches/postgres@3.4.7.patch
+supportedArchitectures:
+  os: [linux]
+  cpu: [current, $NODE_ARCH]
+  libc: [musl]
+fetchRetries: 5
+updateNotifier: false
 EOF
 
 COPY patches/ patches/
@@ -125,6 +143,16 @@ RUN ZERO_INSTALL_SOURCE="${ZERO_PACKAGE:-$ZERO_VERSION}" && \
     pnpm add @rocicorp/zero@${ZERO_INSTALL_SOURCE}; \
   fi
 
+FROM node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e
+
+ARG ZERO_VERSION
+
+RUN apk add --update curl
+RUN apk add --no-cache readline readline-dev
+
+WORKDIR /opt/app
+COPY --from=deps /opt/app/ /opt/app/
+
 # Put zero's bin shims on PATH so `zero-cache` resolves without npx.
 ENV PATH="/opt/app/node_modules/.bin:${PATH}"
 
@@ -132,8 +160,8 @@ ENV PATH="/opt/app/node_modules/.bin:${PATH}"
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 COPY --from=litestream-v5 /usr/local/bin/litestream /usr/local/bin/litestream-v5
 COPY --from=vfs-query /usr/local/bin/vfs-query /usr/local/bin/vfs-query
-RUN cp /opt/app/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
-RUN cp /opt/app/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config-v5.yml /etc/litestream-v5.yml
+COPY --from=deps /opt/app/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
+COPY --from=deps /opt/app/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config-v5.yml /etc/litestream-v5.yml
 
 ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
 ENV ZERO_LITESTREAM_EXECUTABLE_V5=/usr/local/bin/litestream-v5
