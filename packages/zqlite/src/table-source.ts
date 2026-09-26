@@ -22,6 +22,7 @@ import {
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {ConnectionIndex} from '../../zql/src/ivm/connection-index.ts';
+import type {Constraint} from '../../zql/src/ivm/constraint.ts';
 import {
   makeComparator,
   type Comparator,
@@ -35,7 +36,7 @@ import {
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
+import {type FetchRequest, type Start} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {SourceChangeIndex} from '../../zql/src/ivm/source-change-index.ts';
 import {
@@ -116,6 +117,7 @@ export class TableSource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
   readonly #uniqueIndexes: Map<string, Set<string>>;
+  #indexes: readonly TableIndex[];
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
@@ -154,6 +156,7 @@ export class TableSource implements Source {
     this.#table = tableName;
     this.#columns = columns;
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
+    this.#indexes = getTableIndexes(db, tableName, primaryKey);
     this.#primaryKey = primaryKey;
     this.#primaryKeySort = primaryKey.map(k => [k, 'asc']);
     this.#stmts = this.#getStatementsFor(db);
@@ -192,6 +195,7 @@ export class TableSource implements Source {
    */
   setDB(db: Database) {
     this.#stmts = this.#getStatementsFor(db);
+    this.#indexes = getTableIndexes(db, this.#table, this.#primaryKey);
     // The new snapshot already contains everything the batch was standing in
     // for, so the batch is done.
     this.#delta?.clear();
@@ -356,6 +360,7 @@ export class TableSource implements Source {
     filters?: Condition,
     splitEditKeys?: Set<string>,
     debug?: DebugDelegate,
+    userSort?: Ordering | undefined,
   ) {
     const transformedFilters = transformFilters(filters);
     const unordered = sort === undefined;
@@ -383,6 +388,7 @@ export class TableSource implements Source {
       debug,
       output: undefined,
       sort,
+      userSort,
       splitEditKeys,
       filters: transformedFilters.filters
         ? {
@@ -413,9 +419,48 @@ export class TableSource implements Source {
   }
 
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
-    const {sort, debug} = connection;
+    const {sort, userSort, debug} = connection;
 
-    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
+    let sqlOrder: Ordering | undefined = sort;
+    let sqlStart: Start | undefined = req.start;
+    let runBufferPrefixCompare: Comparator | undefined = undefined;
+
+    if (sort) {
+      const equalityCols = extractEqualityColumns(
+        req.constraint,
+        connection.filters?.condition,
+        req.filter,
+      );
+
+      const fullSortSatisfied = this.#indexes.some(idx =>
+        indexSatisfiesOrdering(idx, sort, !!req.reverse, equalityCols),
+      );
+
+      if (fullSortSatisfied) {
+        sqlOrder = sort;
+      } else if (
+        userSort &&
+        userSort.length > 0 &&
+        this.#indexes.some(idx =>
+          indexSatisfiesOrdering(idx, userSort, !!req.reverse, equalityCols),
+        )
+      ) {
+        sqlOrder = userSort;
+        runBufferPrefixCompare = makeComparator(userSort);
+        if (req.start) {
+          sqlStart = {row: req.start.row, basis: 'at'};
+        }
+      } else {
+        sqlOrder = sort;
+      }
+    }
+
+    const query = this.#requestToSQL(
+      req,
+      connection.filters?.condition,
+      sqlOrder,
+      sqlStart,
+    );
     const sqlAndBindings = format(query);
 
     const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
@@ -432,17 +477,22 @@ export class TableSource implements Source {
 
       if (sort) {
         const comparator = makeComparator(sort, req.reverse);
+        const rawRows = this.#mapFromSQLiteTypes(
+          this.#columns,
+          rowIterator,
+          sqlAndBindings.text,
+          debug,
+        );
+        const sortedBaseRows = runBufferPrefixCompare
+          ? bufferAndSortRuns(rawRows, runBufferPrefixCompare, comparator)
+          : rawRows;
+
         yield* generateWithStart(
           generateWithYields(
             generateWithOverlay(
               req.start?.row,
               this.#withPendingDelta(
-                this.#mapFromSQLiteTypes(
-                  this.#columns,
-                  rowIterator,
-                  sqlAndBindings.text,
-                  debug,
-                ),
+                sortedBaseRows,
                 req,
                 overlayPredicate,
                 sort,
@@ -889,6 +939,7 @@ export class TableSource implements Source {
     request: FetchRequest,
     filters: NoSubqueryCondition | undefined,
     order: Ordering | undefined,
+    start: Start | undefined = request.start,
   ): SQLQuery {
     return buildSelectQuery(
       this.#table,
@@ -897,7 +948,7 @@ export class TableSource implements Source {
       filters,
       order,
       request.reverse,
-      request.start,
+      start,
       request.multiConstraints,
       request.filter,
     );
@@ -984,6 +1035,218 @@ function getUniqueIndexes(
       return [JSON.stringify(columns.sort()), set];
     }),
   );
+}
+
+export type IndexColumn = {
+  readonly name: string;
+  readonly desc: boolean;
+};
+
+export type TableIndex = {
+  readonly name: string;
+  readonly unique: boolean;
+  readonly columns: readonly IndexColumn[];
+};
+
+export function getTableIndexes(
+  db: Database,
+  tableName: string,
+  primaryKey: PrimaryKey,
+): readonly TableIndex[] {
+  const indexListSql = format(
+    sql`SELECT name, "unique", partial FROM pragma_index_list(${tableName})`,
+  );
+  const stmt = db.prepare(indexListSql.text);
+  const indexList = stmt.all<{
+    name: string;
+    unique: number;
+    partial: number;
+  }>(...indexListSql.values);
+
+  const indexes: TableIndex[] = [];
+
+  for (const idx of indexList) {
+    if (idx.partial !== 0) {
+      continue;
+    }
+    const xinfoSql = format(
+      sql`SELECT name, "desc" FROM pragma_index_xinfo(${idx.name}) WHERE "key" = 1 AND name IS NOT NULL ORDER BY seqno`,
+    );
+    const xinfoStmt = db.prepare(xinfoSql.text);
+    const cols = xinfoStmt.all<{
+      name: string;
+      desc: number;
+    }>(...xinfoSql.values);
+
+    if (cols.length > 0) {
+      indexes.push({
+        name: idx.name,
+        unique: idx.unique !== 0,
+        columns: cols.map(c => ({
+          name: c.name,
+          desc: c.desc === 1,
+        })),
+      });
+    }
+  }
+
+  const hasPkIndex = indexes.some(
+    idx =>
+      idx.columns.length === primaryKey.length &&
+      idx.columns.every((c, i) => c.name === primaryKey[i] && !c.desc),
+  );
+  if (!hasPkIndex && primaryKey.length > 0) {
+    indexes.push({
+      name: 'sqlite_autoindex_rowid_pk',
+      unique: true,
+      columns: primaryKey.map(k => ({name: k, desc: false})),
+    });
+  }
+
+  return indexes;
+}
+
+export function indexSatisfiesOrdering(
+  index: TableIndex,
+  order: Ordering,
+  reverse: boolean,
+  equalityCols: Set<string>,
+): boolean {
+  if (order.length === 0) {
+    return true;
+  }
+
+  const queryOrder: [string, 'asc' | 'desc'][] = order.map(([field, dir]) => [
+    field,
+    reverse ? (dir === 'asc' ? 'desc' : 'asc') : dir,
+  ]);
+
+  const nonEqualityOrder = queryOrder.filter(
+    ([field]) => !equalityCols.has(field),
+  );
+  if (nonEqualityOrder.length === 0) {
+    return true;
+  }
+
+  let indexColIdx = 0;
+  while (
+    indexColIdx < index.columns.length &&
+    equalityCols.has(index.columns[indexColIdx].name)
+  ) {
+    indexColIdx++;
+  }
+
+  if (indexColIdx >= index.columns.length) {
+    return false;
+  }
+
+  const firstOrder = nonEqualityOrder[0];
+  const firstIndexCol = index.columns[indexColIdx];
+  if (firstIndexCol.name !== firstOrder[0]) {
+    return false;
+  }
+
+  const firstIndexDir: 'asc' | 'desc' = firstIndexCol.desc ? 'desc' : 'asc';
+  const scanDirection: 'forward' | 'reverse' =
+    firstIndexDir === firstOrder[1] ? 'forward' : 'reverse';
+
+  indexColIdx++;
+  let orderIdx = 1;
+
+  while (orderIdx < nonEqualityOrder.length) {
+    while (
+      indexColIdx < index.columns.length &&
+      equalityCols.has(index.columns[indexColIdx].name)
+    ) {
+      indexColIdx++;
+    }
+
+    if (indexColIdx >= index.columns.length) {
+      return false;
+    }
+
+    const orderTerm = nonEqualityOrder[orderIdx];
+    const indexCol = index.columns[indexColIdx];
+    if (indexCol.name !== orderTerm[0]) {
+      return false;
+    }
+
+    const indexDir: 'asc' | 'desc' = indexCol.desc ? 'desc' : 'asc';
+    const expectedDir: 'asc' | 'desc' =
+      scanDirection === 'forward'
+        ? orderTerm[1]
+        : orderTerm[1] === 'asc'
+          ? 'desc'
+          : 'asc';
+
+    if (indexDir !== expectedDir) {
+      return false;
+    }
+
+    indexColIdx++;
+    orderIdx++;
+  }
+
+  return true;
+}
+
+export function extractEqualityColumns(
+  constraint?: Constraint,
+  filters?: NoSubqueryCondition,
+  fetchFilters?: NoSubqueryCondition,
+): Set<string> {
+  const cols = new Set<string>();
+  if (constraint) {
+    for (const col of Object.keys(constraint)) {
+      cols.add(col);
+    }
+  }
+  const collect = (cond?: NoSubqueryCondition) => {
+    if (!cond) return;
+    if (cond.type === 'simple') {
+      if (
+        (cond.op === '=' || cond.op === 'IS') &&
+        cond.left.type === 'column' &&
+        cond.right.type === 'literal'
+      ) {
+        cols.add(cond.left.name);
+      }
+    } else if (cond.type === 'and') {
+      for (const child of cond.conditions) {
+        collect(child as NoSubqueryCondition);
+      }
+    }
+  };
+  collect(filters);
+  collect(fetchFilters);
+  return cols;
+}
+
+export function* bufferAndSortRuns(
+  rows: Iterable<Row>,
+  prefixCompare: Comparator,
+  fullCompare: Comparator,
+): IterableIterator<Row> {
+  let run: Row[] = [];
+  for (const row of rows) {
+    if (run.length === 0) {
+      run.push(row);
+    } else if (prefixCompare(run[0], row) === 0) {
+      run.push(row);
+    } else {
+      if (run.length > 1) {
+        run.sort(fullCompare);
+      }
+      yield* run;
+      run = [row];
+    }
+  }
+  if (run.length > 0) {
+    if (run.length > 1) {
+      run.sort(fullCompare);
+    }
+    yield* run;
+  }
 }
 
 export function toSQLiteTypes(

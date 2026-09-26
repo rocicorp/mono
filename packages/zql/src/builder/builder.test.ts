@@ -3024,3 +3024,110 @@ test('enablePlannerAwarePushdown pushes before planning', () => {
   expect(before.userStatesFilters).toContainEqual(pushed);
   expect(before.ids).toEqual([3]);
 });
+
+test('buildPipeline preserves userSort for related subqueries and correlated subqueries', () => {
+  const {sources} = testBuilderDelegate();
+  const connectCalls: Record<string, {sort: unknown; userSort: unknown}[]> = {
+    users: [],
+    userStates: [],
+  };
+
+  const usersConnect = sources.users.connect.bind(sources.users);
+  sources.users.connect = vi.fn(
+    (sort, filter, splitEditKeys, debug, userSort) => {
+      connectCalls.users.push({sort, userSort});
+      return usersConnect(sort, filter, splitEditKeys, debug, userSort);
+    },
+  );
+
+  const userStatesConnect = sources.userStates.connect.bind(sources.userStates);
+  sources.userStates.connect = vi.fn(
+    (sort, filter, splitEditKeys, debug, userSort) => {
+      connectCalls.userStates.push({sort, userSort});
+      return userStatesConnect(sort, filter, splitEditKeys, debug, userSort);
+    },
+  );
+
+  // 1. Related subquery with explicit orderBy
+  const relatedAst: AST = {
+    table: 'users',
+    orderBy: [['name', 'asc']],
+    related: [
+      {
+        correlation: {
+          parentField: ['id'],
+          childField: ['userID'],
+        },
+        subquery: {
+          table: 'userStates',
+          alias: 'states1',
+          orderBy: [['stateCode', 'desc']],
+        },
+      },
+    ],
+  };
+
+  new Catch(
+    buildPipeline(relatedAst, new TestBuilderDelegate(sources), 'q-related'),
+  );
+  expect(connectCalls.userStates).toHaveLength(1);
+  expect(connectCalls.userStates[0].userSort).toEqual([['stateCode', 'desc']]);
+
+  // 2. Correlated subquery with explicit orderBy in flipped join
+  connectCalls.userStates.length = 0;
+  const flippedAst: AST = {
+    table: 'users',
+    orderBy: [['name', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      related: {
+        correlation: {
+          parentField: ['id'],
+          childField: ['userID'],
+        },
+        subquery: {
+          table: 'userStates',
+          alias: 'states2',
+          orderBy: [['stateCode', 'desc']],
+        },
+      },
+    },
+  };
+
+  new Catch(
+    buildPipeline(flippedAst, new TestBuilderDelegate(sources), 'q-flipped'),
+  );
+  expect(connectCalls.userStates).toHaveLength(1);
+  expect(connectCalls.userStates[0].userSort).toEqual([['stateCode', 'desc']]);
+
+  // 3. Subquery without explicit orderBy receives undefined userSort
+  connectCalls.userStates.length = 0;
+  const unorderedSubqueryAst: AST = {
+    table: 'users',
+    orderBy: [['name', 'asc']],
+    related: [
+      {
+        correlation: {
+          parentField: ['id'],
+          childField: ['userID'],
+        },
+        subquery: {
+          table: 'userStates',
+          alias: 'states3',
+        },
+      },
+    ],
+  };
+
+  new Catch(
+    buildPipeline(
+      unorderedSubqueryAst,
+      new TestBuilderDelegate(sources),
+      'q-unordered',
+    ),
+  );
+  expect(connectCalls.userStates).toHaveLength(1);
+  expect(connectCalls.userStates[0].userSort).toBeUndefined();
+});

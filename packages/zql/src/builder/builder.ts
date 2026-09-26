@@ -165,6 +165,7 @@ export function buildPipeline(
   planDebugger?: PlanDebugger,
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
+  ast = preserveUserOrderBy(ast);
   ast = completeOrdering(
     ast,
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
@@ -205,7 +206,15 @@ export function buildPipeline(
     // as selective filters.
     ast = pushDownCorrelatedPredicates(ast, columnsOf);
   }
-  return buildPipelineInternal(ast, delegate, queryID, '');
+  return buildPipelineInternal(
+    ast,
+    delegate,
+    queryID,
+    '',
+    undefined,
+    undefined,
+    (ast as Record<symbol, Ordering | undefined>)[userOrderBySymbol],
+  );
 }
 
 export function bindStaticParameters(
@@ -325,7 +334,12 @@ function buildPipelineInternal(
   name: string,
   partitionKey?: CompoundKey,
   isNonFlippedExistsChild?: boolean,
+  userOrderBy?: Ordering | undefined,
 ): Input {
+  userOrderBy ??= (ast as Record<symbol, Ordering | undefined>)[
+    userOrderBySymbol
+  ];
+
   const source = delegate.getSource(ast.table);
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
@@ -379,6 +393,7 @@ function buildPipelineInternal(
     ast.where,
     splitEditKeys,
     delegate.debug,
+    useCap ? undefined : userOrderBy,
   );
 
   let end: Input = delegate.decorateSourceInput(conn, queryID);
@@ -609,6 +624,9 @@ function applyFilterWithFlips(
         `${name}.${sq.subquery.alias}`,
         sq.correlation.childField,
         false,
+        (sq.subquery as Record<symbol, Ordering | undefined>)[
+          userOrderBySymbol
+        ],
       );
       const flippedJoinName = `${name}:flipped-join(${sq.subquery.alias})`;
       const flippedJoin = new FlippedJoin({
@@ -787,6 +805,7 @@ function applyCorrelatedSubQuery(
     `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
     fromCondition,
+    (sq.subquery as Record<symbol, Ordering | undefined>)[userOrderBySymbol],
   );
 
   const joinName = `${name}:join(${sq.subquery.alias})`;
@@ -954,4 +973,53 @@ export function partitionBranches(
     }
   }
   return [matched, notMatched] as const;
+}
+
+export const userOrderBySymbol = Symbol('userOrderBy');
+
+function preserveUserOrderBy(ast: AST): AST {
+  return {
+    ...ast,
+    [userOrderBySymbol]: ast.orderBy,
+    ...(ast.related
+      ? {
+          related: ast.related.map(r => ({
+            ...r,
+            subquery: preserveUserOrderBy(r.subquery),
+          })),
+        }
+      : undefined),
+    ...(ast.where
+      ? {
+          where: preserveUserOrderByInCondition(ast.where),
+        }
+      : undefined),
+  } as AST;
+}
+
+function preserveUserOrderByInCondition<C extends Condition | undefined>(
+  condition: C,
+): C {
+  if (!condition) {
+    return condition;
+  }
+  if (condition.type === 'simple') {
+    return condition;
+  }
+  if (condition.type === 'correlatedSubquery') {
+    return {
+      ...condition,
+      related: {
+        ...condition.related,
+        subquery: preserveUserOrderBy(condition.related.subquery),
+      },
+    } as C;
+  }
+  condition.type satisfies 'and' | 'or';
+  return {
+    ...condition,
+    conditions: condition.conditions.map(c =>
+      preserveUserOrderByInCondition(c),
+    ),
+  } as C;
 }

@@ -4,7 +4,13 @@ import {assert} from '../../shared/src/asserts.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import {
+  buildPipeline,
+  type BuilderDelegate,
+} from '../../zql/src/builder/builder.ts';
 import {
   Debug,
   type DebugDelegate,
@@ -27,10 +33,14 @@ import {Database, Statement} from './db.ts';
 import {explainQueries} from './explain-queries.ts';
 import {format} from './internal/sql.ts';
 import {filtersToSQL} from './query-builder.ts';
+import {QueryDelegateImpl} from './query-delegate.ts';
 import {
+  bufferAndSortRuns,
   fromSQLiteTypes,
+  indexSatisfiesOrdering,
   TableSource,
   UnsupportedValueError,
+  type TableIndex,
 } from './table-source.ts';
 
 const columns = {
@@ -1695,5 +1705,542 @@ describe('pushes rejected by every connection', () => {
     expect(read.all()).toEqual([]);
     consume(source.push(makeSourceChangeAdd({id: 'r2', owner: 'bob', n: 2})));
     expect(read.all()).toEqual([{id: 'r2', owner: 'bob', n: 2}]);
+  });
+});
+
+describe('Phase 3: run-buffering fallback for secondary indexes lacking PK', () => {
+  test('indexSatisfiesOrdering matches expected index prefixes and directions', () => {
+    const idxAb: TableIndex = {
+      name: 'idx_ab',
+      unique: false,
+      columns: [
+        {name: 'a', desc: false},
+        {name: 'b', desc: true},
+      ],
+    };
+
+    const emptyEquality = new Set<string>();
+
+    // Forward scan matches exactly
+    expect(
+      indexSatisfiesOrdering(
+        idxAb,
+        [
+          ['a', 'asc'],
+          ['b', 'desc'],
+        ],
+        false,
+        emptyEquality,
+      ),
+    ).toBe(true);
+
+    // Reverse scan matches inverted directions
+    expect(
+      indexSatisfiesOrdering(
+        idxAb,
+        [
+          ['a', 'desc'],
+          ['b', 'asc'],
+        ],
+        false,
+        emptyEquality,
+      ),
+    ).toBe(true);
+
+    // Mixed direction mismatch fails
+    expect(
+      indexSatisfiesOrdering(
+        idxAb,
+        [
+          ['a', 'asc'],
+          ['b', 'asc'],
+        ],
+        false,
+        emptyEquality,
+      ),
+    ).toBe(false);
+
+    // Prefix match (only first column) succeeds
+    expect(
+      indexSatisfiesOrdering(idxAb, [['a', 'asc']], false, emptyEquality),
+    ).toBe(true);
+
+    // Prefix match with reverse scan succeeds
+    expect(
+      indexSatisfiesOrdering(idxAb, [['a', 'desc']], false, emptyEquality),
+    ).toBe(true);
+
+    // More terms than index columns fails
+    expect(
+      indexSatisfiesOrdering(
+        idxAb,
+        [
+          ['a', 'asc'],
+          ['b', 'desc'],
+          ['c', 'asc'],
+        ],
+        false,
+        emptyEquality,
+      ),
+    ).toBe(false);
+
+    // Index with equality constraint on leading column
+    const idxTenantA: TableIndex = {
+      name: 'idx_ta',
+      unique: false,
+      columns: [
+        {name: 'tenant_id', desc: false},
+        {name: 'created_at', desc: true},
+      ],
+    };
+
+    // When tenant_id is fixed by equality, created_at matches
+    expect(
+      indexSatisfiesOrdering(
+        idxTenantA,
+        [['created_at', 'desc']],
+        false,
+        new Set(['tenant_id']),
+      ),
+    ).toBe(true);
+
+    // When tenant_id is NOT fixed by equality, created_at cannot match
+    expect(
+      indexSatisfiesOrdering(
+        idxTenantA,
+        [['created_at', 'desc']],
+        false,
+        emptyEquality,
+      ),
+    ).toBe(false);
+  });
+
+  test('bufferAndSortRuns correctly buffers runs and sorts ties by full comparator', () => {
+    const rows: Row[] = [
+      {id: '3', a: 10},
+      {id: '1', a: 10},
+      {id: '2', a: 10},
+      {id: '5', a: 20},
+      {id: '4', a: 20},
+      {id: '6', a: 30},
+    ];
+
+    const prefixCompare = makeComparator([['a', 'asc']]);
+    const fullCompare = makeComparator([
+      ['a', 'asc'],
+      ['id', 'asc'],
+    ]);
+
+    const result = [...bufferAndSortRuns(rows, prefixCompare, fullCompare)];
+    expect(result).toEqual([
+      {id: '1', a: 10},
+      {id: '2', a: 10},
+      {id: '3', a: 10},
+      {id: '4', a: 20},
+      {id: '5', a: 20},
+      {id: '6', a: 30},
+    ]);
+  });
+
+  test('TableSource eliminates temp B-tree when secondary index lacks PK', () => {
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE issues (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER,
+        title TEXT
+      );
+      CREATE INDEX idx_issues_created ON issues (created_at DESC);
+    `);
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'issues',
+      {
+        id: {type: 'string'},
+        created_at: {type: 'number'},
+        title: {type: 'string'},
+      },
+      ['id'],
+    );
+
+    // Insert rows with duplicate created_at values in arbitrary order
+    const rows: Row[] = [
+      {id: '1', created_at: 100, title: 'one'},
+      {id: '3', created_at: 100, title: 'three'},
+      {id: '2', created_at: 100, title: 'two'},
+      {id: '4', created_at: 200, title: 'four'},
+      {id: '5', created_at: 50, title: 'five'},
+    ];
+    for (const r of rows) {
+      consume(source.push(makeSourceChangeAdd(r)));
+    }
+
+    const debug = new Debug(false);
+    // User requested order by created_at DESC; completeOrdering appended id DESC
+    const sort = [
+      ['created_at', 'desc'],
+      ['id', 'desc'],
+    ] as const;
+    const userSort = [['created_at', 'desc']] as const;
+
+    const input = source.connect(sort, undefined, undefined, debug, userSort);
+    const nodes = [...input.fetch({})];
+    const resultRows = nodes.map(n => (n === 'yield' ? n : n.row));
+
+    // Result must be strictly ordered by created_at DESC, id DESC:
+    // 200: id 4
+    // 100: id 3, id 2, id 1 (sorted descending by id!)
+    //  50: id 5
+    expect(resultRows).toEqual([
+      {id: '4', created_at: 200, title: 'four'},
+      {id: '3', created_at: 100, title: 'three'},
+      {id: '2', created_at: 100, title: 'two'},
+      {id: '1', created_at: 100, title: 'one'},
+      {id: '5', created_at: 50, title: 'five'},
+    ]);
+
+    // Inspect the query executed against SQLite
+    const plans = debug.getSQLitePlans();
+    const entries = Object.entries(plans);
+    expect(entries.length).toBeGreaterThanOrEqual(1);
+    const [sqlQuery, planLines] = entries[0];
+
+    // The SQL query sent to SQLite MUST order by created_at only (not id!)
+    expect(sqlQuery).toContain('ORDER BY "created_at" desc');
+    expect(sqlQuery.split('ORDER BY')[1]).not.toContain('"id"');
+
+    // EXPLAIN QUERY PLAN must NOT contain USE TEMP B-TREE
+    const planText = planLines.join('\n');
+    expect(planText).toContain('USING INDEX idx_issues_created');
+    expect(planText).not.toContain('TEMP B-TREE');
+  });
+
+  test('TableSource eliminates temp B-tree with reverse scan', () => {
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE issues (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER,
+        title TEXT
+      );
+      CREATE INDEX idx_issues_created ON issues (created_at DESC);
+    `);
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'issues',
+      {
+        id: {type: 'string'},
+        created_at: {type: 'number'},
+        title: {type: 'string'},
+      },
+      ['id'],
+    );
+
+    const rows: Row[] = [
+      {id: '1', created_at: 100, title: 'one'},
+      {id: '3', created_at: 100, title: 'three'},
+      {id: '2', created_at: 100, title: 'two'},
+      {id: '4', created_at: 200, title: 'four'},
+      {id: '5', created_at: 50, title: 'five'},
+    ];
+    for (const r of rows) {
+      consume(source.push(makeSourceChangeAdd(r)));
+    }
+
+    const debug = new Debug(false);
+    const sort = [
+      ['created_at', 'desc'],
+      ['id', 'desc'],
+    ] as const;
+    const userSort = [['created_at', 'desc']] as const;
+
+    const input = source.connect(sort, undefined, undefined, debug, userSort);
+    // Reverse scan (reverse: true)
+    const nodes = [...input.fetch({reverse: true})];
+    const resultRows = nodes.map(n => (n === 'yield' ? n : n.row));
+
+    // Reversed order:
+    //  50: id 5
+    // 100: id 1, id 2, id 3 (reversed: id asc)
+    // 200: id 4
+    expect(resultRows).toEqual([
+      {id: '5', created_at: 50, title: 'five'},
+      {id: '1', created_at: 100, title: 'one'},
+      {id: '2', created_at: 100, title: 'two'},
+      {id: '3', created_at: 100, title: 'three'},
+      {id: '4', created_at: 200, title: 'four'},
+    ]);
+
+    const plans = debug.getSQLitePlans();
+    const [sqlQuery, planLines] = Object.entries(plans)[0];
+    expect(sqlQuery).toContain('ORDER BY "created_at" asc');
+    expect(sqlQuery.split('ORDER BY')[1]).not.toContain('"id"');
+    const planText = planLines.join('\n');
+    expect(planText).toContain('USING INDEX idx_issues_created');
+    expect(planText).not.toContain('TEMP B-TREE');
+  });
+
+  test('TableSource handles keyset pagination (start: basis after and at) correctly with run-buffering', () => {
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE issues (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER,
+        title TEXT
+      );
+      CREATE INDEX idx_issues_created ON issues (created_at DESC);
+    `);
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'issues',
+      {
+        id: {type: 'string'},
+        created_at: {type: 'number'},
+        title: {type: 'string'},
+      },
+      ['id'],
+    );
+
+    const rows: Row[] = [
+      {id: '1', created_at: 100, title: 'one'},
+      {id: '3', created_at: 100, title: 'three'},
+      {id: '2', created_at: 100, title: 'two'},
+      {id: '4', created_at: 200, title: 'four'},
+      {id: '5', created_at: 50, title: 'five'},
+    ];
+    for (const r of rows) {
+      consume(source.push(makeSourceChangeAdd(r)));
+    }
+
+    const sort = [
+      ['created_at', 'desc'],
+      ['id', 'desc'],
+    ] as const;
+    const userSort = [['created_at', 'desc']] as const;
+
+    const input = source.connect(
+      sort,
+      undefined,
+      undefined,
+      undefined,
+      userSort,
+    );
+
+    // 1. Basis 'after' start at id '2' (which is in the middle of the tie-break group of created_at: 100)
+    // Full order is: id 4 (200), id 3 (100), id 2 (100), id 1 (100), id 5 (50)
+    // After {created_at: 100, id: '2'}, the remaining rows are id 1 (100) and id 5 (50)
+    const afterNodes = [
+      ...input.fetch({
+        start: {
+          row: {id: '2', created_at: 100, title: 'two'},
+          basis: 'after',
+        },
+      }),
+    ];
+    expect(afterNodes.map(n => (n === 'yield' ? n : n.row))).toEqual([
+      {id: '1', created_at: 100, title: 'one'},
+      {id: '5', created_at: 50, title: 'five'},
+    ]);
+
+    // 2. Basis 'at' start at id '2'
+    // Starting AT {created_at: 100, id: '2'}, rows are id 2 (100), id 1 (100), id 5 (50)
+    const atNodes = [
+      ...input.fetch({
+        start: {
+          row: {id: '2', created_at: 100, title: 'two'},
+          basis: 'at',
+        },
+      }),
+    ];
+    expect(atNodes.map(n => (n === 'yield' ? n : n.row))).toEqual([
+      {id: '2', created_at: 100, title: 'two'},
+      {id: '1', created_at: 100, title: 'one'},
+      {id: '5', created_at: 50, title: 'five'},
+    ]);
+  });
+
+  test('TableSource does not use run-buffering when index covers the full sort (Tier 1)', () => {
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE issues (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER,
+        title TEXT
+      );
+      CREATE INDEX idx_issues_created_id ON issues (created_at DESC, id DESC);
+    `);
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'issues',
+      {
+        id: {type: 'string'},
+        created_at: {type: 'number'},
+        title: {type: 'string'},
+      },
+      ['id'],
+    );
+
+    consume(
+      source.push(
+        makeSourceChangeAdd({id: '1', created_at: 100, title: 'one'}),
+      ),
+    );
+
+    const debug = new Debug(false);
+    const sort = [
+      ['created_at', 'desc'],
+      ['id', 'desc'],
+    ] as const;
+    const userSort = [['created_at', 'desc']] as const;
+
+    const input = source.connect(sort, undefined, undefined, debug, userSort);
+    [...input.fetch({})];
+
+    const plans = debug.getSQLitePlans();
+    const [sqlQuery, planLines] = Object.entries(plans)[0];
+    // Full sort is passed to SQLite since the index covers it
+    expect(sqlQuery).toContain('ORDER BY "created_at" desc, "id" desc');
+    const planText = planLines.join('\n');
+    expect(planText).toContain('USING INDEX idx_issues_created_id');
+    expect(planText).not.toContain('TEMP B-TREE');
+  });
+
+  test('TableSource falls back to full sort when index does not cover userSort (Tier 3)', () => {
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE issues (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER,
+        title TEXT
+      );
+      -- No index on title!
+    `);
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'issues',
+      {
+        id: {type: 'string'},
+        created_at: {type: 'number'},
+        title: {type: 'string'},
+      },
+      ['id'],
+    );
+
+    consume(
+      source.push(
+        makeSourceChangeAdd({id: '1', created_at: 100, title: 'one'}),
+      ),
+    );
+
+    const debug = new Debug(false);
+    const sort = [
+      ['title', 'asc'],
+      ['id', 'asc'],
+    ] as const;
+    const userSort = [['title', 'asc']] as const;
+
+    const input = source.connect(sort, undefined, undefined, debug, userSort);
+    [...input.fetch({})];
+
+    const plans = debug.getSQLitePlans();
+    const [sqlQuery] = Object.entries(plans)[0];
+    // Falls back to sending full sort to SQLite
+    expect(sqlQuery).toContain('ORDER BY "title" asc, "id" asc');
+  });
+
+  test('buildPipeline with related subquery ordering by secondary column uses run-buffering and eliminates temp b-tree', () => {
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        name TEXT
+      );
+      CREATE TABLE comments (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        created_at INTEGER
+      );
+      -- Secondary index on comments(created_at) without PK
+      CREATE INDEX idx_comments_created ON comments(created_at DESC);
+
+      INSERT INTO users (id, name) VALUES ('u1', 'Alice');
+      INSERT INTO comments (id, user_id, created_at) VALUES ('c1', 'u1', 100);
+    `);
+
+    const schema: Schema = {
+      tables: {
+        users: {
+          name: 'users',
+          columns: {
+            id: {type: 'string'},
+            name: {type: 'string'},
+          },
+          primaryKey: ['id'],
+        },
+        comments: {
+          name: 'comments',
+          columns: {
+            id: {type: 'string'},
+            user_id: {type: 'string'},
+            created_at: {type: 'number'},
+          },
+          primaryKey: ['id'],
+        },
+      },
+      relationships: {},
+    };
+
+    const delegate: BuilderDelegate = new QueryDelegateImpl(lc, db, schema);
+    const debug = new Debug(false);
+    delegate.debug = debug;
+
+    const ast: AST = {
+      table: 'users',
+      orderBy: [['name', 'asc']],
+      related: [
+        {
+          correlation: {
+            parentField: ['id'],
+            childField: ['user_id'],
+          },
+          subquery: {
+            table: 'comments',
+            alias: 'comments',
+            orderBy: [['created_at', 'desc']],
+          },
+        },
+      ],
+    };
+
+    const sink = new Catch(buildPipeline(ast, delegate, 'q-subquery-order'));
+    sink.fetch();
+
+    const plans = debug.getSQLitePlans();
+    // Verify that comments query used idx_comments_created and NO temp b-tree
+    const commentsPlanEntry = Object.entries(plans).find(([sql]) =>
+      sql.includes('"comments"'),
+    );
+    expect(commentsPlanEntry).toBeDefined();
+    const [sqlQuery, planLines] = commentsPlanEntry!;
+    expect(sqlQuery).toContain('ORDER BY "created_at" desc');
+    expect(sqlQuery.split('ORDER BY')[1]).not.toContain('"id"');
+    const planText = planLines.join('\n');
+    expect(planText).toContain('USING INDEX idx_comments_created');
+    expect(planText).not.toContain('TEMP B-TREE');
   });
 });
