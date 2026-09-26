@@ -1,5 +1,8 @@
 import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
+import {DEFAULT_HEAD_NAME} from './db/commit.ts';
 import {IDBOpenError} from './kv/idb-store.ts';
 import {MemStore, dropMemStore, hasMemStore} from './kv/mem-store.ts';
 import type {Read, Store, Write} from './kv/store.ts';
@@ -9,7 +12,8 @@ import {
   dropAllDatabases,
   dropDatabase,
 } from './persist/collect-idb-databases.ts';
-import {StorageFailureError} from './storage-failure.ts';
+import {HEARTBEAT_INTERVAL} from './persist/heartbeat.ts';
+import {getStorageFailure, StorageFailureError} from './storage-failure.ts';
 import {
   ReplicacheTest,
   addData,
@@ -28,12 +32,15 @@ afterEach(() => {
 /**
  * A MemStore whose write transactions can be made to fail the way the SQLite
  * store's do when the storage underneath it fails. Reads keep working, as
- * they do on a device whose disk is full.
+ * they do on a device whose disk is full. `failGetsWith` fails the reads
+ * INSIDE a transaction that began fine, the way an I/O error surfaces on a
+ * statement rather than on BEGIN.
  */
 class StorageFailingStore implements Store {
   readonly #inner: MemStore;
   failWith: Error | undefined;
   failReadsWith: Error | undefined;
+  failGetsWith: Error | undefined;
   writeAttempts = 0;
   readAttempts = 0;
 
@@ -41,20 +48,20 @@ class StorageFailingStore implements Store {
     this.#inner = new MemStore(name);
   }
 
-  read(): Promise<Read> {
+  async read(): Promise<Read> {
     this.readAttempts++;
     if (this.failReadsWith) {
-      return Promise.reject(this.failReadsWith);
+      throw this.failReadsWith;
     }
-    return this.#inner.read();
+    return new GetFailingRead(await this.#inner.read(), this);
   }
 
-  write(): Promise<Write> {
+  async write(): Promise<Write> {
     this.writeAttempts++;
     if (this.failWith) {
-      return Promise.reject(this.failWith);
+      throw this.failWith;
     }
-    return this.#inner.write();
+    return new GetFailingWrite(await this.#inner.write(), this);
   }
 
   close(): Promise<void> {
@@ -65,6 +72,164 @@ class StorageFailingStore implements Store {
     return this.#inner.closed;
   }
 }
+
+class GetFailingRead<R extends Read> implements Read {
+  protected readonly _tx: R;
+  readonly #store: StorageFailingStore;
+
+  constructor(tx: R, store: StorageFailingStore) {
+    this._tx = tx;
+    this.#store = store;
+  }
+
+  has(key: string): Promise<boolean> {
+    return this.#store.failGetsWith
+      ? Promise.reject(this.#store.failGetsWith)
+      : this._tx.has(key);
+  }
+
+  get(key: string): Promise<ReadonlyJSONValue | undefined> {
+    return this.#store.failGetsWith
+      ? Promise.reject(this.#store.failGetsWith)
+      : this._tx.get(key);
+  }
+
+  release(): void {
+    this._tx.release();
+  }
+
+  get closed(): boolean {
+    return this._tx.closed;
+  }
+}
+
+class GetFailingWrite extends GetFailingRead<Write> implements Write {
+  put(key: string, value: ReadonlyJSONValue): Promise<void> {
+    return this._tx.put(key, value);
+  }
+
+  del(key: string): Promise<void> {
+    return this._tx.del(key);
+  }
+
+  commit(): Promise<void> {
+    return this._tx.commit();
+  }
+}
+
+test('a storage failure on a store read inside a mutation is reported once', async () => {
+  const stores = new Map<string, StorageFailingStore>();
+  const rep = await replicacheForTesting(
+    'storage-failure-in-mutation',
+    {
+      kvStore: {
+        create: name => {
+          const store = new StorageFailingStore(name);
+          stores.set(name, store);
+          return store;
+        },
+        drop: name => dropMemStore(name),
+      },
+      mutators: {addData},
+    },
+    {...disableAllBackgroundProcesses, enablePullAndPushInOpen: false},
+  );
+  const failures: StorageFailureError[] = [];
+  rep.onStorageFailure = failure => failures.push(failure);
+  rep.onClientStateNotFound = () => {
+    throw new Error('a storage failure must not read as a lost client');
+  };
+  const perdag = stores.get(rep.idbName);
+  assert(perdag, 'the perdag store was created');
+
+  // The open left the head commit in the store: the in-memory dag has its
+  // hash and has not loaded it yet, so the first mutation reads it from the
+  // store.
+  const headHash = await withRead(rep.impl.memdag, read =>
+    read.getHead(DEFAULT_HEAD_NAME),
+  );
+  assert(headHash, 'the open set the main head');
+  expect(rep.impl.memdag.isCached(headHash)).toBe(false);
+
+  const diskError = new StorageFailureError('io-error', 'disk I/O error');
+  perdag.failGetsWith = diskError;
+
+  // The mutation fails, as any store read does, AND the failure is reported.
+  await expect(rep.mutate.addData({a: 1})).rejects.toSatisfy(
+    e => getStorageFailure(e) === diskError,
+  );
+  expect(failures).toEqual([diskError]);
+
+  // Once: persistence has stopped, and a second mutation meeting the same
+  // failure does not report it again.
+  const attemptsAtFailure = perdag.writeAttempts;
+  await rep.persist();
+  expect(perdag.writeAttempts).toBe(attemptsAtFailure);
+  await expect(rep.mutate.addData({b: 2})).rejects.toSatisfy(
+    e => getStorageFailure(e) === diskError,
+  );
+  expect(failures).toHaveLength(1);
+});
+
+test('a storage failure on a store read inside the heartbeat is reported once and stops it', async () => {
+  const stores = new Map<string, StorageFailingStore>();
+  const logSink = new TestLogSink();
+  const rep = await replicacheForTesting(
+    'storage-failure-in-heartbeat',
+    {
+      kvStore: {
+        create: name => {
+          const store = new StorageFailingStore(name);
+          stores.set(name, store);
+          return store;
+        },
+        drop: name => dropMemStore(name),
+      },
+      logLevel: 'warn',
+      logSinks: [logSink],
+    },
+    {...disableAllBackgroundProcesses, enablePullAndPushInOpen: false},
+  );
+  const failures: StorageFailureError[] = [];
+  rep.onStorageFailure = failure => failures.push(failure);
+  rep.onClientStateNotFound = () => {
+    throw new Error('a storage failure must not read as a lost client');
+  };
+  const perdag = stores.get(rep.idbName);
+  assert(perdag, 'the perdag store was created');
+
+  await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL);
+  expect(failures).toEqual([]);
+  const writesBeforeFailure = perdag.writeAttempts;
+
+  // The heartbeat's write begins fine and its first read fails: an I/O
+  // error on a statement rather than on BEGIN, which the store wrapper does
+  // not see.
+  const diskError = new StorageFailureError('io-error', 'disk I/O error');
+  perdag.failGetsWith = diskError;
+  await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL);
+  expect(failures).toEqual([diskError]);
+  expect(perdag.writeAttempts).toBe(writesBeforeFailure + 1);
+  expect(
+    logSink.messages.map(([level, context, args]) => [
+      level,
+      context?.bgIntervalProcess,
+      args[0],
+    ]),
+  ).toEqual([
+    ['warn', 'Heartbeat', 'Storage failed; stopping.'],
+    [
+      'warn',
+      undefined,
+      `Local store storage failed (io-error) for ${rep.idbName}; persistence is stopped for this instance`,
+    ],
+  ]);
+
+  // Stopped: no more heartbeats against the failing store.
+  await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL * 3);
+  expect(perdag.writeAttempts).toBe(writesBeforeFailure + 1);
+  expect(failures).toHaveLength(1);
+});
 
 test('a storage failure during persist is reported once and stops persistence', async () => {
   const stores = new Map<string, StorageFailingStore>();

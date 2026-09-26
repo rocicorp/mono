@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert, describe, expect, test, vi} from 'vitest';
+import {StorageFailureError} from '../../../replicache/src/storage-failure.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   createSilentLogContext,
@@ -598,6 +599,55 @@ describe('MutatorProxy', () => {
       expect(clientResult).toEqual({type: 'success'});
       expect(serverResult).toEqual({type: 'success'});
       expect(mutator).toHaveBeenCalledTimes(1);
+    });
+
+    test('logs a storage failure under the mutation at warn, not error', async () => {
+      const testLogSink = new TestLogSink();
+      const testLc = new LogContext('warn', undefined, testLogSink);
+      const {manager, mutationTracker} = createMockConnectionManager();
+      const proxy = new MutatorProxy(testLc, manager, mutationTracker);
+
+      // The failure reaches the client promise as the store threw it, and the
+      // server promise wrapped, the way the mutation tracker rejects it.
+      const failure = new StorageFailureError('io-error', 'disk I/O error');
+      const wrapped = proxy.wrapCustomMutator('testMutator', () => ({
+        client: Promise.reject(failure),
+        server: Promise.reject(new Error('rejected', {cause: failure})),
+      }));
+      const result = wrapped();
+      expect(await result.client).toMatchObject({
+        type: 'error',
+        error: {type: 'app', message: 'disk I/O error'},
+      });
+      expect(await result.server).toMatchObject({
+        type: 'error',
+        error: {type: 'app', message: 'rejected'},
+      });
+
+      expect(testLogSink.messages.map(m => [m[0], m[2][0]])).toEqual([
+        ['warn', 'Mutator "testMutator" storage failure on client'],
+        ['warn', 'Mutator "testMutator" storage failure on server'],
+      ]);
+    });
+
+    test('logs an app error at error', async () => {
+      const testLogSink = new TestLogSink();
+      const testLc = new LogContext('warn', undefined, testLogSink);
+      const {manager, mutationTracker} = createMockConnectionManager();
+      const proxy = new MutatorProxy(testLc, manager, mutationTracker);
+
+      const wrapped = proxy.wrapCustomMutator('testMutator', () => ({
+        client: Promise.reject(new Error('the mutator threw')),
+        server: Promise.resolve(),
+      }));
+      const result = wrapped();
+      expect(await result.client).toMatchObject({
+        type: 'error',
+        error: {type: 'app', message: 'the mutator threw'},
+      });
+      expect(testLogSink.messages.map(m => [m[0], m[2][0]])).toEqual([
+        ['error', 'Mutator "testMutator" app error on client'],
+      ]);
     });
 
     test('logs warning when mutation called while offline', () => {

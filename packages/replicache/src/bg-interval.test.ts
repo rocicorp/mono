@@ -4,6 +4,7 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
 import {initBgIntervalProcess} from './bg-interval.ts';
 import {IDBNotFoundError} from './kv/idb-store.ts';
+import {StorageFailureError} from './storage-failure.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -143,6 +144,74 @@ test('IDBNotFoundError thrown during process is logged to info, not error', asyn
       'info',
       {bgIntervalProcess: 'testProcess'},
       ['IndexedDB was deleted externally.', idbError],
+    ],
+  ]);
+});
+
+test('a storage failure thrown during process is logged to warn, reported, and stops the process', async () => {
+  const testLogSink = new TestLogSink();
+  const lc = new LogContext('debug', undefined, testLogSink);
+  const failure = new StorageFailureError('io-error', 'disk I/O error');
+  let processCallCount = 0;
+  const process = () => {
+    processCallCount++;
+    return Promise.reject(failure);
+  };
+  const reported: StorageFailureError[] = [];
+  const controller = new AbortController();
+  initBgIntervalProcess(
+    'testProcess',
+    process,
+    () => 100,
+    lc,
+    controller.signal,
+    f => reported.push(f),
+  );
+  await vi.advanceTimersByTimeAsync(100);
+  expect(processCallCount).toBe(1);
+  expect(reported).toEqual([failure]);
+  expect(testLogSink.messages).toEqual([
+    ['debug', {bgIntervalProcess: 'testProcess'}, ['Starting']],
+    ['debug', {bgIntervalProcess: 'testProcess'}, ['Running']],
+    [
+      'warn',
+      {bgIntervalProcess: 'testProcess'},
+      ['Storage failed; stopping.', failure],
+    ],
+    ['debug', {bgIntervalProcess: 'testProcess'}, ['Stopping']],
+  ]);
+
+  // Not run again: the store fails the same way at every interval.
+  await vi.advanceTimersByTimeAsync(500);
+  expect(processCallCount).toBe(1);
+  expect(reported).toHaveLength(1);
+});
+
+test('a storage failure wrapped in another error is still recognized, with no callback attached', async () => {
+  const testLogSink = new TestLogSink();
+  const lc = new LogContext('warn', undefined, testLogSink);
+  const failure = new StorageFailureError('cannot-open', 'unable to open');
+  const wrapped = new Error('Transaction failed', {cause: failure});
+  let processCallCount = 0;
+  const process = () => {
+    processCallCount++;
+    return Promise.reject(wrapped);
+  };
+  const controller = new AbortController();
+  initBgIntervalProcess(
+    'testProcess',
+    process,
+    () => 100,
+    lc,
+    controller.signal,
+  );
+  await vi.advanceTimersByTimeAsync(300);
+  expect(processCallCount).toBe(1);
+  expect(testLogSink.messages).toEqual([
+    [
+      'warn',
+      {bgIntervalProcess: 'testProcess'},
+      ['Storage failed; stopping.', wrapped],
     ],
   ]);
 });

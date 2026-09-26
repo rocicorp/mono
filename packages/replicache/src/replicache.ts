@@ -217,7 +217,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * keep running against what the in-memory dag holds and mutations keep
    * pushing to the server; a read that needs a chunk not yet loaded from the
    * store (or since evicted from the in-memory cache) still fails the way any
-   * store read does. Create a new instance once the condition is cleared.
+   * store read does, and is reported here too, whichever caller made it.
+   * Create a new instance once the condition is cleared.
    *
    * The default behavior is to log the failure and nothing else.
    */

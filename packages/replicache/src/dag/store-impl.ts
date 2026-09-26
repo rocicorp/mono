@@ -79,7 +79,15 @@ export class ReadImpl implements Read {
   async getChunk(hash: Hash): Promise<Chunk | undefined> {
     const dataPromise = this._tx.get(chunkDataKey(hash));
     const refsPromise = this._tx.get(chunkMetaKey(hash));
-    const data = await dataPromise;
+    let data: ReadonlyJSONValue | undefined;
+    try {
+      data = await dataPromise;
+    } catch (e) {
+      // The two reads fail together on a storage failure; the second
+      // rejection has no one to await it and must not surface as unhandled.
+      refsPromise.catch(() => {});
+      throw e;
+    }
     if (data === undefined) {
       refsPromise.catch(() => {
         // Ignore error since we will return undefined anyway.

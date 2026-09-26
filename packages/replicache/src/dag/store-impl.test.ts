@@ -82,6 +82,27 @@ describe('read', () => {
     await t(null, toRefs([fakeHash('a001'), fakeHash('a002')]), false);
   });
 
+  test('a kv read that fails rejects getChunk and leaves no unhandled rejection', async () => {
+    const kv = new TestMemStore();
+    const error = new Error('disk I/O error');
+    const inner = await kv.read();
+    const failing: Read = {
+      has: () => Promise.reject(error),
+      get: () => Promise.reject(error),
+      release: () => inner.release(),
+      get closed() {
+        return inner.closed;
+      },
+    };
+    const r = new ReadImpl(failing, assertHash);
+    await expect(r.getChunk(fakeHash('e5e'))).rejects.toBe(error);
+    // getChunk reads the data and the meta keys in parallel. Vitest fails the
+    // run on an unhandled rejection, which is what the meta read's used to
+    // be once the data read rejected.
+    await vi.waitFor(() => undefined);
+    failing.release();
+  });
+
   test('must get chunk missing chunks', async () => {
     await testChunkNotFoundError('read');
   });

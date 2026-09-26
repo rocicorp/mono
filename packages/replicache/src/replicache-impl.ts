@@ -441,7 +441,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * instance. A read that needs a chunk the in-memory dag has not loaded from
    * the store yet, or has since evicted from its cache, still goes to the
    * store and fails the way any store read does; that failure reaches its
-   * caller and is not reclassified here. An invalid ref count reported while
+   * caller, and is reported here as well, whichever caller it was (a query,
+   * a mutation, a poke, a background process). An invalid ref count reported while
    * the store is failing with `cannot-open` or `io-error` is NOT treated as
    * corruption (the database is not dropped and {@link onClientStateNotFound}
    * is not called), because a store that cannot complete a read or write is
@@ -451,8 +452,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    *
    * After the open, the failure is detected when a transaction on the store
    * fails to begin or to commit, whichever caller ran it (`persist()`, the
-   * heartbeat, garbage collection, ...), and when `persist()` or `refresh()`
-   * fails. The background maintenance processes (heartbeat, client and
+   * heartbeat, garbage collection, ...), when `persist()` or `refresh()`
+   * fails, when the in-memory dag fails to load a chunk from the store for
+   * any caller, and when a background process fails on a store read inside
+   * its transaction. The background maintenance processes (heartbeat, client and
    * client-group GC, database collection, mutation recovery) stop on it
    * instead of retrying against the store at their interval.
    *
@@ -591,6 +594,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
       newRandomHash,
       assertHash,
+      undefined,
+      this.#reportStorageFailure,
     );
 
     // Use a promise-resolve pair so that we have a promise to use even before
@@ -757,6 +762,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       HEARTBEAT_INTERVAL,
       this.#lc,
       signal,
+      this.#reportStorageFailure,
     );
     initClientGC(
       clientID,
@@ -766,6 +772,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       onClientsDeleted,
       this.#lc,
       signal,
+      this.#reportStorageFailure,
     );
     initCollectIDBDatabases(
       this.#idbDatabases,
@@ -789,8 +796,15 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           assertHash,
           name === this.idbName ? this.#onInvalidRefCount : undefined,
         ),
+      this.#reportStorageFailure,
     );
-    initClientGroupGC(this.perdag, enableMutationRecovery, this.#lc, signal);
+    initClientGroupGC(
+      this.perdag,
+      enableMutationRecovery,
+      this.#lc,
+      signal,
+      this.#reportStorageFailure,
+    );
     initNewClientChannel(
       this.name,
       this.idbName,
@@ -1457,6 +1471,18 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * the same corrupt key, so recovery runs once and later reports await it.
    */
   #corruptDatabaseRecovery: Promise<void> | undefined;
+
+  /**
+   * Handed to the in-memory dag and the background processes, which have no
+   * other way to reach this instance when a store read inside them fails.
+   * Skipped while closing: a read that fails because the store was closed
+   * under it is not a storage failure of the instance.
+   */
+  readonly #reportStorageFailure = (failure: StorageFailureError): void => {
+    if (!this.#closed) {
+      this.#handleStorageFailure(failure);
+    }
+  };
 
   /**
    * A storage failure after the open. Records the first one, stops the
