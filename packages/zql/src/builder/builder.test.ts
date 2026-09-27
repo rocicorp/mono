@@ -1,4 +1,4 @@
-import {expect, test, vi} from 'vitest';
+import {expect, test, vi, type MockInstance} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {
@@ -3023,4 +3023,88 @@ test('enablePlannerAwarePushdown pushes before planning', () => {
   const before = run(true);
   expect(before.userStatesFilters).toContainEqual(pushed);
   expect(before.ids).toEqual([3]);
+});
+
+test('destroying a pipeline destroys the storage of its operators', () => {
+  const {delegate} = testBuilderDelegate();
+  const createStorage = delegate.createStorage.bind(delegate);
+  const destroys: Record<string, MockInstance<() => void>> = {};
+  vi.spyOn(delegate, 'createStorage').mockImplementation(name => {
+    const storage = createStorage(name);
+    destroys[name] = vi.spyOn(storage, 'destroy');
+    return storage;
+  });
+  const userStates = (flip: boolean): CorrelatedSubqueryCondition => ({
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    flip,
+    related: {
+      system: 'client',
+      correlation: {parentField: ['id'], childField: ['userID']},
+      subquery: {
+        table: 'userStates',
+        alias: flip ? 'flippedStates' : 'states',
+        orderBy: [
+          ['userID', 'asc'],
+          ['stateCode', 'asc'],
+        ],
+      },
+    },
+  });
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        // Take
+        limit: 3,
+        // Join and FlippedJoin (EXISTS), with a Cap on the non-flipped child
+        where: {
+          type: 'and',
+          conditions: [userStates(false), userStates(true)],
+        },
+        // Join (relationship)
+        related: [
+          {
+            system: 'client',
+            correlation: {parentField: ['id'], childField: ['userID']},
+            subquery: {
+              table: 'userStates',
+              alias: 'userStates',
+              orderBy: [
+                ['userID', 'asc'],
+                ['stateCode', 'asc'],
+              ],
+            },
+          },
+        ],
+      },
+      delegate,
+      'query-id',
+    ),
+  );
+  expect(sink.fetch()).toHaveLength(3);
+
+  // Each of these operators keeps state in its storage...
+  const hydrated = delegate.clonedStorage;
+  expect(Object.keys(hydrated).sort()).toEqual([
+    '.states_0:cap',
+    ':flipped-join(flippedStates_1)',
+    ':join(states_0)',
+    ':join(userStates)',
+    ':take',
+  ]);
+  for (const data of Object.values(hydrated)) {
+    expect(Object.keys(data).length).toBeGreaterThan(0);
+  }
+  expect(Object.keys(destroys).sort()).toEqual(Object.keys(hydrated).sort());
+  for (const destroy of Object.values(destroys)) {
+    expect(destroy).not.toHaveBeenCalled();
+  }
+
+  // ...and destroys it when it is destroyed.
+  sink.destroy();
+  for (const destroy of Object.values(destroys)) {
+    expect(destroy).toHaveBeenCalledTimes(1);
+  }
 });

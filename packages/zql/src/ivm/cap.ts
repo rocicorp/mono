@@ -33,6 +33,7 @@ interface CapStorage {
   get(key: string): CapState | undefined;
   set(key: string, value: CapState): void;
   del(key: string): void;
+  destroy(): void;
 }
 
 /**
@@ -302,6 +303,7 @@ export class Cap implements Operator {
 
   destroy(): void {
     this.#input.destroy();
+    this.#storage.destroy();
   }
 
   *reconcile(_pusher: InputBase): Stream<'yield'> {

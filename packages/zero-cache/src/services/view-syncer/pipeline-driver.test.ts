@@ -79,6 +79,7 @@ describe('view-syncer/pipeline-driver', () => {
   let logSink: TestLogSink;
   let pipelines: PipelineDriver;
   let replicator: FakeReplicator;
+  let storageDB: Database;
 
   beforeEach(() => {
     logSink = new TestLogSink();
@@ -86,15 +87,17 @@ describe('view-syncer/pipeline-driver', () => {
     dbFile = new DbFile('pipelines_test');
     dbFile.connect(lc).pragma('journal_mode = wal2');
 
-    const storage = new Database(lc, ':memory:');
-    storage.prepare(CREATE_STORAGE_TABLE).run();
+    storageDB = new Database(lc, ':memory:');
+    storageDB.prepare(CREATE_STORAGE_TABLE).run();
 
     pipelines = new PipelineDriver(
       lc,
       testLogConfig,
       new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
       shardID,
-      new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
+      new DatabaseStorage(storageDB).createClientGroupStorage(
+        'foo-client-group',
+      ),
       'pipeline-driver.test.ts',
       new InspectorDelegate(undefined),
       () => 200 /** yield threshold */,
@@ -939,6 +942,66 @@ describe('view-syncer/pipeline-driver', () => {
     expect([...pipelines.queries().keys()]).toEqual(['queryID2']);
     pipelines.removeQuery('queryID2');
     expect(pipelines.queries().size).toBe(0);
+  });
+
+  test('destroyed pipelines free their operator storage', () => {
+    pipelines.init(clientSchema);
+    const storageRows = () =>
+      storageDB.prepare('SELECT COUNT(*) AS n FROM storage').get<{n: number}>()
+        .n;
+    // A limit (Take) over a relationship (Join), and nested EXISTS (Joins
+    // or FlippedJoins), all of which keep state in operator storage.
+    const issuesWithComments: AST = {...ISSUES_AND_COMMENTS, limit: 2};
+
+    [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        issuesWithComments,
+        startTimer(),
+      ),
+    ];
+    const query1Rows = storageRows();
+    expect(query1Rows).toBeGreaterThan(0);
+    [
+      ...pipelines.addQuery(
+        'hash2',
+        'queryID2',
+        ISSUES_QUERY_WITH_EXISTS,
+        startTimer(),
+      ),
+    ];
+    const bothRows = storageRows();
+    expect(bothRows).toBeGreaterThan(query1Rows);
+
+    // Removing a query frees exactly the storage of its operators.
+    pipelines.removeQuery('queryID1');
+    expect(storageRows()).toBe(bothRows - query1Rows);
+    pipelines.removeQuery('queryID2');
+    expect(storageRows()).toBe(0);
+
+    // Resetting the pipelines frees the storage of all of them.
+    [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        issuesWithComments,
+        startTimer(),
+      ),
+    ];
+    expect(storageRows()).toBe(query1Rows);
+    pipelines.reset(clientSchema);
+    expect(storageRows()).toBe(0);
+
+    // So does abandoning a hydration partway (of a query without a limit,
+    // which Take does not allow to be cut short).
+    const hydration = pipelines
+      .addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, startTimer())
+      [Symbol.iterator]();
+    expect(hydration.next().done).toBe(false);
+    expect(storageRows()).toBeGreaterThan(0);
+    hydration.return?.();
+    expect(storageRows()).toBe(0);
   });
 
   test('failed scalar subquery resolution tears down earlier companions', () => {

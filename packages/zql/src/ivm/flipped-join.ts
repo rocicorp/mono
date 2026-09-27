@@ -182,6 +182,7 @@ export class FlippedJoin implements Input {
   destroy(): void {
     this.#child.destroy();
     this.#parent.destroy();
+    this.#storage.destroy();
   }
 
   setOutput(output: Output): void {

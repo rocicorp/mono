@@ -190,6 +190,30 @@ describe('view-syncer/database-storage', () => {
     `);
   });
 
+  test('destroying an operator storage deletes only its entries', () => {
+    const cg1 = storage.createClientGroupStorage('foo-bar');
+    const cg2 = storage.createClientGroupStorage('bar-foo');
+    const [op1, op2] = [cg1.createStorage(), cg1.createStorage()];
+    const other = cg2.createStorage();
+
+    op1.set('a', 1);
+    op1.set('b', 2);
+    op2.set('a', 3);
+    other.set('a', 4);
+
+    op1.destroy();
+    expect(op1.get('a')).toBeUndefined();
+    expect([...op1.scan()]).toEqual([]);
+    expect(dumpDB()).toEqual([
+      {clientGroupID: 'foo-bar', op: 2, key: 'a', val: '3'},
+      {clientGroupID: 'bar-foo', op: 1, key: 'a', val: '4'},
+    ]);
+
+    // Destroying again is a no-op.
+    op1.destroy();
+    expect(dumpDB()).toHaveLength(2);
+  });
+
   test('set duplicate key', () => {
     const store = storage.createClientGroupStorage('foo-bar').createStorage();
     store.set('foo', '2');

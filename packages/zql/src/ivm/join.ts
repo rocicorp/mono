@@ -148,6 +148,7 @@ export class Join implements Input {
   destroy(): void {
     this.#parent.destroy();
     this.#child.destroy();
+    this.#storage.destroy();
   }
 
   setOutput(output: Output): void {

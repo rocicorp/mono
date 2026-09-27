@@ -35,6 +35,7 @@ interface TakeStorage {
   get(key: string): TakeState | undefined;
   set(key: string, value: TakeState): void;
   del(key: string): void;
+  destroy(): void;
 }
 
 export type PartitionKey = PrimaryKey;
@@ -681,6 +682,7 @@ export class Take implements Operator, TakeBoundProvider {
 
   destroy(): void {
     this.#input.destroy();
+    this.#storage.destroy();
   }
 
   *reconcile(_pusher?: InputBase): Stream<'yield'> {
