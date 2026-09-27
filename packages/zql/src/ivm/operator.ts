@@ -212,4 +212,10 @@ export interface Storage {
    */
   scan(options?: {prefix: string}): Stream<[string, JSONValue]>;
   del(key: string): void;
+  /**
+   * Called by the operator that owns the storage when the operator is
+   * destroyed. Releases anything the storage holds outside of the operator
+   * (e.g. rows in a shared database). The storage is not used afterwards.
+   */
+  destroy(): void;
 }

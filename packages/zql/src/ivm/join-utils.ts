@@ -292,6 +292,7 @@ export interface JoinStorage {
   set(key: string, value: unknown): void;
   del(key: string): void;
   scan(options?: {prefix: string}): Stream<[string, unknown]>;
+  destroy(): void;
 }
 
 export function makeUnpartitionedStorageKey(

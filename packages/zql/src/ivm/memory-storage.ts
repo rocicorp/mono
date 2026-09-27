@@ -44,6 +44,11 @@ export class MemoryStorage implements Storage {
     }
   }
 
+  destroy() {
+    // Nothing to release: the entries are garbage collected along with the
+    // operator that owns this storage.
+  }
+
   cloneData(): Record<string, JSONValue> {
     return structuredClone(Object.fromEntries(this.#data.values()));
   }

@@ -19,6 +19,7 @@ type Statements = {
   del: Statement;
   scan: Statement;
   clear: Statement;
+  clearOp: Statement;
   commit: Statement;
   begin: Statement;
 };
@@ -92,6 +93,9 @@ export class DatabaseStorage {
       clear: db.prepare(`
         DELETE FROM storage WHERE clientGroupID = ?
       `),
+      clearOp: db.prepare(`
+        DELETE FROM storage WHERE clientGroupID = ? AND op = ?
+      `),
       commit: db.prepare('COMMIT'),
       begin: db.prepare('BEGIN'),
     };
@@ -124,6 +128,11 @@ export class DatabaseStorage {
   #del(cgID: string, opID: number, key: string) {
     this.#maybeCheckpoint();
     this.#stmts.del.run(cgID, opID, key);
+  }
+
+  #destroy(cgID: string, opID: number) {
+    this.#maybeCheckpoint();
+    this.#stmts.clearOp.run(cgID, opID);
   }
 
   /**
@@ -178,6 +187,7 @@ export class DatabaseStorage {
           set: (key, val) => this.#set(cgID, opID, key, val),
           del: key => this.#del(cgID, opID, key),
           scan: opts => this.#scan(cgID, opID, opts),
+          destroy: () => this.#destroy(cgID, opID),
         };
       },
 
