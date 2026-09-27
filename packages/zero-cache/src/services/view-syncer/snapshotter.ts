@@ -363,6 +363,24 @@ function readsFor(table: LiteTableSpecWithKeysAndVersion): TableReads {
 // The byUniqueKeys bitmask must fit in a (positive) 31-bit integer.
 const MAX_MEMOIZED_UNIQUE_KEYS = 30;
 
+/**
+ * The index that SQLite creates for the `PRIMARY KEY("stateVersion", "pos")`
+ * of `_zero.changeLog2` (the first constraint of its CREATE TABLE statement,
+ * hence the `_1` suffix).
+ *
+ * For a `stateVersion > ?` query that reads a column outside of this index
+ * (e.g. `op`) and has no ORDER BY, the query planner chooses between a range
+ * search of the index and a full scan of the table based on `sqlite_stat1`.
+ * Statistics recorded while the change log held only a few rows make the full
+ * scan look cheaper, and they persist as the table grows to millions of rows:
+ * the change log of a replication-manager's replica only receives entries
+ * during column backfills, and view-syncers inherit its statistics when they
+ * restore its backup. Such queries therefore pin this index with INDEXED BY,
+ * which also makes them fail to prepare (rather than silently scan) if the
+ * index is ever renamed.
+ */
+const CHANGE_LOG_STATE_VERSION_INDEX = 'sqlite_autoindex__zero.changeLog2_1';
+
 class Snapshot {
   static create(
     lc: LogContext,
@@ -423,7 +441,8 @@ class Snapshot {
    */
   schemaChangedSince(prevVersion: string): boolean {
     const row = this.db.get(
-      'SELECT 1 FROM "_zero.changeLog2" WHERE stateVersion > ? AND op = ? LIMIT 1',
+      `SELECT 1 FROM "_zero.changeLog2" INDEXED BY "${CHANGE_LOG_STATE_VERSION_INDEX}"
+         WHERE stateVersion > ? AND op = ? LIMIT 1`,
       prevVersion,
       RESET_OP,
     );
@@ -437,7 +456,8 @@ class Snapshot {
    */
   hasTableWideOpSince(prevVersion: string): boolean {
     const row = this.db.get(
-      'SELECT 1 FROM "_zero.changeLog2" WHERE stateVersion > ? AND op IN (?, ?) LIMIT 1',
+      `SELECT 1 FROM "_zero.changeLog2" INDEXED BY "${CHANGE_LOG_STATE_VERSION_INDEX}"
+         WHERE stateVersion > ? AND op IN (?, ?) LIMIT 1`,
       prevVersion,
       RESET_OP,
       TRUNCATE_OP,
