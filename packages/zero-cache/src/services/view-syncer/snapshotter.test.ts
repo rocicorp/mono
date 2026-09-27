@@ -716,6 +716,71 @@ describe('view-syncer/snapshotter', () => {
     getSpy.mockRestore();
   });
 
+  test('table-wide op checks search the change log index despite tiny stats', () => {
+    replicator.processTransaction(
+      '07',
+      messages.insert('issues', {id: 4, owner: 20}),
+      messages.insert('issues', {id: 5, owner: 10}),
+    );
+
+    // Record statistics while the change log holds only a couple of rows,
+    // as can happen on a replication-manager's replica (whose change log
+    // only receives entries during column backfills), which view-syncers
+    // then inherit when they restore its backup.
+    const db = dbFile.connect(lc);
+    db.exec('ANALYZE "_zero.changeLog2"');
+    const plan = (sql: string, ...args: unknown[]) =>
+      db
+        .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        .all<{detail: string}>(...args)
+        .map(row => row.detail)
+        .join('\n');
+
+    // With such statistics, the planner chooses a full scan of the change
+    // log for a range query that reads `op` and does not need ordering, no
+    // matter how large the change log has since become.
+    expect(
+      plan(
+        'SELECT 1 FROM "_zero.changeLog2" WHERE stateVersion > ? AND op IN (?, ?) LIMIT 1',
+        '01',
+        'r',
+        't',
+      ),
+    ).toMatch(/\bSCAN _zero\.changeLog2\b/);
+
+    const snapshotter = new Snapshotter(lc, dbFile.path, {
+      appID: 'my_app',
+    }).init();
+    const curr = snapshotter.current();
+    const getSpy = vi.spyOn(curr.db, 'get');
+
+    expect(curr.hasTableWideOpSince('01')).toBe(false);
+    expect(curr.schemaChangedSince('01')).toBe(false);
+
+    const probes = getSpy.mock.calls.filter(([sql]) =>
+      sql.includes('"_zero.changeLog2"'),
+    );
+    expect(probes).toHaveLength(2);
+    for (const [sql, ...args] of probes) {
+      const p = plan(sql, ...args);
+      expect(p).toMatch(
+        /SEARCH _zero\.changeLog2 USING INDEX sqlite_autoindex__zero\.changeLog2_1 \(stateVersion>\?\)/,
+      );
+      expect(p).not.toMatch(/\bSCAN _zero\.changeLog2\b/);
+    }
+    getSpy.mockRestore();
+    snapshotter.destroy();
+
+    // The checks still find table-wide ops logged after the given version.
+    replicator.processTransaction('09', messages.truncate('users'));
+    const after = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
+    expect(after.current().hasTableWideOpSince('07')).toBe(true);
+    expect(after.current().schemaChangedSince('07')).toBe(false);
+    expect(after.current().hasTableWideOpSince('09')).toBe(false);
+    after.destroy();
+    db.close();
+  });
+
   test('unobserved tables are skipped without row lookups', () => {
     const {version} = s.current();
     expect(version).toBe('01');
