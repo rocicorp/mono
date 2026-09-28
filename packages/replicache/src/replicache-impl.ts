@@ -483,6 +483,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #refreshStopped = false;
 
   /**
+   * The last persist queued on the persist lock, if any, so
+   * {@link stopPersist} can wait for it. The lock runs persists in order, so
+   * this one settles after every persist queued before it. Settled to
+   * `undefined` rather than left rejected.
+   */
+  #persistInFlight: Promise<void> | undefined;
+
+  /**
    * The refresh currently running, if any, so {@link stopRefresh} can wait
    * for it. Settled to `undefined` rather than left rejected.
    */
@@ -1376,7 +1384,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   persist(): Promise<void> {
     // Prevent multiple persist calls from running at the same time.
-    return this.#persistLock.withLock(async () => {
+    const run = this.#persistLock.withLock(async () => {
       const {clientID} = this;
       await this.#ready;
       // After a storage failure, or once persist is stopped, nothing is
@@ -1421,6 +1429,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       assert(clientGroupID, 'Expected clientGroupID to be defined');
       this.#onPersist({clientID, clientGroupID});
     });
+    this.#persistInFlight = run.then(noop, noop);
+    return run;
   }
 
   refresh(): Promise<void> {
@@ -1662,9 +1672,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     }
     this.#persistStopped = true;
     this.#storeProcessesAbortController.abort();
-    // A persist in flight holds the lock; taking it waits for that persist to
-    // finish.
-    await this.#persistLock.withLock(noop);
+    await this.#persistInFlight;
   }
 
   /**
