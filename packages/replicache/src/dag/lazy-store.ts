@@ -274,7 +274,7 @@ export class LazyRead implements Read {
    */
   protected async _getSourceChunk(hash: Hash): Promise<Chunk | undefined> {
     try {
-      return await (await this._getSourceRead()).getChunk(hash);
+      return await (await this.#getSourceRead()).getChunk(hash);
     } catch (e) {
       const failure = getStorageFailure(e);
       if (failure !== undefined) {
@@ -333,7 +333,7 @@ export class LazyRead implements Read {
     return this.#closed;
   }
 
-  protected _getSourceRead(): Promise<Read> {
+  #getSourceRead(): Promise<Read> {
     if (!this.#sourceRead) {
       this.#sourceRead = this._sourceStore.read();
     }
