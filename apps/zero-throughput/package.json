@@ -7,6 +7,8 @@
     "start": "node src/main.ts",
     "test": "vitest run",
     "analyze": "node src/analyze.ts",
+    "replay": "node src/replay/run.ts",
+    "replay:prepare": "node src/replay/prepare-workload.ts",
     "sweep": "node src/binary-sweep.ts",
     "sweep:linear": "node src/linear-sweep.ts",
     "sweep:write-rates": "node src/linear-sweep.ts --write-rates 500,1000,2000,3000,4000 --write-concurrency 5 --batch-size 10 --users 20 --sync-workers 2 --profiles feed-append --duration-ms 15000",
