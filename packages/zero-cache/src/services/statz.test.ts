@@ -4,10 +4,14 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {handleStatzRequest} from './statz.ts';
 
-const {dbCloseSpy, dbPragmaSpy, statSyncSpy} = vi.hoisted(() => ({
+const {dbOpenSpy, dbCloseSpy, dbPragmaSpy, statSyncSpy} = vi.hoisted(() => ({
+  dbOpenSpy: vi.fn(),
   dbCloseSpy: vi.fn(),
   dbPragmaSpy: vi.fn(() => [{value: 'ok'}]),
-  statSyncSpy: vi.fn(() => ({size: 1})),
+  statSyncSpy: vi.fn(
+    (_path: string, _opts?: unknown) =>
+      ({size: 1}) as {size: number} | undefined,
+  ),
 }));
 
 vi.mock('fs', () => ({
@@ -17,7 +21,9 @@ vi.mock('fs', () => ({
 
 vi.mock('../../../zqlite/src/db.ts', () => ({
   Database: class {
-    constructor(_lc: unknown, _path: string) {}
+    constructor(_lc: unknown, path: string, opts?: unknown) {
+      dbOpenSpy(path, opts);
+    }
     pragma = dbPragmaSpy;
     close() {
       dbCloseSpy();
@@ -51,6 +57,7 @@ describe('statz endpoint', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
+    dbOpenSpy.mockClear();
     dbCloseSpy.mockClear();
     dbPragmaSpy.mockClear();
     statSyncSpy.mockClear();
@@ -112,6 +119,48 @@ describe('statz endpoint', () => {
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toHaveProperty('os');
+  });
+
+  test('opens the replica read-only and does not checkpoint it', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/statz?group=replica,replication&format=json',
+      headers: authHeader,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(dbOpenSpy).toHaveBeenCalledTimes(2);
+    for (const [path, opts] of dbOpenSpy.mock.calls) {
+      expect(path).toBe('/tmp/replica.db');
+      expect(opts).toEqual({readonly: true});
+    }
+    expect(dbPragmaSpy).not.toHaveBeenCalledWith(
+      expect.stringMatching(/wal_checkpoint/i),
+    );
+  });
+
+  test('reports the sizes of the WAL files that exist', async () => {
+    statSyncSpy.mockImplementation((path: string) =>
+      path.endsWith('-wal2')
+        ? undefined
+        : {size: path.endsWith('-wal') ? 42 : 1},
+    );
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/statz?group=replica&format=json',
+        headers: authHeader,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as {replica: Record<string, unknown>};
+      expect(body.replica['wal file sizes']).toEqual({'-wal': 42});
+      expect(statSyncSpy).toHaveBeenCalledWith('/tmp/replica.db-wal2', {
+        throwIfNoEntry: false,
+      });
+    } finally {
+      statSyncSpy.mockImplementation(() => ({size: 1}));
+    }
   });
 
   test('rejects requests with bad auth', async () => {
