@@ -3485,12 +3485,15 @@ test.each(
     const z = zeroForTest({onClientStateNotFound: resolve});
     z.reload = vi.fn();
     const rep = getInternalReplicacheImplForTesting(z);
-    const stopPersistence = vi.spyOn(rep, 'stopPersistence');
-    let databaseStillThereWhenStopped: boolean | undefined;
-    stopPersistence.mockImplementation(() => {
-      databaseStillThereWhenStopped = hasMemStore(z.idbName);
+    const stopPersist = vi.spyOn(rep, 'stopPersist');
+    const stopRefresh = vi.spyOn(rep, 'stopRefresh');
+    const databaseStillThereWhenStopped: boolean[] = [];
+    const recordStop = () => {
+      databaseStillThereWhenStopped.push(hasMemStore(z.idbName));
       return Promise.resolve();
-    });
+    };
+    stopPersist.mockImplementation(recordStop);
+    stopRefresh.mockImplementation(recordStop);
 
     await z.triggerError({kind, message, origin: ErrorOrigin.ZeroCache});
     await promise;
@@ -3498,8 +3501,9 @@ test.each(
     // Stopped BEFORE the drop, so nothing of this instance's runs into the
     // dropped store: the run loop's refresh after the error, the next
     // scheduled persist, the background processes.
-    expect(stopPersistence).toHaveBeenCalledTimes(1);
-    expect(databaseStillThereWhenStopped).toBe(true);
+    expect(stopPersist).toHaveBeenCalledTimes(1);
+    expect(stopRefresh).toHaveBeenCalledTimes(1);
+    expect(databaseStillThereWhenStopped).toEqual([true, true]);
     expect(hasMemStore(z.idbName)).toBe(false);
     expect(
       z.testLogSink.messages.filter(

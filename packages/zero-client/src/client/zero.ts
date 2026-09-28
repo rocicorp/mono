@@ -1634,7 +1634,7 @@ export class Zero<
       // a connect error, the next scheduled persist is coming, and the
       // background processes are on their intervals — each would run into
       // the dropped store and log the drop's own footprint as an error.
-      await this.#rep.stopPersistence();
+      await Promise.all([this.#rep.stopPersist(), this.#rep.stopRefresh()]);
       await dropReplicacheDatabase(this.#rep.idbName, {
         kvStore: this.#kvStore,
       });

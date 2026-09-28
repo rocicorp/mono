@@ -469,15 +469,22 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #storageFailure: StorageFailureError | undefined;
 
   /**
-   * Set by {@link stopPersistence}. Read by every path that reads or writes
-   * the store, so none of them runs against a database that is about to be
-   * dropped from under this instance.
+   * Set by {@link stopPersist}. Read by `persist()` and the persist scheduler,
+   * so neither writes to a database that is about to be dropped from under
+   * this instance.
    */
-  #persistenceStopped = false;
+  #persistStopped = false;
 
   /**
-   * The refresh currently running, if any, so {@link stopPersistence} can
-   * wait for it. Settled to `undefined` rather than left rejected.
+   * Set by {@link stopRefresh}. Read by `refresh()` and the refresh
+   * scheduler, so neither reads from a database that is about to be dropped
+   * from under this instance.
+   */
+  #refreshStopped = false;
+
+  /**
+   * The refresh currently running, if any, so {@link stopRefresh} can wait
+   * for it. Settled to `undefined` rather than left rejected.
    */
   #refreshInFlight: Promise<void> | undefined;
 
@@ -1372,9 +1379,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return this.#persistLock.withLock(async () => {
       const {clientID} = this;
       await this.#ready;
-      // After a storage failure, or once persistence is stopped, nothing is
+      // After a storage failure, or once persist is stopped, nothing is
       // persisted.
-      if (this.#closed || this.#storageFailure || this.#persistenceStopped) {
+      if (this.#closed || this.#storageFailure || this.#persistStopped) {
         return;
       }
       try {
@@ -1428,7 +1435,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (
       this.#closed ||
       this.#storageFailure ||
-      this.#persistenceStopped ||
+      this.#refreshStopped ||
       !this.#enableRefresh()
     ) {
       return;
@@ -1637,29 +1644,42 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * Stops every path that reads or writes the local store, for an instance
-   * whose database is about to be dropped from under it: the store-using
-   * background processes (heartbeat, GC, collection, mutation recovery) are
-   * aborted, a `persist()` or `refresh()` already in flight is waited for,
-   * and every later `persist()` / `refresh()` — scheduled or explicit — is a
-   * no-op. Queries and mutations keep running against what the in-memory dag
-   * holds, until the app replaces the instance (see `onClientStateNotFound`).
+   * Stops every write to the local store, for an instance whose database is
+   * about to be dropped from under it: the store-using background processes
+   * (heartbeat, GC, collection, mutation recovery) are aborted, a `persist()`
+   * already in flight is waited for, and every later `persist()` — scheduled
+   * or explicit — is a no-op. Mutations keep running against the in-memory
+   * dag until the app replaces the instance (see `onClientStateNotFound`).
    *
-   * Without this, dropping the database under a live instance (zero-client
-   * does so when the server reports the client ahead of it) has the drop's
-   * own footprint — `database is closed` from the run loop's refresh, the
-   * next scheduled persist and the background processes — logged as errors
-   * against a store that was deleted on purpose.
+   * Use together with {@link stopRefresh} before dropping the database, so
+   * the drop's own footprint — `database is closed` from the next scheduled
+   * persist and the background processes — is not logged as errors against a
+   * store that was deleted on purpose.
    */
-  async stopPersistence(): Promise<void> {
-    if (this.#persistenceStopped) {
+  async stopPersist(): Promise<void> {
+    if (this.#persistStopped) {
       return;
     }
-    this.#persistenceStopped = true;
+    this.#persistStopped = true;
     this.#storeProcessesAbortController.abort();
     // A persist in flight holds the lock; taking it waits for that persist to
-    // finish. A refresh in flight is tracked separately since it has no lock.
+    // finish.
     await this.#persistLock.withLock(noop);
+  }
+
+  /**
+   * Stops every refresh from the local store, for an instance whose database
+   * is about to be dropped from under it: a `refresh()` already in flight is
+   * waited for, and every later `refresh()` / `runRefresh()` — scheduled or
+   * explicit — is a no-op. Queries keep running against the in-memory dag
+   * until the app replaces the instance (see `onClientStateNotFound`).
+   *
+   * Use together with {@link stopPersist} before dropping the database, so
+   * the run loop's refresh after a connect error does not run into the
+   * dropped store and log `database is closed` as an error.
+   */
+  async stopRefresh(): Promise<void> {
+    this.#refreshStopped = true;
     await this.#refreshInFlight;
   }
 
@@ -1681,7 +1701,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (
       !this.#enableScheduledPersist ||
       this.#storageFailure ||
-      this.#persistenceStopped
+      this.#persistStopped
     ) {
       return;
     }
@@ -1700,7 +1720,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (
       !this.#enableScheduledRefresh ||
       this.#storageFailure ||
-      this.#persistenceStopped
+      this.#refreshStopped
     ) {
       return;
     }
