@@ -1,0 +1,674 @@
+diff --git a/packages/zero-cache/src/config/zero-config.ts b/packages/zero-cache/src/config/zero-config.ts
+index a69888e7e..c300ce16b 100644
+--- a/packages/zero-cache/src/config/zero-config.ts
++++ b/packages/zero-cache/src/config/zero-config.ts
+@@ -680,21 +680,26 @@ export const zeroOptions = {
+       `With {bold deferIvmWrites}, the maximum number of rows that the client`,
+       `groups of one sync worker may hold in memory at once. Each client group`,
+       `holds its own copy of the changes it is advancing through. Before an`,
+-      `advancement starts, its number of changes is reserved from this budget;`,
+-      `an advancement that does not fit is written through to the replica`,
+-      `snapshot instead, as when {bold deferIvmWrites} is off.`,
++      `advancement starts, the number of rows it will change in the tables`,
++      `its queries read is reserved from this budget; an advancement that`,
++      `does not fit is written through to the replica snapshot instead, as`,
++      `when {bold deferIvmWrites} is off.`,
+     ],
+     hidden: true,
+   },
+ 
+   deferIvmWritesMaxBytes: {
+-    type: v.number().default(32 * 1024 * 1024),
++    type: v.number().default(256 * 1024 * 1024),
+     desc: [
+-      `With {bold deferIvmWrites}, the maximum estimated bytes retained by`,
+-      `pending rows and indexes across a client group's tables during one`,
+-      `advancement. This is a backstop for wide rows, which the row budget`,
+-      `does not account for. Exceeding it resets and rehydrates the client`,
+-      `group's pipelines. This is an estimate, not a hard JavaScript heap limit.`,
++      `With {bold deferIvmWrites}, the maximum estimated bytes that the client`,
++      `groups of one sync worker may hold in memory at once. Before an`,
++      `advancement starts, the bytes its rows are expected to hold are`,
++      `reserved alongside them, from the bytes per row of each table in`,
++      `earlier advancements, and an advancement that does not fit is written`,
++      `through. If an advancement holds more than it reserved, the reservation`,
++      `grows as it goes, and if this budget cannot cover it, the client`,
++      `group's pipelines are reset. This is an estimate, not a hard JavaScript`,
++      `heap limit.`,
+     ],
+     hidden: true,
+   },
+diff --git a/packages/zero-cache/src/services/view-syncer/deferred-writes-budget.ts b/packages/zero-cache/src/services/view-syncer/deferred-writes-budget.ts
+index c3aecb26e..08203571b 100644
+--- a/packages/zero-cache/src/services/view-syncer/deferred-writes-budget.ts
++++ b/packages/zero-cache/src/services/view-syncer/deferred-writes-budget.ts
+@@ -1,5 +1,35 @@
+ import {assert} from '../../../../shared/src/asserts.ts';
+ 
++/**
++ * The estimated bytes per row held for a table that no advancement on this
++ * worker has held rows for yet.
++ */
++export const DEFAULT_BYTES_PER_ROW = 1024;
++
++/**
++ * The weight of each advancement's observed bytes per row in a table's
++ * running estimate.
++ */
++const BYTES_PER_ROW_WEIGHT = 0.25;
++
++/**
++ * Rows and estimated bytes reserved from a {@link DeferredWritesBudget} for
++ * one advancement.
++ */
++export interface Reservation {
++  readonly rows: number;
++  readonly bytes: number;
++
++  /**
++   * Grows the reserved bytes to `bytes` if the budget has room, and returns
++   * whether the reservation now covers `bytes`.
++   */
++  growBytesTo(bytes: number): boolean;
++
++  /** Returns the reservation to the budget. Idempotent. */
++  release(): void;
++}
++
+ /**
+  * Bounds the memory that deferred IVM writes (see `deferIvmWrites`) use
+  * across the client groups of one syncer process.
+@@ -7,52 +37,116 @@ import {assert} from '../../../../shared/src/asserts.ts';
+  * Each client group holds its own in-memory copy of the changes of the
+  * advancement it is processing, so the copies add up across the groups that
+  * advance at the same time. Before an advancement starts, its pipeline driver
+- * reserves the advancement's number of change log entries. That number bounds
+- * the rows its sources can hold: the change log has one entry per row key
+- * (a truncation, which does not, resets the pipelines instead), and a row
+- * displaced through a unique key must itself have changed in the same
+- * interval, so it has its own entry. An advancement that does not fit is
+- * written through to the replica snapshot instead, which SQLite bounds with
+- * its page cache and spills to disk.
++ * reserves, for the tables it reads, their number of change log entries and
++ * an estimate of the bytes those rows will hold.
++ *
++ * The entry count bounds the rows the sources can hold: the change log has
++ * one entry per row key (a truncation, which does not, resets the pipelines
++ * instead), and a row displaced through a unique key must itself have changed
++ * in the same interval, so it has its own entry. The bytes are an estimate,
++ * so the reservation grows with the bytes actually held, and the advancement
++ * is abandoned if the budget cannot cover them.
++ *
++ * An advancement that does not fit to begin with is written through to the
++ * replica snapshot instead, which SQLite bounds with its page cache and
++ * spills to disk.
+  */
+ export class DeferredWritesBudget {
+   readonly #maxRows: number;
++  readonly #maxBytes: number;
++  readonly #bytesPerRow = new Map<string, number>();
+   #reservedRows = 0;
++  #reservedBytes = 0;
+ 
+-  /**
+-   * Estimated bytes one client group may hold for one advancement. The row
+-   * count is known before the advancement starts, but the width of the rows
+-   * is not, so this is checked as the rows are written.
+-   */
+-  readonly maxBytesPerClientGroup: number;
+-
+-  constructor(maxRows: number, maxBytesPerClientGroup: number) {
++  constructor(maxRows: number, maxBytes: number) {
+     this.#maxRows = maxRows;
+-    this.maxBytesPerClientGroup = maxBytesPerClientGroup;
++    this.#maxBytes = maxBytes;
+   }
+ 
+   get reservedRows(): number {
+     return this.#reservedRows;
+   }
+ 
++  get reservedBytes(): number {
++    return this.#reservedBytes;
++  }
++
++  /**
++   * The estimated bytes that `rows` rows of `table` will hold. A whole
++   * number, so that reservations add up exactly.
++   */
++  estimateBytes(table: string, rows: number): number {
++    return Math.ceil(
++      rows * (this.#bytesPerRow.get(table) ?? DEFAULT_BYTES_PER_ROW),
++    );
++  }
++
++  /**
++   * Updates the estimate for `table` with the bytes per row that an
++   * advancement held for it.
++   */
++  recordBytesPerRow(table: string, bytesPerRow: number): void {
++    const estimate = this.#bytesPerRow.get(table);
++    this.#bytesPerRow.set(
++      table,
++      estimate === undefined
++        ? bytesPerRow
++        : estimate + BYTES_PER_ROW_WEIGHT * (bytesPerRow - estimate),
++    );
++  }
++
+   /**
+-   * Reserves `rows` if they fit in what is left of the budget, and returns
+-   * whether they did. A successful reservation must be {@link release}d.
++   * Reserves `rows` and `bytes` if they fit in what is left of the budget.
++   * A reservation must be {@link Reservation.release}d.
+    */
+-  tryReserve(rows: number): boolean {
+-    if (this.#reservedRows + rows > this.#maxRows) {
+-      return false;
++  tryReserve(rows: number, bytes: number): Reservation | undefined {
++    if (!this.#fits(rows, bytes)) {
++      return undefined;
+     }
+-    this.#reservedRows += rows;
+-    return true;
++    this.#add(rows, bytes);
++
++    let reservedBytes = bytes;
++    let released = false;
++    return {
++      rows,
++      get bytes() {
++        return reservedBytes;
++      },
++      growBytesTo: (bytes: number) => {
++        assert(!released, 'Reservation has been released');
++        if (bytes <= reservedBytes) {
++          return true;
++        }
++        if (!this.#fits(0, bytes - reservedBytes)) {
++          return false;
++        }
++        this.#add(0, bytes - reservedBytes);
++        reservedBytes = bytes;
++        return true;
++      },
++      release: () => {
++        if (!released) {
++          released = true;
++          this.#add(-rows, -reservedBytes);
++        }
++      },
++    };
+   }
+ 
+-  release(rows: number): void {
++  #fits(rows: number, bytes: number): boolean {
++    return (
++      this.#reservedRows + rows <= this.#maxRows &&
++      this.#reservedBytes + bytes <= this.#maxBytes
++    );
++  }
++
++  #add(rows: number, bytes: number) {
++    this.#reservedRows += rows;
++    this.#reservedBytes += bytes;
+     assert(
+-      rows <= this.#reservedRows,
++      this.#reservedRows >= 0 && this.#reservedBytes >= 0,
+       () =>
+-        `Releasing ${rows} rows but only ${this.#reservedRows} are reserved`,
++        `Negative reservation: ${this.#reservedRows} rows, ${this.#reservedBytes} bytes`,
+     );
+-    this.#reservedRows -= rows;
+   }
+ }
+diff --git a/packages/zero-cache/src/services/view-syncer/deferred-writes-test-util.ts b/packages/zero-cache/src/services/view-syncer/deferred-writes-test-util.ts
+index ac726e641..0bf631756 100644
+--- a/packages/zero-cache/src/services/view-syncer/deferred-writes-test-util.ts
++++ b/packages/zero-cache/src/services/view-syncer/deferred-writes-test-util.ts
+@@ -1,4 +1,7 @@
+-import {DeferredWritesBudget} from './deferred-writes-budget.ts';
++import {
++  DeferredWritesBudget,
++  type Reservation,
++} from './deferred-writes-budget.ts';
+ 
+ /**
+  * A budget in which every other reservation fails, starting with one that
+@@ -9,9 +12,9 @@ import {DeferredWritesBudget} from './deferred-writes-budget.ts';
+ class AlternatingBudget extends DeferredWritesBudget {
+   #fits = false;
+ 
+-  override tryReserve(rows: number): boolean {
++  override tryReserve(rows: number, bytes: number): Reservation | undefined {
+     this.#fits = !this.#fits;
+-    return this.#fits && super.tryReserve(rows);
++    return this.#fits ? super.tryReserve(rows, bytes) : undefined;
+   }
+ }
+ 
+@@ -28,7 +31,7 @@ class AlternatingBudget extends DeferredWritesBudget {
+  */
+ export function testDeferredWritesBudget(): DeferredWritesBudget | undefined {
+   const maxRows = 200_000;
+-  const maxBytes = 32 * 1024 * 1024;
++  const maxBytes = 256 * 1024 * 1024;
+   const mode = process.env['ZERO_TEST_DEFER_IVM_WRITES'];
+   switch (mode) {
+     case undefined:
+diff --git a/packages/zero-cache/src/services/view-syncer/pipeline-driver.test.ts b/packages/zero-cache/src/services/view-syncer/pipeline-driver.test.ts
+index e11212cd3..20dc7c88b 100644
+--- a/packages/zero-cache/src/services/view-syncer/pipeline-driver.test.ts
++++ b/packages/zero-cache/src/services/view-syncer/pipeline-driver.test.ts
+@@ -45,7 +45,10 @@ import {
+   type FakeReplicator,
+ } from '../replicator/test-utils.ts';
+ import {getMutationResultsQuery} from './cvr.ts';
+-import {DeferredWritesBudget} from './deferred-writes-budget.ts';
++import {
++  DEFAULT_BYTES_PER_ROW,
++  DeferredWritesBudget,
++} from './deferred-writes-budget.ts';
+ import {testDeferredWritesBudget} from './deferred-writes-test-util.ts';
+ import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
+ import {rowIDSignatureUnit} from './row-set-signature.ts';
+@@ -1953,8 +1956,8 @@ describe('view-syncer/pipeline-driver', () => {
+         ).toEqual(expected);
+         expect(mixedBudget.reservedRows).toBe(0);
+       });
+-      expect(tryReserve.mock.calls).toEqual([[2], [3], [1]]);
+-      expect(tryReserve.mock.results.map(r => r.value)).toEqual([
++      expect(tryReserve.mock.calls.map(([rows]) => rows)).toEqual([2, 3, 1]);
++      expect(tryReserve.mock.results.map(r => r.value !== undefined)).toEqual([
+         true,
+         false,
+         true,
+@@ -2057,8 +2060,8 @@ describe('view-syncer/pipeline-driver', () => {
+       expect(summarize(b.advance(NO_TIME_ADVANCEMENT_TIMER).changes)).toEqual(
+         summarize(writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+       );
+-      expect(tryReserve.mock.calls).toEqual([[2], [2], [3]]);
+-      expect(tryReserve.mock.results.map(r => r.value)).toEqual([
++      expect(tryReserve.mock.calls.map(([rows]) => rows)).toEqual([2, 2, 3]);
++      expect(tryReserve.mock.results.map(r => r.value !== undefined)).toEqual([
+         true,
+         false,
+         true,
+@@ -2104,12 +2107,100 @@ describe('view-syncer/pipeline-driver', () => {
+       const iter = changes[Symbol.iterator]();
+       expect(iter.next().done).toBe(false);
+       expect(budget.reservedRows).toBe(numChanges);
++      expect(budget.reservedBytes).toBeGreaterThan(0);
+       iter.return?.();
+       expect(budget.reservedRows).toBe(0);
++      expect(budget.reservedBytes).toBe(0);
++    });
++
++    test('reserves only the changes to tables the client group reads', () => {
++      const budget = new DeferredWritesBudget(Infinity, Infinity);
++      const tryReserve = vi.spyOn(budget, 'tryReserve');
++      const driver = makeDriver('uniques-only', budget);
++      replicator.processTransaction(
++        '134',
++        messages.insert('issues', {id: '4', closed: 0}),
++        messages.insert('issues', {id: '5', closed: 1}),
++        messages.update('uniques', {id: 'foo', name: 'wuzzy'}),
++      );
++
++      const {numChanges, changes} = driver.advance(NO_TIME_ADVANCEMENT_TIMER);
++      [...changes];
++      expect(numChanges).toBe(3);
++      expect(tryReserve.mock.calls).toEqual([[1, DEFAULT_BYTES_PER_ROW]]);
++    });
++
++    test('bytes per row are estimated from earlier advancements', () => {
++      const budget = new DeferredWritesBudget(Infinity, Infinity);
++      const tryReserve = vi.spyOn(budget, 'tryReserve');
++      const driver = makeDriver('learns', budget);
++      let held = {rows: 0, bytes: 0};
++      // Last consulted after the last change has been applied.
++      const timer: Timer = {
++        elapsedLap: () => 0,
++        totalElapsed: () => {
++          held = {rows: driver.pendingRows, bytes: driver.pendingBytes};
++          return 0;
++        },
++      };
++
++      replicator.processTransaction('134', ...transactions[0]);
++      [...driver.advance(timer).changes];
++      // With nothing to go on, the default.
++      expect(tryReserve.mock.calls[0]).toEqual([2, 2 * DEFAULT_BYTES_PER_ROW]);
++
++      replicator.processTransaction('135', ...transactions[1]);
++      [...driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes];
++      expect(tryReserve.mock.calls[1]).toEqual([
++        3,
++        Math.ceil((3 * held.bytes) / held.rows),
++      ]);
++    });
++
++    test('an advancement expected not to fit writes through', () => {
++      // Less than the default estimate for the 2 changes.
++      const budget = new DeferredWritesBudget(
++        Infinity,
++        2 * DEFAULT_BYTES_PER_ROW - 1,
++      );
++      const tryReserve = vi.spyOn(budget, 'tryReserve');
++      const writeThrough = makeDriver('write-through', undefined);
++      const driver = makeDriver('expected-wide', budget);
++      replicator.processTransaction('134', ...transactions[0]);
++
++      expect(
++        summarize(driver.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
++      ).toEqual(
++        summarize(writeThrough.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
++      );
++      expect(tryReserve.mock.results.map(r => r.value)).toEqual([undefined]);
++    });
++
++    test('the reservation grows with the bytes held', () => {
++      const budget = new DeferredWritesBudget(Infinity, Infinity);
++      // Far less than a row of `uniques` holds.
++      budget.recordBytesPerRow('uniques', 1);
++      const driver = makeDriver('grows', budget);
++      let last = {reserved: 0, held: 0};
++      // Last consulted after the last change has been applied and checked.
++      const timer: Timer = {
++        elapsedLap: () => 0,
++        totalElapsed: () => {
++          last = {reserved: budget.reservedBytes, held: driver.pendingBytes};
++          return 0;
++        },
++      };
++      replicator.processTransaction('134', ...transactions[0]);
++
++      [...driver.advance(timer).changes];
++      expect(last.held).toBeGreaterThan(2);
++      expect(last.reserved).toBeGreaterThanOrEqual(last.held);
++      expect(budget.reservedBytes).toBe(0);
+     });
+ 
+-    test('advancement resets past the byte backstop', () => {
+-      const budget = new DeferredWritesBudget(Infinity, 1);
++    test('an advancement resets when the budget cannot cover its growth', () => {
++      const budget = new DeferredWritesBudget(Infinity, 100);
++      budget.recordBytesPerRow('uniques', 1);
+       const driver = makeDriver('wide', budget);
+       replicator.processTransaction('134', ...transactions[0]);
+ 
+@@ -2122,6 +2213,7 @@ describe('view-syncer/pipeline-driver', () => {
+       expect(err).toBeInstanceOf(ResetPipelinesSignal);
+       expect((err as ResetPipelinesSignal).reason).toBe('ivm-delta-overflow');
+       expect(budget.reservedRows).toBe(0);
++      expect(budget.reservedBytes).toBe(0);
+     });
+   });
+ 
+diff --git a/packages/zero-cache/src/services/view-syncer/pipeline-driver.ts b/packages/zero-cache/src/services/view-syncer/pipeline-driver.ts
+index d7401510a..a066987a2 100644
+--- a/packages/zero-cache/src/services/view-syncer/pipeline-driver.ts
++++ b/packages/zero-cache/src/services/view-syncer/pipeline-driver.ts
+@@ -66,7 +66,10 @@ import {
+   ZERO_VERSION_COLUMN_NAME,
+ } from '../replicator/schema/replication-state.ts';
+ import {checkClientSchema} from './client-schema.ts';
+-import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
++import type {
++  DeferredWritesBudget,
++  Reservation,
++} from './deferred-writes-budget.ts';
+ import {rowIDSignatureUnit} from './row-set-signature.ts';
+ import type {Snapshotter} from './snapshotter.ts';
+ import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
+@@ -154,8 +157,11 @@ type AdvanceContext = {
+   readonly timer: Timer;
+   readonly totalHydrationTimeMs: number;
+   readonly numChanges: number;
+-  /** Whether the advancement's changes are held in memory. */
+-  readonly deferWrites: boolean;
++  /**
++   * Present if the advancement's changes are held in memory, which the
++   * reservation covers.
++   */
++  readonly reservation: Reservation | undefined;
+   currentChangeStartMs: number | undefined;
+   pos: number;
+ };
+@@ -518,6 +524,18 @@ export class PipelineDriver {
+     return total;
+   }
+ 
++  /**
++   * The estimated bytes of {@link pendingRows}, which the advancement's
++   * reservation is grown to cover.
++   */
++  get pendingBytes(): number {
++    let total = 0;
++    for (const source of this.#tables.values()) {
++      total += source.pendingBytes;
++    }
++    return total;
++  }
++
+   #logQueryPipelineLifecycle({
+     zeroEvent,
+     pipelineRunID,
+@@ -1090,9 +1108,10 @@ export class PipelineDriver {
+     // The reservation is made here rather than in advance(), so that the
+     // finally below is guaranteed to release it: a generator that is never
+     // started never runs its finally.
+-    let deferWrites = false;
++    let reservation: Reservation | undefined;
+     try {
+-      deferWrites = this.#reserveDeferredWrites(numChanges);
++      reservation = this.#reserveDeferredWrites(diff);
++      const deferWrites = reservation !== undefined;
+       if (deferWrites) {
+         // `prev` is not written, so all of its reads can be shared.
+         diff.setPrevWrites('none');
+@@ -1104,7 +1123,7 @@ export class PipelineDriver {
+         timer,
+         totalHydrationTimeMs,
+         numChanges,
+-        deferWrites,
++        reservation,
+         currentChangeStartMs: undefined,
+         pos: 0,
+       };
+@@ -1181,7 +1200,7 @@ export class PipelineDriver {
+           }
+ 
+           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
+-          this.#checkPendingBytes(advanceContext);
++          this.#checkReservation(advanceContext);
+         } finally {
+           advanceContext.currentChangeStartMs = undefined;
+         }
+@@ -1192,6 +1211,10 @@ export class PipelineDriver {
+         });
+       }
+ 
++      if (reservation) {
++        this.#recordBytesPerRow(must(this.#deferredWrites));
++      }
++
+       // Set the new snapshot on all TableSources.
+       const {curr} = diff;
+       for (const table of this.#tables.values()) {
+@@ -1200,9 +1223,7 @@ export class PipelineDriver {
+       this.#ensureCostModelExistsIfEnabled(curr.db.db);
+       this.#lc.debug?.(`Advanced to ${curr.version}`);
+     } finally {
+-      if (deferWrites) {
+-        must(this.#deferredWrites).release(numChanges);
+-      }
++      reservation?.release();
+       this.#advanceContext = null;
+     }
+   }
+@@ -1210,23 +1231,47 @@ export class PipelineDriver {
+   /**
+    * Decides how the sources apply an advancement's changes: in memory if
+    * they fit in the worker's {@link DeferredWritesBudget}, and otherwise
+-   * written through to the `prev` snapshot. Returns true if they are held in
+-   * memory, in which case `numChanges` rows have been reserved.
++   * written through to the `prev` snapshot. Returns the reservation if they
++   * are held in memory.
+    */
+-  #reserveDeferredWrites(numChanges: number): boolean {
++  #reserveDeferredWrites(diff: SnapshotDiff): Reservation | undefined {
+     const budget = this.#deferredWrites;
+     if (!budget) {
+-      return false;
++      return undefined;
+     }
+-    if (budget.tryReserve(numChanges)) {
+-      return true;
++    // Only the changes to tables that this group's pipelines read reach its
++    // sources.
++    let rows = 0;
++    let bytes = 0;
++    for (const [table, changes] of diff.changesByTable()) {
++      if (this.#tables.has(table)) {
++        rows += changes;
++        bytes += budget.estimateBytes(table, changes);
++      }
++    }
++    const reservation = budget.tryReserve(rows, bytes);
++    if (!reservation) {
++      this.#deferredWritesFallbacks.add(1);
++      this.#lc.debug?.(
++        `writing through ${rows} rows (~${bytes} bytes): ` +
++          `${budget.reservedRows} rows and ${budget.reservedBytes} bytes ` +
++          `of the deferred writes budget are reserved`,
++      );
++    }
++    return reservation;
++  }
++
++  /**
++   * Refines the budget's estimate of the bytes per row of each table from
++   * what the advancement held.
++   */
++  #recordBytesPerRow(budget: DeferredWritesBudget) {
++    for (const [table, source] of this.#tables) {
++      const rows = source.pendingRows;
++      if (rows > 0) {
++        budget.recordBytesPerRow(table, source.pendingBytes / rows);
++      }
+     }
+-    this.#deferredWritesFallbacks.add(1);
+-    this.#lc.debug?.(
+-      `writing through ${numChanges} changes: ${budget.reservedRows} rows ` +
+-        `of the deferred writes budget are reserved`,
+-    );
+-    return false;
+   }
+ 
+   /** Implements `BuilderDelegate.getSource()` */
+@@ -1336,23 +1381,20 @@ export class PipelineDriver {
+   }
+ 
+   /**
+-   * The rows an advancement holds in memory are bounded by its reservation,
+-   * but their width is not known in advance. This is the backstop for wide
+-   * rows.
++   * The rows an advancement holds in memory cannot outgrow its reservation,
++   * but the bytes it reserved are an estimate. The reservation grows with the
++   * bytes held while the worker's budget has room, and the advancement is
++   * abandoned once it does not.
+    */
+-  #checkPendingBytes({deferWrites, pos, numChanges}: AdvanceContext) {
+-    if (!deferWrites) {
++  #checkReservation({reservation, pos, numChanges}: AdvanceContext) {
++    if (!reservation) {
+       return;
+     }
+-    const {maxBytesPerClientGroup} = must(this.#deferredWrites);
+-    let pendingBytes = 0;
+-    for (const source of this.#tables.values()) {
+-      pendingBytes += source.pendingBytes;
+-    }
+-    if (pendingBytes > maxBytesPerClientGroup) {
++    const bytes = this.pendingBytes;
++    if (!reservation.growBytesTo(bytes)) {
+       throw new ResetPipelinesSignal(
+-        `Advancement exceeded ${maxBytesPerClientGroup} estimated pending bytes ` +
+-          `(${pendingBytes} bytes) at ${pos} of ${numChanges} changes.`,
++        `Advancement holds ${bytes} estimated bytes at ${pos} of ` +
++          `${numChanges} changes, more than the deferred writes budget has left.`,
+         'ivm-delta-overflow',
+       );
+     }
+diff --git a/packages/zero-cache/src/services/view-syncer/snapshotter.test.ts b/packages/zero-cache/src/services/view-syncer/snapshotter.test.ts
+index 54f126ce7..2b0539b49 100644
+--- a/packages/zero-cache/src/services/view-syncer/snapshotter.test.ts
++++ b/packages/zero-cache/src/services/view-syncer/snapshotter.test.ts
+@@ -203,6 +203,12 @@ describe('view-syncer/snapshotter', () => {
+     expect(diff.prev.version).toBe('01');
+     expect(diff.curr.version).toBe('09');
+     expect(diff.changes).toBe(3);
++    expect(diff.changesByTable()).toEqual(
++      new Map([
++        ['backfilling', 1],
++        ['users', 2],
++      ]),
++    );
+ 
+     expect([...diff]).toMatchInlineSnapshot(`
+       [
+diff --git a/packages/zero-cache/src/services/view-syncer/snapshotter.ts b/packages/zero-cache/src/services/view-syncer/snapshotter.ts
+index cc126ffb3..0fbb7b5ef 100644
+--- a/packages/zero-cache/src/services/view-syncer/snapshotter.ts
++++ b/packages/zero-cache/src/services/view-syncer/snapshotter.ts
+@@ -298,6 +298,12 @@ export interface SnapshotDiff extends Iterable<Change> {
+    */
+   readonly changes: number;
+ 
++  /**
++   * {@link changes} by table. Computed on the first call, as it costs a scan
++   * of the change log entries.
++   */
++  changesByTable(): ReadonlyMap<string, number>;
++
+   /**
+    * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
+    * caller that decides how to write to `prev` once it knows the number of
+@@ -415,6 +421,14 @@ class Snapshot {
+     return count;
+   }
+ 
++  numChangesByTableSince(prevVersion: string): Map<string, number> {
++    const counts: {table: string; count: number}[] = this.db.all(
++      'SELECT "table", COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ? GROUP BY "table"',
++      prevVersion,
++    );
++    return new Map(counts.map(({table, count}) => [table, count]));
++  }
++
+   /**
+    * Whether a table-wide RESET op (i.e. a schema change) was logged after
+    * `prevVersion`. Table specs computed at or before `prevVersion` are
+@@ -599,6 +613,7 @@ class Diff implements SnapshotDiff {
+   readonly #rowCache: SnapshotRowCache | undefined;
+   #prevWrites: PrevWrites;
+   #iterated = false;
++  #changesByTable: ReadonlyMap<string, number> | undefined;
+   readonly prev: Snapshot;
+   readonly curr: Snapshot;
+   readonly changes: number;
+@@ -633,6 +648,13 @@ class Diff implements SnapshotDiff {
+         : undefined;
+   }
+ 
++  changesByTable(): ReadonlyMap<string, number> {
++    this.#changesByTable ??= this.curr.numChangesByTableSince(
++      this.prev.version,
++    );
++    return this.#changesByTable;
++  }
++
+   setPrevWrites(prevWrites: PrevWrites): void {
+     assert(!this.#iterated, 'prevWrites must be set before iterating the diff');
+     this.#prevWrites = prevWrites;

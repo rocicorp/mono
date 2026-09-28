@@ -81,15 +81,22 @@ const DEFAULT_USER_ID_KEYS = ['userId', 'userID', 'user_id'];
  * The CVR does not record which user a client group authenticated as, but the
  * user's own queries carry it as an argument. Returns the most frequent
  * string that appears either as a whole top-level argument or under one of
- * `userIDKeys` in an object argument.
+ * `userIDKeys` in an object argument, optionally only strings matching
+ * `pattern` (other string arguments, like a country code, can outnumber the
+ * user ID in a small group).
  */
 export function inferUserID(
   queries: readonly {readonly args: readonly ReadonlyJSONValue[]}[],
   userIDKeys: readonly string[] = DEFAULT_USER_ID_KEYS,
+  pattern?: RegExp | undefined,
 ): string | undefined {
   const counts = new Map<string, number>();
   const count = (value: ReadonlyJSONValue | undefined) => {
-    if (typeof value === 'string' && value !== '') {
+    if (
+      typeof value === 'string' &&
+      value !== '' &&
+      (pattern === undefined || pattern.test(value))
+    ) {
       counts.set(value, (counts.get(value) ?? 0) + 1);
     }
   };

@@ -196,6 +196,8 @@ export async function startLocalTarget(
       ZERO_PORT: String(o.zeroPort),
       ZERO_NUM_SYNC_WORKERS: String(o.numSyncWorkers),
       ZERO_QUERY_URL: `http://127.0.0.1:${o.queryServerPort}${o.queryPath}`,
+      // Opaque tokens need both URLs set; nothing here calls mutate.
+      ZERO_MUTATE_URL: `http://127.0.0.1:${o.queryServerPort}/api/mutate`,
       ZERO_LOG_FORMAT: 'text',
     });
     children.push(zeroCache);
@@ -266,6 +268,15 @@ function spawnLogged(
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });
+  const killGroup = () => {
+    try {
+      process.kill(-(child.pid as number), 'SIGKILL');
+    } catch {
+      // Already gone.
+    }
+  };
+  process.once('exit', killGroup);
+  child.once('exit', () => process.off('exit', killGroup));
   child.stdout?.pipe(log, {end: false});
   child.stderr?.pipe(log, {end: false});
   child.once('close', () => log.end());

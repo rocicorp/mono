@@ -51,7 +51,12 @@ export type SyncClientListener = {
     readonly bytes: number;
     readonly ms: number;
   }): void;
-  onRow(tableName: string, row: Row): void;
+  /**
+   * A row put by a poke that confirms no query, i.e. one carrying changes
+   * rather than a hydration, once the session has caught up. `caughtUpAtMs`
+   * is when it did, on the `performance.now()` clock.
+   */
+  onRow(tableName: string, row: Row, caughtUpAtMs: number): void;
   onPong(rttMs: number): void;
   onServerError(kind: string, message: string): void;
   onClose(info: {
@@ -101,7 +106,7 @@ export class SyncClient {
   #startedAtMs = 0;
   #initSent = false;
   #connected = false;
-  #firstPokeSeen = false;
+  #caughtUpAtMs: number | undefined;
   #closing = false;
   #receiving: ReceivingPoke | undefined;
   #pingTimer: NodeJS.Timeout | undefined;
@@ -343,6 +348,10 @@ export class SyncClient {
         : receiving.parts;
     const now = performance.now();
     const listener = this.#options.listener;
+    const caughtUpAtMs = this.#caughtUpAtMs;
+    const carriesChanges =
+      caughtUpAtMs !== undefined &&
+      parts.every(part => (part.gotQueriesPatch?.length ?? 0) === 0);
     let rows = 0;
     for (const part of parts) {
       for (const op of part.gotQueriesPatch ?? []) {
@@ -365,8 +374,8 @@ export class SyncClient {
       }
       for (const op of part.rowsPatch ?? []) {
         rows++;
-        if (op.op === 'put') {
-          listener.onRow(op.tableName, op.value);
+        if (carriesChanges && op.op === 'put') {
+          listener.onRow(op.tableName, op.value, caughtUpAtMs);
         }
       }
     }
@@ -376,8 +385,8 @@ export class SyncClient {
       bytes: receiving.bytes,
       ms: now - receiving.startedAtMs,
     });
-    if (!this.#firstPokeSeen) {
-      this.#firstPokeSeen = true;
+    if (this.#caughtUpAtMs === undefined) {
+      this.#caughtUpAtMs = now;
       listener.onFirstPoke({ms: now - this.#startedAtMs});
     }
   }

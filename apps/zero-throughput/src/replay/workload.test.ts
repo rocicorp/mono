@@ -18,6 +18,21 @@ describe('inferUserID', () => {
     expect(inferUserID([{args: [{id: 'w9'}]}, {args: []}])).toBeUndefined();
   });
 
+  test('only counts strings matching the pattern', () => {
+    const uuid = '0f151b84-4f1e-4cac-9bcf-e0d87e011d4e';
+    expect(inferUserID([{args: ['US']}, {args: ['US']}])).toBe('US');
+    expect(
+      inferUserID(
+        [{args: ['US']}, {args: ['US']}, {args: [{userId: uuid}]}],
+        undefined,
+        /^[0-9a-f-]{36}$/,
+      ),
+    ).toBe(uuid);
+    expect(
+      inferUserID([{args: ['US']}], undefined, /^[0-9a-f-]{36}$/),
+    ).toBeUndefined();
+  });
+
   test('honors custom keys', () => {
     expect(inferUserID([{args: [{owner: 'o1'}]}], ['owner'])).toBe('o1');
   });

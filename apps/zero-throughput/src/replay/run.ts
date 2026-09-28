@@ -26,6 +26,11 @@ import {
   type AppWritesSpec,
 } from './app-writes.ts';
 import {
+  parseArgRewrites,
+  rewriteArgs,
+  type ArgRewrite,
+} from './arg-rewrites.ts';
+import {
   BackfillDriver,
   HeldRowTracker,
   loadBackfillSpec,
@@ -85,6 +90,16 @@ const options = {
   appWritesPerSecond: v.number().default(0),
   appWritesMaxInFlight: v.number().default(8),
 
+  /**
+   * `name.key=now|minute|hour|day`: replace a recorded clock-derived argument
+   * with the current time (floored to the unit) whenever a session registers
+   * the query. Without it the snapshot's values are replayed as-is.
+   */
+  argRewrite: v.array(v.string()).default([]),
+
+  /** Free text copied into the result, e.g. known fidelity gaps. */
+  note: v.array(v.string()).default([]),
+
   bucketSeconds: v.number().default(60),
   progressSeconds: v.number().default(15),
   output: v.string().default('results/replay/latest.json'),
@@ -137,6 +152,8 @@ async function main(): Promise<void> {
   if ((backfillSpec === undefined) !== (schedule === undefined)) {
     throw new Error('--backfill-spec and --backfill-schedule go together');
   }
+  // Parsed before anything starts, so a typo fails fast.
+  const argRewrites = parseArgRewrites(config.argRewrite);
   const appWrites =
     config.appWritesSpec === undefined || config.appWritesPerSecond <= 0
       ? undefined
@@ -144,10 +161,12 @@ async function main(): Promise<void> {
 
   const stops: (() => Promise<void>)[] = [];
   let interrupted = false;
-  process.once('SIGINT', () => {
+  const onSignal = () => {
     warn('Interrupted; finishing the run and writing results...');
     interrupted = true;
-  });
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
 
   try {
     const {cacheURLs, pgURL, authSecret} = await resolveTarget(
@@ -164,6 +183,7 @@ async function main(): Promise<void> {
       backfillSpec,
       schedule,
       appWrites,
+      argRewrites,
       cacheURLs,
       pgURL,
       authSecret,
@@ -236,6 +256,7 @@ async function execute(args: {
   readonly backfillSpec: BackfillSpec | undefined;
   readonly schedule: readonly ScheduleSegment[] | undefined;
   readonly appWrites: AppWritesSpec | undefined;
+  readonly argRewrites: readonly ArgRewrite[];
   readonly cacheURLs: readonly string[];
   readonly pgURL: string | undefined;
   readonly authSecret: string;
@@ -312,6 +333,7 @@ async function execute(args: {
   }
 
   const devices = config.devices ?? Math.min(2 * config.groups, 100_000);
+  const {argRewrites} = args;
   const sessions = new SessionDriver({
     groups: workload.groups,
     screenQueries: workload.screenQueries,
@@ -331,8 +353,10 @@ async function execute(args: {
     pingIntervalMs: config.pingIntervalMs,
     maxHeaderLength: config.maxHeaderLength,
     random,
+    prepareQuery: q => rewriteArgs(q, argRewrites, Date.now()),
     recorder,
-    onRow: (table, row) => tracker?.observe(table, row),
+    onRow: (table, row, caughtUpAtMs) =>
+      tracker?.observe(table, row, caughtUpAtMs),
     log: warn,
   });
 
@@ -402,10 +426,14 @@ async function execute(args: {
   }));
   const result = {
     runID,
+    notes: config.note,
     interrupted: args.isInterrupted(),
     config: {
       ...config,
       authSecret: config.authSecret ? '<redacted>' : undefined,
+      pgURL: redactPassword(config.pgURL),
+      cloudzeroApiKey: config.cloudzeroApiKey ? '<redacted>' : undefined,
+      local: {...config.local, pgURL: redactPassword(config.local.pgURL)},
     },
     target: {cacheURLs: args.cacheURLs},
     workload: {
@@ -435,6 +463,9 @@ async function execute(args: {
     timelineCSV(result.timeline),
   );
   log('');
+  for (const note of config.note) {
+    log(`note: ${note}`);
+  }
   log(summaryTable(result.phases));
   const errors = [...recorder.errors()].toSorted((a, b) => b[1] - a[1]);
   if (errors.length > 0) {
@@ -447,6 +478,21 @@ async function execute(args: {
 }
 
 const JSON_EXTENSION = /\.json$/;
+
+function redactPassword(url: string | undefined): string | undefined {
+  if (url === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(url);
+    if (parsed.password !== '') {
+      parsed.password = 'redacted';
+    }
+    return parsed.toString();
+  } catch {
+    return '<unparseable>';
+  }
+}
 
 function runPhases(
   rampMs: number,
@@ -484,17 +530,19 @@ function selectTables(
   if (names === undefined || names.length === 0) {
     return spec.tables;
   }
-  return names.map(name => {
-    const table = spec.tables.find(
-      t => t.table === name || t.table.endsWith(`.${name}`),
-    );
-    if (table === undefined) {
-      throw new Error(
-        `--backfill-tables: ${name} is not in the spec (${spec.tables.map(t => t.table).join(', ')})`,
+  return names
+    .flatMap(n => n.split(','))
+    .map(name => {
+      const table = spec.tables.find(
+        t => t.table === name || t.table.endsWith(`.${name}`),
       );
-    }
-    return table;
-  });
+      if (table === undefined) {
+        throw new Error(
+          `--backfill-tables: ${name} is not in the spec (${spec.tables.map(t => t.table).join(', ')})`,
+        );
+      }
+      return table;
+    });
 }
 
 function startCloudZero(config: RunConfig): CloudZeroMetricsPoller | undefined {

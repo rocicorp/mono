@@ -32,6 +32,8 @@ type HydrationSample = Sample & {
   readonly returning: boolean;
 };
 
+type FailureKind = 'unexpectedClose' | 'serverError' | 'queryError';
+
 type Counters = {
   sessionsStarted: number;
   sessionsEnded: number;
@@ -130,7 +132,8 @@ export class Recorder {
   readonly #connects: Sample[] = [];
   readonly #firstPokes: Sample[] = [];
   readonly #heldRows: Sample[] = [];
-  readonly #backfillPages: Sample[] = [];
+  readonly #backfillPages: (Sample & {readonly written: number})[] = [];
+  readonly #failures: {readonly t: number; readonly kind: FailureKind}[] = [];
   readonly #appWrites: Sample[] = [];
   readonly #pings: Sample[] = [];
   readonly #errors = new Map<string, number>();
@@ -159,6 +162,7 @@ export class Recorder {
     c.sessionsEnded++;
     if (!expected) {
       c.unexpectedCloses++;
+      this.#failures.push({t: this.elapsedMs(), kind: 'unexpectedClose'});
       this.#error(`close: ${reason}`);
     }
   }
@@ -182,11 +186,13 @@ export class Recorder {
 
   queryError(name: string, message: string): void {
     this.#counters().queryErrors++;
+    this.#failures.push({t: this.elapsedMs(), kind: 'queryError'});
     this.#error(`query ${name}: ${message}`);
   }
 
   serverError(kind: string, message: string): void {
     this.#counters().serverErrors++;
+    this.#failures.push({t: this.elapsedMs(), kind: 'serverError'});
     this.#error(`${kind}: ${message}`);
   }
 
@@ -210,7 +216,7 @@ export class Recorder {
     c.backfillPages++;
     c.backfillRowsRead += read;
     c.backfillRowsWritten += written;
-    this.#backfillPages.push({t: this.elapsedMs(), ms: pageMs});
+    this.#backfillPages.push({t: this.elapsedMs(), ms: pageMs, written});
   }
 
   appWrite(ms: number, error: string | undefined): void {
@@ -292,12 +298,14 @@ export class Recorder {
   phaseSummaries(phases: readonly Phase[]): PhaseSummary[] {
     const timeline = this.timeline(phases);
     return phases.map(phase => {
-      const inPhase = (s: Sample) => s.t >= phase.startMs && s.t < phase.endMs;
+      const inPhase = (s: {readonly t: number}) =>
+        s.t >= phase.startMs && s.t < phase.endMs;
       const tailStart = phase.endMs - (phase.endMs - phase.startMs) / 4;
       const buckets = timeline.filter(b => b.phase === phase.label);
       const seconds = (phase.endMs - phase.startMs) / 1000;
-      const sum = (key: keyof Counters) =>
-        buckets.reduce((total, b) => total + b[key], 0);
+      const perSecond = (n: number) => (seconds > 0 ? round(n / seconds) : 0);
+      const failures = (kind: FailureKind) =>
+        this.#failures.filter(f => f.kind === kind && inPhase(f)).length;
       return {
         label: phase.label,
         startS: phase.startMs / 1000,
@@ -315,12 +323,15 @@ export class Recorder {
         firstPoke: msOf(this.#firstPokes, inPhase),
         heldRowDelivery: msOf(this.#heldRows, inPhase),
         pingRtt: msOf(this.#pings, inPhase),
-        backfillRowsPerSecond:
-          seconds > 0 ? round(sum('backfillRowsWritten') / seconds) : 0,
-        appWritesPerSecond: seconds > 0 ? round(sum('appWrites') / seconds) : 0,
-        unexpectedCloses: sum('unexpectedCloses'),
-        serverErrors: sum('serverErrors'),
-        queryErrors: sum('queryErrors'),
+        backfillRowsPerSecond: perSecond(
+          this.#backfillPages
+            .filter(inPhase)
+            .reduce((total, p) => total + p.written, 0),
+        ),
+        appWritesPerSecond: perSecond(this.#appWrites.filter(inPhase).length),
+        unexpectedCloses: failures('unexpectedClose'),
+        serverErrors: failures('serverError'),
+        queryErrors: failures('queryError'),
       };
     });
   }

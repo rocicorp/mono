@@ -20,7 +20,7 @@ export type BackfillTableSpec = {
   readonly table: string;
   /** Keyset column; unique among rows holding the old value. */
   readonly cursorColumn: string;
-  /** SQL type the cursor is compared as. Defaults to `uuid`. */
+  /** SQL type the cursor is compared as. Defaults to the column's type. */
   readonly cursorType?: string | undefined;
   /**
    * SQL predicate over alias `t`, true when renaming the row would collide
@@ -185,6 +185,32 @@ export async function checkPredicate(
   return rows[0]?.predicate ?? 'true';
 }
 
+/** The declared type of `table.column`, e.g. `uuid` or `text`. */
+export async function columnType(
+  sql: postgres.Sql,
+  table: string,
+  column: string,
+): Promise<string> {
+  const [schema, name] = table.includes('.')
+    ? table.split('.', 2)
+    : ['public', table];
+  const rows = await sql<{type: string}[]>`
+    SELECT format_type(a.atttypid, a.atttypmod) AS type
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = ${schema} AND c.relname = ${name}
+       AND a.attname = ${column} AND NOT a.attisdropped`;
+  const type = rows[0]?.type;
+  if (type === undefined) {
+    throw new Error(`${table}.${column} does not exist`);
+  }
+  return type;
+}
+
+/** Consecutive failed pages after which the backfill gives up. */
+const MAX_CONSECUTIVE_FAILURES = 5;
+
 /**
  * Times how long a renamed row takes to reach each client that holds it:
  * from the page's commit to the poke that carries the new value.
@@ -222,7 +248,11 @@ export class HeldRowTracker {
     }
   }
 
-  observe(tableName: string, row: Row): void {
+  /**
+   * Counts a delivery only when the session was caught up before the commit,
+   * so rows a session hydrates after the rename do not read as slow pokes.
+   */
+  observe(tableName: string, row: Row, caughtUpAtMs: number): void {
     const cursorColumn = this.#cursorColumns.get(tableName);
     if (cursorColumn === undefined || row[this.#column] !== this.#to) {
       return;
@@ -230,7 +260,7 @@ export class HeldRowTracker {
     const committedAt = this.#committedAt.get(
       `${tableName}\u0000${String(row[cursorColumn])}`,
     );
-    if (committedAt !== undefined) {
+    if (committedAt !== undefined && committedAt >= caughtUpAtMs) {
       this.#onDelivered(this.#now() - committedAt);
     }
   }
@@ -313,15 +343,23 @@ export class BackfillDriver {
     const o = this.#o;
     const startedAt = performance.now();
     const validText = new Map<string, string>();
-    if (o.skipInvalidRows) {
-      for (const table of o.tables) {
+    const tables: BackfillTableSpec[] = [];
+    for (const table of o.tables) {
+      tables.push({
+        ...table,
+        cursorType:
+          table.cursorType ??
+          (await columnType(o.sql, table.table, table.cursorColumn)),
+      });
+      if (o.skipInvalidRows) {
         validText.set(table.table, await checkPredicate(o.sql, table.table));
       }
     }
+    let failures = 0;
     let tableIndex = 0;
     let after: string | null = null;
     let nextPageAt = startedAt;
-    while (!this.#stopped && tableIndex < o.tables.length) {
+    while (!this.#stopped && tableIndex < tables.length) {
       const now = performance.now();
       const current = segmentAt(o.schedule, now - startedAt);
       if (current === undefined) {
@@ -337,7 +375,7 @@ export class BackfillDriver {
         await sleep(Math.min(250, nextPageAt - now));
         continue;
       }
-      const table = o.tables[tableIndex];
+      const table = tables[tableIndex];
       const statement = pageStatement(o.spec, table, {
         from: this.#from,
         to: this.#to,
@@ -363,9 +401,14 @@ export class BackfillDriver {
       } catch (e) {
         o.recorder.serverError('backfill', String(e));
         o.log(`backfill page on ${table.table} failed: ${String(e)}`);
+        if (++failures >= MAX_CONSECUTIVE_FAILURES) {
+          o.log(`backfill: stopping after ${failures} failed pages in a row`);
+          return;
+        }
         await sleep(1_000);
         continue;
       }
+      failures = 0;
       const pageMs = performance.now() - pageStart;
       o.recorder.backfillPage(page.readrows, page.writtenrows, pageMs);
       o.tracker.written(table.syncedTable ?? table.table, page.keys);

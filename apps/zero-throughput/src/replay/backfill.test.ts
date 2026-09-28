@@ -114,15 +114,29 @@ describe('HeldRowTracker', () => {
     });
     tracker.written('catalog.work_titles', ['t1', 't2']);
     now = 1_250;
-    tracker.observe('catalog.work_titles', {title_id: 't1', language: 'en'});
-    tracker.observe('catalog.work_titles', {title_id: 't2', language: 'en-US'});
-    tracker.observe('catalog.work_titles', {title_id: 't3', language: 'en'});
-    tracker.observe('catalog.works', {title_id: 't1', language: 'en'});
+    const caughtUp = 500;
+    const t1 = {title_id: 't1', language: 'en'};
+    tracker.observe('catalog.work_titles', t1, caughtUp);
+    tracker.observe(
+      'catalog.work_titles',
+      {title_id: 't2', language: 'en-US'},
+      caughtUp,
+    );
+    tracker.observe(
+      'catalog.work_titles',
+      {title_id: 't3', language: 'en'},
+      caughtUp,
+    );
+    tracker.observe('catalog.works', t1, caughtUp);
+    expect(delivered).toEqual([250]);
+
+    // A session that caught up after the commit hydrated the row instead.
+    tracker.observe('catalog.work_titles', t1, 1_100);
     expect(delivered).toEqual([250]);
 
     now = 100_000;
     tracker.expire();
-    tracker.observe('catalog.work_titles', {title_id: 't1', language: 'en'});
+    tracker.observe('catalog.work_titles', t1, caughtUp);
     expect(delivered).toEqual([250]);
   });
 });

@@ -2,7 +2,7 @@ import type {ClientSchema} from '../../../../packages/zero-protocol/src/client-s
 import type {Row} from '../../../../packages/zero-protocol/src/data.ts';
 import type {Recorder} from './recorder.ts';
 import {SyncClient, type DeviceState, type ReplayQuery} from './sync-client.ts';
-import type {ScreenQuery, WorkloadGroup} from './workload.ts';
+import type {ScreenQuery, WorkloadGroup, WorkloadQuery} from './workload.ts';
 
 export type SessionDriverOptions = {
   readonly groups: readonly WorkloadGroup[];
@@ -26,8 +26,13 @@ export type SessionDriverOptions = {
   readonly pingIntervalMs: number;
   readonly maxHeaderLength: number;
   readonly random: () => number;
+  /**
+   * Applied to each query as a session registers it, e.g. to move
+   * clock-derived arguments to the current time.
+   */
+  readonly prepareQuery: (query: WorkloadQuery) => WorkloadQuery;
   readonly recorder: Recorder;
-  readonly onRow: (tableName: string, row: Row) => void;
+  readonly onRow: (tableName: string, row: Row, caughtUpAtMs: number) => void;
   readonly log: (message: string) => void;
 };
 
@@ -220,7 +225,10 @@ export class SessionDriver {
     this.#sessions.add(session);
     recorder.sessionStarted();
     client.connect(
-      device.group.sessionQueries.map(q => ({...q, kind: 'session'})),
+      device.group.sessionQueries.map(q => ({
+        ...o.prepareQuery(q),
+        kind: 'session',
+      })),
     );
 
     this.#after(session, exponential(o.random, o.meanSessionMs), () =>
@@ -249,7 +257,7 @@ export class SessionDriver {
     if (session.screens.size >= o.maxScreenQueriesPerSession) {
       return;
     }
-    const picked = this.#pickScreenQuery();
+    const picked = o.prepareQuery(this.#pickScreenQuery());
     const key = JSON.stringify([picked.name, picked.args]);
     if (session.screens.has(key)) {
       return;

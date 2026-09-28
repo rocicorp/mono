@@ -43,6 +43,8 @@ const options = {
   /** A JSON array of names that are always session queries. */
   sessionNamesFile: v.string().optional(),
   userIDKeys: v.array(v.string()).default(['userId', 'userID', 'user_id']),
+  /** A regular expression user IDs must match, e.g. a UUID pattern. */
+  userIDPattern: v.string().optional(),
 };
 
 type LiveGroup = {
@@ -82,6 +84,10 @@ async function main(): Promise<void> {
     throw new Error(`Invalid snapshot time: ${String(config.snapshot)}`);
   }
   const liveSinceMs = snapshotMs - config.liveWindowSeconds * 1000;
+  const userIDPattern =
+    config.userIDPattern === undefined
+      ? undefined
+      : new RegExp(config.userIDPattern);
   log(`snapshot ${new Date(snapshotMs).toISOString()}`);
 
   // 1. Live groups, their client schemas, and the recent connect rate.
@@ -221,7 +227,7 @@ async function main(): Promise<void> {
   let screenDesires = 0;
   let sessionMinutes = 0;
   for (const [cg, held] of active) {
-    const userID = inferUserID(held, config.userIDKeys);
+    const userID = inferUserID(held, config.userIDKeys, userIDPattern);
     if (userID === undefined) {
       groupsWithoutUser++;
       continue;
