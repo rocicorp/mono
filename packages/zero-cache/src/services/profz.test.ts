@@ -1,6 +1,7 @@
 import fastify, {type FastifyInstance} from 'fastify';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {getLikePredicate} from '../../../zql/src/builder/like.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {
   inProcChannel,
@@ -8,18 +9,25 @@ import {
   type ProfileResponseMessage,
 } from '../types/processes.ts';
 import {CpuProfiler} from '../types/profiler.ts';
-import {handleProfrmzRequest, handleProfzRequest} from './profz.ts';
+import {
+  handleProfrmzRequest,
+  handleProfzRequest,
+  redactProfile,
+} from './profz.ts';
 
 describe('profz', () => {
   const lc = createSilentLogContext();
   const config = {
     adminPassword: 'secret',
+    operatorPassword: 'operator-secret',
     changeStreamer: {},
   } as unknown as NormalizedZeroConfig;
 
-  const authHeader = {
-    authorization: `Basic ${Buffer.from('user:secret').toString('base64')}`,
-  };
+  const basicAuth = (password: string) => ({
+    authorization: `Basic ${Buffer.from(`user:${password}`).toString('base64')}`,
+  });
+  const authHeader = basicAuth('secret');
+  const operatorAuthHeader = basicAuth('operator-secret');
 
   let app: FastifyInstance;
   let profileSpy: ReturnType<typeof vi.spyOn>;
@@ -30,6 +38,18 @@ describe('profz', () => {
     timeDeltas: [1000],
     startTime: 0,
     endTime: 1000,
+  };
+
+  const regExpProfile = {
+    ...mockProfile,
+    nodes: [
+      {id: 1, callFrame: {functionName: '(root)'}, children: [2]},
+      {
+        id: 2,
+        callFrame: {functionName: 'RegExp: ^.*alice@example\\.com.*$'},
+        hitCount: 7,
+      },
+    ],
   };
 
   beforeEach(async () => {
@@ -57,6 +77,83 @@ describe('profz', () => {
     });
 
     expect(res.statusCode).toBe(401);
+  });
+
+  test('rejects a wrong password when an operator password is set', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/profz',
+      headers: basicAuth('wrong'),
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  test('operator password gets profiles with regular expressions redacted', async () => {
+    profileSpy.mockResolvedValue(regExpProfile);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/profz?duration=1',
+      headers: operatorAuthHeader,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain('alice');
+    const body = JSON.parse(res.body) as Record<string, typeof regExpProfile>;
+    expect(body.dispatcher.nodes).toEqual([
+      regExpProfile.nodes[0],
+      {
+        ...regExpProfile.nodes[1],
+        callFrame: {functionName: 'RegExp: <redacted>'},
+      },
+    ]);
+  });
+
+  test('admin password gets profiles unredacted', async () => {
+    profileSpy.mockResolvedValue(regExpProfile);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/profz?duration=1',
+      headers: authHeader,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as Record<string, typeof regExpProfile>;
+    expect(body.dispatcher).toEqual(regExpProfile);
+  });
+
+  test('operator password gets redacted profiles from workers', async () => {
+    const [dispatcherSide, workerSide] = inProcChannel();
+    workerSide.onMessageType<ProfileMessage>('profile', ({id}) =>
+      workerSide.send<ProfileResponseMessage>([
+        'profileResponse',
+        {id, name: 'syncer-0', profile: regExpProfile},
+      ]),
+    );
+    const workerApp = fastify();
+    workerApp.get('/profz', (req, res) =>
+      handleProfzRequest(lc, config, req, res, () =>
+        Promise.resolve(dispatcherSide),
+      ),
+    );
+    await workerApp.ready();
+    try {
+      for (const url of [
+        '/profz?duration=1&worker=syncer',
+        '/profz?duration=1&worker=all',
+      ]) {
+        const res = await workerApp.inject({
+          method: 'GET',
+          url,
+          headers: operatorAuthHeader,
+        });
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain('RegExp: <redacted>');
+        expect(res.body).not.toContain('alice');
+      }
+    } finally {
+      await workerApp.close();
+    }
   });
 
   test('returns multi-process profile bundle by default', async () => {
@@ -159,6 +256,26 @@ describe('profz', () => {
     expect(body).toEqual(mockProfile);
   });
 
+  test('profrmz accepts the operator password', async () => {
+    profileSpy.mockResolvedValue(regExpProfile);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/profrmz?duration=1',
+      headers: operatorAuthHeader,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('RegExp: <redacted>');
+    expect(res.body).not.toContain('alice');
+
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/profrmz?duration=1',
+      headers: basicAuth('wrong'),
+    });
+    expect(denied.statusCode).toBe(401);
+  });
+
   test('profrmz in distributed mode proxies to changeStreamer.uri (converting ws:// to http://)', async () => {
     const distributedConfig = {
       adminPassword: 'secret',
@@ -203,4 +320,95 @@ describe('profz', () => {
     fetchSpy.mockRestore();
     await distApp.close();
   });
+});
+
+describe('redactProfile', () => {
+  test('redacts LIKE patterns from a real CPU profile', async () => {
+    // A LIKE pattern with a wildcard is compiled to a regular expression,
+    // which V8 names after its source in CPU profiles.
+    const secret = 'alice.operator-test@example.com';
+    const like = getLikePredicate(`%${secret}%`, '');
+    const rows = Array.from(
+      {length: 1000},
+      (_, i) => `${'x'.repeat(200)}${i % 7 === 0 ? secret : i}`,
+    );
+
+    const profiler = await CpuProfiler.connect();
+    await profiler.start();
+    const end = Date.now() + 500;
+    let matches = 0;
+    while (Date.now() < end) {
+      for (const row of rows) {
+        if (like(row)) {
+          matches++;
+        }
+      }
+    }
+    const profile = await profiler.stop();
+    expect(matches).toBeGreaterThan(0);
+
+    // Guards the premise of this test: the unredacted profile leaks.
+    expect(JSON.stringify(profile)).toContain('alice');
+
+    const redacted = JSON.stringify(redactProfile(profile));
+    expect(redacted).not.toContain('alice');
+    expect(redacted).toContain('RegExp: <redacted>');
+  });
+
+  test('leaves everything but regular expression names alone', () => {
+    const profile = {
+      nodes: [
+        {
+          id: 1,
+          callFrame: {
+            functionName: 'fetchRows',
+            scriptId: '42',
+            url: 'file:///app/zero-cache.js',
+            lineNumber: 10,
+            columnNumber: 3,
+          },
+          hitCount: 3,
+          children: [2],
+          positionTicks: [{line: 11, ticks: 3}],
+        },
+        {
+          id: 2,
+          callFrame: {
+            functionName: 'RegExp: ^secret$',
+            scriptId: '0',
+            url: '',
+            lineNumber: -1,
+            columnNumber: -1,
+          },
+          hitCount: 1,
+        },
+      ],
+      startTime: 1,
+      endTime: 2,
+      samples: [1, 2],
+      timeDeltas: [1, 1],
+    };
+    expect(redactProfile(profile)).toEqual({
+      ...profile,
+      nodes: [
+        profile.nodes[0],
+        {
+          ...profile.nodes[1],
+          callFrame: {
+            ...profile.nodes[1].callFrame,
+            functionName: 'RegExp: <redacted>',
+          },
+        },
+      ],
+    });
+  });
+
+  test.each([undefined, null, 'profile', {}, {nodes: 'nope'}])(
+    'withholds a profile in an unrecognized format: %o',
+    profile => {
+      expect(redactProfile(profile)).toEqual({
+        error: 'Profile withheld: unrecognized format',
+      });
+    },
+  );
 });

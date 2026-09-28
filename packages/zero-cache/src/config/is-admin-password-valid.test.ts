@@ -2,7 +2,11 @@ import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {NormalizedZeroConfig} from './normalize.ts';
-import {isAdminPasswordValid, resetWarnOnceState} from './zero-config.ts';
+import {
+  getOperatorAccess,
+  isAdminPasswordValid,
+  resetWarnOnceState,
+} from './zero-config.ts';
 
 describe('isAdminPasswordValid', () => {
   let testLogSink: TestLogSink;
@@ -239,5 +243,108 @@ describe('isAdminPasswordValid', () => {
         ['No admin password set; allowing access in development mode only'],
       ]);
     });
+  });
+});
+
+describe('operator password', () => {
+  let testLogSink: TestLogSink;
+  let lc: LogContext;
+
+  const config: Pick<
+    NormalizedZeroConfig,
+    'adminPassword' | 'operatorPassword'
+  > = {
+    adminPassword: 'admin-secret',
+    operatorPassword: 'operator-secret',
+  };
+
+  beforeEach(() => {
+    testLogSink = new TestLogSink();
+    lc = new LogContext('debug', undefined, testLogSink);
+    resetWarnOnceState();
+  });
+
+  describe.each(['production', 'development'])('NODE_ENV=%s', nodeEnv => {
+    beforeEach(() => {
+      vi.stubEnv('NODE_ENV', nodeEnv);
+    });
+
+    test('isAdminPasswordValid never accepts the operator password', () => {
+      expect(isAdminPasswordValid(lc, config, 'operator-secret')).toBe(false);
+      expect(testLogSink.messages).toContainEqual([
+        'warn',
+        undefined,
+        ['Invalid admin password'],
+      ]);
+    });
+
+    test('getOperatorAccess grants operator access for the operator password', () => {
+      expect(getOperatorAccess(lc, config, 'operator-secret')).toBe('operator');
+      expect(testLogSink.messages).toContainEqual([
+        'debug',
+        undefined,
+        ['Operator password accepted'],
+      ]);
+    });
+
+    test('getOperatorAccess grants admin access for the admin password', () => {
+      expect(getOperatorAccess(lc, config, 'admin-secret')).toBe('admin');
+      expect(testLogSink.messages).toContainEqual([
+        'debug',
+        undefined,
+        ['Admin password accepted'],
+      ]);
+    });
+
+    test.each([undefined, '', 'wrong', 'operator-secretX', 'operator'])(
+      'getOperatorAccess denies access for password %o',
+      password => {
+        expect(getOperatorAccess(lc, config, password)).toBeUndefined();
+        expect(testLogSink.messages).toContainEqual([
+          'warn',
+          undefined,
+          ['Invalid admin or operator password'],
+        ]);
+      },
+    );
+
+    test('getOperatorAccess without an operator password configured is admin-only', () => {
+      const adminOnly = {
+        adminPassword: 'admin-secret',
+        operatorPassword: undefined,
+      };
+      expect(getOperatorAccess(lc, adminOnly, 'admin-secret')).toBe('admin');
+      expect(
+        getOperatorAccess(lc, adminOnly, 'operator-secret'),
+      ).toBeUndefined();
+      expect(getOperatorAccess(lc, adminOnly, '')).toBeUndefined();
+    });
+  });
+
+  test('getOperatorAccess in development mode with only an operator password configured', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const operatorOnly = {
+      adminPassword: undefined,
+      operatorPassword: 'operator-secret',
+    };
+    expect(getOperatorAccess(lc, operatorOnly, 'operator-secret')).toBe(
+      'operator',
+    );
+    expect(getOperatorAccess(lc, operatorOnly, 'wrong')).toBeUndefined();
+    // Unchanged from before the operator password existed: in development
+    // mode with no admin password, a request without a password is allowed.
+    expect(getOperatorAccess(lc, operatorOnly, undefined)).toBe('admin');
+  });
+
+  test('getOperatorAccess in production mode with no passwords configured', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const none = {adminPassword: undefined, operatorPassword: undefined};
+    expect(getOperatorAccess(lc, none, undefined)).toBeUndefined();
+    expect(getOperatorAccess(lc, none, '')).toBeUndefined();
+    expect(testLogSink.messages).toContainEqual([
+      'warn',
+      undefined,
+      ['No admin password set; denying access'],
+    ]);
   });
 });

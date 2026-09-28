@@ -57,7 +57,9 @@ const SUBSCRIBE_PATH = `/replication/v${PROTOCOL_VERSION}/subscribe`;
 
 type Options = HttpOptions & {
   startupDelayMs: number;
-  config?: Pick<NormalizedZeroConfig, 'adminPassword'> | undefined;
+  config?:
+    | Pick<NormalizedZeroConfig, 'adminPassword' | 'operatorPassword'>
+    | undefined;
   getProfileWorker?: (() => Promise<Worker>) | undefined;
 };
 
@@ -87,7 +89,10 @@ export class ChangeStreamerHttpServer extends HttpService {
       fastify.get('/profz', (req, res) =>
         handleProfzRequest(
           lc,
-          opts.config ?? {adminPassword: undefined},
+          opts.config ?? {
+            adminPassword: undefined,
+            operatorPassword: undefined,
+          },
           req,
           res,
           opts.getProfileWorker,

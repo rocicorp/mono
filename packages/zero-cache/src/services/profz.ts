@@ -1,10 +1,11 @@
 import {randomUUID} from 'node:crypto';
+import type {Profiler} from 'node:inspector';
 import type {LogContext} from '@rocicorp/logger';
 import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import {sleep} from '../../../shared/src/sleep.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
-import {isAdminPasswordValid} from '../config/zero-config.ts';
+import {getOperatorAccess} from '../config/zero-config.ts';
 import {
   singleProcessMode,
   subscribeToMessageType,
@@ -15,9 +16,20 @@ import {
 import {CpuProfiler} from '../types/profiler.ts';
 import {URLParams} from '../types/url-params.ts';
 
+/**
+ * Serves CPU profiles. This is available to the operator password as well as
+ * the admin password (see `--operator-password`), so it must never serve
+ * application data to `operator` access.
+ *
+ * A V8 CPU profile describes code, not data: function names, script URLs and
+ * positions, and sample timings. The exception is a regular expression, which
+ * V8 names after its source (`RegExp: <source>`). zero-cache compiles `LIKE`
+ * and `ILIKE` patterns from client queries into regular expressions, so their
+ * sources are redacted for `operator` access. See {@link redactProfile}.
+ */
 export async function handleProfzRequest(
   lc: LogContext,
-  config: Pick<NormalizedZeroConfig, 'adminPassword'>,
+  config: Pick<NormalizedZeroConfig, 'adminPassword' | 'operatorPassword'>,
   req: FastifyRequest,
   res: FastifyReply,
   getWorker?: (() => Promise<Worker>) | undefined,
@@ -25,7 +37,8 @@ export async function handleProfzRequest(
   localProcessName: string = 'dispatcher',
 ): Promise<void> {
   const credentials = auth(req);
-  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
+  const access = getOperatorAccess(lc, config, credentials?.pass);
+  if (access === undefined) {
     void res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="Profz Protected Area"')
@@ -108,6 +121,12 @@ export async function handleProfzRequest(
     responses.set(localName, localProfile);
   }
 
+  if (access === 'operator') {
+    for (const [name, prof] of responses) {
+      responses.set(name, redactProfile(prof));
+    }
+  }
+
   // If a single specific worker was requested, return that profile directly
   if (targetWorker !== undefined && targetWorker !== 'all') {
     let matchedProfile = responses.get(targetWorker);
@@ -161,7 +180,7 @@ export async function handleProfrmzRequest(
   getWorker?: (() => Promise<Worker>) | undefined,
 ): Promise<void> {
   const credentials = auth(req);
-  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
+  if (getOperatorAccess(lc, config, credentials?.pass) === undefined) {
     void res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="Profrmz Protected Area"')
@@ -169,7 +188,9 @@ export async function handleProfrmzRequest(
     return;
   }
 
-  // In distributed mode, proxy to the upstream Replication Manager
+  // In distributed mode, proxy to the upstream Replication Manager. The
+  // credentials are forwarded, and the Replication Manager's /profz decides
+  // for itself what access they grant (and so what to redact).
   if (config.changeStreamer.uri) {
     const upstreamURL = new URL('/profz', config.changeStreamer.uri);
     if (upstreamURL.protocol === 'ws:') {
@@ -214,4 +235,37 @@ export async function handleProfrmzRequest(
 
   // In single-node mode, profile local change-streamer / RM process
   return handleProfzRequest(lc, config, req, res, getWorker, 'change-streamer');
+}
+
+// V8 names the code for a regular expression `RegExp: <source>`.
+const REGEXP_NAME_PREFIX = 'RegExp:';
+const REDACTED_REGEXP_NAME = 'RegExp: <redacted>';
+
+/**
+ * Returns a copy of the V8 CPU `profile` with the source of every regular
+ * expression replaced, since a pattern built at runtime can contain
+ * application data (e.g. a `LIKE` pattern from a client query). The time spent
+ * in regular expressions is still attributed to them.
+ *
+ * A `profile` that is not in the expected format is withheld rather than
+ * served unredacted.
+ *
+ * @visibleForTesting
+ */
+export function redactProfile(profile: unknown): unknown {
+  const {nodes} = (profile ?? {}) as Partial<Profiler.Profile>;
+  if (!Array.isArray(nodes)) {
+    return {error: 'Profile withheld: unrecognized format'};
+  }
+  return {
+    ...(profile as Profiler.Profile),
+    nodes: nodes.map(node =>
+      node.callFrame?.functionName?.startsWith(REGEXP_NAME_PREFIX)
+        ? {
+            ...node,
+            callFrame: {...node.callFrame, functionName: REDACTED_REGEXP_NAME},
+          }
+        : node,
+    ),
+  };
 }
