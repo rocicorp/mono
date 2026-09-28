@@ -134,12 +134,9 @@ export class Database implements Disposable {
       }
       throw e;
     } finally {
-      logIfSlow(
-        this.#lc.withContext('method', method),
-        performance.now() - start,
-        {method},
-        this.#threshold,
-      );
+      logIfSlow(this.#lc, performance.now() - start, this.#threshold, {
+        method,
+      });
     }
   }
 
@@ -213,10 +210,11 @@ export class Statement {
     const start = performance.now();
     const ret = this.#stmt.run(...params);
     logIfSlow(
-      this.#lc.withContext('method', 'run'),
+      this.#lc,
       performance.now() - start,
-      {...this.#attrs, method: 'run'},
       this.#threshold,
+      this.#attrs,
+      METHOD_RUN,
     );
     return ret;
   }
@@ -225,10 +223,11 @@ export class Statement {
     const start = performance.now();
     const ret = this.#stmt.get(...params);
     logIfSlow(
-      this.#lc.withContext('method', 'get'),
+      this.#lc,
       performance.now() - start,
-      {...this.#attrs, method: 'get'},
       this.#threshold,
+      this.#attrs,
+      METHOD_GET,
     );
     return ret as T;
   }
@@ -237,17 +236,18 @@ export class Statement {
     const start = performance.now();
     const ret = this.#stmt.all(...params);
     logIfSlow(
-      this.#lc.withContext('method', 'all'),
+      this.#lc,
       performance.now() - start,
-      {...this.#attrs, method: 'all'},
       this.#threshold,
+      this.#attrs,
+      METHOD_ALL,
     );
     return ret as T[];
   }
 
   iterate<T>(...params: unknown[]): IterableIterator<T> {
     return new LoggingIterableIterator(
-      this.#lc.withContext('method', 'iterate'),
+      this.#lc,
       this.#attrs,
       this.#stmt.iterate(...params),
       this.#threshold,
@@ -290,16 +290,18 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
 
   #log() {
     logIfSlow(
-      this.#lc.withContext('type', 'total'),
+      this.#lc,
       performance.now() - this.#start,
-      {...this.#attrs, type: 'total', method: 'iterate'},
       this.#threshold,
+      this.#attrs,
+      ITERATE_TOTAL,
     );
     logIfSlow(
-      this.#lc.withContext('type', 'sqlite'),
+      this.#lc,
       this.#sqliteRowTimeSum,
-      {...this.#attrs, type: 'sqlite', method: 'iterate'},
       this.#threshold,
+      this.#attrs,
+      ITERATE_SQLITE,
     );
   }
 
@@ -320,19 +322,37 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   }
 }
 
+// The per-call attributes of a slow-query log, allocated once.
+const METHOD_RUN: Attributes = {method: 'run'};
+const METHOD_GET: Attributes = {method: 'get'};
+const METHOD_ALL: Attributes = {method: 'all'};
+const ITERATE_TOTAL: Attributes = {method: 'iterate', type: 'total'};
+const ITERATE_SQLITE: Attributes = {method: 'iterate', type: 'sqlite'};
+
+/**
+ * Logs and traces a statement that took at least `threshold` ms, with
+ * `attrs` and `extra` as its log context and span attributes.
+ *
+ * This runs on every statement, including each IVM operator-storage lookup,
+ * so nothing is allocated unless the statement was slow: log contexts and
+ * merged attributes are built only then.
+ */
 function logIfSlow(
   lc: LogContext,
   elapsed: number,
-  attrs: Attributes,
   threshold: number,
+  attrs: Attributes,
+  extra?: Attributes,
 ): void {
-  if (elapsed >= threshold) {
-    for (const [key, value] of Object.entries(attrs)) {
-      lc = lc.withContext(key, value);
-    }
-    lc.warn?.('Slow SQLite query', elapsed);
-    manualSpan(tracer, 'db.slow-query', elapsed, attrs);
+  if (elapsed < threshold) {
+    return;
   }
+  const all = extra === undefined ? attrs : {...attrs, ...extra};
+  for (const [key, value] of Object.entries(all)) {
+    lc = lc.withContext(key, value);
+  }
+  lc.warn?.('Slow SQLite query', elapsed);
+  manualSpan(tracer, 'db.slow-query', elapsed, all);
 }
 
 /**

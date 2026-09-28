@@ -44,10 +44,31 @@ const NO_OWNER: AuthOwner = {};
  */
 const authenticatedClientGroupIDs = new Map<ClientGroupID, AuthOwner>();
 
+/**
+ * `query-update-server` is reported for every change pushed into every
+ * pipeline: millions of values a minute while a bulk write fans out across
+ * many client groups. Inserting each into a TDigest (two allocations, and a
+ * sort every few hundred inserts) cost ~16% of a busy syncer's CPU. Instead,
+ * every UPDATE_SAMPLE_RATE-th value of each query is recorded, weighted by
+ * the rate, so the digests keep describing the distribution and, to within
+ * one sample, the count.
+ */
+export const UPDATE_SAMPLE_RATE = 32;
+
+type UpdateMetrics = {
+  readonly digest: TDigest;
+  /** Values reported for the query, recorded or not. */
+  reported: number;
+};
+
+function newUpdateMetrics(): UpdateMetrics {
+  return {digest: new TDigest(), reported: 0};
+}
+
 export class InspectorDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
   readonly #perQueryHydrateMs = new Map<string, number>();
-  readonly #perQueryUpdateMetrics = new Map<string, TDigest>();
+  readonly #perQueryUpdateMetrics = new Map<string, UpdateMetrics>();
   readonly #queryIDToAST: Map<string, AST> = new Map();
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
@@ -64,14 +85,18 @@ export class InspectorDelegate implements MetricsDelegate {
     const queryID = args[0];
     if (metric === 'query-materialization-server') {
       this.#perQueryHydrateMs.set(queryID, value);
-    } else {
-      getOrInsertComputed(
-        this.#perQueryUpdateMetrics,
-        queryID,
-        () => new TDigest(),
-      ).add(value);
+      this.#globalMetrics[metric].add(value);
+      return;
     }
-    this.#globalMetrics[metric].add(value);
+    const update = getOrInsertComputed(
+      this.#perQueryUpdateMetrics,
+      queryID,
+      newUpdateMetrics,
+    );
+    if (update.reported++ % UPDATE_SAMPLE_RATE === 0) {
+      update.digest.add(value, UPDATE_SAMPLE_RATE);
+      this.#globalMetrics[metric].add(value, UPDATE_SAMPLE_RATE);
+    }
   }
 
   getMetricsJSONForQuery(queryID: string): QueryServerMetricsJSON | null {
@@ -82,7 +107,7 @@ export class InspectorDelegate implements MetricsDelegate {
     }
     return {
       'query-hydration-server-ms': hydrateMs,
-      'query-update-server': (updateMetrics ?? new TDigest()).toJSON(),
+      'query-update-server': (updateMetrics?.digest ?? new TDigest()).toJSON(),
     };
   }
 
