@@ -352,15 +352,24 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   readonly #closeAbortController = new AbortController();
   /**
-   * Aborted on close AND on a storage failure after the open. The store-using
-   * background processes (heartbeat, client and client-group GC, database
-   * collection, mutation recovery, the new-client channel's store read) run
-   * on this signal, so the first detected failure stops them instead of
-   * letting each retry the fault at its interval and log `Error running.`
-   * every time. A failure during the open moves the stores onto memory
-   * instead, where they keep running.
+   * Aborted on close, on a storage failure after the open, and by
+   * {@link stopPersist}. `persist()`, the persist scheduler and the
+   * store-writing background processes (heartbeat, client and client-group
+   * GC, database collection, mutation recovery) stop on this signal, so the
+   * first detected failure stops them instead of letting each retry the
+   * fault at its interval and log `Error running.` every time. A failure
+   * during the open moves the stores onto memory instead, where they keep
+   * running.
    */
-  readonly #storeProcessesAbortController = new AbortController();
+  readonly #persistAbortController = new AbortController();
+
+  /**
+   * Aborted on close, on a storage failure after the open, and by
+   * {@link stopRefresh}. `refresh()`, the refresh scheduler and the
+   * store-reading background process (the new-client channel's store read)
+   * stop on this signal.
+   */
+  readonly #refreshAbortController = new AbortController();
 
   readonly #persistLock = new Lock();
   readonly #enableScheduledPersist: boolean;
@@ -472,6 +481,20 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #storageFailure: StorageFailureError | undefined;
 
   /**
+   * The last persist queued on the persist lock, if any, so
+   * {@link stopPersist} can wait for it. The lock runs persists in order, so
+   * this one settles after every persist queued before it. Settled to
+   * `undefined` rather than left rejected.
+   */
+  #persistInFlight: Promise<void> | undefined;
+
+  /**
+   * The refresh currently running, if any, so {@link stopRefresh} can wait
+   * for it. Settled to `undefined` rather than left rejected.
+   */
+  #refreshInFlight: Promise<void> | undefined;
+
+  /**
    * `onUpdateNeeded` is called when a code update is needed.
    *
    * A code update can be needed because:
@@ -563,7 +586,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     // to a listener added later (an engine closed while its open is in flight).
     this.#closeAbortController.signal.addEventListener(
       'abort',
-      () => this.#storeProcessesAbortController.abort(),
+      () => {
+        this.#persistAbortController.abort();
+        this.#refreshAbortController.abort();
+      },
       {once: true},
     );
     this.#subscriptions = new SubscriptionsManagerImpl(
@@ -751,7 +777,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.push().catch(noop);
     }
 
-    const {signal} = this.#storeProcessesAbortController;
+    const {signal} = this.#persistAbortController;
 
     startHeartbeats(
       clientID,
@@ -808,7 +834,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     initNewClientChannel(
       this.name,
       this.idbName,
-      signal,
+      this.#refreshAbortController.signal,
       client.clientGroupID,
       isNewClientGroup,
       () => {
@@ -1370,11 +1396,16 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   persist(): Promise<void> {
     // Prevent multiple persist calls from running at the same time.
-    return this.#persistLock.withLock(async () => {
+    const run = this.#persistLock.withLock(async () => {
       const {clientID} = this;
       await this.#ready;
-      // After a storage failure nothing is persisted.
-      if (this.#closed || this.#storageFailure) {
+      // After a storage failure, or once persist is stopped, nothing is
+      // persisted.
+      if (
+        this.#closed ||
+        this.#storageFailure ||
+        this.#persistAbortController.signal.aborted
+      ) {
         return;
       }
       try {
@@ -1414,12 +1445,25 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       assert(clientGroupID, 'Expected clientGroupID to be defined');
       this.#onPersist({clientID, clientGroupID});
     });
+    this.#persistInFlight = run.catch(noop);
+    return run;
   }
 
-  async refresh(): Promise<void> {
+  refresh(): Promise<void> {
+    const run = this.#refresh();
+    this.#refreshInFlight = run.catch(noop);
+    return run;
+  }
+
+  async #refresh(): Promise<void> {
     await this.#ready;
     const {clientID} = this;
-    if (this.#closed || this.#storageFailure || !this.#enableRefresh()) {
+    if (
+      this.#closed ||
+      this.#storageFailure ||
+      this.#refreshAbortController.signal.aborted ||
+      !this.#enableRefresh()
+    ) {
       return;
     }
     let refreshResult: Awaited<ReturnType<typeof refresh>>;
@@ -1495,7 +1539,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       return;
     }
     this.#storageFailure = failure;
-    this.#storeProcessesAbortController.abort();
+    this.#persistAbortController.abort();
+    this.#refreshAbortController.abort();
     // warn, not error: a full or failing disk is the device's condition, and
     // it is handled here (retries stop, the app is told once through
     // onStorageFailure), so there is nothing for a developer to fix.
@@ -1637,6 +1682,42 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#fireOnClientStateNotFound();
   }
 
+  /**
+   * Stops every write to the local store, for an instance whose database is
+   * about to be dropped from under it: the store-writing background
+   * processes (heartbeat, GC, collection, mutation recovery) are aborted, a
+   * `persist()` already in flight is waited for, and every later `persist()`
+   * — scheduled or explicit — is a no-op. Mutations keep running against the in-memory
+   * dag until the app replaces the instance (see `onClientStateNotFound`).
+   *
+   * Use together with {@link stopRefresh} before dropping the database, so
+   * the drop's own footprint — `database is closed` from the next scheduled
+   * persist and the background processes — is not logged as errors against a
+   * store that was deleted on purpose.
+   */
+  async stopPersist(): Promise<void> {
+    this.#persistAbortController.abort();
+    await this.#persistInFlight;
+  }
+
+  /**
+   * Stops every refresh from the local store, for an instance whose database
+   * is about to be dropped from under it: the store-reading background
+   * process (the new-client channel) is aborted, a `refresh()` already in
+   * flight is waited for, and every later `refresh()` / `runRefresh()` —
+   * scheduled or explicit — is a no-op. Queries keep running against the
+   * in-memory dag until the app replaces the instance (see
+   * `onClientStateNotFound`).
+   *
+   * Use together with {@link stopPersist} before dropping the database, so
+   * the run loop's refresh after a connect error does not run into the
+   * dropped store and log `database is closed` as an error.
+   */
+  async stopRefresh(): Promise<void> {
+    this.#refreshAbortController.abort();
+    await this.#refreshInFlight;
+  }
+
   async disableClientGroup(): Promise<void> {
     const clientGroupID = await this.#clientGroupIDPromise;
     assert(clientGroupID, 'Expected clientGroupID to be defined');
@@ -1652,7 +1733,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   async #schedulePersist(): Promise<void> {
-    if (!this.#enableScheduledPersist || this.#storageFailure) {
+    if (
+      !this.#enableScheduledPersist ||
+      this.#storageFailure ||
+      this.#persistAbortController.signal.aborted
+    ) {
       return;
     }
     await this.#schedule('persist', this.#persistScheduler);
@@ -1667,7 +1752,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   async #scheduleRefresh(): Promise<void> {
-    if (!this.#enableScheduledRefresh || this.#storageFailure) {
+    if (
+      !this.#enableScheduledRefresh ||
+      this.#storageFailure ||
+      this.#refreshAbortController.signal.aborted
+    ) {
       return;
     }
     await this.#schedule('refresh from storage', this.#refreshScheduler);
@@ -1988,8 +2077,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   recoverMutations(): Promise<boolean> | void {
     // Also reached on every offline->online change, which does not go
-    // through the store-process signal.
-    if (this.#storeProcessesAbortController.signal.aborted) {
+    // through the persist signal.
+    if (this.#persistAbortController.signal.aborted) {
       return promiseFalse;
     }
     if (!process.env.DISABLE_MUTATION_RECOVERY) {
