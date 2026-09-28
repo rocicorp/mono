@@ -1,7 +1,9 @@
 # 003: `/plannerz`, replica statistics and query plans for LLMs
 
-- **Status:** Proposed
-- **Date:** 2026-09-22
+- **Status:** Phase 1 (`GET /plannerz`) shipped in
+  [#6639](https://github.com/rocicorp/mono/pull/6639) on 2026-09-24. Phases 2
+  and 3 are not built.
+- **Date:** 2026-09-22 (updated 2026-09-28 to match the code)
 - **Packages:** `zero-cache` (admin endpoint), `zqlite` (stat4 decoding)
 
 ## Goal
@@ -15,12 +17,12 @@ statistics are allowed. Values from the database are not.
 
 ## What exists today
 
-| Piece                                                         | Where                                                                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin HTTP endpoints `/statz`, `/heapz`, `/profz`, `/profrmz` | `server/runner/zero-dispatcher.ts`                                                       | Basic auth, password optional in dev. `/heapz` requires the admin password (`isAdminPasswordValid`). `/statz`, `/profz` and `/profrmz` also accept the operator password (`getOperatorAccess`, `--operator-password`), since they return no application data. Profiles served for the operator password have regular expression sources redacted, since those can hold `LIKE` patterns from client queries. `/statz` already opens `config.replica.file` read-only for pragmas. |
-| `analyze-query`                                               | `services/view-syncer/inspect-handler.ts` → `services/analyze.ts`                        | Websocket inspector only, admin password only. Needs a connected client (uses the CVR `clientSchema`). **Runs** the query (capped at `MAX_ANALYZE_ROWS` = 1000 per table). Returns planner events (`joinPlans`), SQLite plans, and read counts per SQL. Can also return `syncedRows`/`vendedRows`, which are row data.                                                                                                                                                          |
-| Planner cost model                                            | `zqlite/src/sqlite-cost-model.ts`, `sqlite-stat-fanout.ts`                               | Costs come from SQLite `scanstatus` estimates. Join fanout comes from stat4, else stat1, else the default of 3.                                                                                                                                                                                                                                                                                                                                                                 |
-| Stats collection                                              | `db/migration-lite.ts:159`, `replicator/change-processor.ts:991`, `zqlite/src/db.ts:156` | Only `PRAGMA optimize` runs, always under `analysis_limit` (1000 is set explicitly in `workers/replicator.ts:176`; `optimize` sets its own limit otherwise). There is no full `ANALYZE` anywhere.                                                                                                                                                                                                                                                                               |
+| Piece                                                                      | Where                                                                                                                                                                                                                       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin HTTP endpoints `/statz`, `/plannerz`, `/heapz`, `/profz`, `/profrmz` | `server/runner/zero-dispatcher.ts`                                                                                                                                                                                          | Basic auth, password optional in dev. `/heapz` requires the admin password (`isAdminPasswordValid`). `/statz`, `/plannerz`, `/profz` and `/profrmz` also accept the operator password (`getOperatorAccess`, `--operator-password`), since they return no application data. Profiles served for the operator password have regular expression sources redacted, since those can hold `LIKE` patterns from client queries. `/plannerz` opens `config.replica.file` read-only. `/statz` opens it writable for its pragmas, which include `wal_checkpoint`. |
+| `analyze-query`                                                            | `services/view-syncer/inspect-handler.ts` → `services/analyze.ts`                                                                                                                                                           | Websocket inspector only, admin password only. Needs a connected client (uses the CVR `clientSchema`). **Runs** the query (capped at `MAX_ANALYZE_ROWS` = 1000 per table). Returns planner events (`joinPlans`), SQLite plans, and read counts per SQL. Can also return `syncedRows`/`vendedRows`, which are row data.                                                                                                                                                                                                                                  |
+| Planner cost model                                                         | `zqlite/src/sqlite-cost-model.ts`, `sqlite-stat-fanout.ts`                                                                                                                                                                  | Costs come from SQLite `scanstatus` estimates. Join fanout comes from stat4, else stat1, else the default of 3.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Stats collection                                                           | `db/migration-lite.ts` (after migrations), `workers/replicator.ts` (replica setup, `optimize = 0x10002`), `replicator/change-processor.ts` (after a schema change), `zqlite/src/db.ts` (`close()` on a writable connection) | Only `PRAGMA optimize` runs. The replicator's connections set `analysis_limit = 1000` (`getPragmaConfig` in `workers/replicator.ts`); elsewhere `optimize` sets its own temporary limit. There is no full `ANALYZE` anywhere.                                                                                                                                                                                                                                                                                                                           |
 
 ## Finding: the replica has no stat4 and only approximate stat1
 
@@ -85,7 +87,7 @@ from the catalog, `sqlite_stat*`, and config. No user tables are scanned.
   "server": {
     "zeroVersion": "…",
     "sqliteVersion": "3.54.0",
-    "replicaWatermark": "…",       // getReplicationState, as /statz does
+    "replicaWatermark": "…",       // getReplicationState; absent before initial sync
     "generatedAt": "…",
     "planner": {                   // config flags that change plans
       "enableQueryPlanner": true,
@@ -96,15 +98,19 @@ from the catalog, `sqlite_stat*`, and config. No user tables are scanned.
   "statsQuality": {
     "stat1Present": true,
     "stat4Rows": 0,
-    "method": "PRAGMA optimize with analysis_limit (approximate)",
+    "method": "PRAGMA optimize under an analysis_limit. …",  // fixed text, §1.3
     "tablesWithoutStats": ["…"]
   },
   "tables": [{
     "name": "issue",
-    "columns": [{"name": "…", "type": "…", "nullable": true, "zqlType": "…"}],
+    "columns": [{
+      "name": "…", "dataType": "…", "nullable": true,
+      "zqlType": "…",              // null for a column clients cannot see
+      "backfilling": true          // only while the column is backfilling
+    }],
     "primaryKey": ["id"],
     "estimatedRows": 20000,        // first number in the table's stat1 row
-    "syncable": true,              // present in zqlSpecs (not backfilling or internal)
+    "syncable": true,              // has a primary key or unique index, and a ZQL-typed column
     "indexes": [{
       "name": "…",
       "columns": [{"name": "projectID", "dir": "ASC"}, …],
@@ -123,7 +129,10 @@ from the catalog, `sqlite_stat*`, and config. No user tables are scanned.
         "perPrefix": [                                   // per key prefix depth
           {"maxRowsPerKey": 4500, "medianRowsPerKey": 4500, "estimatedDistinctKeys": 2}
         ]
-      }
+      },
+      "stat4Samples": [            // only with ?stat4=full (§1.1b)
+        {"nEq": […], "nLt": […], "nDLt": […], "sample": ["integer", "text", "integer"]}
+      ]
     }]
   }]
 }
@@ -131,7 +140,8 @@ from the catalog, `sqlite_stat*`, and config. No user tables are scanned.
 
 #### 1.1 Sources
 
-- Tables and columns: `listTables` and `computeZqlSpecs` from `db/lite-tables.ts`.
+- Tables and columns: `listTables` and `computeZqlSpecsFromLiteSpecs` from
+  `db/lite-tables.ts`, with backfilling columns left out of the ZQL specs.
   Don't list Zero's internal tables (`_zero.*`, change log, and so on).
 - Indexes: `listIndexes` from `db/lite-tables.ts`. It also returns the indexes
   Zero creates itself, and the ones SQLite creates for primary keys.
@@ -162,12 +172,15 @@ and was off by 8x because of this.
 These are enforced in code and pinned by tests.
 
 - **stat4 `sample` values are never returned.** Each sample becomes a list of
-  `{kind}` per key column (`null | integer | real | text | blob`), decoded from
-  the record header. That is the same decoding `#decodeSampleIsNull` already
-  does. The numeric arrays (`nEq`/`nLt`/`nDLt`) are returned. They show skew
-  ("one key covers 40% of the rows") but not which key it is. The trailing
-  rowid in each sample is also dropped.
-- There is no raw-samples option in v1. Add one only if users ask for it.
+  kinds (`null | integer | real | text | blob | unknown`), one per key column
+  plus the trailing rowid, decoded from the record header by
+  `decodeSampleKinds` in `zqlite/src/sqlite-stat4-sample.ts`. The fanout code
+  uses the same decoder (`isSampleNull`). The numeric arrays
+  (`nEq`/`nLt`/`nDLt`) are returned. They show skew ("one key covers 40% of the
+  rows") but not which key it is.
+- There is no option to return sample values. `?stat4=full` returns every
+  sample, but still only their kinds. Add a values option only if users ask
+  for it.
 - What is returned: table and column names, index definitions, row count
   estimates, and distinct-value averages. These are served to the operator
   password too, which is for people who operate zero-cache but may not read
@@ -176,9 +189,10 @@ These are enforced in code and pinned by tests.
 #### 1.3 How approximate the stats are
 
 The server can't tell when stats were gathered or with which limit, but the
-code path is known. Report it as fixed text in `statsQuality.method`. If stat4
-has rows, report `"ANALYZE (full)"`. Don't compare against `count(*)`, because
-that scans the whole table.
+code path is known. `statsQuality.method` is fixed text: an explanation that
+the stats are sampled estimates, or, when stat4 has rows, that a full `ANALYZE`
+ran at some point. It doesn't compare against `count(*)`, because that scans
+the whole table.
 
 #### 1.4 `about`: a short glossary
 
@@ -196,12 +210,18 @@ map that covers:
   - **Postgres** indexes. The replica copies upstream indexes, so users don't
     add indexes to the replica directly.
   - The planner config flags.
-- Pointers: the docs URL and `POST /plannerz/analyze` for checking a specific
-  query.
+- Caveats: row counts are estimates, the stats can be stale, and what
+  `syncable: false` means.
+- `nextStep`, which tells the LLM to `POST /plannerz/analyze` to check one
+  query. That route is not built yet (Phase 2), so for now this points at a
+  route that returns 404. There is no docs URL.
 
-Keep it short, under about 1.5k tokens, and snapshot-test it.
+It is about 560 tokens, under the 1.5k budget. It is not snapshot-tested: the
+endpoint test only checks `whatThisIs`.
 
 ### Phase 2: `POST /plannerz/analyze` returns the plan for one query
+
+**Not built.** Everything in this section is still a proposal.
 
 This is where most of the value is. Without it, the LLM has to rebuild our
 cost model from raw stats. The planner has known cost gaps (semi-join double
@@ -288,6 +308,8 @@ Implementation notes:
 
 ### Phase 3: packaging for LLMs (optional)
 
+**Not built.**
+
 - A docs page with a prompt snippet like "fetch `$URL/plannerz`, read my
   queries in `src/queries.ts`, then call `/plannerz/analyze` on the three most
   expensive ones".
@@ -298,37 +320,59 @@ Implementation notes:
 
 ## Files
 
+Phase 1:
+
 - `packages/zero-cache/src/services/plannerz.ts`: request handler, bundle
-  builder, stat parsing and redaction.
+  builder, stat1 parsing, stat4 digest, and the `about` text.
 - `packages/zero-cache/src/services/plannerz.test.ts`
-- `packages/zero-cache/src/server/runner/zero-dispatcher.ts`: add routes.
-- Maybe `zqlite/src/sqlite-stat-fanout.ts`: move the record-header decoding
-  into a shared function so the fanout code and the redaction use the same one.
-- Phase 2: a `clientSchema` from `tableSpecs` adapter next to `services/analyze.ts`.
+- `packages/zero-cache/src/server/runner/zero-dispatcher.ts`: the
+  `GET /plannerz` route.
+- `packages/zqlite/src/sqlite-stat4-sample.ts` (and its test): the stat4
+  record-header decoding, shared by the redaction and
+  `zqlite/src/sqlite-stat-fanout.ts`.
+
+Phase 2 (not built): a `clientSchema` from `tableSpecs` adapter next to
+`services/analyze.ts`, and the `POST /plannerz/analyze` route.
 
 ## Tests
 
-- 401 without a password or with a wrong one. Allowed in dev mode without a
-  password, which matches the other endpoints.
-- `GET /plannerz` accepts the operator password. `POST /plannerz/analyze`
-  returns 401 for it.
-- Bundle built from a fixture replica: tables, indexes, and stat1 parsing,
-  including the `unordered` and `sz=` flags.
-- **Redaction**: run a full `ANALYZE` on a fixture with sentinel strings
-  (`"SECRET-…"`). Check that the response contains stat4 counts and that no
-  sentinel appears anywhere in the serialized body. Do the same check on the
-  phase 2 response.
-- No stats yet (fresh replica, stat tables missing) returns
-  `statsQuality.stat1Present=false` and no error.
-- Internal tables are left out.
-- Phase 2 plan-only: a zbugs-style AST returns `joinPlans` and `sqlitePlans`
-  with no row fields, and reads no user table. Pin the "reads nothing" part by
-  counting reads, for example with a `TableSource` spy or by asserting that the
-  fetch path is never entered.
-- Phase 2 execute mode: same AST with `?execute=true` adds measured row counts,
-  and still has no row fields.
-- Manual eval: point Claude at zbugs plus a local `/plannerz` and see whether
-  the advice is correct.
+Phase 1, in `services/plannerz.test.ts` and
+`zqlite/src/sqlite-stat4-sample.test.ts`:
+
+- 401 without a password or with a wrong one, and 200 with the operator
+  password. Dev mode without a password is covered by the tests of the shared
+  password check (`config/is-admin-password-valid.test.ts`).
+- stat1 parsing, including the `unordered` and `sz=` flags.
+- The stat4 digest, including that it does not depend on the order the samples
+  arrive in.
+- Bundle built from a fixture replica: tables, columns and indexes, before any
+  stats exist (`statsQuality.stat1Present=false`, `tablesWithoutStats`), and
+  after `PRAGMA optimize` (stat1, no stat4).
+- A table with no unique key is reported as not syncable. Internal tables are
+  left out.
+- **Redaction**: the fixture's indexed columns hold a sentinel string
+  (`SECRET-do-not-leak`). After a full `ANALYZE`, the bundle has stat4 counts
+  and the sentinel appears nowhere in it, with and without `?stat4=full`, and
+  nowhere in the HTTP response body.
+- stat4 record-header decoding, including multi-byte varints and NULL samples.
+
+The fixture replica has no `_zero.tableMetadata`, so every bundle test goes
+through the fallback in §1.1. Not covered: a replica that has table metadata
+(and so the `backfilling` column flag), and a snapshot of `about`.
+
+Phase 2 (planned):
+
+- Plan-only: a zbugs-style AST returns `joinPlans` and `sqlitePlans` with no
+  row fields, and reads no user table. Pin the "reads nothing" part by counting
+  reads, for example with a `TableSource` spy or by asserting that the fetch
+  path is never entered.
+- Execute mode: same AST with `?execute=true` adds measured row counts, and
+  still has no row fields.
+- The sentinel check on the Phase 2 response.
+- 401 for the operator password.
+
+Manual: point Claude at zbugs plus a local `/plannerz` and see whether the
+advice is correct.
 
 ## Follow-ups
 
