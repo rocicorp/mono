@@ -1429,13 +1429,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       assert(clientGroupID, 'Expected clientGroupID to be defined');
       this.#onPersist({clientID, clientGroupID});
     });
-    this.#persistInFlight = run.then(noop, noop);
+    this.#persistInFlight = run.catch(noop);
     return run;
   }
 
   refresh(): Promise<void> {
     const run = this.#refresh();
-    this.#refreshInFlight = run.then(noop, noop);
+    this.#refreshInFlight = run.catch(noop);
     return run;
   }
 
