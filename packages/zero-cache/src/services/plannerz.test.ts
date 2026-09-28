@@ -195,6 +195,14 @@ describe('plannerz bundle', () => {
     ]);
   });
 
+  test('about does not point at routes that are not built', () => {
+    // `/plannerz/analyze` is designed (Phase 2 in
+    // designs/003_replica_stats_endpoint.md) but not built, so `about` must
+    // not send an LLM to it.
+    const bundle = buildPlannerzBundleFromDB(lc, db, config(file));
+    expect(JSON.stringify(bundle.about)).not.toContain('/plannerz/analyze');
+  });
+
   test('a table with no unique key is reported as not syncable', () => {
     const bundle = buildPlannerzBundleFromDB(lc, db, config(file));
     expect(tableNamed(bundle, 'no_pk').syncable).toBe(false);

@@ -79,9 +79,6 @@ const ABOUT = {
       'they lack a primary key or unique index, or every column has a type ' +
       'ZQL does not support.',
   ],
-  nextStep:
-    'POST an AST to /plannerz/analyze to see the plan the planner picks for ' +
-    'one query, with the SQLite query plans it generates.',
 } as const;
 
 export type Stat1 = {
