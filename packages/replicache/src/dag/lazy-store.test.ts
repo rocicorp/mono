@@ -1,6 +1,7 @@
 import {expect, test, vi} from 'vitest';
 import {deepFreeze} from '../frozen-json.ts';
 import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.ts';
+import {StorageFailureError} from '../storage-failure.ts';
 import {
   using,
   withRead,
@@ -8,6 +9,8 @@ import {
   withWriteNoImplicitCommit,
 } from '../with-transactions.ts';
 import {asRefs, toRefs, type Chunk} from './chunk.ts';
+import {LazyStore} from './lazy-store.ts';
+import type {Read, Store} from './store.ts';
 import {TestLazyStore} from './test-lazy-store.ts';
 import {TestStore} from './test-store.ts';
 
@@ -1600,4 +1603,54 @@ test('the refs of chunks being cached for a *second* time are not counted on com
   expect(lazyStore.getRefCountsSnapshot()).toEqual({});
   expect(lazyStore.getRefsSnapshot()).toEqual({});
   expect(lazyStore.getCachedSourceChunksSnapshot().toSorted()).toEqual([]);
+});
+
+test('a storage failure on a source read is reported to onStorageFailure and still thrown', async () => {
+  const chunkHasher = makeNewFakeHashFunction('50ce');
+  const sourceStore = new TestStore(undefined, chunkHasher, assertHash);
+  const failure = new StorageFailureError('io-error', 'disk I/O error');
+  const other = new Error('not storage');
+  let failWith: Error | undefined;
+  const failingSource: Store = {
+    read: async () => {
+      const read = await sourceStore.read();
+      return {
+        ...read,
+        getChunk: hash =>
+          failWith ? Promise.reject(failWith) : read.getChunk(hash),
+        release: () => read.release(),
+        get closed() {
+          return read.closed;
+        },
+      } as Read;
+    },
+    write: () => sourceStore.write(),
+    close: () => sourceStore.close(),
+  };
+  const reported: StorageFailureError[] = [];
+  const lazyStore = new LazyStore(
+    failingSource,
+    DEFAULT_CACHE_SIZE_LIMIT,
+    chunkHasher,
+    assertHash,
+    getSizeOfChunkForTest,
+    f => reported.push(f),
+  );
+  const hash = fakeHash('a');
+
+  failWith = failure;
+  await expect(withRead(lazyStore, read => read.getChunk(hash))).rejects.toBe(
+    failure,
+  );
+  await expect(
+    withWrite(lazyStore, write => write.getChunk(hash)),
+  ).rejects.toBe(failure);
+  expect(reported).toEqual([failure, failure]);
+
+  // Any other error propagates without a report.
+  failWith = other;
+  await expect(withRead(lazyStore, read => read.getChunk(hash))).rejects.toBe(
+    other,
+  );
+  expect(reported).toHaveLength(2);
 });

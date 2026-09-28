@@ -2,6 +2,10 @@ import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../shared/src/abort-error.ts';
 import {sleep} from '../../shared/src/sleep.ts';
 import {IDBNotFoundError} from './kv/idb-store.ts';
+import {
+  getStorageFailure,
+  type StorageFailureError,
+} from './storage-failure.ts';
 
 export function initBgIntervalProcess(
   processName: string,
@@ -9,8 +13,16 @@ export function initBgIntervalProcess(
   delayMs: () => number,
   lc: LogContext,
   signal: AbortSignal,
+  onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
 ): void {
-  void runBgIntervalProcess(processName, process, delayMs, lc, signal);
+  void runBgIntervalProcess(
+    processName,
+    process,
+    delayMs,
+    lc,
+    signal,
+    onStorageFailure,
+  );
 }
 
 async function runBgIntervalProcess(
@@ -19,6 +31,7 @@ async function runBgIntervalProcess(
   delayMs: () => number,
   lc: LogContext,
   signal: AbortSignal,
+  onStorageFailure?: ((failure: StorageFailureError) => void) | undefined,
 ): Promise<void> {
   if (signal.aborted) {
     return;
@@ -43,7 +56,18 @@ async function runBgIntervalProcess(
         } else if (e instanceof IDBNotFoundError) {
           lc.info?.('IndexedDB was deleted externally.', e);
         } else {
-          lc.error?.('Error running.', e);
+          const failure = getStorageFailure(e);
+          if (failure === undefined) {
+            lc.error?.('Error running.', e);
+          } else {
+            // The store's storage failed, not this process: running it again
+            // at the interval fails the same way (see `onStorageFailure`).
+            // warn, not error: the instance reports it once through the
+            // callback, and there is nothing for a developer to fix.
+            lc.warn?.('Storage failed; stopping.', e);
+            onStorageFailure?.(failure);
+            break;
+          }
         }
       }
     }

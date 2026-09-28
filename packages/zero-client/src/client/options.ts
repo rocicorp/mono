@@ -275,7 +275,8 @@ export type ZeroOptions<
    * zero-cache, but nothing is written to disk until a new instance is
    * created; a read that needs a chunk not yet loaded
    * from the store (or since evicted from the in-memory cache) still fails
-   * the way any store read does. An invalid ref count seen while the store is
+   * the way any store read does, and is reported here too, whichever caller
+   * made it. An invalid ref count seen while the store is
    * failing with `cannot-open` or `io-error` is not treated as corruption, so
    * {@link onClientStateNotFound} is not called for it: a store that cannot
    * complete its reads and writes produces such readings without the data
