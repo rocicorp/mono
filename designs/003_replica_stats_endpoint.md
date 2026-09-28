@@ -15,12 +15,12 @@ statistics are allowed. Values from the database are not.
 
 ## What exists today
 
-| Piece                                                         | Where                                                                                    | Notes                                                                                                                                                                                                                                                                                             |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin HTTP endpoints `/statz`, `/heapz`, `/profz`, `/profrmz` | `server/runner/zero-dispatcher.ts`                                                       | Basic auth via `isAdminPasswordValid` (password optional in dev). `/statz` already opens `config.replica.file` read-only for pragmas.                                                                                                                                                             |
-| `analyze-query`                                               | `services/view-syncer/inspect-handler.ts` → `services/analyze.ts`                        | Websocket inspector only. Needs a connected client (uses the CVR `clientSchema`). **Runs** the query (capped at `MAX_ANALYZE_ROWS` = 1000 per table). Returns planner events (`joinPlans`), SQLite plans, and read counts per SQL. Can also return `syncedRows`/`vendedRows`, which are row data. |
-| Planner cost model                                            | `zqlite/src/sqlite-cost-model.ts`, `sqlite-stat-fanout.ts`                               | Costs come from SQLite `scanstatus` estimates. Join fanout comes from stat4, else stat1, else the default of 3.                                                                                                                                                                                   |
-| Stats collection                                              | `db/migration-lite.ts:159`, `replicator/change-processor.ts:991`, `zqlite/src/db.ts:156` | Only `PRAGMA optimize` runs, always under `analysis_limit` (1000 is set explicitly in `workers/replicator.ts:176`; `optimize` sets its own limit otherwise). There is no full `ANALYZE` anywhere.                                                                                                 |
+| Piece                                                         | Where                                                                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin HTTP endpoints `/statz`, `/heapz`, `/profz`, `/profrmz` | `server/runner/zero-dispatcher.ts`                                                       | Basic auth, password optional in dev. `/heapz` requires the admin password (`isAdminPasswordValid`). `/statz`, `/profz` and `/profrmz` also accept the operator password (`getOperatorAccess`, `--operator-password`), since they return no application data. Profiles served for the operator password have regular expression sources redacted, since those can hold `LIKE` patterns from client queries. `/statz` already opens `config.replica.file` read-only for pragmas. |
+| `analyze-query`                                               | `services/view-syncer/inspect-handler.ts` → `services/analyze.ts`                        | Websocket inspector only, admin password only. Needs a connected client (uses the CVR `clientSchema`). **Runs** the query (capped at `MAX_ANALYZE_ROWS` = 1000 per table). Returns planner events (`joinPlans`), SQLite plans, and read counts per SQL. Can also return `syncedRows`/`vendedRows`, which are row data.                                                                                                                                                          |
+| Planner cost model                                            | `zqlite/src/sqlite-cost-model.ts`, `sqlite-stat-fanout.ts`                               | Costs come from SQLite `scanstatus` estimates. Join fanout comes from stat4, else stat1, else the default of 3.                                                                                                                                                                                                                                                                                                                                                                 |
+| Stats collection                                              | `db/migration-lite.ts:159`, `replicator/change-processor.ts:991`, `zqlite/src/db.ts:156` | Only `PRAGMA optimize` runs, always under `analysis_limit` (1000 is set explicitly in `workers/replicator.ts:176`; `optimize` sets its own limit otherwise). There is no full `ANALYZE` anywhere.                                                                                                                                                                                                                                                                               |
 
 ## Finding: the replica has no stat4 and only approximate stat1
 
@@ -56,6 +56,11 @@ This may matter more than the endpoint itself. See follow-up F1.
 One new admin endpoint family, `/plannerz`, on the zero-dispatcher, next to
 `/statz`. It uses the same basic-auth check and the same "open the replica
 read-only, then close it" pattern.
+
+Access differs by route. `GET /plannerz` returns no application data, so like
+`/statz` it accepts the operator password as well as the admin password
+(`getOperatorAccess`). `POST /plannerz/analyze` requires the admin password
+(§2.3).
 
 We chose a separate path over a new `/statz` group, because the second route
 takes a POST body and returns a different kind of output.
@@ -164,8 +169,9 @@ These are enforced in code and pinned by tests.
   rowid in each sample is also dropped.
 - There is no raw-samples option in v1. Add one only if users ask for it.
 - What is returned: table and column names, index definitions, row count
-  estimates, and distinct-value averages. That is expected for an admin
-  endpoint.
+  estimates, and distinct-value averages. These are served to the operator
+  password too, which is for people who operate zero-cache but may not read
+  its data. Schema and statistics are fine for them; values are not.
 
 #### 1.3 How approximate the stats are
 
@@ -247,6 +253,11 @@ wall-clock timeout.
 
 #### 2.3 Both modes
 
+- **Admin password only.** Unlike `GET /plannerz`, this route checks
+  `isAdminPasswordValid`, not `getOperatorAccess`. It runs caller-supplied
+  queries against the replica, and what it reports back (whether a scalar
+  subquery matched, measured row counts) reveals application data even when
+  no rows are returned.
 - **Rows are never returned.** `syncedRows`, `vendedRows` and `readRows` are
   deleted from the result unconditionally, so a later change to the
   `analyzeQuery` defaults can't leak them.
@@ -299,6 +310,8 @@ Implementation notes:
 
 - 401 without a password or with a wrong one. Allowed in dev mode without a
   password, which matches the other endpoints.
+- `GET /plannerz` accepts the operator password. `POST /plannerz/analyze`
+  returns 401 for it.
 - Bundle built from a fixture replica: tables, indexes, and stat1 parsing,
   including the `unordered` and `sz=` flags.
 - **Redaction**: run a full `ANALYZE` on a fixture with sentinel strings
@@ -345,3 +358,5 @@ Implementation notes:
 3. No table or index scans to gather column statistics (see Design).
 4. `/plannerz/analyze` is plan-only by default; running the query is opt-in
    with `?execute=true` (2026-09-22).
+5. `GET /plannerz` accepts the operator password; `/plannerz/analyze` requires
+   the admin password (2026-09-28).
