@@ -7,7 +7,7 @@ import {
   type SampleValueKind,
 } from '../../../zqlite/src/sqlite-stat4-sample.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
-import {getServerVersion, isAdminPasswordValid} from '../config/zero-config.ts';
+import {getOperatorAccess, getServerVersion} from '../config/zero-config.ts';
 import {
   computeZqlSpecsFromLiteSpecs,
   listIndexes,
@@ -79,9 +79,6 @@ const ABOUT = {
       'they lack a primary key or unique index, or every column has a type ' +
       'ZQL does not support.',
   ],
-  nextStep:
-    'POST an AST to /plannerz/analyze to see the plan the planner picks for ' +
-    'one query, with the SQLite query plans it generates.',
 } as const;
 
 export type Stat1 = {
@@ -464,6 +461,11 @@ function replicaWatermark(lc: LogContext, db: Database): string | undefined {
  *
  * Row data is never returned. See `designs/003_replica_stats_endpoint.md`.
  *
+ * This is available to the operator password as well as the admin password
+ * (see `--operator-password`). That does not extend to `/plannerz/analyze`,
+ * which runs caller-supplied queries against the replica and so must require
+ * the admin password (`isAdminPasswordValid`).
+ *
  * HTTP query parameters:
  * * `pretty`: indents the JSON
  * * `stat4=full`: includes the full sqlite_stat4 histogram, which is large
@@ -475,7 +477,7 @@ export async function handlePlannerzRequest(
   res: FastifyReply,
 ) {
   const credentials = auth(req);
-  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
+  if (getOperatorAccess(lc, config, credentials?.pass) === undefined) {
     void res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="Plannerz Protected Area"')

@@ -1136,6 +1136,32 @@ export const zeroOptions = {
       `/statz endpoint.`,
       '',
       'A password is optional in development mode but {bold required in production} mode.',
+      '',
+      'The admin password also grants access to everything that the',
+      '{bold operator-password} does.',
+    ],
+  },
+
+  operatorPassword: {
+    type: v.string().optional(),
+    desc: [
+      `A password that grants access only to the diagnostic endpoints that cannot`,
+      `expose application data, so that people who operate zero-cache can`,
+      `diagnose it without being able to read the data it serves. These are:`,
+      '',
+      `* {bold /profz} and {bold /profrmz}: CPU profiles. Profiles served for the`,
+      `  operator password have the source of every regular expression redacted,`,
+      `  since those can contain LIKE patterns from client queries.`,
+      `* {bold /statz}: counts and sizes.`,
+      `* {bold /plannerz}: the replica's schema and planner statistics.`,
+      '',
+      `All other protected endpoints (the inspector and {bold /heapz}) still`,
+      `require the {bold admin-password}.`,
+      '',
+      `For {bold /profrmz} in a multi-node deployment, the replication-manager`,
+      `must be configured with the same operator password.`,
+      '',
+      `If it is the same as the {bold admin-password}, it grants admin access.`,
     ],
   },
 
@@ -1669,49 +1695,107 @@ export function getServerVersion(
   return config?.serverVersion ?? packageJson.version;
 }
 
+/**
+ * The access that a password grants to zero-cache's protected endpoints.
+ * `admin` grants access to all of them. `operator` grants access only to the
+ * ones that cannot expose application data (see `--operator-password`).
+ */
+export type AdminAccess = 'admin' | 'operator';
+
+/**
+ * Returns whether `password` is the admin password. Endpoints that can expose
+ * application data must use this, which never accepts the operator password.
+ */
 export function isAdminPasswordValid(
   lc: LogContext,
   config: Pick<NormalizedZeroConfig, 'adminPassword'>,
   password: string | undefined,
-) {
+): boolean {
+  return getAccess(lc, config, undefined, password) === 'admin';
+}
+
+/**
+ * Returns the access that `password` grants, accepting either the admin
+ * password or the operator password, or `undefined` if it grants none.
+ *
+ * Only endpoints that cannot expose application data may use this, and they
+ * must not serve anything to `operator` access that `--operator-password`
+ * documents as withheld.
+ */
+export function getOperatorAccess(
+  lc: LogContext,
+  config: Pick<NormalizedZeroConfig, 'adminPassword' | 'operatorPassword'>,
+  password: string | undefined,
+): AdminAccess | undefined {
+  return getAccess(lc, config, config.operatorPassword, password);
+}
+
+function getAccess(
+  lc: LogContext,
+  {adminPassword}: Pick<NormalizedZeroConfig, 'adminPassword'>,
+  operatorPassword: string | undefined,
+  password: string | undefined,
+): AdminAccess | undefined {
   // If development mode, password is optional
   // We use process.env.NODE_ENV === 'development' as a sign that we're in
   // development mode, rather than a custom env var like ZERO_DEVELOPMENT_MODE,
   // because NODE_ENV is more standard and is already used by many tools.
   // Note that if NODE_ENV is not set, we assume production mode.
 
-  if (!password && !config.adminPassword && isDevelopmentMode()) {
+  if (!password && !adminPassword && isDevelopmentMode()) {
     warnOnce(
       lc,
       'No admin password set; allowing access in development mode only',
     );
-    return true;
+    return 'admin';
   }
 
-  if (!config.adminPassword) {
+  if (!adminPassword && !operatorPassword) {
     lc.warn?.('No admin password set; denying access');
+    return undefined;
+  }
+
+  // Compare against both configured passwords (rather than stopping at the
+  // first match) so that timing does not reveal which one matched.
+  const isAdmin = passwordMatches(password, adminPassword);
+  const isOperator = passwordMatches(password, operatorPassword);
+
+  if (isAdmin) {
+    lc.debug?.('Admin password accepted');
+    return 'admin';
+  }
+  if (isOperator) {
+    lc.debug?.('Operator password accepted');
+    return 'operator';
+  }
+  lc.warn?.(
+    operatorPassword
+      ? 'Invalid admin or operator password'
+      : 'Invalid admin password',
+  );
+  return undefined;
+}
+
+function passwordMatches(
+  password: string | undefined,
+  expected: string | undefined,
+): boolean {
+  if (!expected) {
     return false;
   }
 
   // Use constant-time comparison to prevent timing attacks
   const passwordBuffer = Buffer.from(password ?? '');
-  const configBuffer = Buffer.from(config.adminPassword);
+  const expectedBuffer = Buffer.from(expected);
 
   // Handle length mismatch in constant time
-  if (passwordBuffer.length !== configBuffer.length) {
+  if (passwordBuffer.length !== expectedBuffer.length) {
     // Perform dummy comparison to maintain constant timing
-    timingSafeEqual(configBuffer, configBuffer);
-    lc.warn?.('Invalid admin password');
+    timingSafeEqual(expectedBuffer, expectedBuffer);
     return false;
   }
 
-  if (!timingSafeEqual(passwordBuffer, configBuffer)) {
-    lc.warn?.('Invalid admin password');
-    return false;
-  }
-
-  lc.debug?.('Admin password accepted');
-  return true;
+  return timingSafeEqual(passwordBuffer, expectedBuffer);
 }
 
 let hasWarned = false;

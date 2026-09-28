@@ -6,7 +6,7 @@ import type {FastifyReply, FastifyRequest} from 'fastify';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
-import {isAdminPasswordValid} from '../config/zero-config.ts';
+import {getOperatorAccess} from '../config/zero-config.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
@@ -218,11 +218,14 @@ async function changeLogStats(lc: LogContext, config: ZeroConfig) {
   }
 }
 
+// The replica is opened read-only: /statz is available to the operator
+// password, and must not change the replica. Among other things, a writable
+// connection would run `PRAGMA optimize` when closed.
 function replicaStats(lc: LogContext, config: ZeroConfig) {
-  const db = new Database(lc, config.replica.file);
+  const db = new Database(lc, config.replica.file, {readonly: true});
   try {
     return Object.fromEntries([
-      ['wal checkpoint', pick(first(db.pragma('WAL_CHECKPOINT')))],
+      ['wal file sizes', walFileSizes(config.replica.file)],
       ['page count', pick(first(db.pragma('PAGE_COUNT')))],
       ['page size', pick(first(db.pragma('PAGE_SIZE')))],
       ['journal mode', pick(first(db.pragma('JOURNAL_MODE')))],
@@ -239,12 +242,29 @@ function replicaStats(lc: LogContext, config: ZeroConfig) {
 }
 
 function replicationStats(lc: LogContext, config: ZeroConfig) {
-  const db = new Database(lc, config.replica.file);
+  const db = new Database(lc, config.replica.file, {readonly: true});
   try {
     return getReplicationStats(db);
   } finally {
     db.close();
   }
+}
+
+/**
+ * The sizes of the replica's WAL files, by suffix, read from the filesystem.
+ * `PRAGMA wal_checkpoint` would report the WAL's frame counts, but it runs a
+ * checkpoint to do so, and fails on a read-only connection in WAL mode.
+ */
+function walFileSizes(file: string): Record<string, number> {
+  const sizes: Record<string, number> = {};
+  // `-wal` is used in WAL mode, and both files in WAL2 mode.
+  for (const suffix of ['-wal', '-wal2']) {
+    const stats = fs.statSync(file + suffix, {throwIfNoEntry: false});
+    if (stats) {
+      sizes[suffix] = stats.size;
+    }
+  }
+  return sizes;
 }
 
 function getReplicationStats(db: Database) {
@@ -291,6 +311,10 @@ function printStats(group: string, statsObject: StatsObject): string {
 }
 
 /**
+ * Serves counts and sizes. This is available to the operator password as well
+ * as the admin password (see `--operator-password`), so it must never return
+ * application data: no row values, query ASTs or query arguments.
+ *
  * HTTP query parameters:
  * * `group`: restricts the groups for which stats are computed
  * * `format=json`: returns the stats as a JSON object
@@ -303,7 +327,7 @@ export async function handleStatzRequest(
   res: FastifyReply,
 ) {
   const credentials = auth(req);
-  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
+  if (getOperatorAccess(lc, config, credentials?.pass) === undefined) {
     void res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="Statz Protected Area"')
