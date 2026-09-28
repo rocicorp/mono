@@ -59,6 +59,7 @@ function seed(db: Database, rows: number) {
 function config(file: string): NormalizedZeroConfig {
   return {
     adminPassword: 'secret',
+    operatorPassword: 'operator-secret',
     replica: {file},
     log: {level: 'error'},
     enableQueryPlanner: true,
@@ -353,5 +354,19 @@ describe('plannerz endpoint', () => {
     expect(bundle.about.whatThisIs).toContain('no row data');
     expect(bundle.server.zeroVersion).toBe('0.0.0-test');
     expect(tableNamed(bundle, 'issue').estimatedRows).toBe(100);
+  });
+
+  test('accepts the operator password', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/plannerz',
+      headers: {
+        authorization: `Basic ${Buffer.from('user:operator-secret').toString('base64')}`,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain(SENTINEL);
+    expect(tableNamed(JSON.parse(res.body), 'issue').estimatedRows).toBe(100);
   });
 });

@@ -336,6 +336,17 @@ describe('operator password', () => {
     expect(getOperatorAccess(lc, operatorOnly, undefined)).toBe('admin');
   });
 
+  test('getOperatorAccess grants admin access when both passwords are the same', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const same = {
+      adminPassword: 'same-secret',
+      operatorPassword: 'same-secret',
+    };
+    expect(getOperatorAccess(lc, same, 'same-secret')).toBe('admin');
+    expect(isAdminPasswordValid(lc, same, 'same-secret')).toBe(true);
+    expect(getOperatorAccess(lc, same, 'wrong')).toBeUndefined();
+  });
+
   test('getOperatorAccess in production mode with no passwords configured', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const none = {adminPassword: undefined, operatorPassword: undefined};

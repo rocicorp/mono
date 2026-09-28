@@ -247,6 +247,11 @@ wall-clock timeout.
 
 #### 2.3 Both modes
 
+- **Admin password only.** `GET /plannerz` also accepts the operator password
+  (`--operator-password`), but this route must check `isAdminPasswordValid`.
+  It runs caller-supplied queries against the replica, and what it reports
+  back (whether a scalar subquery matched, measured row counts) reveals
+  application data even when no rows are returned.
 - **Rows are never returned.** `syncedRows`, `vendedRows` and `readRows` are
   deleted from the result unconditionally, so a later change to the
   `analyzeQuery` defaults can't leak them.

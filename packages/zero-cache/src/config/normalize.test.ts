@@ -428,23 +428,3 @@ describe('config/normalize change-streamer role', () => {
     },
   );
 });
-
-describe('config/normalize operator password', () => {
-  test('is optional', () => {
-    expect(() => assertNormalized(configWith({}))).not.toThrow();
-  });
-
-  test('is accepted when it differs from the admin password', () => {
-    const config = configWith({});
-    config.operatorPassword = 'operator';
-    expect(() => assertNormalized(config)).not.toThrow();
-  });
-
-  test('must differ from the admin password', () => {
-    const config = configWith({});
-    config.operatorPassword = config.adminPassword;
-    expect(() => assertNormalized(config)).toThrow(
-      '--operator-password must differ from --admin-password',
-    );
-  });
-});

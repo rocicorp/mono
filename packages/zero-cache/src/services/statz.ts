@@ -6,7 +6,7 @@ import type {FastifyReply, FastifyRequest} from 'fastify';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
-import {isAdminPasswordValid} from '../config/zero-config.ts';
+import {getOperatorAccess} from '../config/zero-config.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
@@ -291,6 +291,10 @@ function printStats(group: string, statsObject: StatsObject): string {
 }
 
 /**
+ * Serves counts and sizes. This is available to the operator password as well
+ * as the admin password (see `--operator-password`), so it must never return
+ * application data: no row values, query ASTs or query arguments.
+ *
  * HTTP query parameters:
  * * `group`: restricts the groups for which stats are computed
  * * `format=json`: returns the stats as a JSON object
@@ -303,7 +307,7 @@ export async function handleStatzRequest(
   res: FastifyReply,
 ) {
   const credentials = auth(req);
-  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
+  if (getOperatorAccess(lc, config, credentials?.pass) === undefined) {
     void res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="Statz Protected Area"')

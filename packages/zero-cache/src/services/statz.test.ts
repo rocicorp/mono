@@ -39,6 +39,7 @@ describe('statz endpoint', () => {
   const lc = createSilentLogContext();
   const config = {
     adminPassword: 'secret',
+    operatorPassword: 'operator-secret',
     replica: {file: '/tmp/replica.db'},
     log: {level: 'error'},
   } as unknown as NormalizedZeroConfig;
@@ -98,6 +99,19 @@ describe('statz endpoint', () => {
 
     expect(res.statusCode).toBe(200);
     expect(dbCloseSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test('accepts the operator password', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/statz?group=os&format=json',
+      headers: {
+        authorization: `Basic ${Buffer.from('user:operator-secret').toString('base64')}`,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toHaveProperty('os');
   });
 
   test('rejects requests with bad auth', async () => {

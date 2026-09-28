@@ -163,11 +163,6 @@ export function assertNormalized(
       'missing --admin-password: required in production mode',
     );
   }
-  assert(
-    !config.operatorPassword ||
-      config.operatorPassword !== config.adminPassword,
-    '--operator-password must differ from --admin-password',
-  );
 }
 
 /**
