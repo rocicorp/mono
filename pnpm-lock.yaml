@@ -133,8 +133,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/zero
       '@rocicorp/zero-virtual':
-        specifier: 0.6.3
-        version: 0.6.3(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)
+        specifier: 0.6.4
+        version: 0.6.4(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)
       '@schickling/fps-meter':
         specifier: ^0.1.2
         version: 0.1.2(react@19.2.6)
@@ -5626,8 +5626,8 @@ packages:
     engines: {bun: '>=1.1.0', node: 22.x || 24.x}
     hasBin: true
 
-  '@rocicorp/zero-virtual@0.6.3':
-    resolution: {integrity: sha512-QtX5NoUzlPpYFcCLGuwaY1WQPdXAhUD0hUN7yeLk4oUNDr46c2xU8jTnn0sxGh6FqQknWfM0/sUgRts8ELvOoQ==}
+  '@rocicorp/zero-virtual@0.6.4':
+    resolution: {integrity: sha512-aA2mCSVIG0rkgjOgnthMujVd3aHgs0/ZKXeUd5h2NIKl83jnCLGN2Ts8hPIsVlboATdXgpcPaRy8Kgoz26SLOA==}
     peerDependencies:
       '@rocicorp/zero': ^1.7.0
       react: ^19.2.4
@@ -16927,7 +16927,7 @@ snapshots:
   '@jridgewell/trace-mapping@0.3.31':
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
@@ -18664,7 +18664,7 @@ snapshots:
     dependencies:
       node-gyp-build: 4.8.4
 
-  '@rocicorp/zero-virtual@0.6.3(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)':
+  '@rocicorp/zero-virtual@0.6.4(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)':
     optionalDependencies:
       '@rocicorp/zero': link:packages/zero
       react: 19.2.6
@@ -19548,9 +19548,9 @@ snapshots:
       obug: 2.2.1
       std-env: 4.2.0
       tinyrainbow: 3.1.1
-      vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
     optionalDependencies:
-      '@vitest/browser': 5.0.0(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@5.0.0)
+      '@vitest/browser': 5.0.0(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@5.0.0)
 
   '@vitest/istanbul-lib-coverage@1.0.1': {}
 
@@ -19594,7 +19594,7 @@ snapshots:
       pathe: 2.0.3
       sirv: 3.0.2
       tinyrainbow: 3.1.1
-      vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
 
   '@vitest/utils@4.1.6':
     dependencies:
