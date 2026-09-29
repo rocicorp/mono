@@ -11,8 +11,13 @@ import type {
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
-import type {MultiConstraint, Start} from '../../zql/src/ivm/operator.ts';
-import {sql} from './internal/sql.ts';
+import type {
+  FetchRequest,
+  MultiConstraint,
+  Start,
+} from '../../zql/src/ivm/operator.ts';
+import {format, sql} from './internal/sql.ts';
+import {normalizeWhitespace} from './internal/statement-cache.ts';
 
 /**
  * Condition type without correlated subqueries.
@@ -22,6 +27,43 @@ export type NoSubqueryCondition = Exclude<
   Condition,
   {type: 'correlatedSubquery'}
 >;
+
+/** The parts of a {@link FetchRequest} that a select query is built from. */
+export type SelectRequest = Pick<
+  FetchRequest,
+  'constraint' | 'start' | 'reverse' | 'multiConstraints'
+> & {readonly filter?: NoSubqueryCondition | undefined};
+
+/** Reads the value of a statement parameter from a request. */
+export type Binding = (req: SelectRequest) => unknown;
+
+/**
+ * A select query compiled for one shape of request: its SQL, with whitespace
+ * normalized as the statement cache does, and how to read each of its
+ * parameters from a request of that shape. See {@link compileSelectQuery}.
+ */
+export type CompiledSelectQuery = {
+  readonly text: string;
+  readonly bindings: readonly Binding[];
+};
+
+/**
+ * Emits the SQL for a parameter. `value` is its value in the request the
+ * query is being built for, and `get` reads it from any request of the same
+ * shape.
+ */
+type Bind = (value: unknown, get: Binding) => SQLQuery;
+
+const bindValue: Bind = value => sql`${value}`;
+
+class Slot {
+  readonly get: Binding;
+  constructor(get: Binding) {
+    this.get = get;
+  }
+}
+
+const bindSlot: Bind = (_, get) => sql`${new Slot(get)}`;
 
 export function buildSelectQuery(
   tableName: string,
@@ -34,23 +76,77 @@ export function buildSelectQuery(
   multiConstraints?: readonly MultiConstraint[] | undefined,
   fetchFilters?: NoSubqueryCondition | undefined,
 ) {
+  return selectQuery(
+    tableName,
+    columns,
+    {constraint, reverse, start, multiConstraints, filter: fetchFilters},
+    filters,
+    order,
+    bindValue,
+  );
+}
+
+/**
+ * Compiles the select query for `req` so that it can be reused for any
+ * request of the same shape, i.e. one that differs from `req` only in the
+ * values of its constraint, multi-constraints and start row, and in no way
+ * that changes the SQL: the same constraint and multi-constraint keys (in the
+ * same order), the same number of multi-constraint entries, the same start
+ * basis and NULL start values, the same `reverse`, and the same `filter`.
+ *
+ * The values of `filters` and `req.filter` are compiled in as they are.
+ */
+export function compileSelectQuery(
+  tableName: string,
+  columns: Record<string, SchemaValue>,
+  req: SelectRequest,
+  filters: NoSubqueryCondition | undefined,
+  order: Ordering | undefined,
+): CompiledSelectQuery {
+  const {text, values} = format(
+    selectQuery(tableName, columns, req, filters, order, bindSlot),
+  );
+  return {
+    text: normalizeWhitespace(text),
+    bindings: values.map(v => (v instanceof Slot ? v.get : () => v)),
+  };
+}
+
+function selectQuery(
+  tableName: string,
+  columns: Record<string, SchemaValue>,
+  req: SelectRequest,
+  filters: NoSubqueryCondition | undefined,
+  order: Ordering | undefined,
+  bind: Bind,
+) {
+  const {
+    constraint,
+    reverse,
+    start,
+    multiConstraints,
+    filter: fetchFilters,
+  } = req;
   let query = sql`SELECT ${sql.join(
     Object.keys(columns).map(c => sql.ident(c)),
     sql`,`,
   )} FROM ${sql.ident(tableName)}`;
-  const constraints: SQLQuery[] = constraintsToSQL(constraint, columns);
+  const constraints: SQLQuery[] = constraintsToSQL(constraint, columns, bind);
 
   if (multiConstraints) {
-    for (const mc of multiConstraints) {
+    for (let i = 0; i < multiConstraints.length; i++) {
+      const mc = multiConstraints[i];
       if (mc.length > 0) {
-        constraints.push(multiConstraintToSQL(mc, columns));
+        constraints.push(multiConstraintToSQL(mc, columns, bind, i));
       }
     }
   }
 
   if (start) {
     assert(order !== undefined, 'start requires ordering');
-    constraints.push(gatherStartConstraints(start, reverse, order, columns));
+    constraints.push(
+      gatherStartConstraints(start, reverse, order, columns, bind),
+    );
   }
 
   if (filters) {
@@ -74,6 +170,7 @@ export function buildSelectQuery(
 export function constraintsToSQL(
   constraint: Constraint | undefined,
   columns: Record<string, SchemaValue>,
+  bind: Bind = bindValue,
 ) {
   if (!constraint) {
     return [];
@@ -81,8 +178,11 @@ export function constraintsToSQL(
 
   const constraints: SQLQuery[] = [];
   for (const [key, value] of Object.entries(constraint)) {
+    const {type} = columns[key];
     constraints.push(
-      sql`${sql.ident(key)} = ${toSQLiteType(value, columns[key].type)}`,
+      sql`${sql.ident(key)} = ${bind(toSQLiteType(value, type), req =>
+        toSQLiteType(req.constraint?.[key], type),
+      )}`,
     );
   }
 
@@ -103,7 +203,15 @@ export function constraintsToSQL(
 export function multiConstraintToSQL(
   multiConstraint: MultiConstraint,
   columns: Record<string, SchemaValue>,
+  bind: Bind = bindValue,
+  // The index of `multiConstraint` in the request's `multiConstraints`.
+  index = 0,
 ): SQLQuery {
+  const param = (i: number, key: string, type: ValueType) =>
+    bind(toSQLiteType(multiConstraint[i][key], type), req =>
+      toSQLiteType(req.multiConstraints?.[index][i][key], type),
+    );
+
   assert(multiConstraint.length > 0, 'multiConstraint must be non-empty');
   // All entries share the same keys; pull the column list from the first.
   const keys = Object.keys(multiConstraint[0]);
@@ -126,7 +234,7 @@ export function multiConstraintToSQL(
     const key = keys[0];
     const colType = columns[key].type;
     return sql`${sql.ident(key)} IN (${sql.join(
-      multiConstraint.map(c => sql`${toSQLiteType(c[key], colType)}`),
+      multiConstraint.map((_, i) => param(i, key, colType)),
       sql`,`,
     )})`;
   }
@@ -137,9 +245,9 @@ export function multiConstraintToSQL(
     sql`,`,
   )})`;
   const rows = multiConstraint.map(
-    c =>
+    (_, i) =>
       sql`(${sql.join(
-        keys.map(k => sql`${toSQLiteType(c[k], columns[k].type)}`),
+        keys.map(k => param(i, k, columns[k].type)),
         sql`,`,
       )})`,
   );
@@ -306,6 +414,7 @@ export function toSQLiteType(v: unknown, type: ValueType): unknown {
 function nullableAwareEquality(
   field: string,
   value: unknown,
+  param: SQLQuery,
   columnType: SchemaValue,
 ): SQLQuery {
   if (value === null) {
@@ -317,13 +426,14 @@ function nullableAwareEquality(
   // Use = instead of IS for non-nullable columns to enable better
   // index usage in SQLite.
   return columnType.optional === true
-    ? sql`${sql.ident(field)} IS ${value}`
-    : sql`${sql.ident(field)} = ${value}`;
+    ? sql`${sql.ident(field)} IS ${param}`
+    : sql`${sql.ident(field)} = ${param}`;
 }
 
 function nullableAwareRangeComparison(
   field: string,
   value: unknown,
+  param: SQLQuery,
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery {
@@ -337,7 +447,7 @@ function nullableAwareRangeComparison(
   // See: https://github.com/rocicorp/mono/pull/5542
   const comparison = sql`${sql.ident(field)} ${sql.__dangerous__rawValue(
     operator,
-  )} ${value}`;
+  )} ${param}`;
   if (columnType.optional !== true) {
     return comparison;
   }
@@ -354,6 +464,7 @@ function nullableAwareRangeComparison(
 function sargableLeadingStartBound(
   field: string,
   value: unknown,
+  param: SQLQuery,
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery | undefined {
@@ -370,7 +481,7 @@ function sargableLeadingStartBound(
   const inclusiveOperator = operator === '>' ? '>=' : '<=';
   return sql`${sql.ident(field)} ${sql.__dangerous__rawValue(
     inclusiveOperator,
-  )} ${value}`;
+  )} ${param}`;
 }
 
 /**
@@ -394,10 +505,21 @@ function gatherStartConstraints(
   reverse: boolean | undefined,
   order: Ordering,
   columnTypes: Record<string, SchemaValue>,
+  bind: Bind,
 ): SQLQuery {
   const constraints: SQLQuery[] = [];
   const {row: from, basis} = start;
   let leadingBound: SQLQuery | undefined;
+
+  // The value of the start row in `field`, and its parameter.
+  const startValue = (field: string): [unknown, SQLQuery] => {
+    const {type} = columnTypes[field];
+    const value = toSQLiteType(from[field] ?? null, type);
+    return [
+      value,
+      bind(value, req => toSQLiteType(req.start?.row[field] ?? null, type)),
+    ];
+  };
 
   for (let i = 0; i < order.length; i++) {
     const group: SQLQuery[] = [];
@@ -405,16 +527,14 @@ function gatherStartConstraints(
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         const columnType = columnTypes[iField];
-        const constraintValue = toSQLiteType(
-          from[iField] ?? null,
-          columnType.type,
-        );
+        const [constraintValue, param] = startValue(iField);
         const operator =
           iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
         if (i === 0) {
           leadingBound = sargableLeadingStartBound(
             iField,
             constraintValue,
+            param,
             operator,
             columnType,
           );
@@ -423,15 +543,17 @@ function gatherStartConstraints(
           nullableAwareRangeComparison(
             iField,
             constraintValue,
+            param,
             operator,
             columnType,
           ),
         );
       } else {
         const [jField] = order[j];
-        const columnType = columnTypes[jField];
-        const value = toSQLiteType(from[jField] ?? null, columnType.type);
-        group.push(nullableAwareEquality(jField, value, columnType));
+        const [value, param] = startValue(jField);
+        group.push(
+          nullableAwareEquality(jField, value, param, columnTypes[jField]),
+        );
       }
     }
     constraints.push(sql`(${sql.join(group, sql` AND `)})`);
@@ -441,9 +563,8 @@ function gatherStartConstraints(
     constraints.push(
       sql`(${sql.join(
         order.map(([field]) => {
-          const columnType = columnTypes[field];
-          const value = toSQLiteType(from[field] ?? null, columnType.type);
-          return nullableAwareEquality(field, value, columnType);
+          const [value, param] = startValue(field);
+          return nullableAwareEquality(field, value, param, columnTypes[field]);
         }),
         sql` AND `,
       )})`,

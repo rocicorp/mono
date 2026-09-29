@@ -104,10 +104,14 @@ export class StatementCache {
    * `get` with the same `sql` will prepare a new statement.
    *
    * @param sql
+   * @param normalized whether `sql` has already been passed through
+   *     {@link normalizeWhitespace}, which can then be skipped
    * @returns
    */
-  get(sql: string): CachedStatement {
-    sql = normalizeWhitespace(sql);
+  get(sql: string, normalized = false): CachedStatement {
+    if (!normalized) {
+      sql = normalizeWhitespace(sql);
+    }
     const statements = this.#cache.get(sql);
     if (statements && statements.length > 0) {
       const statement = statements.pop()!;
@@ -175,6 +179,10 @@ export class StatementCache {
   }
 }
 
-function normalizeWhitespace(sql: string) {
+/**
+ * Normalizes the whitespace of a SQL statement, as the key of the statements
+ * cached for it.
+ */
+export function normalizeWhitespace(sql: string) {
   return sql.replaceAll(/\s+/g, ' ');
 }

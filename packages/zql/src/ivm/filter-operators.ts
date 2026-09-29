@@ -69,6 +69,13 @@ export const throwFilterOutput: FilterOutput = {
 export class FilterStart implements FilterInput, Output {
   readonly #input: Input;
   readonly #condition: NoSubqueryCondition | undefined;
+  // The filter passed upstream for each filter received, so that the same
+  // filter is passed for the same condition (sources key their compiled
+  // queries by the filter object).
+  readonly #mergedFilters = new WeakMap<
+    NoSubqueryCondition,
+    NoSubqueryCondition | undefined
+  >();
   #output: FilterOutput = throwFilterOutput;
 
   constructor(input: Input, condition?: NoSubqueryCondition) {
@@ -99,8 +106,22 @@ export class FilterStart implements FilterInput, Output {
     }
   }
 
+  #mergeFilter(
+    reqFilter: NoSubqueryCondition | undefined,
+  ): NoSubqueryCondition | undefined {
+    if (reqFilter === undefined || this.#condition === undefined) {
+      return mergeFilters(reqFilter, this.#condition);
+    }
+    let merged = this.#mergedFilters.get(reqFilter);
+    if (merged === undefined) {
+      merged = mergeFilters(reqFilter, this.#condition);
+      this.#mergedFilters.set(reqFilter, merged);
+    }
+    return merged;
+  }
+
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    const mergedFilter = mergeFilters(req.filter, this.#condition);
+    const mergedFilter = this.#mergeFilter(req.filter);
     const childReq =
       mergedFilter === req.filter ? req : {...req, filter: mergedFilter};
     this.#output.beginFilter();

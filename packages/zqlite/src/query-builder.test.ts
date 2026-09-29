@@ -1,13 +1,16 @@
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
+import {normalizeWhitespace} from './internal/statement-cache.ts';
 import {
   buildSelectQuery,
+  compileSelectQuery,
   filtersToSQL,
   multiConstraintToSQL,
   type NoSubqueryCondition,
+  type SelectRequest,
 } from './query-builder.ts';
 
 test.each(['IS', 'IS NOT'] as const)(
@@ -806,4 +809,164 @@ test('ILIKE matches case-insensitively across Unicode (needs ICU lower())', () =
   // "ss", but lower() does not, so 'STRASSE' ILIKE 'straße' would not match even
   // with ICU. Umlauts/accents/Cyrillic are the clean cases.)
   expect(rows).toEqual(['MÜLLER']);
+});
+
+describe('compileSelectQuery', () => {
+  const columns: Record<string, SchemaValue> = {
+    id: {type: 'string'},
+    n: {type: 'number'},
+    s: {type: 'string', optional: true},
+    b: {type: 'boolean', optional: true},
+    j: {type: 'json', optional: true},
+  };
+  const order = [
+    ['n', 'desc'],
+    ['s', 'asc'],
+    ['b', 'asc'],
+    ['j', 'asc'],
+    ['id', 'asc'],
+  ] as const;
+  const filters: NoSubqueryCondition = {
+    type: 'and',
+    conditions: [
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'n'},
+        op: '>',
+        right: {type: 'literal', value: 3},
+      },
+      {
+        type: 'simple',
+        left: {type: 'column', name: 's'},
+        op: 'IS NOT',
+        right: {type: 'literal', value: null},
+      },
+    ],
+  };
+  const fetchFilter: NoSubqueryCondition = {
+    type: 'simple',
+    left: {type: 'column', name: 'id'},
+    op: 'IN',
+    right: {type: 'literal', value: ['a', 'b']},
+  };
+
+  // Pairs of requests of the same shape, with different values.
+  const cases: [name: string, a: SelectRequest, b: SelectRequest][] = [
+    ['no request', {}, {}],
+    [
+      'constraint',
+      {constraint: {n: 1, id: 'x'}},
+      {constraint: {n: 2, id: 'y'}},
+    ],
+    [
+      'json and boolean constraint',
+      {constraint: {j: {a: 1}, b: true}},
+      {constraint: {j: [1, 2], b: false}},
+    ],
+    [
+      'multi-constraints',
+      {
+        multiConstraints: [
+          [{id: 'a'}, {id: 'b'}],
+          [],
+          [
+            {n: 1, s: 'x'},
+            {n: 2, s: 'y'},
+          ],
+        ],
+      },
+      {
+        multiConstraints: [
+          [{id: 'c'}, {id: 'd'}],
+          [],
+          [
+            {n: 3, s: 'z'},
+            {n: 4, s: 'w'},
+          ],
+        ],
+      },
+    ],
+    ...(['at', 'after'] as const).flatMap(basis =>
+      [false, true].flatMap(
+        reverse =>
+          [
+            [
+              `start ${basis}${reverse ? ' reversed' : ''}`,
+              {
+                reverse,
+                start: {
+                  basis,
+                  row: {id: 'a', n: 1, s: 'x', b: true, j: {k: 1}},
+                },
+              },
+              {
+                reverse,
+                start: {
+                  basis,
+                  row: {id: 'b', n: 2, s: 'y', b: false, j: null},
+                },
+              },
+            ],
+            [
+              `start ${basis}${reverse ? ' reversed' : ''} with NULLs`,
+              {
+                reverse,
+                start: {basis, row: {id: 'a', n: 1, s: null, j: null}},
+              },
+              {
+                reverse,
+                start: {basis, row: {id: 'b', n: 2, b: null}},
+              },
+            ],
+          ] as [string, SelectRequest, SelectRequest][],
+      ),
+    ),
+    [
+      'everything',
+      {
+        constraint: {s: 'x'},
+        multiConstraints: [[{id: 'a'}]],
+        start: {basis: 'after', row: {id: 'a', n: 1, s: 'x', b: true}},
+        reverse: true,
+        filter: fetchFilter,
+      },
+      {
+        constraint: {s: 'y'},
+        multiConstraints: [[{id: 'b'}]],
+        start: {basis: 'after', row: {id: 'b', n: 5, s: 'z', b: false}},
+        reverse: true,
+        filter: fetchFilter,
+      },
+    ],
+  ];
+
+  const build = (req: SelectRequest) => {
+    const {text, values} = format(
+      buildSelectQuery(
+        'items',
+        columns,
+        req.constraint,
+        filters,
+        order,
+        req.reverse,
+        req.start,
+        req.multiConstraints,
+        req.filter,
+      ),
+    );
+    return {text: normalizeWhitespace(text), values};
+  };
+
+  test.each(cases)(
+    'binds any request of the shape it was compiled for: %s',
+    (_, a, b) => {
+      const compiled = compileSelectQuery('items', columns, a, filters, order);
+      for (const req of [a, b]) {
+        expect({
+          text: compiled.text,
+          values: compiled.bindings.map(get => get(req)),
+        }).toEqual(build(req));
+      }
+    },
+  );
 });

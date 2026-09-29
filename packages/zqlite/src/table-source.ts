@@ -1,4 +1,3 @@
-import type {SQLQuery} from '@databases/sql';
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
@@ -54,11 +53,8 @@ import {
   NOT_OVERRIDDEN,
   PendingDelta,
 } from './pending-delta.ts';
-import {
-  buildSelectQuery,
-  toSQLiteType,
-  type NoSubqueryCondition,
-} from './query-builder.ts';
+import {toSQLiteType} from './query-builder.ts';
+import {SelectQueryCache} from './select-query-cache.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -365,7 +361,7 @@ export class TableSource implements Source {
 
     const input: SourceInput = {
       getSchema: () => schema,
-      fetch: req => this.#fetch(req, connection),
+      fetch: req => this.#fetch(req, connection, selects),
       setOutput: output => {
         connection.output = output;
       },
@@ -377,6 +373,13 @@ export class TableSource implements Source {
       },
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
+
+    const selects = new SelectQueryCache(
+      this.#table,
+      this.#columns,
+      transformedFilters.filters,
+      sort,
+    );
 
     const connection: Connection = {
       input,
@@ -412,13 +415,16 @@ export class TableSource implements Source {
     ) as Row;
   }
 
-  *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
+  *#fetch(
+    req: FetchRequest,
+    connection: Connection,
+    selects: SelectQueryCache,
+  ): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
-    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
-    const sqlAndBindings = format(query);
+    const sqlAndBindings = selects.get(req);
 
-    const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
+    const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text, true);
     cachedStatement.statement.safeIntegers(true);
     const rowIterator = cachedStatement.statement.iterate<Row>(
       ...sqlAndBindings.values,
@@ -883,24 +889,6 @@ export class TableSource implements Source {
     // The base match is absent, removed, or no longer matches this key. Another
     // pending row may now own the key.
     return delta.getByColumns(keyCols, rowKey);
-  }
-
-  #requestToSQL(
-    request: FetchRequest,
-    filters: NoSubqueryCondition | undefined,
-    order: Ordering | undefined,
-  ): SQLQuery {
-    return buildSelectQuery(
-      this.#table,
-      this.#columns,
-      request.constraint,
-      filters,
-      order,
-      request.reverse,
-      request.start,
-      request.multiConstraints,
-      request.filter,
-    );
   }
 }
 
