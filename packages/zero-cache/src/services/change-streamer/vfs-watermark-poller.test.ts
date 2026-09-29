@@ -15,6 +15,7 @@ import type {BackedUpWatermark} from './backup-monitor.ts';
 import {
   buildLitestreamVfsReplicaURL,
   VfsWatermarkPoller,
+  vfsQueryMemoryLimitBytes,
   type VfsPollerConfig,
 } from './vfs-watermark-poller.ts';
 
@@ -138,6 +139,45 @@ describe('change-streamer/vfs-watermark-poller', () => {
       '--log-format',
       'text',
     ]);
+  });
+
+  test('spawns the remote poller with a GOMEMLIMIT sized to the replica', () => {
+    setUp();
+    vi.stubEnv('GOMEMLIMIT', '');
+    try {
+      const db = new Database(createSilentLogContext(), replicaFile);
+      db.exec(`CREATE TABLE filler (data BLOB)`);
+      db.prepare(`INSERT INTO filler VALUES (zeroblob(1000000))`).run();
+      const [{page_count: pageCount}] = db.pragma<{page_count: number}>(
+        'page_count',
+      );
+      db.close();
+
+      makePoller(fakeVfsQuery(BLOCK));
+
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      const [, , options] = spawnMock.mock.calls[0];
+      expect(options?.env?.GOMEMLIMIT).toBe(
+        `${vfsQueryMemoryLimitBytes(pageCount)}B`,
+      );
+      expect(options?.env?.PATH).toBe(process.env.PATH);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test('passes an explicitly configured GOMEMLIMIT through unchanged', () => {
+    setUp();
+    vi.stubEnv('GOMEMLIMIT', '3GiB');
+    try {
+      makePoller(fakeVfsQuery(BLOCK));
+
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      const [, , options] = spawnMock.mock.calls[0];
+      expect(options?.env?.GOMEMLIMIT).toBe('3GiB');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   test('pushes watermark updates parsed from vfs-query stdout, deduped by stateVersion', async () => {
@@ -309,5 +349,15 @@ describe('buildLitestreamVfsReplicaURL', () => {
     expect(new URL(url).searchParams.get('endpoint')).toEqual(
       'http://existing:9000',
     );
+  });
+});
+
+describe('vfsQueryMemoryLimitBytes', () => {
+  test('is a fixed base plus a per-page allowance', () => {
+    const MiB = 1024 ** 2;
+    expect(vfsQueryMemoryLimitBytes(0)).toBe(64 * MiB);
+    expect(vfsQueryMemoryLimitBytes(1_000_000)).toBe(64 * MiB + 150_000_000);
+    // A ~130 GiB replica of 4 KiB pages.
+    expect(vfsQueryMemoryLimitBytes(34_000_000)).toBe(64 * MiB + 5_100_000_000);
   });
 });
