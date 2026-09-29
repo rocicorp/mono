@@ -1,7 +1,7 @@
 import {describe, expect, test, vi} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {isDevelopmentMode} from '../config/normalize.ts';
-import {InspectorDelegate} from './inspector-delegate.ts';
+import {InspectorDelegate, UPDATE_SAMPLE_RATE} from './inspector-delegate.ts';
 
 // Mock the config module to control development mode
 vi.mock('../config/normalize.ts', () => ({
@@ -25,15 +25,54 @@ describe('InspectorDelegate', () => {
     // query-hydration-server-ms is a plain number (last value wins)
     expect(queryMetrics).toEqual({
       'query-hydration-server-ms': 15,
-      'query-update-server': [1000, 3, 1], // One centroid: 3
+      // One centroid: 3, standing for UPDATE_SAMPLE_RATE values.
+      'query-update-server': [1000, 3, UPDATE_SAMPLE_RATE],
     });
 
     // Global metrics still use TDigest for aggregation
     const globalMetrics = d.getMetricsJSON();
     expect(globalMetrics).toEqual({
       'query-materialization-server': [1000, 5, 1, 15, 1],
-      'query-update-server': [1000, 3, 1],
+      'query-update-server': [1000, 3, UPDATE_SAMPLE_RATE],
     });
+  });
+
+  test('update metrics record every UPDATE_SAMPLE_RATE-th value, weighted', () => {
+    const d = new InspectorDelegate(undefined);
+    const q1 = 'query-1';
+    const q2 = 'query-2';
+
+    // Values 0, 1, 2, ... for q1: the 0th, the rate-th and the (2*rate)-th
+    // are recorded.
+    for (let i = 0; i <= 2 * UPDATE_SAMPLE_RATE; i++) {
+      d.addMetric('query-update-server', i, q1);
+    }
+    // Each query is sampled on its own count, so q2's first value is kept.
+    d.addMetric('query-update-server', 1000, q2);
+
+    expect(d.getMetricsJSONForQuery(q1)).toEqual({
+      'query-hydration-server-ms': undefined,
+      'query-update-server': [
+        1000,
+        0,
+        UPDATE_SAMPLE_RATE,
+        UPDATE_SAMPLE_RATE,
+        UPDATE_SAMPLE_RATE,
+        2 * UPDATE_SAMPLE_RATE,
+        UPDATE_SAMPLE_RATE,
+      ],
+    });
+    expect(d.getMetricsJSON()['query-update-server']).toEqual([
+      1000,
+      0,
+      UPDATE_SAMPLE_RATE,
+      UPDATE_SAMPLE_RATE,
+      UPDATE_SAMPLE_RATE,
+      2 * UPDATE_SAMPLE_RATE,
+      UPDATE_SAMPLE_RATE,
+      1000,
+      UPDATE_SAMPLE_RATE,
+    ]);
   });
 
   test('getMetricsJSONForQuery returns null for non-existent query', () => {
@@ -226,7 +265,14 @@ describe('InspectorDelegate', () => {
     const globalMetrics = d.getMetricsJSON();
     expect(globalMetrics).toEqual({
       'query-materialization-server': [1000, 5, 1, 15, 1], // Two centroids: 5 and 15
-      'query-update-server': [1000, 3, 1, 7, 1], // Two centroids: 3 and 7
+      // Two centroids, 3 and 7, each standing for UPDATE_SAMPLE_RATE values.
+      'query-update-server': [
+        1000,
+        3,
+        UPDATE_SAMPLE_RATE,
+        7,
+        UPDATE_SAMPLE_RATE,
+      ],
     });
   });
 
