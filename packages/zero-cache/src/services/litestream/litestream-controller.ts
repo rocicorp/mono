@@ -38,10 +38,10 @@ export type SyncOptions = {
    * returning without waiting on the backup store. Use false on the write path
    * where the goal is to keep the WAL small, not to durably back it up.
    */
-  wait?: boolean;
+  wait?: boolean | undefined;
 
   /** Overall request timeout in milliseconds. Defaults to 30s. */
-  timeoutMs?: number;
+  timeoutMs?: number | undefined;
 
   /**
    * Server-side deadline in seconds, sent as litestream's `timeout`. When set,
@@ -50,7 +50,7 @@ export type SyncOptions = {
    * the client, ends a slow request. (litestream defaults to 30s when `wait`
    * is set, and to no deadline otherwise.)
    */
-  serverTimeoutSeconds?: number;
+  serverTimeoutSeconds?: number | undefined;
 };
 
 /**
