@@ -614,6 +614,60 @@ describe('ActiveClientManager', () => {
     );
 
     test.each(cases)(
+      '%s - late broadcast from a deleted client does not re-add it',
+      async (_desc, setup) => {
+        setup();
+        const clientGroupID = nanoid();
+
+        const ac1 = new AbortController();
+        const ac2 = new AbortController();
+
+        const deletions = new Queue<string>();
+
+        await ActiveClientsManager.create(clientGroupID, 'client1', ac1.signal);
+
+        const clientManager2 = await ActiveClientsManager.create(
+          clientGroupID,
+          'client2',
+          ac2.signal,
+        );
+        clientManager2.onDelete = deletedClientID => {
+          deletions.enqueue(deletedClientID);
+        };
+
+        await waitForPostMessage();
+
+        ac1.abort();
+
+        expect(await deletions.dequeue()).toBe('client1');
+
+        // Simulate client1's "I'm here" message being delivered after its lock
+        // was already released.
+        const channelName = `zero-active/${clientGroupID}`;
+        const lockName = `${channelName}/client1`;
+        const sender = new BroadcastChannel(channelName);
+        const receiver = new BroadcastChannel(channelName);
+        // BroadcastChannel delivers to channels in creation order, so once
+        // receiver gets the message clientManager2 has already handled it.
+        const received = new Promise<void>(resolve => {
+          receiver.onmessage = () => resolve();
+        });
+        sender.postMessage(lockName);
+        await received;
+        sender.close();
+        receiver.close();
+        // A shared lock that clientManager2 might have requested for client1 is
+        // queued before this one, so once we get it onDelete would have fired.
+        await navigator.locks?.request(lockName, () => {});
+
+        expect(deletions.size()).toBe(0);
+        expect(clientManager2.activeClients).toEqual(new Set(['client2']));
+
+        ac2.abort();
+      },
+    );
+
+    test.each(cases)(
       '%s - no notification when onDelete is undefined',
       async (_desc, setup) => {
         setup();
