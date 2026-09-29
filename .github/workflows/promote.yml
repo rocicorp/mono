@@ -17,6 +17,10 @@ concurrency:
 jobs:
   validate:
     name: Validate release
+    # Releases publish from the public repo only. This file also exists in
+    # rocicorp/mono-internal, where skipping this job skips every job that
+    # needs it.
+    if: github.repository == 'rocicorp/mono'
     runs-on: ubuntu-latest
     permissions:
       contents: read
