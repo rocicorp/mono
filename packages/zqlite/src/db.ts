@@ -134,12 +134,10 @@ export class Database implements Disposable {
       }
       throw e;
     } finally {
-      logIfSlow(
-        this.#lc.withContext('method', method),
-        performance.now() - start,
-        {method},
-        this.#threshold,
-      );
+      const elapsed = performance.now() - start;
+      if (elapsed >= this.#threshold) {
+        logSlow(this.#lc.withContext('method', method), elapsed, {method});
+      }
     }
   }
 
@@ -212,42 +210,36 @@ export class Statement {
   run(...params: unknown[]): RunResult {
     const start = performance.now();
     const ret = this.#stmt.run(...params);
-    logIfSlow(
-      this.#lc.withContext('method', 'run'),
-      performance.now() - start,
-      {...this.#attrs, method: 'run'},
-      this.#threshold,
-    );
+    this.#logIfSlow('run', performance.now() - start);
     return ret;
   }
 
   get<T>(...params: unknown[]): T {
     const start = performance.now();
     const ret = this.#stmt.get(...params);
-    logIfSlow(
-      this.#lc.withContext('method', 'get'),
-      performance.now() - start,
-      {...this.#attrs, method: 'get'},
-      this.#threshold,
-    );
+    this.#logIfSlow('get', performance.now() - start);
     return ret as T;
   }
 
   all<T>(...params: unknown[]): T[] {
     const start = performance.now();
     const ret = this.#stmt.all(...params);
-    logIfSlow(
-      this.#lc.withContext('method', 'all'),
-      performance.now() - start,
-      {...this.#attrs, method: 'all'},
-      this.#threshold,
-    );
+    this.#logIfSlow('all', performance.now() - start);
     return ret as T[];
+  }
+
+  #logIfSlow(method: string, elapsed: number): void {
+    if (elapsed >= this.#threshold) {
+      logSlow(this.#lc.withContext('method', method), elapsed, {
+        ...this.#attrs,
+        method,
+      });
+    }
   }
 
   iterate<T>(...params: unknown[]): IterableIterator<T> {
     return new LoggingIterableIterator(
-      this.#lc.withContext('method', 'iterate'),
+      this.#lc,
       this.#attrs,
       this.#stmt.iterate(...params),
       this.#threshold,
@@ -289,18 +281,29 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   }
 
   #log() {
-    logIfSlow(
-      this.#lc.withContext('type', 'total'),
-      performance.now() - this.#start,
-      {...this.#attrs, type: 'total', method: 'iterate'},
-      this.#threshold,
-    );
-    logIfSlow(
-      this.#lc.withContext('type', 'sqlite'),
-      this.#sqliteRowTimeSum,
-      {...this.#attrs, type: 'sqlite', method: 'iterate'},
-      this.#threshold,
-    );
+    // Total time includes downstream consumer work and waits between rows.
+    // Check it independently of the time spent stepping SQLite.
+    const totalMs = performance.now() - this.#start;
+    if (totalMs >= this.#threshold) {
+      logSlow(
+        this.#lc,
+        totalMs,
+        {...this.#attrs, type: 'total', method: 'iterate'},
+        'Slow SQLite iterator total time (including consumer work and waits between rows)',
+      );
+    }
+    if (this.#sqliteRowTimeSum >= this.#threshold) {
+      logSlow(
+        this.#lc.withContext('method', 'iterate').withContext('type', 'sqlite'),
+        this.#sqliteRowTimeSum,
+        {
+          ...this.#attrs,
+          type: 'sqlite',
+          method: 'iterate',
+          totalMs,
+        },
+      );
+    }
   }
 
   [Symbol.iterator](): IterableIterator<T> {
@@ -320,19 +323,17 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   }
 }
 
-function logIfSlow(
+function logSlow(
   lc: LogContext,
   elapsed: number,
   attrs: Attributes,
-  threshold: number,
+  message = 'Slow SQLite query',
 ): void {
-  if (elapsed >= threshold) {
-    for (const [key, value] of Object.entries(attrs)) {
-      lc = lc.withContext(key, value);
-    }
-    lc.warn?.('Slow SQLite query', elapsed);
-    manualSpan(tracer, 'db.slow-query', elapsed, attrs);
+  for (const [key, value] of Object.entries(attrs)) {
+    lc = lc.withContext(key, value);
   }
+  lc.warn?.(message, elapsed);
+  manualSpan(tracer, 'db.slow-query', elapsed, attrs);
 }
 
 /**
