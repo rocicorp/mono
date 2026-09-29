@@ -45,6 +45,7 @@ import {
   cmpVersions,
   versionFromString,
 } from '../../../zero-cache/src/services/view-syncer/schema/types.ts';
+import {testSharedDiffs} from '../../../zero-cache/src/services/view-syncer/shared-diffs-test-util.ts';
 import {SnapshotRowCache} from '../../../zero-cache/src/services/view-syncer/snapshot-row-cache.ts';
 import {Snapshotter} from '../../../zero-cache/src/services/view-syncer/snapshotter.ts';
 import {
@@ -536,7 +537,15 @@ export async function startZeroCacheReplica(
           new PipelineDriver(
             lc.withContext('component', 'pipeline-driver'),
             testLogConfig,
-            new Snapshotter(lc, replicaDbFile.path, shard, undefined, rowCache),
+            new Snapshotter(
+              lc,
+              replicaDbFile.path,
+              shard,
+              undefined,
+              rowCache,
+              // Selected by ZERO_TEST_SHARED_DIFFS.
+              testSharedDiffs(lc, replicaDbFile.path, shard),
+            ),
             shard,
             databaseStorage.createClientGroupStorage(clientGroupID),
             clientGroupID,

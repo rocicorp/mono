@@ -23,6 +23,7 @@ import {
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
+import {testSharedDiffs} from './shared-diffs-test-util.ts';
 import {Snapshotter} from './snapshotter.ts';
 
 describe('view-syncer/pipeline-driver', () => {
@@ -43,7 +44,14 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines = new PipelineDriver(
       lc,
       testLogConfig,
-      new Snapshotter(lc, dbFile.path, {appID: 'zeroz'}),
+      new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'zeroz'},
+        undefined,
+        undefined,
+        testSharedDiffs(lc, dbFile.path, {appID: 'zeroz'}),
+      ),
       {appID: 'zeroz', shardNum: 1},
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',

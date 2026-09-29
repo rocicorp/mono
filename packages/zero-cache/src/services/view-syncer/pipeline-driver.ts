@@ -80,6 +80,7 @@ import {planWarningMessage} from './plan-warnings.ts';
 import {queryShape, type QueryShape} from './query-shape.ts';
 import type {QueryStats} from './query-stats.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
+import {specsFingerprint} from './shared-diffs.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
@@ -366,6 +367,8 @@ export class PipelineDriver {
   readonly #config: ZeroConfig | undefined;
   readonly #deferredWrites: DeferredWritesBudget | undefined;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
+  /** The {@link specsFingerprint} of {@link #tableSpecs}. */
+  #tableSpecsFingerprint: string | undefined;
   readonly #allTableNames = new Set<string>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   readonly #planWarningThresholds: PlanWarningThresholds | undefined;
@@ -498,6 +501,9 @@ export class PipelineDriver {
       this.#tableSpecs,
       fullTables,
     );
+    this.#tableSpecsFingerprint = this.#snapshotter.sharesDiffs
+      ? specsFingerprint(this.#tableSpecs)
+      : undefined;
     checkClientSchema(
       this.#shardID,
       clientSchema,
@@ -1289,6 +1295,7 @@ export class PipelineDriver {
       // observe, so a `prev` they write to diverges from other groups'.
       // #advance() overrides this if it holds the changes in memory.
       'divergent',
+      this.#tableSpecsFingerprint,
     );
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
@@ -1337,6 +1344,10 @@ export class PipelineDriver {
       }
       for (const table of this.#tables.values()) {
         table.setDeferWrites(deferWrites);
+        // A source skips the changes no pipeline can observe on the grounds
+        // that the row does not come up again before the source moves to
+        // `curr`, which does not hold when the diff replays several segments.
+        table.setApplyUnobservableChanges(diff.rowsMayRepeat);
       }
       this.#lc.debug?.(
         `starting pipeline advancement of ${numChanges} changes with an ` +

@@ -607,6 +607,28 @@ export const zeroOptions = {
     hidden: true,
   },
 
+  shareSnapshotDiffs: {
+    type: v.boolean().default(false),
+    desc: [
+      `Compute the diff between two versions of the replica once per sync`,
+      `worker instead of once per client group. A client group whose`,
+      `advancement starts and ends at versions the worker's producer advanced`,
+      `to replays the producer's segments; any other advancement computes its`,
+      `own diff as before.`,
+    ],
+    hidden: true,
+  },
+
+  shareSnapshotDiffsMaxBytes: {
+    type: v.number().default(64 * 1024 * 1024),
+    desc: [
+      `With {bold shareSnapshotDiffs}, the most estimated bytes of diff`,
+      `segments a sync worker keeps, counting segments that client groups are`,
+      `still replaying. Advances that do not fit are not shared.`,
+    ],
+    hidden: true,
+  },
+
   enableQueryPlanner: {
     type: v.boolean().default(true),
     desc: [

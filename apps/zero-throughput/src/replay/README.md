@@ -97,11 +97,40 @@ pnpm --filter zero-throughput run replay -- \
 2. a database (`--local-database`, rebuilt with `--local-reset`) whose tables
    come from the workload's client schema, with an index on every `*_id`
    column and a publication over their schemas;
-3. the replayed user IDs in `replay_meta.users`, then each
-   `--local-seed-sql` script;
+3. the replayed user IDs in `replay_meta.users`; then, with
+   `--local-seed-replica <file>`, rows copied from a Zero replica (see
+   below); then each `--local-seed-sql` script; then the indexes;
 4. the query server, started with `--local-query-server-command` (given
    `PORT` and `QUERY_SECRET`; it must answer `GET /health`);
-5. zero-cache from this repository with `--local-num-sync-workers`.
+5. zero-cache from this repository with `--local-num-sync-workers`. Its
+   first start copies the whole database (`--local-ready-timeout-minutes`).
+
+To run on real data, point `--local-seed-replica` at a replica file from
+the deployment (opened read-only). Tables are created from the workload's
+client schema, and the copy fills whatever the replica, the client schema
+and the created tables share:
+
+- columns the replica lacks stay NULL, and tables it lacks stay empty, so an
+  older replica works with a newer schema;
+- booleans stored as 0/1 and JSON stored as text are converted by the
+  column's client type.
+
+`--local-seed-replica-plan` is a JSON file of per-table rules:
+
+```json
+{
+  "default": "copy",
+  "tables": {
+    "catalog.large_lookup": "skip",
+    "app.user_rows": {"where": "user_id IN {{users}}"}
+  }
+}
+```
+
+A `where` is SQLite, evaluated against the replica; `{{users}}` becomes the
+list of replayed user IDs. Pair it with `--local-database` and
+`--local-replica-file` so the loaded database and zero-cache's replica are
+kept apart from the synthetic ones and reused across runs.
 
 ## Output
 

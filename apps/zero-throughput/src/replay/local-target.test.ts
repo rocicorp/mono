@@ -21,24 +21,28 @@ test('schemaDDL creates schemas, tables, *_id indexes and a publication', () => 
         },
       },
     }),
-  ).toEqual([
-    'CREATE SCHEMA IF NOT EXISTS "catalog"',
-    'CREATE TABLE "catalog"."work_titles" (\n' +
-      '  "title_id" text NOT NULL,\n' +
-      '  "work_id" text,\n' +
-      '  "is_primary" boolean,\n' +
-      '  "position" double precision,\n' +
-      '  "extra" jsonb,\n' +
-      '  PRIMARY KEY ("title_id")\n' +
-      ')',
-    'CREATE INDEX ON "catalog"."work_titles" ("work_id")',
-    'CREATE SCHEMA IF NOT EXISTS "public"',
-    'CREATE TABLE "languages" (\n' +
-      '  "bcp47_code" text NOT NULL,\n' +
-      '  PRIMARY KEY ("bcp47_code")\n' +
-      ')',
-    'CREATE PUBLICATION replay_tables FOR TABLES IN SCHEMA "catalog", "public"',
-  ]);
+  ).toEqual({
+    tables: [
+      'CREATE SCHEMA IF NOT EXISTS "catalog"',
+      'CREATE TABLE "catalog"."work_titles" (\n' +
+        '  "title_id" text NOT NULL,\n' +
+        '  "work_id" text,\n' +
+        '  "is_primary" boolean,\n' +
+        '  "position" double precision,\n' +
+        '  "extra" jsonb,\n' +
+        '  PRIMARY KEY ("title_id")\n' +
+        ')',
+      'CREATE SCHEMA IF NOT EXISTS "public"',
+      'CREATE TABLE "languages" (\n' +
+        '  "bcp47_code" text NOT NULL,\n' +
+        '  PRIMARY KEY ("bcp47_code")\n' +
+        ')',
+    ],
+    afterLoad: [
+      'CREATE INDEX ON "catalog"."work_titles" ("work_id")',
+      'CREATE PUBLICATION replay_tables FOR TABLES IN SCHEMA "catalog", "public"',
+    ],
+  });
 });
 
 test('databaseURL swaps the database', () => {

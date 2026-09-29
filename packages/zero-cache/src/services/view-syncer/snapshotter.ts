@@ -2,10 +2,12 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {getOrInsertComputed} from '../../../../shared/src/map.ts';
+import {must} from '../../../../shared/src/must.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {toSQLiteType} from '../../../../zqlite/src/query-builder.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
 import type {
   LiteAndZqlSpec,
@@ -29,6 +31,7 @@ import {
   getReplicationState,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.ts';
+import type {Segment, SegmentLease, SharedDiffs} from './shared-diffs.ts';
 import type {SnapshotRowCache} from './snapshot-row-cache.ts';
 
 /**
@@ -96,14 +99,20 @@ export class Snapshotter {
   readonly #appID: string;
   readonly #pageCacheSizeKib: number | undefined;
   readonly #rowCache: SnapshotRowCache | undefined;
+  readonly #sharedDiffs: SharedDiffs | undefined;
   #curr: Snapshot | undefined;
   #prev: Snapshot | undefined;
+  /** The segments the last diff replays, if it does. */
+  #lease: SegmentLease | undefined;
 
   /**
    * @param rowCache An optional worker-wide {@link SnapshotRowCache} through
    *        which the row reads performed when iterating over a
    *        {@link SnapshotDiff} are shared with the other Snapshotters
    *        (i.e. client groups) on the worker.
+   * @param sharedDiffs An optional worker-wide {@link SharedDiffs} whose
+   *        segments a diff replays, when they cover it, instead of computing
+   *        its changes.
    */
   constructor(
     lc: LogContext,
@@ -111,12 +120,14 @@ export class Snapshotter {
     {appID}: AppID,
     pageCacheSizeKib?: number,
     rowCache?: SnapshotRowCache,
+    sharedDiffs?: SharedDiffs,
   ) {
     this.#lc = lc;
     this.#dbFile = dbFile;
     this.#appID = appID;
     this.#pageCacheSizeKib = pageCacheSizeKib;
     this.#rowCache = rowCache;
+    this.#sharedDiffs = sharedDiffs;
   }
 
   /**
@@ -133,11 +144,20 @@ export class Snapshotter {
       this.#pageCacheSizeKib,
     );
     this.#lc.debug?.(`Initial snapshot at version ${this.#curr.version}`);
+    // A client group can only replay the segments of a producer that was at
+    // its version, so start the producer no later than the first of them.
+    this.#sharedDiffs?.start();
+    this.#sharedDiffs?.track(this, this.#curr.version);
     return this;
   }
 
   initialized(): boolean {
     return this.#curr !== undefined;
+  }
+
+  /** Whether diffs may replay the segments of a {@link SharedDiffs}. */
+  get sharesDiffs(): boolean {
+    return this.#sharedDiffs !== undefined;
   }
 
   /** Returns the current snapshot. Asserts if {@link initialized()} is false. */
@@ -186,14 +206,38 @@ export class Snapshotter {
    * @param prevWrites How the caller writes to `prev` during the iteration,
    *        which determines which `prev` reads can be shared through the
    *        {@link SnapshotRowCache}. See {@link PrevWrites}.
+   * @param specsFingerprint The {@link specsFingerprint} of `syncableTables`,
+   *        which lets the diff replay the segments of the worker's
+   *        {@link SharedDiffs} if they were built with the same specs.
    */
   advance(
     syncableTables: Map<string, LiteAndZqlSpec>,
     allTableNames: Set<string>,
     observedTables?: TableFilter | undefined,
     prevWrites: PrevWrites = 'uniform',
+    specsFingerprint?: string | undefined,
   ): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
+    let lease: SegmentLease | undefined;
+    const shared = this.#sharedDiffs;
+    if (shared && specsFingerprint !== undefined) {
+      // Keeps the segments from `prev` while they are acquired. Once they
+      // are, the lease holds them.
+      shared.track(this, prev.version);
+      lease = shared.acquire(prev.version, curr.version, specsFingerprint);
+      shared.track(this, curr.version);
+    }
+    if (lease) {
+      this.#lease = lease;
+      return new SegmentDiff(
+        syncableTables,
+        prev,
+        curr,
+        lease,
+        observedTables,
+        prevWrites,
+      );
+    }
     return new Diff(
       this.#appID,
       syncableTables,
@@ -208,6 +252,8 @@ export class Snapshotter {
 
   advanceWithoutDiff() {
     assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
+    // The previous diff is no longer valid.
+    this.#releaseLease();
     const next = this.#prev
       ? this.#prev.resetToHead()
       : Snapshot.create(
@@ -218,7 +264,13 @@ export class Snapshotter {
         );
     this.#prev = this.#curr;
     this.#curr = next;
+    this.#sharedDiffs?.track(this, next.version);
     return {prev: this.#prev, curr: this.#curr};
+  }
+
+  #releaseLease() {
+    this.#lease?.release();
+    this.#lease = undefined;
   }
 
   /**
@@ -226,6 +278,8 @@ export class Snapshotter {
    * no longer needed.
    */
   destroy() {
+    this.#releaseLease();
+    this.#sharedDiffs?.untrack(this);
     this.#curr?.db.db.close();
     this.#prev?.db.db.close();
     this.#lc.debug?.('closed database connections');
@@ -297,6 +351,14 @@ export interface SnapshotDiff extends Iterable<Change> {
    *       may not be worth it for a presumable rare operation.
    */
   readonly changes: number;
+
+  /**
+   * Whether a row can appear more than once in the iteration. It can when the
+   * diff replays several segments of a {@link SharedDiffs}, each of which
+   * may change the row, and so the caller must apply every change it skips
+   * rather than rely on the row not coming up again.
+   */
+  readonly rowsMayRepeat: boolean;
 
   /**
    * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
@@ -623,6 +685,7 @@ class Diff implements SnapshotDiff {
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
+  readonly rowsMayRepeat = false;
 
   constructor(
     appID: string,
@@ -890,6 +953,134 @@ class Diff implements SnapshotDiff {
         'Diff is no longer valid. curr db has advanced.',
       );
     }
+  }
+}
+
+/**
+ * A diff that replays the segments of a {@link SharedDiffs} rather than
+ * computing its changes from the change log.
+ *
+ * The rows the segments hold were read by the producer, from snapshots it
+ * never writes to, and are shared with the other client groups on the
+ * worker, so they must not be modified. They are what a {@link Diff} with
+ * `prevWrites` of `none` produces, which is also right for the rows of a
+ * table with only a primary key when the caller writes to `prev`. For a
+ * table with other unique keys, the rows a change displaces depend on the
+ * earlier changes the caller applied, so when the caller writes to `prev`
+ * they are read from it again.
+ */
+class SegmentDiff implements SnapshotDiff {
+  readonly #syncableTables: Map<string, LiteAndZqlSpec>;
+  readonly #lease: SegmentLease;
+  readonly #observedTables: TableFilter | undefined;
+  #prevWrites: PrevWrites;
+  #iterated = false;
+  readonly prev: Snapshot;
+  readonly curr: Snapshot;
+  readonly changes: number;
+  readonly rowsMayRepeat: boolean;
+
+  constructor(
+    syncableTables: Map<string, LiteAndZqlSpec>,
+    prev: Snapshot,
+    curr: Snapshot,
+    lease: SegmentLease,
+    observedTables: TableFilter | undefined,
+    prevWrites: PrevWrites,
+  ) {
+    this.#syncableTables = syncableTables;
+    this.#lease = lease;
+    this.#observedTables = observedTables;
+    this.#prevWrites = prevWrites;
+    this.prev = prev;
+    this.curr = curr;
+    this.changes = lease.changes;
+    this.rowsMayRepeat = lease.segments.length > 1;
+  }
+
+  setPrevWrites(prevWrites: PrevWrites): void {
+    assert(
+      !this.#iterated || prevWrites === 'divergent',
+      'prevWrites must be set before iterating the diff',
+    );
+    this.#prevWrites = prevWrites;
+  }
+
+  *[Symbol.iterator](): Iterator<Change> {
+    this.#iterated = true;
+    try {
+      for (const segment of this.#lease.segments) {
+        for (const change of segment.changes) {
+          if (this.prev.reset) {
+            throw new InvalidDiffError(
+              `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
+            );
+          }
+          if (this.#observedTables && !this.#observedTables.has(change.table)) {
+            continue;
+          }
+          if (this.#prevWrites !== 'none') {
+            const specs = must(this.#syncableTables.get(change.table));
+            if (specs.tableSpec.uniqueKeys.length > 1) {
+              const prevValues = this.#readPrevValues(segment, specs, change);
+              if (prevValues.length === 0 && change.nextValue === null) {
+                continue; // As a Diff drops a delete of a row not in prev.
+              }
+              yield {...change, prevValues};
+              continue;
+            }
+          }
+          yield change;
+        }
+      }
+    } finally {
+      this.#lease.release();
+    }
+  }
+
+  /**
+   * Reads the rows of `prev` that `change` replaces, as a {@link Diff} does
+   * when the caller writes to `prev`: those that collide with its new value
+   * on a unique key, or the row at its change-log key if it removes one.
+   */
+  #readPrevValues(
+    segment: Segment,
+    {tableSpec, zqlSpec}: LiteAndZqlSpec,
+    {nextValue, rowKey}: Change,
+  ): Readonly<Row>[] {
+    let rows: RowValue[];
+    if (nextValue === null) {
+      const row = this.prev.getRow(tableSpec, rowKey);
+      rows = row ? [row] : [];
+    } else {
+      // A unique key over a column that is not synced (so not in the specs)
+      // has no value to look up, and so is skipped, as it is by a Diff.
+      const probe: Record<string, unknown> = {};
+      for (const key of tableSpec.uniqueKeys) {
+        for (const column of key) {
+          const type = zqlSpec[column]?.type;
+          probe[column] =
+            type === undefined
+              ? undefined
+              : toSQLiteType(nextValue[column], type);
+        }
+      }
+      rows = this.prev.getRows(
+        tableSpec,
+        tableSpec.uniqueKeys,
+        probe as RowValue,
+      );
+    }
+    return rows.map(row => {
+      // `prev` holds the rows as of the start of the advancement and the
+      // earlier changes the caller wrote, none of them past this segment.
+      if ((row[ROW_VERSION] ?? '~') > segment.to) {
+        throw new InvalidDiffError(
+          `Diff is no longer valid. prev db has advanced past ${segment.to}.`,
+        );
+      }
+      return fromSQLiteTypes(zqlSpec, row as Row, tableSpec.name);
+    });
   }
 }
 

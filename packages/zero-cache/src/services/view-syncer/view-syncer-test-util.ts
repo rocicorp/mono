@@ -58,6 +58,7 @@ import {DrainCoordinator} from './drain-coordinator.ts';
 import type {MonotonicClock} from './hydration-budget.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
+import {testSharedDiffs} from './shared-diffs-test-util.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
@@ -825,7 +826,15 @@ export async function setup(
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
       testLogConfig,
-      new Snapshotter(lc, replicaDbFile.path, SHARD),
+      new Snapshotter(
+        lc,
+        replicaDbFile.path,
+        SHARD,
+        undefined,
+        undefined,
+        // Selected by ZERO_TEST_SHARED_DIFFS.
+        testSharedDiffs(lc, replicaDbFile.path, SHARD),
+      ),
       SHARD,
       operatorStorage,
       'view-syncer.pg.test.ts',
@@ -1017,7 +1026,15 @@ export function restartViewSyncer(params: {
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
       testLogConfig,
-      new Snapshotter(lc, replicaDbFile.path, SHARD),
+      new Snapshotter(
+        lc,
+        replicaDbFile.path,
+        SHARD,
+        undefined,
+        undefined,
+        // Selected by ZERO_TEST_SHARED_DIFFS.
+        testSharedDiffs(lc, replicaDbFile.path, SHARD),
+      ),
       SHARD,
       operatorStorage,
       'view-syncer-restart',

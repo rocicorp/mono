@@ -351,7 +351,7 @@ export class PendingDelta {
 
 // Allow for object/property storage and UTF-16 strings without allocating a
 // serialized copy. Shared values may be counted more than once intentionally.
-function estimateBytes(value: Value): number {
+export function estimateBytes(value: Value): number {
   if (typeof value === 'string') {
     return 24 + value.length * 2;
   }

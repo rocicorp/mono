@@ -1,13 +1,15 @@
-import {spawn, type ChildProcess} from 'node:child_process';
+import {execFileSync, spawn, type ChildProcess} from 'node:child_process';
 import {createWriteStream, mkdirSync} from 'node:fs';
 import {readFile, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import postgres from 'postgres';
+import {getOrInsertComputed} from '../../../../packages/shared/src/map.ts';
 import type {ClientSchema} from '../../../../packages/zero-protocol/src/client-schema.ts';
 import {waitForPostgres} from '../db.ts';
 import {sleep} from '../util.ts';
 import {quoteIdentifier, quoteTable, sqlLiteral} from './backfill.ts';
+import {copyFromReplica, type ReplicaSeedPlan} from './replica-seed.ts';
 
 /**
  * A local stand-in for a deployed stack: a Postgres database whose tables
@@ -22,6 +24,10 @@ export type LocalTargetOptions = {
   readonly reset: boolean;
   readonly clientSchema: ClientSchema;
   readonly userIDs: readonly string[];
+  /** A Zero replica file to copy rows from, before the seed scripts run. */
+  readonly seedReplica?:
+    | {readonly file: string; readonly plan: ReplicaSeedPlan}
+    | undefined;
   readonly seedSQLFiles: readonly string[];
   /** Shell command that starts the query server; gets PORT and QUERY_SECRET. */
   readonly queryServerCommand: string;
@@ -31,6 +37,13 @@ export type LocalTargetOptions = {
   readonly zeroPort: number;
   readonly numSyncWorkers: number;
   readonly replicaFile: string;
+  /**
+   * Run zero-cache and its workers with `--cpu-prof`, writing one profile per
+   * process to this directory when they exit.
+   */
+  readonly cpuProfileDir?: string | undefined;
+  /** How long zero-cache may take to start, including its initial sync. */
+  readonly readyTimeoutMs: number;
   readonly logsDir: string;
   readonly runID: string;
   readonly log: (message: string) => void;
@@ -39,6 +52,7 @@ export type LocalTargetOptions = {
 export type LocalTarget = {
   readonly cacheURL: string;
   readonly pgURL: string;
+  readonly zeroCacheLog: string;
   stop(): Promise<void>;
 };
 
@@ -51,9 +65,16 @@ export function databaseURL(serverURL: string, database: string): string {
   return url.toString();
 }
 
-/** `CREATE` statements for the tables a client schema describes. */
-export function schemaDDL(clientSchema: ClientSchema): string[] {
+/**
+ * DDL for the tables a client schema describes: the tables, then the
+ * indexes and publication, which are cheaper to create after a bulk load.
+ */
+export function schemaDDL(clientSchema: ClientSchema): {
+  readonly tables: string[];
+  readonly afterLoad: string[];
+} {
   const statements: string[] = [];
+  const indexes: string[] = [];
   const schemas = new Set<string>();
   for (const [name, table] of Object.entries(clientSchema.tables)) {
     const schema = name.includes('.') ? name.split('.')[0] : 'public';
@@ -79,19 +100,19 @@ export function schemaDDL(clientSchema: ClientSchema): string[] {
     const leading = table.primaryKey?.[0];
     for (const column of Object.keys(table.columns)) {
       if (column.endsWith('_id') && column !== leading) {
-        statements.push(
+        indexes.push(
           `CREATE INDEX ON ${quoteTable(name)} (${quoteIdentifier(column)})`,
         );
       }
     }
   }
-  statements.push(
+  indexes.push(
     `CREATE PUBLICATION ${PUBLICATION} FOR TABLES IN SCHEMA ${Array.from(
       schemas,
       quoteIdentifier,
     ).join(', ')}`,
   );
-  return statements;
+  return {tables: statements, afterLoad: indexes};
 }
 
 function pgType(type: string): string {
@@ -175,6 +196,9 @@ export async function startLocalTarget(
       queryLog,
     );
 
+    if (o.cpuProfileDir !== undefined) {
+      mkdirSync(o.cpuProfileDir, {recursive: true});
+    }
     const zeroLog = join(o.logsDir, `${o.runID}-zero-cache.log`);
     o.log(`starting zero-cache (${zeroLog})`);
     const zeroCacheMain = fileURLToPath(
@@ -199,18 +223,21 @@ export async function startLocalTarget(
       // Opaque tokens need both URLs set; nothing here calls mutate.
       ZERO_MUTATE_URL: `http://127.0.0.1:${o.queryServerPort}/api/mutate`,
       ZERO_LOG_FORMAT: 'text',
+      ...(o.cpuProfileDir === undefined
+        ? {}
+        : {NODE_OPTIONS: `--cpu-prof --cpu-prof-dir=${o.cpuProfileDir}`}),
     });
     children.push(zeroCache);
     const cacheURL = `http://127.0.0.1:${o.zeroPort}`;
     // The first start copies the whole database into the replica.
     await waitForHTTP(
       `${cacheURL}/statz`,
-      30 * 60_000,
+      o.readyTimeoutMs,
       zeroCache,
       zeroLog,
       [401, 403],
     );
-    return {cacheURL, pgURL, stop};
+    return {cacheURL, pgURL, zeroCacheLog: zeroLog, stop};
   } catch (e) {
     await stop();
     throw e;
@@ -226,7 +253,8 @@ async function seedDatabase(
     o.log(
       `creating ${Object.keys(o.clientSchema.tables).length} tables from the client schema`,
     );
-    for (const statement of schemaDDL(o.clientSchema)) {
+    const ddl = schemaDDL(o.clientSchema);
+    for (const statement of ddl.tables) {
       await sql.unsafe(statement);
     }
     // The replayed users, for seed scripts to build their data around. In a
@@ -243,13 +271,31 @@ async function seedDatabase(
         .join(',');
       await sql.unsafe(`INSERT INTO replay_meta.users VALUES ${values}`);
     }
+    if (o.seedReplica !== undefined) {
+      o.log(`copying rows from ${o.seedReplica.file}`);
+      await copyFromReplica({
+        sql,
+        replicaFile: o.seedReplica.file,
+        plan: o.seedReplica.plan,
+        clientSchema: o.clientSchema,
+        userIDs: users,
+        log: o.log,
+      });
+    }
     for (const file of o.seedSQLFiles) {
       o.log(`running seed ${file}`);
       const started = Date.now();
       await sql.unsafe(await readFile(file, 'utf8'));
       o.log(`seed ${file} took ${((Date.now() - started) / 1000).toFixed(1)}s`);
     }
+    o.log(`creating ${ddl.afterLoad.length - 1} indexes and the publication`);
+    const started = Date.now();
+    await sql.unsafe(`SET maintenance_work_mem = '1GB'`);
+    for (const statement of ddl.afterLoad) {
+      await sql.unsafe(statement);
+    }
     await sql.unsafe('ANALYZE');
+    o.log(`indexes took ${((Date.now() - started) / 1000).toFixed(1)}s`);
   } finally {
     await sql.end();
   }
@@ -314,6 +360,9 @@ async function stopChild(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return;
   }
+  // zero-cache's workers can leave the process group; remember every
+  // descendant now so none outlives the run holding the replica.
+  const descendants = descendantPIDs(child.pid as number);
   const exited = new Promise<void>(resolve =>
     child.once('exit', () => resolve()),
   );
@@ -325,7 +374,57 @@ async function stopChild(child: ChildProcess): Promise<void> {
     }
   };
   signalGroup('SIGTERM');
-  const timer = setTimeout(signalGroup, 10_000, 'SIGKILL');
+  // Long enough for a graceful exit, which is when --cpu-prof writes.
+  const timer = setTimeout(signalGroup, 60_000, 'SIGKILL');
   await exited;
   clearTimeout(timer);
+  const deadline = Date.now() + 60_000;
+  let alive = descendants.filter(isAlive);
+  while (alive.length > 0 && Date.now() < deadline) {
+    await sleep(500);
+    alive = alive.filter(isAlive);
+  }
+  for (const pid of alive) {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+const WHITESPACE = /\s+/;
+
+function descendantPIDs(root: number): number[] {
+  const children = new Map<number, number[]>();
+  for (const line of execFileSync('ps', ['-A', '-o', 'pid=,ppid='], {
+    encoding: 'utf8',
+  }).split('\n')) {
+    const [pid, ppid] = line.trim().split(WHITESPACE).map(Number);
+    if (Number.isInteger(pid) && Number.isInteger(ppid)) {
+      getOrInsertComputed(children, ppid, newList).push(pid);
+    }
+  }
+  const result: number[] = [];
+  const stack = [root];
+  while (stack.length > 0) {
+    for (const child of children.get(stack.pop() as number) ?? []) {
+      result.push(child);
+      stack.push(child);
+    }
+  }
+  return result;
+}
+
+function newList(): number[] {
+  return [];
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }

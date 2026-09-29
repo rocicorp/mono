@@ -78,6 +78,8 @@ export type BucketSummary = {
   readonly connect: Distribution;
   readonly firstPoke: Distribution;
   readonly heldRowDelivery: Distribution;
+  /** Time for a fresh probe group to hydrate every session query. */
+  readonly probeHydration: Distribution;
   readonly backfillPage: Distribution;
   readonly appWrite: Distribution;
   readonly pingRtt: Distribution;
@@ -95,6 +97,8 @@ export type PhaseSummary = {
   readonly hydrationP95SlopeMsPerMin: number;
   readonly firstPoke: Distribution;
   readonly heldRowDelivery: Distribution;
+  /** Time for a fresh probe group to hydrate every session query. */
+  readonly probeHydration: Distribution;
   readonly pingRtt: Distribution;
   readonly backfillRowsPerSecond: number;
   readonly appWritesPerSecond: number;
@@ -132,6 +136,7 @@ export class Recorder {
   readonly #connects: Sample[] = [];
   readonly #firstPokes: Sample[] = [];
   readonly #heldRows: Sample[] = [];
+  readonly #probes: Sample[] = [];
   readonly #backfillPages: (Sample & {readonly written: number})[] = [];
   readonly #failures: {readonly t: number; readonly kind: FailureKind}[] = [];
   readonly #appWrites: Sample[] = [];
@@ -205,6 +210,19 @@ export class Recorder {
 
   pong(rttMs: number): void {
     this.#pings.push({t: this.elapsedMs(), ms: rttMs});
+  }
+
+  probeHydrated(ms: number): void {
+    this.#probes.push({t: this.elapsedMs(), ms});
+  }
+
+  probeFailed(reason: string): void {
+    this.#error(`probe: ${reason}`);
+  }
+
+  recentProbe(windowMs: number): Distribution {
+    const since = this.elapsedMs() - windowMs;
+    return distribution(this.#probes.filter(s => s.t >= since).map(s => s.ms));
   }
 
   heldRowDelivered(ms: number): void {
@@ -285,6 +303,7 @@ export class Recorder {
         connect: msOf(this.#connects, inBucket),
         firstPoke: msOf(this.#firstPokes, inBucket),
         heldRowDelivery: msOf(this.#heldRows, inBucket),
+        probeHydration: msOf(this.#probes, inBucket),
         backfillPage: msOf(this.#backfillPages, inBucket),
         appWrite: msOf(this.#appWrites, inBucket),
         pingRtt: msOf(this.#pings, inBucket),
@@ -322,6 +341,7 @@ export class Recorder {
         ),
         firstPoke: msOf(this.#firstPokes, inPhase),
         heldRowDelivery: msOf(this.#heldRows, inPhase),
+        probeHydration: msOf(this.#probes, inPhase),
         pingRtt: msOf(this.#pings, inPhase),
         backfillRowsPerSecond: perSecond(
           this.#backfillPages

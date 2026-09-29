@@ -30,6 +30,7 @@ import {DeferredWritesBudget} from '../services/view-syncer/deferred-writes-budg
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {QueryStats} from '../services/view-syncer/query-stats.ts';
+import {SharedDiffs} from '../services/view-syncer/shared-diffs.ts';
 import {SnapshotRowCache} from '../services/view-syncer/snapshot-row-cache.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
@@ -190,6 +191,27 @@ export default async function runWorker(
       ? new SnapshotRowCache(config.snapshotRowCacheSize)
       : undefined;
 
+  // Shared by all of the view-syncers on this worker, so that the diff
+  // between two versions of the replica is computed once per worker rather
+  // than once per client group.
+  const sharedDiffs = config.shareSnapshotDiffs
+    ? new SharedDiffs(
+        lc.withContext('component', 'shared-diffs'),
+        replicaFile,
+        shard,
+        {maxBytes: config.shareSnapshotDiffsMaxBytes, logIntervalMs: 60_000},
+        snapshotRowCache,
+      )
+    : undefined;
+  if (sharedDiffs) {
+    getOrCreateGauge('sync', 'ivm.shared-diffs-held-bytes', {
+      description:
+        'Estimated bytes of the shared diff segments a sync worker keeps or ' +
+        'that its client groups are replaying (shareSnapshotDiffs)',
+      unit: 'By',
+    }).addCallback(o => o.observe(sharedDiffs.liveBytes));
+  }
+
   // Shared by all of the view-syncers on this worker, which each hold their
   // own copy of the changes they are advancing through.
   const deferredWritesBudget = config.deferIvmWrites
@@ -280,6 +302,7 @@ export default async function runWorker(
           shard,
           undefined,
           snapshotRowCache,
+          sharedDiffs,
         ),
         shard,
         operatorStorage.createClientGroupStorage(id),

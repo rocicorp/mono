@@ -53,6 +53,8 @@ import {queryShape} from './query-shape.ts';
 import {QueryStats} from './query-stats.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {RowID} from './schema/types.ts';
+import {testSharedDiffs} from './shared-diffs-test-util.ts';
+import {SharedDiffs} from './shared-diffs.ts';
 import {SnapshotRowCache} from './snapshot-row-cache.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 import {TimeSliceTimer} from './view-syncer.ts';
@@ -93,7 +95,14 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines = new PipelineDriver(
       lc,
       testLogConfig,
-      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+      new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: shardID.appID},
+        undefined,
+        undefined,
+        testSharedDiffs(lc, dbFile.path, {appID: shardID.appID}),
+      ),
       shardID,
       new DatabaseStorage(storageDB).createClientGroupStorage(
         'foo-client-group',
@@ -773,7 +782,14 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines = new PipelineDriver(
       lc,
       testLogConfig,
-      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+      new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: shardID.appID},
+        undefined,
+        undefined,
+        testSharedDiffs(lc, dbFile.path, {appID: shardID.appID}),
+      ),
       shardID,
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'foo-client-group',
@@ -1529,7 +1545,14 @@ describe('view-syncer/pipeline-driver', () => {
       const driver = new PipelineDriver(
         warnLC,
         {...testLogConfig, ...logConfig},
-        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        new Snapshotter(
+          lc,
+          dbFile.path,
+          {appID: shardID.appID},
+          undefined,
+          undefined,
+          testSharedDiffs(lc, dbFile.path, {appID: shardID.appID}),
+        ),
         shardID,
         databaseStorage.createClientGroupStorage(clientGroupID),
         clientGroupID,
@@ -2169,6 +2192,7 @@ describe('view-syncer/pipeline-driver', () => {
           {appID: shardID.appID},
           undefined,
           rowCache,
+          testSharedDiffs(lc, dbFile.path, shardID),
         ),
         shardID,
         databaseStorage.createClientGroupStorage(clientGroupID),
@@ -2215,6 +2239,85 @@ describe('view-syncer/pipeline-driver', () => {
     ).toEqual([`${ChangeType.EDIT}:foo`, `${ChangeType.ADD}:baz`]);
   });
 
+  test('a client group replaying several shared diff segments applies the changes it cannot observe', () => {
+    // `behind` replays two segments of the worker's SharedDiffs in one
+    // advancement: the first adds `newbie` where its query cannot see it, and
+    // the second edits `newbie` into view. A source may skip a change that no
+    // query can observe when the row comes up once per advancement, but here
+    // the edit needs the row it replaces.
+    const shared = new SharedDiffs(lc, dbFile.path, shardID, {
+      maxBytes: 1024 * 1024,
+      idleMs: 0,
+    });
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    const databaseStorage = new DatabaseStorage(storage);
+    const makeDriver = (clientGroupID: string, sharedDiffs?: SharedDiffs) =>
+      new PipelineDriver(
+        lc,
+        testLogConfig,
+        new Snapshotter(
+          lc,
+          dbFile.path,
+          {appID: shardID.appID},
+          undefined,
+          undefined,
+          sharedDiffs,
+        ),
+        shardID,
+        databaseStorage.createClientGroupStorage(clientGroupID),
+        'pipeline-driver.test.ts',
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+        undefined,
+        undefined,
+        deferredWritesBudget(),
+      );
+    const keepingUp = makeDriver('keeping-up', shared);
+    const behind = makeDriver('behind', shared);
+    const own = makeDriver('own');
+    const visible: AST = {
+      ...UNIQUES_QUERY,
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'name'},
+        op: '=',
+        right: {type: 'literal', value: 'visible'},
+      },
+    };
+    for (const driver of [keepingUp, behind, own]) {
+      driver.init(clientSchema);
+      [...driver.addQuery('hash1', 'queryID1', visible, startTimer())];
+    }
+    const summarize = (changes: Iterable<RowChange | 'yield'>) =>
+      Array.from(changes, c =>
+        c === 'yield' ? c : `${c.type}:${String(c.rowKey.id)}`,
+      );
+
+    replicator.processTransaction(
+      '134',
+      messages.insert('uniques', {id: 'newbie', name: 'hidden'}),
+    );
+    expect(
+      summarize(keepingUp.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+    ).toEqual([]);
+    replicator.processTransaction(
+      '135',
+      messages.update('uniques', {id: 'newbie', name: 'visible'}),
+    );
+    expect(
+      summarize(keepingUp.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+    ).toEqual([`${ChangeType.ADD}:newbie`]);
+
+    const {numChanges, changes} = behind.advance(NO_TIME_ADVANCEMENT_TIMER);
+    // Both segments, where its own diff has one change.
+    expect(numChanges).toBe(2);
+    expect(summarize(changes)).toEqual(
+      summarize(own.advance(NO_TIME_ADVANCEMENT_TIMER).changes),
+    );
+    shared.destroy();
+  });
+
   describe('deferred writes budget', () => {
     function makeDriver(
       clientGroupID: string,
@@ -2238,6 +2341,7 @@ describe('view-syncer/pipeline-driver', () => {
           {appID: shardID.appID},
           undefined,
           rowCache,
+          testSharedDiffs(lc, dbFile.path, shardID),
         ),
         shardID,
         new DatabaseStorage(storage).createClientGroupStorage(clientGroupID),
@@ -2847,7 +2951,14 @@ describe('view-syncer/pipeline-driver', () => {
         // SQLite sorts the tiny comments table (~1 row per issue) rather than
         // scan it by id, which a threshold of 2 rows leaves out.
         {...testLogConfig, planWarningRowThreshold: 2},
-        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        new Snapshotter(
+          lc,
+          dbFile.path,
+          {appID: shardID.appID},
+          undefined,
+          undefined,
+          testSharedDiffs(lc, dbFile.path, {appID: shardID.appID}),
+        ),
         shardID,
         databaseStorage.createClientGroupStorage(clientGroupID),
         clientGroupID,
@@ -3836,7 +3947,14 @@ describe('view-syncer/pipeline-driver', () => {
       pipelines = new PipelineDriver(
         warnLc,
         testLogConfig,
-        new Snapshotter(warnLc, dbFile.path, {appID: shardID.appID}),
+        new Snapshotter(
+          warnLc,
+          dbFile.path,
+          {appID: shardID.appID},
+          undefined,
+          undefined,
+          testSharedDiffs(warnLc, dbFile.path, {appID: shardID.appID}),
+        ),
         shardID,
         new DatabaseStorage(storage).createClientGroupStorage(
           'foo-client-group',
@@ -4251,7 +4369,14 @@ describe('view-syncer/pipeline-driver', () => {
       pipelines = new PipelineDriver(
         lc,
         testLogConfig,
-        new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+        new Snapshotter(
+          lc,
+          dbFile.path,
+          {appID: shardID.appID},
+          undefined,
+          undefined,
+          testSharedDiffs(lc, dbFile.path, {appID: shardID.appID}),
+        ),
         shardID,
         new DatabaseStorage(storage).createClientGroupStorage(
           'foo-client-group',

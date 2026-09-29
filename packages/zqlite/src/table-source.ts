@@ -121,6 +121,7 @@ export class TableSource implements Source {
   readonly #lc: LogContext;
   readonly #shouldYield: () => boolean;
   readonly #skipUnobservableChanges: boolean;
+  #applyUnobservableChanges = false;
   readonly #primaryKeySort: Ordering;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
@@ -204,6 +205,18 @@ export class TableSource implements Source {
    * be called before the first push after construction or {@link setDB}. To
    * switch to writing through partway, see {@link writePendingChanges}.
    */
+  /**
+   * With `skipUnobservableChanges`, whether a change that no connection can
+   * observe is still applied to the source (but not pushed). Skipping it
+   * relies on the row not being changed again before the source moves to
+   * the next snapshot, which the caller sets this to rule out when it can
+   * push several changes to one row, e.g. a view-syncer replaying several
+   * shared diff segments.
+   */
+  setApplyUnobservableChanges(apply: boolean) {
+    this.#applyUnobservableChanges = apply;
+  }
+
   setDeferWrites(deferWrites: boolean) {
     assert(
       this.#delta === undefined || this.#delta.isEmpty,
@@ -614,8 +627,11 @@ export class TableSource implements Source {
       !this.#connectionIndex.mayAcceptChange(change)
     ) {
       // No connection can observe this row, so only a REMOVE needs to be
-      // applied to the snapshot.
-      if (change[SourceChangeIndex.TYPE] === ChangeType.REMOVE) {
+      // applied to the snapshot, unless the row can be changed again.
+      if (
+        this.#applyUnobservableChanges ||
+        change[SourceChangeIndex.TYPE] === ChangeType.REMOVE
+      ) {
         this.#writeChange(change);
       }
       return;

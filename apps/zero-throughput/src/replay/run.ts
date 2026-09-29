@@ -7,7 +7,7 @@
  */
 import '../../../../packages/shared/src/dotenv.ts';
 
-import {mkdir, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {monitorEventLoopDelay, performance} from 'node:perf_hooks';
 import {parseOptions} from '../../../../packages/shared/src/options.ts';
@@ -39,10 +39,17 @@ import {
   type BackfillSpec,
   type ScheduleSegment,
 } from './backfill.ts';
+import {
+  captureProfiles,
+  profileClockMicros,
+  summarizeResets,
+} from './diagnostics.ts';
 import {startLocalTarget, type LocalTarget} from './local-target.ts';
+import {HydrationProbe} from './probe.ts';
 import {Recorder, type Distribution, type Phase} from './recorder.ts';
+import {loadReplicaSeedPlan} from './replica-seed.ts';
 import {SessionDriver, seededRandom} from './sessions.ts';
-import {loadWorkload} from './workload.ts';
+import {loadWorkload, type WorkloadGroup} from './workload.ts';
 
 const options = {
   workload: v.string(),
@@ -97,6 +104,25 @@ const options = {
    */
   argRewrite: v.array(v.string()).default([]),
 
+  /**
+   * Seconds into the run (the ramp included) at which to capture CPU
+   * profiles of every zero-cache process through `/profz`.
+   */
+  profileAt: v.array(v.string()).default([]),
+  profileSeconds: v.number().default(20),
+  /** For `/profz` on a deployment; not needed for the local target. */
+  adminPassword: v.string().optional(),
+
+  /**
+   * Every N seconds after the ramp, a fresh client group for one fixed
+   * workload group connects and times hydrating all its session queries.
+   * 0 turns the probe off.
+   */
+  probeEverySeconds: v.number().default(0),
+  /** The workload group to probe with: an index or a source client group ID. */
+  probeGroup: v.string().default('0'),
+  probeTimeoutSeconds: v.number().default(180),
+
   /** Free text copied into the result, e.g. known fidelity gaps. */
   note: v.array(v.string()).default([]),
 
@@ -118,6 +144,18 @@ const options = {
     database: v.string().default('replay'),
     reset: v.boolean().default(false),
     seedSQL: v.array(v.string()).default([]),
+    /** A Zero replica file to copy rows from before the seed SQL runs. */
+    seedReplica: v.string().optional(),
+    /** JSON plan for the copy: per-table `skip` or a SQLite `where`. */
+    seedReplicaPlan: v.string().optional(),
+    /** zero-cache's first start copies the whole database. */
+    readyTimeoutMinutes: v.number().default(180),
+    /**
+     * Profile every zero-cache process for its whole life (`--cpu-prof`) into
+     * `<output>.profiles/`. The result's `profileClockStartMicros` lines the
+     * run's phases up with the profiles' sample times.
+     */
+    cpuProf: v.boolean().default(false),
     queryServerCommand: v.string().optional(),
     queryServerPort: v.number().default(3_100),
     queryPath: v.string().default('/api/query'),
@@ -169,7 +207,7 @@ async function main(): Promise<void> {
   process.once('SIGTERM', onSignal);
 
   try {
-    const {cacheURLs, pgURL, authSecret} = await resolveTarget(
+    const {cacheURLs, pgURL, authSecret, zeroCacheLog} = await resolveTarget(
       config,
       runID,
       workload.clientSchema,
@@ -187,6 +225,7 @@ async function main(): Promise<void> {
       cacheURLs,
       pgURL,
       authSecret,
+      zeroCacheLog,
       stops,
       isInterrupted: () => interrupted,
     });
@@ -207,6 +246,7 @@ async function resolveTarget(
   cacheURLs: string[];
   pgURL: string | undefined;
   authSecret: string;
+  zeroCacheLog?: string | undefined;
 }> {
   if (config.target === 'remote') {
     if (config.cacheURL === undefined || config.authSecret === undefined) {
@@ -233,7 +273,15 @@ async function resolveTarget(
     reset: local.reset,
     clientSchema,
     userIDs,
+    seedReplica:
+      local.seedReplica === undefined
+        ? undefined
+        : {
+            file: local.seedReplica,
+            plan: await loadReplicaSeedPlan(local.seedReplicaPlan),
+          },
     seedSQLFiles: local.seedSQL,
+    readyTimeoutMs: local.readyTimeoutMinutes * 60_000,
     queryServerCommand: local.queryServerCommand,
     queryServerPort: local.queryServerPort,
     queryPath: local.queryPath,
@@ -241,12 +289,20 @@ async function resolveTarget(
     zeroPort: local.zeroPort,
     numSyncWorkers: local.numSyncWorkers,
     replicaFile: local.replicaFile,
+    cpuProfileDir: local.cpuProf
+      ? appPath(config.output).replace(JSON_EXTENSION, '') + '.profiles'
+      : undefined,
     logsDir: appPath(config.logsDir),
     runID,
     log,
   });
   stops.push(() => target.stop());
-  return {cacheURLs: [target.cacheURL], pgURL: target.pgURL, authSecret};
+  return {
+    cacheURLs: [target.cacheURL],
+    pgURL: target.pgURL,
+    authSecret,
+    zeroCacheLog: target.zeroCacheLog,
+  };
 }
 
 async function execute(args: {
@@ -260,6 +316,7 @@ async function execute(args: {
   readonly cacheURLs: readonly string[];
   readonly pgURL: string | undefined;
   readonly authSecret: string;
+  readonly zeroCacheLog: string | undefined;
   readonly stops: (() => Promise<void>)[];
   readonly isInterrupted: () => boolean;
 }): Promise<void> {
@@ -267,6 +324,9 @@ async function execute(args: {
   const random = seededRandom(config.seed);
   const now = () => performance.now();
   const recorder = new Recorder(config.bucketSeconds * 1000, now);
+  const startedAtWallMs = Date.now();
+  // Where run time zero falls on the clock of --cpu-prof samples.
+  const profileClockStartMicros = await profileClockMicros();
   const rampMs = config.rampSeconds * 1000;
   const measuredMs =
     (config.durationSeconds ??
@@ -384,6 +444,46 @@ async function execute(args: {
       `ramp ${formatDuration(rampMs)}, then ${formatDuration(measuredMs)}`,
   );
   sessions.setConcurrency(config.groups, rampMs);
+  const profilesDir =
+    appPath(config.output).replace(JSON_EXTENSION, '') + '.profiles';
+  const profileFiles: string[] = [];
+  const profiling = config.profileAt
+    .flatMap(s => s.split(','))
+    .map(Number)
+    .filter(s => Number.isFinite(s))
+    .map(
+      atSeconds =>
+        new Promise<void>(resolve => {
+          setTimeout(
+            () => {
+              if (args.isInterrupted()) {
+                resolve();
+                return;
+              }
+              log(
+                `profiling every zero-cache process for ${config.profileSeconds}s (t=${atSeconds}s)`,
+              );
+              captureProfiles({
+                cacheURL: args.cacheURLs[0],
+                seconds: config.profileSeconds,
+                adminPassword: config.adminPassword,
+                outDir: profilesDir,
+                label: `t${atSeconds}s`,
+              })
+                .then(files => {
+                  profileFiles.push(...files);
+                  log(`saved ${files.length} profiles to ${profilesDir}`);
+                })
+                .catch(e => {
+                  recorder.serverError('profz', String(e));
+                  warn(`profiling at t=${atSeconds}s failed: ${String(e)}`);
+                })
+                .finally(resolve);
+            },
+            Math.max(0, atSeconds * 1000 - recorder.elapsedMs()),
+          );
+        }),
+    );
   let backfillDone: Promise<void> | undefined;
   let writesDone: Promise<void> | undefined;
   const appWriter =
@@ -399,17 +499,42 @@ async function execute(args: {
           recorder,
         });
 
+  const probe =
+    config.probeEverySeconds > 0
+      ? new HydrationProbe({
+          group: pickGroup(workload.groups, config.probeGroup),
+          clientSchema: workload.clientSchema,
+          cacheURL: args.cacheURLs[0],
+          protocolVersion: config.protocolVersion,
+          auth: `${args.authSecret}:${pickGroup(workload.groups, config.probeGroup).userID}`,
+          prepareQuery: q => rewriteArgs(q, argRewrites, Date.now()),
+          intervalMs: config.probeEverySeconds * 1000,
+          timeoutMs: config.probeTimeoutSeconds * 1000,
+          clientGroupPrefix: config.clientGroupPrefix ?? `replay-${runID}`,
+          pingIntervalMs: config.pingIntervalMs,
+          maxHeaderLength: config.maxHeaderLength,
+          recorder,
+        })
+      : undefined;
+  let probing = false;
+
   const endMs = rampMs + measuredMs;
   while (recorder.elapsedMs() < endMs && !args.isInterrupted()) {
     if (recorder.elapsedMs() >= rampMs) {
       backfillDone ??= backfill?.run() ?? Promise.resolve();
       writesDone ??= appWriter?.run() ?? Promise.resolve();
+      if (probe !== undefined && !probing) {
+        probing = true;
+        probe.start();
+      }
     }
     await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   backfill?.stop();
   appWriter?.stop();
+  await probe?.stop();
+  await Promise.all(profiling);
   await backfillDone;
   await writesDone;
   const endedAtMs = recorder.elapsedMs();
@@ -426,6 +551,7 @@ async function execute(args: {
   }));
   const result = {
     runID,
+    profileClockStartMicros,
     notes: config.note,
     interrupted: args.isInterrupted(),
     config: {
@@ -433,6 +559,7 @@ async function execute(args: {
       authSecret: config.authSecret ? '<redacted>' : undefined,
       pgURL: redactPassword(config.pgURL),
       cloudzeroApiKey: config.cloudzeroApiKey ? '<redacted>' : undefined,
+      adminPassword: config.adminPassword ? '<redacted>' : undefined,
       local: {...config.local, pgURL: redactPassword(config.local.pgURL)},
     },
     target: {cacheURLs: args.cacheURLs},
@@ -453,6 +580,15 @@ async function execute(args: {
     phases: recorder.phaseSummaries(closedPhases),
     hydrationByName: recorder.hydrationByName(rampMs, endedAtMs),
     errors: Object.fromEntries(recorder.errors()),
+    resets:
+      args.zeroCacheLog === undefined
+        ? undefined
+        : summarizeResets(
+            await readFile(args.zeroCacheLog, 'utf8'),
+            startedAtWallMs,
+            closedPhases,
+          ),
+    profiles: profileFiles,
     timeline: recorder.timeline(closedPhases),
   };
   const output = appPath(config.output);
@@ -467,6 +603,15 @@ async function execute(args: {
     log(`note: ${note}`);
   }
   log(summaryTable(result.phases));
+  if (result.resets !== undefined) {
+    log(
+      `pipeline resets: ${result.resets.total} ` +
+        JSON.stringify({
+          byPhase: result.resets.byPhase,
+          byReason: result.resets.byReason,
+        }),
+    );
+  }
   const errors = [...recorder.errors()].toSorted((a, b) => b[1] - a[1]);
   if (errors.length > 0) {
     log('errors:');
@@ -521,6 +666,18 @@ function runPhases(
     phases.push({label: 'after schedule', startMs: t, endMs});
   }
   return phases;
+}
+
+function pickGroup(
+  groups: readonly WorkloadGroup[],
+  selector: string,
+): WorkloadGroup {
+  const byID = groups.find(g => g.sourceClientGroupID === selector);
+  const group = byID ?? groups[Number(selector)];
+  if (group === undefined) {
+    throw new Error(`--probe-group ${selector} matches no workload group`);
+  }
+  return group;
 }
 
 function selectTables(
@@ -598,6 +755,7 @@ function progressLine(
   const h = recorder.recentHydration(60_000);
   const held = recorder.recentHeldRowDelivery(60_000);
   const ping = recorder.recentPing(60_000);
+  const probe = recorder.recentProbe(60_000);
   const parts = [
     `+${formatDuration(Math.round(t))}`,
     `[${phase}]`,
@@ -606,6 +764,11 @@ function progressLine(
     `hydrated/1m=${h.count} p50=${ms(h.p50)} p95=${ms(h.p95)} max=${ms(h.max)}`,
     `ping p95=${ms(ping.p95)}`,
   ];
+  if (probe.count > 0) {
+    parts.push(
+      `probe/1m=${probe.count} p50=${ms(probe.p50)} max=${ms(probe.max)}`,
+    );
+  }
   if (backfill !== undefined) {
     parts.push(
       `backfill total=${backfill.rowsWritten}`,
@@ -637,6 +800,8 @@ function summaryTable(phases: ReturnType<Recorder['phaseSummaries']>): string {
     'p95 slope/min',
     'caught up p95',
     'held p95',
+    'probe p50',
+    'probe max',
     'ping p95',
     'errors',
   ];
@@ -653,6 +818,8 @@ function summaryTable(phases: ReturnType<Recorder['phaseSummaries']>): string {
     ms(p.hydrationP95SlopeMsPerMin),
     d(p.firstPoke, 'p95'),
     d(p.heldRowDelivery, 'p95'),
+    d(p.probeHydration, 'p50'),
+    p.probeHydration.count === 0 ? '-' : ms(p.probeHydration.max),
     d(p.pingRtt, 'p95'),
     String(p.unexpectedCloses + p.serverErrors + p.queryErrors),
   ]);
@@ -680,6 +847,9 @@ function timelineCSV(timeline: ReturnType<Recorder['timeline']>): string {
     'firstPokeP95',
     'heldRowDeliveries',
     'heldRowP95',
+    'probeCount',
+    'probeP50',
+    'probeMax',
     'pingP95',
     'backfillRowsWritten',
     'backfillPageP95',
@@ -712,6 +882,9 @@ function timelineCSV(timeline: ReturnType<Recorder['timeline']>): string {
       b.firstPoke.p95,
       b.heldRowDelivery.count,
       b.heldRowDelivery.p95,
+      b.probeHydration.count,
+      b.probeHydration.p50,
+      b.probeHydration.max,
       b.pingRtt.p95,
       b.backfillRowsWritten,
       b.backfillPage.p95,

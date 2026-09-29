@@ -32,6 +32,7 @@ import {
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
 import {PipelineDriver, type RowChange} from './pipeline-driver.ts';
+import {testSharedDiffs} from './shared-diffs-test-util.ts';
 import {Snapshotter} from './snapshotter.ts';
 
 describe('view-syncer/pipeline-driver union witnesses', () => {
@@ -50,7 +51,14 @@ describe('view-syncer/pipeline-driver union witnesses', () => {
     pipelines = new PipelineDriver(
       lc,
       testLogConfig,
-      new Snapshotter(lc, dbFile.path, {appID: 'zeroz'}),
+      new Snapshotter(
+        lc,
+        dbFile.path,
+        {appID: 'zeroz'},
+        undefined,
+        undefined,
+        testSharedDiffs(lc, dbFile.path, {appID: 'zeroz'}),
+      ),
       {appID: 'zeroz', shardNum: 1},
       new DatabaseStorage(storage).createClientGroupStorage('cg'),
       'pipeline-driver.union-witness.test.ts',
