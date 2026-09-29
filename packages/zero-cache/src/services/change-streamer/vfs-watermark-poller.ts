@@ -56,11 +56,35 @@ const remoteQueryLineSchema = v.object({
 const INITIAL_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 30_000;
 
+const MiB = 1024 ** 2;
+
+// vfs-query holds a page index for the entire replica in memory: ~117 bytes
+// per page once built, peaking at ~235 bytes per page while the snapshot's
+// index is merged into it. With Go's default GC pacing, the heap (and RSS)
+// settles at ~2x the live index (~315 bytes per page). A soft memory limit
+// just above the live index halves that steady state, at the cost of extra
+// GC work while the index is built (the limit cannot push the build peak
+// below its live size).
+const VFS_QUERY_MEMORY_LIMIT_BASE_BYTES = 64 * MiB;
+const VFS_QUERY_MEMORY_LIMIT_BYTES_PER_PAGE = 150;
+
+/**
+ * Returns the GOMEMLIMIT for a vfs-query process watching a replica of
+ * `pageCount` pages.
+ */
+export function vfsQueryMemoryLimitBytes(pageCount: number): number {
+  return (
+    VFS_QUERY_MEMORY_LIMIT_BASE_BYTES +
+    pageCount * VFS_QUERY_MEMORY_LIMIT_BYTES_PER_PAGE
+  );
+}
+
 export class VfsWatermarkPoller {
   readonly #lc: LogContext;
   readonly #state = new RunningState('vfs-watermark-poller');
   readonly #pollerConfig: VfsPollerConfig;
   readonly #readLocalWatermark: Statement;
+  readonly #readPageCount: Statement;
 
   readonly #stream: Subscription<BackedUpWatermark>;
 
@@ -86,6 +110,7 @@ export class VfsWatermarkPoller {
     this.#readLocalWatermark = db.prepare(
       `SELECT stateVersion, writeTimeMs FROM "_zero.replicationState"`,
     );
+    this.#readPageCount = db.prepare(`PRAGMA page_count`);
     // Purely to type the member variable as always defined
     this.#localWatermark = v.parse(
       this.#readLocalWatermark.get(),
@@ -167,7 +192,7 @@ export class VfsWatermarkPoller {
           ? ['--query-timeout', `${this.#pollerConfig.remoteQueryTimeoutMs}ms`]
           : []),
       ],
-      {stdio: ['pipe', 'pipe', 'inherit']},
+      {stdio: ['pipe', 'pipe', 'inherit'], env: this.#vfsQueryEnv()},
     )
       .on('error', err => {
         this.#lc.error?.(`received error from vfs-query process`, err);
@@ -205,6 +230,25 @@ export class VfsWatermarkPoller {
       this.#readRemotePollerLine,
     );
     this.#remotePoller = child;
+  }
+
+  /**
+   * The environment for a vfs-query process: this process's environment
+   * plus a GOMEMLIMIT sized to the replica's current page count. An
+   * explicitly configured GOMEMLIMIT is passed through unchanged.
+   */
+  #vfsQueryEnv(): NodeJS.ProcessEnv {
+    if (process.env.GOMEMLIMIT) {
+      return process.env;
+    }
+    const {page_count: pageCount} = this.#readPageCount.get<{
+      page_count: number;
+    }>();
+    const limit = vfsQueryMemoryLimitBytes(pageCount);
+    this.#lc.info?.(
+      `spawning vfs-query with GOMEMLIMIT=${limit}B for ${pageCount} pages`,
+    );
+    return {...process.env, GOMEMLIMIT: `${limit}B`};
   }
 
   readonly #readRemotePollerLine = (line: string) => {
