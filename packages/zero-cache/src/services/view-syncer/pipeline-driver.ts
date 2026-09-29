@@ -314,8 +314,10 @@ function shouldResetProjectedAdvancement(
     return false;
   }
 
+  // The time already spent is spent whether or not the advancement is reset,
+  // so a reset only saves the rest of it.
   return (
-    projectedTotalTimeMs >
+    projectedTotalTimeMs - elapsedMs >
     advancementResetTimeLimitMs(totalHydrationTimeMs) *
       PROJECTED_ADVANCEMENT_RESET_MULTIPLIER
   );
@@ -1810,8 +1812,10 @@ export class PipelineDriver {
     if (
       !shouldFinish &&
       elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
-      (elapsed > totalHydrationTimeMs ||
-        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
+      elapsed > totalHydrationTimeMs / 2 &&
+      // As above, only the rest of the advancement is saved by a reset.
+      (projectedTotalTimeMs === undefined ||
+        projectedTotalTimeMs - elapsed > totalHydrationTimeMs)
     ) {
       throw new ResetPipelinesSignal(
         `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
