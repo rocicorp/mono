@@ -14,7 +14,8 @@
 //   GITHUB_TOKEN           token to use (defaults to `gh auth token`)
 //   COPY_COLLABORATORS=1   also copy direct collaborators (SENDS INVITES) and teams
 //
-// Requires: Node 22.12+, git, gh (for the token and git credential helper). Optional: git-lfs.
+// Requires: Node 22.12+, git, gh (for the token and git credential helper).
+// Doesn't copy Git LFS objects; mono doesn't use LFS.
 //
 // Issues, wiki and discussions are turned OFF on the destination.
 // Actions is DISABLED on the destination during and after the copy so the mirror push
@@ -200,36 +201,6 @@ const git = (...args: string[]) => {
   }
   execFileSync('git', [...gitAuth, ...args], {stdio: 'inherit'});
 };
-/** Whether any .gitattributes at the source's HEAD routes files to LFS. */
-function usesLfs(bare: string): boolean {
-  try {
-    execFileSync(
-      'git',
-      [
-        '-C',
-        bare,
-        'grep',
-        '-q',
-        'filter=lfs',
-        'HEAD',
-        '--',
-        ':(glob)**/.gitattributes',
-      ],
-      {stdio: 'ignore'},
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-const hasLfs = (() => {
-  try {
-    execFileSync('git', ['lfs', 'version'], {stdio: 'ignore'});
-    return true;
-  } catch {
-    return false;
-  }
-})();
 
 // --- GitHub API shapes (only the fields used here) -------------------------------------
 
@@ -342,16 +313,6 @@ async function main() {
   const bare = join(tmp, 'repo.git');
   const dstUrl = `https://github.com/${dst}.git`;
   git('clone', '--bare', `https://github.com/${src}.git`, bare);
-  // LFS failures are fatal: pushing the refs without all LFS objects would
-  // look like a finished copy with holes in its history.
-  if (hasLfs) {
-    git('-C', bare, 'lfs', 'fetch', '--all', 'origin');
-  } else if (!dryRun && usesLfs(bare)) {
-    throw new Error(
-      `${src} uses LFS (a .gitattributes has filter=lfs) but git-lfs is ` +
-        'not installed. Install it and run again.',
-    );
-  }
   try {
     git('-C', bare, 'push', '--mirror', dstUrl);
   } catch (e) {
@@ -363,9 +324,6 @@ async function main() {
         `of the org rulesets, or exclude ${dst} from them for the copy.`,
     );
     throw e;
-  }
-  if (hasLfs) {
-    git('-C', bare, 'lfs', 'push', '--all', dstUrl);
   }
 
   // --- repo settings -----------------------------------------------------------------
