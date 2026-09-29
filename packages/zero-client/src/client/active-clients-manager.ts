@@ -74,6 +74,9 @@ export class ActiveClientsManager {
   readonly #resolver = resolver<void>();
   readonly #lockManager: ClientLockManager;
   readonly #activeClients: Set<string> = new Set();
+  // Client IDs are never reused, so a client that has been seen is never added
+  // again (e.g. by a late BroadcastChannel message after it was removed).
+  readonly #seenClients: Set<string> = new Set();
 
   /**
    * A callback that is called when a client is added to the client group.
@@ -113,6 +116,7 @@ export class ActiveClientsManager {
     this.clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.#lockManager = getClientLockManager(signal);
+    this.#seenClients.add(clientID);
     this.#activeClients.add(clientID);
   }
 
@@ -194,7 +198,8 @@ export class ActiveClientsManager {
   }
 
   #addClient(clientID: string): void {
-    if (!this.#activeClients.has(clientID)) {
+    if (!this.#seenClients.has(clientID)) {
+      this.#seenClients.add(clientID);
       this.#activeClients.add(clientID);
       this.#addSharedLockForOtherClient(clientID);
       this.onAdd?.(clientID);
