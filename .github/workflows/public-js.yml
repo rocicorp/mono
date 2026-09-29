@@ -1,0 +1,111 @@
+name: Public JS
+
+# CI for the public rocicorp/mono. Development happens in the private
+# rocicorp/mono-internal, which publishes a filtered copy of every commit to
+# mono (tools/public-sync). mono keeps the test suites only for the packages
+# we want outside contributions to, so this runs the static checks and those
+# packages' tests: on the synced commits, and on contributors' pull requests.
+#
+# The file lives in mono-internal too, where js.yml already covers all of it,
+# so every job is limited to rocicorp/mono.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Public Checks
+    if: github.repository == 'rocicorp/mono'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          restore-keys: |
+            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
+      - name: Install
+        id: install
+        run: pnpm install --frozen-lockfile
+      # Each check runs even when an earlier one failed, so a pull request sees
+      # every problem at once.
+      - name: Sync Package Versions
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm exec syncpack lint
+      - name: Verify Package Dependencies
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run verify-deps
+      - name: Oxfmt
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm exec oxfmt --check
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run lint
+      - name: Check Types
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check-types
+
+  test:
+    name: Public Test
+    if: github.repository == 'rocicorp/mono'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          restore-keys: |
+            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
+      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/playwright-install
+      # The packages whose tests are published (see tools/public-sync/
+      # public-filter). Each package's own vitest config runs its node and
+      # browser projects.
+      - name: Run tests
+        run: >-
+          pnpm
+          --filter zero-client
+          --filter replicache
+          --filter @rocicorp/zero-events
+          --filter zero-react
+          --filter zero-solid
+          --filter shared
+          run test
