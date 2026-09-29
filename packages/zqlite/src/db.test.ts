@@ -100,8 +100,20 @@ test('slow queries are logged', () => {
       },
       ['Slow SQLite query', 0],
     ],
-    // The time between rows is spent by the consumer, not SQLite, so it is
-    // only reported alongside the time spent in SQLite.
+    [
+      'warn',
+      {
+        class: 'Statement',
+        path: ':memory:',
+        sql: 'SELECT * FROM foo',
+        method: 'iterate',
+        type: 'total',
+      },
+      [
+        'Slow SQLite iterator total time (including consumer work and waits between rows)',
+        200,
+      ],
+    ],
     [
       'warn',
       {
@@ -115,6 +127,42 @@ test('slow queries are logged', () => {
       ['Slow SQLite query', 0],
     ],
   ]);
+});
+
+test.each([0, 100])('iterator consumer time of %i ms', consumerMs => {
+  vi.useFakeTimers();
+  const sink = new TestLogSink();
+  using db = new Database(
+    new LogContext('debug', undefined, sink),
+    ':memory:',
+    undefined,
+    100,
+  );
+
+  for (const _ of db.prepare('SELECT 1').iterate()) {
+    vi.advanceTimersByTime(consumerMs);
+  }
+
+  expect(sink.messages).toEqual(
+    consumerMs === 0
+      ? []
+      : [
+          [
+            'warn',
+            {
+              class: 'Statement',
+              path: ':memory:',
+              sql: 'SELECT 1',
+              method: 'iterate',
+              type: 'total',
+            },
+            [
+              'Slow SQLite iterator total time (including consumer work and waits between rows)',
+              consumerMs,
+            ],
+          ],
+        ],
+  );
 });
 
 test('sql errors are annotated with sql', () => {

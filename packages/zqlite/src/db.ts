@@ -281,10 +281,17 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   }
 
   #log() {
-    // Only the time spent in SQLite is attributed to the query. The time since
-    // the iterator was created also counts whatever its consumer did between
-    // rows (e.g. the rest of an IVM push, or yielding to other client groups),
-    // which is not a property of the query, so it is only reported alongside.
+    // Total time includes downstream consumer work and waits between rows.
+    // Check it independently of the time spent stepping SQLite.
+    const totalMs = performance.now() - this.#start;
+    if (totalMs >= this.#threshold) {
+      logSlow(
+        this.#lc,
+        totalMs,
+        {...this.#attrs, type: 'total', method: 'iterate'},
+        'Slow SQLite iterator total time (including consumer work and waits between rows)',
+      );
+    }
     if (this.#sqliteRowTimeSum >= this.#threshold) {
       logSlow(
         this.#lc.withContext('method', 'iterate').withContext('type', 'sqlite'),
@@ -293,7 +300,7 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
           ...this.#attrs,
           type: 'sqlite',
           method: 'iterate',
-          totalMs: performance.now() - this.#start,
+          totalMs,
         },
       );
     }
@@ -316,11 +323,16 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   }
 }
 
-function logSlow(lc: LogContext, elapsed: number, attrs: Attributes): void {
+function logSlow(
+  lc: LogContext,
+  elapsed: number,
+  attrs: Attributes,
+  message = 'Slow SQLite query',
+): void {
   for (const [key, value] of Object.entries(attrs)) {
     lc = lc.withContext(key, value);
   }
-  lc.warn?.('Slow SQLite query', elapsed);
+  lc.warn?.(message, elapsed);
   manualSpan(tracer, 'db.slow-query', elapsed, attrs);
 }
 
