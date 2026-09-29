@@ -24,7 +24,9 @@ jobs:
           client-id: ${{ vars.ROCICORP_MIRROR_APP_CLIENT_ID }}
           private-key: ${{ secrets.ROCICORP_MIRROR_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: mono
+          # The repo this runs in, so the same file works in rocicorp/mono
+          # and in the private rocicorp/mono-internal duplicated from it.
+          repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-workflows: write
 
