@@ -194,7 +194,7 @@ export default async function runWorker(
   return running;
 }
 
-function setupMetrics(
+export function setupMetrics(
   lc: LogContext,
   file: string,
   walMode: WalMode,
