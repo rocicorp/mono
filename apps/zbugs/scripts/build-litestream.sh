@@ -18,7 +18,7 @@
 set -euo pipefail
 
 LITESTREAM_V3_REF="zero@v0.0.10"
-LITESTREAM_V5_VERSION="0.5.18-zero.8"
+LITESTREAM_V5_VERSION="0.5.18-zero.11"
 LITESTREAM_REPO="https://github.com/rocicorp/litestream.git"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

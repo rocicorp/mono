@@ -1266,6 +1266,21 @@ export const zeroOptions = {
       ],
     },
 
+    syncRequesterEnabled: {
+      // TODO: Make this non-optional and get rid of vfs.
+      type: v.boolean().default(true),
+      desc: [
+        `When backing up with {bold ZERO_LITESTREAM_BACKUP_USING_V5}, drives litestream`,
+        `backups via its control socket and determines backed-up watermarks from the`,
+        `completed syncs, instead of polling the backup with the vfs-query executable.`,
+        ``,
+        `Syncs are requested every {bold ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}`,
+        `(a no-op when there are no changes to back up), and litestream's own monitor`,
+        `interval is relaxed to a less frequent backstop.`,
+      ],
+      hidden: true,
+    },
+
     vfsQueryExecutable: {
       type: v.string().optional(),
       desc: [
