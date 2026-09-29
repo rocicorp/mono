@@ -1,5 +1,5 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
-import {describe, expect, test, vi} from 'vitest';
+import {describe, expect, onTestFinished, test, vi} from 'vitest';
 import {refresh} from './persist/refresh.ts';
 import {ReplicacheImpl} from './replicache-impl.ts';
 import type {ReplicacheOptions, ZeroOption} from './replicache-options.ts';
@@ -64,38 +64,34 @@ describe('ReplicacheImpl', () => {
       // on it instead.
       event.preventDefault();
     };
-    globalThis.addEventListener('unhandledrejection', onUnhandledRejection);
+    addEventListener('unhandledrejection', onUnhandledRejection);
+    onTestFinished(() => {
+      removeEventListener('unhandledrejection', onUnhandledRejection);
+    });
 
-    try {
-      const impl = new ReplicacheImpl(
-        {name, logLevel: 'error', logSinks: [logSink]},
-        {
-          enablePullAndPushInOpen: false,
-          // Zero's IVM initialization is the last thing `#open` awaits before
-          // it resolves readiness, and it reads the dag — so it is where a
-          // store that cannot answer surfaces. Only `init` runs here, so the
-          // rest of the interface is deliberately absent.
-          zero: {
-            init: () => Promise.reject(openError),
-          } as unknown as ZeroOption,
-        },
-      );
+    const impl = new ReplicacheImpl(
+      {name, logLevel: 'error', logSinks: [logSink]},
+      {
+        enablePullAndPushInOpen: false,
+        // Zero's IVM initialization is the last thing `#open` awaits before
+        // it resolves readiness, and it reads the dag — so it is where a
+        // store that cannot answer surfaces. Only `init` runs here, so the
+        // rest of the interface is deliberately absent.
+        zero: {
+          init: () => Promise.reject(openError),
+        } as unknown as ZeroOption,
+      },
+    );
 
-      await tickAFewTimes(vi);
+    await tickAFewTimes(vi);
 
-      expect(
-        records.some(
-          ({level, args}) => level === 'error' && args.includes(openError),
-        ),
-      ).toBe(true);
-      expect(rejections).toEqual([]);
+    expect(
+      records.some(
+        ({level, args}) => level === 'error' && args.includes(openError),
+      ),
+    ).toBe(true);
+    expect(rejections).toEqual([]);
 
-      await impl.close();
-    } finally {
-      globalThis.removeEventListener(
-        'unhandledrejection',
-        onUnhandledRejection,
-      );
-    }
+    await impl.close();
   });
 });
