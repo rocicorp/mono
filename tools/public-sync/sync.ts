@@ -116,6 +116,16 @@ function main() {
     );
     console.log(`split at ${from.slice(0, 10)} -> ${parent.slice(0, 10)}`);
   } else {
+    // The split commit's trailer names a pre-split mono commit. git
+    // filter-repo rewrites commit hashes it finds in messages unless run with
+    // --preserve-commit-hashes, which would leave a SHA mono-internal lacks.
+    if (!isAncestor(from, sourceHead)) {
+      throw new Error(
+        `${args.branch}'s newest ${TRAILER} trailer names ${from}, which is ` +
+          `not in ${args.source}'s history. If mono's history was rewritten, ` +
+          'redo it with git filter-repo --preserve-commit-hashes.',
+      );
+    }
     // If mono's tree no longer matches what we'd have published for the last
     // synced commit, someone pushed to mono directly (e.g. merged an outside
     // PR). Refuse rather than silently revert it; it has to land in
@@ -137,15 +147,16 @@ function main() {
   );
   for (const sha of todo) {
     const tree = filteredTree(sha);
+    const body = lines(git('show', '-s', '--format=%b', sha));
     // A port that only touched private files still gets an (empty) commit, so
     // its Closes line closes the public PR.
-    if (tree === parentTree && portedFrom(sha).length === 0) {
+    if (tree === parentTree && matchLines(body, PORTED_FROM).length === 0) {
       // Commit only touched private files. Skipping it keeps its title
       // private too; the next public commit's trailer moves past it.
       console.log(`skip ${sha.slice(0, 10)} (no public changes)`);
       continue;
     }
-    parent = commitTree(tree, parent, publicMessage(sha), authorOf(sha));
+    parent = commitTree(tree, parent, publicMessage(sha, body), authorOf(sha));
     parentTree = tree;
     console.log(`${sha.slice(0, 10)} -> ${parent.slice(0, 10)}`);
   }
@@ -236,16 +247,10 @@ function authorOf(sha: string): NodeJS.ProcessEnv {
  * Both are matched on any line of the body, not only in the final trailer
  * paragraph, since GitHub's squash can put its own paragraph after them.
  */
-function publicMessage(sha: string): string {
+function publicMessage(sha: string, body: string[]): string {
   const subject = git('show', '-s', '--format=%s', sha);
-  const body = lines(git('show', '-s', '--format=%b', sha));
-  const match = (re: RegExp) =>
-    body.flatMap(l => {
-      const m = re.exec(l.trim());
-      return m ? [m[1]] : [];
-    });
-  const closes = portedFrom(sha).map(ref => `Closes ${ref}`);
-  const people = match(CO_AUTHOR).filter(
+  const closes = matchLines(body, PORTED_FROM).map(ref => `Closes ${ref}`);
+  const people = matchLines(body, CO_AUTHOR).filter(
     c => !AGENT_CO_AUTHORS.some(r => r.test(c)),
   );
   const trailers = [
@@ -287,10 +292,10 @@ function filterFor(sha: string): string {
   return firstFilterCommit;
 }
 
-/** The `Ported-From:` references (`owner/repo#123`) in `sha`'s body. */
-function portedFrom(sha: string): string[] {
-  return lines(git('show', '-s', '--format=%b', sha)).flatMap(l => {
-    const m = PORTED_FROM.exec(l.trim());
+/** The first capture group of `re` on each line of `body` it matches. */
+function matchLines(body: string[], re: RegExp): string[] {
+  return body.flatMap(l => {
+    const m = re.exec(l.trim());
     return m ? [m[1]] : [];
   });
 }

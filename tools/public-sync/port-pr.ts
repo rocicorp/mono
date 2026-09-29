@@ -9,9 +9,10 @@
 // main, commits it as the contributor with any other PR authors as
 // Co-authored-by, and opens a mono-internal PR.
 //
-// Because the commit's author is the contributor and the engineer opens the
-// PR, the squash merge in mono-internal gets a Co-authored-by trailer for the
-// contributor, and sync.ts carries that trailer to mono.
+// mono-internal squash-merges with the PR body as the commit message, so the
+// mono-internal PR's body carries a Co-authored-by line for every PR author
+// and a Ported-From line (see internalBody). sync.ts turns those into the
+// contributor's credit and a `Closes` line on mono.
 //
 // Usage (from a mono-internal checkout):
 //   node tools/public-sync/port-pr.ts <pr-number> [--no-push]
