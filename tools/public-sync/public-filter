@@ -15,7 +15,6 @@
 !/LICENSE
 !/README.md
 !/CONTRIBUTING.md
-!/CODE_OF_CONDUCT.md
 !/package.json
 !/pnpm-lock.yaml
 !/pnpm-workspace.yaml
@@ -77,3 +76,14 @@ __snapshots__/
 !/packages/zero-react/**
 !/packages/zero-solid/**
 !/packages/shared/**
+
+# ---- Markdown: private everywhere (design notes, docs sources, agent
+# instructions), apart from the files people outside need. Last, so it also
+# covers the packages re-included above.
+*.md
+*.mdx
+!/README.md
+!/CONTRIBUTING.md
+# npm uses these as the package pages, and releases are built from mono.
+!/packages/zero/README.md
+!/packages/replicache/README-external.md
