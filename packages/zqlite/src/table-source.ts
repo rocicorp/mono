@@ -55,7 +55,7 @@ import {
   PendingDelta,
 } from './pending-delta.ts';
 import {
-  buildSelectQuery,
+  buildSelectQueries,
   toSQLiteType,
   type NoSubqueryCondition,
 } from './query-builder.ts';
@@ -415,21 +415,15 @@ export class TableSource implements Source {
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
-    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
-    const sqlAndBindings = format(query);
-
-    const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
-    cachedStatement.statement.safeIntegers(true);
-    const rowIterator = cachedStatement.statement.iterate<Row>(
-      ...sqlAndBindings.values,
+    const rows = this.#queryRows(
+      this.#requestToSQL(req, connection.filters?.condition, sort),
+      debug,
     );
     const overlayPredicate = mergeOverlayPredicate(
       connection.filters?.predicate,
       req.filter,
     );
     try {
-      debug?.initQuery(this.#table, sqlAndBindings.text);
-
       if (sort) {
         const comparator = makeComparator(sort, req.reverse);
         yield* generateWithStart(
@@ -437,12 +431,7 @@ export class TableSource implements Source {
             generateWithOverlay(
               req.start?.row,
               this.#withPendingDelta(
-                this.#mapFromSQLiteTypes(
-                  this.#columns,
-                  rowIterator,
-                  sqlAndBindings.text,
-                  debug,
-                ),
+                rows,
                 req,
                 overlayPredicate,
                 sort,
@@ -468,12 +457,7 @@ export class TableSource implements Source {
         yield* generateWithYields(
           generateWithOverlayUnordered(
             this.#withPendingDelta(
-              this.#mapFromSQLiteTypes(
-                this.#columns,
-                rowIterator,
-                sqlAndBindings.text,
-                debug,
-              ),
+              rows,
               req,
               overlayPredicate,
               undefined,
@@ -490,39 +474,72 @@ export class TableSource implements Source {
         );
       }
     } finally {
-      // Ensure the SQLite iterate() is closed.
-      rowIterator.return?.();
-      if (debug) {
-        let totalNvisit = 0;
-        const planLines: string[] = [];
-        for (let i = 0; ; i++) {
-          const nvisit = cachedStatement.statement.scanStatus(
-            i,
-            SQLite3Database.SQLITE_SCANSTAT_NVISIT,
-            1,
-          );
-          if (nvisit === undefined) {
-            break;
+      // The generators above do not close `rows` when they are abandoned
+      // partway, which leaves its statement open.
+      rows.return();
+    }
+  }
+
+  /**
+   * The rows of `queries`, run one after another as {@link buildSelectQueries}
+   * requires. Each statement is run only once the previous one is exhausted,
+   * so a fetch that stops early never runs the rest.
+   */
+  *#queryRows(
+    queries: readonly SQLQuery[],
+    debug: DebugDelegate | undefined,
+  ): Generator<Row, void, undefined> {
+    const {cache} = this.#stmts;
+    for (const query of queries) {
+      const sqlAndBindings = format(query);
+      const cachedStatement = cache.get(sqlAndBindings.text);
+      cachedStatement.statement.safeIntegers(true);
+      const rowIterator = cachedStatement.statement.iterate<Row>(
+        ...sqlAndBindings.values,
+      );
+      try {
+        debug?.initQuery(this.#table, sqlAndBindings.text);
+        yield* this.#mapFromSQLiteTypes(
+          this.#columns,
+          rowIterator,
+          sqlAndBindings.text,
+          debug,
+        );
+      } finally {
+        // Ensure the SQLite iterate() is closed.
+        rowIterator.return?.();
+        if (debug) {
+          let totalNvisit = 0;
+          const planLines: string[] = [];
+          for (let i = 0; ; i++) {
+            const nvisit = cachedStatement.statement.scanStatus(
+              i,
+              SQLite3Database.SQLITE_SCANSTAT_NVISIT,
+              1,
+            );
+            if (nvisit === undefined) {
+              break;
+            }
+            totalNvisit += Number(nvisit);
+            const explain = cachedStatement.statement.scanStatus(
+              i,
+              SQLite3Database.SQLITE_SCANSTAT_EXPLAIN,
+              1,
+            );
+            if (typeof explain === 'string' && explain.length > 0) {
+              planLines.push(explain);
+            }
           }
-          totalNvisit += Number(nvisit);
-          const explain = cachedStatement.statement.scanStatus(
-            i,
-            SQLite3Database.SQLITE_SCANSTAT_EXPLAIN,
-            1,
-          );
-          if (typeof explain === 'string' && explain.length > 0) {
-            planLines.push(explain);
+          if (totalNvisit !== 0) {
+            debug.recordNVisit(this.#table, sqlAndBindings.text, totalNvisit);
           }
+          if (planLines.length > 0) {
+            debug.recordExplain(this.#table, sqlAndBindings.text, planLines);
+          }
+          cachedStatement.statement.scanStatusReset();
         }
-        if (totalNvisit !== 0) {
-          debug.recordNVisit(this.#table, sqlAndBindings.text, totalNvisit);
-        }
-        if (planLines.length > 0) {
-          debug.recordExplain(this.#table, sqlAndBindings.text, planLines);
-        }
-        cachedStatement.statement.scanStatusReset();
+        cache.return(cachedStatement);
       }
-      this.#stmts.cache.return(cachedStatement);
     }
   }
 
@@ -889,8 +906,8 @@ export class TableSource implements Source {
     request: FetchRequest,
     filters: NoSubqueryCondition | undefined,
     order: Ordering | undefined,
-  ): SQLQuery {
-    return buildSelectQuery(
+  ): readonly SQLQuery[] {
+    return buildSelectQueries(
       this.#table,
       this.#columns,
       request.constraint,

@@ -1,9 +1,10 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
+import type {Condition} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
 import {
   Debug,
@@ -17,6 +18,7 @@ import {
   type Change,
 } from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';
+import type {FetchRequest} from '../../zql/src/ivm/operator.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
@@ -31,6 +33,7 @@ import {
   fromSQLiteTypes,
   TableSource,
   UnsupportedValueError,
+  type TableSourceOptions,
 } from './table-source.ts';
 
 const columns = {
@@ -401,74 +404,215 @@ describe('fetching across a NULL-sorted cursor region', () => {
     ).toEqual(bazRows.slice(2));
   });
 
-  test.each(['asc', 'desc'] as const)(
-    'every start bound, direction and basis matches the IVM comparator (%s)',
-    direction => {
-      // A walk towards lower values of a nullable leading column is split into
-      // a seek below the bound and a seek of the NULL group (see
-      // `gatherStartConstraints`). Both halves, and a walk that drains the
-      // first into the second, must still produce exactly the comparator's
-      // continuation.
-      const sweepRows: Bar[] = [
-        {id: '01', a: null},
-        {id: '02', a: null},
-        {id: '03', a: 1},
-        {id: '04', a: 2},
-        {id: '05', a: 2},
-        {id: '06', a: 3},
-      ];
-      const sweepDb = new Database(createSilentLogContext(), ':memory:');
-      sweepDb.exec(/* sql */ `
-        CREATE TABLE bar (id TEXT PRIMARY KEY, a);
-        CREATE INDEX bar_sort ON bar (a, id);
-      `);
-      const insert = sweepDb.prepare(
-        /* sql */ `INSERT INTO bar (id, a) VALUES (?, ?);`,
-      );
-      for (const row of sweepRows) {
-        insert.run(row.id, row.a);
-      }
+  describe('a walk towards the NULL group', () => {
+    // A walk towards lower values of a nullable leading column runs a SELECT
+    // below the bound and then a SELECT of the NULL group (see
+    // `buildSelectQueries`). Both, and a walk that drains the first into the
+    // second, must produce exactly the comparator's continuation, with every
+    // constraint and filter bound in each.
+    type Qux = {id: string; ws: string; a: number | null; b: number};
+    const quxColumns = {
+      id: {type: 'string'},
+      ws: {type: 'string'},
+      a: {type: 'number', optional: true},
+      b: {type: 'number'},
+    } as const;
+    const quxRows: Qux[] = ['w1', 'w2', 'w3'].flatMap(ws =>
+      [null, null, 1, 2, 2, 3].map((a, i) => ({
+        id: `${ws}-${i}`,
+        ws,
+        a,
+        b: i % 2,
+      })),
+    );
+    // Pushed with deferred writes: a NULL and a non-NULL row added to each
+    // partition and a NULL row removed from it.
+    const added: Qux[] = ['w1', 'w2', 'w3'].flatMap(ws => [
+      {id: `${ws}-6`, ws, a: null, b: 1},
+      {id: `${ws}-7`, ws, a: 2, b: 1},
+    ]);
+    const removed = quxRows.filter(r => r.id.endsWith('-1'));
 
-      const order = [
-        ['a', direction],
-        ['id', direction],
-      ] as const;
-      const source = new TableSource(
+    function makeSource(options?: TableSourceOptions) {
+      const db = new Database(createSilentLogContext(), ':memory:');
+      db.exec(/* sql */ `
+        CREATE TABLE qux (id TEXT PRIMARY KEY, ws TEXT, a, b);
+        CREATE INDEX qux_sort ON qux (ws, a, id);
+      `);
+      const insert = db.prepare(
+        /* sql */ `INSERT INTO qux (id, ws, a, b) VALUES (?, ?, ?, ?);`,
+      );
+      for (const row of quxRows) {
+        insert.run(row.id, row.ws, row.a, row.b);
+      }
+      return new TableSource(
         lc,
         testLogConfig,
-        sweepDb,
-        'bar',
-        barColumns,
+        db,
+        'qux',
+        quxColumns,
         ['id'],
+        undefined,
+        options,
       );
-      const c = source.connect(order);
-      const out = new Catch(c);
-      c.setOutput(out);
+    }
 
-      for (const reverse of [false, true]) {
-        const compare = makeComparator(order, reverse);
-        for (const basis of ['at', 'after'] as const) {
-          for (const startRow of sweepRows) {
-            const expected = sweepRows
-              .filter(r =>
-                basis === 'at'
-                  ? compare(r, startRow) >= 0
-                  : compare(r, startRow) > 0,
-              )
-              .toSorted(compare);
-            const rows = out.fetch({start: {row: startRow, basis}, reverse});
-            expect(
-              rows.map(r => {
-                assert(r !== 'yield', 'Expected row result, not yield');
-                return r.row;
-              }),
-              `reverse=${reverse} ${basis} ${JSON.stringify(startRow)}`,
-            ).toEqual(expected);
+    const bIs1 = {
+      type: 'simple',
+      left: {type: 'column', name: 'b'},
+      op: '=',
+      right: {type: 'literal', value: 1},
+    } as const;
+    const aIsNotNull = {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS NOT',
+      right: {type: 'literal', value: null},
+    } as const;
+
+    test.each(
+      (
+        [
+          {name: 'no constraint or filter', matches: () => true},
+          {
+            name: 'a constraint',
+            req: {constraint: {ws: 'w2'}},
+            matches: r => r.ws === 'w2',
+          },
+          {
+            name: 'multiConstraints',
+            req: {multiConstraints: [[{ws: 'w1'}, {ws: 'w3'}]]},
+            matches: r => r.ws !== 'w2',
+          },
+          {name: 'a connection filter', filter: bIs1, matches: r => r.b === 1},
+          {
+            name: 'a fetch filter',
+            req: {filter: bIs1},
+            matches: r => r.b === 1,
+          },
+          {
+            name: 'a constraint and both filters',
+            req: {
+              constraint: {ws: 'w2'},
+              filter: {
+                type: 'simple',
+                left: {type: 'column', name: 'id'},
+                op: '!=',
+                right: {type: 'literal', value: 'w2-5'},
+              },
+            },
+            filter: bIs1,
+            matches: r => r.ws === 'w2' && r.b === 1 && r.id !== 'w2-5',
+          },
+          {
+            name: 'a filter that rejects NULLs',
+            filter: aIsNotNull,
+            matches: r => r.a !== null,
+          },
+        ] as const satisfies readonly {
+          name: string;
+          req?: Omit<FetchRequest, 'start' | 'reverse'>;
+          filter?: Condition;
+          matches: (r: Qux) => boolean;
+        }[]
+      ).flatMap(c => [
+        {...c, deferWrites: false},
+        {...c, deferWrites: true},
+      ]),
+    )(
+      'matches the IVM comparator with $name (deferWrites: $deferWrites)',
+      ({deferWrites, matches, ...testCase}) => {
+        const req = 'req' in testCase ? testCase.req : {};
+        const filter = 'filter' in testCase ? testCase.filter : undefined;
+        for (const direction of ['asc', 'desc'] as const) {
+          const source = makeSource({deferWrites});
+          const order = [
+            ['a', direction],
+            ['id', direction],
+          ] as const;
+          const c = source.connect(order, filter);
+          const out = new Catch(c);
+          c.setOutput(out);
+
+          let rows = quxRows;
+          if (deferWrites) {
+            for (const row of added) {
+              consume(source.push(makeSourceChangeAdd(row)));
+            }
+            for (const row of removed) {
+              consume(source.push(makeSourceChangeRemove(row)));
+            }
+            rows = [...quxRows.filter(r => !removed.includes(r)), ...added];
+          }
+          rows = rows.filter(matches);
+
+          for (const reverse of [false, true]) {
+            const compare = makeComparator(order, reverse);
+            for (const basis of ['at', 'after'] as const) {
+              for (const startRow of rows) {
+                const expected = rows
+                  .filter(r =>
+                    basis === 'at'
+                      ? compare(r, startRow) >= 0
+                      : compare(r, startRow) > 0,
+                  )
+                  .toSorted(compare);
+                const fetched = out.fetch({
+                  ...req,
+                  start: {row: startRow, basis},
+                  reverse,
+                });
+                expect(
+                  fetched.map(r => {
+                    assert(r !== 'yield', 'Expected row result, not yield');
+                    return r.row;
+                  }),
+                  `${direction} reverse=${reverse} ${basis} ${JSON.stringify(startRow)}`,
+                ).toEqual(expected);
+              }
+            }
           }
         }
+      },
+    );
+
+    test('runs the NULL group SELECT only once the first is exhausted', () => {
+      const source = makeSource();
+      const debug = new Debug(false);
+      const order = [
+        ['a', 'asc'],
+        ['id', 'asc'],
+      ] as const;
+      const walk = (filter?: Condition) =>
+        source.connect(order, filter, undefined, debug).fetch({
+          constraint: {ws: 'w1'},
+          start: {row: must(quxRows.find(r => r.id === 'w1-4')), basis: 'at'},
+          reverse: true,
+        });
+      const initQuery = vi.spyOn(debug, 'initQuery');
+      const statementsRun = () => {
+        const statements = initQuery.mock.calls.map(([, query]) => query);
+        initQuery.mockClear();
+        return statements;
+      };
+
+      // Stops early, as Take does.
+      for (const _ of walk()) {
+        break;
       }
-    },
-  );
+      expect(statementsRun()).toEqual([expect.stringContaining('"a" <= ?')]);
+
+      expect([...walk()]).toHaveLength(5);
+      expect(statementsRun()).toEqual([
+        expect.stringContaining('"a" <= ?'),
+        expect.stringContaining('"a" IS NULL ORDER BY'),
+      ]);
+
+      // A filter that rejects the NULL group leaves nothing for its SELECT.
+      expect([...walk(aIsNotNull)]).toHaveLength(3);
+      expect(statementsRun()).toEqual([expect.stringContaining('"a" <= ?')]);
+    });
+  });
 });
 
 describe('fetched value types', () => {
@@ -1545,10 +1689,10 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
   };
 
   try {
-    // debug.initQuery() is called in #fetch after the SQLite iterator is
-    // created but before the yield* generator chain (and thus
-    // #mapFromSQLiteTypes) is ever iterated. If initQuery throws, the fix
-    // ensures rowIterator.return() is still called in #fetch's finally block.
+    // debug.initQuery() is called in #queryRows after the SQLite iterator is
+    // created but before #mapFromSQLiteTypes is ever iterated. If initQuery
+    // throws, the fix ensures rowIterator.return() is still called in
+    // #queryRows' finally block.
     // Without the fix, rowIterator.return() was only in #mapFromSQLiteTypes'
     // finally block, which never ran because the generator was never started.
     const throwingDebug: DebugDelegate = {

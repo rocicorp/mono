@@ -4,6 +4,7 @@ import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
 import {
+  buildSelectQueries,
   buildSelectQuery,
   filtersToSQL,
   multiConstraintToSQL,
@@ -321,43 +322,45 @@ test('basis at with a NULL bound keeps the anchor row reachable', () => {
 test('a non-null bound on an optional column admits the NULL group when walking backward', () => {
   // NULLs sort before every non-NULL value, so the strictly-before set of a
   // non-NULL bound includes the whole NULL group; a bare `col < ?` silently
-  // drops those rows from a reverse walk.
+  // drops those rows from a reverse walk. The group is fetched by a second
+  // SELECT, run after the first.
   const columns = {
     owner: {type: 'string', optional: true},
     id: {type: 'string'},
   } as const satisfies Record<string, SchemaValue>;
 
   expect(
-    format(
-      buildSelectQuery(
-        'issues',
-        columns,
-        undefined,
-        undefined,
-        [
-          ['owner', 'asc'],
-          ['id', 'asc'],
-        ],
-        true,
-        {
-          row: {owner: 'alice', id: 'issue-1'},
-          basis: 'after',
-        },
-      ),
-    ),
-  ).toMatchInlineSnapshot(`
-    {
-      "text": "SELECT "owner","id" FROM "issues" WHERE ("owner" <= ? AND ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?))) UNION ALL SELECT "owner","id" FROM "issues" WHERE ("owner" IS NULL AND ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?))) ORDER BY "owner" desc, "id" desc",
-      "values": [
-        "alice",
-        "alice",
-        "alice",
-        "issue-1",
-        "alice",
-        "alice",
-        "issue-1",
+    buildSelectQueries(
+      'issues',
+      columns,
+      undefined,
+      undefined,
+      [
+        ['owner', 'asc'],
+        ['id', 'asc'],
       ],
-    }
+      true,
+      {
+        row: {owner: 'alice', id: 'issue-1'},
+        basis: 'after',
+      },
+    ).map(format),
+  ).toMatchInlineSnapshot(`
+    [
+      {
+        "text": "SELECT "owner","id" FROM "issues" WHERE ("owner" <= ? AND ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?))) ORDER BY "owner" desc, "id" desc",
+        "values": [
+          "alice",
+          "alice",
+          "alice",
+          "issue-1",
+        ],
+      },
+      {
+        "text": "SELECT "owner","id" FROM "issues" WHERE "owner" IS NULL ORDER BY "owner" desc, "id" desc",
+        "values": [],
+      },
+    ]
   `);
 });
 
@@ -719,41 +722,213 @@ test.each([
       CREATE INDEX items_sort ON items(workspaceID, a, id);
     `);
 
-    const {text, values} = format(
-      buildSelectQuery(
-        'items',
-        columns,
-        {workspaceID: 'w1'},
-        undefined,
-        [
-          ['a', direction],
-          ['id', direction],
-        ],
-        reverse,
-        {row: {a: 500, id: 123}, basis: 'at'},
-      ),
-    );
-    const plan = db
-      .prepare(`EXPLAIN QUERY PLAN ${text}`)
-      .all<{detail: string}>(...values)
-      .map(r => r.detail)
-      .join('\n');
+    const [bounded, nullGroup] = buildSelectQueries(
+      'items',
+      columns,
+      {workspaceID: 'w1'},
+      undefined,
+      [
+        ['a', direction],
+        ['id', direction],
+      ],
+      reverse,
+      {row: {a: 500, id: 123}, basis: 'at'},
+    ).map(format);
+    const plan = ({text, values}: {text: string; values: unknown[]}) =>
+      db
+        .prepare(`EXPLAIN QUERY PLAN ${text}`)
+        .all<{detail: string}>(...values)
+        .map(r => r.detail)
+        .join('\n');
 
-    expect(text).toContain(
+    expect(bounded.text).toContain(
       `WHERE "workspaceID" = ? AND ("a" <= ? AND ((("a" IS NULL OR "a" < ?))`,
     );
-    expect(text).toContain(
-      ` UNION ALL SELECT "workspaceID","a","id" FROM "items" WHERE "workspaceID" = ? AND ("a" IS NULL AND ((("a" IS NULL OR "a" < ?))`,
+    expect(bounded.text).toMatch(/ORDER BY "a" desc, "id" desc$/);
+    expect(plan(bounded)).toMatch(
+      /^SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a<\?\)$/,
     );
-    expect(text).toMatch(/ORDER BY "a" desc, "id" desc$/);
-    expect(plan).toMatch(/MERGE \(UNION ALL\)/);
-    expect(plan).toMatch(
-      /SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a<\?\)/,
+
+    expect(nullGroup.text).toBe(
+      `SELECT "workspaceID","a","id" FROM "items" WHERE "workspaceID" = ? AND "a" IS NULL ORDER BY "a" desc, "id" desc`,
     );
-    expect(plan).toMatch(
-      /SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a=\?\)/,
+    expect(nullGroup.values).toEqual(['w1']);
+    expect(plan(nullGroup)).toMatch(
+      /^SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a=\?\)$/,
     );
-    expect(plan).not.toMatch(/USE TEMP B-TREE/);
+  },
+);
+
+test.each([
+  {
+    name: 'IS NOT NULL',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS NOT',
+      right: {type: 'literal', value: null},
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'a range',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: '>',
+      right: {type: 'literal', value: 3},
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'IS a value',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS',
+      right: {type: 'literal', value: 3},
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'IN',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IN',
+      right: {type: 'literal', value: [1, 2]},
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'a conjunct',
+    filter: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'b'},
+          op: '=',
+          right: {type: 'literal', value: 1},
+        },
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'a'},
+          op: 'LIKE',
+          right: {type: 'literal', value: '1%'},
+        },
+      ],
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'IS NULL',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS',
+      right: {type: 'literal', value: null},
+    },
+    rejectsNull: false,
+  },
+  {
+    name: 'IS NOT a value',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS NOT',
+      right: {type: 'literal', value: 3},
+    },
+    rejectsNull: false,
+  },
+  {
+    // `NULL NOT IN ()` is true.
+    name: 'NOT IN',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'NOT IN',
+      right: {type: 'literal', value: []},
+    },
+    rejectsNull: false,
+  },
+  {
+    name: 'another column',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'b'},
+      op: '>',
+      right: {type: 'literal', value: 3},
+    },
+    rejectsNull: false,
+  },
+  {
+    name: 'a disjunct',
+    filter: {
+      type: 'or',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'a'},
+          op: '>',
+          right: {type: 'literal', value: 3},
+        },
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'b'},
+          op: '>',
+          right: {type: 'literal', value: 3},
+        },
+      ],
+    },
+    rejectsNull: false,
+  },
+] as const satisfies readonly {
+  name: string;
+  filter: NoSubqueryCondition;
+  rejectsNull: boolean;
+}[])(
+  'a filter that rejects NULLs of the leading column skips the NULL group ($name)',
+  ({filter, rejectsNull}) => {
+    // The NULL group's SELECT would return nothing, and on a large group it
+    // would read every row of it to find that out.
+    const columns = {
+      a: {type: 'number', optional: true},
+      b: {type: 'number'},
+      id: {type: 'number'},
+    } as const satisfies Record<string, SchemaValue>;
+    const order = [
+      ['a', 'desc'],
+      ['id', 'desc'],
+    ] as const;
+    const start = {row: {a: 5, id: 1}, basis: 'at'} as const;
+    const expected = rejectsNull ? 1 : 2;
+
+    // As a connection filter, and as a fetch filter.
+    expect(
+      buildSelectQueries(
+        'items',
+        columns,
+        undefined,
+        filter,
+        order,
+        false,
+        start,
+      ),
+    ).toHaveLength(expected);
+    expect(
+      buildSelectQueries(
+        'items',
+        columns,
+        undefined,
+        undefined,
+        order,
+        false,
+        start,
+        undefined,
+        filter,
+      ),
+    ).toHaveLength(expected);
   },
 );
 
