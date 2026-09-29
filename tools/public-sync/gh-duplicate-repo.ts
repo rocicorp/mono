@@ -174,6 +174,10 @@ const enc = encodeURIComponent;
 const step = (msg: string) => console.log(`==> ${msg}`);
 const warn = (msg: string) => console.error(`   ! ${msg}`);
 
+// Steps that failed but didn't stop the run. They are listed again at the end
+// and make the exit status nonzero, so a partial copy doesn't pass for done.
+const failed: string[] = [];
+
 async function attempt<T>(
   label: string,
   fn: () => T | Promise<T>,
@@ -182,6 +186,7 @@ async function attempt<T>(
     return await fn();
   } catch (e) {
     warn(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+    failed.push(label);
     return undefined;
   }
 }
@@ -267,6 +272,13 @@ type DeployKey = {title: string; read_only: boolean};
 const tmp = mkdtempSync(join(tmpdir(), 'dup-repo-'));
 try {
   await main();
+  if (failed.length) {
+    console.error(
+      `\n==> ${failed.length} step(s) failed; redo them by hand:\n` +
+        failed.map(f => `   ${f}`).join('\n'),
+    );
+    process.exitCode = 1;
+  }
 } finally {
   rmSync(tmp, {recursive: true, force: true});
 }

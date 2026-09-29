@@ -32,6 +32,8 @@
 # (`/dir/*`, not `/dir/`, so children can be re-included.)
 /.github/workflows/*
 !/.github/workflows/public-*.yml
+# The sync workflow itself runs in mono-internal only, next to its script.
+/.github/workflows/public-sync.yml
 # Releases run on mono so they build from exactly what is published. The names
 # must stay: npm trusted publishing is registered for rocicorp/mono +
 # release.yml, and --provenance requires a public repo anyway.
