@@ -8,7 +8,6 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtChange} from './catch.ts';
 import {Join} from './join.ts';
-import {MemoryStorage} from './memory-storage.ts';
 import type {Input} from './operator.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import {
@@ -748,7 +747,6 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
       ...info,
       hidden: false,
       system: 'client',
-      storage: new MemoryStorage(),
     });
 
     joins[i] = join;

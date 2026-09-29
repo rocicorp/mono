@@ -247,7 +247,6 @@ test('tree', () => {
     relationshipName: 'children',
     hidden: false,
     system: 'client',
-    storage: new MemoryStorage(),
   });
 
   const view = new ArrayView(
@@ -562,7 +561,6 @@ test('tree-single', () => {
     relationshipName: 'child',
     hidden: false,
     system: 'client',
-    storage: new MemoryStorage(),
   });
 
   const view = new ArrayView(
@@ -1325,7 +1323,6 @@ test('tree edit', () => {
     relationshipName: 'children',
     hidden: false,
     system: 'client',
-    storage: new MemoryStorage(),
   });
 
   const view = new ArrayView(
