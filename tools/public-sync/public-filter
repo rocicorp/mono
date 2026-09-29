@@ -87,3 +87,6 @@ __snapshots__/
 # npm uses these as the package pages, and releases are built from mono.
 !/packages/zero/README.md
 !/packages/replicache/README-external.md
+# The Replicache docs site; its sources are public on replicache.dev anyway.
+!/packages/replicache-doc/**/*.md
+!/packages/replicache-doc/**/*.mdx
