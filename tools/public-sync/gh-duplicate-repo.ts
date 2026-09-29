@@ -408,11 +408,21 @@ async function main() {
       api('PUT', `repos/${dst}/private-vulnerability-reporting`),
     );
   }
-  const setup = await attempt('code scanning default setup', () =>
-    get<{state: string; languages: string[]; query_suite: string}>(
-      `repos/${src}/code-scanning/default-setup`,
-    ),
-  );
+  // A 404 here just means code scanning isn't set up, not a failed step.
+  const setup = await attempt('code scanning default setup', async () => {
+    try {
+      return await get<{
+        state: string;
+        languages: string[];
+        query_suite: string;
+      }>(`repos/${src}/code-scanning/default-setup`);
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 404) {
+        return undefined;
+      }
+      throw e;
+    }
+  });
   if (setup?.state === 'configured') {
     await attempt('code scanning default setup', () =>
       api('PATCH', `repos/${dst}/code-scanning/default-setup`, {
@@ -707,17 +717,16 @@ async function main() {
   console.log(
     `   gh api -X PUT repos/${dst}/actions/permissions -F enabled=true -f allowed_actions=${allowed}`,
   );
-  if (allowed === 'selected' && dryRun) {
-    console.log('   (a real run also writes selected-actions.json here)');
-  } else if (allowed === 'selected') {
-    writeFileSync(
-      'selected-actions.json',
-      JSON.stringify(
-        await get(`repos/${src}/actions/permissions/selected-actions`),
-        null,
-        2,
-      ),
+  if (allowed === 'selected') {
+    // Read in both modes, so a dry run exercises the same endpoint.
+    const selected = await get(
+      `repos/${src}/actions/permissions/selected-actions`,
     );
+    if (dryRun) {
+      console.log('   (a real run also writes selected-actions.json here)');
+      return;
+    }
+    writeFileSync('selected-actions.json', JSON.stringify(selected, null, 2));
     console.log(
       `   gh api -X PUT repos/${dst}/actions/permissions/selected-actions --input selected-actions.json`,
     );
