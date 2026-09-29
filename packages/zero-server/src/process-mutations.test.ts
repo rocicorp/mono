@@ -27,9 +27,12 @@ import {
 } from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {
+  DEFAULT_MUTATOR_RETRY_OPTIONS,
   getMutation,
   handleMutateRequest,
+  mutatorRetryDelayMs,
   type Database,
+  type TransactFn,
   type TransactionProviderHooks,
 } from './process-mutations.ts';
 
@@ -1506,5 +1509,285 @@ describe('logSink', () => {
       0,
     );
     expect(consoleWarnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('retryMutator', () => {
+  const rejectingHandler = (
+    runs: {count: number},
+    reject: (run: number) => Promise<void>,
+  ) =>
+    ((transact: TransactFn<Database<unknown>>) =>
+      transact((_tx, _name, _args) => {
+        runs.count++;
+        return reject(runs.count);
+      })) as never;
+
+  const appError = (message: string) =>
+    makeSuccessResponse(
+      [{id: {clientID: 'cid', id: 1}, result: {error: 'app', message}}],
+      null,
+    );
+
+  // `minDelayMs: 0` re-runs at once: `sleep(0)` takes no macro task, so these
+  // cases stay synchronous with respect to timers. The delay itself is pinned
+  // separately below.
+  const atOnce = {minDelayMs: 0, maxDelayMs: 0};
+
+  // The default: a mutator rejection retries the TRANSACTION with the mutator
+  // SKIPPED, and the error becomes the mutation's result. Pinned as the control
+  // for the cases below, and because it is what every caller passing no
+  // options must keep getting.
+  test('is not consulted, and the mutator is skipped, when absent', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('serialization failure')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+    });
+
+    expect(runs.count).toBe(1);
+    expect(response).toEqual(appError('serialization failure'));
+  });
+
+  test('re-runs the mutator when shouldRetry returns true, and the re-run can succeed', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      // The shape the option exists for: the first attempt lost a race, the
+      // second runs against the winner's committed state and converges.
+      handler: rejectingHandler(runs, run =>
+        run === 1
+          ? Promise.reject(new Error('serialization failure'))
+          : promiseUndefined,
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      retryMutator: {shouldRetry: () => true, ...atOnce},
+    });
+
+    expect(runs.count).toBe(2);
+    expect(response).toEqual(
+      makeSuccessResponse([{id: {clientID: 'cid', id: 1}, result: {}}], null),
+    );
+  });
+
+  test('keeps re-running while shouldRetry returns true, up to the default maxRetries', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      // Two losses, then the third re-run converges.
+      handler: rejectingHandler(runs, run =>
+        run <= 3
+          ? Promise.reject(new Error('serialization failure'))
+          : promiseUndefined,
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      retryMutator: {shouldRetry: () => true, ...atOnce},
+    });
+
+    expect(DEFAULT_MUTATOR_RETRY_OPTIONS.maxRetries).toBe(3);
+    expect(runs.count).toBe(4);
+    expect(response).toEqual(
+      makeSuccessResponse([{id: {clientID: 'cid', id: 1}, result: {}}], null),
+    );
+  });
+
+  // The bound is the point: without it a persistently contended row becomes a
+  // stuck push rather than a reported failure.
+  test('re-runs at most maxRetries times, then falls back to the default retry', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('always fails')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      retryMutator: {shouldRetry: () => true, maxRetries: 2, ...atOnce},
+    });
+
+    // The first attempt, two re-runs, then the transaction retry with the
+    // mutator skipped — which does not run the mutator.
+    expect(runs.count).toBe(3);
+    expect(response).toEqual(appError('always fails'));
+  });
+
+  test('maxRetries: 0 leaves the default path alone', async () => {
+    const runs = {count: 0};
+    const consulted = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('serialization failure')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      retryMutator: {
+        shouldRetry: () => {
+          consulted.count++;
+          return true;
+        },
+        maxRetries: 0,
+        ...atOnce,
+      },
+    });
+
+    expect(runs.count).toBe(1);
+    expect(consulted.count).toBe(0);
+    expect(response).toEqual(appError('serialization failure'));
+  });
+
+  // The converse, and it is the half that keeps the option safe. An
+  // application's DELIBERATE rejection reaches the predicate wrapped exactly as
+  // a driver error is, so a predicate answering false must leave the default
+  // path untouched — otherwise every typed rejection in an app gets re-run.
+  test('leaves the default path alone when shouldRetry returns false', async () => {
+    const runs = {count: 0};
+    const seen: unknown[] = [];
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('that name is taken')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      retryMutator: {
+        shouldRetry: error => {
+          seen.push(error);
+          return false;
+        },
+        ...atOnce,
+      },
+    });
+
+    expect(runs.count).toBe(1);
+    expect(seen).toHaveLength(1);
+    expect(response).toEqual(appError('that name is taken'));
+  });
+
+  // A predicate is application code on a recovery path: if it throws, failing
+  // to classify must not become a second failure.
+  test('treats a throwing shouldRetry as not retriable', async () => {
+    const runs = {count: 0};
+    const {db} = createTrackingDatabase();
+    const response = await handleMutateRequest({
+      dbProvider: db,
+      handler: rejectingHandler(runs, () =>
+        Promise.reject(new Error('original failure')),
+      ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({id: 1})]),
+      userID: null,
+      retryMutator: {
+        shouldRetry: () => {
+          throw new Error('predicate blew up');
+        },
+        ...atOnce,
+      },
+    });
+
+    expect(runs.count).toBe(1);
+    expect(response).toEqual(appError('original failure'));
+  });
+
+  test('waits the backoff delay before each re-run', async () => {
+    vi.useFakeTimers();
+    // Pin the jitter to the midpoint, so the delays are exactly 75ms and
+    // then 150ms (equal jitter on 100ms, then on 200ms).
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      const runs = {count: 0};
+      const {db} = createTrackingDatabase();
+      const pending = handleMutateRequest({
+        dbProvider: db,
+        handler: rejectingHandler(runs, run =>
+          run <= 2
+            ? Promise.reject(new Error('serialization failure'))
+            : promiseUndefined,
+        ),
+        query: baseQuery,
+        body: makePushBody([makeCustomMutation({id: 1})]),
+        userID: null,
+        retryMutator: {
+          shouldRetry: () => true,
+          minDelayMs: 100,
+          maxDelayMs: 1000,
+        },
+      });
+
+      // The first attempt runs at once; the re-runs wait their delay.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runs.count).toBe(1);
+      await vi.advanceTimersByTimeAsync(74);
+      expect(runs.count).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(runs.count).toBe(2);
+      await vi.advanceTimersByTimeAsync(149);
+      expect(runs.count).toBe(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(runs.count).toBe(3);
+
+      expect(await pending).toEqual(
+        makeSuccessResponse([{id: {clientID: 'cid', id: 1}, result: {}}], null),
+      );
+    } finally {
+      random.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('mutatorRetryDelayMs', () => {
+  const lowest = () => 0;
+  const highest = () => 0.999999;
+
+  test('doubles per re-run from minDelayMs', () => {
+    const options = {minDelayMs: 10, maxDelayMs: 1000};
+    expect(mutatorRetryDelayMs(1, options, lowest)).toBe(5);
+    expect(mutatorRetryDelayMs(2, options, lowest)).toBe(10);
+    expect(mutatorRetryDelayMs(3, options, lowest)).toBe(20);
+    expect(mutatorRetryDelayMs(4, options, lowest)).toBe(40);
+  });
+
+  test('is capped at maxDelayMs', () => {
+    const options = {minDelayMs: 10, maxDelayMs: 25};
+    expect(mutatorRetryDelayMs(1, options, highest)).toBeCloseTo(10, 3);
+    expect(mutatorRetryDelayMs(2, options, highest)).toBeCloseTo(20, 3);
+    expect(mutatorRetryDelayMs(3, options, highest)).toBeCloseTo(25, 3);
+    expect(mutatorRetryDelayMs(10, options, highest)).toBeCloseTo(25, 3);
+  });
+
+  test('jitters within the upper half of the delay', () => {
+    const options = {minDelayMs: 100, maxDelayMs: 1000};
+    expect(mutatorRetryDelayMs(1, options, lowest)).toBe(50);
+    expect(mutatorRetryDelayMs(1, options, highest)).toBeCloseTo(100, 3);
+    expect(mutatorRetryDelayMs(1, options, () => 0.5)).toBe(75);
+  });
+
+  test('uses the defaults for what is left undefined', () => {
+    expect(mutatorRetryDelayMs(1, {}, lowest)).toBe(
+      DEFAULT_MUTATOR_RETRY_OPTIONS.minDelayMs / 2,
+    );
+    expect(mutatorRetryDelayMs(20, {}, highest)).toBeCloseTo(
+      DEFAULT_MUTATOR_RETRY_OPTIONS.maxDelayMs,
+      3,
+    );
   });
 });

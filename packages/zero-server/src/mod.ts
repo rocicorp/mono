@@ -31,13 +31,16 @@ export {
 } from './custom.ts';
 export {executePostgresQuery} from './pg-query-executor.ts';
 export {
+  DEFAULT_MUTATOR_RETRY_OPTIONS,
   getMutation,
   handleMutateRequest,
   handleMutationRequest,
+  mutatorRetryDelayMs,
   OutOfOrderMutation,
   type Database,
   type ExtractTransactionType,
   type MutateRequestHandler,
+  type MutatorRetryOptions,
   type Params,
   type Parsed,
   type TransactFn,
@@ -45,7 +48,7 @@ export {
   type TransactionProviderHooks,
   type TransactionProviderInput,
 } from './process-mutations.ts';
-export {PushProcessor} from './push-processor.ts';
+export {PushProcessor, type PushProcessorOptions} from './push-processor.ts';
 export {
   handleGetQueriesRequest,
   handleQueryRequest,

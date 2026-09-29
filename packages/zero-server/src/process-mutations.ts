@@ -8,6 +8,7 @@ import {assert} from '../../shared/src/asserts.ts';
 import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {promiseVoid} from '../../shared/src/resolved-promises.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
@@ -133,6 +134,78 @@ export type MutateRequestHandler<
   mutation: CustomMutation,
 ) => Promise<MutationResponse>;
 
+/**
+ * How a mutator's TRANSIENT rejections are answered: by running the mutator
+ * AGAIN, in a fresh transaction, with exponential backoff between attempts —
+ * rather than by the default retry, which re-runs the transaction with the
+ * mutator skipped and returns the error to the client.
+ *
+ * A re-run gets a new snapshot, because the transaction is opened anew each
+ * pass; that is what lets a body that lost a race read the winner's committed
+ * row and converge. Once the retries are exhausted the default retry takes
+ * over and the last error becomes the mutation's result.
+ */
+export type MutatorRetryOptions = {
+  /**
+   * Whether this rejection is transient. Return `true` only for errors the
+   * application knows are TRANSIENT — in practice serialization failures and
+   * deadlocks reported by the database, or a unique violation on a key the
+   * generated `ON CONFLICT` arbiter does not cover. Zero cannot decide this
+   * itself: it does not parse driver errors, and at the `Transactor` an
+   * application's own deliberate rejection and a driver rejection arrive
+   * wrapped identically in `DatabaseTransactionError`.
+   *
+   * A throwing predicate answers `false`: it runs on a recovery path, where
+   * failing to classify must not become a second failure.
+   */
+  shouldRetry: (error: unknown) => boolean;
+  /**
+   * How many times the mutator may be re-run after its first attempt. `0`
+   * disables re-running. Defaults to
+   * {@linkcode DEFAULT_MUTATOR_RETRY_OPTIONS}.
+   */
+  maxRetries?: number | undefined;
+  /**
+   * The delay before the first re-run, in milliseconds; it doubles on each
+   * further re-run. `0` re-runs at once. Defaults to
+   * {@linkcode DEFAULT_MUTATOR_RETRY_OPTIONS}.
+   */
+  minDelayMs?: number | undefined;
+  /**
+   * The upper bound on that delay, in milliseconds. Defaults to
+   * {@linkcode DEFAULT_MUTATOR_RETRY_OPTIONS}.
+   */
+  maxDelayMs?: number | undefined;
+};
+
+/** The defaults for {@linkcode MutatorRetryOptions}. */
+export const DEFAULT_MUTATOR_RETRY_OPTIONS = {
+  maxRetries: 3,
+  minDelayMs: 10,
+  maxDelayMs: 1000,
+} as const;
+
+/**
+ * The delay before re-run number `retry` (1-based): `minDelayMs`, doubled for
+ * each re-run before this one, capped at `maxDelayMs` — with equal jitter, so
+ * the second half of that delay is random. The losers of one race would
+ * otherwise re-run in lockstep and lose the same race again.
+ *
+ * `random` is injectable for tests; it must return a number in `[0, 1)`.
+ */
+export function mutatorRetryDelayMs(
+  retry: number,
+  options: Pick<MutatorRetryOptions, 'minDelayMs' | 'maxDelayMs'>,
+  random: () => number = Math.random,
+): number {
+  const minDelayMs =
+    options.minDelayMs ?? DEFAULT_MUTATOR_RETRY_OPTIONS.minDelayMs;
+  const maxDelayMs =
+    options.maxDelayMs ?? DEFAULT_MUTATOR_RETRY_OPTIONS.maxDelayMs;
+  const delayMs = Math.min(maxDelayMs, minDelayMs * 2 ** (retry - 1));
+  return delayMs / 2 + random() * (delayMs / 2);
+}
+
 export type HandleMutateRequestArgs<
   D extends Database<ExtractTransactionType<D>>,
 > = {
@@ -145,6 +218,12 @@ export type HandleMutateRequestArgs<
   userID: string | null | undefined;
   /** Optional log level for request parsing and execution. */
   logLevel?: LogLevel | undefined;
+  /**
+   * Re-run a mutator whose rejection is transient, with backoff, instead of
+   * returning the error to the client. See {@linkcode MutatorRetryOptions}.
+   * Left undefined, behaviour is exactly as before.
+   */
+  retryMutator?: MutatorRetryOptions | undefined;
   /**
    * Destination for this request's log output. When omitted, logs are written
    * with `console.log`/`info`/`warn`/`error` etc.
@@ -180,6 +259,7 @@ type NormalizedMutateRequestArgs<
   readonly userID: string | null | undefined;
   readonly logLevel: LogLevel;
   readonly logSink: LogSink;
+  readonly retryMutator: MutatorRetryOptions | undefined;
 } & (
   | {
       readonly type: 'request';
@@ -342,6 +422,7 @@ export async function handleMutateRequest<
       pushBody,
       parsedQueryParams,
       lc,
+      normalized.retryMutator,
     );
 
     // Each mutation goes through three phases:
@@ -468,6 +549,7 @@ function normalizeMutateRequestInput<
       userID: input.userID ?? null,
       logLevel: input.logLevel ?? 'info',
       logSink: input.logSink ?? consoleLogSink,
+      retryMutator: input.retryMutator,
     };
   }
 
@@ -483,6 +565,7 @@ function normalizeMutateRequestInput<
         : input.query,
     logLevel: input.logLevel ?? 'info',
     logSink: input.logSink ?? consoleLogSink,
+    retryMutator: input.retryMutator,
   };
 }
 
@@ -513,6 +596,8 @@ function normalizeLegacyMutateRequestArgs<
       // The `request` overload has no `body` slot, so the sink arrives one
       // position earlier than it does in the `query`/`body` overload.
       logSink: (logLevelOrLogSink as LogSink | undefined) ?? consoleLogSink,
+      // The deprecated positional signatures carry no place to pass it.
+      retryMutator: undefined,
     };
   }
 
@@ -533,6 +618,7 @@ function normalizeLegacyMutateRequestArgs<
         : requestOrQuery,
     logLevel: (logLevelOrLogSink as LogLevel | undefined) ?? 'info',
     logSink: maybeLogSink ?? consoleLogSink,
+    retryMutator: undefined,
   };
 }
 
@@ -541,12 +627,42 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
   readonly #req: PushBody;
   readonly #params: Params;
   readonly #lc: LogContext;
+  readonly #retryMutator: MutatorRetryOptions | undefined;
 
-  constructor(dbProvider: D, req: PushBody, params: Params, lc: LogContext) {
+  constructor(
+    dbProvider: D,
+    req: PushBody,
+    params: Params,
+    lc: LogContext,
+    retryMutator?: MutatorRetryOptions | undefined,
+  ) {
     this.#dbProvider = dbProvider;
     this.#req = req;
     this.#params = params;
     this.#lc = lc;
+    this.#retryMutator = retryMutator;
+  }
+
+  /**
+   * Whether this rejection is one the application asked us to answer by running
+   * the mutator again.
+   *
+   * A throwing predicate answers `false`: this runs on a recovery path, where
+   * failing to classify must not become a second failure.
+   */
+  #isRetriableMutatorError(error: unknown): boolean {
+    if (this.#retryMutator === undefined) {
+      return false;
+    }
+    try {
+      return this.#retryMutator.shouldRetry(error) === true;
+    } catch (predicateError) {
+      this.#lc.warn?.(
+        'retryMutator.shouldRetry threw; treating the error as not retriable',
+        predicateError,
+      );
+      return false;
+    }
   }
 
   transact = async (
@@ -554,6 +670,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
     let appError: ApplicationError | undefined = undefined;
+    let mutatorRetries = 0;
     for (;;) {
       try {
         const ret = await this.#transactImpl(mutation, cb, appError);
@@ -595,6 +712,43 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             error,
           );
           throw error;
+        }
+
+        // A TRANSIENT failure → run the mutator again, in a fresh transaction,
+        // after a backoff.
+        //
+        // `continue` WITHOUT setting `appError` is the whole mechanism: it is
+        // `appError` being set that makes the next `#transactImpl` skip
+        // `cb(...)`. `#transactImpl` opens a new transaction each pass, so the
+        // re-run gets a new snapshot — which is the point. Re-reading inside the
+        // same transaction cannot see the winner at `REPEATABLE READ`.
+        //
+        // `#checkAndIncrementLastMutationID` re-runs safely because the failed
+        // attempt rolled its increment back.
+        //
+        // Bounded, so a persistently contended row becomes a reported failure
+        // rather than a stuck push; once the budget is spent the default retry
+        // below takes over.
+        const maxRetries =
+          this.#retryMutator?.maxRetries ??
+          DEFAULT_MUTATOR_RETRY_OPTIONS.maxRetries;
+        if (
+          mutatorRetries < maxRetries &&
+          this.#isRetriableMutatorError(error)
+        ) {
+          mutatorRetries++;
+          const delayMs = mutatorRetryDelayMs(
+            mutatorRetries,
+            // `#isRetriableMutatorError` answered true, so the options are set.
+            this.#retryMutator!,
+          );
+          this.#lc.warn?.(
+            // log-leak-ignore -- mutation and client ids, not row data
+            `Mutation ${mutation.id} for client ${mutation.clientID} hit a retriable error, re-running mutator (retry ${mutatorRetries} of ${maxRetries}, in ${Math.round(delayMs)}ms)`,
+            error,
+          );
+          await sleep(delayMs);
+          continue;
         }
 
         // First attempt failed → store error and retry without mutator

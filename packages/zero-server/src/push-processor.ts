@@ -10,6 +10,8 @@ import {
   type Database,
   type ExtractTransactionType,
   handleMutateRequest,
+  type MutateRequestHandler,
+  type MutatorRetryOptions,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
@@ -19,6 +21,25 @@ import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 
 export const separatorRe = /[.|]/;
+
+/** Options for {@linkcode PushProcessor}. */
+export type PushProcessorOptions = {
+  /** Log level for request parsing and execution. Defaults to `'info'`. */
+  logLevel?: LogLevel | undefined;
+  /**
+   * Destination for this processor's log output. When omitted, logs are
+   * written with `console.log`/`info`/`warn`/`error` etc. Provide a custom
+   * {@linkcode LogSink} to redirect them into the application's own logging
+   * pipeline.
+   */
+  logSink?: LogSink | undefined;
+  /**
+   * Re-run a mutator whose rejection is transient, with backoff, instead of
+   * returning the error to the client. See {@linkcode MutatorRetryOptions}.
+   * Left undefined, behaviour is exactly as before.
+   */
+  retryMutator?: MutatorRetryOptions | undefined;
+};
 
 export class PushProcessor<
   _S extends Schema,
@@ -30,23 +51,33 @@ export class PushProcessor<
   readonly #logLevel: LogLevel;
   readonly #logSink: LogSink;
   readonly #context: C;
+  readonly #retryMutator: MutatorRetryOptions | undefined;
 
   /**
-   * @param logSink Destination for this processor's log output. When omitted,
-   *   logs are written with `console.log`/`info`/`warn`/`error` etc. Provide a
-   *   custom {@linkcode LogSink} to redirect them into the application's own
-   *   logging pipeline.
+   * @param logLevelOrOptions a `LogLevel`, or a {@linkcode PushProcessorOptions}
+   *   object. The bare `LogLevel` form is kept so every existing call site
+   *   compiles unchanged.
+   * @param logSink Destination for this processor's log output when the third
+   *   argument is a `LogLevel`. When omitted, logs are written with
+   *   `console.log`/`info`/`warn`/`error` etc. Provide a custom
+   *   {@linkcode LogSink} to redirect them into the application's own logging
+   *   pipeline. Pass it inside the options object instead when using that form.
    */
   constructor(
     dbProvider: D,
     context?: C,
-    logLevel: LogLevel = 'info',
-    logSink: LogSink = consoleLogSink,
+    logLevelOrOptions: LogLevel | PushProcessorOptions = 'info',
+    logSink?: LogSink,
   ) {
     this.#dbProvider = dbProvider;
     this.#context = context as C;
-    this.#logLevel = logLevel;
-    this.#logSink = logSink;
+    const options: PushProcessorOptions =
+      typeof logLevelOrOptions === 'string'
+        ? {logLevel: logLevelOrOptions, logSink}
+        : logLevelOrOptions;
+    this.#logLevel = options.logLevel ?? 'info';
+    this.#logSink = options.logSink ?? consoleLogSink;
+    this.#retryMutator = options.retryMutator;
   }
 
   /**
@@ -78,25 +109,56 @@ export class PushProcessor<
     queryOrQueryString: Request | URLSearchParams | Record<string, string>,
     body?: ReadonlyJSONValue,
   ): Promise<MutateResponse> {
-    if (queryOrQueryString instanceof Request) {
+    const handler: MutateRequestHandler<D> = (transact, mutation) =>
+      this.#processMutation(mutators, transact, mutation);
+
+    // ⚠ THE POSITIONAL FORM IS KEPT WHEN THERE IS NOTHING EXTRA TO PASS, and
+    // that is not stylistic. It normalizes `userID` to `undefined`, which
+    // `handleMutateRequest` uses to OMIT `userID` from the response; the object
+    // form coerces `undefined` to `null`, which would start emitting it. Until
+    // `PushProcessor` has a `userID` of its own to pass, switching
+    // unconditionally would be a response-shape change unrelated to retries.
+    if (this.#retryMutator === undefined) {
+      if (queryOrQueryString instanceof Request) {
+        return handleMutateRequest(
+          this.#dbProvider,
+          handler,
+          queryOrQueryString,
+          this.#logLevel,
+          this.#logSink,
+        );
+      }
       return handleMutateRequest(
         this.#dbProvider,
-        (transact, mutation) =>
-          this.#processMutation(mutators, transact, mutation),
+        handler,
         queryOrQueryString,
+        must(body, 'body is required when using query params directly'),
         this.#logLevel,
         this.#logSink,
       );
     }
-    return handleMutateRequest(
-      this.#dbProvider,
-      (transact, mutation) =>
-        this.#processMutation(mutators, transact, mutation),
-      queryOrQueryString,
-      must(body, 'body is required when using query params directly'),
-      this.#logLevel,
-      this.#logSink,
-    );
+
+    if (queryOrQueryString instanceof Request) {
+      return handleMutateRequest({
+        dbProvider: this.#dbProvider,
+        handler,
+        request: queryOrQueryString,
+        userID: undefined,
+        logLevel: this.#logLevel,
+        logSink: this.#logSink,
+        retryMutator: this.#retryMutator,
+      });
+    }
+    return handleMutateRequest({
+      dbProvider: this.#dbProvider,
+      handler,
+      query: queryOrQueryString,
+      body: must(body, 'body is required when using query params directly'),
+      userID: undefined,
+      logLevel: this.#logLevel,
+      logSink: this.#logSink,
+      retryMutator: this.#retryMutator,
+    });
   }
 
   #processMutation(
