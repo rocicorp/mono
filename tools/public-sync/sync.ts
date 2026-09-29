@@ -59,9 +59,13 @@ const {values: args} = parseArgs({
 });
 
 // Authenticates fetch and push to github.com without putting the token in
-// the remote URL (same header actions/checkout uses).
+// the remote URL (same header actions/checkout uses). extraheader is
+// multi-valued, so first clear any header actions/checkout persisted for
+// mono-internal's own token; otherwise git sends both.
 const auth = process.env.GH_TOKEN
   ? [
+      '-c',
+      'http.https://github.com/.extraheader=',
       '-c',
       `http.https://github.com/.extraheader=AUTHORIZATION: basic ${Buffer.from(
         `x-access-token:${process.env.GH_TOKEN}`,

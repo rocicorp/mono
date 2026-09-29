@@ -318,7 +318,18 @@ async function main() {
       git('-C', bare, 'lfs', 'fetch', '--all', 'origin'),
     );
   }
-  git('-C', bare, 'push', '--mirror', dstUrl);
+  try {
+    git('-C', bare, 'push', '--mirror', dstUrl);
+  } catch (e) {
+    // The new repo is covered by org rulesets targeting the default branch
+    // from the moment it exists.
+    warn(
+      `push to ${dst} failed. If the error names a ruleset (e.g. "changes ` +
+        `must be made through a pull request"), run this as a bypass actor ` +
+        `of the org rulesets, or exclude ${dst} from them for the copy.`,
+    );
+    throw e;
+  }
   if (hasLfs) {
     await attempt('lfs push', () =>
       git('-C', bare, 'lfs', 'push', '--all', dstUrl),

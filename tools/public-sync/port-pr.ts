@@ -90,8 +90,17 @@ function main() {
   // rather than whatever was last fetched.
   const slash = args.onto.indexOf('/');
   const remote = slash === -1 ? '' : args.onto.slice(0, slash);
-  if (lines(git('remote')).includes(remote)) {
-    git('fetch', '--no-tags', remote, args.onto.slice(slash + 1));
+  const isRemote = lines(git('remote')).includes(remote);
+  const ontoBranch = isRemote ? args.onto.slice(slash + 1) : args.onto;
+  // A PR against a release branch must not end up on main.
+  if (pr.base !== ontoBranch) {
+    throw new Error(
+      `${pr.url} targets ${pr.base}, not ${ontoBranch}. Pass ` +
+        `--onto origin/${pr.base} to port it onto that branch.`,
+    );
+  }
+  if (isRemote) {
+    git('fetch', '--no-tags', remote, ontoBranch);
   }
 
   const url = args.remote ?? `https://github.com/${args.repo}.git`;
