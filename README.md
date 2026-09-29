@@ -1,29 +1,6 @@
 # Rocicorp Monorepo
 
-This is the mono repo for [Rocicorp](https://rocicorp.dev/)'s two main products, Zero and Replicache.
-
-## About this repository
-
-rocicorp/mono is published from Rocicorp's internal repository. Each commit
-here comes from an internal commit, which the `Mono-Internal-Commit:` line at
-the end of the commit message records; internal commits that only touch
-private files aren't published. Releases of Zero are built and
-published from this repository.
-
-Test suites are included for [zero-client](./packages/zero-client),
-[replicache](./packages/replicache), [zero-events](./packages/zero-events),
-[zero-react](./packages/zero-react), [zero-solid](./packages/zero-solid),
-[shared](./packages/shared) and [go](./go). The test harnesses (helpers, fixtures, vitest
-configs and the Postgres test setup) are included for every package.
-
-The history of this repository was rewritten on YYYY-MM-DD. If you cloned or
-forked it before then, clone it again.
-
-## Contributing
-
-Pull requests are welcome. We don't merge them here: a maintainer ports your
-change into the internal repository, and it comes back here in a commit that
-lists you as a co-author and closes your pull request. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+This is the mono repo for [Rocicorp](https://rocicorp.dev/)'s two main products (as of 2024).
 
 ## Zero
 
@@ -44,7 +21,7 @@ Web site and docs https://replicache.dev/.
 ### Code
 
 - [packages/replicache](./packages/replicache): The replicache client library.
-- [packages/replicache-doc](./packages/replicache-doc): The docs for replicache is in this mono repo.
+- [packages/replicache/doc](./packages/replicache/): The docs for replicache is in this mono repo.
 
 ## Older Projects
 
