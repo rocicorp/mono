@@ -1,4 +1,5 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {describe, expect, onTestFinished, test, vi} from 'vitest';
 import {refresh} from './persist/refresh.ts';
 import {ReplicacheImpl} from './replicache-impl.ts';
@@ -69,6 +70,7 @@ describe('ReplicacheImpl', () => {
       removeEventListener('unhandledrejection', onUnhandledRejection);
     });
 
+    const initCalled = resolver<void>();
     const impl = new ReplicacheImpl(
       {name, logLevel: 'error', logSinks: [logSink]},
       {
@@ -78,11 +80,17 @@ describe('ReplicacheImpl', () => {
         // store that cannot answer surfaces. Only `init` runs here, so the
         // rest of the interface is deliberately absent.
         zero: {
-          init: () => Promise.reject(openError),
+          init: () => {
+            initCalled.resolve();
+            return Promise.reject(openError);
+          },
         } as unknown as ZeroOption,
       },
     );
 
+    // The dag work before `init` runs on real storage, not on the fake
+    // timers, so ticking alone does not reliably get `#open` that far.
+    await initCalled.promise;
     await tickAFewTimes(vi);
 
     expect(
