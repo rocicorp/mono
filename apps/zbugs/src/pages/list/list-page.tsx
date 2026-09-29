@@ -1,6 +1,7 @@
 import {
   rowAttributes,
   useZeroVirtualizer,
+  type RowKey,
   type VirtualRow,
 } from '@rocicorp/zero-virtual/react';
 import {useQuery, useZero} from '@rocicorp/zero/react';
@@ -415,6 +416,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
     permalinkNotFound,
     estimatedTotal,
     total,
+    scrollToItem,
+    firstVisibleItem,
   } = useZeroVirtualizer<typeof listContextParams, Issue, IssueRowSort>({
     estimateSize: () => ITEM_SIZE,
     getScrollElement: () => listRef.current,
@@ -457,6 +460,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
     onScrollStateChange: setScrollState,
   });
 
+  // The keydown handler below reads the loaded window, which changes identity
+  // on every commit. Through a ref, so the listener isn't torn down and
+  // re-attached each time the list pages.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
   useEffect(() => {
     if (permalinkNotFound) {
       const toastID = 'permalink-issue-not-found';
@@ -494,32 +503,22 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    const focusRow = (scrollElement: HTMLElement, index: number) => {
-      const el = scrollElement.querySelector<HTMLElement>(
-        `[data-vrow-index="${index}"]`,
-      );
-      if (el) {
-        el.focus();
-        return;
-      }
-      // Not rendered yet. Rows are fixed height, so scroll it into view and
-      // focus it once the virtualizer has rendered it.
-      const top = index * ITEM_SIZE;
-      const bottom = top + ITEM_SIZE;
-      if (top < scrollElement.scrollTop) {
-        scrollElement.scrollTop = top;
-      } else if (
-        bottom >
-        scrollElement.scrollTop + scrollElement.clientHeight
-      ) {
-        scrollElement.scrollTop = bottom - scrollElement.clientHeight;
-      }
-      requestAnimationFrame(() => {
-        scrollElement
-          .querySelector<HTMLElement>(`[data-vrow-index="${index}"]`)
-          ?.focus();
-      });
+    const focusRow = (scrollElement: HTMLElement, key: RowKey) => {
+      scrollToItem(key);
+      scrollElement
+        .querySelector<HTMLElement>(
+          `[data-vrow-key="${CSS.escape(String(key))}"]`,
+        )
+        // scrollToItem has already placed the row; don't let the browser
+        // scroll it a second time with its own idea of where it belongs.
+        ?.focus({preventScroll: true});
     };
+
+    // j/k only ever move one row, so the target is adjacent to the focused one
+    // and the virtualizer already has it loaded. Nothing here needs to know
+    // how tall a row is or where it sits — only which row comes next.
+    const itemAt = (index: number) =>
+      itemsRef.current.find(i => i.index === index);
 
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (
@@ -545,24 +544,28 @@ export function ListPage({onReady}: {onReady: () => void}) {
         return;
       }
       const focusedRow = target?.closest<HTMLElement>('.row[data-vrow-index]');
-      let next: number;
-      if (focusedRow && scrollElement.contains(focusedRow)) {
-        next = Number(focusedRow.dataset.vrowIndex) + (e.key === 'j' ? 1 : -1);
-      } else {
-        // Nothing focused in the list: start from the first visible row.
-        next = Math.floor(scrollElement.scrollTop / ITEM_SIZE);
+      const next =
+        focusedRow && scrollElement.contains(focusedRow)
+          ? itemAt(
+              Number(focusedRow.dataset.vrowIndex) + (e.key === 'j' ? 1 : -1),
+            )
+          : // Nothing focused in the list: start from the first visible row.
+            firstVisibleItem();
+      if (!next) {
+        // Either end of the list, or the window edge with paging not caught
+        // up yet — scrolling toward it is what advances the window, so the
+        // next press lands.
+        return;
       }
-      const lastIndex = Math.max(0, (total ?? estimatedTotal) - 1);
-      next = Math.max(0, Math.min(next, lastIndex));
       e.preventDefault();
-      focusRow(scrollElement, next);
+      focusRow(scrollElement, next.key);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [selectMode, deleteConfirmationShown, total, estimatedTotal]);
+  }, [selectMode, deleteConfirmationShown, scrollToItem, firstVisibleItem]);
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;
