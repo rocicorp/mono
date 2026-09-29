@@ -686,10 +686,17 @@ async function main() {
       `repos/${src}/actions/permissions`,
     ),
   );
-  const allowed = perm?.allowed_actions ?? 'all';
-  console.log(
-    `\nActions is DISABLED on ${dst}. After adding secrets, re-enable with:`,
-  );
+  console.log(`\nActions is DISABLED on ${dst}.`);
+  const allowed = perm?.allowed_actions;
+  if (allowed === undefined) {
+    // Guessing 'all' could allow more actions than the source does.
+    warn(
+      `couldn't read ${src}'s allowed actions; check them in its settings ` +
+        `and re-enable ${dst} with the same policy by hand`,
+    );
+    return;
+  }
+  console.log('After adding secrets, re-enable it with:');
   console.log(
     `   gh api -X PUT repos/${dst}/actions/permissions -F enabled=true -f allowed_actions=${allowed}`,
   );

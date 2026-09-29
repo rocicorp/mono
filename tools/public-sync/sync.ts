@@ -95,9 +95,10 @@ function main() {
   const sourceHead = git('rev-parse', args.source);
 
   let parent = publicHead;
-  let from = findLastSynced(PUBLIC_REF);
+  const last = findLastSynced(PUBLIC_REF);
+  let from = last?.source;
 
-  if (from === undefined) {
+  if (last === undefined || from === undefined) {
     // First run after the duplication: nothing has been synced yet, and mono's
     // head is still a commit in mono-internal's own history. Start there, and
     // drop the private files in one dedicated commit rather than folding that
@@ -126,10 +127,20 @@ function main() {
           'redo it with git filter-repo --preserve-commit-hashes.',
       );
     }
-    // If mono's tree no longer matches what we'd have published for the last
-    // synced commit, someone pushed to mono directly (e.g. merged an outside
-    // PR). Refuse rather than silently revert it; it has to land in
-    // mono-internal first.
+    // Every commit on mono's main after the split is one this script wrote,
+    // so its head must be the newest one carrying the trailer. Anything
+    // else -- even an empty commit, or a change pushed and then reverted --
+    // was pushed to mono directly and would otherwise be built on.
+    if (last.commit !== publicHead) {
+      throw new Error(
+        `${args.branch} has commits after the last sync (${last.commit}); ` +
+          `its head is ${publicHead}. Port any direct changes to ` +
+          'mono-internal and reset mono to the last sync commit first.',
+      );
+    }
+    // Same for a head that carries the trailer but whose tree differs from
+    // what we'd publish, e.g. an amended sync commit. Refuse rather than
+    // silently revert it; the change has to land in mono-internal first.
     const expected = filteredTree(from);
     const actual = treeOf(publicHead);
     if (expected !== actual) {
@@ -178,7 +189,9 @@ function main() {
  * The newest commit on `ref` carrying our trailer, or undefined before the
  * first sync.
  */
-function findLastSynced(ref: string): string | undefined {
+function findLastSynced(
+  ref: string,
+): {commit: string; source: string} | undefined {
   // --grep + -1 stops at the newest synced commit instead of formatting all of
   // mono's history on every run.
   const out = git(
@@ -186,10 +199,11 @@ function findLastSynced(ref: string): string | undefined {
     '-1',
     '--first-parent',
     `--grep=^${TRAILER}: `,
-    `--format=%(trailers:key=${TRAILER},valueonly,separator=)`,
+    `--format=%H%x00%(trailers:key=${TRAILER},valueonly,separator=)`,
     ref,
   );
-  return lines(out)[0];
+  const [commit, source] = out.split('\0');
+  return commit && source ? {commit, source} : undefined;
 }
 
 /**

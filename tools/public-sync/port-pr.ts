@@ -26,14 +26,20 @@
 // - New in the PR but already in mono-internal (say, a zero-cache test file
 //   named like an existing private one): applying would clobber or conflict
 //   with the private file, so it is left out of the patch and the
-//   contributor's version is saved beside it as <name>.mono-<N>.<ext>. The
+//   contributor's version is saved beside it as mono-<N>.<name>. The
 //   internal PR lists these so they get folded in by hand before merging.
 // - Changed by the PR and present in its base (only for PRs based on mono's
 //   history from before the rewrite): merged by `git apply --3way` like any
 //   other change.
 
 import {execFileSync} from 'node:child_process';
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {parseArgs} from 'node:util';
@@ -141,6 +147,18 @@ function main() {
         added.map(p => `  ${p}`).join('\n'),
     );
   }
+  // Only a PR based on mono's history from before the rewrite can delete or
+  // rename away a file that is private now. The patch removes it from
+  // mono-internal too, which is probably what the contributor meant, but
+  // it's a file they can no longer see, so call it out.
+  const removed = privateChanges(base, changed).filter(p => !exists(head, p));
+  if (removed.length) {
+    console.warn(
+      `The PR deletes or renames these private files, so the port removes ` +
+        `them from mono-internal too; check that's intended:\n` +
+        removed.map(p => `  ${p}`).join('\n'),
+    );
+  }
 
   // A rerun after a failed attempt finds the branch already there. Start it
   // over unless it holds commits of its own (a finished port).
@@ -171,6 +189,16 @@ function main() {
   );
   const aside = collisions.map(p => ({path: p, saved: saveAside(head, p)}));
   if (aside.length) {
+    // The copies must stay private too, or the sync would publish them.
+    const {paths} = privatePaths(git('write-tree'), args.onto, tmp);
+    const priv = new Set(paths.split('\0'));
+    const leaked = aside.filter(a => !priv.has(a.saved));
+    if (leaked.length) {
+      throw new Error(
+        `public-filter would publish these saved copies; rename them by ` +
+          `hand:\n${leaked.map(a => `  ${a.saved}`).join('\n')}`,
+      );
+    }
     console.warn(
       `These files already exist privately in mono-internal. The ` +
         `contributor's versions were saved beside them; fold them in by ` +
@@ -296,21 +324,22 @@ function exists(rev: string, path: string): boolean {
 
 /**
  * Writes the PR's version of `path` to a sibling that still matches the same
- * globs (`cvr.test.ts` -> `cvr.mono-6694.test.ts`), straight from the object
+ * globs (`cvr.test.ts` -> `mono-6694.cvr.test.ts`), straight from the object
  * store so binary files survive, and stages it.
  */
 function saveAside(head: string, path: string): string {
   const [mode, , sha] = git('--literal-pathspecs', 'ls-tree', head, '--', path)
     .split('\t')[0]
     .split(' ');
+  // A prefix, not an infix: the private patterns match a file's end
+  // (*.test.ts, *-gen.ts, *-tests.ts) or a substring (*bench*), and a prefix
+  // keeps every one of those matching.
   const slash = path.lastIndexOf('/') + 1;
-  const name = path.slice(slash);
-  const dot = name.indexOf('.', 1);
-  const saved =
-    path.slice(0, slash) +
-    (dot === -1
-      ? `${name}.mono-${number}`
-      : `${name.slice(0, dot)}.mono-${number}${name.slice(dot)}`);
+  const saved = `${path.slice(0, slash)}mono-${number}.${path.slice(slash)}`;
+  // checkout-index -f would overwrite an untracked file of the same name.
+  if (existsSync(join(git('rev-parse', '--show-toplevel'), saved))) {
+    throw new Error(`${saved} already exists; move it out of the way first.`);
+  }
   git('update-index', '--add', '--cacheinfo', `${mode},${sha},${saved}`);
   git('checkout-index', '-f', '--', saved);
   return saved;
