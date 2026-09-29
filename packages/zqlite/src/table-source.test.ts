@@ -400,6 +400,75 @@ describe('fetching across a NULL-sorted cursor region', () => {
       }),
     ).toEqual(bazRows.slice(2));
   });
+
+  test.each(['asc', 'desc'] as const)(
+    'every start bound, direction and basis matches the IVM comparator (%s)',
+    direction => {
+      // A walk towards lower values of a nullable leading column is split into
+      // a seek below the bound and a seek of the NULL group (see
+      // `gatherStartConstraints`). Both halves, and a walk that drains the
+      // first into the second, must still produce exactly the comparator's
+      // continuation.
+      const sweepRows: Bar[] = [
+        {id: '01', a: null},
+        {id: '02', a: null},
+        {id: '03', a: 1},
+        {id: '04', a: 2},
+        {id: '05', a: 2},
+        {id: '06', a: 3},
+      ];
+      const sweepDb = new Database(createSilentLogContext(), ':memory:');
+      sweepDb.exec(/* sql */ `
+        CREATE TABLE bar (id TEXT PRIMARY KEY, a);
+        CREATE INDEX bar_sort ON bar (a, id);
+      `);
+      const insert = sweepDb.prepare(
+        /* sql */ `INSERT INTO bar (id, a) VALUES (?, ?);`,
+      );
+      for (const row of sweepRows) {
+        insert.run(row.id, row.a);
+      }
+
+      const order = [
+        ['a', direction],
+        ['id', direction],
+      ] as const;
+      const source = new TableSource(
+        lc,
+        testLogConfig,
+        sweepDb,
+        'bar',
+        barColumns,
+        ['id'],
+      );
+      const c = source.connect(order);
+      const out = new Catch(c);
+      c.setOutput(out);
+
+      for (const reverse of [false, true]) {
+        const compare = makeComparator(order, reverse);
+        for (const basis of ['at', 'after'] as const) {
+          for (const startRow of sweepRows) {
+            const expected = sweepRows
+              .filter(r =>
+                basis === 'at'
+                  ? compare(r, startRow) >= 0
+                  : compare(r, startRow) > 0,
+              )
+              .toSorted(compare);
+            const rows = out.fetch({start: {row: startRow, basis}, reverse});
+            expect(
+              rows.map(r => {
+                assert(r !== 'yield', 'Expected row result, not yield');
+                return r.row;
+              }),
+              `reverse=${reverse} ${basis} ${JSON.stringify(startRow)}`,
+            ).toEqual(expected);
+          }
+        }
+      }
+    },
+  );
 });
 
 describe('fetched value types', () => {

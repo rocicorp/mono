@@ -347,8 +347,12 @@ test('a non-null bound on an optional column admits the NULL group when walking 
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "owner","id" FROM "issues" WHERE ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?)) ORDER BY "owner" desc, "id" desc",
+      "text": "SELECT "owner","id" FROM "issues" WHERE ("owner" <= ? AND ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?))) UNION ALL SELECT "owner","id" FROM "issues" WHERE ("owner" IS NULL AND ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?))) ORDER BY "owner" desc, "id" desc",
       "values": [
+        "alice",
+        "alice",
+        "alice",
+        "issue-1",
         "alice",
         "alice",
         "issue-1",
@@ -689,6 +693,69 @@ test('nullable forward cursor keeps a sargable leading-column bound', () => {
   );
   expect(plan).not.toMatch(/USE TEMP B-TREE FOR ORDER BY/);
 });
+
+test.each([
+  {name: 'ascending, reverse', direction: 'asc', reverse: true},
+  {name: 'descending, forward', direction: 'desc', reverse: false},
+] as const)(
+  'nullable cursor walking towards NULLs seeks the non-NULL range and the NULL group ($name)',
+  ({direction, reverse}) => {
+    // `a IS NULL OR a <= ?` is not one index range, so without a split SQLite
+    // seeks only the partition and filters every row from its far end up to
+    // the cursor.
+    const columns = {
+      workspaceID: {type: 'string'},
+      a: {type: 'number', optional: true},
+      id: {type: 'number'},
+    } as const satisfies Record<string, SchemaValue>;
+    const lc = createSilentLogContext();
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE items (
+        workspaceID TEXT NOT NULL,
+        a INTEGER,
+        id INTEGER PRIMARY KEY
+      );
+      CREATE INDEX items_sort ON items(workspaceID, a, id);
+    `);
+
+    const {text, values} = format(
+      buildSelectQuery(
+        'items',
+        columns,
+        {workspaceID: 'w1'},
+        undefined,
+        [
+          ['a', direction],
+          ['id', direction],
+        ],
+        reverse,
+        {row: {a: 500, id: 123}, basis: 'at'},
+      ),
+    );
+    const plan = db
+      .prepare(`EXPLAIN QUERY PLAN ${text}`)
+      .all<{detail: string}>(...values)
+      .map(r => r.detail)
+      .join('\n');
+
+    expect(text).toContain(
+      `WHERE "workspaceID" = ? AND ("a" <= ? AND ((("a" IS NULL OR "a" < ?))`,
+    );
+    expect(text).toContain(
+      ` UNION ALL SELECT "workspaceID","a","id" FROM "items" WHERE "workspaceID" = ? AND ("a" IS NULL AND ((("a" IS NULL OR "a" < ?))`,
+    );
+    expect(text).toMatch(/ORDER BY "a" desc, "id" desc$/);
+    expect(plan).toMatch(/MERGE \(UNION ALL\)/);
+    expect(plan).toMatch(
+      /SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a<\?\)/,
+    );
+    expect(plan).toMatch(
+      /SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a=\?\)/,
+    );
+    expect(plan).not.toMatch(/USE TEMP B-TREE/);
+  },
+);
 
 test('multiConstraintToSQL asserts on empty multiConstraint', () => {
   const columns = {id: {type: 'string'}} as const satisfies Record<
