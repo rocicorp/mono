@@ -309,6 +309,15 @@ function filterFor(sha: string): string {
   if (firstFilterCommit === undefined) {
     throw new Error(`${FILTER_PATH} is not in ${args.source}'s history.`);
   }
+  // Only commits from before the filter existed may borrow it. A later commit
+  // without one deleted or moved it; publishing it under stale rules could
+  // leak private files, so stop instead.
+  if (isAncestor(firstFilterCommit, sha)) {
+    throw new Error(
+      `${sha} has no ${FILTER_PATH}, but ${firstFilterCommit} added it. ` +
+        'Restore the filter before syncing.',
+    );
+  }
   return firstFilterCommit;
 }
 

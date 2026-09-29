@@ -104,9 +104,12 @@ async function api<T = unknown>(
   body?: unknown,
 ): Promise<T> {
   if (dryRun && method !== 'GET') {
-    console.log(
-      `   would ${method} ${path}${body === undefined ? '' : ` ${JSON.stringify(body)}`}`,
-    );
+    // Variable values can be sensitive, and a dry run may log to CI.
+    const shown =
+      body === undefined
+        ? ''
+        : ` ${JSON.stringify(body, (k, v) => (k === 'value' ? '<redacted>' : v))}`;
+    console.log(`   would ${method} ${path}${shown}`);
     return null as T;
   }
   const res = await request(method, path, body);
@@ -317,10 +320,12 @@ async function main() {
   const bare = join(tmp, 'repo.git');
   const dstUrl = `https://github.com/${dst}.git`;
   git('clone', '--bare', `https://github.com/${src}.git`, bare);
+  // LFS failures are fatal: pushing the refs without all LFS objects would
+  // look like a finished copy with holes in its history.
   if (hasLfs) {
-    await attempt('lfs fetch', () =>
-      git('-C', bare, 'lfs', 'fetch', '--all', 'origin'),
-    );
+    git('-C', bare, 'lfs', 'fetch', '--all', 'origin');
+  } else {
+    warn('git-lfs is not installed; if the source uses LFS, install it first');
   }
   try {
     git('-C', bare, 'push', '--mirror', dstUrl);
@@ -335,9 +340,7 @@ async function main() {
     throw e;
   }
   if (hasLfs) {
-    await attempt('lfs push', () =>
-      git('-C', bare, 'lfs', 'push', '--all', dstUrl),
-    );
+    git('-C', bare, 'lfs', 'push', '--all', dstUrl);
   }
 
   // --- repo settings -----------------------------------------------------------------
