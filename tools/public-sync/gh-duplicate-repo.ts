@@ -200,6 +200,28 @@ const git = (...args: string[]) => {
   }
   execFileSync('git', [...gitAuth, ...args], {stdio: 'inherit'});
 };
+/** Whether any .gitattributes at the source's HEAD routes files to LFS. */
+function usesLfs(bare: string): boolean {
+  try {
+    execFileSync(
+      'git',
+      [
+        '-C',
+        bare,
+        'grep',
+        '-q',
+        'filter=lfs',
+        'HEAD',
+        '--',
+        ':(glob)**/.gitattributes',
+      ],
+      {stdio: 'ignore'},
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
 const hasLfs = (() => {
   try {
     execFileSync('git', ['lfs', 'version'], {stdio: 'ignore'});
@@ -324,8 +346,11 @@ async function main() {
   // look like a finished copy with holes in its history.
   if (hasLfs) {
     git('-C', bare, 'lfs', 'fetch', '--all', 'origin');
-  } else {
-    warn('git-lfs is not installed; if the source uses LFS, install it first');
+  } else if (!dryRun && usesLfs(bare)) {
+    throw new Error(
+      `${src} uses LFS (a .gitattributes has filter=lfs) but git-lfs is ` +
+        'not installed. Install it and run again.',
+    );
   }
   try {
     git('-C', bare, 'push', '--mirror', dstUrl);

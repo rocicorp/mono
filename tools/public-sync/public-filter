@@ -57,6 +57,8 @@
 # anything that generates them.
 *.test.ts
 *.test.tsx
+*.spec.ts
+*.spec.tsx
 *.bench.ts
 *.bench.*.ts
 *bench*.ts
