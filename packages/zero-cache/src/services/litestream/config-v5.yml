@@ -28,8 +28,11 @@ dbs:
     # The monitor-interval is the steady-state interval at which the db / wal
     # is checked to create new l0 files and/or checkpoint the wal. The
     # application will also explicitly trigger a "/sync" if the wal reaches
-    # ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB.
-    monitor-interval: ${ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}s
+    # ZERO_LITESTREAM_FORCE_CHECKPOINT_THRESHOLD_MB and, with the sync
+    # requester enabled, at the incremental backup interval (in which case
+    # this is a backstop that only fires once requests stop; see
+    # litestreamMonitorIntervalSeconds).
+    monitor-interval: ${ZERO_LITESTREAM_MONITOR_INTERVAL_SECONDS}s
     min-checkpoint-page-count: ${ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT}
     truncate-page-n: ${ZERO_LITESTREAM_TRUNCATE_PAGE_N}
     replica:

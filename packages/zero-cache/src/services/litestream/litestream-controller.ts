@@ -42,6 +42,15 @@ export type SyncOptions = {
 
   /** Overall request timeout in milliseconds. Defaults to 30s. */
   timeoutMs?: number;
+
+  /**
+   * Server-side deadline in seconds, sent as litestream's `timeout`. When set,
+   * litestream ends the request itself (with an error response) once it
+   * elapses. Set it below {@link timeoutMs} so that litestream, rather than
+   * the client, ends a slow request. (litestream defaults to 30s when `wait`
+   * is set, and to no deadline otherwise.)
+   */
+  serverTimeoutSeconds?: number;
 };
 
 /**
@@ -95,10 +104,18 @@ export class LitestreamController {
     opts: SyncOptions = {},
     signal?: AbortSignal,
   ): Promise<SyncResponse> {
-    const {wait = false, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS} = opts;
+    const {
+      wait = false,
+      timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+      serverTimeoutSeconds,
+    } = opts;
     const result = await this.#post<SyncResponse>(
       '/sync',
-      {path: this.#replicaFile, wait},
+      {
+        path: this.#replicaFile,
+        wait,
+        ...(serverTimeoutSeconds ? {timeout: serverTimeoutSeconds} : {}),
+      },
       timeoutMs,
       signal,
     );

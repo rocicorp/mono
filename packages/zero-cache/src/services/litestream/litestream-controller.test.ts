@@ -104,6 +104,34 @@ describe('litestream/litestream-controller', () => {
     client.close();
   });
 
+  test('sends serverTimeoutSeconds as the litestream timeout', async () => {
+    const requests: unknown[] = [];
+    server = await startFakeServer(async req => {
+      requests.push(await readJSON(req));
+      return {
+        status: 200,
+        body: {
+          status: 'synced',
+          path: '/data/replica.db',
+          txid: 1,
+          replicated_txid: 1,
+        },
+      };
+    });
+    const client = new LitestreamController(
+      lc,
+      '/data/replica.db',
+      socketPathOf(server),
+    );
+
+    await client.sync({wait: true, serverTimeoutSeconds: 60});
+
+    expect(requests).toEqual([
+      {path: '/data/replica.db', wait: true, timeout: 60},
+    ]);
+    client.close();
+  });
+
   test('rejects with the parsed error body on a non-2xx response', async () => {
     server = await startFakeServer(() =>
       Promise.resolve({

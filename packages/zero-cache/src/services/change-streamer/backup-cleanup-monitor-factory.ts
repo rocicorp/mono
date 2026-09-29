@@ -5,6 +5,7 @@ import type {Source} from '../../types/streams.ts';
 import {getLastBackupTime} from '../litestream/commands.ts';
 import {type BackedUpWatermark, BackupMonitor} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
+import {LitestreamSyncRequester} from './litestream-sync-requester.ts';
 import {
   type BackupStateVerifier,
   Litestream3PrometheusPoller,
@@ -34,6 +35,13 @@ export function createBackupCleanupMonitor({
 
   if (!backupURL) {
     stream = new ReplicaPoller(lc, replicaFile).start();
+  } else if (
+    config.litestream.backupUsingV5 &&
+    config.litestream.syncRequesterEnabled
+  ) {
+    stream = new LitestreamSyncRequester(lc, replicaFile, {
+      intervalMs: litestream.incrementalBackupIntervalSeconds * 1000,
+    }).start();
   } else if (config.litestream.backupUsingV5) {
     const {
       logLevel,
