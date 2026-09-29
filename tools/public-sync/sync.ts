@@ -4,12 +4,18 @@
 // mono-internal CI after every push to main.
 //
 // mono-internal starts life as a full-history duplicate of mono (see
-// gh-duplicate-repo.mjs), so both repos share every commit up to the split.
+// gh-duplicate-repo.ts), so both repos share every commit up to the split.
 // From then on, for every first-parent commit on mono-internal/main this
 // builds a tree with only the files `public-filter` allows and commits it on
 // top of mono's main. The mono commit keeps the title and author and adds a
 // trailer naming the source commit. It has no body and no internal parents,
-// so neither private files nor internal history become reachable from mono.
+// so nothing written after the split, private files or internal history,
+// becomes reachable from mono.
+//
+// What mono already had before the split stays reachable through its history,
+// private files included, until mono's history is rewritten (step 6 of the
+// rollout, with git filter-repo --preserve-commit-hashes). That rewrite comes
+// after the sync is running, so the sync can't require it up front.
 //
 // There is no state besides mono itself: the newest trailer on mono's main
 // says how far the sync got, so reruns and overlapping runs converge. The push

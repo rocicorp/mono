@@ -292,6 +292,10 @@ async function main() {
     }
   }
   if (dstOwner.toLowerCase() === me.toLowerCase()) {
+    if (visibility === 'internal') {
+      // Only organization repos can be internal; don't quietly go private.
+      throw new Error(`--internal needs an organization; ${dst} is yours.`);
+    }
     await api('POST', 'user/repos', {
       name: dstName,
       description: srcRepo.description ?? '',
