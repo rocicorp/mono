@@ -1,2 +1,3 @@
 .github/ @arv @0xcadams
 pnpm-lock.yaml @arv @0xcadams @aboodman
+tools/public-sync/ @arv @aboodman

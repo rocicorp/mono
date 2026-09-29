@@ -1,0 +1,96 @@
+# Which files from mono-internal are published to rocicorp/mono.
+# Syntax is .gitignore: a matching pattern EXCLUDES a file, `!` re-includes it,
+# and the last matching pattern wins. Evaluated against every tracked path.
+
+# ---- Allow list: deny everything at the top level, then opt dirs back in. ----
+# New top-level dirs therefore stay private until someone adds them here.
+/*
+!/.github/
+!/apps/
+!/packages/
+!/tools/
+# The Docker image builds go/cmd/vfs-query (release.yml: --build-context monogo=go).
+!/go/
+!/scripts/
+!/LICENSE
+!/README.md
+!/CONTRIBUTING.md
+!/package.json
+!/pnpm-lock.yaml
+!/pnpm-workspace.yaml
+!/tsconfig.json
+!/turbo.json
+!/vitest.config.ts
+!/oxlint.base.ts
+!/oxlint.config.ts
+!/.gitignore
+!/.npmrc
+!/.nvmrc
+
+# ---- Deny list: whole directories that stay private. ----
+# Internal CI stays private; public CI lives in public-*.yml.
+# (`/dir/*`, not `/dir/`, so children can be re-included.)
+/.github/workflows/*
+!/.github/workflows/public-*.yml
+# The sync workflow itself runs in mono-internal only, next to its script.
+/.github/workflows/public-sync.yml
+# Releases run on mono so they build from exactly what is published. The names
+# must stay: npm trusted publishing is registered for rocicorp/mono +
+# release.yml, and --provenance requires a public repo anyway.
+!/.github/workflows/release.yml
+!/.github/workflows/promote.yml
+/apps/zero-throughput/
+/apps/zql-viz/
+/packages/replicache-perf/
+/packages/zql-benchmarks/
+/packages/zql-integration-tests/
+/packages/zqlite-zql-test/
+/tools/*
+# Needed by public config: oxlint.base.ts loads the lint plugin, and
+# package.json's verify-deps runs verify-package-deps. (tools/tsnapi, behind
+# api-snapshot, is an API test and stays private.)
+!/tools/oxlint-plugin-zero/
+!/tools/verify-package-deps/
+
+# ---- Tests, benches and fuzzers: private everywhere... ----
+# Test harnesses (test/ dirs, *test-util*.ts, *test-helper*.ts, vitest
+# configs, PG container setup) stay public so outside contributors can write
+# and run tests for their patches. What stays private is the test cases and
+# anything that generates them.
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+*.bench.ts
+*.bench.*.ts
+*bench*.ts
+*.fuzz.ts
+__snapshots__/
+# Fuzz generators.
+*-gen.ts
+# Shared suites of test cases, run from several *.test.ts files.
+*-tests.ts
+*-test.ts
+
+# ---- ...except in the packages we want outside contributions to. These keep
+# everything, tests included.
+!/packages/zero-client/**
+!/packages/replicache/**
+!/packages/zero-events/**
+!/packages/zero-react/**
+!/packages/zero-solid/**
+!/packages/shared/**
+
+# ---- Markdown: private everywhere (design notes, docs sources, agent
+# instructions), apart from the files people outside need. Last, so it also
+# covers the packages re-included above.
+*.md
+*.mdx
+!/README.md
+!/CONTRIBUTING.md
+# npm uses these as the package pages, and releases are built from mono.
+!/packages/zero/README.md
+!/packages/replicache/README-external.md
+# The Replicache docs site; its sources are public on replicache.dev anyway.
+!/packages/replicache-doc/**/*.md
+!/packages/replicache-doc/**/*.mdx
