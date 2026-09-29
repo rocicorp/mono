@@ -100,17 +100,8 @@ test('slow queries are logged', () => {
       },
       ['Slow SQLite query', 0],
     ],
-    [
-      'warn',
-      {
-        class: 'Statement',
-        path: ':memory:',
-        sql: 'SELECT * FROM foo',
-        method: 'iterate',
-        type: 'total',
-      },
-      ['Slow SQLite query', 200],
-    ],
+    // The time between rows is spent by the consumer, not SQLite, so it is
+    // only reported alongside the time spent in SQLite.
     [
       'warn',
       {
@@ -119,6 +110,7 @@ test('slow queries are logged', () => {
         sql: 'SELECT * FROM foo',
         method: 'iterate',
         type: 'sqlite',
+        totalMs: 200,
       },
       ['Slow SQLite query', 0],
     ],
