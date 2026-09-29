@@ -255,6 +255,7 @@ type ProtectionRule = {
 };
 type Environment = {
   name: string;
+  can_admins_bypass?: boolean | undefined;
   protection_rules?: ProtectionRule[] | undefined;
   deployment_branch_policy?:
     | {custom_branch_policies: boolean}
@@ -356,8 +357,14 @@ async function main() {
   await api('PATCH', `repos/${dst}`, settings);
 
   step('Security settings');
+  // Without admin, vulnerability-alerts answers 404 whether alerts are on or
+  // off, so only trust it for admins.
+  const isAdmin =
+    (srcRepo.permissions as {admin?: boolean} | undefined)?.admin === true;
   // Dependabot alerts first: Dependabot security updates need them on.
-  if (await isOn(`repos/${src}/vulnerability-alerts`)) {
+  if (!isAdmin) {
+    warn(`Dependabot alerts of ${src} not readable (needs admin)`);
+  } else if (await isOn(`repos/${src}/vulnerability-alerts`)) {
     await attempt('Dependabot alerts', () =>
       api('PUT', `repos/${dst}/vulnerability-alerts`),
     );
@@ -368,13 +375,15 @@ async function main() {
     | Record<string, {status: string}>
     | undefined;
   if (analysis) {
-    await attempt('security_and_analysis', () =>
-      api('PATCH', `repos/${dst}`, {
-        security_and_analysis: Object.fromEntries(
-          Object.entries(analysis).map(([k, v]) => [k, {status: v.status}]),
-        ),
-      }),
-    );
+    // One feature per request: if the destination refuses one (say, secret
+    // scanning without a license), the others still get copied.
+    for (const [feature, {status}] of Object.entries(analysis)) {
+      await attempt(`security_and_analysis.${feature}`, () =>
+        api('PATCH', `repos/${dst}`, {
+          security_and_analysis: {[feature]: {status}},
+        }),
+      );
+    }
   } else {
     warn(`security_and_analysis of ${src} not readable (needs admin)`);
   }
@@ -409,7 +418,11 @@ async function main() {
   for (const {name, color, description} of await getAll<Label>(
     `repos/${src}/labels`,
   )) {
-    const body = {name, color, description};
+    const body = {
+      name,
+      color,
+      ...(description === null ? {} : {description}),
+    };
     try {
       await api('POST', `repos/${dst}/labels`, body);
     } catch {
@@ -515,7 +528,9 @@ async function main() {
     `repos/${src}/actions/variables`,
     'variables',
   )) {
-    await api('POST', `repos/${dst}/actions/variables`, {name, value});
+    await attempt(`variable ${name}`, () =>
+      api('POST', `repos/${dst}/actions/variables`, {name, value}),
+    );
   }
 
   step('Actions workflow permissions');
@@ -548,6 +563,7 @@ async function main() {
           id: r.reviewer.id,
         })),
         deployment_branch_policy: env.deployment_branch_policy ?? null,
+        can_admins_bypass: env.can_admins_bypass ?? true,
       });
       return true;
     });
@@ -575,10 +591,12 @@ async function main() {
       `repos/${src}/environments/${en}/variables`,
       'variables',
     )) {
-      await api('POST', `repos/${dst}/environments/${en}/variables`, {
-        name,
-        value,
-      });
+      await attempt(`variable ${env.name}/${name}`, () =>
+        api('POST', `repos/${dst}/environments/${en}/variables`, {
+          name,
+          value,
+        }),
+      );
     }
   }
 
@@ -664,7 +682,9 @@ async function main() {
   console.log(
     `   gh api -X PUT repos/${dst}/actions/permissions -F enabled=true -f allowed_actions=${allowed}`,
   );
-  if (allowed === 'selected') {
+  if (allowed === 'selected' && dryRun) {
+    console.log('   (a real run also writes selected-actions.json here)');
+  } else if (allowed === 'selected') {
     writeFileSync(
       'selected-actions.json',
       JSON.stringify(
