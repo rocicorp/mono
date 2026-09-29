@@ -21,6 +21,7 @@ import {changeLogFileName} from '../replicator/change-log-db.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   getLastBackupTime,
+  litestreamMonitorIntervalSeconds,
   parseBackupCreatedTimes,
   startReplicaBackupProcess,
   tryRestore,
@@ -787,5 +788,16 @@ describe('litestream/commands restoreReplica', () => {
     expect(monitorLine).toBeDefined();
     // Sibling of `replica:` => nested one level under the `- path:` db entry.
     expect(indentOf(must(monitorLine))).toBe(indentOf(must(replicaLine)));
+  });
+});
+
+describe('litestreamMonitorIntervalSeconds', () => {
+  test('matches the incremental interval without the sync requester', () => {
+    expect(litestreamMonitorIntervalSeconds(15, false)).toBe(15);
+  });
+
+  test('is a longer backstop interval with the sync requester', () => {
+    expect(litestreamMonitorIntervalSeconds(15, true)).toBe(30);
+    expect(litestreamMonitorIntervalSeconds(30, true)).toBe(60);
   });
 });
