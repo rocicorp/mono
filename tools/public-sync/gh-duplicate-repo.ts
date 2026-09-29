@@ -264,7 +264,7 @@ type Environment = {
     | undefined;
 };
 type Named = {name: string};
-type Hook = {config: {url: string}; events: string[]};
+type Hook = {id: number; config: {url: string}; events: string[]};
 type DeployKey = {title: string; read_only: boolean};
 
 // --- main ----------------------------------------------------------------------------
@@ -670,9 +670,14 @@ async function main() {
       s => s.name,
     ),
   );
+  // Only the host: a webhook URL's path or query can itself be the secret,
+  // and this output may end up in CI logs. The settings page has the rest.
   await list('Webhooks (recreate; secrets not readable)', async () =>
     (await getAll<Hook>(`repos/${src}/hooks`)).map(
-      h => `${h.config.url} events=${h.events.join(',')}`,
+      h =>
+        `${URL.parse(h.config.url)?.host ?? '(unparsable URL)'} ` +
+        `events=${h.events.join(',')} ` +
+        `https://github.com/${src}/settings/hooks/${h.id}`,
     ),
   );
   await list(
