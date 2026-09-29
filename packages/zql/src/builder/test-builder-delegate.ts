@@ -2,6 +2,8 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONObject} from '../../../shared/src/json.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {FilterInput} from '../ivm/filter-operators.ts';
+import {FlippedJoin} from '../ivm/flipped-join.ts';
+import {Join} from '../ivm/join.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
 import type {Input, Storage} from '../ivm/operator.ts';
 import {FilterSnitch, Snitch, type SnitchMessage} from '../ivm/snitch.ts';
@@ -11,6 +13,7 @@ import type {BuilderDelegate} from './builder.ts';
 export class TestBuilderDelegate implements BuilderDelegate {
   readonly #sources: Readonly<Record<string, Source>>;
   readonly #storage: Record<string, MemoryStorage> = {};
+  readonly #joins: Record<string, Join | FlippedJoin> = {};
   readonly #shouldLog: boolean;
   readonly #log: SnitchMessage[] = [];
   readonly enableNotExists: boolean;
@@ -52,6 +55,9 @@ export class TestBuilderDelegate implements BuilderDelegate {
   }
 
   decorateInput(input: Input, name: string): Input {
+    if (input instanceof Join || input instanceof FlippedJoin) {
+      this.#joins[name] = input;
+    }
     if (!this.#shouldLog) {
       return input;
     }
@@ -81,10 +87,17 @@ export class TestBuilderDelegate implements BuilderDelegate {
     return this.#log;
   }
 
+  /**
+   * The state of every operator that keeps any: the storage of those that
+   * use it and the parent index of each join, keyed by operator name.
+   */
   get clonedStorage(): Record<string, JSONObject> {
     const cloned: Record<string, JSONObject> = {};
     for (const [name, s] of Object.entries(this.#storage)) {
       cloned[name] = s.cloneData();
+    }
+    for (const [name, join] of Object.entries(this.#joins)) {
+      cloned[name] = join.parentIndexForTest.entriesForTest();
     }
     return cloned;
   }

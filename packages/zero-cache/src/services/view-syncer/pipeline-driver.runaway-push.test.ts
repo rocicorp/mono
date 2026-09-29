@@ -210,6 +210,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('timeout on single change that causes lot of push processing but no push output', () => {
+    replicator.processTransaction('124', messages.delete('user', {id: 'u1'}));
     pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
@@ -223,12 +224,12 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    // This change will fetch each of the 1000 issues related to user 'u1'
-    // because fromCondition EXISTS joins do not track partitions / JoinIndex,
-    // but has no push output because none of them pass the exists comments filter.
+    // Adding user 'u1' can make each of its 1000 issues pass the exists
+    // creator filter, so this change fetches all of them, but has no push
+    // output because none of them pass the exists comments filter.
     replicator.processTransaction(
       '134',
-      messages.update('user', {id: 'u1', name: 'wuzzy'}),
+      messages.insert('user', {id: 'u1', name: 'wuzzy'}),
     );
 
     let elapsed = 0;

@@ -1,6 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {
@@ -11,17 +11,14 @@ import {
   type Change,
 } from './change.ts';
 import type {Node} from './data.ts';
+import {JoinIndex} from './join-index.ts';
 import {
   buildJoinConstraint,
   canonicalKey,
   generateWithOverlay,
   generateWithOverlayUnordered,
-  getMatchingParentEntries,
-  indexParentInStorage,
   isJoinMatch,
   rowEqualsForCompoundKey,
-  unindexParentInStorage,
-  type JoinStorage,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
 import {
@@ -29,7 +26,6 @@ import {
   type FetchRequest,
   type Input,
   type Output,
-  type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
@@ -51,7 +47,20 @@ type Args = {
   system: System;
   parentPartitionKey?: CompoundKey | undefined;
   boundProvider?: TakeBoundProvider | undefined;
-  storage: Storage;
+  /**
+   * Set when this join feeds an EXISTS or NOT EXISTS condition. Its parent
+   * index is then kept by a JoinIndexTap at the end of the pipeline, so it
+   * only holds the parents the pipeline emits, not every parent this join
+   * sees. A child change that misses the index is dropped unless it could
+   * make a parent pass the condition: an add for EXISTS, a remove for NOT
+   * EXISTS. Those still fetch the parents.
+   */
+  exists?: ExistsJoin | undefined;
+};
+
+export type ExistsJoin = {
+  readonly op: 'EXISTS' | 'NOT EXISTS';
+  readonly parentIndex: JoinIndex;
 };
 
 /**
@@ -71,8 +80,17 @@ export class Join implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
-  readonly #parentPartitionKey: CompoundKey | undefined;
-  readonly #storage: JoinStorage;
+  readonly #parentIndex: JoinIndex;
+  /**
+   * Whether this join adds and removes parents in #parentIndex itself. Not
+   * so for EXISTS joins, see Args.exists.
+   */
+  readonly #indexesParents: boolean;
+  /**
+   * The child change type that is still pushed to the parents when no
+   * indexed parent has its join key. See Args.exists.
+   */
+  readonly #qualifyingChildChange: ChangeType | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
 
   #output: Output = throwOutput;
@@ -99,20 +117,33 @@ export class Join implements Input {
     system,
     parentPartitionKey,
     boundProvider,
-    storage,
+    exists,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
       parentKey.length === childKey.length,
       'The parentKey and childKey keys must have same length',
     );
+    assert(!exists || !parentPartitionKey, 'EXISTS joins are not partitioned');
     this.#parent = parent;
     this.#child = child;
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
-    this.#parentPartitionKey = parentPartitionKey;
-    this.#storage = storage as unknown as JoinStorage;
+    if (exists) {
+      this.#parentIndex = exists.parentIndex;
+      this.#indexesParents = false;
+      this.#qualifyingChildChange =
+        exists.op === 'EXISTS' ? ChangeType.ADD : ChangeType.REMOVE;
+    } else {
+      this.#parentIndex = new JoinIndex(
+        parentKey,
+        parent.getSchema().primaryKey,
+        parentPartitionKey,
+      );
+      this.#indexesParents = true;
+      this.#qualifyingChildChange = undefined;
+    }
     this.#boundProvider = boundProvider;
 
     const parentSchema = parent.getSchema();
@@ -148,7 +179,10 @@ export class Join implements Input {
   destroy(): void {
     this.#parent.destroy();
     this.#child.destroy();
-    this.#storage.destroy();
+  }
+
+  get parentIndexForTest(): JoinIndex {
+    return this.#parentIndex;
   }
 
   setOutput(output: Output): void {
@@ -278,21 +312,20 @@ export class Join implements Input {
         this.#parentKey,
       );
       if (constraint) {
-        const matching = getMatchingParentEntries(
-          this.#storage,
-          childRow,
-          this.#childKey,
-          this.#parentPartitionKey,
-        );
-        if (!matching) {
+        const partitions = this.#parentIndex.lookup(childRow, this.#childKey);
+        let fetchConstraints: Record<string, Value>[];
+        if (partitions) {
+          fetchConstraints = partitions.map(partitionConstraint =>
+            partitionConstraint
+              ? {...constraint, ...partitionConstraint}
+              : constraint,
+          );
+        } else if (change[ChangeIndex.TYPE] === this.#qualifyingChildChange) {
+          fetchConstraints = [constraint];
+        } else {
           return;
         }
 
-        const fetchConstraints = matching.map(entry =>
-          entry.partitionConstraint
-            ? {...constraint, ...entry.partitionConstraint}
-            : constraint,
-        );
         if (this.#boundProvider) {
           this.#inprogressParentFetchBounds = readParentFetchBounds(
             this.#boundProvider,
@@ -364,23 +397,15 @@ export class Join implements Input {
   }
 
   #indexParentRow(row: Row): void {
-    indexParentInStorage(
-      this.#storage,
-      row,
-      this.#parentKey,
-      this.#parent.getSchema().primaryKey,
-      this.#parentPartitionKey,
-    );
+    if (this.#indexesParents) {
+      this.#parentIndex.add(row);
+    }
   }
 
   #unindexParentRow(row: Row): void {
-    unindexParentInStorage(
-      this.#storage,
-      row,
-      this.#parentKey,
-      this.#parent.getSchema().primaryKey,
-      this.#parentPartitionKey,
-    );
+    if (this.#indexesParents) {
+      this.#parentIndex.remove(row);
+    }
   }
 
   #processParentNode(
