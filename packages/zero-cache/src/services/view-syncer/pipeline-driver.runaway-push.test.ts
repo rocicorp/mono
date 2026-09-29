@@ -258,18 +258,49 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     );
 
+    // Each change takes 300 ms, so the rest of the advancement is projected
+    // to take longer than hydrating the query again.
     let changeCount = 0;
     expect(() => {
       for (const _ of pipelines.advance({
         elapsedLap: () => 0,
-        totalElapsed: () => (changeCount + 1) * 100,
+        totalElapsed: () => (changeCount + 1) * 300,
       }).changes) {
         changeCount++;
       }
     }).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement exceeded timeout at 5 of 10 changes after 600 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 1 of 10 changes after 600 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
     );
-    expect(changeCount).toEqual(5);
+    expect(changeCount).toEqual(1);
+  });
+
+  test('does not timeout when the rest of the advancement is cheaper than hydration', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 1000,
+        elapsedLap: () => 1000,
+      }),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n =>
+        messages.insert('issue', {id: `i${1000 + n}`}),
+      ),
+    );
+
+    // The advancement takes longer than hydration in total (1100 ms), but
+    // once it has spent 500 ms, what is left of it (600 ms) is still cheaper
+    // than hydrating again.
+    let changeCount = 0;
+    for (const _ of pipelines.advance({
+      elapsedLap: () => 0,
+      totalElapsed: () => (changeCount + 1) * 100,
+    }).changes) {
+      changeCount++;
+    }
+    expect(changeCount).toEqual(10);
   });
 
   test('projected timeout waits for a meaningful fraction of the advancement', () => {
