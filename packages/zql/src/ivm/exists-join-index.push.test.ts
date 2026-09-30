@@ -69,10 +69,12 @@ const sourceContents: Record<Table, Row[]> = {
 function exists(
   table: 'comment' | 'label',
   op: 'EXISTS' | 'NOT EXISTS' = 'EXISTS',
+  flip = false,
 ): CorrelatedSubqueryCondition {
   return {
     type: 'correlatedSubquery',
     op,
+    flip,
     related: {
       system: 'client',
       correlation: {parentField: ['id'], childField: ['issueID']},
@@ -123,7 +125,10 @@ function run(
     // The parents in each join's index, by join.
     indexed: Object.fromEntries(
       Object.entries(delegate.clonedStorage)
-        .filter(([name]) => name.includes(':join('))
+        .filter(
+          ([name]) =>
+            name.includes(':join(') || name.includes(':flipped-join('),
+        )
         .map(([name, entries]) => [
           name,
           Object.keys(entries)
@@ -193,6 +198,29 @@ describe('hydration', () => {
     ).toEqual({
       ':join(comments_0)': ['i3', 'i5', 'i7'],
       ':join(labels_1)': ['i3', 'i5', 'i7'],
+    });
+  });
+
+  test('a limited flipped EXISTS indexes the window, not the issues scanned', () => {
+    expect(run(issues(exists('comment', 'EXISTS', true), 1)).indexed).toEqual({
+      ':flipped-join(comments)': ['i3'],
+    });
+  });
+
+  test('every flipped EXISTS join of an OR indexes the whole result', () => {
+    expect(
+      run(
+        issues({
+          type: 'or',
+          conditions: [
+            exists('comment', 'EXISTS', true),
+            exists('label', 'EXISTS', true),
+          ],
+        }),
+      ).indexed,
+    ).toEqual({
+      ':flipped-join(comments_0)': ['i3', 'i5', 'i7'],
+      ':flipped-join(labels_1)': ['i3', 'i5', 'i7'],
     });
   });
 });
@@ -337,5 +365,119 @@ describe('NOT EXISTS', () => {
     );
     expect(pushes).toEqual([]);
     expect(issueFetches).toBe(0);
+  });
+});
+
+describe('flipped EXISTS', () => {
+  test('a limit eviction removes the evicted issue from the flipped join index', () => {
+    const {pushes, indexed} = run(
+      issues(exists('comment', 'EXISTS', true), 2),
+      [['comment', makeSourceChangeAdd({id: 'c9', issueID: 'i1', text: 'x'})]],
+    );
+    expect(pushes).toEqual(['remove i7', 'add i1']);
+    expect(indexed).toEqual({':flipped-join(comments)': ['i1', 'i3']});
+  });
+
+  test('parents beyond the limit window are not added to the flipped join index', () => {
+    // i8 exists but has no comment. Adding a comment qualifies i8,
+    // but because i3 is already in the limit(1) window and sorts before i8,
+    // i8 is rejected by the limit and must not be added to the flipped join index.
+    const {pushes, indexed} = run(
+      issues(exists('comment', 'EXISTS', true), 1),
+      [['comment', makeSourceChangeAdd({id: 'c8', issueID: 'i8', text: 'z'})]],
+    );
+    expect(pushes).toEqual([]);
+    expect(indexed).toEqual({':flipped-join(comments)': ['i3']});
+  });
+
+  test('a parent add beyond the limit window is not added to the flipped join index', () => {
+    // Parent add where parent already has a matching child.
+    // Downstream Take(1) rejects the parent, so it must not enter the index.
+    const {pushes, indexed} = run(
+      issues(exists('comment', 'EXISTS', true), 1),
+      [
+        [
+          'comment',
+          makeSourceChangeAdd({id: 'c99', issueID: 'i99', text: 'z'}),
+        ],
+        ['issue', makeSourceChangeAdd({id: 'i99', open: true})],
+      ],
+    );
+    expect(pushes).toEqual([]);
+    expect(indexed).toEqual({':flipped-join(comments)': ['i3']});
+  });
+
+  test('removing the last child removes the issue from the flipped join index', () => {
+    const {pushes, indexed} = run(issues(exists('comment', 'EXISTS', true)), [
+      ['comment', makeSourceChangeRemove({id: 'c3', issueID: 'i7', text: 'c'})],
+    ]);
+    expect(pushes).toEqual(['remove i7']);
+    expect(indexed).toEqual({':flipped-join(comments)': ['i3']});
+  });
+
+  test('a child edit reaches an indexed issue', () => {
+    const {pushes} = run(issues(exists('comment', 'EXISTS', true)), [
+      [
+        'comment',
+        makeSourceChangeEdit(
+          {id: 'c3', issueID: 'i7', text: 'c2'},
+          {id: 'c3', issueID: 'i7', text: 'c'},
+        ),
+      ],
+    ]);
+    expect(pushes).toEqual(['child i7 comments edit c3']);
+  });
+
+  test('a child edit of an issue another condition rejects fetches nothing', () => {
+    // i7 has a comment but is closed, so the query does not emit it.
+    const {pushes, issueFetches} = run(
+      issues({
+        type: 'and',
+        conditions: [
+          exists('comment', 'EXISTS', true),
+          {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'open'},
+            right: {type: 'literal', value: true},
+          },
+        ],
+      }),
+      [
+        [
+          'comment',
+          makeSourceChangeEdit(
+            {id: 'c3', issueID: 'i7', text: 'c2'},
+            {id: 'c3', issueID: 'i7', text: 'c'},
+          ),
+        ],
+      ],
+    );
+    expect(pushes).toEqual([]);
+    expect(issueFetches).toBe(0);
+  });
+
+  test('in an OR, a child edit reaches an issue that passed the other branch', () => {
+    // i3 passes the comments branch, but both branches' joins must index the
+    // emitted row so child edits reach it.
+    const {pushes} = run(
+      issues({
+        type: 'or',
+        conditions: [
+          exists('comment', 'EXISTS', true),
+          exists('label', 'EXISTS', true),
+        ],
+      }),
+      [
+        [
+          'label',
+          makeSourceChangeEdit(
+            {id: 'l1', issueID: 'i3'},
+            {id: 'l1', issueID: 'i3'},
+          ),
+        ],
+      ],
+    );
+    expect(pushes).toEqual(['child i3 labels_1 edit l1']);
   });
 });

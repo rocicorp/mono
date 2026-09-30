@@ -436,7 +436,15 @@ function buildPipelineInternal(
   }
 
   if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
-    end = applyWhere(end, ast.where, delegate, name, partitionKey, takeGate);
+    end = applyWhere(
+      end,
+      ast.where,
+      delegate,
+      name,
+      partitionKey,
+      takeGate,
+      existsParentIndexes,
+    );
   }
 
   if (ast.limit !== undefined) {
@@ -508,6 +516,7 @@ function applyWhere(
   name: string,
   parentPartitionKey?: CompoundKey,
   boundProvider?: TakeBoundProvider,
+  existsParentIndexes?: JoinIndex[],
 ): Input {
   if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
     return buildFilterPipeline(
@@ -525,6 +534,7 @@ function applyWhere(
     name,
     parentPartitionKey,
     boundProvider,
+    existsParentIndexes,
   );
 }
 
@@ -535,6 +545,7 @@ function applyFilterWithFlips(
   name: string,
   parentPartitionKey?: CompoundKey,
   boundProvider?: TakeBoundProvider,
+  existsParentIndexes?: JoinIndex[],
 ): Input {
   let end = input;
   assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
@@ -566,6 +577,7 @@ function applyFilterWithFlips(
           name,
           parentPartitionKey,
           boundProvider,
+          existsParentIndexes,
         );
       }
       break;
@@ -606,6 +618,7 @@ function applyFilterWithFlips(
             name,
             parentPartitionKey,
             boundProvider,
+            existsParentIndexes,
           ),
         );
       }
@@ -628,6 +641,15 @@ function applyFilterWithFlips(
         sq.correlation.childField,
         false,
       );
+      let parentIndex: JoinIndex | undefined;
+      if (existsParentIndexes) {
+        parentIndex = new JoinIndex(
+          sq.correlation.parentField,
+          end.getSchema().primaryKey,
+          parentPartitionKey,
+        );
+        existsParentIndexes.push(parentIndex);
+      }
       const flippedJoinName = `${name}:flipped-join(${sq.subquery.alias})`;
       const flippedJoin = new FlippedJoin({
         parent: end,
@@ -642,6 +664,7 @@ function applyFilterWithFlips(
         system: sq.system ?? 'client',
         parentPartitionKey,
         boundProvider,
+        parentIndex,
       });
       delegate.addEdge(end, flippedJoin);
       delegate.addEdge(child, flippedJoin);

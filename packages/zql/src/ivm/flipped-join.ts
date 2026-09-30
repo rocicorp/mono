@@ -91,6 +91,7 @@ type Args = {
   system: System;
   parentPartitionKey?: CompoundKey | undefined;
   boundProvider?: TakeBoundProvider | undefined;
+  parentIndex?: JoinIndex | undefined;
 };
 
 /**
@@ -114,6 +115,7 @@ export class FlippedJoin implements Input {
    * child.
    */
   readonly #parentIndex: JoinIndex;
+  readonly #indexesParents: boolean;
 
   #output: Output = throwOutput;
 
@@ -131,6 +133,7 @@ export class FlippedJoin implements Input {
     system,
     parentPartitionKey,
     boundProvider,
+    parentIndex,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -143,11 +146,17 @@ export class FlippedJoin implements Input {
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
     this.#boundProvider = boundProvider;
-    this.#parentIndex = new JoinIndex(
-      parentKey,
-      parent.getSchema().primaryKey,
-      parentPartitionKey,
-    );
+    if (parentIndex) {
+      this.#parentIndex = parentIndex;
+      this.#indexesParents = false;
+    } else {
+      this.#parentIndex = new JoinIndex(
+        parentKey,
+        parent.getSchema().primaryKey,
+        parentPartitionKey,
+      );
+      this.#indexesParents = true;
+    }
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -588,11 +597,15 @@ export class FlippedJoin implements Input {
   }
 
   #indexParentRow(row: Row): void {
-    this.#parentIndex.add(row);
+    if (this.#indexesParents) {
+      this.#parentIndex.add(row);
+    }
   }
 
   #unindexParentRow(row: Row): void {
-    this.#parentIndex.remove(row);
+    if (this.#indexesParents) {
+      this.#parentIndex.remove(row);
+    }
   }
 
   *#pushParent(change: Change): Stream<'yield'> {
