@@ -1,3 +1,4 @@
+import {Readable} from 'node:stream';
 import {
   PG_ADMIN_SHUTDOWN,
   PG_OBJECT_IN_USE,
@@ -12,6 +13,9 @@ import {type PostgresDB} from '../../../../types/pg.ts';
 import {id, lit} from '../../../../types/sql.ts';
 import {pipe, type Sink, type Source} from '../../../../types/streams.ts';
 import {Subscription} from '../../../../types/subscription.ts';
+import {childWorker, type Worker} from '../../../../types/processes.ts';
+import {SLOT_KEEPER_URL} from '../../../../server/worker-urls.ts';
+import type {SlotKeeperConfig} from '../../../../server/slot-keeper.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {fromBigInt} from '../lsn.ts';
 import {PgoutputParser} from './pgoutput-parser.ts';
@@ -320,7 +324,7 @@ function formatPublicationNames(publications: string[]): string {
   return publications.map(p => lit(p).slice(1, -1)).join(',');
 }
 
-async function startReplicationStream(
+export async function startReplicationStream(
   lc: LogContext,
   session: postgres.Sql,
   slot: string,
@@ -386,41 +390,147 @@ async function startReplicationStream(
  * Note that caller should not close the supplied `session`, as that will
  * also terminate the dummy replication session.
  */
+export class SlotReservationHandle extends Readable {
+  #worker: Worker | null;
+
+  constructor(worker: Worker) {
+    super({read() {}});
+    this.#worker = worker;
+    worker.on('close', () => {
+      if (!this.destroyed) {
+        this.destroy();
+      }
+    });
+    worker.on('error', err => {
+      if (!this.destroyed) {
+        this.destroy(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
+  }
+
+  override _destroy(
+    error: Error | null,
+    callback: (error?: Error | null) => void,
+  ): void {
+    if (this.#worker) {
+      try {
+        this.#worker.send(['stop', {}]);
+      } catch {
+        // ignore
+      }
+      const w = this.#worker;
+      setTimeout(() => {
+        try {
+          w.kill('SIGTERM');
+        } catch {}
+      }, 5_000).unref();
+      this.#worker = null;
+    }
+    callback(error);
+  }
+}
+
+export type PgConnectionConfig = {
+  host?: string | string[] | undefined;
+  port?: number | number[] | undefined;
+  database?: string | undefined;
+  user?: string | undefined;
+  pass?: string | null | undefined;
+  ssl?:
+    | boolean
+    | string
+    | {rejectUnauthorized?: boolean | undefined}
+    | undefined;
+};
+
+export function extractConnectionConfig(
+  session: postgres.Sql,
+): PgConnectionConfig {
+  const opts = session.options;
+  return {
+    host: opts.host,
+    port: opts.port,
+    database: opts.database,
+    user: opts.user,
+    pass: opts.pass,
+    ssl:
+      typeof opts.ssl === 'object' && opts.ssl !== null
+        ? {
+            rejectUnauthorized: (
+              opts.ssl as {rejectUnauthorized?: boolean | undefined}
+            ).rejectUnauthorized,
+          }
+        : (opts.ssl as boolean | string | undefined),
+  };
+}
+
+/**
+ * Starts a "dummy" replication session for the specified `slot` which:
+ * * does not consume any records
+ * * keeps the session alive by sending status messages at the starting LSN
+ *
+ * Runs in a separate process with its own event loop and connection reconnect
+ * loop to prevent slot drop races during heavy initial sync table copy or
+ * SQLite index building.
+ */
 export async function keepSlotActiveUntilTakenOver(
   lc: LogContext,
   session: postgres.Sql,
   slot: string,
   dummyPublication: string,
   lsn: bigint,
-) {
-  const [readable, writeable] = await startReplicationStream(
-    lc,
-    session,
+): Promise<Readable> {
+  const config: SlotKeeperConfig = {
+    db: extractConnectionConfig(session),
     slot,
-    [dummyPublication],
-    lsn,
-    1,
-  );
-  lc.info?.(`keeping ${slot} active until taken over ...`);
-  // Send periodic status messages upstream to indicate that the session is
-  // alive, but keep the confirmed_flush_lsn at the initial lsn.
-  const keepalive = setInterval(() => writeable.write(makeAck(lsn)), 10_000);
+    dummyPublication,
+    lsn: String(lsn),
+  };
 
-  readable.on('close', async () => {
-    lc.info?.(`released initial reservation of ${slot}`);
-    clearInterval(keepalive);
-    try {
-      await session.end();
-      lc.info?.(`ended session`);
-    } catch (e) {
-      lc.warn?.(`error ending session`, e);
+  // Close the setup replication session in this process so the separate process
+  // can attach to the replication slot without PG_OBJECT_IN_USE conflict.
+  try {
+    await session.end({timeout: 5});
+  } catch (e) {
+    lc.warn?.(`error ending setup session for ${slot}`, e);
+  }
+
+  lc.info?.(`spawning slot-keeper process for ${slot} at lsn ${lsn} ...`);
+  const worker = childWorker(
+    SLOT_KEEPER_URL,
+    process.env,
+    JSON.stringify(config),
+  );
+
+  // Wait for the slot keeper to establish replication before returning
+  await new Promise<void>((resolve, reject) => {
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (err: unknown) => {
+      cleanup();
+      reject(err);
+    };
+    const onClose = (code: number) => {
+      cleanup();
+      reject(
+        new Error(
+          `slot-keeper for ${slot} exited with code ${code} before becoming ready`,
+        ),
+      );
+    };
+    function cleanup() {
+      worker.off('error', onError);
+      worker.off('close', onClose);
     }
+    worker.onceMessageType('ready', onReady);
+    worker.once('error', onError);
+    worker.once('close', onClose);
   });
-  readable.once('error', e => {
-    lc.info?.(`closing replication session to ${session.options.host}`, e);
-    readable.destroy();
-  });
-  return readable;
+
+  lc.info?.(`slot-keeper active for ${slot}`);
+  return new SlotReservationHandle(worker);
 }
 
 function parseStreamMessage(
@@ -446,7 +556,7 @@ function parseStreamMessage(
 }
 
 // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
-function makeAck(lsn: bigint): Buffer {
+export function makeAck(lsn: bigint): Buffer {
   const microNow = BigInt(Date.now() - Date.UTC(2000, 0, 1)) * BigInt(1000);
 
   const x = Buffer.alloc(34);

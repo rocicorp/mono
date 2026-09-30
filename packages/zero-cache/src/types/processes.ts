@@ -27,6 +27,7 @@ export const MESSAGE_TYPES = {
   backupWatermarkUpdate: 'backupWatermakUpdate',
   profile: 'profile',
   profileResponse: 'profileResponse',
+  stop: 'stop',
 } as const;
 
 export type ClientGroupStatus = {
