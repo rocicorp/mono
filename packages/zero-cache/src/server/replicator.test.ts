@@ -36,75 +36,89 @@ describe('replicator metrics', () => {
     dbFile.delete();
   });
 
-  test('observes active and uncheckpointed WAL bytes', () => {
-    const db = new Database(lc, dbFile.path);
-    db.pragma('journal_mode = WAL');
-    db.pragma('wal_autocheckpoint = 0');
-    db.exec('CREATE TABLE test (id INT PRIMARY KEY, val TEXT)');
-    for (let i = 0; i < 10; i++) {
-      db.exec(`INSERT INTO test VALUES (${i}, 'val-${i}')`);
-    }
+  test.each(['wal', 'wal2'] as const)(
+    'observes active and uncheckpointed WAL bytes in %s mode',
+    walMode => {
+      const db = new Database(lc, dbFile.path);
+      db.pragma(`journal_mode = ${walMode.toUpperCase()}`);
+      db.pragma('wal_autocheckpoint = 0');
+      db.exec('CREATE TABLE test (id INT PRIMARY KEY, val TEXT)');
+      for (let i = 0; i < 10; i++) {
+        db.exec(`INSERT INTO test VALUES (${i}, 'val-${i}')`);
+      }
 
-    const [{page_size: pageSize}] = db.pragma<{page_size: number}>('page_size');
-    const [{log: logBefore, checkpointed: checkpointedBefore}] = db.pragma<{
-      log: number;
-      checkpointed: number;
-    }>('wal_checkpoint(NOOP)');
+      const [{page_size: pageSize}] = db.pragma<{page_size: number}>(
+        'page_size',
+      );
+      const [{log: logBefore, checkpointed: checkpointedBefore}] = db.pragma<{
+        log: number;
+        checkpointed: number;
+      }>('wal_checkpoint(NOOP)');
 
-    expect(logBefore).toBeGreaterThan(0);
+      expect(logBefore).toBeGreaterThan(0);
 
-    setupMetrics(lc, dbFile.path, 'wal', pageSize);
+      setupMetrics(lc, dbFile.path, walMode, pageSize);
 
-    const activeCallback = gaugeCallbacks.get('wal_active_bytes');
-    const uncheckpointedCallback = gaugeCallbacks.get(
-      'wal_uncheckpointed_bytes',
-    );
-    expect(activeCallback).toBeDefined();
-    expect(uncheckpointedCallback).toBeDefined();
+      const activeCallback = gaugeCallbacks.get('wal_active_bytes');
+      const uncheckpointedCallback = gaugeCallbacks.get(
+        'wal_uncheckpointed_bytes',
+      );
+      expect(activeCallback).toBeDefined();
+      expect(uncheckpointedCallback).toBeDefined();
 
-    let observedActive: number | undefined;
-    let observedUncheckpointed: number | undefined;
+      if (walMode === 'wal2') {
+        expect(gaugeCallbacks.get('wal2_size')).toBeDefined();
+      } else {
+        expect(gaugeCallbacks.get('wal2_size')).toBeUndefined();
+      }
 
-    activeCallback!({
-      observe: (val: number) => {
-        observedActive = val;
-      },
-    });
-    uncheckpointedCallback!({
-      observe: (val: number) => {
-        observedUncheckpointed = val;
-      },
-    });
+      let observedActive: number | undefined;
+      let observedUncheckpointed: number | undefined;
 
-    expect(observedActive).toBe(logBefore * pageSize);
-    expect(observedUncheckpointed).toBe(
-      (logBefore - checkpointedBefore) * pageSize,
-    );
+      activeCallback!({
+        observe: (val: number) => {
+          observedActive = val;
+        },
+      });
+      uncheckpointedCallback!({
+        observe: (val: number) => {
+          observedUncheckpointed = val;
+        },
+      });
 
-    // Checkpoint the WAL and verify uncheckpointed bytes updates
-    db.pragma('wal_checkpoint(PASSIVE)');
-    const [{log: logAfter, checkpointed: checkpointedAfter}] = db.pragma<{
-      log: number;
-      checkpointed: number;
-    }>('wal_checkpoint(NOOP)');
+      expect(observedActive).toBe(logBefore * pageSize);
+      expect(observedUncheckpointed).toBe(
+        (logBefore - checkpointedBefore) * pageSize,
+      );
 
-    activeCallback!({
-      observe: (val: number) => {
-        observedActive = val;
-      },
-    });
-    uncheckpointedCallback!({
-      observe: (val: number) => {
-        observedUncheckpointed = val;
-      },
-    });
+      // Checkpoint the WAL and verify metrics reflect the updated status
+      db.pragma('wal_checkpoint(PASSIVE)');
+      const [{log: logAfter, checkpointed: checkpointedAfter}] = db.pragma<{
+        log: number;
+        checkpointed: number;
+      }>('wal_checkpoint(NOOP)');
 
-    expect(observedActive).toBe(logAfter * pageSize);
-    expect(observedUncheckpointed).toBe(
-      (logAfter - checkpointedAfter) * pageSize,
-    );
-    expect(observedUncheckpointed).toBe(0);
+      activeCallback!({
+        observe: (val: number) => {
+          observedActive = val;
+        },
+      });
+      uncheckpointedCallback!({
+        observe: (val: number) => {
+          observedUncheckpointed = val;
+        },
+      });
 
-    db.close();
-  });
+      expect(observedActive).toBe(logAfter * pageSize);
+      expect(observedUncheckpointed).toBe(
+        (logAfter - checkpointedAfter) * pageSize,
+      );
+
+      if (walMode === 'wal') {
+        expect(observedUncheckpointed).toBe(0);
+      }
+
+      db.close();
+    },
+  );
 });
