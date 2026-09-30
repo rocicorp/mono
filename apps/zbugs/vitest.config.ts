@@ -74,6 +74,8 @@ export function configForNoPg(url: string) {
 
 export default defineConfig({
   test: {
+    // A run-level option, so projects can't set it. See shared's vitest-config.
+    passWithNoTests: true,
     projects: [
       configForNoPg(import.meta.url),
       configForVersion(16, import.meta.url),

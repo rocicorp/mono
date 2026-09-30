@@ -88,6 +88,9 @@ const projects = [...getProjects()].filter(filterTestName);
 
 export default defineConfig({
   test: {
+    // The public rocicorp/mono only has some packages' tests; see
+    // packages/shared/src/tool/vitest-config.ts.
+    passWithNoTests: true,
     projects,
   },
 });

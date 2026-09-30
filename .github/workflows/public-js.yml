@@ -6,8 +6,8 @@ name: Public JS
 # we want outside contributions to, so this runs the static checks and those
 # packages' tests: on the synced commits, and on contributors' pull requests.
 #
-# The file lives in mono-internal too, where js.yml already covers all of it,
-# so every job is limited to rocicorp/mono.
+# It runs in mono-internal too, on the tree the sync would publish, so a change
+# that breaks mono fails on its mono-internal pull request.
 
 on:
   push:
@@ -25,12 +25,19 @@ permissions:
 jobs:
   checks:
     name: Public Checks
-    if: github.repository == 'rocicorp/mono'
-    runs-on: ubuntu-latest
+    if: github.repository == 'rocicorp/mono' || github.repository == 'rocicorp/mono-internal'
+    # ubuntu-latest has 4 cores on public repos but only 2 on private ones,
+    # where timing-sensitive tests flake; mono-internal uses a larger runner.
+    runs-on: ${{ github.repository == 'rocicorp/mono-internal' && 'ubuntu-x64-8-core' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      # Delete what tools/public-sync/public-filter keeps private, leaving the
+      # tree the sync publishes.
+      - name: Keep only published files
+        if: github.repository == 'rocicorp/mono-internal'
+        run: git ls-files -z --cached --ignored --exclude-from=tools/public-sync/public-filter | xargs -0 rm -f --
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 11.11.0
@@ -56,9 +63,8 @@ jobs:
       - name: Sync Package Versions
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm exec syncpack lint
-      - name: Verify Package Dependencies
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run verify-deps
+      # No verify-deps: dependencies used only by private files (e.g. a test
+      # helper) look unused here. mono-internal's own CI checks the full tree.
       - name: Oxfmt
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm exec oxfmt --check
@@ -71,12 +77,16 @@ jobs:
 
   test:
     name: Public Test
-    if: github.repository == 'rocicorp/mono'
-    runs-on: ubuntu-latest
+    if: github.repository == 'rocicorp/mono' || github.repository == 'rocicorp/mono-internal'
+    # See Public Checks. x64, since this runs WebKit and Firefox too.
+    runs-on: ${{ github.repository == 'rocicorp/mono-internal' && 'ubuntu-x64-8-core' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - name: Keep only published files
+        if: github.repository == 'rocicorp/mono-internal'
+        run: git ls-files -z --cached --ignored --exclude-from=tools/public-sync/public-filter | xargs -0 rm -f --
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 11.11.0

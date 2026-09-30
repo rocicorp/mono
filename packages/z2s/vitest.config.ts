@@ -21,4 +21,8 @@ export const projects = [
   }),
 );
 
-export default defineConfig({test: {projects, testTimeout: 20_000}});
+// passWithNoTests is a run-level option, so projects can't set it. See
+// shared's vitest-config.
+export default defineConfig({
+  test: {projects, testTimeout: 20_000, passWithNoTests: true},
+});

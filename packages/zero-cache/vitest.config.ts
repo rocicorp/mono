@@ -97,6 +97,8 @@ export function configForCustomPg(url: string) {
 
 export default defineConfig({
   test: {
+    // A run-level option, so projects can't set it. See shared's vitest-config.
+    passWithNoTests: true,
     projects: [
       'vitest.config.*.ts',
       '!vitest.config.bench.ts',

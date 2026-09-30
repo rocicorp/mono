@@ -64,6 +64,10 @@ export default defineConfig({
       return undefined;
     },
     include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
+    // The public rocicorp/mono only has the test suites of some packages
+    // (tools/public-sync/public-filter); the others keep their harness but
+    // have no tests to run.
+    passWithNoTests: true,
     silent: 'passed-only',
     browser,
 
