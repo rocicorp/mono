@@ -23,7 +23,18 @@ export type NoSubqueryCondition = Exclude<
   {type: 'correlatedSubquery'}
 >;
 
-export function buildSelectQuery(
+/**
+ * Builds the SELECTs for a fetch. Running them in order and concatenating
+ * their rows gives the fetch's rows, in order.
+ *
+ * There is a second SELECT only when the fetch starts at a non-NULL value of a
+ * nullable leading sort column and walks towards its NULL group. The first
+ * SELECT then leaves that group out so that SQLite can seek it (see
+ * `gatherStartConstraints`), and the second fetches the group. NULLs sort
+ * before every other value, so the group follows all of the first SELECT's
+ * rows, and a fetch that stops early never needs to run the second.
+ */
+export function buildSelectQueries(
   tableName: string,
   columns: Record<string, SchemaValue>,
   constraint: Constraint | undefined,
@@ -33,42 +44,137 @@ export function buildSelectQuery(
   start: Start | undefined,
   multiConstraints?: readonly MultiConstraint[] | undefined,
   fetchFilters?: NoSubqueryCondition | undefined,
-) {
-  let query = sql`SELECT ${sql.join(
+): [SQLQuery] | [SQLQuery, SQLQuery] {
+  const select = sql`SELECT ${sql.join(
     Object.keys(columns).map(c => sql.ident(c)),
     sql`,`,
   )} FROM ${sql.ident(tableName)}`;
-  const constraints: SQLQuery[] = constraintsToSQL(constraint, columns);
+  const leading: SQLQuery[] = constraintsToSQL(constraint, columns);
 
   if (multiConstraints) {
     for (const mc of multiConstraints) {
       if (mc.length > 0) {
-        constraints.push(multiConstraintToSQL(mc, columns));
+        leading.push(multiConstraintToSQL(mc, columns));
       }
     }
   }
 
-  if (start) {
-    assert(order !== undefined, 'start requires ordering');
-    constraints.push(gatherStartConstraints(start, reverse, order, columns));
-  }
-
+  const trailing: SQLQuery[] = [];
   if (filters) {
-    constraints.push(filtersToSQL(filters));
+    trailing.push(filtersToSQL(filters));
   }
 
   if (fetchFilters) {
-    constraints.push(filtersToSQL(fetchFilters));
+    trailing.push(filtersToSQL(fetchFilters));
   }
 
-  if (constraints.length > 0) {
-    query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
+  const orderBy =
+    order && order.length > 0 ? orderByToSQL(order, !!reverse) : undefined;
+  const selectWhere = (constraints: SQLQuery[]) => {
+    const query =
+      constraints.length > 0
+        ? sql`${select} WHERE ${sql.join(constraints, sql` AND `)}`
+        : select;
+    return orderBy ? sql`${query} ${orderBy}` : query;
+  };
+
+  if (!start) {
+    return [selectWhere([...leading, ...trailing])];
   }
 
-  if (order && order.length > 0) {
-    return sql`${query} ${orderByToSQL(order, !!reverse)}`;
+  assert(order !== undefined, 'start requires ordering');
+  const {constraint: startConstraint, excludesNullGroup} =
+    gatherStartConstraints(start, reverse, order, columns);
+  const query = selectWhere([...leading, startConstraint, ...trailing]);
+  const [leadingField] = order[0];
+  if (
+    !excludesNullGroup ||
+    // The rest of the fetch would reject every row of the NULL group anyway.
+    constraintsRejectNull(constraint, multiConstraints, leadingField) ||
+    rejectsNull(filters, leadingField) ||
+    rejectsNull(fetchFilters, leadingField)
+  ) {
+    return [query];
   }
+  return [
+    query,
+    selectWhere([
+      ...leading,
+      sql`${sql.ident(leadingField)} IS NULL`,
+      ...trailing,
+    ]),
+  ];
+}
+
+/**
+ * {@link buildSelectQueries} for a fetch that needs only one SELECT, such as
+ * one without a start row.
+ */
+export function buildSelectQuery(
+  ...args: Parameters<typeof buildSelectQueries>
+): SQLQuery {
+  const [query, nullGroup] = buildSelectQueries(...args);
+  assert(
+    nullGroup === undefined,
+    'The fetch needs a second SELECT for its NULL group; use buildSelectQueries',
+  );
   return query;
+}
+
+/**
+ * Whether `condition` is never true for a row whose `field` is NULL. Only a
+ * comparison of `field` itself, alone or ANDed with other conditions, is
+ * recognized. Every operator yields NULL for a NULL operand except `IS`,
+ * `IS NOT` and `NOT IN`, which is true for an empty list.
+ */
+function rejectsNull(
+  condition: NoSubqueryCondition | undefined,
+  field: string,
+): boolean {
+  switch (condition?.type) {
+    case undefined:
+    case 'or':
+      return false;
+    case 'and':
+      return condition.conditions.some(c =>
+        rejectsNull(c as NoSubqueryCondition, field),
+      );
+    case 'simple': {
+      const {op, left, right} = condition;
+      if (left.type !== 'column' || left.name !== field) {
+        return false;
+      }
+      switch (op) {
+        case 'IS':
+          return right.type === 'literal' && right.value !== null;
+        case 'IS NOT':
+          return right.type === 'literal' && right.value === null;
+        case 'NOT IN':
+          return false;
+        default:
+          return true;
+      }
+    }
+  }
+}
+
+/**
+ * Whether the constraints of the fetch are never true for a row whose `field`
+ * is NULL. {@link constraintsToSQL} compares the field with `=` and
+ * {@link multiConstraintToSQL} with `IN`, neither of which is ever true for a
+ * NULL operand, so the field being constrained at all is enough.
+ */
+function constraintsRejectNull(
+  constraint: Constraint | undefined,
+  multiConstraints: readonly MultiConstraint[] | undefined,
+  field: string,
+): boolean {
+  if (constraint && field in constraint) {
+    return true;
+  }
+  // `multiConstraintToSQL` takes its key list from the first entry and asserts
+  // that the rest match it.
+  return multiConstraints?.some(mc => mc.length > 0 && field in mc[0]) === true;
 }
 
 export function constraintsToSQL(
@@ -326,6 +432,12 @@ function nullableAwareRangeComparison(
   value: unknown,
   operator: '>' | '<',
   columnType: SchemaValue,
+  /**
+   * Whether an entailed bound ANDed in front of the disjunction already
+   * excludes the column's NULL group, which a second SELECT then fetches (see
+   * {@link gatherStartConstraints}).
+   */
+  nullGroupExcluded: boolean,
 ): SQLQuery {
   if (value === null) {
     return operator === '>' ? sql`${sql.ident(field)} IS NOT NULL` : sql`FALSE`;
@@ -345,32 +457,49 @@ function nullableAwareRangeComparison(
   // The bound is non-NULL here. NULLs sort before every non-NULL value, so
   // `>` already excludes them and needs no guard, while `<` must admit the
   // NULL group explicitly — a bare `col < ?` would silently drop NULL rows
-  // from a backward walk.
-  return operator === '>'
+  // from a backward walk. Unless the NULL group is excluded and fetched on its
+  // own: the guard is dead then, and a NULL inside an OR is what costs SQLite
+  // the MULTI-INDEX OR optimization in the first place.
+  return operator === '>' || nullGroupExcluded
     ? comparison
     : sql`(${sql.ident(field)} IS NULL OR ${comparison})`;
 }
+
+type SargableLeadingStartBound = {
+  readonly bound: SQLQuery;
+  /**
+   * Whether `bound` excludes the column's NULL group, which belongs to the
+   * rows the start walks over and must then be fetched separately.
+   */
+  readonly excludesNullGroup: boolean;
+};
 
 function sargableLeadingStartBound(
   field: string,
   value: unknown,
   operator: '>' | '<',
   columnType: SchemaValue,
-): SQLQuery | undefined {
+): SargableLeadingStartBound | undefined {
   // A NULL bound value proves the column is nullable regardless of the
   // column metadata, and a bare range bound is not sound there: `col >= NULL`
   // is never true, so instead of being redundant it would annihilate the
-  // whole start constraint. A nullable column also cannot use a `<` bound,
-  // because the start constraint must retain the NULL group. For `>`, NULLs
-  // sort before the non-NULL bound, so `col >= value` remains sound.
-  if (value === null || (columnType.optional === true && operator === '<')) {
+  // whole start constraint.
+  if (value === null) {
     return undefined;
   }
 
   const inclusiveOperator = operator === '>' ? '>=' : '<=';
-  return sql`${sql.ident(field)} ${sql.__dangerous__rawValue(
-    inclusiveOperator,
-  )} ${value}`;
+  return {
+    bound: sql`${sql.ident(field)} ${sql.__dangerous__rawValue(
+      inclusiveOperator,
+    )} ${value}`,
+    // For `>`, NULLs sort before the non-NULL bound, so `col >= value` remains
+    // sound on a nullable column. For `<`, the rows before the bound include
+    // the whole NULL group, which `col <= value` drops. SQLite cannot seek
+    // `col IS NULL OR col <= value` as one index range, so the caller fetches
+    // that group separately.
+    excludesNullGroup: columnType.optional === true && operator === '<',
+  };
 }
 
 /**
@@ -388,16 +517,26 @@ function sargableLeadingStartBound(
  *
  * - after vs before flips the comparison operators.
  * - inclusive adds a final `OR` clause for the exact match.
+ *
+ * SQLite cannot seek an index with that disjunction, so a redundant, entailed
+ * bound on the leading column is ANDed in front of it (e.g. `a >= 1 AND ...`).
+ *
+ * When the leading column is nullable and the walk heads towards lower values
+ * (`<`), the rows the start walks over include the whole NULL group, which
+ * that bound drops. `excludesNullGroup` is set then, and the group is left out
+ * of the disjunction too — every row the returned constraint admits has
+ * `a <= ?`, so it and `a IS NULL` partition those rows, and the caller fetches
+ * the NULL group with a second SELECT.
  */
 function gatherStartConstraints(
   start: Start,
   reverse: boolean | undefined,
   order: Ordering,
   columnTypes: Record<string, SchemaValue>,
-): SQLQuery {
+): {readonly constraint: SQLQuery; readonly excludesNullGroup: boolean} {
   const constraints: SQLQuery[] = [];
   const {row: from, basis} = start;
-  let leadingBound: SQLQuery | undefined;
+  let leadingBound: SargableLeadingStartBound | undefined;
 
   for (let i = 0; i < order.length; i++) {
     const group: SQLQuery[] = [];
@@ -411,6 +550,7 @@ function gatherStartConstraints(
         );
         const operator =
           iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
+        let nullGroupExcluded = false;
         if (i === 0) {
           leadingBound = sargableLeadingStartBound(
             iField,
@@ -418,6 +558,7 @@ function gatherStartConstraints(
             operator,
             columnType,
           );
+          nullGroupExcluded = leadingBound?.excludesNullGroup === true;
         }
         group.push(
           nullableAwareRangeComparison(
@@ -425,6 +566,7 @@ function gatherStartConstraints(
             constraintValue,
             operator,
             columnType,
+            nullGroupExcluded,
           ),
         );
       } else {
@@ -451,7 +593,11 @@ function gatherStartConstraints(
   }
 
   const lexicographicStart = sql`(${sql.join(constraints, sql` OR `)})`;
-  return leadingBound === undefined
-    ? lexicographicStart
-    : sql`(${leadingBound} AND ${lexicographicStart})`;
+  if (leadingBound === undefined) {
+    return {constraint: lexicographicStart, excludesNullGroup: false};
+  }
+  return {
+    constraint: sql`(${leadingBound.bound} AND ${lexicographicStart})`,
+    excludesNullGroup: leadingBound.excludesNullGroup,
+  };
 }
