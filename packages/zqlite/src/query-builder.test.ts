@@ -1,6 +1,8 @@
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
+import type {Constraint} from '../../zql/src/ivm/constraint.ts';
+import type {MultiConstraint} from '../../zql/src/ivm/operator.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
 import {
@@ -929,6 +931,85 @@ test.each([
         filter,
       ),
     ).toHaveLength(expected);
+  },
+);
+
+test.each([
+  {
+    name: 'an equality on the leading column',
+    constraint: {a: 7},
+    multiConstraints: undefined,
+    rejectsNull: true,
+  },
+  {
+    name: 'an equality on another column',
+    constraint: {b: 7},
+    multiConstraints: undefined,
+    rejectsNull: false,
+  },
+  {
+    name: 'a single-column IN on the leading column',
+    constraint: undefined,
+    multiConstraints: [[{a: 1}, {a: 2}]],
+    rejectsNull: true,
+  },
+  {
+    name: 'a compound IN covering the leading column',
+    constraint: undefined,
+    multiConstraints: [[{b: 1, a: 2}]],
+    rejectsNull: true,
+  },
+  {
+    name: 'an IN on another column',
+    constraint: undefined,
+    multiConstraints: [[{b: 1}]],
+    rejectsNull: false,
+  },
+  {
+    // An empty entry contributes no term to the WHERE clause.
+    name: 'an empty IN',
+    constraint: undefined,
+    multiConstraints: [[]],
+    rejectsNull: false,
+  },
+  {
+    name: 'an IN on another column beside one on the leading column',
+    constraint: undefined,
+    multiConstraints: [[{b: 1}], [{a: 1}]],
+    rejectsNull: true,
+  },
+] as const satisfies readonly {
+  name: string;
+  constraint: Constraint | undefined;
+  multiConstraints: readonly MultiConstraint[] | undefined;
+  rejectsNull: boolean;
+}[])(
+  'constraints that reject NULLs of the leading column skip the NULL group ($name)',
+  ({constraint, multiConstraints, rejectsNull}) => {
+    // `a = ?` and `a IN (…)` are both NULL, never true, for a NULL `a`, so the
+    // NULL group's SELECT can return nothing. Without an index on `a` it takes
+    // a whole extra table scan to find that out.
+    const columns = {
+      a: {type: 'number', optional: true},
+      b: {type: 'number'},
+      id: {type: 'number'},
+    } as const satisfies Record<string, SchemaValue>;
+
+    expect(
+      buildSelectQueries(
+        'items',
+        columns,
+        constraint,
+        undefined,
+        [
+          ['a', 'desc'],
+          ['id', 'desc'],
+        ],
+        false,
+        {row: {a: 5, id: 1}, basis: 'at'},
+        multiConstraints,
+      ),
+    ).toHaveLength(rejectsNull ? 1 : 2);
   },
 );
 

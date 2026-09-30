@@ -509,6 +509,16 @@ describe('fetching across a NULL-sorted cursor region', () => {
             filter: aIsNotNull,
             matches: r => r.a !== null,
           },
+          {
+            name: 'a constraint on the leading sort column',
+            req: {constraint: {a: 2}},
+            matches: r => r.a === 2,
+          },
+          {
+            name: 'multiConstraints on the leading sort column',
+            req: {multiConstraints: [[{a: 2}, {a: 3}]]},
+            matches: r => r.a === 2 || r.a === 3,
+          },
         ] as const satisfies readonly {
           name: string;
           req?: Omit<FetchRequest, 'start' | 'reverse'>;
@@ -583,9 +593,10 @@ describe('fetching across a NULL-sorted cursor region', () => {
         ['a', 'asc'],
         ['id', 'asc'],
       ] as const;
-      const walk = (filter?: Condition) =>
+      const walk = (filter?: Condition, req?: Partial<FetchRequest>) =>
         source.connect(order, filter, undefined, debug).fetch({
           constraint: {ws: 'w1'},
+          ...req,
           start: {row: must(quxRows.find(r => r.id === 'w1-4')), basis: 'at'},
           reverse: true,
         });
@@ -610,6 +621,13 @@ describe('fetching across a NULL-sorted cursor region', () => {
 
       // A filter that rejects the NULL group leaves nothing for its SELECT.
       expect([...walk(aIsNotNull)]).toHaveLength(3);
+      expect(statementsRun()).toEqual([expect.stringContaining('"a" <= ?')]);
+
+      // Nor does a constraint on the leading column, which `=` and `IN` never
+      // match a NULL against.
+      expect([...walk(undefined, {constraint: {ws: 'w1', a: 2}})]).toHaveLength(
+        2,
+      );
       expect(statementsRun()).toEqual([expect.stringContaining('"a" <= ?')]);
     });
   });

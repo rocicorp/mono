@@ -89,7 +89,8 @@ export function buildSelectQueries(
   const [leadingField] = order[0];
   if (
     !excludesNullGroup ||
-    // The filters would reject every row of the NULL group anyway.
+    // The rest of the fetch would reject every row of the NULL group anyway.
+    constraintsRejectNull(constraint, multiConstraints, leadingField) ||
     rejectsNull(filters, leadingField) ||
     rejectsNull(fetchFilters, leadingField)
   ) {
@@ -155,6 +156,25 @@ function rejectsNull(
       }
     }
   }
+}
+
+/**
+ * Whether the constraints of the fetch are never true for a row whose `field`
+ * is NULL. {@link constraintsToSQL} compares the field with `=` and
+ * {@link multiConstraintToSQL} with `IN`, neither of which is ever true for a
+ * NULL operand, so the field being constrained at all is enough.
+ */
+function constraintsRejectNull(
+  constraint: Constraint | undefined,
+  multiConstraints: readonly MultiConstraint[] | undefined,
+  field: string,
+): boolean {
+  if (constraint && field in constraint) {
+    return true;
+  }
+  // `multiConstraintToSQL` takes its key list from the first entry and asserts
+  // that the rest match it.
+  return multiConstraints?.some(mc => mc.length > 0 && field in mc[0]) === true;
 }
 
 export function constraintsToSQL(
