@@ -1,4 +1,4 @@
-import {describe, expect, test, vi} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import postgres from 'postgres';
 import {
   extractConnectionConfig,
@@ -65,7 +65,7 @@ describe('slot-keeper', () => {
   });
 
   test('SlotReservationHandle forwards error and close from worker', async () => {
-    const [parent, child] = inProcChannel();
+    const [, child] = inProcChannel();
     const handle = new SlotReservationHandle(child);
 
     const closed = new Promise<void>(resolve => {
