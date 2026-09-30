@@ -89,7 +89,6 @@ function getLitestream(
     incrementalBackupIntervalSeconds,
     syncRequesterEnabled,
     snapshotBackupIntervalHours,
-    snapshotBackupIntervalHoursV5,
     multipartConcurrency,
     multipartSize,
   } = config;
@@ -101,9 +100,6 @@ function getLitestream(
     (v5 ? executableV5 : executable) ??
     must(executable, `Missing --litestream-executable`);
   const litestreamConfig = v5 ? configPathV5 : configPath;
-  const snapshotIntervalHours = v5
-    ? snapshotBackupIntervalHoursV5
-    : snapshotBackupIntervalHours;
   // Disable truncate-page-n if forced checkpoints are enabled,
   // and otherwise use litestream's default.
   const truncatePageN = forceCheckpointThresholdMB ? -1 : 121359;
@@ -135,10 +131,10 @@ function getLitestream(
       ['ZERO_LITESTREAM_TRUNCATE_PAGE_N']: String(truncatePageN),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
       ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS']: String(
-        snapshotIntervalHours,
+        snapshotBackupIntervalHours,
       ),
       ['ZERO_LITESTREAM_SNAPSHOT_RETENTION_INTERVAL_HOURS']: String(
-        snapshotIntervalHours + 6, // delete old snapshots after 6 hours
+        snapshotBackupIntervalHours + 6, // delete old snapshots after 6 hours
       ),
       ['ZERO_LITESTREAM_MULTIPART_CONCURRENCY']: String(multipartConcurrency),
       ['ZERO_LITESTREAM_MULTIPART_SIZE']: String(multipartSize),
@@ -148,6 +144,7 @@ function getLitestream(
       ['LITESTREAM_PORT']: String(port),
       ...(endpoint ? {['ZERO_LITESTREAM_ENDPOINT']: endpoint} : {}),
       ...(region ? {['ZERO_LITESTREAM_REGION']: region} : {}),
+      ['LITESTREAM_COMPACTION_SERIALIZE']: 'false',
     },
   };
 }
