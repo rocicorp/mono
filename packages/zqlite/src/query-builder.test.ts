@@ -1,9 +1,12 @@
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
+import type {Constraint} from '../../zql/src/ivm/constraint.ts';
+import type {MultiConstraint} from '../../zql/src/ivm/operator.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
 import {
+  buildSelectQueries,
   buildSelectQuery,
   filtersToSQL,
   multiConstraintToSQL,
@@ -320,40 +323,47 @@ test('basis at with a NULL bound keeps the anchor row reachable', () => {
 
 test('a non-null bound on an optional column admits the NULL group when walking backward', () => {
   // NULLs sort before every non-NULL value, so the strictly-before set of a
-  // non-NULL bound includes the whole NULL group; a bare `col < ?` silently
-  // drops those rows from a reverse walk.
+  // non-NULL bound includes the whole NULL group; dropping those rows from a
+  // reverse walk would skip them. The group is left out of the disjunction —
+  // the entailed `owner <= ?` excludes it anyway — and fetched by a second
+  // SELECT, run after the first.
   const columns = {
     owner: {type: 'string', optional: true},
     id: {type: 'string'},
   } as const satisfies Record<string, SchemaValue>;
 
   expect(
-    format(
-      buildSelectQuery(
-        'issues',
-        columns,
-        undefined,
-        undefined,
-        [
-          ['owner', 'asc'],
-          ['id', 'asc'],
-        ],
-        true,
-        {
-          row: {owner: 'alice', id: 'issue-1'},
-          basis: 'after',
-        },
-      ),
-    ),
-  ).toMatchInlineSnapshot(`
-    {
-      "text": "SELECT "owner","id" FROM "issues" WHERE ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?)) ORDER BY "owner" desc, "id" desc",
-      "values": [
-        "alice",
-        "alice",
-        "issue-1",
+    buildSelectQueries(
+      'issues',
+      columns,
+      undefined,
+      undefined,
+      [
+        ['owner', 'asc'],
+        ['id', 'asc'],
       ],
-    }
+      true,
+      {
+        row: {owner: 'alice', id: 'issue-1'},
+        basis: 'after',
+      },
+    ).map(format),
+  ).toMatchInlineSnapshot(`
+    [
+      {
+        "text": "SELECT "owner","id" FROM "issues" WHERE ("owner" <= ? AND (("owner" < ?) OR ("owner" IS ? AND "id" < ?))) ORDER BY "owner" desc, "id" desc",
+        "values": [
+          "alice",
+          "alice",
+          "alice",
+          "issue-1",
+        ],
+      },
+      {
+        "text": "SELECT "owner","id" FROM "issues" WHERE "owner" IS NULL ORDER BY "owner" desc, "id" desc",
+        "values": [],
+      },
+    ]
   `);
 });
 
@@ -689,6 +699,323 @@ test('nullable forward cursor keeps a sargable leading-column bound', () => {
   );
   expect(plan).not.toMatch(/USE TEMP B-TREE FOR ORDER BY/);
 });
+
+test.each([
+  {name: 'ascending, reverse', direction: 'asc', reverse: true},
+  {name: 'descending, forward', direction: 'desc', reverse: false},
+] as const)(
+  'nullable cursor walking towards NULLs seeks the non-NULL range and the NULL group ($name)',
+  ({direction, reverse}) => {
+    // `a IS NULL OR a <= ?` is not one index range, so without a split SQLite
+    // seeks only the partition and filters every row from its far end up to
+    // the cursor.
+    const columns = {
+      workspaceID: {type: 'string'},
+      a: {type: 'number', optional: true},
+      id: {type: 'number'},
+    } as const satisfies Record<string, SchemaValue>;
+    const lc = createSilentLogContext();
+    const db = new Database(lc, ':memory:');
+    db.exec(`
+      CREATE TABLE items (
+        workspaceID TEXT NOT NULL,
+        a INTEGER,
+        id INTEGER PRIMARY KEY
+      );
+      CREATE INDEX items_sort ON items(workspaceID, a, id);
+    `);
+
+    const [bounded, nullGroup] = buildSelectQueries(
+      'items',
+      columns,
+      {workspaceID: 'w1'},
+      undefined,
+      [
+        ['a', direction],
+        ['id', direction],
+      ],
+      reverse,
+      {row: {a: 500, id: 123}, basis: 'at'},
+    ).map(format);
+    const plan = ({text, values}: {text: string; values: unknown[]}) =>
+      db
+        .prepare(`EXPLAIN QUERY PLAN ${text}`)
+        .all<{detail: string}>(...values)
+        .map(r => r.detail)
+        .join('\n');
+
+    // No NULL inside the OR: that is what costs SQLite MULTI-INDEX OR, and
+    // the entailed `a <= ?` excludes the NULL group on its own.
+    expect(bounded.text).toContain(
+      `WHERE "workspaceID" = ? AND ("a" <= ? AND (("a" < ?)`,
+    );
+    expect(bounded.text).not.toContain(`IS NULL`);
+    expect(bounded.text).toMatch(/ORDER BY "a" desc, "id" desc$/);
+    expect(plan(bounded)).toMatch(
+      /^SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a<\?\)$/,
+    );
+
+    expect(nullGroup.text).toBe(
+      `SELECT "workspaceID","a","id" FROM "items" WHERE "workspaceID" = ? AND "a" IS NULL ORDER BY "a" desc, "id" desc`,
+    );
+    expect(nullGroup.values).toEqual(['w1']);
+    expect(plan(nullGroup)).toMatch(
+      /^SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a=\?\)$/,
+    );
+  },
+);
+
+test.each([
+  {
+    name: 'IS NOT NULL',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS NOT',
+      right: {type: 'literal', value: null},
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'a range',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: '>',
+      right: {type: 'literal', value: 3},
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'IS a value',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS',
+      right: {type: 'literal', value: 3},
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'IN',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IN',
+      right: {type: 'literal', value: [1, 2]},
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'a conjunct',
+    filter: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'b'},
+          op: '=',
+          right: {type: 'literal', value: 1},
+        },
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'a'},
+          op: 'LIKE',
+          right: {type: 'literal', value: '1%'},
+        },
+      ],
+    },
+    rejectsNull: true,
+  },
+  {
+    name: 'IS NULL',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS',
+      right: {type: 'literal', value: null},
+    },
+    rejectsNull: false,
+  },
+  {
+    name: 'IS NOT a value',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'IS NOT',
+      right: {type: 'literal', value: 3},
+    },
+    rejectsNull: false,
+  },
+  {
+    // `NULL NOT IN ()` is true.
+    name: 'NOT IN',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'a'},
+      op: 'NOT IN',
+      right: {type: 'literal', value: []},
+    },
+    rejectsNull: false,
+  },
+  {
+    name: 'another column',
+    filter: {
+      type: 'simple',
+      left: {type: 'column', name: 'b'},
+      op: '>',
+      right: {type: 'literal', value: 3},
+    },
+    rejectsNull: false,
+  },
+  {
+    name: 'a disjunct',
+    filter: {
+      type: 'or',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'a'},
+          op: '>',
+          right: {type: 'literal', value: 3},
+        },
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'b'},
+          op: '>',
+          right: {type: 'literal', value: 3},
+        },
+      ],
+    },
+    rejectsNull: false,
+  },
+] as const satisfies readonly {
+  name: string;
+  filter: NoSubqueryCondition;
+  rejectsNull: boolean;
+}[])(
+  'a filter that rejects NULLs of the leading column skips the NULL group ($name)',
+  ({filter, rejectsNull}) => {
+    // The NULL group's SELECT would return nothing, and on a large group it
+    // would read every row of it to find that out.
+    const columns = {
+      a: {type: 'number', optional: true},
+      b: {type: 'number'},
+      id: {type: 'number'},
+    } as const satisfies Record<string, SchemaValue>;
+    const order = [
+      ['a', 'desc'],
+      ['id', 'desc'],
+    ] as const;
+    const start = {row: {a: 5, id: 1}, basis: 'at'} as const;
+    const expected = rejectsNull ? 1 : 2;
+
+    // As a connection filter, and as a fetch filter.
+    expect(
+      buildSelectQueries(
+        'items',
+        columns,
+        undefined,
+        filter,
+        order,
+        false,
+        start,
+      ),
+    ).toHaveLength(expected);
+    expect(
+      buildSelectQueries(
+        'items',
+        columns,
+        undefined,
+        undefined,
+        order,
+        false,
+        start,
+        undefined,
+        filter,
+      ),
+    ).toHaveLength(expected);
+  },
+);
+
+test.each([
+  {
+    name: 'an equality on the leading column',
+    constraint: {a: 7},
+    multiConstraints: undefined,
+    rejectsNull: true,
+  },
+  {
+    name: 'an equality on another column',
+    constraint: {b: 7},
+    multiConstraints: undefined,
+    rejectsNull: false,
+  },
+  {
+    name: 'a single-column IN on the leading column',
+    constraint: undefined,
+    multiConstraints: [[{a: 1}, {a: 2}]],
+    rejectsNull: true,
+  },
+  {
+    name: 'a compound IN covering the leading column',
+    constraint: undefined,
+    multiConstraints: [[{b: 1, a: 2}]],
+    rejectsNull: true,
+  },
+  {
+    name: 'an IN on another column',
+    constraint: undefined,
+    multiConstraints: [[{b: 1}]],
+    rejectsNull: false,
+  },
+  {
+    // An empty entry contributes no term to the WHERE clause.
+    name: 'an empty IN',
+    constraint: undefined,
+    multiConstraints: [[]],
+    rejectsNull: false,
+  },
+  {
+    name: 'an IN on another column beside one on the leading column',
+    constraint: undefined,
+    multiConstraints: [[{b: 1}], [{a: 1}]],
+    rejectsNull: true,
+  },
+] as const satisfies readonly {
+  name: string;
+  constraint: Constraint | undefined;
+  multiConstraints: readonly MultiConstraint[] | undefined;
+  rejectsNull: boolean;
+}[])(
+  'constraints that reject NULLs of the leading column skip the NULL group ($name)',
+  ({constraint, multiConstraints, rejectsNull}) => {
+    // `a = ?` and `a IN (…)` are both NULL, never true, for a NULL `a`, so the
+    // NULL group's SELECT can return nothing. Without an index on `a` it takes
+    // a whole extra table scan to find that out.
+    const columns = {
+      a: {type: 'number', optional: true},
+      b: {type: 'number'},
+      id: {type: 'number'},
+    } as const satisfies Record<string, SchemaValue>;
+
+    expect(
+      buildSelectQueries(
+        'items',
+        columns,
+        constraint,
+        undefined,
+        [
+          ['a', 'desc'],
+          ['id', 'desc'],
+        ],
+        false,
+        {row: {a: 5, id: 1}, basis: 'at'},
+        multiConstraints,
+      ),
+    ).toHaveLength(rejectsNull ? 1 : 2);
+  },
+);
 
 test('multiConstraintToSQL asserts on empty multiConstraint', () => {
   const columns = {id: {type: 'string'}} as const satisfies Record<
