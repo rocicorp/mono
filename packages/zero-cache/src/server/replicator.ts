@@ -6,6 +6,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import type {
   LitestreamConfig,
   NormalizedZeroConfig,
@@ -143,7 +144,7 @@ export default async function runWorker(
   // this is keyed on the config flag and nothing else.
   deleteStaleChangeLog(config.changeStreamer.sqliteChangeLogMode, dbPath);
 
-  setupMetrics(lc, dbPath, walMode);
+  setupMetrics(lc, dbPath, walMode, pageSize);
 
   // Create the write worker for async SQLite writes. Enable write-path
   // checkpoint backpressure only for the backup replicator on litestream v5,
@@ -193,7 +194,24 @@ export default async function runWorker(
   return running;
 }
 
-function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
+export function setupMetrics(
+  lc: LogContext,
+  file: string,
+  walMode: WalMode,
+  pageSize: number,
+) {
+  let db: Database | undefined;
+  const getDb = () => {
+    if (!db) {
+      try {
+        db = new Database(lc, file, {readonly: true});
+      } catch (e) {
+        lc.warn?.(`unable to open ${file} for wal metrics`, e);
+      }
+    }
+    return db;
+  };
+
   getOrCreateGauge('replica', 'db_size', {
     description:
       `The size of the replica's main db file, ` +
@@ -213,6 +231,20 @@ function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
     }).addCallback(observeFileSize(lc, `${file}-wal2`));
   }
 
+  getOrCreateGauge('replica', 'wal_active_bytes', {
+    description:
+      `The actual size of active WAL frames currently in use ` +
+      `(excluding pre-allocated or reclaimed space).`,
+    unit: 'bytes',
+  }).addCallback(observeWalActiveBytes(lc, getDb, pageSize));
+
+  getOrCreateGauge('replica', 'wal_uncheckpointed_bytes', {
+    description:
+      `The size of un-checkpointed WAL frames that have not yet ` +
+      `been backfilled into the main database.`,
+    unit: 'bytes',
+  }).addCallback(observeWalUncheckpointedBytes(lc, getDb, pageSize));
+
   // A whole-database total rather than a per-file one. Its counterpart,
   // `sqlite_change_log.file_bytes`, is emitted by the change-streamer, which is
   // the process that writes the log.
@@ -231,6 +263,54 @@ function observeFileSize(lc: LogContext, file: string): ObservableCallback {
       o.observe(stats.size);
     } catch (e) {
       lc.warn?.(`unable to stat ${file} for size metrics`, e);
+    }
+  };
+}
+
+function observeWalActiveBytes(
+  lc: LogContext,
+  getDb: () => Database | undefined,
+  pageSize: number,
+): ObservableCallback {
+  return o => {
+    try {
+      const db = getDb();
+      if (!db) {
+        return;
+      }
+      const [{log}] = db.pragma<{log: number}>('wal_checkpoint(NOOP)');
+      if (typeof log === 'number') {
+        o.observe(Math.max(0, log) * pageSize);
+      }
+    } catch (e) {
+      lc.warn?.('unable to inspect wal_checkpoint for active bytes metric', e);
+    }
+  };
+}
+
+function observeWalUncheckpointedBytes(
+  lc: LogContext,
+  getDb: () => Database | undefined,
+  pageSize: number,
+): ObservableCallback {
+  return o => {
+    try {
+      const db = getDb();
+      if (!db) {
+        return;
+      }
+      const [{log, checkpointed}] = db.pragma<{
+        log: number;
+        checkpointed: number;
+      }>('wal_checkpoint(NOOP)');
+      if (typeof log === 'number' && typeof checkpointed === 'number') {
+        o.observe(Math.max(0, log - checkpointed) * pageSize);
+      }
+    } catch (e) {
+      lc.warn?.(
+        'unable to inspect wal_checkpoint for uncheckpointed bytes metric',
+        e,
+      );
     }
   };
 }
