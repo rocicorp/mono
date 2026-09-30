@@ -11,22 +11,10 @@ export type ParentPartitions = readonly (Record<string, Value> | undefined)[];
 
 const UNPARTITIONED: ParentPartitions = [undefined];
 
-/**
- * The canonical primary keys of the parents under one key. A lone parent,
- * the common case, is kept as a plain string rather than a one-element Set.
- */
-type PKs = string | Set<string>;
-
 type Partition = {
   readonly constraint: Record<string, Value>;
-  pks: PKs;
+  readonly pks: Set<string>;
 };
-
-/**
- * The partitions under one join key. A lone partition, the common case, is
- * kept as is rather than in a one-entry map keyed by its canonical key.
- */
-type Partitions = Partition | Map<string, Partition>;
 
 /**
  * An in-memory index from a join key to the parent rows that have it. Join
@@ -43,8 +31,8 @@ export class JoinIndex {
   /** The join key is the primary key, so one string serves as both. */
   readonly #joinKeyIsPK: boolean;
   readonly #partitionKey: CompoundKey | undefined;
-  readonly #unpartitioned = new Map<string, PKs>();
-  readonly #partitioned = new Map<string, Partitions>();
+  readonly #unpartitioned = new Map<string, Set<string>>();
+  readonly #partitioned = new Map<string, Map<string, Partition>>();
   #size = 0;
 
   constructor(
@@ -73,45 +61,37 @@ export class JoinIndex {
     const pk = this.#pkOf(row, joinKey);
     const partitionKey = this.#partitionKey;
     if (partitionKey === undefined) {
-      const pks = addPK(this.#unpartitioned.get(joinKey), pk);
-      if (pks !== undefined) {
+      let pks = this.#unpartitioned.get(joinKey);
+      if (pks === undefined) {
+        pks = new Set();
         this.#unpartitioned.set(joinKey, pks);
+      }
+      if (!pks.has(pk)) {
+        pks.add(pk);
         this.#size++;
       }
       return;
     }
 
     const partKey = canonicalKey(row, partitionKey);
-    const partitions = this.#partitioned.get(joinKey);
-    const partition =
-      partitions && findPartition(partitions, partKey, partitionKey);
-    if (partition) {
-      const pks = addPK(partition.pks, pk);
-      if (pks !== undefined) {
-        partition.pks = pks;
-        this.#size++;
-      }
-      return;
-    }
-    const constraint: Record<string, Value> = {};
-    for (const key of partitionKey) {
-      constraint[key] = row[key];
-    }
-    const added: Partition = {constraint, pks: pk};
+    let partitions = this.#partitioned.get(joinKey);
     if (partitions === undefined) {
-      this.#partitioned.set(joinKey, added);
-    } else if (partitions instanceof Map) {
-      partitions.set(partKey, added);
-    } else {
-      this.#partitioned.set(
-        joinKey,
-        new Map([
-          [canonicalKey(partitions.constraint, partitionKey), partitions],
-          [partKey, added],
-        ]),
-      );
+      partitions = new Map();
+      this.#partitioned.set(joinKey, partitions);
     }
-    this.#size++;
+    let partition = partitions.get(partKey);
+    if (partition === undefined) {
+      const constraint: Record<string, Value> = {};
+      for (const key of partitionKey) {
+        constraint[key] = row[key];
+      }
+      partition = {constraint, pks: new Set()};
+      partitions.set(partKey, partition);
+    }
+    if (!partition.pks.has(pk)) {
+      partition.pks.add(pk);
+      this.#size++;
+    }
   }
 
   remove(row: Row): void {
@@ -126,16 +106,12 @@ export class JoinIndex {
       if (pks === undefined) {
         return;
       }
-      const rest = removePK(pks, pk);
-      if (rest === undefined) {
-        return;
+      if (pks.delete(pk)) {
+        this.#size--;
+        if (pks.size === 0) {
+          this.#unpartitioned.delete(joinKey);
+        }
       }
-      if (rest === null) {
-        this.#unpartitioned.delete(joinKey);
-      } else {
-        this.#unpartitioned.set(joinKey, rest);
-      }
-      this.#size--;
       return;
     }
 
@@ -144,26 +120,19 @@ export class JoinIndex {
       return;
     }
     const partKey = canonicalKey(row, partitionKey);
-    const partition = findPartition(partitions, partKey, partitionKey);
+    const partition = partitions.get(partKey);
     if (partition === undefined) {
       return;
     }
-    const rest = removePK(partition.pks, pk);
-    if (rest === undefined) {
-      return;
-    }
-    if (rest !== null) {
-      partition.pks = rest;
-    } else if (!(partitions instanceof Map)) {
-      this.#partitioned.delete(joinKey);
-    } else {
-      partitions.delete(partKey);
-      if (partitions.size === 1) {
-        const [last] = partitions.values();
-        this.#partitioned.set(joinKey, last);
+    if (partition.pks.delete(pk)) {
+      this.#size--;
+      if (partition.pks.size === 0) {
+        partitions.delete(partKey);
+        if (partitions.size === 0) {
+          this.#partitioned.delete(joinKey);
+        }
       }
     }
-    this.#size--;
   }
 
   /**
@@ -182,9 +151,7 @@ export class JoinIndex {
     if (partitions === undefined) {
       return undefined;
     }
-    return partitions instanceof Map
-      ? Array.from(partitions.values(), p => p.constraint)
-      : [partitions.constraint];
+    return Array.from(partitions.values(), p => p.constraint);
   }
 
   /**
@@ -193,21 +160,18 @@ export class JoinIndex {
    */
   entriesForTest(): Record<string, 1> {
     const entries: Record<string, 1> = {};
-    const addEntries = (prefix: string, pks: PKs) => {
-      for (const pk of typeof pks === 'string' ? [pks] : pks) {
-        entries[`${prefix}${pk}`] = 1;
-      }
-    };
     for (const [joinKey, pks] of this.#unpartitioned) {
-      addEntries(`j\x00${joinKey}\x00`, pks);
+      for (const pk of pks) {
+        entries[`j\x00${joinKey}\x00${pk}`] = 1;
+      }
     }
     for (const [joinKey, partitions] of this.#partitioned) {
       const partitionKey = must(this.#partitionKey);
-      for (const {constraint, pks} of partitions instanceof Map
-        ? partitions.values()
-        : [partitions]) {
+      for (const {constraint, pks} of partitions.values()) {
         const partKey = canonicalKey(constraint, partitionKey);
-        addEntries(`j\x00${joinKey}\x00${partKey}\x00`, pks);
+        for (const pk of pks) {
+          entries[`j\x00${joinKey}\x00${partKey}\x00${pk}`] = 1;
+        }
       }
     }
     return entries;
@@ -229,46 +193,4 @@ function joinKeyOf(row: Row, key: CompoundKey): string | undefined {
     }
   }
   return canonicalKey(row, key);
-}
-
-function findPartition(
-  partitions: Partitions,
-  partKey: string,
-  partitionKey: CompoundKey,
-): Partition | undefined {
-  if (partitions instanceof Map) {
-    return partitions.get(partKey);
-  }
-  return canonicalKey(partitions.constraint, partitionKey) === partKey
-    ? partitions
-    : undefined;
-}
-
-/** Adds `pk`. Returns the new PKs, or `undefined` if `pk` was present. */
-function addPK(pks: PKs | undefined, pk: string): PKs | undefined {
-  if (pks === undefined) {
-    return pk;
-  }
-  if (typeof pks === 'string') {
-    return pks === pk ? undefined : new Set([pks, pk]);
-  }
-  return pks.has(pk) ? undefined : pks.add(pk);
-}
-
-/**
- * Removes `pk`. Returns `undefined` if `pk` was absent, `null` if it was the
- * last one, and the remaining PKs otherwise.
- */
-function removePK(pks: PKs, pk: string): PKs | null | undefined {
-  if (typeof pks === 'string') {
-    return pks === pk ? null : undefined;
-  }
-  if (!pks.delete(pk)) {
-    return undefined;
-  }
-  if (pks.size === 1) {
-    const [last] = pks;
-    return last;
-  }
-  return pks;
 }
