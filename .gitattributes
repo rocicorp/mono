@@ -1,4 +1,0 @@
-# Lockfiles are generated. Collapse them in review and keep them out of
-# language stats; they still version normally.
-pnpm-lock.yaml linguist-generated=true
-**/pnpm-lock.yaml linguist-generated=true
