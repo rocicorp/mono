@@ -323,8 +323,9 @@ test('basis at with a NULL bound keeps the anchor row reachable', () => {
 
 test('a non-null bound on an optional column admits the NULL group when walking backward', () => {
   // NULLs sort before every non-NULL value, so the strictly-before set of a
-  // non-NULL bound includes the whole NULL group; a bare `col < ?` silently
-  // drops those rows from a reverse walk. The group is fetched by a second
+  // non-NULL bound includes the whole NULL group; dropping those rows from a
+  // reverse walk would skip them. The group is left out of the disjunction —
+  // the entailed `owner <= ?` excludes it anyway — and fetched by a second
   // SELECT, run after the first.
   const columns = {
     owner: {type: 'string', optional: true},
@@ -350,7 +351,7 @@ test('a non-null bound on an optional column admits the NULL group when walking 
   ).toMatchInlineSnapshot(`
     [
       {
-        "text": "SELECT "owner","id" FROM "issues" WHERE ("owner" <= ? AND ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?))) ORDER BY "owner" desc, "id" desc",
+        "text": "SELECT "owner","id" FROM "issues" WHERE ("owner" <= ? AND (("owner" < ?) OR ("owner" IS ? AND "id" < ?))) ORDER BY "owner" desc, "id" desc",
         "values": [
           "alice",
           "alice",
@@ -743,9 +744,12 @@ test.each([
         .map(r => r.detail)
         .join('\n');
 
+    // No NULL inside the OR: that is what costs SQLite MULTI-INDEX OR, and
+    // the entailed `a <= ?` excludes the NULL group on its own.
     expect(bounded.text).toContain(
-      `WHERE "workspaceID" = ? AND ("a" <= ? AND ((("a" IS NULL OR "a" < ?))`,
+      `WHERE "workspaceID" = ? AND ("a" <= ? AND (("a" < ?)`,
     );
+    expect(bounded.text).not.toContain(`IS NULL`);
     expect(bounded.text).toMatch(/ORDER BY "a" desc, "id" desc$/);
     expect(plan(bounded)).toMatch(
       /^SEARCH items USING (COVERING )?INDEX items_sort \(workspaceID=\? AND a<\?\)$/,

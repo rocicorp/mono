@@ -432,6 +432,12 @@ function nullableAwareRangeComparison(
   value: unknown,
   operator: '>' | '<',
   columnType: SchemaValue,
+  /**
+   * Whether an entailed bound ANDed in front of the disjunction already
+   * excludes the column's NULL group, which a second SELECT then fetches (see
+   * {@link gatherStartConstraints}).
+   */
+  nullGroupExcluded: boolean,
 ): SQLQuery {
   if (value === null) {
     return operator === '>' ? sql`${sql.ident(field)} IS NOT NULL` : sql`FALSE`;
@@ -451,8 +457,10 @@ function nullableAwareRangeComparison(
   // The bound is non-NULL here. NULLs sort before every non-NULL value, so
   // `>` already excludes them and needs no guard, while `<` must admit the
   // NULL group explicitly — a bare `col < ?` would silently drop NULL rows
-  // from a backward walk.
-  return operator === '>'
+  // from a backward walk. Unless the NULL group is excluded and fetched on its
+  // own: the guard is dead then, and a NULL inside an OR is what costs SQLite
+  // the MULTI-INDEX OR optimization in the first place.
+  return operator === '>' || nullGroupExcluded
     ? comparison
     : sql`(${sql.ident(field)} IS NULL OR ${comparison})`;
 }
@@ -460,8 +468,8 @@ function nullableAwareRangeComparison(
 type SargableLeadingStartBound = {
   readonly bound: SQLQuery;
   /**
-   * Whether the start constraint admits the column's NULL group, which
-   * `bound` excludes.
+   * Whether `bound` excludes the column's NULL group, which belongs to the
+   * rows the start walks over and must then be fetched separately.
    */
   readonly excludesNullGroup: boolean;
 };
@@ -486,8 +494,8 @@ function sargableLeadingStartBound(
       inclusiveOperator,
     )} ${value}`,
     // For `>`, NULLs sort before the non-NULL bound, so `col >= value` remains
-    // sound on a nullable column. For `<`, the start constraint admits the
-    // whole NULL group, which `col <= value` drops. SQLite cannot seek
+    // sound on a nullable column. For `<`, the rows before the bound include
+    // the whole NULL group, which `col <= value` drops. SQLite cannot seek
     // `col IS NULL OR col <= value` as one index range, so the caller fetches
     // that group separately.
     excludesNullGroup: columnType.optional === true && operator === '<',
@@ -514,10 +522,11 @@ function sargableLeadingStartBound(
  * bound on the leading column is ANDed in front of it (e.g. `a >= 1 AND ...`).
  *
  * When the leading column is nullable and the walk heads towards lower values
- * (`<`), the disjunction admits the whole NULL group, which that bound drops.
- * `excludesNullGroup` is set then. Every non-NULL row the disjunction admits
- * has `a <= ?`, so the returned constraint and `a IS NULL` partition the
- * admitted rows, and the caller fetches the NULL group with a second SELECT.
+ * (`<`), the rows the start walks over include the whole NULL group, which
+ * that bound drops. `excludesNullGroup` is set then, and the group is left out
+ * of the disjunction too — every row the returned constraint admits has
+ * `a <= ?`, so it and `a IS NULL` partition those rows, and the caller fetches
+ * the NULL group with a second SELECT.
  */
 function gatherStartConstraints(
   start: Start,
@@ -541,6 +550,7 @@ function gatherStartConstraints(
         );
         const operator =
           iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
+        let nullGroupExcluded = false;
         if (i === 0) {
           leadingBound = sargableLeadingStartBound(
             iField,
@@ -548,6 +558,7 @@ function gatherStartConstraints(
             operator,
             columnType,
           );
+          nullGroupExcluded = leadingBound?.excludesNullGroup === true;
         }
         group.push(
           nullableAwareRangeComparison(
@@ -555,6 +566,7 @@ function gatherStartConstraints(
             constraintValue,
             operator,
             columnType,
+            nullGroupExcluded,
           ),
         );
       } else {
