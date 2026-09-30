@@ -29,7 +29,9 @@ import {
 } from '../ivm/filter-operators.ts';
 import {Filter} from '../ivm/filter.ts';
 import {FlippedJoin} from '../ivm/flipped-join.ts';
-import {Join} from '../ivm/join.ts';
+import {JoinIndexTap} from '../ivm/join-index-tap.ts';
+import {JoinIndex} from '../ivm/join-index.ts';
+import {Join, type ExistsJoin} from '../ivm/join.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
@@ -399,9 +401,17 @@ function buildPipelineInternal(
     end = delegate.decorateInput(takeGate, takeGateName);
   }
 
+  // The parent indexes of the EXISTS joins below. They hold the rows this
+  // pipeline emits, which the JoinIndexTap after the limit maintains.
+  const existsParentIndexes: JoinIndex[] = [];
   for (const csqCondition of csqConditions) {
     // flipped EXISTS are handled in applyWhere
     if (!csqCondition.flip) {
+      const parentIndex = new JoinIndex(
+        csqCondition.related.correlation.parentField,
+        end.getSchema().primaryKey,
+      );
+      existsParentIndexes.push(parentIndex);
       end = applyCorrelatedSubQuery(
         {
           ...csqCondition.related,
@@ -420,12 +430,21 @@ function buildPipelineInternal(
         true,
         undefined,
         takeGate,
+        {op: csqCondition.op, parentIndex},
       );
     }
   }
 
   if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
-    end = applyWhere(end, ast.where, delegate, name, partitionKey, takeGate);
+    end = applyWhere(
+      end,
+      ast.where,
+      delegate,
+      name,
+      partitionKey,
+      takeGate,
+      existsParentIndexes,
+    );
   }
 
   if (ast.limit !== undefined) {
@@ -461,6 +480,13 @@ function buildPipelineInternal(
     }
   }
 
+  if (existsParentIndexes.length > 0) {
+    const tapName = `${name}:join-index`;
+    const tap = new JoinIndexTap(end, existsParentIndexes);
+    delegate.addEdge(end, tap);
+    end = delegate.decorateInput(tap, tapName);
+  }
+
   if (ast.related) {
     // Dedupe by alias - last one wins (LWW), like limit(5).limit(10)
     const byAlias = new Map<string, CorrelatedSubquery>();
@@ -490,6 +516,7 @@ function applyWhere(
   name: string,
   parentPartitionKey?: CompoundKey,
   boundProvider?: TakeBoundProvider,
+  existsParentIndexes?: JoinIndex[],
 ): Input {
   if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
     return buildFilterPipeline(
@@ -507,6 +534,7 @@ function applyWhere(
     name,
     parentPartitionKey,
     boundProvider,
+    existsParentIndexes,
   );
 }
 
@@ -517,6 +545,7 @@ function applyFilterWithFlips(
   name: string,
   parentPartitionKey?: CompoundKey,
   boundProvider?: TakeBoundProvider,
+  existsParentIndexes?: JoinIndex[],
 ): Input {
   let end = input;
   assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
@@ -548,6 +577,7 @@ function applyFilterWithFlips(
           name,
           parentPartitionKey,
           boundProvider,
+          existsParentIndexes,
         );
       }
       break;
@@ -588,6 +618,7 @@ function applyFilterWithFlips(
             name,
             parentPartitionKey,
             boundProvider,
+            existsParentIndexes,
           ),
         );
       }
@@ -610,6 +641,15 @@ function applyFilterWithFlips(
         sq.correlation.childField,
         false,
       );
+      let parentIndex: JoinIndex | undefined;
+      if (existsParentIndexes) {
+        parentIndex = new JoinIndex(
+          sq.correlation.parentField,
+          end.getSchema().primaryKey,
+          parentPartitionKey,
+        );
+        existsParentIndexes.push(parentIndex);
+      }
       const flippedJoinName = `${name}:flipped-join(${sq.subquery.alias})`;
       const flippedJoin = new FlippedJoin({
         parent: end,
@@ -624,7 +664,7 @@ function applyFilterWithFlips(
         system: sq.system ?? 'client',
         parentPartitionKey,
         boundProvider,
-        storage: delegate.createStorage(flippedJoinName),
+        parentIndex,
       });
       delegate.addEdge(end, flippedJoin);
       delegate.addEdge(child, flippedJoin);
@@ -772,6 +812,7 @@ function applyCorrelatedSubQuery(
   fromCondition: boolean,
   parentPartitionKey?: CompoundKey,
   boundProvider?: TakeBoundProvider,
+  exists?: ExistsJoin,
 ) {
   // TODO: we only omit the join if the CSQ if from a condition since
   // we want to create an empty array for `related` fields that are `limit(0)`
@@ -800,7 +841,7 @@ function applyCorrelatedSubQuery(
     system: sq.system ?? 'client',
     parentPartitionKey: fromCondition ? undefined : parentPartitionKey,
     boundProvider,
-    storage: delegate.createStorage(joinName),
+    exists,
   });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);

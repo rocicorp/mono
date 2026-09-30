@@ -13,17 +13,14 @@ import {
 } from './change.ts';
 import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
+import {JoinIndex} from './join-index.ts';
 import {
   buildJoinConstraint,
   canonicalKey,
   canonicalKeyForTest,
   generateWithOverlayNoYield,
-  getMatchingParentEntries,
-  indexParentInStorage,
   isJoinMatch,
   rowEqualsForCompoundKey,
-  unindexParentInStorage,
-  type JoinStorage,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
 import {
@@ -32,7 +29,6 @@ import {
   type Input,
   type MultiConstraint,
   type Output,
-  type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
@@ -95,7 +91,7 @@ type Args = {
   system: System;
   parentPartitionKey?: CompoundKey | undefined;
   boundProvider?: TakeBoundProvider | undefined;
-  storage: Storage;
+  parentIndex?: JoinIndex | undefined;
 };
 
 /**
@@ -113,9 +109,13 @@ export class FlippedJoin implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
-  readonly #parentPartitionKey: CompoundKey | undefined;
   readonly #boundProvider: TakeBoundProvider | undefined;
-  readonly #storage: JoinStorage;
+  /**
+   * The parents this join has output: those with at least one related
+   * child.
+   */
+  readonly #parentIndex: JoinIndex;
+  readonly #indexesParents: boolean;
 
   #output: Output = throwOutput;
 
@@ -133,7 +133,7 @@ export class FlippedJoin implements Input {
     system,
     parentPartitionKey,
     boundProvider,
-    storage,
+    parentIndex,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -145,9 +145,18 @@ export class FlippedJoin implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
-    this.#parentPartitionKey = parentPartitionKey;
     this.#boundProvider = boundProvider;
-    this.#storage = storage as unknown as JoinStorage;
+    if (parentIndex) {
+      this.#parentIndex = parentIndex;
+      this.#indexesParents = false;
+    } else {
+      this.#parentIndex = new JoinIndex(
+        parentKey,
+        parent.getSchema().primaryKey,
+        parentPartitionKey,
+      );
+      this.#indexesParents = true;
+    }
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -182,7 +191,10 @@ export class FlippedJoin implements Input {
   destroy(): void {
     this.#child.destroy();
     this.#parent.destroy();
-    this.#storage.destroy();
+  }
+
+  get parentIndexForTest(): JoinIndex {
+    return this.#parentIndex;
   }
 
   setOutput(output: Output): void {
@@ -466,13 +478,8 @@ export class FlippedJoin implements Input {
       const childRow = change[ChangeIndex.NODE].row;
       const changeType = change[ChangeIndex.TYPE];
 
-      const matching = getMatchingParentEntries(
-        this.#storage,
-        childRow,
-        this.#childKey,
-        this.#parentPartitionKey,
-      );
-      if (!matching) {
+      const partitions = this.#parentIndex.lookup(childRow, this.#childKey);
+      if (!partitions) {
         // If no matching parent is resident in the view, REMOVE and EDIT
         // cannot affect any view-resident parent. (ADD and CHILD can qualify
         // previously absent parents).
@@ -484,12 +491,12 @@ export class FlippedJoin implements Input {
       let fetchConstraints: Constraint[];
       if (changeType !== ChangeType.ADD && changeType !== ChangeType.CHILD) {
         assert(
-          matching,
+          partitions,
           'Matching entries must exist for non-add child change',
         );
-        fetchConstraints = matching.map(entry =>
-          entry.partitionConstraint
-            ? {...constraint, ...entry.partitionConstraint}
+        fetchConstraints = partitions.map(partitionConstraint =>
+          partitionConstraint
+            ? {...constraint, ...partitionConstraint}
             : constraint,
         );
       } else {
@@ -590,23 +597,15 @@ export class FlippedJoin implements Input {
   }
 
   #indexParentRow(row: Row): void {
-    indexParentInStorage(
-      this.#storage,
-      row,
-      this.#parentKey,
-      this.#parent.getSchema().primaryKey,
-      this.#parentPartitionKey,
-    );
+    if (this.#indexesParents) {
+      this.#parentIndex.add(row);
+    }
   }
 
   #unindexParentRow(row: Row): void {
-    unindexParentInStorage(
-      this.#storage,
-      row,
-      this.#parentKey,
-      this.#parent.getSchema().primaryKey,
-      this.#parentPartitionKey,
-    );
+    if (this.#indexesParents) {
+      this.#parentIndex.remove(row);
+    }
   }
 
   *#pushParent(change: Change): Stream<'yield'> {
