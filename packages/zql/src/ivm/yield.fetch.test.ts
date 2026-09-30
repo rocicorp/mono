@@ -188,7 +188,6 @@ describe('Yield Propagation', () => {
       relationshipName: 'child',
       hidden: false,
       system: 'client',
-      storage: new MemoryStorage(),
     });
     const catchOp = new Catch(join);
     expect(catchOp.fetch({})).toMatchInlineSnapshot(`
@@ -256,7 +255,6 @@ describe('Yield Propagation', () => {
       relationshipName: 'child',
       hidden: false,
       system: 'client',
-      storage: new MemoryStorage(),
     });
     const catchOp = new Catch(flippedJoin);
     expect(catchOp.fetch({})).toMatchInlineSnapshot(`
@@ -310,7 +308,6 @@ describe('Yield Propagation', () => {
       relationshipName: 'child',
       hidden: false,
       system: 'client',
-      storage: new MemoryStorage(),
     });
 
     const start = new FilterStart(join);

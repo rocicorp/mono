@@ -949,8 +949,8 @@ describe('view-syncer/pipeline-driver', () => {
     const storageRows = () =>
       storageDB.prepare('SELECT COUNT(*) AS n FROM storage').get<{n: number}>()
         .n;
-    // A limit (Take) over a relationship (Join), and nested EXISTS (Joins
-    // or FlippedJoins), all of which keep state in operator storage.
+    // A limit (Take), and nested EXISTS whose subqueries end in a limit
+    // (Cap), both of which keep state in operator storage.
     const issuesWithComments: AST = {...ISSUES_AND_COMMENTS, limit: 2};
 
     [
@@ -996,7 +996,7 @@ describe('view-syncer/pipeline-driver', () => {
     // So does abandoning a hydration partway (of a query without a limit,
     // which Take does not allow to be cut short).
     const hydration = pipelines
-      .addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, startTimer())
+      .addQuery('hash2', 'queryID2', ISSUES_QUERY_WITH_EXISTS, startTimer())
       [Symbol.iterator]();
     expect(hydration.next().done).toBe(false);
     expect(storageRows()).toBeGreaterThan(0);

@@ -3085,7 +3085,7 @@ test('destroying a pipeline destroys the storage of its operators', () => {
   );
   expect(sink.fetch()).toHaveLength(3);
 
-  // Each of these operators keeps state in its storage...
+  // Each of these operators keeps state...
   const hydrated = delegate.clonedStorage;
   expect(Object.keys(hydrated).sort()).toEqual([
     '.states_0:cap',
@@ -3097,7 +3097,8 @@ test('destroying a pipeline destroys the storage of its operators', () => {
   for (const data of Object.values(hydrated)) {
     expect(Object.keys(data).length).toBeGreaterThan(0);
   }
-  expect(Object.keys(destroys).sort()).toEqual(Object.keys(hydrated).sort());
+  // ...the joins in memory, the others in storage...
+  expect(Object.keys(destroys).sort()).toEqual(['.states_0:cap', ':take']);
   for (const destroy of Object.values(destroys)) {
     expect(destroy).not.toHaveBeenCalled();
   }

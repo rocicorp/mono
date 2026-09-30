@@ -3,7 +3,6 @@ import {bench, describe} from '../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import {FlippedJoin} from '../../zql/src/ivm/flipped-join.ts';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 
@@ -66,7 +65,6 @@ function setup(rows: number) {
     relationshipName: 'children',
     hidden: false,
     system: 'client',
-    storage: new MemoryStorage(),
   });
   return {db, out: new Catch(flippedJoin)};
 }
