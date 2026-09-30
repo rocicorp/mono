@@ -1,9 +1,11 @@
 snapshot:
   interval: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS}h
   retention: ${ZERO_LITESTREAM_SNAPSHOT_RETENTION_INTERVAL_HOURS}h
+  mode: compaction
 
-# Retain raw L0 files well past worst-case restore duration so continuous
-# compaction can't delete a file an in-progress restore still needs.
+# Retain raw L0 files well past the worst-case restore or snapshot-compaction
+# duration, so continuous compaction can't delete a file that an in-progress
+# restore or compaction snapshot still needs.
 l0-retention: 1h
 l0-retention-check-interval: 5m
 
