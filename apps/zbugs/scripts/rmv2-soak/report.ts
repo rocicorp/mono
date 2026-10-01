@@ -337,7 +337,6 @@ export function buildReport(args: {
       viewSyncers: config.viewSyncers,
       changeLog: config.changeLog,
       backupIntervalSeconds: config.backupIntervalSeconds,
-      vfsPollIntervalMs: config.vfsPollIntervalMs,
       startupDelayMs: config.startupDelayMs,
       snapshotBackupIntervalHours: config.snapshotBackupIntervalHours,
       chaos: config.chaos,

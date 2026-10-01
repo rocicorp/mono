@@ -4,8 +4,8 @@ import type {SoakConfig} from './config.ts';
 /**
  * The workload phases of plan section 5.
  *
- * A flat rate does not stress purge scheduling, the barrier, or the vfs
- * poller's pause/resume; sustained rate, bursts and idle gaps do. Every
+ * A flat rate does not stress purge scheduling, the barrier, or the sync
+ * requester's idle no-op syncs; sustained rate, bursts and idle gaps do. Every
  * duration is multiplied by `config.scale`, so the same shape runs as a
  * two-minute smoke test or as a thirty-minute soak.
  */
@@ -43,7 +43,7 @@ export function workloadPhases(config: SoakConfig): PhaseSpec[] {
     {
       name: 'quiet',
       stresses:
-        'the purger draining to its floor, and the vfs poller pausing when local == remote',
+        'the purger draining to its floor, and the sync requester idling with nothing to back up',
       stages: [
         {
           // Longer than retentionMs, so the log ages out of its warm-up

@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {must} from '../../../../shared/src/must.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {Source} from '../../types/streams.ts';
 import {getLastBackupTime} from '../litestream/commands.ts';
@@ -11,7 +10,6 @@ import {
   Litestream3PrometheusPoller,
 } from './litestream3-prometheus-poller.ts';
 import {ReplicaPoller} from './replica-poller.ts';
-import {VfsWatermarkPoller} from './vfs-watermark-poller.ts';
 
 export type BackupCleanupMonitorFactoryOptions = {
   lc: LogContext;
@@ -28,39 +26,16 @@ export function createBackupCleanupMonitor({
   changeStreamer,
   verifyBackupState,
 }: BackupCleanupMonitorFactoryOptions): BackupMonitor {
-  const {log, litestream, replica} = config;
+  const {litestream, replica} = config;
   const {backupURL} = litestream;
 
   let stream: Source<BackedUpWatermark>;
 
   if (!backupURL) {
     stream = new ReplicaPoller(lc, replicaFile).start();
-  } else if (
-    config.litestream.backupUsingV5 &&
-    config.litestream.syncRequesterEnabled
-  ) {
+  } else if (config.litestream.backupUsingV5) {
     stream = new LitestreamSyncRequester(lc, replicaFile, {
       intervalMs: litestream.incrementalBackupIntervalSeconds * 1000,
-    }).start();
-  } else if (config.litestream.backupUsingV5) {
-    const {
-      logLevel,
-      endpoint,
-      region,
-      vfsQueryExecutable,
-      vfsPollIntervalMs: remotePollIntervalMs,
-    } = litestream;
-    stream = new VfsWatermarkPoller(lc, replicaFile, {
-      executable: must(
-        vfsQueryExecutable,
-        `litestream-vfs-query-executable must be defined`,
-      ),
-      remotePollIntervalMs,
-      backupURL,
-      region,
-      endpoint,
-      logLevel,
-      logFormat: log.format,
     }).start();
   } else {
     const {port: metricsPort} = litestream;

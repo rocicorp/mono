@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 #
-# Builds the three native binaries the RMv2 local soak needs into
+# Builds the two native binaries the RMv2 local soak needs into
 # apps/zbugs/.litestream/bin (gitignored):
 #
 #   litestream-v3  rocicorp/litestream @ zero@v0.0.10        (packages/zero/Dockerfile)
-#   litestream-v5  rocicorp/litestream @ v0.5.18-zero.8      (packages/zero/Dockerfile)
-#   vfs-query      mono/go, `make build` (cgo, -tags vfs)    (go/Makefile)
+#   litestream-v5  rocicorp/litestream @ v0.5.18-zero.12     (packages/zero/Dockerfile)
 #
 # The v3 binary is needed even though v5 does all of the backing up: the
 # change-streamer's PurgeLocker branch is gated on `litestream.executable` --
@@ -18,12 +17,11 @@
 set -euo pipefail
 
 LITESTREAM_V3_REF="zero@v0.0.10"
-LITESTREAM_V5_VERSION="0.5.18-zero.11"
+LITESTREAM_V5_VERSION="0.5.18-zero.12"
 LITESTREAM_REPO="https://github.com/rocicorp/litestream.git"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REPO_ROOT="$(cd "${APP_DIR}/../.." && pwd)"
 OUT_DIR="${APP_DIR}/.litestream"
 BIN_DIR="${OUT_DIR}/bin"
 SRC_DIR="${OUT_DIR}/src"
@@ -117,29 +115,8 @@ build_litestream_v5() {
   log "built ${bin}"
 }
 
-build_vfs_query() {
-  local bin="${BIN_DIR}/vfs-query"
-  local stamp="${BIN_DIR}/vfs-query.stamp"
-  # vfs-query is built from the working tree rather than a pinned ref, so the
-  # stamp is the tree's own revision of go/.
-  local want
-  want="$(git -C "${REPO_ROOT}" rev-parse HEAD:go 2>/dev/null || echo unknown)"
-  if ! needs_build "${stamp}" "${want}" "${bin}"; then
-    log "vfs-query up to date (go/ @ ${want})"
-    return
-  fi
-  log "building vfs-query from ${REPO_ROOT}/go"
-  # cgo (mattn/go-sqlite3) -- this must be built with the host toolchain, so
-  # it cannot be lifted out of the Docker build.
-  make -C "${REPO_ROOT}/go" build
-  cp "${REPO_ROOT}/go/dist/vfs-query" "${bin}"
-  printf '%s' "${want}" >"${stamp}"
-  log "built ${bin}"
-}
-
 build_litestream_v3
 build_litestream_v5
-build_vfs_query
 
 log "binaries in ${BIN_DIR}:"
 ls -l "${BIN_DIR}" >&2

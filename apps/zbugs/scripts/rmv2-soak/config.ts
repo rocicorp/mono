@@ -56,7 +56,6 @@ export type SoakConfig = {
 
   readonly changeLog: ChangeLogSettings;
   readonly backupIntervalSeconds: number;
-  readonly vfsPollIntervalMs: number;
   readonly startupDelayMs: number;
   readonly snapshotBackupIntervalHours: number;
 
@@ -124,7 +123,6 @@ function commonEnv(config: SoakConfig, node: string): NodeJS.ProcessEnv {
     // backs up) and the view-syncers (which restore) need them.
     ZERO_LITESTREAM_EXECUTABLE: join(BIN_DIR, 'litestream-v3'),
     ZERO_LITESTREAM_EXECUTABLE_V5: join(BIN_DIR, 'litestream-v5'),
-    ZERO_LITESTREAM_VFS_QUERY_EXECUTABLE: join(BIN_DIR, 'vfs-query'),
     // The defaults are relative to the process's cwd
     // (`./src/services/litestream/...`), which only resolves when zero-cache
     // runs from packages/zero-cache.
@@ -189,7 +187,6 @@ export function replicationManagerEnv(
     ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS: String(
       config.snapshotBackupIntervalHours,
     ),
-    ZERO_LITESTREAM_VFS_POLL_INTERVAL_MS: String(config.vfsPollIntervalMs),
     ...changeLogEnv({...config.changeLog, ...overrides}),
   };
 }

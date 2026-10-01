@@ -16,8 +16,8 @@ import type {SoakLog} from './logs.ts';
  * automatically and graceful shutdown happens as intended), which puts every
  * worker in its own process group. Signalling the dispatcher's group reaches
  * only the dispatcher and the runner, and a dispatcher that dies without
- * draining leaves its change-streamer, backup-replicator, litestream and
- * vfs-query processes running -- still serving view-syncers, and still
+ * draining leaves its change-streamer, backup-replicator and litestream
+ * processes running -- still serving view-syncers, and still
  * holding the replica's locks, which is what makes the next start fail with
  * `SQLITE_BUSY: journal_mode = delete`.
  */

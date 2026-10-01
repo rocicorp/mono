@@ -55,7 +55,7 @@ Usage:
   node scripts/rmv2-soak.ts [options]
 
 Prerequisites:
-  scripts/build-litestream.sh          builds litestream v3/v5 and vfs-query
+  scripts/build-litestream.sh          builds litestream v3/v5
   docker                               postgres and minio come up from
                                        docker/docker-compose{,.minio}.yml
 
@@ -75,8 +75,8 @@ Options:
                             long minio outage) and the C10-C12 rollback
                             drills, which run last and leave the log off.
   --baseline                Also run the mode=off A/B control pass first
-  --backup-interval-seconds <n>  litestream monitor-interval. Default: 2
-  --vfs-poll-ms <n>         Default: 1000
+  --backup-interval-seconds <n>  incremental backup (sync request) interval.
+                            Default: 2
   --startup-delay-ms <n>    change-streamer startup delay. Default: 1000
   --snapshot-hours <n>      litestream snapshot interval. Default: 4
   --seed                    Run db-migrate and db-seed first
@@ -109,7 +109,6 @@ function parseConfig(): SoakConfig {
       'chaos': {type: 'string'},
       'baseline': {type: 'boolean', default: false},
       'backup-interval-seconds': {type: 'string'},
-      'vfs-poll-ms': {type: 'string'},
       'startup-delay-ms': {type: 'string'},
       'snapshot-hours': {type: 'string'},
       'seed': {type: 'boolean', default: false},
@@ -204,7 +203,6 @@ function parseConfig(): SoakConfig {
       values['backup-interval-seconds'],
       2,
     ),
-    vfsPollIntervalMs: numOpt('vfs-poll-ms', values['vfs-poll-ms'], 1000),
     startupDelayMs: numOpt(
       'startup-delay-ms',
       values['startup-delay-ms'],
@@ -281,7 +279,7 @@ async function assertPortsFree(config: SoakConfig): Promise<void> {
 }
 
 function assertPrerequisites(): void {
-  const missing = ['litestream-v3', 'litestream-v5', 'vfs-query'].filter(
+  const missing = ['litestream-v3', 'litestream-v5'].filter(
     bin => !existsSync(join(BIN_DIR, bin)),
   );
   if (missing.length > 0) {

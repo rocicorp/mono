@@ -1231,12 +1231,24 @@ export const zeroOptions = {
     },
 
     backupUsingV5: {
-      type: v.boolean().default(false),
+      type: v.boolean().default(true),
       desc: [
-        `Backs up the replica using Litestream v0.5.x and monitors cleanup`,
-        `watermarks by reading the backup through the Litestream SQLite VFS.`,
-        `This requires {bold ZERO_LITESTREAM_RESTORE_USING_V5} and`,
-        `{bold ZERO_LITESTREAM_VFS_QUERY_EXECUTABLE}`,
+        `Backs up the replica using Litestream v0.5.x. This is required for (upcoming)`,
+        `high-availability replication. Set to false to revert to Litestream v0.3.x backups.`,
+        ``,
+        `zero-cache requests an incremental backup every`,
+        `{bold ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS} and only acknowledges`,
+        `changes upstream once a backup containing them has completed.`,
+        ``,
+        `Litestream v0.5.x allows only one writer per backup location, so each`,
+        `replication-manager backs up to its own subfolder of the backup URL. Subfolders`,
+        `left by previous replication-managers are not cleaned up automatically; that is`,
+        `up to the operator. The simplest approach is a lifecycle expiration rule on the`,
+        `object store (e.g. S3). Every file needed for a restore is at most about`,
+        `{bold ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS} old, so an expiration of at`,
+        `least twice that interval is safe.`,
+        ``,
+        `Requires {bold ZERO_LITESTREAM_RESTORE_USING_V5} (enabled by default).`,
       ],
     },
 
@@ -1263,55 +1275,6 @@ export const zeroOptions = {
         `* {bold ZERO_LITESTREAM_BACKUP_LOCATION} for the db replica url`,
         `* {bold ZERO_LITESTREAM_LOG_LEVEL} for the log level`,
         `* {bold ZERO_LOG_FORMAT} for the log type`,
-      ],
-    },
-
-    syncRequesterEnabled: {
-      // TODO: Make this non-optional and get rid of vfs.
-      type: v.boolean().default(true),
-      desc: [
-        `When backing up with {bold ZERO_LITESTREAM_BACKUP_USING_V5}, drives litestream`,
-        `backups via its control socket and determines backed-up watermarks from the`,
-        `completed syncs, instead of polling the backup with the vfs-query executable.`,
-        ``,
-        `Syncs are requested every {bold ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}`,
-        `(a no-op when there are no changes to back up), and litestream's own monitor`,
-        `interval is relaxed to a less frequent backstop.`,
-      ],
-      hidden: true,
-    },
-
-    vfsQueryExecutable: {
-      type: v.string().optional(),
-      desc: [
-        `Path to the rocicorp vfs-query executable that runs the VFS-based`,
-        `polling of backup watermark. This is required when backing up with V5.`,
-      ],
-    },
-
-    vfsPollIntervalMs: {
-      type: v.number().default(15 * 1000),
-      desc: [
-        `Interval in milliseconds litestream vfs extension polls the backup store (e.g. s3)`,
-        `to determine the most recent backup.`,
-        ``,
-        `This, in turn, influences how quickly new backups are confirmed, allowing the`,
-        `change-streamer to ack the upstream change-source (e.g. replication slot).`,
-      ],
-    },
-
-    vfsPollTimeoutMs: {
-      type: v.number().default(10 * 1000),
-      desc: [
-        `Timeout in milliseconds for requests to the Litestream VFS poller.`,
-      ],
-    },
-
-    vfsLogFile: {
-      type: v.string().optional(),
-      desc: [
-        `Optional file path for logs emitted by the Litestream VFS native`,
-        `extension. If unset, the extension writes to stdout.`,
       ],
     },
 

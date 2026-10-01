@@ -147,13 +147,6 @@ export function assertNormalized(
     '--litestream-restore-using-v5 and --litestream-backup-using-v5 ' +
       'require --litestream-executable-v5 to be specified',
   );
-  assert(
-    !config.litestream.backupURL ||
-      !config.litestream.backupUsingV5 ||
-      config.litestream.syncRequesterEnabled ||
-      config.litestream.vfsQueryExecutable,
-    '--litestream-backup-using-v5 requires --litestream-vfs-query-executable to be specified',
-  );
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
   assertNotUndefined(config.numSyncWorkers, 'missing --num-sync-workers');

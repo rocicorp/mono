@@ -87,7 +87,6 @@ function getLitestream(
     forceCheckpointThresholdMB,
     incrementalBackupIntervalMinutes,
     incrementalBackupIntervalSeconds,
-    syncRequesterEnabled,
     snapshotBackupIntervalHours,
     multipartConcurrency,
     multipartSize,
@@ -122,11 +121,13 @@ function getLitestream(
       ['ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS']: String(
         incrementalBackupIntervalSeconds, // v5 only
       ),
+      // v5 only
       ['ZERO_LITESTREAM_MONITOR_INTERVAL_SECONDS']: String(
-        litestreamMonitorIntervalSeconds(
-          incrementalBackupIntervalSeconds,
-          syncRequesterEnabled,
-        ), // v5 only
+        // zero-cache explicitly requests syncs at the incremental backup
+        // interval (see LitestreamSyncRequester), and litestream's
+        // own monitor becomes a backstop that keeps backups and checkpoints
+        // progressing if zero-cache stops requesting them.
+        2 * incrementalBackupIntervalSeconds,
       ),
       ['ZERO_LITESTREAM_TRUNCATE_PAGE_N']: String(truncatePageN),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
@@ -390,27 +391,6 @@ function replicaIsValid(
   } finally {
     db?.close();
   }
-}
-
-/**
- * The interval at which litestream v5 syncs the WAL on its own.
- *
- * With the sync requester enabled, zero-cache requests syncs at the
- * incremental backup interval (see LitestreamSyncRequester), and litestream's
- * own monitor becomes a backstop that keeps backups and checkpoints
- * progressing if zero-cache stops requesting them. litestream resets its
- * monitor tick after every requested sync, so the backstop only fires once
- * requests stop for a full interval. It must still be longer than the request
- * interval, or timer jitter would occasionally let a tick slip in just before
- * a request and seal an extra backup file.
- */
-export function litestreamMonitorIntervalSeconds(
-  incrementalBackupIntervalSeconds: number,
-  syncRequesterEnabled: boolean,
-): number {
-  return syncRequesterEnabled
-    ? 2 * incrementalBackupIntervalSeconds
-    : incrementalBackupIntervalSeconds;
 }
 
 export function startReplicaBackupProcess(

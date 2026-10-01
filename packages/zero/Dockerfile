@@ -29,44 +29,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
 	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_V5_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
 
-# Build vfs-query: a Go binary that polls a Litestream backup through VFS
-# and streams query results to stdout. The alternative of loading
-# litestream-vfs.so dynamically as an SQLite extension in a Node process
-# doesn't work on musl (golang/go#54805) and arm64 (golang/go#62556).
-# Running the VFS in a normal Go process sidesteps both.
-#
-# Built with the musl (Alpine) toolchain: this binary links mattn/go-sqlite3
-# via cgo, and it runs directly in the musl final stage below (no dlopen, so
-# the TLS bug that motivated vfs-query doesn't apply). A glibc-built cgo
-# binary would still fail to *run* on musl, so the builder's libc has to match.
-#
-# Pinned to $BUILDPLATFORM (not the implicit per-target-platform default) so
-# the Go toolchain itself runs natively on the build host — Go already
-# cross-compiles by GOARCH alone. Only cgo's C compile/link step needs an
-# actual cross toolchain for the non-native arch, supplied by zig cc (bundled
-# musl sysroots for both architectures). Without this, buildx would run this
-# entire stage under QEMU for the non-native platform, and QEMU-emulated cgo
-# compilation of this module's dependency tree (aws-sdk-go-v2 et al.) takes
-# ~30 minutes instead of under a minute natively.
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS vfs-query
-RUN apk add --no-cache zig
-ARG TARGETARCH
-
-WORKDIR /src/go
-# Source lives in mono/go, outside this Dockerfile's build context
-# (packages/zero/), so it's supplied as a named build context.
-COPY --from=monogo . .
-RUN --mount=type=cache,target=/root/.cache/go-build \
-	--mount=type=cache,target=/go/pkg \
-	case "$TARGETARCH" in \
-		amd64) ZIG_ARCH=x86_64 ;; \
-		arm64) ZIG_ARCH=aarch64 ;; \
-		*) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
-	esac && \
-	GOOS=linux GOARCH="$TARGETARCH" CGO_ENABLED=1 \
-	CC="zig cc -target ${ZIG_ARCH}-linux-musl" \
-	go build -tags vfs -o /usr/local/bin/vfs-query ./cmd/vfs-query
-
 # Install the zero package natively on $BUILDPLATFORM, then copy node_modules
 # into the per-target-platform runtime stage below. Running Node/pnpm under
 # QEMU for the non-native arch was slow and intermittently crashed V8 with
@@ -159,13 +121,11 @@ ENV PATH="/opt/app/node_modules/.bin:${PATH}"
 # Copy litestream executable and config.yml
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 COPY --from=litestream-v5 /usr/local/bin/litestream /usr/local/bin/litestream-v5
-COPY --from=vfs-query /usr/local/bin/vfs-query /usr/local/bin/vfs-query
 COPY --from=deps /opt/app/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
 COPY --from=deps /opt/app/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config-v5.yml /etc/litestream-v5.yml
 
 ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
 ENV ZERO_LITESTREAM_EXECUTABLE_V5=/usr/local/bin/litestream-v5
-ENV ZERO_LITESTREAM_VFS_QUERY_EXECUTABLE=/usr/local/bin/vfs-query
 ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
 ENV ZERO_LITESTREAM_CONFIG_PATH_V5=/etc/litestream-v5.yml
 ENV ZERO_LOG_FORMAT=json

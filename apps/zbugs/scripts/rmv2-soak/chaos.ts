@@ -340,7 +340,7 @@ function viewSyncerAt(ctx: ChaosContext, index: number) {
 
 /**
  * Section 1.4's window, measured without a follower in it: from the reseed to
- * the first backup the vfs poller observes at or above the seed point.
+ * the first backup the sync requester confirms at or above the seed point.
  *
  * That is the interval during which a restoring follower *would* be held,
  * because until such a backup exists the log cannot cover any backup the
@@ -348,8 +348,8 @@ function viewSyncerAt(ctx: ChaosContext, index: number) {
  * which is why the reservation hold alone understates the exposure while
  * reseed-to-confirm overstates it -- the latter is mostly restart latency.
  *
- * Its floor is one litestream `monitor-interval` plus one vfs poll interval,
- * so it scales with those settings rather than being a fixed cost.
+ * Its floor is one incremental backup interval, so it scales with that
+ * setting rather than being a fixed cost.
  */
 function measureReseedWindow(log: SoakLog, out: MutableOutcome): void {
   const reseed = log.events.find(

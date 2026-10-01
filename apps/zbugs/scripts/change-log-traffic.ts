@@ -228,7 +228,8 @@ export class TrafficDriver {
     };
 
     // An idle stage. `--rates` cannot express this (its floor is 0.1/s), and
-    // idle is what drains the purger to its floor and pauses the vfs poller,
+    // idle is what drains the purger to its floor and leaves the sync
+    // requester with nothing to back up,
     // so it is a first-class stage rather than a very low rate.
     if (rate <= 0) {
       const startedAt = performance.now();
