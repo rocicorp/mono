@@ -347,6 +347,7 @@ function shouldResetSlowCurrentChange(
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
 export class PipelineDriver {
+  // Retain sources until reset or destroy so getRow can serve catch-up reads.
   readonly #tables = new Map<string, TableSource>();
   // Query id to pipeline
   readonly #pipelines = new Map<string, Pipeline>();
@@ -1162,7 +1163,6 @@ export class PipelineDriver {
         for (const input of builtInputs) {
           input.destroy();
         }
-        this.#pruneUnusedTables();
         // Rows may already have been yielded through #trackRowSetSignatures,
         // and rowSetSignature() must not report a signature for a query
         // without an active pipeline.
@@ -1184,17 +1184,8 @@ export class PipelineDriver {
     if (pipeline) {
       this.#pipelines.delete(queryID);
       this.#destroyPipeline(queryID, pipeline, stopReason);
-      this.#pruneUnusedTables();
     }
     this.#rowSetSignatures.delete(queryID);
-  }
-
-  #pruneUnusedTables() {
-    for (const [table, source] of this.#tables.entries()) {
-      if (!source.hasConnections()) {
-        this.#tables.delete(table);
-      }
-    }
   }
 
   #destroyPipeline(
