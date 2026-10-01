@@ -3,7 +3,9 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
+import {assignProperty} from '../../../../shared/src/objects.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
+import type {Writable} from '../../../../shared/src/writable.ts';
 import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
@@ -374,6 +376,8 @@ export class PipelineDriver {
   readonly #planWarningThresholds: PlanWarningThresholds | undefined;
   readonly #yieldThresholdMs: () => number;
   #streamer: Streamer | null = null;
+  /** The row changes of the push in progress, until #push yields them. */
+  #pushedRowChanges: RowChange[] | null = null;
   #hydrateContext: HydrateContext | null = null;
   #advanceContext: AdvanceContext | null = null;
   #replicaVersion: string | null = null;
@@ -518,6 +522,7 @@ export class PipelineDriver {
       primaryKeys.set(table, spec.tableSpec.primaryKey);
     }
     buildPrimaryKeys(clientSchema, primaryKeys);
+    this.#streamer ??= new Streamer(primaryKeys, this.#tableSpecs);
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
   }
@@ -994,11 +999,11 @@ export class PipelineDriver {
         push: change => this.#streamPushed(queryID, schema, change),
       });
 
-      for (const change of hydrateInternal(
-        input,
+      for (const change of must(this.#streamer).streamNodes(
         queryID,
-        must(this.#primaryKeys),
-        this.#tableSpecs,
+        schema,
+        ChangeType.ADD,
+        input.fetch({}),
       )) {
         if (change !== 'yield') {
           hydrationRowCount++;
@@ -1895,21 +1900,19 @@ export class PipelineDriver {
     source: TableSource,
     change: SourceChange,
   ): Iterable<RowChange | 'yield'> {
-    this.#startAccumulating();
+    assert(this.#pushedRowChanges === null, 'push already in progress');
     try {
+      this.#pushedRowChanges = [];
       for (const val of source.genPush(change)) {
         if (val === 'yield') {
           yield 'yield';
         }
-        for (const changeOrYield of this.#stopAccumulating().stream()) {
-          yield changeOrYield;
-        }
-        this.#startAccumulating();
+        const rowChanges = this.#pushedRowChanges;
+        this.#pushedRowChanges = [];
+        yield* rowChanges;
       }
     } finally {
-      if (this.#streamer !== null) {
-        this.#stopAccumulating();
-      }
+      this.#pushedRowChanges = null;
     }
   }
 
@@ -1927,112 +1930,40 @@ export class PipelineDriver {
     schema: SourceSchema,
     change: Change,
   ): Stream<'yield'> {
-    const streamer = this.#streamer;
-    assert(streamer, 'must #startAccumulating() before pushing changes');
-    for (const rowChange of streamer.streamChange(queryID, schema, change)) {
+    assert(this.#pushedRowChanges, 'changes are only pushed by #push');
+    for (const rowChange of must(this.#streamer).streamChange(
+      queryID,
+      schema,
+      change,
+    )) {
       if (rowChange === 'yield') {
         yield rowChange;
         continue;
       }
-      // #push replaces the streamer after each 'yield', so add to the
-      // current one.
-      must(this.#streamer).add(rowChange);
+      // #push starts a new list after each 'yield', so add to the current one.
+      must(this.#pushedRowChanges).push(rowChange);
     }
-  }
-
-  #startAccumulating() {
-    assert(this.#streamer === null, 'Streamer already started');
-    this.#streamer = new Streamer(
-      must(this.#primaryKeys),
-      this.#tableSpecs,
-      (queryID, error) =>
-        this.#logQueryFailure(queryID, 'query pipeline failed', error),
-    );
-  }
-
-  #stopAccumulating(): Streamer {
-    const streamer = this.#streamer;
-    assert(streamer, 'Streamer not started');
-    this.#streamer = null;
-    return streamer;
-  }
-
-  #logQueryFailure(queryID: string, message: string, error: unknown): void {
-    const pipeline = this.#pipelines.get(queryID);
-    const queryInfo = pipeline
-      ? {
-          queryHash: queryID,
-          transformationHash: pipeline.transformationHash,
-          queryName: pipeline.queryName,
-        }
-      : undefined;
-    logQueryFailure(this.#lc, queryInfo, message, error);
   }
 }
 
+/** Turns the output of query pipelines into the row changes sent to clients. */
 class Streamer {
   readonly #primaryKeys: Map<string, PrimaryKey>;
   readonly #tableSpecs: Map<string, LiteAndZqlSpec>;
-  readonly #logQueryFailure:
-    | ((queryID: string, error: unknown) => void)
-    | undefined;
 
   constructor(
     primaryKeys: Map<string, PrimaryKey>,
     tableSpecs: Map<string, LiteAndZqlSpec>,
-    logQueryFailure?: (queryID: string, error: unknown) => void,
   ) {
     this.#primaryKeys = primaryKeys;
     this.#tableSpecs = tableSpecs;
-    this.#logQueryFailure = logQueryFailure;
   }
 
-  readonly #changes: [
-    queryID: string,
-    schema: SourceSchema,
-    changes: Iterable<Change | 'yield'>,
-  ][] = [];
-
-  /** Row changes that were already produced by {@link streamChange}. */
-  readonly #rowChanges: RowChange[] = [];
-
-  add(rowChange: RowChange) {
-    this.#rowChanges.push(rowChange);
-  }
-
-  streamChange(
+  /** The row changes for a change pushed out of the pipeline of `queryID`. */
+  *streamChange(
     queryID: string,
     schema: SourceSchema,
     change: Change,
-  ): Iterable<RowChange | 'yield'> {
-    return this.#streamChanges(queryID, schema, [change]);
-  }
-
-  accumulate(
-    queryID: string,
-    schema: SourceSchema,
-    changes: Iterable<Change | 'yield'>,
-  ): this {
-    this.#changes.push([queryID, schema, changes]);
-    return this;
-  }
-
-  *stream(): Iterable<RowChange | 'yield'> {
-    yield* this.#rowChanges;
-    for (const [queryID, schema, changes] of this.#changes) {
-      try {
-        yield* this.#streamChanges(queryID, schema, changes);
-      } catch (e) {
-        this.#logQueryFailure?.(queryID, e);
-        throw e;
-      }
-    }
-  }
-
-  *#streamChanges(
-    queryID: string,
-    schema: SourceSchema,
-    changes: Iterable<Change | 'yield'>,
   ): Iterable<RowChange | 'yield'> {
     // We do not sync rows gathered by the permissions
     // system to the client.
@@ -2040,51 +1971,41 @@ class Streamer {
       return;
     }
 
-    for (const change of changes) {
-      if (change === 'yield') {
-        yield change;
-        continue;
+    const type = change[ChangeIndex.TYPE];
+    switch (type) {
+      case ChangeType.REMOVE:
+      case ChangeType.ADD:
+        yield* this.streamNodes(queryID, schema, type, [
+          change[ChangeIndex.NODE],
+        ]);
+        break;
+      case ChangeType.CHILD: {
+        const child = change[ChangeIndex.CHILD_DATA];
+        yield* this.streamChange(
+          queryID,
+          must(schema.relationships[child.relationshipName]),
+          child.change,
+        );
+        break;
       }
-      const type = change[ChangeIndex.TYPE];
-      switch (type) {
-        case ChangeType.REMOVE:
-        case ChangeType.ADD: {
-          yield* this.#streamNodes(queryID, schema, type, () => [
-            change[ChangeIndex.NODE],
-          ]);
-          break;
-        }
-
-        case ChangeType.CHILD: {
-          const child = change[ChangeIndex.CHILD_DATA];
-          const childSchema = must(
-            schema.relationships[child.relationshipName],
-          );
-
-          yield* this.#streamChanges(queryID, childSchema, [child.change]);
-          break;
-        }
-        case ChangeType.EDIT:
-          yield* this.#streamNodes(queryID, schema, type, () => [
-            {row: change[ChangeIndex.NODE].row, relationships: {}},
-          ]);
-          break;
-        default:
-          unreachable(change[ChangeIndex.TYPE]);
-      }
+      case ChangeType.EDIT:
+        yield* this.streamNodes(queryID, schema, type, [
+          {row: change[ChangeIndex.NODE].row, relationships: {}},
+        ]);
+        break;
+      default:
+        unreachable(change[ChangeIndex.TYPE]);
     }
   }
 
-  *#streamNodes(
+  /** A row change of type `op` for each of `nodes` and their descendants. */
+  *streamNodes(
     queryID: string,
     schema: SourceSchema,
     op: ChangeType.ADD | ChangeType.REMOVE | ChangeType.EDIT,
-    nodes: () => Iterable<Node | 'yield'>,
+    nodes: Iterable<Node | 'yield'>,
   ): Iterable<RowChange | 'yield'> {
     const {tableName: table, system} = schema;
-
-    const primaryKey = must(this.#primaryKeys.get(table));
-    const spec = must(this.#tableSpecs.get(table)).tableSpec;
 
     // We do not sync rows gathered by the permissions
     // system to the client.
@@ -2092,7 +2013,10 @@ class Streamer {
       return;
     }
 
-    for (const node of nodes()) {
+    const primaryKey = must(this.#primaryKeys.get(table));
+    const spec = must(this.#tableSpecs.get(table)).tableSpec;
+
+    for (const node of nodes) {
       if (node === 'yield') {
         yield node;
         continue;
@@ -2118,9 +2042,17 @@ class Streamer {
         row: op === ChangeType.REMOVE ? undefined : row,
       } as RowChange;
 
-      for (const [relationship, children] of Object.entries(relationships)) {
+      for (const relationship of Object.keys(relationships)) {
         const childSchema = must(schema.relationships[relationship]);
-        yield* this.#streamNodes(queryID, childSchema, op, children);
+        // Permissions rows are not synced, so their relationship is not read.
+        if (childSchema.system !== 'permissions') {
+          yield* this.streamNodes(
+            queryID,
+            childSchema,
+            op,
+            relationships[relationship](),
+          );
+        }
       }
     }
   }
@@ -2225,18 +2157,14 @@ function logQueryFailure(
   queryLC.error?.(message, error);
 }
 
-function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
-  for (const node of nodes) {
-    if (node === 'yield') {
-      yield node;
-      continue;
-    }
-    yield [ChangeType.ADD, node, null];
-  }
-}
-
 function getRowKey(cols: PrimaryKey, row: Row): RowKey {
-  return Object.fromEntries(cols.map(col => [col, must(row[col])]));
+  const rowKey: Writable<RowKey> = {};
+  for (const col of cols) {
+    // Not `rowKey[col] = ...`: for a column named `__proto__` that would call
+    // the prototype setter instead of adding the key.
+    assignProperty(rowKey, col, must(row[col]));
+  }
+  return rowKey;
 }
 
 /** Whether `rowKey` has exactly the columns of `primaryKey`. */
@@ -2262,27 +2190,12 @@ export function hydrate(
   clientSchema: ClientSchema,
   tableSpecs: Map<string, LiteAndZqlSpec>,
 ): Iterable<RowChange | 'yield'> {
-  const res = input.fetch({});
-  const streamer = new Streamer(
-    buildPrimaryKeys(clientSchema),
-    tableSpecs,
-  ).accumulate(hash, input.getSchema(), toAdds(res));
-  return streamer.stream();
-}
-
-export function hydrateInternal(
-  input: Input,
-  hash: string,
-  primaryKeys: Map<string, PrimaryKey>,
-  tableSpecs: Map<string, LiteAndZqlSpec>,
-): Iterable<RowChange | 'yield'> {
-  const res = input.fetch({});
-  const streamer = new Streamer(primaryKeys, tableSpecs).accumulate(
+  return new Streamer(buildPrimaryKeys(clientSchema), tableSpecs).streamNodes(
     hash,
     input.getSchema(),
-    toAdds(res),
+    ChangeType.ADD,
+    input.fetch({}),
   );
-  return streamer.stream();
 }
 
 function buildPrimaryKeys(
