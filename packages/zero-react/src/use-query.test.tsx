@@ -1,4 +1,4 @@
-import {Suspense, useState, type ReactNode} from 'react';
+import {memo, Suspense, useState, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {
   afterEach,
@@ -10,7 +10,14 @@ import {
   vi,
 } from 'vitest';
 import type {Format} from '../../zero-types/src/format.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+} from '../../zql/src/ivm/source.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
+import {schema as testSchema} from '../../zql/src/query/test/test-schemas.ts';
 import type {TTL} from '../../zql/src/query/ttl.ts';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
@@ -458,9 +465,11 @@ describe('ViewStore', () => {
       emit(empty(), 'unknown');
       expect(view.getSnapshot()).toBe(snapshot1);
 
-      emit(row(), 'unknown');
-      // TODO: Assert that the data is the same object as passed into the listener.
-      expect(view.getSnapshot()).toEqual([row(), {type: 'unknown'}]);
+      // The data is passed through as is, so its rows keep their identity.
+      const data = row();
+      emit(data, 'unknown');
+      expect(view.getSnapshot()).toEqual([data, {type: 'unknown'}]);
+      expect(view.getSnapshot()[0]).toBe(data);
 
       emit(empty(), 'complete');
       const snapshot3 = view.getSnapshot();
@@ -633,6 +642,8 @@ describe('ViewStore', () => {
         cleanup();
         vi.advanceTimersByTime(20);
         expect(view.complete).toBe(false);
+        // The destroyed view's data stays visible rather than going empty.
+        expect(view.getSnapshot()).toBe(snapshot);
 
         const notify = vi.fn();
         const cleanup2 = view.subscribeReactInternals(notify);
@@ -1258,6 +1269,110 @@ describe('useSuspenseQuery', () => {
       // All views should be cleaned up
       expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
     });
+  });
+});
+
+// Rows that a change does not touch keep their identity all the way from the
+// query pipeline to React, so a `memo` component of an unchanged row does not
+// re-render.
+describe('row identity through a real query pipeline', () => {
+  const dom = setupRoot();
+
+  test('editing a comment re-renders only the issue that has it', async () => {
+    const queryDelegate = new QueryDelegateImpl({callGot: true});
+    const comment1 = {
+      id: 'c1',
+      authorId: 'u1',
+      issueId: 'i1',
+      text: 'first',
+      createdAt: 1,
+    };
+    const rows = {
+      user: [
+        {id: 'u1', name: 'Alice', metadata: null},
+        {id: 'u2', name: 'Bob', metadata: null},
+      ],
+      issue: [
+        {
+          id: 'i1',
+          title: 'Bug',
+          description: 'd1',
+          closed: false,
+          ownerId: 'u1',
+          createdAt: 1,
+        },
+        {
+          id: 'i2',
+          title: 'Feature',
+          description: 'd2',
+          closed: false,
+          ownerId: 'u2',
+          createdAt: 2,
+        },
+      ],
+      comment: [
+        comment1,
+        {id: 'c2', authorId: 'u2', issueId: 'i1', text: 'second', createdAt: 2},
+        {id: 'c3', authorId: 'u2', issueId: 'i2', text: 'third', createdAt: 3},
+      ],
+    };
+    for (const [table, tableRows] of Object.entries(rows)) {
+      for (const row of tableRows) {
+        consume(queryDelegate.getSource(table).push(makeSourceChangeAdd(row)));
+      }
+    }
+    // A Zero whose views are real IVM views over `queryDelegate`.
+    const zero = {
+      clientID: 'client-pipeline',
+      materialize: (q: Query<string, Schema>, options: unknown) =>
+        queryDelegate.materialize(q, undefined, options as never),
+    } as unknown as Zero<Schema>;
+
+    type Issue = {
+      id: string;
+      title: string;
+      owner: {name: string} | undefined;
+      comments: readonly {text: string}[];
+    };
+    const renders: Record<string, number> = {};
+    const IssueRow = memo(function IssueRow({issue}: {issue: Issue}) {
+      renders[issue.id] = (renders[issue.id] ?? 0) + 1;
+      const comments = issue.comments.map(c => c.text).join(',');
+      return (
+        <div>{`${issue.title} by ${issue.owner?.name}: ${comments};`}</div>
+      );
+    });
+    function Issues() {
+      const [issues] = useQuery(
+        newQuery(testSchema, 'issue').related('owner').related('comments'),
+      );
+      return (
+        <div>
+          {(issues as readonly Issue[]).map(issue => (
+            <IssueRow key={issue.id} issue={issue} />
+          ))}
+        </div>
+      );
+    }
+
+    dom.render(zero, <Issues />);
+    await expect
+      .poll(dom.text)
+      .toBe('Bug by Alice: first,second;Feature by Bob: third;');
+    const rendersBefore = {...renders};
+
+    consume(
+      queryDelegate
+        .getSource('comment')
+        .push(makeSourceChangeEdit({...comment1, text: 'edited'}, comment1)),
+    );
+    queryDelegate.commit();
+
+    await expect
+      .poll(dom.text)
+      .toBe('Bug by Alice: edited,second;Feature by Bob: third;');
+    expect(renders.i1).toBeGreaterThan(rendersBefore.i1);
+    expect(renders.i2).toBe(rendersBefore.i2);
   });
 });
 
