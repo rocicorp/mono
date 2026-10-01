@@ -1,4 +1,4 @@
-import {Suspense, useState} from 'react';
+import {Suspense, useState, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {
   afterEach,
@@ -8,7 +8,6 @@ import {
   expectTypeOf,
   test,
   vi,
-  type Mock,
 } from 'vitest';
 import type {Format} from '../../zero-types/src/format.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
@@ -31,7 +30,6 @@ import {
   type Query,
   type QueryResultDetails,
   type ReadonlyJSONValue,
-  type ResultType,
   type Schema,
   type Zero,
 } from './zero.ts';
@@ -61,27 +59,116 @@ function newMockQueryWithFormat(
   return ret;
 }
 
+type MockView = ReturnType<typeof newView>;
+
+/** The views each mock Zero's `materialize` returned, in order. */
+const materializedViews = new WeakMap<object, MockView[]>();
+
 function newMockZero<
   MD extends CustomMutatorDefs | undefined = undefined,
   C = unknown,
 >(clientID: string): Zero<Schema, MD, C> {
-  const view = newView();
-  return {
+  const views: MockView[] = [];
+  const zero = {
     clientID,
-    materialize: vi.fn().mockImplementation(() => view),
-  } as unknown as Zero<Schema, MD, C>;
+    materialize: vi.fn(() => {
+      const view = newView();
+      views.push(view);
+      return view;
+    }),
+  };
+  materializedViews.set(zero, views);
+  return zero as unknown as Zero<Schema, MD, C>;
 }
 
 function newView() {
+  const listeners = new Set<(...args: unknown[]) => void>();
   return {
-    listeners: new Set<() => void>(),
-    addListener(cb: () => void) {
-      this.listeners.add(cb);
+    listeners,
+    addListener(cb: (...args: unknown[]) => void) {
+      listeners.add(cb);
     },
-    destroy() {
-      this.listeners.clear();
+    destroy: vi.fn(() => {
+      listeners.clear();
+    }),
+    updateTTL(_ttl: TTL) {},
+    /** Calls the listeners, as the real view does when it flushes. */
+    emit(...args: unknown[]) {
+      for (const cb of listeners) {
+        cb(...args);
+      }
     },
-    updateTTL() {},
+  };
+}
+
+/** The view the last (or the `n`th) `zero.materialize` call returned. */
+function materializedView(zero: object, n = -1): MockView {
+  const view = materializedViews.get(zero)?.at(n);
+  if (!view) {
+    throw new Error(`materialize was not called ${n < 0 ? -n : n + 1} times`);
+  }
+  return view;
+}
+
+function getView(
+  viewStore: ViewStore,
+  {
+    zero = newMockZero('client1'),
+    query = newMockQuery('query1'),
+    ttl = 'forever',
+  }: {
+    zero?: Zero<Schema> | undefined;
+    query?: Query<string, Schema> | undefined;
+    ttl?: TTL | undefined;
+  } = {},
+) {
+  return viewStore.getView(zero, query, true, ttl);
+}
+
+/**
+ * A view of `query1` in a new store, and a way to call the listeners of the
+ * view it materialized.
+ */
+function newMaterializedView(singular = false) {
+  const zero = newMockZero('client1');
+  const view = getView(new ViewStore(), {
+    zero,
+    query: newMockQuery('query1', singular),
+  });
+  return {
+    zero,
+    view,
+    emit: (...args: unknown[]) => materializedView(zero).emit(...args),
+  };
+}
+
+/** Mounts a fresh React root for each test of the enclosing describe. */
+function setupRoot() {
+  let element: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    element = document.createElement('div');
+    document.body.appendChild(element);
+    root = createRoot(element);
+  });
+
+  afterEach(() => {
+    root.unmount();
+    element.remove();
+  });
+
+  return {
+    render(zero: Zero<Schema>, children: ReactNode, key?: string) {
+      root.render(
+        <ZeroProvider zero={zero} key={key}>
+          {children}
+        </ZeroProvider>,
+      );
+    },
+    /** The rendered text, for `expect.poll`. */
+    text: () => element.textContent,
   };
 }
 
@@ -91,53 +178,20 @@ describe('ViewStore', () => {
   });
 
   describe('duplicate queries', () => {
+    // Each getView below uses a new Zero with the same client ID.
+
     test('duplicate queries do not create duplicate views', () => {
       const viewStore = new ViewStore();
-
-      const zero1 = newMockZero('client1');
-      const view1 = viewStore.getView(
-        zero1,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-
-      const zero2 = newMockZero('client1');
-      const view2 = viewStore.getView(
-        zero2,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-
-      expect(view1).toBe(view2);
-
+      expect(getView(viewStore)).toBe(getView(viewStore));
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
     });
 
     test('removing a duplicate query does not destroy the shared view', () => {
       const viewStore = new ViewStore();
-
-      const zero1 = newMockZero('client1');
-      const view1 = viewStore.getView(
-        zero1,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-      const zero2 = newMockZero('client1');
-      const view2 = viewStore.getView(
-        zero2,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-
-      const cleanup1 = view1.subscribeReactInternals(() => {});
-      view2.subscribeReactInternals(() => {});
+      const cleanup1 = getView(viewStore).subscribeReactInternals(() => {});
+      getView(viewStore).subscribeReactInternals(() => {});
 
       cleanup1();
-
       vi.advanceTimersByTime(100);
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
@@ -145,20 +199,15 @@ describe('ViewStore', () => {
 
     test('Using the same query with different TTL should reuse views', () => {
       const viewStore = new ViewStore();
-
       const q1 = newMockQuery('query1');
       const zero = newMockZero('client1');
-      const view1 = viewStore.getView(zero, q1, true, '1s');
+      const view1 = getView(viewStore, {zero, query: q1, ttl: '1s'});
 
       const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
-      expect(zero.materialize).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(zero.materialize).mock.calls[0][0]).toBe(q1);
-      expect(vi.mocked(zero.materialize).mock.calls[0][1]).toEqual({ttl: '1s'});
+      expect(zero.materialize).toHaveBeenCalledExactlyOnceWith(q1, {ttl: '1s'});
 
-      const q2 = newMockQuery('query1');
       const zeroClient2 = newMockZero('client1');
-      const view2 = viewStore.getView(zeroClient2, q2, true, '1m');
-      expect(view1).toBe(view2);
+      expect(getView(viewStore, {zero: zeroClient2, ttl: '1m'})).toBe(view1);
 
       // Same query hash and client id so only one view. Should have called
       // updateTTL on the existing one.
@@ -170,25 +219,15 @@ describe('ViewStore', () => {
 
     test('Using the same query with same TTL but different representation', () => {
       const viewStore = new ViewStore();
-
-      const q1 = newMockQuery('query1');
       const zero = newMockZero('client1');
-      const view1 = viewStore.getView(zero, q1, true, '60s');
+      const view1 = getView(viewStore, {zero, ttl: '60s'});
       const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
       expect(zero.materialize).toHaveBeenCalledTimes(1);
 
-      const q2 = newMockQuery('query1');
-      const zeroClient2 = newMockZero('client1');
-      const view2 = viewStore.getView(zeroClient2, q2, true, '1m');
-      expect(view1).toBe(view2);
-
+      expect(getView(viewStore, {ttl: '1m'})).toBe(view1);
       expect(updateTTLSpy).toHaveBeenCalledExactlyOnceWith('1m');
 
-      const q3 = newMockQuery('query1');
-      const zeroClient3 = newMockZero('client1');
-      const view3 = viewStore.getView(zeroClient3, q3, true, 60_000);
-
-      expect(view1).toBe(view3);
+      expect(getView(viewStore, {ttl: 60_000})).toBe(view1);
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
     });
@@ -197,29 +236,11 @@ describe('ViewStore', () => {
   describe('destruction', () => {
     test('removing all duplicate queries destroys the shared view', () => {
       const viewStore = new ViewStore();
-
-      const zero1 = newMockZero('client1');
-      const view1 = viewStore.getView(
-        zero1,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-
-      const zero2 = newMockZero('client1');
-      const view2 = viewStore.getView(
-        zero2,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-
-      const cleanup1 = view1.subscribeReactInternals(() => {});
-      const cleanup2 = view2.subscribeReactInternals(() => {});
+      const cleanup1 = getView(viewStore).subscribeReactInternals(() => {});
+      const cleanup2 = getView(viewStore).subscribeReactInternals(() => {});
 
       cleanup1();
       cleanup2();
-
       vi.advanceTimersByTime(100);
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
@@ -227,16 +248,7 @@ describe('ViewStore', () => {
 
     test('removing a unique query destroys the view', () => {
       const viewStore = new ViewStore();
-
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(
-        zero,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-
-      const cleanup = view.subscribeReactInternals(() => {});
+      const cleanup = getView(viewStore).subscribeReactInternals(() => {});
       cleanup();
 
       vi.advanceTimersByTime(100);
@@ -245,16 +257,7 @@ describe('ViewStore', () => {
 
     test('view destruction is delayed via setTimeout', () => {
       const viewStore = new ViewStore();
-
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(
-        zero,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-
-      const cleanup = view.subscribeReactInternals(() => {});
+      const cleanup = getView(viewStore).subscribeReactInternals(() => {});
       cleanup();
 
       vi.advanceTimersByTime(5);
@@ -266,13 +269,7 @@ describe('ViewStore', () => {
 
     test('subscribing to a view scheduled for cleanup prevents the cleanup', () => {
       const viewStore = new ViewStore();
-      const zero1 = newMockZero('client1');
-      const view = viewStore.getView(
-        zero1,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
+      const view = getView(viewStore);
       const cleanup = view.subscribeReactInternals(() => {});
 
       cleanup();
@@ -281,13 +278,7 @@ describe('ViewStore', () => {
       vi.advanceTimersByTime(5);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
 
-      const zero2 = newMockZero('client1');
-      const view2 = viewStore.getView(
-        zero2,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
+      const view2 = getView(viewStore);
       const cleanup2 = view2.subscribeReactInternals(() => {});
       vi.advanceTimersByTime(100);
 
@@ -302,14 +293,7 @@ describe('ViewStore', () => {
 
     test('destroying the same underlying view twice is a no-op', () => {
       const viewStore = new ViewStore();
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(
-        zero,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-      const cleanup = view.subscribeReactInternals(() => {});
+      const cleanup = getView(viewStore).subscribeReactInternals(() => {});
 
       cleanup();
       cleanup();
@@ -322,43 +306,17 @@ describe('ViewStore', () => {
   describe('clients', () => {
     test('the same query for different clients results in different views', () => {
       const viewStore = new ViewStore();
-
-      const zero1 = newMockZero('client1');
-      const view1 = viewStore.getView(
-        zero1,
-        newMockQuery('query1'),
-        true,
-        'forever',
+      expect(getView(viewStore)).not.toBe(
+        getView(viewStore, {zero: newMockZero('client2')}),
       );
-
-      const zero2 = newMockZero('client2');
-      const view2 = viewStore.getView(
-        zero2,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-
-      expect(view1).not.toBe(view2);
     });
 
     test('one client’s views are destroyed without disturbing another’s', () => {
       const viewStore = new ViewStore();
-
       const zero1 = newMockZero('client1');
-      const view1 = viewStore.getView(
-        zero1,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
+      const view1 = getView(viewStore, {zero: zero1});
       const zero2 = newMockZero('client2');
-      const view2 = viewStore.getView(
-        zero2,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
+      const view2 = getView(viewStore, {zero: zero2});
       expect(getAllViewsSizeForTesting(viewStore)).toBe(2);
 
       const cleanup1 = view1.subscribeReactInternals(() => {});
@@ -370,9 +328,7 @@ describe('ViewStore', () => {
       // The other client keeps its view, and asking again returns that same
       // one rather than building a second.
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
-      expect(
-        viewStore.getView(zero2, newMockQuery('query1'), true, 'forever'),
-      ).toBe(view2);
+      expect(getView(viewStore, {zero: zero2})).toBe(view2);
 
       cleanup2();
       vi.advanceTimersByTime(100);
@@ -380,13 +336,7 @@ describe('ViewStore', () => {
 
       // ...and the store still works afterwards, having dropped the per-client
       // entry it no longer needs.
-      const view3 = viewStore.getView(
-        zero1,
-        newMockQuery('query1'),
-        true,
-        'forever',
-      );
-      expect(view3).not.toBe(view1);
+      expect(getView(viewStore, {zero: zero1})).not.toBe(view1);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
     });
   });
@@ -396,29 +346,25 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
       const zero = newMockZero('client1');
 
-      viewStore.getView(zero, newMockQuery('query1'), true, 1000);
+      getView(viewStore, {zero, ttl: 1000});
       // The wrapper materializes eagerly, so the underlying view is the one
       // to watch: `getView` calls the wrapper's `updateTTL` either way, and
       // what the guard changes is whether it forwards.
-      const materialized = vi.mocked(zero.materialize).mock.results[0]
-        .value as {
-        updateTTL: (ttl: TTL) => void;
-      };
-      const updateTTL = vi.spyOn(materialized, 'updateTTL');
+      const updateTTL = vi.spyOn(materializedView(zero), 'updateTTL');
 
       // Same ttl, as every re-render passes: nothing to tell the view, and
       // nothing to re-derive in the query manager.
-      viewStore.getView(zero, newMockQuery('query1'), true, 1000);
-      viewStore.getView(zero, newMockQuery('query1'), true, 1000);
+      getView(viewStore, {zero, ttl: 1000});
+      getView(viewStore, {zero, ttl: 1000});
       expect(updateTTL).not.toHaveBeenCalled();
 
       // A different ttl still propagates...
-      viewStore.getView(zero, newMockQuery('query1'), true, 2000);
+      getView(viewStore, {zero, ttl: 2000});
       expect(updateTTL).toHaveBeenCalledWith(2000);
 
       // ...including a change only in how the duration is spelled.
       updateTTL.mockClear();
-      viewStore.getView(zero, newMockQuery('query1'), true, '2s');
+      getView(viewStore, {zero, ttl: '2s'});
       expect(updateTTL).toHaveBeenCalledWith('2s');
     });
   });
@@ -426,21 +372,15 @@ describe('ViewStore', () => {
   describe('singular vs plural', () => {
     test('the same query hash with different singular flag creates different views', () => {
       const viewStore = new ViewStore();
-
       const zero = newMockZero('client1');
-      const view1 = viewStore.getView(
+      const view1 = getView(viewStore, {
         zero,
-        newMockQuery('query1', false),
-        true,
-        'forever',
-      );
-
-      const view2 = viewStore.getView(
+        query: newMockQuery('query1', false),
+      });
+      const view2 = getView(viewStore, {
         zero,
-        newMockQuery('query1', true),
-        true,
-        'forever',
-      );
+        query: newMockQuery('query1', true),
+      });
 
       expect(view1).not.toBe(view2);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(2);
@@ -448,22 +388,8 @@ describe('ViewStore', () => {
 
     test('duplicate singular queries share a view', () => {
       const viewStore = new ViewStore();
-
-      const zero1 = newMockZero('client1');
-      const view1 = viewStore.getView(
-        zero1,
-        newMockQuery('query1', true),
-        true,
-        'forever',
-      );
-
-      const zero2 = newMockZero('client1');
-      const view2 = viewStore.getView(
-        zero2,
-        newMockQuery('query1', true),
-        true,
-        'forever',
-      );
+      const view1 = getView(viewStore, {query: newMockQuery('query1', true)});
+      const view2 = getView(viewStore, {query: newMockQuery('query1', true)});
 
       expect(view1).toBe(view2);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
@@ -477,28 +403,14 @@ describe('ViewStore', () => {
       // whole format, not just the top-level singular flag.
       const viewStore = new ViewStore();
       const zero = newMockZero('client1');
+      const withOwner = (singular: boolean) =>
+        newMockQueryWithFormat('query1', {
+          singular: false,
+          relationships: {owner: {singular, relationships: {}}},
+        });
 
-      const oneFormat: Format = {
-        singular: false,
-        relationships: {owner: {singular: true, relationships: {}}},
-      };
-      const limitFormat: Format = {
-        singular: false,
-        relationships: {owner: {singular: false, relationships: {}}},
-      };
-
-      const view1 = viewStore.getView(
-        zero,
-        newMockQueryWithFormat('query1', oneFormat),
-        true,
-        'forever',
-      );
-      const view2 = viewStore.getView(
-        zero,
-        newMockQueryWithFormat('query1', limitFormat),
-        true,
-        'forever',
-      );
+      const view1 = getView(viewStore, {zero, query: withOwner(true)});
+      const view2 = getView(viewStore, {zero, query: withOwner(false)});
 
       expect(view1).not.toBe(view2);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(2);
@@ -507,189 +419,89 @@ describe('ViewStore', () => {
     test('duplicate queries with matching nested formats share a view', () => {
       const viewStore = new ViewStore();
       const zero = newMockZero('client1');
-
-      const format: Format = {
-        singular: false,
-        relationships: {owner: {singular: true, relationships: {}}},
-      };
-
-      const view1 = viewStore.getView(
-        zero,
-        newMockQueryWithFormat('query1', format),
-        true,
-        'forever',
-      );
-      const view2 = viewStore.getView(
-        zero,
+      // A new but equal format object for each query.
+      const withSingularOwner = () =>
         newMockQueryWithFormat('query1', {
           singular: false,
           relationships: {owner: {singular: true, relationships: {}}},
-        }),
-        true,
-        'forever',
-      );
+        });
+
+      const view1 = getView(viewStore, {zero, query: withSingularOwner()});
+      const view2 = getView(viewStore, {zero, query: withSingularOwner()});
 
       expect(view1).toBe(view2);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
     });
   });
 
+  // The data is built by a function so that each call passes a new object:
+  // equal data, not the same reference.
+  const shapes = [
+    {name: 'plural', singular: false, empty: () => [], row: () => [{a: 1}]},
+    {
+      name: 'singular',
+      singular: true,
+      empty: () => undefined,
+      row: () => ({a: 1}),
+    },
+  ];
+
   describe('collapse multiple empty on data', () => {
-    test('plural', () => {
-      const viewStore = new ViewStore();
-      const q = newMockQuery('query1');
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(zero, q, true, 'forever');
-
+    test.each(shapes)('$name', ({singular, empty, row}) => {
+      const {zero, view, emit} = newMaterializedView(singular);
       expect(zero.materialize).toHaveBeenCalledTimes(1);
-      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
-        .value as unknown as {
-        listeners: Set<(...args: unknown[]) => void>;
-      };
-
       const cleanup = view.subscribeReactInternals(() => {});
 
-      listeners.forEach(cb => cb([], 'unknown'));
-
+      emit(empty(), 'unknown');
       const snapshot1 = view.getSnapshot();
+      expect(snapshot1).toEqual([empty(), {type: 'unknown'}]);
+      emit(empty(), 'unknown');
+      expect(view.getSnapshot()).toBe(snapshot1);
 
-      listeners.forEach(cb => cb([], 'unknown'));
+      emit(row(), 'unknown');
+      // TODO: Assert that the data is the same object as passed into the listener.
+      expect(view.getSnapshot()).toEqual([row(), {type: 'unknown'}]);
 
-      const snapshot2 = view.getSnapshot();
-
-      expect(snapshot1).toBe(snapshot2);
-
-      listeners.forEach(cb => cb([{a: 1}], 'unknown'));
-
-      // TODO: Assert that data[0] is the same object as passed into the listener.
-      expect(view.getSnapshot()).toEqual([[{a: 1}], {type: 'unknown'}]);
-
-      listeners.forEach(cb => cb([], 'complete'));
+      emit(empty(), 'complete');
       const snapshot3 = view.getSnapshot();
-      expect(snapshot3).toEqual([[], {type: 'complete'}]);
-
-      listeners.forEach(cb => cb([], 'complete'));
-      const snapshot4 = view.getSnapshot();
-      expect(snapshot3).toBe(snapshot4);
-
-      cleanup();
-    });
-
-    test('singular', () => {
-      const viewStore = new ViewStore();
-      const q = newMockQuery('query1', true);
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(zero, q, true, 'forever');
-
-      expect(zero.materialize).toHaveBeenCalledTimes(1);
-      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
-        .value as unknown as {
-        listeners: Set<(...args: unknown[]) => void>;
-      };
-
-      const cleanup = view.subscribeReactInternals(() => {});
-
-      listeners.forEach(cb => cb(undefined, 'unknown'));
-      const snapshot1 = view.getSnapshot();
-      expect(snapshot1).toEqual([undefined, {type: 'unknown'}]);
-
-      listeners.forEach(cb => cb(undefined, 'unknown'));
-      const snapshot2 = view.getSnapshot();
-      expect(snapshot1).toBe(snapshot2);
-
-      listeners.forEach(cb => cb({a: 1}, 'unknown'));
-      // TODO: Assert that data is the same object as passed into the listener.
-      expect(view.getSnapshot()).toEqual([{a: 1}, {type: 'unknown'}]);
-
-      listeners.forEach(cb => cb(undefined, 'complete'));
-      const snapshot3 = view.getSnapshot();
-      expect(snapshot3).toEqual([undefined, {type: 'complete'}]);
-
-      listeners.forEach(cb => cb(undefined, 'complete'));
-      const snapshot4 = view.getSnapshot();
-      expect(snapshot3).toBe(snapshot4);
+      expect(snapshot3).toEqual([empty(), {type: 'complete'}]);
+      emit(empty(), 'complete');
+      expect(view.getSnapshot()).toBe(snapshot3);
 
       cleanup();
     });
   });
 
   describe('cached result type', () => {
-    test('plural: empty cached snapshots are shared and stable', () => {
-      const viewStore = new ViewStore();
-      const q = newMockQuery('query1');
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(zero, q, true, 'forever');
+    test.each(shapes)(
+      '$name: empty cached snapshots are shared and stable',
+      ({singular, empty, row}) => {
+        const {view, emit} = newMaterializedView(singular);
+        const cleanup = view.subscribeReactInternals(() => {});
 
-      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
-        .value as unknown as {
-        listeners: Set<(...args: unknown[]) => void>;
-      };
+        emit(empty(), 'cached');
+        const snapshot1 = view.getSnapshot();
+        expect(snapshot1).toEqual([empty(), {type: 'cached'}]);
+        emit(empty(), 'cached');
+        expect(view.getSnapshot()).toBe(snapshot1);
 
-      const cleanup = view.subscribeReactInternals(() => {});
+        emit(row(), 'cached');
+        expect(view.getSnapshot()).toEqual([row(), {type: 'cached'}]);
 
-      listeners.forEach(cb => cb([], 'cached'));
-      const snapshot1 = view.getSnapshot();
-      expect(snapshot1).toEqual([[], {type: 'cached'}]);
+        emit(row(), 'complete');
+        expect(view.getSnapshot()).toEqual([row(), {type: 'complete'}]);
 
-      listeners.forEach(cb => cb([], 'cached'));
-      const snapshot2 = view.getSnapshot();
-      expect(snapshot1).toBe(snapshot2);
-
-      listeners.forEach(cb => cb([{a: 1}], 'cached'));
-      expect(view.getSnapshot()).toEqual([[{a: 1}], {type: 'cached'}]);
-
-      listeners.forEach(cb => cb([{a: 1}], 'complete'));
-      expect(view.getSnapshot()).toEqual([[{a: 1}], {type: 'complete'}]);
-
-      cleanup();
-    });
-
-    test('singular: empty cached snapshots are shared and stable', () => {
-      const viewStore = new ViewStore();
-      const q = newMockQuery('query1', true);
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(zero, q, true, 'forever');
-
-      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
-        .value as unknown as {
-        listeners: Set<(...args: unknown[]) => void>;
-      };
-
-      const cleanup = view.subscribeReactInternals(() => {});
-
-      listeners.forEach(cb => cb(undefined, 'cached'));
-      const snapshot1 = view.getSnapshot();
-      expect(snapshot1).toEqual([undefined, {type: 'cached'}]);
-
-      listeners.forEach(cb => cb(undefined, 'cached'));
-      const snapshot2 = view.getSnapshot();
-      expect(snapshot1).toBe(snapshot2);
-
-      listeners.forEach(cb => cb({a: 1}, 'cached'));
-      expect(view.getSnapshot()).toEqual([{a: 1}, {type: 'cached'}]);
-
-      listeners.forEach(cb => cb({a: 1}, 'complete'));
-      expect(view.getSnapshot()).toEqual([{a: 1}, {type: 'complete'}]);
-
-      cleanup();
-    });
+        cleanup();
+      },
+    );
 
     test('empty cached result satisfies nonEmpty but not complete', () => {
-      const viewStore = new ViewStore();
-      const q = newMockQuery('query1');
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(zero, q, true, 'forever');
-
-      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
-        .value as unknown as {
-        listeners: Set<(...args: unknown[]) => void>;
-      };
-
+      const {view, emit} = newMaterializedView();
       const cleanup = view.subscribeReactInternals(() => {});
 
       // A server-confirmed empty result from a previous session is enough
       // for suspendUntil: 'partial' to render while offline.
-      listeners.forEach(cb => cb([], 'cached'));
+      emit([], 'cached');
       expect(view.nonEmpty).toBe(true);
       expect(view.complete).toBe(false);
 
@@ -697,23 +509,14 @@ describe('ViewStore', () => {
     });
 
     test('a revoked empty cached result suspends again', async () => {
-      const viewStore = new ViewStore();
-      const q = newMockQuery('query1');
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(zero, q, true, 'forever');
-
-      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
-        .value as unknown as {
-        listeners: Set<(...args: unknown[]) => void>;
-      };
-
+      const {view, emit} = newMaterializedView();
       const cleanup = view.subscribeReactInternals(() => {});
 
-      listeners.forEach(cb => cb([], 'cached'));
+      emit([], 'cached');
       expect(view.nonEmpty).toBe(true);
 
       // The got key was evicted before this connection confirmed the query.
-      listeners.forEach(cb => cb([], 'unknown'));
+      emit([], 'unknown');
       expect(view.nonEmpty).toBe(false);
       let resolved = false;
       void view.waitForNonEmpty().then(() => {
@@ -722,7 +525,7 @@ describe('ViewStore', () => {
       await Promise.resolve();
       expect(resolved).toBe(false);
 
-      listeners.forEach(cb => cb([{a: 1}], 'unknown'));
+      emit([{a: 1}], 'unknown');
       expect(view.nonEmpty).toBe(true);
       await Promise.resolve();
       expect(resolved).toBe(true);
@@ -731,46 +534,124 @@ describe('ViewStore', () => {
     });
 
     test('cached does not satisfy complete-waiters', () => {
-      const viewStore = new ViewStore();
-      const q = newMockQuery('query1');
-      const zero = newMockZero('client1');
-      const view = viewStore.getView(zero, q, true, 'forever');
-
-      const {listeners} = vi.mocked(zero.materialize).mock.results[0]
-        .value as unknown as {
-        listeners: Set<(...args: unknown[]) => void>;
-      };
-
+      const {view, emit} = newMaterializedView();
       const cleanup = view.subscribeReactInternals(() => {});
 
-      listeners.forEach(cb => cb([{a: 1}], 'cached'));
+      emit([{a: 1}], 'cached');
       // 'cached' is last session's server-confirmed answer; only a
       // confirmation on THIS connection may report complete.
       expect(view.complete).toBe(false);
 
-      listeners.forEach(cb => cb([{a: 1}], 'complete'));
+      emit([{a: 1}], 'complete');
       expect(view.complete).toBe(true);
 
       cleanup();
     });
   });
+
+  describe('unchanged data on flush', () => {
+    test('same data reference keeps snapshot identity and does not notify', () => {
+      const {view, emit} = newMaterializedView();
+      const notify = vi.fn();
+      const cleanup = view.subscribeReactInternals(notify);
+
+      const rows = [{a: 1}];
+      emit(rows, 'unknown');
+      const snapshot1 = view.getSnapshot();
+      expect(snapshot1).toEqual([[{a: 1}], {type: 'unknown'}]);
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      // Same data reference, resultType and error: the previous snapshot
+      // tuple is kept (so useSyncExternalStore's Object.is bailout works) and
+      // React is not notified.
+      emit(rows, 'unknown');
+      expect(view.getSnapshot()).toBe(snapshot1);
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      // Same data reference but new resultType: new snapshot, notified.
+      emit(rows, 'complete');
+      const snapshot2 = view.getSnapshot();
+      expect(snapshot2).not.toBe(snapshot1);
+      expect(snapshot2).toEqual([[{a: 1}], {type: 'complete'}]);
+      expect(notify).toHaveBeenCalledTimes(2);
+
+      // New data reference: new snapshot, notified.
+      emit([{a: 2}], 'complete');
+      expect(view.getSnapshot()).toEqual([[{a: 2}], {type: 'complete'}]);
+      expect(notify).toHaveBeenCalledTimes(3);
+
+      cleanup();
+    });
+
+    test('same error reference keeps snapshot identity and does not notify', () => {
+      const {view, emit} = newMaterializedView();
+      const notify = vi.fn();
+      const cleanup = view.subscribeReactInternals(notify);
+
+      const error: ErroredQuery = {
+        error: 'app',
+        id: 'query1',
+        name: 'query1',
+        details: 'boom',
+      };
+      const rows: unknown[] = [];
+      emit(rows, 'error', error);
+      const snapshot1 = view.getSnapshot();
+      expect(snapshot1[1].type).toBe('error');
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      emit(rows, 'error', error);
+      expect(view.getSnapshot()).toBe(snapshot1);
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      // A different error object produces a new snapshot and notifies.
+      emit(rows, 'error', {...error, details: 'boom again'});
+      expect(view.getSnapshot()).not.toBe(snapshot1);
+      expect(notify).toHaveBeenCalledTimes(2);
+
+      cleanup();
+    });
+
+    // After unsubscribe → destroy → re-subscribe, the new view can deliver the
+    // same data reference and resultType as before the destroy; an empty
+    // .one() query redelivering (undefined, 'complete') is the realistic case.
+    // The snapshot keeps its identity and React is not notified, but the
+    // resolvers, reset by the destroy, must still resolve.
+    test.each([
+      {name: 'a row', row: {a: 1}},
+      {name: 'no row', row: undefined},
+    ])(
+      'resolvers resolve after re-materialize with unchanged data: $name',
+      async ({row}) => {
+        const {view, emit} = newMaterializedView(true);
+        const cleanup = view.subscribeReactInternals(() => {});
+        emit(row, 'complete');
+        expect(view.complete).toBe(true);
+        const snapshot = view.getSnapshot();
+        expect(snapshot).toEqual([row, {type: 'complete'}]);
+
+        cleanup();
+        vi.advanceTimersByTime(20);
+        expect(view.complete).toBe(false);
+
+        const notify = vi.fn();
+        const cleanup2 = view.subscribeReactInternals(notify);
+        emit(row, 'complete');
+        expect(view.getSnapshot()).toBe(snapshot);
+        expect(notify).not.toHaveBeenCalled();
+        expect(view.complete).toBe(true);
+        await expect(view.waitForComplete()).resolves.toBeUndefined();
+        expect(view.nonEmpty).toBe(true);
+        await expect(view.waitForNonEmpty()).resolves.toBeUndefined();
+
+        cleanup2();
+      },
+    );
+  });
 });
 
 describe('stable query identity', () => {
-  let root: Root;
-  let element: HTMLDivElement;
-
-  beforeEach(() => {
-    vi.useRealTimers();
-    element = document.createElement('div');
-    document.body.appendChild(element);
-    root = createRoot(element);
-  });
-
-  afterEach(() => {
-    document.body.removeChild(element);
-    root.unmount();
-  });
+  const dom = setupRoot();
 
   /**
    * A named query as a call site sees it: the `CustomQuery` is a stable
@@ -803,18 +684,13 @@ describe('stable query identity', () => {
   }
 
   async function render(
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    zero: any,
+    zero: Zero<Schema>,
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     request: any,
     n: number,
   ) {
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Comp n={n} request={request} />
-      </ZeroProvider>,
-    );
-    await expect.poll(() => element.textContent).toBe(String(n));
+    dom.render(zero, <Comp n={n} request={request} />);
+    await expect.poll(dom.text).toBe(String(n));
   }
 
   test('a request with equal args is resolved once across re-renders', async () => {
@@ -871,234 +747,129 @@ describe('stable query identity', () => {
 });
 
 describe('useSuspenseQuery', () => {
-  let root: Root;
-  let element: HTMLDivElement;
-  let unique: number = 0;
+  const dom = setupRoot();
+  let unique = 0;
 
   beforeEach(() => {
-    vi.useRealTimers();
-    element = document.createElement('div');
-    document.body.appendChild(element);
-    root = createRoot(element);
     unique++;
   });
 
-  afterEach(() => {
-    document.body.removeChild(element);
-    root.unmount();
-  });
-
-  test('suspendsUntil complete', async () => {
-    const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-
-    function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'complete'});
-      return <div>{JSON.stringify(data)}</div>;
-    }
-
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Suspense fallback={<>loading</>}>
-          <Comp />
-        </Suspense>
-      </ZeroProvider>,
-    );
-
-    await expect.poll(() => element.textContent).toBe('loading');
-
-    const view = vi.mocked(zero.materialize).mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+  /** A query and a Zero instance that no other test uses. */
+  function newQueryAndZero(singular = false) {
+    return {
+      q: newMockQuery('query' + unique, singular),
+      zero: newMockZero('client' + unique),
     };
+  }
 
-    view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
-    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
-  });
-
-  test('suspendsUntil complete, already complete', async () => {
-    const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-
-    function Comp({label}: {label: string}) {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'complete'});
-      return <div>{`${label}:${JSON.stringify(data)}`}</div>;
-    }
-
-    root.render(
-      <ZeroProvider zero={zero} key="1">
-        <Suspense fallback={<>loading</>}>
-          <Comp label="1" />
-        </Suspense>
-      </ZeroProvider>,
+  /** Renders `children` in a suspense boundary that shows `loading`. */
+  function renderSuspense(
+    zero: Zero<Schema>,
+    children: ReactNode,
+    key?: string,
+  ) {
+    dom.render(
+      zero,
+      <Suspense fallback={<>loading</>}>{children}</Suspense>,
+      key,
     );
+  }
 
-    await expect.poll(() => element.textContent).toBe('loading');
+  /** Renders the data, prefixed with `label:` when there is one. */
+  function Data({
+    query,
+    suspendUntil,
+    label,
+  }: {
+    query: Query<string, Schema>;
+    suspendUntil: 'complete' | 'partial';
+    label?: string | undefined;
+  }) {
+    const [data] = useSuspenseQuery(query, {suspendUntil});
+    const text = String(JSON.stringify(data));
+    return <div>{label === undefined ? text : `${label}:${text}`}</div>;
+  }
 
-    const view = vi.mocked(zero.materialize).mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
-    };
+  test.each([
+    {
+      name: 'suspendsUntil complete',
+      suspendUntil: 'complete',
+      data: [{a: 1}],
+      resultType: 'complete',
+      text: '[{"a":1}]',
+    },
+    {
+      name: 'suspendsUntil partial, partial array before complete',
+      suspendUntil: 'partial',
+      data: [{a: 1}],
+      resultType: 'unknown',
+      text: '[{"a":1}]',
+    },
+    {
+      name: 'suspendsUntil partial singular, defined value before complete',
+      singular: true,
+      suspendUntil: 'partial',
+      data: {a: 1},
+      resultType: 'unknown',
+      text: '{"a":1}',
+    },
+    {
+      name: 'suspendUntil partial, complete with empty array',
+      suspendUntil: 'partial',
+      data: [],
+      resultType: 'complete',
+      text: '[]',
+    },
+    {
+      name: 'suspendUntil partial, complete with undefined',
+      singular: true,
+      suspendUntil: 'partial',
+      data: undefined,
+      resultType: 'complete',
+      text: 'undefined',
+    },
+  ] as const)(
+    '$name',
+    async ({singular = false, suspendUntil, data, resultType, text}) => {
+      const {q, zero} = newQueryAndZero(singular);
+      renderSuspense(zero, <Data query={q} suspendUntil={suspendUntil} />);
+      await expect.poll(dom.text).toBe('loading');
 
-    view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
-    await expect.poll(() => element.textContent).toBe('1:[{"a":1}]');
+      materializedView(zero).emit(data, resultType);
+      await expect.poll(dom.text).toBe(text);
+    },
+  );
 
-    root.render(
-      <ZeroProvider zero={zero} key="2">
-        <Suspense fallback={<>loading</>}>
-          <Comp label="2" />
-        </Suspense>
-      </ZeroProvider>,
+  test.each([
+    {
+      name: 'suspendsUntil complete, already complete',
+      suspendUntil: 'complete',
+      resultType: 'complete',
+    },
+    {
+      name: 'suspendsUntil partial, already partial array before complete',
+      suspendUntil: 'partial',
+      resultType: 'unknown',
+    },
+  ] as const)('$name', async ({suspendUntil, resultType}) => {
+    const {q, zero} = newQueryAndZero();
+    renderSuspense(
+      zero,
+      <Data query={q} suspendUntil={suspendUntil} label="1" />,
+      '1',
     );
+    await expect.poll(dom.text).toBe('loading');
 
-    await expect.poll(() => element.textContent).toBe('2:[{"a":1}]');
-  });
+    materializedView(zero).emit([{a: 1}], resultType);
+    await expect.poll(dom.text).toBe('1:[{"a":1}]');
 
-  test('suspendsUntil partial, partial array before complete', async () => {
-    const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-
-    function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
-      return <div>{JSON.stringify(data)}</div>;
-    }
-
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Suspense fallback={<>loading</>}>
-          <Comp />
-        </Suspense>
-      </ZeroProvider>,
+    // A new provider and component; the view already satisfies them.
+    renderSuspense(
+      zero,
+      <Data query={q} suspendUntil={suspendUntil} label="2" />,
+      '2',
     );
-
-    await expect.poll(() => element.textContent).toBe('loading');
-
-    const view = vi.mocked(zero.materialize).mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
-    };
-
-    view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
-    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
-  });
-
-  test('suspendsUntil partial, already partial array before complete', async () => {
-    const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-
-    function Comp({label}: {label: string}) {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
-      return <div>{`${label}:${JSON.stringify(data)}`}</div>;
-    }
-
-    root.render(
-      <ZeroProvider zero={zero} key="1">
-        <Suspense fallback={<>loading</>}>
-          <Comp label="1" />
-        </Suspense>
-      </ZeroProvider>,
-    );
-
-    await expect.poll(() => element.textContent).toBe('loading');
-
-    const view = vi.mocked(zero.materialize).mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
-    };
-
-    view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
-    await expect.poll(() => element.textContent).toBe('1:[{"a":1}]');
-
-    root.render(
-      <ZeroProvider zero={zero} key="2">
-        <Suspense fallback={<>loading</>}>
-          <Comp label="2" />
-        </Suspense>
-      </ZeroProvider>,
-    );
-
-    await expect.poll(() => element.textContent).toBe('2:[{"a":1}]');
-  });
-
-  test('suspendsUntil partial singular, defined value before complete', async () => {
-    const q = newMockQuery('query' + unique, true);
-    const zero = newMockZero('client' + unique);
-
-    function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
-      return <div>{JSON.stringify(data)}</div>;
-    }
-
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Suspense fallback={<>loading</>}>
-          <Comp />
-        </Suspense>
-      </ZeroProvider>,
-    );
-
-    await expect.poll(() => element.textContent).toBe('loading');
-
-    const view = vi.mocked(zero.materialize).mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
-    };
-
-    view.listeners.forEach(cb => cb({a: 1}, 'unknown'));
-    await expect.poll(() => element.textContent).toBe('{"a":1}');
-  });
-
-  test('suspendUntil partial, complete with empty array', async () => {
-    const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-
-    function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
-      return <div>{JSON.stringify(data)}</div>;
-    }
-
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Suspense fallback={<>loading</>}>
-          <Comp />
-        </Suspense>
-      </ZeroProvider>,
-    );
-
-    await expect.poll(() => element.textContent).toBe('loading');
-
-    const view = vi.mocked(zero.materialize).mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
-    };
-
-    view.listeners.forEach(cb => cb([], 'complete'));
-    await expect.poll(() => element.textContent).toBe('[]');
-  });
-
-  test('suspendUntil partial, complete with undefined', async () => {
-    const q = newMockQuery('query' + unique, true);
-    const zero = newMockZero('client' + unique);
-
-    function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
-      return (
-        <div>
-          {data === undefined ? 'singularUndefined' : JSON.stringify(data)}
-        </div>
-      );
-    }
-
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Suspense fallback={<>loading</>}>
-          <Comp />
-        </Suspense>
-      </ZeroProvider>,
-    );
-
-    await expect.poll(() => element.textContent).toBe('loading');
-
-    const view = vi.mocked(zero.materialize).mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
-    };
-
-    view.listeners.forEach(cb => cb(undefined, 'complete'));
-    await expect.poll(() => element.textContent).toBe('singularUndefined');
+    await expect.poll(dom.text).toBe('2:[{"a":1}]');
   });
 
   describe('error handling', () => {
@@ -1113,81 +884,41 @@ describe('useSuspenseQuery', () => {
       ...(details ? {details} : {}),
     });
 
-    test('plural query returns error details when query fails', async () => {
-      const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
+    test.each([
+      {name: 'plural', singular: false, empty: []},
+      {name: 'singular', singular: true, empty: undefined},
+    ])(
+      '$name query returns error details when query fails',
+      async ({singular, empty}) => {
+        const {q, zero} = newQueryAndZero(singular);
 
-      function Comp() {
-        const [data, details] = useSuspenseQuery(q, {suspendUntil: 'complete'});
-        return (
-          <div>
-            {details.type === 'error'
-              ? `Error: ${details.error?.message || 'Unknown error'}`
-              : JSON.stringify(data)}
-          </div>
+        function Comp() {
+          const [data, details] = useSuspenseQuery(q, {
+            suspendUntil: 'complete',
+          });
+          return (
+            <div>
+              {details.type === 'error'
+                ? `Error: ${details.error?.message || 'Unknown error'}`
+                : JSON.stringify(data)}
+            </div>
+          );
+        }
+
+        renderSuspense(zero, <Comp />);
+        await expect.poll(dom.text).toBe('loading');
+
+        materializedView(zero).emit(
+          empty,
+          'error',
+          getErroredQuery('Query failed', {reason: 'Invalid syntax'}),
         );
-      }
-
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
-      );
-
-      await expect.poll(() => element.textContent).toBe('loading');
-
-      const view = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
-
-      const error = getErroredQuery('Query failed');
-      view.listeners.forEach(cb => cb([], 'error', error));
-      await expect.poll(() => element.textContent).toBe('Error: Query failed');
-    });
-
-    test('singular query returns error details when query fails', async () => {
-      const q = newMockQuery('query' + unique, true);
-      const zero = newMockZero('client' + unique);
-
-      function Comp() {
-        const [data, details] = useSuspenseQuery(q, {suspendUntil: 'complete'});
-        return (
-          <div>
-            {details.type === 'error'
-              ? `Error: ${details.error?.message || 'Unknown error'}`
-              : JSON.stringify(data)}
-          </div>
-        );
-      }
-
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
-      );
-
-      await expect.poll(() => element.textContent).toBe('loading');
-
-      const view = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
-
-      const error = getErroredQuery('Query failed', {reason: 'Invalid syntax'});
-      view.listeners.forEach(cb => cb(undefined, 'error', error));
-      await expect.poll(() => element.textContent).toBe('Error: Query failed');
-    });
+        await expect.poll(dom.text).toBe('Error: Query failed');
+      },
+    );
 
     test('query transitions from error to success state', async () => {
-      const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
+      const {q, zero} = newQueryAndZero();
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -1200,39 +931,27 @@ describe('useSuspenseQuery', () => {
         );
       }
 
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
-      );
-
-      await expect.poll(() => element.textContent).toBe('loading');
-
-      const view = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
+      renderSuspense(zero, <Comp />);
+      await expect.poll(dom.text).toBe('loading');
+      const view = materializedView(zero);
 
       // First emit error
-      const error = getErroredQuery('Temporary failure', {some: 'detail'});
-      view.listeners.forEach(cb => cb([], 'error', error));
+      view.emit(
+        [],
+        'error',
+        getErroredQuery('Temporary failure', {some: 'detail'}),
+      );
       await expect
-        .poll(() => element.textContent)
+        .poll(dom.text)
         .toBe('Error: Temporary failure {"some":"detail"}');
 
       // Then emit success
-      view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
-      await expect
-        .poll(() => element.textContent)
-        .toBe('Data: [{"a":1}], Type: complete');
+      view.emit([{a: 1}], 'complete');
+      await expect.poll(dom.text).toBe('Data: [{"a":1}], Type: complete');
     });
 
     test('query can return partial data with error state', async () => {
-      const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
+      const {q, zero} = newQueryAndZero();
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -1244,34 +963,21 @@ describe('useSuspenseQuery', () => {
         );
       }
 
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
+      renderSuspense(zero, <Comp />);
+      await expect.poll(dom.text).toBe('loading');
+
+      materializedView(zero).emit(
+        [{a: 1}],
+        'error',
+        getErroredQuery('Partial failure', {message: 'Some items failed'}),
       );
-
-      await expect.poll(() => element.textContent).toBe('loading');
-
-      const view = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
-
-      const error = getErroredQuery('Partial failure', {
-        message: 'Some items failed',
-      });
-      view.listeners.forEach(cb => cb([{a: 1}], 'error', error));
       await expect
-        .poll(() => element.textContent)
+        .poll(dom.text)
         .toBe('Data: [{"a":1}], Type: error, Error: Partial failure');
     });
 
     test('error state without suspense returns immediately', async () => {
-      const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
+      const {q, zero} = newQueryAndZero();
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -1284,33 +990,20 @@ describe('useSuspenseQuery', () => {
         );
       }
 
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
-      );
-
-      await expect.poll(() => element.textContent).toBe('loading');
-
-      const view = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
+      renderSuspense(zero, <Comp />);
+      await expect.poll(dom.text).toBe('loading');
 
       // Emit error immediately
-      const error = getErroredQuery('Immediate error');
-      view.listeners.forEach(cb => cb([], 'error', error));
-      await expect
-        .poll(() => element.textContent)
-        .toBe('Error state: Immediate error');
+      materializedView(zero).emit(
+        [],
+        'error',
+        getErroredQuery('Immediate error'),
+      );
+      await expect.poll(dom.text).toBe('Error state: Immediate error');
     });
 
     test('parse error type is handled correctly', async () => {
-      const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
+      const {q, zero} = newQueryAndZero();
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -1323,38 +1016,21 @@ describe('useSuspenseQuery', () => {
         );
       }
 
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
-      );
+      renderSuspense(zero, <Comp />);
+      await expect.poll(dom.text).toBe('loading');
 
-      await expect.poll(() => element.textContent).toBe('loading');
-
-      const view = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
-
-      const parseError: ErroredQuery = {
+      materializedView(zero).emit([], 'error', {
         error: 'parse',
         id: 'q1',
         name: 'q1',
         message: 'Parse error',
         details: {message: 'Invalid syntax'},
-      };
-      view.listeners.forEach(cb => cb([], 'error', parseError));
-      await expect
-        .poll(() => element.textContent)
-        .toBe('Parse Error: Parse error');
+      } satisfies ErroredQuery);
+      await expect.poll(dom.text).toBe('Parse Error: Parse error');
     });
 
     test('retry function retries the query after error', async () => {
-      const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
+      const {q, zero} = newQueryAndZero();
 
       let retryFn: (() => void) | undefined;
       let refetchFn: (() => void) | undefined;
@@ -1377,64 +1053,33 @@ describe('useSuspenseQuery', () => {
         );
       }
 
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
+      renderSuspense(zero, <Comp />);
+      await expect.poll(dom.text).toBe('loading');
+
+      const firstView = materializedView(zero, 0);
+      firstView.emit(
+        [],
+        'error',
+        getErroredQuery('Query failed', {message: 'Network error'}),
       );
-
-      await expect.poll(() => element.textContent).toBe('loading');
-
-      // First materialize call
-      const firstView = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-        destroy: Mock;
-      };
-
-      // Add destroy spy
-      firstView.destroy = vi.fn(() => {
-        firstView.listeners.clear();
-      });
-
-      // Emit error
-      const error = getErroredQuery('Query failed', {message: 'Network error'});
-      firstView.listeners.forEach(cb => cb([], 'error', error));
-      await expect.poll(() => element.textContent).toBe('Error: Query failed');
+      await expect.poll(dom.text).toBe('Error: Query failed');
 
       // Verify retry function is available
       expect(retryFn).toBeDefined();
       expect(refetchFn).toEqual(retryFn);
 
-      // Call retry
+      // Retrying destroys the old view and materializes a new one.
       retryFn!();
-
-      // Verify that the old view was destroyed
       expect(firstView.destroy).toHaveBeenCalledTimes(1);
-
-      // Verify that materialize was called again
       expect(zero.materialize).toHaveBeenCalledTimes(2);
 
-      // Second materialize call creates new view
-      const secondView = vi.mocked(zero.materialize).mock.results[1].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
-
       // Emit successful data on retry
-      secondView.listeners.forEach(cb => cb([{a: 1, b: 2}], 'complete'));
-      await expect
-        .poll(() => element.textContent)
-        .toBe('Data: [{"a":1,"b":2}], Type: complete');
+      materializedView(zero, 1).emit([{a: 1, b: 2}], 'complete');
+      await expect.poll(dom.text).toBe('Data: [{"a":1,"b":2}], Type: complete');
     });
 
     test('retry function can be called multiple times', async () => {
-      const q = newMockQuery('query' + unique, true);
-      const zero = newMockZero('client' + unique);
+      const {q, zero} = newQueryAndZero(true);
 
       let retryFn: (() => void) | undefined;
 
@@ -1457,80 +1102,37 @@ describe('useSuspenseQuery', () => {
         );
       }
 
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
-      );
+      renderSuspense(zero, <Comp />);
+      await expect.poll(dom.text).toBe('loading');
 
-      await expect.poll(() => element.textContent).toBe('loading');
+      // The first two views fail; each retry destroys the failed view and
+      // materializes a new one.
+      for (const [i, [message, details]] of [
+        ['First failure', 'Network error'],
+        ['Second failure', 'Service unavailable'],
+      ].entries()) {
+        const view = materializedView(zero, i);
+        view.emit(
+          undefined,
+          'error',
+          getErroredQuery(message, {message: details}),
+        );
+        await expect
+          .poll(dom.text)
+          .toBe(`Error: ${message} {"message":"${details}"}`);
 
-      // First materialize call
-      const firstView = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-        destroy: Mock;
-      };
-      firstView.destroy = vi.fn(() => {
-        firstView.listeners.clear();
-      });
-
-      // First error
-      const error1 = getErroredQuery('First failure', {
-        message: 'Network error',
-      });
-      firstView.listeners.forEach(cb => cb(undefined, 'error', error1));
-      await expect
-        .poll(() => element.textContent)
-        .toBe('Error: First failure {"message":"Network error"}');
-
-      // First retry
-      retryFn!();
-      expect(firstView.destroy).toHaveBeenCalledTimes(1);
-      expect(zero.materialize).toHaveBeenCalledTimes(2);
-
-      // Second view also fails
-      const secondView = vi.mocked(zero.materialize).mock.results[1].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-        destroy: Mock;
-      };
-      secondView.destroy = vi.fn(() => {
-        secondView.listeners.clear();
-      });
-
-      const error2 = getErroredQuery('Second failure', {
-        message: 'Service unavailable',
-      });
-      secondView.listeners.forEach(cb => cb(undefined, 'error', error2));
-      await expect
-        .poll(() => element.textContent)
-        .toBe('Error: Second failure {"message":"Service unavailable"}');
-
-      // Second retry
-      retryFn!();
-      expect(secondView.destroy).toHaveBeenCalledTimes(1);
-      expect(zero.materialize).toHaveBeenCalledTimes(3);
+        retryFn!();
+        expect(view.destroy).toHaveBeenCalledTimes(1);
+        expect(zero.materialize).toHaveBeenCalledTimes(i + 2);
+      }
 
       // Third view succeeds
-      const thirdView = vi.mocked(zero.materialize).mock.results[2].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
-      thirdView.listeners.forEach(cb => cb({success: true}, 'complete'));
-      await expect
-        .poll(() => element.textContent)
-        .toBe('Data: {"success":true}');
+      materializedView(zero, 2).emit({success: true}, 'complete');
+      await expect.poll(dom.text).toBe('Data: {"success":true}');
     });
 
     test('retry function is undefined when query is not in error state', async () => {
-      const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
+      const {q, zero} = newQueryAndZero();
 
       let capturedDetails: QueryResultDetails | undefined;
 
@@ -1545,32 +1147,15 @@ describe('useSuspenseQuery', () => {
         );
       }
 
-      root.render(
-        <ZeroProvider zero={zero}>
-          <Suspense fallback={<>loading</>}>
-            <Comp />
-          </Suspense>
-        </ZeroProvider>,
-      );
-
-      await expect.poll(() => element.textContent).toBe('loading');
-
-      const view = vi.mocked(zero.materialize).mock.results[0].value as {
-        listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
-        >;
-      };
+      renderSuspense(zero, <Comp />);
+      await expect.poll(dom.text).toBe('loading');
 
       // Emit successful data (not error state)
-      view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
-      await expect
-        .poll(() => element.textContent)
-        .toBe('Data: [{"a":1}], Type: complete');
+      materializedView(zero).emit([{a: 1}], 'complete');
+      await expect.poll(dom.text).toBe('Data: [{"a":1}], Type: complete');
 
       // Verify that retry is not available when not in error state
       expect(capturedDetails?.type).toBe('complete');
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((capturedDetails as any).retry).toBeUndefined();
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       expect((capturedDetails as any).retry).toBeUndefined();
     });
@@ -1591,22 +1176,17 @@ describe('useSuspenseQuery', () => {
       const query = newMockQuery('query1');
 
       // Simulate concurrent calls
-      const promises = Array.from({length: 10}, () =>
-        Promise.resolve().then(() =>
-          viewStore.getView(zero, query, true, 'forever'),
+      const views = await Promise.all(
+        Array.from({length: 10}, () =>
+          Promise.resolve().then(() => getView(viewStore, {zero, query})),
         ),
       );
 
-      const views = await Promise.all(promises);
-
       // Check if views are shared (ideal case)
-      const uniqueViews = new Set(views);
-      expect(uniqueViews.size).toBe(1);
+      expect(new Set(views).size).toBe(1);
 
-      // Subscribe to all views
+      // Subscribe to all views, then clean up all
       const cleanups = views.map(v => v.subscribeReactInternals(() => {}));
-
-      // Clean up all
       cleanups.forEach(cleanup => cleanup());
       vi.advanceTimersByTime(100);
 
@@ -1619,20 +1199,16 @@ describe('useSuspenseQuery', () => {
       const zero = newMockZero('client1');
       const query = newMockQuery('query1');
 
-      const views = [];
-
       // Simulate React strict mode double-mounting
       for (let i = 0; i < 5; i++) {
-        const view = viewStore.getView(zero, query, true, 'forever');
-        views.push(view);
+        const view = getView(viewStore, {zero, query});
         const cleanup = view.subscribeReactInternals(() => {});
 
         // Immediate cleanup (unmount)
         cleanup();
 
         // Immediate remount before timeout
-        const view2 = viewStore.getView(zero, query, true, 'forever');
-        views.push(view2);
+        const view2 = getView(viewStore, {zero, query});
         const cleanup2 = view2.subscribeReactInternals(() => {});
 
         // In ideal case, should reuse the same view
@@ -1655,23 +1231,15 @@ describe('useSuspenseQuery', () => {
       const query = newMockQuery('query1');
 
       // Create multiple views that might or might not be shared
-      const subscriptions = [];
-
-      for (let i = 0; i < 3; i++) {
-        const view = viewStore.getView(zero, query, true, 'forever');
-        const cleanup = view.subscribeReactInternals(() => {});
-        subscriptions.push({view, cleanup});
-      }
+      const cleanups = Array.from({length: 3}, () =>
+        getView(viewStore, {zero, query}).subscribeReactInternals(() => {}),
+      );
 
       // Stagger the cleanups to create overlapping timers
-      subscriptions[0].cleanup();
-      vi.advanceTimersByTime(3);
-
-      subscriptions[1].cleanup();
-      vi.advanceTimersByTime(3);
-
-      subscriptions[2].cleanup();
-      vi.advanceTimersByTime(3);
+      for (const cleanup of cleanups) {
+        cleanup();
+        vi.advanceTimersByTime(3);
+      }
 
       // Some timers still pending
       expect(getAllViewsSizeForTesting(viewStore)).toBeGreaterThan(0);
@@ -1694,21 +1262,14 @@ describe('useSuspenseQuery', () => {
 });
 
 describe('maybe queries', () => {
-  let container: HTMLElement;
-  let root: Root;
+  const dom = setupRoot();
   let zero: Zero<Schema>;
 
   beforeEach(() => {
-    vi.useRealTimers();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
     zero = newMockZero('client-maybe');
   });
 
   afterEach(() => {
-    root.unmount();
-    document.body.removeChild(container);
     vi.resetAllMocks();
   });
 
@@ -1741,11 +1302,7 @@ describe('maybe queries', () => {
       return <div>Has query</div>;
     }
 
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Comp />
-      </ZeroProvider>,
-    );
+    dom.render(zero, <Comp />);
 
     await vi.waitFor(() => {
       expect(capturedDetails).toBeDefined();
@@ -1771,11 +1328,7 @@ describe('maybe queries', () => {
       return <div>No query</div>;
     }
 
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Comp />
-      </ZeroProvider>,
-    );
+    dom.render(zero, <Comp />);
 
     await vi.waitFor(() => {
       expect(capturedDetails).toBeDefined();
@@ -1805,11 +1358,7 @@ describe('maybe queries', () => {
       return <div>Has query</div>;
     }
 
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Comp />
-      </ZeroProvider>,
-    );
+    dom.render(zero, <Comp />);
 
     await vi.waitFor(() => {
       expect(capturedDetails).toBeDefined();
@@ -1835,11 +1384,7 @@ describe('maybe queries', () => {
       return <div>No query</div>;
     }
 
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Comp />
-      </ZeroProvider>,
-    );
+    dom.render(zero, <Comp />);
 
     await vi.waitFor(() => {
       expect(capturedDetails).toBeDefined();
@@ -1854,39 +1399,42 @@ describe('maybe queries', () => {
   // cause React hooks order violations. Without the fix, React throws:
   // - "Rendered fewer hooks than expected" (truthy → falsy)
   // - "Rendered more hooks than during the previous render" (falsy → truthy)
+  function Toggle({
+    initiallyEnabled,
+    onRender,
+  }: {
+    initiallyEnabled: boolean;
+    onRender: (
+      data: Item[] | undefined,
+      setEnabled: (e: boolean) => void,
+    ) => void;
+  }) {
+    const [enabled, setEnabled] = useState(initiallyEnabled);
+    const [data] = useQuery(enabled ? pluralQuery : null);
+    onRender(data, setEnabled);
+    return <div>{enabled ? 'Has query' : 'No query'}</div>;
+  }
 
   test('query transitioning from truthy to falsy maintains hooks order', async () => {
     let capturedData: Item[] | undefined;
     let setQueryEnabled!: (enabled: boolean) => void;
 
-    function Comp() {
-      const [enabled, setEnabled] = useState(true);
-      setQueryEnabled = setEnabled;
-
-      const maybeQuery = enabled ? pluralQuery : null;
-      const [data] = useQuery(maybeQuery);
-      capturedData = data;
-
-      return <div>{enabled ? 'Has query' : 'No query'}</div>;
-    }
-
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Comp />
-      </ZeroProvider>,
+    dom.render(
+      zero,
+      <Toggle
+        initiallyEnabled={true}
+        onRender={(data, setEnabled) => {
+          capturedData = data;
+          setQueryEnabled = setEnabled;
+        }}
+      />,
     );
-
-    await vi.waitFor(() => {
-      expect(container.textContent).toBe('Has query');
-    });
+    await expect.poll(dom.text).toBe('Has query');
     expect(zero.materialize).toHaveBeenCalled();
 
     // Transition to falsy - would throw "Rendered fewer hooks" without fix
     setQueryEnabled(false);
-
-    await vi.waitFor(() => {
-      expect(container.textContent).toBe('No query');
-    });
+    await expect.poll(dom.text).toBe('No query');
     expect(capturedData).toBe(undefined);
   });
 
@@ -1894,35 +1442,23 @@ describe('maybe queries', () => {
     let capturedData: Item[] | undefined;
     let setQueryEnabled!: (enabled: boolean) => void;
 
-    function Comp() {
-      const [enabled, setEnabled] = useState(false);
-      setQueryEnabled = setEnabled;
-
-      const maybeQuery = enabled ? pluralQuery : null;
-      const [data] = useQuery(maybeQuery);
-      capturedData = data;
-
-      return <div>{enabled ? 'Has query' : 'No query'}</div>;
-    }
-
-    root.render(
-      <ZeroProvider zero={zero}>
-        <Comp />
-      </ZeroProvider>,
+    dom.render(
+      zero,
+      <Toggle
+        initiallyEnabled={false}
+        onRender={(data, setEnabled) => {
+          capturedData = data;
+          setQueryEnabled = setEnabled;
+        }}
+      />,
     );
-
-    await vi.waitFor(() => {
-      expect(container.textContent).toBe('No query');
-    });
+    await expect.poll(dom.text).toBe('No query');
     expect(capturedData).toBe(undefined);
     expect(zero.materialize).not.toHaveBeenCalled();
 
     // Transition to truthy - would throw "Rendered more hooks" without fix
     setQueryEnabled(true);
-
-    await vi.waitFor(() => {
-      expect(container.textContent).toBe('Has query');
-    });
+    await expect.poll(dom.text).toBe('Has query');
     expect(zero.materialize).toHaveBeenCalled();
   });
 });

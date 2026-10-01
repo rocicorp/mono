@@ -125,7 +125,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
 
-    this.#fireListener(listener);
+    listener(...this.#listenerArgs());
 
     return () => {
       this.#listeners.delete(listener);
@@ -133,22 +133,21 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   #fireListeners() {
+    // Read the snapshot once: a listener may push() synchronously, and the
+    // listeners after it must not be handed the root that push is building,
+    // which the rest of the transaction would then mutate in place.
+    const args = this.#listenerArgs();
     for (const listener of this.#listeners) {
-      this.#fireListener(listener);
+      listener(...args);
     }
   }
 
-  #fireListener(listener: Listener<V>) {
+  #listenerArgs(): Parameters<Listener<V>> {
     if (this.#committedRoot !== undefined) {
       // Held rows go with the held type; after releaseData() both are current.
-      listener(
-        this.data as Immutable<V>,
-        this.#heldResultType,
-        this.#heldError,
-      );
-      return;
+      return [this.data as Immutable<V>, this.#heldResultType, this.#heldError];
     }
-    listener(this.data as Immutable<V>, this.#resultType, this.#error);
+    return [this.data as Immutable<V>, this.#resultType, this.#error];
   }
 
   destroy() {
@@ -175,8 +174,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   push(change: Change) {
-    this.#dirty = true;
-    this.#root = applyChange(
+    const newRoot = applyChange(
       this.#root,
       changeToViewChange(change),
       this.#getSchema(),
@@ -185,6 +183,18 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       false /* withIDs */,
       this.#txnDirty /* mutate: copy-on-write within this transaction */,
     );
+    // applyChange returns the same root when the change did not affect the
+    // view — e.g. a child change for a relationship that is not in the format,
+    // such as a whereExists subquery (zsubq_*). Only mark dirty when the root
+    // actually changed so flush() does not notify listeners with identical
+    // data. Within a transaction the root keeps its reference across a *real*
+    // change only if an earlier change in the same transaction already cloned
+    // it (copy-on-write) — and that earlier change set #dirty, so an unchanged
+    // reference here never hides a real change.
+    if (newRoot !== this.#root) {
+      this.#root = newRoot;
+      this.#dirty = true;
+    }
     return emptyArray;
   }
 
@@ -223,11 +233,17 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       return;
     }
     this.#dirty = false;
-    this.#fireListeners();
-    // The snapshot just handed to listeners is now observed; the next
+    // The snapshot about to be handed to listeners becomes observed; the next
     // transaction must copy-on-write rather than mutate these objects. A fresh
     // WeakSet drops all "owned" marks (WeakSet has no clear()).
+    //
+    // Reset BEFORE notifying: a listener may throw (swallowed by
+    // ZeroContext#endTransaction) or re-enter push(). If the committed root
+    // kept its "owned" marks, a later transaction would mutate it in place and
+    // return an identical reference — which push() would read as "no change",
+    // permanently silencing the view.
     this.#txnDirty = new WeakSet();
+    this.#fireListeners();
   }
 
   updateTTL(ttl: TTL) {
