@@ -16,6 +16,12 @@ Test suites are included for [zero-client](./packages/zero-client),
 [shared](./packages/shared) and [go](./go). The test harnesses (helpers, fixtures, vitest
 configs and the Postgres test setup) are included for every package.
 
+Tests for zero-cache, zql (including IVM), zqlite and some other packages are
+not included in this repository. These tests were previously published under
+the Apache 2.0 license, and those previously published copies remain open
+source under that license. They were removed from the published repository on
+September 30, 2026.
+
 The history of this repository was rewritten on 2026-09-30 to remove the files
 that are no longer published. If you cloned or forked it before then, clone it
 again.
