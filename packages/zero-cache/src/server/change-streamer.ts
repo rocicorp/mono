@@ -11,6 +11,7 @@ import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
+import {InitCleanup} from '../services/change-source/common/init-cleanup.ts';
 import type {PgChangeLogPurgeLocker} from '../services/change-source/common/replica-restore.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source-init.ts';
@@ -131,25 +132,7 @@ export default async function runWorker(
   // Ensure the change DB schema is initialized/up-to-date.
   await initChangeStreamerSchema(lc, changeDB, shard);
 
-  // When restoring from litestream, a lock is acquired to prevent change-log
-  // purges. This ensures that (this) change-streamer will be able to resume
-  // from the backup. The lock is acquired by the change source initialization
-  // just before restoring (i.e. after a replication slot is created, if
-  // applicable), and released once this change-streamer takes over the
-  // change-log.
   let purgeLock = null as PurgeLock | null;
-  const acquirePurgeLock: PgChangeLogPurgeLocker | undefined =
-    pgChangeLogEnabled && litestream.backupURL && litestream.executable
-      ? async (slotWatermark?: string) => {
-          const lock = await new PurgeLocker(lc, shard, changeDB).acquire(
-            slotWatermark,
-          );
-          purgeLock = lock === 'behind-slot' ? null : lock;
-          return lock;
-        }
-      : undefined;
-  const restoreOptions = {litestream, acquirePurgeLock};
-
   let changeStreamer: ChangeStreamerService | undefined;
   let backupURL: string | undefined;
 
@@ -185,6 +168,34 @@ export default async function runWorker(
   let waitForFirstBackupBeforeServing = false;
   let newBackupLineage = false;
   for (const first of [true, false]) {
+    // Resources acquired by an initialization attempt (e.g. a claimed
+    // replication slot, the purge lock) to be released if the attempt fails.
+    const cleanup = new InitCleanup(lc);
+    // When restoring from litestream, a lock is acquired to prevent change-log
+    // purges. This ensures that (this) change-streamer will be able to resume
+    // from the backup. The lock is acquired by the change source initialization
+    // just before restoring (i.e. after a replication slot is created, if
+    // applicable), and released once this change-streamer takes over the
+    // change-log.
+    const acquirePurgeLock: PgChangeLogPurgeLocker | undefined =
+      pgChangeLogEnabled && litestream.backupURL && litestream.executable
+        ? async (slotWatermark?: string) => {
+            const lock = await new PurgeLocker(lc, shard, changeDB).acquire(
+              slotWatermark,
+            );
+            purgeLock = lock === 'behind-slot' ? null : lock;
+            if (purgeLock) {
+              const acquired = purgeLock;
+              cleanup.onFailure('purge lock', () => {
+                purgeLock = null;
+                return acquired.release();
+              });
+            }
+            return lock;
+          }
+        : undefined;
+
+    const restoreOptions = {litestream, acquirePurgeLock, cleanup};
     try {
       // Note: This performs initial sync of the replica if necessary.
       const {
@@ -320,6 +331,21 @@ export default async function runWorker(
       newBackupLineage = initNewBackupLineage;
       break;
     } catch (e) {
+      // Release the resources acquired by the failed attempt, e.g.:
+      // * The claimed replication slot, which would otherwise remain active
+      //   indefinitely, preventing a retry from resuming (or forking) it.
+      // * The purge lock. This is safe because the purge lock exists to
+      //   preserve change-log entries so the new change-streamer can resume
+      //   from the backup replica's watermark. An AutoResetSignal means we
+      //   can't resume from the backup replica (e.g. its replication slot is
+      //   gone), so the change-log entries the lock was protecting are no
+      //   longer needed. The retry performs a fresh initial sync with a new
+      //   replication slot, independent of the old change-log. Releasing is
+      //   also necessary to avoid a self-deadlock when CHANGE_DB ==
+      //   UPSTREAM_DB: CREATE_REPLICATION_SLOT waits for all older
+      //   transactions to finish, including this lock's open transaction.
+      await cleanup.release();
+
       if (first && e instanceof AutoResetSignal) {
         lc.warn?.(`resetting replica ${replica.file}`, e);
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
@@ -331,19 +357,6 @@ export default async function runWorker(
         // 'identity-mismatch') but only after the writer opened a file that is
         // known here to be garbage.
         deleteChangeLogDB(replica.file);
-        // Release the purge lock before retrying. This is safe because the
-        // purge lock exists to preserve change-log entries so the new
-        // change-streamer can resume from the backup replica's watermark.
-        // An AutoResetSignal means we cant resume from the backup replica
-        // (e.g. its replication slot is gone), so the change-log entries the lock
-        // was protecting are no longer needed. The retry performs a fresh
-        // initial sync with a new replication slot, independent of the old
-        // change-log. Releasing is also necessary to avoid a
-        // self-deadlock when CHANGE_DB == UPSTREAM_DB:
-        // CREATE_REPLICATION_SLOT waits for all older transactions to
-        // finish, including this lock's open transaction.
-        await purgeLock?.release();
-        purgeLock = null;
         continue; // execute again with a fresh initial-sync
       }
       if (e instanceof DatabaseInitError) {

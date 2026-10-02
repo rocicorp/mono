@@ -1,3 +1,4 @@
+import type {Readable} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
@@ -9,6 +10,7 @@ import {StatementRunner} from '../../../db/statements.ts';
 import {connectPgClient, type PostgresDB} from '../../../types/pg.ts';
 import {type ShardConfig, type ShardID} from '../../../types/shards.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import type {ReplicaConstraints} from '../../litestream/commands.ts';
 import {
   getSubscriptionStateAndContext,
   type SubscriptionStateAndContext,
@@ -119,11 +121,17 @@ export async function initializePostgresChangeSource(
       `replica-${shard.appID}-${shard.shardNum}`,
       replicaDbFile,
       async (log, tx) => {
+        // Falling back to initial sync abandons the restore, so release the
+        // resources acquired for it, e.g. a replication slot claimed (or
+        // created) for a resumed (or forked) replica, which would otherwise
+        // remain active indefinitely.
+        await restoreOptions.cleanup?.release();
         // The purge lock on the change-db must be released before performing
         // initial sync; if the change-db and upstream are the same db, a lock-holding
         // transaction will prevent a replication slot from being created. This awkward
-        // dependency can go away with RMv2.
-        void purgeLock?.release();
+        // dependency can go away with RMv2. (The purge lock is also released by
+        // the cleanup when it is registered with it; releasing it is idempotent.)
+        await purgeLock?.release();
         initialSyncedReplica = await initialSync(
           log,
           shard,
@@ -132,6 +140,7 @@ export async function initializePostgresChangeSource(
           syncOptions,
           context,
           {epoch, backupV5},
+          restoreOptions.cleanup,
         );
       },
     );
@@ -229,11 +238,9 @@ async function selectAndRestoreReplica(
   const lock = await acquirePurgeLock?.();
   assert(lock !== 'behind-slot', 'unexpected purge-lock result');
   const purgeLock = lock ?? null;
-  const constraints = purgeLock ?? undefined;
   const replicas = (await getActiveReplicas(lc, sql, shard)).filter(
-    // filter to the generation specified by the constraints, if present
-    ({generation}) =>
-      generation === (constraints?.replicaVersion ?? generation),
+    // filter to the generation specified by the purge lock, if present
+    ({generation}) => generation === (purgeLock?.replicaVersion ?? generation),
   );
   if (replicas.length === 0) {
     lc.info?.(`no suitable replicas to restore from`, {replicas});
@@ -242,6 +249,7 @@ async function selectAndRestoreReplica(
   const [replica] = replicas;
 
   if (litestream?.backupURL) {
+    const constraints = restoreConstraints(purgeLock, replica);
     const {backupURL: backupBaseURL} = litestream;
     const {slot, backupPath, confirmedFlushLsn} = replica;
     const backupURL = new URL(backupPath ?? '', backupBaseURL).toString();
@@ -270,7 +278,7 @@ async function forkOrResumeReplica(
   epoch: number,
   slotFailover: boolean,
   replicaFile: string,
-  {litestream, acquirePurgeLock}: RestoreOptions,
+  {litestream, acquirePurgeLock, cleanup}: RestoreOptions,
   gracePeriodMs: number,
 ): Promise<RestoredReplica> {
   const result = await getSourceAndDestinationReplicas(
@@ -285,7 +293,14 @@ async function forkOrResumeReplica(
     // can't restore, must initial-sync
     return {replica: undefined, purgeLock: null};
   }
-  const {restoreFrom, replicateTo, slotLSN} = result;
+  const {restoreFrom, replicateTo, slotLSN, slotSession} = result;
+  // The slot is held active by a session in this process until it is taken
+  // over by the PostgresChangeSource. If initialization fails before then,
+  // the session must be released, or the slot remains active indefinitely,
+  // preventing the replica from being resumed (or forked) by a retry.
+  cleanup?.onFailure(`replication slot ${replicateTo.slot}`, () =>
+    slotSession.destroy(),
+  );
 
   // Acquired only after the replication slot has been created (or claimed),
   // and only if the change-log can be resumed from the slot's position.
@@ -308,7 +323,10 @@ async function forkOrResumeReplica(
     : null;
   const pgChangeLogBehindSlot = lock === 'behind-slot';
   const purgeLock = lock === 'behind-slot' ? null : lock;
-  const constraints = purgeLock ?? undefined;
+  // Absent a purge lock, still constrain the restore to the source's
+  // generation, so that a local replica left behind by a different
+  // generation (e.g. a failed initial sync) is not mistaken for it.
+  const constraints = restoreConstraints(purgeLock, restoreFrom);
 
   if (litestream?.backupURL) {
     const {backupURL: backupBaseURL} = litestream;
@@ -326,6 +344,13 @@ async function forkOrResumeReplica(
     );
   }
   return {replica: replicateTo, purgeLock, pgChangeLogBehindSlot};
+}
+
+function restoreConstraints(
+  purgeLock: ConstrainingPurgeLock | null,
+  {generation}: ReplicaState,
+): ReplicaConstraints {
+  return purgeLock ?? {replicaVersion: generation, minWatermark: ''};
 }
 
 async function currentWalLSN(sql: PostgresDB): Promise<LSN> {
@@ -351,6 +376,11 @@ export async function getSourceAndDestinationReplicas(
       replicateTo: ReplicaState;
       /** The position of the slot from which replication resumes. */
       slotLSN: LSN;
+      /**
+       * The session holding the destination slot active until it is taken
+       * over by the PostgresChangeSource. Destroying it releases the slot.
+       */
+      slotSession: Readable;
     }
   | undefined
 > {
@@ -448,7 +478,22 @@ export async function getSourceAndDestinationReplicas(
               restoreFrom: replica,
               replicateTo,
               slotLSN: destination.slot.consistent_point,
+              slotSession: destination.initialSession,
             };
+          }
+        }
+
+        if (
+          replica.stage === ReplicaStage.Restore &&
+          replica.active &&
+          replica.id !== destination?.replica.id
+        ) {
+          // Another task is restoring (e.g. resuming) this replica.
+          if (i % 12 === 0) {
+            lc.info?.(
+              `waiting for replica ${replica.id}@${replica.slot} being restored by another task`,
+              {replica},
+            );
           }
         }
 
@@ -488,6 +533,7 @@ export async function getSourceAndDestinationReplicas(
                 replicateTo: reserved.replica,
                 // The slot is inactive, so its position is fixed.
                 slotLSN: replica.confirmedFlushLsn,
+                slotSession: reserved.reservation,
               };
             }
           }

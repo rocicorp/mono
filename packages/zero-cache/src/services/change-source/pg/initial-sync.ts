@@ -58,6 +58,7 @@ import {
 } from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
+import type {InitCleanup} from '../common/init-cleanup.ts';
 import {toStateVersionString} from './lsn.ts';
 import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
@@ -118,6 +119,7 @@ export async function initialSync(
   syncOptions: InitialSyncOptions,
   context: ServerContext,
   {epoch, backupV5}: ReplicaOptions = {epoch: 0, backupV5: true},
+  cleanup?: InitCleanup,
 ): Promise<ReplicaState | undefined> {
   if (!ALLOWED_APP_ID_CHARACTERS.test(shard.appID)) {
     throw new Error(
@@ -261,6 +263,13 @@ export async function initialSync(
       slotName = replication.slot.slot_name;
       snapshotResult = replication.capturedSnapshot;
       slotSession = replication.initialSession;
+      // The slot is held active by the session until it is taken over by the
+      // PostgresChangeSource. Release it if initialization fails after the
+      // initial sync (failures of the initial sync itself are handled below).
+      const session = slotSession;
+      cleanup?.onFailure(`replication slot ${slotName}`, () =>
+        session.destroy(),
+      );
     }
 
     const {published, tables, indexes, numTables, copyPool, copiers} =

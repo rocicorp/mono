@@ -13,6 +13,7 @@ import {
 } from '../../litestream/metrics.ts';
 import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource} from '../change-source.ts';
+import type {InitCleanup} from './init-cleanup.ts';
 
 export interface PurgeLock {
   release(): Promise<void>;
@@ -44,6 +45,13 @@ export type RestoreOptions = {
    * the creation of a replication slot.
    */
   acquirePurgeLock?: PgChangeLogPurgeLocker | undefined;
+  /**
+   * Resources acquired by the initialization (e.g. a claimed replication slot)
+   * are registered here to be released if the initialization attempt fails.
+   * Note that a purge lock acquired with `acquirePurgeLock` must be registered
+   * here by the locker, so that it is released on failure.
+   */
+  cleanup?: InitCleanup | undefined;
 };
 
 export type InitializeResult = {

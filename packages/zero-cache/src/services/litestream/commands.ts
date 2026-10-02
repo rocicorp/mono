@@ -158,13 +158,47 @@ export async function tryRestore(
   role: LitestreamRole,
   signal?: AbortSignal,
 ): Promise<RestoreAttempt> {
+  const {reusedExisting, ...attempt} = await restoreOnce(
+    lc,
+    config,
+    replicaFile,
+    replicaConstraints,
+    role,
+    signal,
+  );
+  if (attempt.result === 'invalid_replica' && reusedExisting) {
+    // `-if-db-not-exists` made the restore a no-op, and the existing local
+    // replica (e.g. one left behind by a failed initial sync of a different
+    // generation) was invalid. It has since been deleted, so restore from the
+    // backup.
+    const {reusedExisting: _, ...retry} = await restoreOnce(
+      lc,
+      config,
+      replicaFile,
+      replicaConstraints,
+      role,
+      signal,
+    );
+    return retry;
+  }
+  return attempt;
+}
+
+async function restoreOnce(
+  lc: LogContext,
+  config: LitestreamConfig,
+  replicaFile: string,
+  replicaConstraints: ReplicaConstraints | undefined,
+  role: LitestreamRole,
+  signal: AbortSignal | undefined,
+): Promise<RestoreAttempt & {reusedExisting: boolean}> {
   const {backupURL} = config;
   const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
   let result: RestoreResult = 'error';
   try {
     logRestoreDirectoryContents(lc, replicaFile, 'before-temp-cleanup');
     deleteRestoreTempFiles(replicaFile);
-    const replicaExistedBeforeRestore = existsSync(replicaFile);
+    const reusedExisting = existsSync(replicaFile);
     const {litestream, env} = getLitestream(
       'restore',
       config,
@@ -246,7 +280,7 @@ export async function tryRestore(
     }
     if (!existsSync(replicaFile)) {
       result = 'no_backup';
-      return {restored: false, backupURL, result};
+      return {restored: false, backupURL, result, reusedExisting};
     }
     const validationStart = performance.now();
     const valid = replicaIsValid(lc, replicaFile, replicaConstraints);
@@ -259,10 +293,10 @@ export async function tryRestore(
       lc.info?.(`Deleting local replica and retrying restore`);
       deleteLiteDB(replicaFile);
       deleteChangeLogDB(replicaFile);
-      return {restored: false, backupURL, result};
+      return {restored: false, backupURL, result, reusedExisting};
     }
     result = 'success';
-    if (!replicaExistedBeforeRestore) {
+    if (!reusedExisting) {
       // This restore materialized the replica file, so any change log beside it
       // was written against a replica that is no longer there. Reconciliation
       // is the safety net — a restored replica keeps its replicaVersion, so the
@@ -280,7 +314,7 @@ export async function tryRestore(
         result: 'success',
       });
     }
-    return {restored: true, backupURL, result};
+    return {restored: true, backupURL, result, reusedExisting};
   } finally {
     try {
       deleteRestoreTempFiles(replicaFile);
