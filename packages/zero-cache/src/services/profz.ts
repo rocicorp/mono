@@ -104,8 +104,41 @@ export async function handleProfzRequest(
           },
         ]);
 
-        // Wait for duration plus grace period for IPC transfer
-        await sleep(durationMs + 500);
+        // Wait for profile duration, then wait for child workers to transfer
+        // profiles over IPC. Under heavy production load, serializing and sending
+        // large CPU profiles can take several seconds.
+        const graceMs =
+          params.getInteger('graceMs', false) ??
+          params.getInteger('timeout', false) ??
+          5000;
+        await sleep(durationMs);
+
+        const pollMs = 50;
+        let waited = 0;
+        let lastCount = responses.size;
+        let quietMs = 0;
+        while (waited < graceMs) {
+          await sleep(pollMs);
+          waited += pollMs;
+
+          if (targetWorker && targetWorker !== 'all') {
+            const hasTarget = [...responses.keys()].some(
+              name =>
+                name === targetWorker || name.startsWith(`${targetWorker}-`),
+            );
+            if (hasTarget) {
+              break;
+            }
+          } else if (responses.size !== lastCount) {
+            lastCount = responses.size;
+            quietMs = 0;
+          } else if (responses.size > 0) {
+            quietMs += pollMs;
+            if (quietMs >= 400) {
+              break;
+            }
+          }
+        }
       } finally {
         unsubscribe();
       }
