@@ -75,6 +75,10 @@ import type {ReplicaState} from '../replicator/replicator.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.ts';
 import type {ActivityBasedService} from '../service.ts';
 import {
+  AdvancementMetrics,
+  type AdvancementOutcome,
+} from './advancement-metrics.ts';
+import {
   ClientHandler,
   startPoke,
   type PatchToVersion,
@@ -425,6 +429,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       unit: '{observation}',
     },
   );
+  readonly #advancementMetrics = new AdvancementMetrics();
   readonly #transactionAdvanceTime = getOrCreateLatencyHistogram(
     'sync',
     'advance-time',
@@ -3547,77 +3552,99 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       const start = performance.now();
       const timer = new TimeSliceTimer(lc);
-      let pokers: ReturnType<typeof startPoke> | undefined;
-      let updater: CVRQueryDrivenUpdater | undefined;
-      let version: string | undefined;
-      let numChanges = 0;
+      let outcome: AdvancementOutcome = {outcome: 'error'};
+      let setupTimeMs: number | undefined;
       try {
-        const advancement = this.#pipelines.advance(timer);
-        version = advancement.version;
-        numChanges = advancement.numChanges;
-        lc = lc.withContext('newVersion', version);
+        let pokers: ReturnType<typeof startPoke> | undefined;
+        let updater: CVRQueryDrivenUpdater | undefined;
+        let version: string | undefined;
+        let numChanges = 0;
+        try {
+          const advancement = this.#pipelines.advance(timer);
+          version = advancement.version;
+          numChanges = advancement.numChanges;
+          lc = lc.withContext('newVersion', version);
 
-        // Probably need a new updater type. CVRAdvancementUpdater?
-        updater = new CVRQueryDrivenUpdater(
-          this.#cvrStore,
-          cvr,
-          version,
-          this.#pipelines.replicaVersion,
-          queryID => this.#pipelines.rowSetSignature(queryID),
-        );
-        // Only poke clients that are at the cvr.version. New clients that
-        // are behind need to first be caught up when their initConnection
-        // message is processed (and #syncQueryPipelines is called).
-        pokers = startPoke(
-          lc,
-          this.#getClients(cvr.version),
-          updater.updatedVersion(),
-        );
-        lc.debug?.(`applying ${numChanges} to advance to ${version}`);
+          // Probably need a new updater type. CVRAdvancementUpdater?
+          updater = new CVRQueryDrivenUpdater(
+            this.#cvrStore,
+            cvr,
+            version,
+            this.#pipelines.replicaVersion,
+            queryID => this.#pipelines.rowSetSignature(queryID),
+          );
+          // Only poke clients that are at the cvr.version. New clients that
+          // are behind need to first be caught up when their initConnection
+          // message is processed (and #syncQueryPipelines is called).
+          pokers = startPoke(
+            lc,
+            this.#getClients(cvr.version),
+            updater.updatedVersion(),
+          );
+          lc.debug?.(`applying ${numChanges} to advance to ${version}`);
+          setupTimeMs = performance.now() - start;
 
-        await this.#processChanges(
-          lc,
-          await timer.start(),
-          advancement.changes,
-          updater,
-          pokers,
-        );
-      } catch (e) {
-        if (e instanceof ResetPipelinesSignal) {
-          await pokers?.cancel();
-          // The updater is abandoned with the poke. The row records it has
-          // queued describe patches that the clients never received, so they
-          // must not reach the next flush.
-          this.#cvrStore.discardPending();
-          return e;
+          await this.#processChanges(
+            lc,
+            await timer.start(),
+            advancement.changes,
+            updater,
+            pokers,
+          );
+        } catch (e) {
+          setupTimeMs ??= performance.now() - start;
+          if (e instanceof ResetPipelinesSignal) {
+            await pokers?.cancel();
+            // The updater is abandoned with the poke. The row records it has
+            // queued describe patches that the clients never received, so they
+            // must not reach the next flush.
+            this.#cvrStore.discardPending();
+            outcome = {outcome: 'reset', reason: e.reason};
+            return e;
+          }
+          throw e;
         }
-        throw e;
+
+        assert(
+          updater && pokers && version !== undefined,
+          'advancement state missing',
+        );
+        // Commit the changes and update the CVR snapshot.
+        this.#cvr = await this.#flushPoked(lc, updater, pokers);
+        const finalVersion = this.#cvr.version;
+
+        // Signal clients to commit.
+        await startAsyncSpan(tracer, 'vs.#advancePipelines.pokeEnd', () =>
+          pokers.end(finalVersion),
+        );
+        // `version`, not `finalVersion`: the pipelines advanced to the replica's
+        // `version` and every resulting change has now been poked. `finalVersion`
+        // lags it whenever the CVR flush was a no-op. See #markVersionServed.
+        this.#markVersionServed(version);
+
+        const wallTime = performance.now() - start;
+        const totalProcessTime = timer.totalElapsed();
+        lc.debug?.(
+          `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
+        );
+        this.#transactionAdvanceTime.recordMs(totalProcessTime);
+        outcome = {outcome: 'success'};
+        return 'success';
+      } finally {
+        // Setup is synchronous. The running timer excludes time-slice waits
+        // but includes asynchronous I/O such as the CVR flush.
+        const setupMs = must(setupTimeMs);
+        const processingTimeMs = setupMs + timer.totalElapsed();
+        const wallTimeMs = performance.now() - start;
+        this.#advancementMetrics.record(
+          {
+            processingTimeMs,
+            setupTimeMs: setupMs,
+            wallTimeMs,
+          },
+          outcome,
+        );
       }
-
-      assert(
-        updater && pokers && version !== undefined,
-        'advancement state missing',
-      );
-      // Commit the changes and update the CVR snapshot.
-      this.#cvr = await this.#flushPoked(lc, updater, pokers);
-      const finalVersion = this.#cvr.version;
-
-      // Signal clients to commit.
-      await startAsyncSpan(tracer, 'vs.#advancePipelines.pokeEnd', () =>
-        pokers.end(finalVersion),
-      );
-      // `version`, not `finalVersion`: the pipelines advanced to the replica's
-      // `version` and every resulting change has now been poked. `finalVersion`
-      // lags it whenever the CVR flush was a no-op. See #markVersionServed.
-      this.#markVersionServed(version);
-
-      const wallTime = performance.now() - start;
-      const totalProcessTime = timer.totalElapsed();
-      lc.debug?.(
-        `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
-      );
-      this.#transactionAdvanceTime.recordMs(totalProcessTime);
-      return 'success';
     });
   }
 
