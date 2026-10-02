@@ -247,6 +247,29 @@ export class Statement {
   }
 }
 
+// Bound consumer-time warnings across all databases and SQL statements in this
+// process. Nested iterators can all outlive the threshold during the same stall.
+const ITERATOR_TOTAL_LOG_WINDOW_MS = 60_000;
+const ITERATOR_TOTAL_LOG_LIMIT = 10;
+let iteratorTotalLogWindowStart = -Infinity;
+let iteratorTotalLogsInWindow = 0;
+let suppressedIteratorTotalLogs = 0;
+
+function admitIteratorTotalLog(now: number): number | undefined {
+  if (now - iteratorTotalLogWindowStart >= ITERATOR_TOTAL_LOG_WINDOW_MS) {
+    iteratorTotalLogWindowStart = now;
+    iteratorTotalLogsInWindow = 0;
+  }
+  if (iteratorTotalLogsInWindow >= ITERATOR_TOTAL_LOG_LIMIT) {
+    suppressedIteratorTotalLogs++;
+    return undefined;
+  }
+  iteratorTotalLogsInWindow++;
+  const suppressedCount = suppressedIteratorTotalLogs;
+  suppressedIteratorTotalLogs = 0;
+  return suppressedCount;
+}
+
 class LoggingIterableIterator<T> implements IterableIterator<T> {
   readonly #lc: LogContext;
   readonly #it: IterableIterator<T>;
@@ -290,14 +313,24 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
 
     // Total time includes downstream consumer work and waits between rows.
     // Check it independently of the time spent stepping SQLite.
-    const totalMs = performance.now() - this.#start;
+    const now = performance.now();
+    const totalMs = now - this.#start;
     if (totalMs >= this.#threshold) {
-      logSlow(
-        this.#lc,
-        totalMs,
-        {...this.#attrs, type: 'total', method: 'iterate'},
-        'Slow SQLite iterator total time (including consumer work and waits between rows)',
-      );
+      const suppressedCount = admitIteratorTotalLog(now);
+      if (suppressedCount !== undefined) {
+        logSlow(
+          this.#lc,
+          totalMs,
+          {
+            ...this.#attrs,
+            type: 'total',
+            method: 'iterate',
+            sqliteMs: this.#sqliteRowTimeSum,
+            ...(suppressedCount > 0 ? {suppressedCount} : undefined),
+          },
+          'Slow SQLite iterator total time (including consumer work and waits between rows)',
+        );
+      }
     }
     if (this.#sqliteRowTimeSum >= this.#threshold) {
       logSlow(
