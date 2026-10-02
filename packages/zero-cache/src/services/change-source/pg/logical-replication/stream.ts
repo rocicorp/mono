@@ -8,12 +8,13 @@ import {defu} from 'defu';
 import postgres, {type Options, type PostgresType} from 'postgres';
 import {sleep} from '../../../../../../shared/src/sleep.ts';
 import {getTypeParsers} from '../../../../db/pg-type-parser.ts';
+import {getOrCreateHistogram} from '../../../../observability/metrics.ts';
 import {type PostgresDB} from '../../../../types/pg.ts';
 import {id, lit} from '../../../../types/sql.ts';
 import {pipe, type Sink, type Source} from '../../../../types/streams.ts';
 import {Subscription} from '../../../../types/subscription.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
-import {fromBigInt} from '../lsn.ts';
+import {fromBigInt, toBigInt, type LSN} from '../lsn.ts';
 import {PgoutputParser} from './pgoutput-parser.ts';
 import type {Message} from './pgoutput.types.ts';
 
@@ -100,6 +101,7 @@ export async function subscribe(
           `inbound liveness detection.`,
   );
 
+  const decode = await InitialDecodeTracker.start(lc, session, slot, lsn);
   const [readable, writable] = await startReplicationStream(
     lc,
     session,
@@ -191,7 +193,11 @@ export async function subscribe(
     sink: messages,
     parse: buffer => {
       lastReceivedTime = Date.now();
-      return parseStreamMessage(lc, buffer, parser);
+      const msg = parseStreamMessage(lc, buffer, parser);
+      if (msg) {
+        decode.observe(msg, lastReceivedTime);
+      }
+      return msg;
     },
     // Allow a small buffer of messages to be queued in the subscription so
     // that the change-source loop can check the queue to determine if more
@@ -203,6 +209,144 @@ export async function subscribe(
     messages,
     acks: {push: sendAck},
   };
+}
+
+const INITIAL_DECODE_HISTOGRAM_BOUNDARIES_S = [
+  0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 2400, 3600, 7200,
+];
+
+function initialDecodeHistogram() {
+  return getOrCreateHistogram('replication', 'stream_initial_decode', {
+    description:
+      'Time from START_REPLICATION until upstream has decoded the WAL ' +
+      "between the slot's restart_lsn and the start of the stream",
+    unit: 's',
+    bucketBoundaries: INITIAL_DECODE_HISTOGRAM_BOUNDARIES_S,
+  });
+}
+
+/**
+ * Measures how long upstream takes to decode the WAL between the slot's
+ * `restart_lsn` and the start of the stream, during which the stream
+ * delivers nothing but keepalives. This span can be large, e.g. for a slot
+ * that was created (or last acked) long before the requested start LSN.
+ *
+ * The walsender streams from `max(lsn, confirmed_flush_lsn)`, but must
+ * decode from `restart_lsn` to rebuild its transaction state. The decode is
+ * considered complete upon the first message at or past the start:
+ * * any XLogData message, since only transactions committed after the
+ *   start are sent, or
+ * * a keepalive at or past the start. Keepalives report the decoding
+ *   position, except for the first one of the stream, which reports the
+ *   slot's `confirmed_flush_lsn` and is thus ignored if it is at or past the
+ *   start.
+ *
+ * Note that on an idle upstream, a walsender whose start is already
+ * confirmed may not send a keepalive until other WAL is written or the
+ * periodic keepalive (`wal_sender_timeout / 2`) is due, so the measured
+ * time is an upper bound when completed by a keepalive.
+ */
+export class InitialDecodeTracker {
+  static async start(
+    lc: LogContext,
+    session: postgres.Sql,
+    slot: string,
+    lsn: bigint,
+  ): Promise<InitialDecodeTracker> {
+    let restartLSN: bigint | undefined;
+    let confirmedFlushLSN: bigint | undefined;
+    try {
+      // Replication sessions only support the simple query protocol, so the
+      // slot name is inlined as a literal.
+      const [row] = await session
+        .unsafe<{restartLSN: LSN | null; confirmedFlushLSN: LSN | null}[]>(
+          `SELECT restart_lsn AS "restartLSN",
+                  confirmed_flush_lsn AS "confirmedFlushLSN"
+             FROM pg_replication_slots
+             WHERE slot_name = ${lit(slot)}`,
+        )
+        .simple();
+      restartLSN = row?.restartLSN ? toBigInt(row.restartLSN) : undefined;
+      confirmedFlushLSN = row?.confirmedFlushLSN
+        ? toBigInt(row.confirmedFlushLSN)
+        : undefined;
+    } catch (e) {
+      lc.warn?.(`unable to read position of replication slot ${slot}`, e);
+    }
+    return new InitialDecodeTracker(
+      lc,
+      lsn,
+      restartLSN,
+      confirmedFlushLSN,
+      Date.now(),
+    );
+  }
+
+  readonly #lc: LogContext;
+  readonly #start: bigint;
+  readonly #restartLSN: bigint | undefined;
+  readonly #confirmedFlushLSN: bigint | undefined;
+  readonly #startTime: number;
+  #first = true;
+  #done = false;
+
+  constructor(
+    lc: LogContext,
+    lsn: bigint,
+    restartLSN: bigint | undefined,
+    confirmedFlushLSN: bigint | undefined,
+    startTime: number,
+  ) {
+    // The walsender silently starts at confirmed_flush_lsn if the
+    // requested lsn is behind it.
+    this.#start =
+      confirmedFlushLSN !== undefined && confirmedFlushLSN > lsn
+        ? confirmedFlushLSN
+        : lsn;
+    this.#lc = lc.withContext('decodeStart', fromBigInt(this.#start));
+    this.#restartLSN = restartLSN;
+    this.#confirmedFlushLSN = confirmedFlushLSN;
+    this.#startTime = startTime;
+
+    if (restartLSN !== undefined) {
+      this.#lc.info?.(
+        `decoding ${this.#start - restartLSN} bytes of WAL from ` +
+          `restart_lsn ${fromBigInt(restartLSN)} to the start of the stream`,
+      );
+    }
+  }
+
+  /**
+   * Observes a received message, returning the elapsed decode time (ms) if
+   * this message completed the initial decode.
+   */
+  observe([lsn, msg]: StreamMessage, now: number): number | undefined {
+    if (this.#done) {
+      return undefined;
+    }
+    const first = this.#first;
+    this.#first = false;
+    if (msg.tag === 'keepalive') {
+      if (
+        lsn < this.#start ||
+        (first && lsn === this.#confirmedFlushLSN) // reports confirmed_flush
+      ) {
+        return undefined;
+      }
+    }
+    this.#done = true;
+    const elapsed = now - this.#startTime;
+    initialDecodeHistogram().recordMs(elapsed);
+    this.#lc.info?.(
+      `upstream decoded the WAL to the start of the stream in ` +
+        `${elapsed} ms (${msg.tag} at ${fromBigInt(lsn)}` +
+        (this.#restartLSN === undefined
+          ? ')'
+          : `, ${this.#start - this.#restartLSN} bytes from restart_lsn)`),
+      {elapsed},
+    );
+    return elapsed;
+  }
 }
 
 /**
