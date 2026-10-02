@@ -333,9 +333,7 @@ function getReplicatedIndexes(db: Database): ReplicatedIndex[] {
   return listIndexes(db).map(({tableName: table, columns, unique}) => ({
     table,
     unique,
-    columns: Object.entries(columns)
-      .sort(byKeys)
-      .map(([column, dir]) => ({column, dir})),
+    columns: Object.entries(columns).map(([column, dir]) => ({column, dir})),
   }));
 }
 
