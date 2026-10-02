@@ -194,8 +194,18 @@ export type AdvancementProgress = {
   readonly changesSkipped: number;
 };
 
+type AdvancementLogFields = AdvancementProgress & {
+  readonly advancementTimeMs: number;
+  readonly queryPushTimeMs: number;
+  readonly outsideQueryPushTimeMs: number;
+  readonly totalHydrationTimeMs: number;
+  readonly changesCompleted: number;
+};
+
 type AdvanceContext = {
   readonly timer: Timer;
+  readonly progress: {changesProcessed: number};
+  readonly diff: SnapshotDiff;
   /** Raw entries completed, including skipped entries but excluding an in-flight push. */
   completedChanges: number;
   readonly totalHydrationTimeMs: number;
@@ -1334,6 +1344,8 @@ export class PipelineDriver {
     const totalHydrationTimeMs = this.totalHydrationTimeMs();
     const advanceContext: AdvanceContext = {
       timer,
+      progress,
+      diff,
       completedChanges: 0,
       totalHydrationTimeMs,
       numChanges,
@@ -1659,15 +1671,47 @@ export class PipelineDriver {
     };
   }
 
+  /** Compute once for an admitted log, without clocks or allocations per change. */
+  #advancementLogFields({
+    timer,
+    diff,
+    progress,
+    completedChanges,
+    queryStats,
+    totalHydrationTimeMs,
+  }: AdvanceContext): AdvancementLogFields {
+    const advancementTimeMs = timer.totalElapsed();
+    let queryPushTimeMs = 0;
+    for (const stats of queryStats.values()) {
+      queryPushTimeMs += stats.timeMs;
+    }
+    return {
+      advancementTimeMs,
+      queryPushTimeMs,
+      // Time outside measured query output pushes includes upstream query
+      // propagation, diff iteration, sources and consumer work/waits. This
+      // approximate remainder is not a CPU or non-query-work attribution;
+      // clamp it for timer precision/overlap.
+      outsideQueryPushTimeMs: Math.max(0, advancementTimeMs - queryPushTimeMs),
+      totalHydrationTimeMs,
+      changesScanned: diff.changesScanned,
+      changesCompleted: completedChanges,
+      changesProcessed: progress.changesProcessed,
+      changesSkipped: diff.changesSkipped,
+    };
+  }
+
   /**
    * Logs each query whose pushes took longer than the slow advance
    * threshold, at most once per query shape per
    * {@link SLOW_ADVANCE_LOG_WINDOW_MS}.
    */
-  #logSlowAdvances({queryStats, numChanges}: AdvanceContext): void {
+  #logSlowAdvances(context: AdvanceContext): void {
     if (!this.#lc.warn) {
       return;
     }
+    const {queryStats, numChanges} = context;
+    let advancementFields: AdvancementLogFields | undefined;
     for (const [queryID, stats] of queryStats) {
       if (stats.timeMs <= this.#logConfig.slowAdvanceThreshold) {
         continue;
@@ -1691,6 +1735,7 @@ export class PipelineDriver {
           advanceTimeMs: stats.timeMs,
           changes: stats.changes,
           advancementChanges: numChanges,
+          ...(advancementFields ??= this.#advancementLogFields(context)),
           timeMsByTable: Object.fromEntries(stats.timeMsByTable),
           ...(suppressed > 0 && {suppressedSinceLastLog: suppressed}),
           zql: query.shape.zql,
@@ -1702,15 +1747,17 @@ export class PipelineDriver {
   /**
    * Logs the queries that took the most time in an advancement that timed
    * out, since the reset that follows would otherwise not say what was slow.
-   * Throttled per query shape of the slowest query.
+   * Throttled per query shape of the slowest query, with a shared fallback
+   * when the timeout happens before any query push timings are recorded.
    */
   #logAdvanceTimeout(
-    {queryStats, numChanges}: AdvanceContext,
+    context: AdvanceContext,
     reset: ResetPipelinesSignal,
   ): void {
     if (!this.#lc.warn) {
       return;
     }
+    const {queryStats, numChanges} = context;
     const slowest = [...queryStats]
       .toSorted(([, a], [, b]) => b.timeMs - a.timeMs)
       .slice(0, ADVANCE_TIMEOUT_LOG_MAX_QUERIES)
@@ -1718,11 +1765,11 @@ export class PipelineDriver {
         const query = this.#queryForLog(queryID);
         return query ? [{query, stats}] : [];
       });
-    if (slowest.length === 0) {
-      return;
-    }
+    const leadingQuery = slowest[0]?.query;
     const suppressed = slowAdvanceLogThrottle.admit(
-      `timeout:${slowest[0].query.queryName ?? ''}:${slowest[0].query.shape.hash}`,
+      leadingQuery
+        ? `timeout:${leadingQuery.queryName ?? ''}:${leadingQuery.shape.hash}`
+        : 'timeout:outside-query-push',
     );
     if (suppressed === undefined) {
       return;
@@ -1735,12 +1782,15 @@ export class PipelineDriver {
       .join(', ');
     this.#lc.warn(
       `Advancement of ${numChanges} changes timed out. ` +
-        `The queries that took the most time: ${summary}`,
+        (summary
+          ? `The queries that took the most time: ${summary}`
+          : 'No query push timings were recorded.'),
       {
         zeroEvent: 'query-advance-timeout',
         // Says where the advancement was when it timed out.
         reason: reset.message,
         advancementChanges: numChanges,
+        ...this.#advancementLogFields(context),
         queries: slowest.map(({query, stats}) => ({
           ...query.fields,
           advanceTimeMs: stats.timeMs,
