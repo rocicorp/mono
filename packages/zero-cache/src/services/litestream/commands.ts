@@ -295,6 +295,17 @@ export async function tryRestore(
   }
 }
 
+/**
+ * Deletes litestream's local state for `replicaFile` (its default meta
+ * directory, `.<file>-litestream`).
+ */
+export function deleteLitestreamMetaDir(replicaFile: string) {
+  rmSync(join(dirname(replicaFile), `.${basename(replicaFile)}-litestream`), {
+    recursive: true,
+    force: true,
+  });
+}
+
 function deleteRestoreTempFiles(replicaFile: string) {
   const temporaryReplicaFile = `${replicaFile}.tmp`;
   deleteLiteDB(temporaryReplicaFile);

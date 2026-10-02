@@ -29,7 +29,10 @@ import {
   ProcessManager,
   runUntilKilled,
 } from '../services/life-cycle.ts';
-import {startReplicaBackupProcess} from '../services/litestream/commands.ts';
+import {
+  deleteLitestreamMetaDir,
+  startReplicaBackupProcess,
+} from '../services/litestream/commands.ts';
 import {
   changeLogFileName,
   deleteChangeLogDB,
@@ -180,6 +183,7 @@ export default async function runWorker(
   }
 
   let waitForFirstBackupBeforeServing = false;
+  let newBackupLineage = false;
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
@@ -194,37 +198,37 @@ export default async function runWorker(
         destinationBackupURL,
         replicaID,
         waitForBackupBeforeServing,
-      } =
-        upstream.type === 'pg'
-          ? await initializePostgresChangeSource(
-              lc,
-              upstream.db,
-              shard,
-              replica.file,
-              {
-                ...initialSync,
-                replicationSlotFailover: upstream.pgReplicationSlotFailover,
-                installPartialIndexTriggers: upstream.pgPartialIndexTriggers,
-              },
-              context,
-              replicationLag.reportIntervalMs,
-              restoreOptions,
-              {
-                epoch,
-                slotPerReplica,
-                inactiveReplicaGracePeriodMs,
-                backupV5: litestream.backupUsingV5,
-              },
-              upstream.pgStreamInboundTimeoutMs,
-            )
-          : await initializeCustomChangeSource(
-              lc,
-              upstream.db,
-              shard,
-              replica.file,
-              context,
-              restoreOptions,
-            );
+        newBackupLineage: initNewBackupLineage,
+      } = upstream.type === 'pg'
+        ? await initializePostgresChangeSource(
+            lc,
+            upstream.db,
+            shard,
+            replica.file,
+            {
+              ...initialSync,
+              replicationSlotFailover: upstream.pgReplicationSlotFailover,
+              installPartialIndexTriggers: upstream.pgPartialIndexTriggers,
+            },
+            context,
+            replicationLag.reportIntervalMs,
+            restoreOptions,
+            {
+              epoch,
+              slotPerReplica,
+              inactiveReplicaGracePeriodMs,
+              backupV5: litestream.backupUsingV5,
+            },
+            upstream.pgStreamInboundTimeoutMs,
+          )
+        : await initializeCustomChangeSource(
+            lc,
+            upstream.db,
+            shard,
+            replica.file,
+            context,
+            restoreOptions,
+          );
 
       const replicationStatusPublisher =
         ReplicationStatusPublisher.forReplicaFile(replica.file);
@@ -313,6 +317,7 @@ export default async function runWorker(
       );
       backupURL = destinationBackupURL;
       waitForFirstBackupBeforeServing = waitForBackupBeforeServing;
+      newBackupLineage = initNewBackupLineage;
       break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
@@ -358,6 +363,9 @@ export default async function runWorker(
   if (backupURL) {
     lc.info?.('setting up backup to', backupURL);
     litestream.backupURL = backupURL;
+    if (newBackupLineage) {
+      deleteLitestreamMetaDir(replica.file);
+    }
     const {promise: backupStarted, resolve} = resolver();
 
     // Start a backup replicator and corresponding litestream backup process.

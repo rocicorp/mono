@@ -15,8 +15,8 @@ import {
 } from '../../replicator/schema/replication-state.ts';
 import {
   restoreReplica,
-  type InitializeResult,
   type ConstrainingPurgeLock,
+  type InitializeResult,
   type RestoreOptions,
 } from '../common/replica-restore.ts';
 import {initReplica} from '../common/replica-schema.ts';
@@ -152,12 +152,15 @@ export async function initializePostgresChangeSource(
       (initialSyncedReplica ?? restoredReplica)?.id,
     );
 
+    // With litestream v5, every replication-manager backs up to a new backup
+    // lineage.
+    const newBackupLineage = backupV5;
     const backupPath = initialSyncedReplica
       ? // If initial sync was performed, use that initial backupPath.
         initialSyncedReplica.backupPath
       : // Otherwise, use a new, unique path when backing up with litestream v5. This will be
         // recorded in the replicas table by the PostgresChangeSource.
-        backupV5
+        newBackupLineage
         ? String(Date.now())
         : (restoredReplica?.backupPath ?? null);
 
@@ -196,6 +199,7 @@ export async function initializePostgresChangeSource(
         // (i.e. backupV5).
         backupPath !== (restoredReplica?.backupPath ?? null),
       pgChangeLogBehindSlot,
+      newBackupLineage,
     };
   } finally {
     await db.end();

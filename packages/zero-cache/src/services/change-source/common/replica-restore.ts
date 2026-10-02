@@ -78,6 +78,17 @@ export type InitializeResult = {
    * the restored replica if it does not contain the replica's changes.
    */
   pgChangeLogBehindSlot?: boolean | undefined;
+
+  /**
+   * Whether the litestream backup to `destinationBackupURL` starts a new
+   * (litestream v5) backup lineage, i.e. one that no local litestream state
+   * belongs to. Any such state (e.g. from a previous run of a restarted
+   * container, whose restore reused the existing replica) describes a
+   * different lineage and must be discarded before replicating, or litestream
+   * resolves its position from it and fails (and auto-recovers) on its first
+   * sync to the empty lineage.
+   */
+  newBackupLineage: boolean;
 };
 
 // A short retry is much cheaper than an initial Postgres sync, while keeping a

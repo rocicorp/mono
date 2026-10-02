@@ -109,6 +109,8 @@ export async function initializeCustomChangeSource(
     // identity here.
     replicaID: null,
     waitForBackupBeforeServing: initialSynced,
+    // Backs up to the (non-lineage) base URL.
+    newBackupLineage: false,
   };
 }
 
