@@ -254,6 +254,7 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   readonly #attrs: Attributes;
   #start: number;
   #sqliteRowTimeSum: number;
+  #logged = false;
 
   constructor(
     lc: LogContext,
@@ -281,6 +282,12 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   }
 
   #log() {
+    // TableSource closes iterators in finally, including after next() is done.
+    if (this.#logged) {
+      return;
+    }
+    this.#logged = true;
+
     // Total time includes downstream consumer work and waits between rows.
     // Check it independently of the time spent stepping SQLite.
     const totalMs = performance.now() - this.#start;
