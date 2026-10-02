@@ -185,8 +185,19 @@ type QueryPipelineLifecycleLog = {
   readonly pipelineLifetimeMs?: number | undefined;
 };
 
+export type AdvancementProgress = {
+  /** Raw ChangeLog entries read, including skipped entries and the current change. */
+  readonly changesScanned: number;
+  /** Yielded source changes whose push processing completed. */
+  readonly changesProcessed: number;
+  /** Raw entries omitted by the snapshot diff. */
+  readonly changesSkipped: number;
+};
+
 type AdvanceContext = {
   readonly timer: Timer;
+  /** Raw entries completed, including skipped entries but excluding an in-flight push. */
+  completedChanges: number;
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
   /**
@@ -1274,6 +1285,8 @@ export class PipelineDriver {
     version: string;
     numChanges: number;
     changes: Iterable<RowChange | 'yield'>;
+    /** Available throughout iteration and after completion or an abort. */
+    progress: () => AdvancementProgress;
   } {
     assert(
       this.initialized(),
@@ -1293,10 +1306,18 @@ export class PipelineDriver {
       `advance ${prev.version} => ${curr.version}: ${changes} changes`,
     );
 
+    const progress = {changesProcessed: 0};
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#trackRowSetSignatures(this.#advance(diff, timer, changes)),
+      changes: this.#trackRowSetSignatures(
+        this.#advance(diff, timer, changes, progress),
+      ),
+      progress: () => ({
+        changesScanned: diff.changesScanned,
+        changesProcessed: progress.changesProcessed,
+        changesSkipped: diff.changesSkipped,
+      }),
     };
   }
 
@@ -1304,6 +1325,7 @@ export class PipelineDriver {
     diff: SnapshotDiff,
     timer: Timer,
     numChanges: number,
+    progress: {changesProcessed: number},
   ): Iterable<RowChange | 'yield'> {
     assert(
       this.#hydrateContext === null,
@@ -1312,6 +1334,7 @@ export class PipelineDriver {
     const totalHydrationTimeMs = this.totalHydrationTimeMs();
     const advanceContext: AdvanceContext = {
       timer,
+      completedChanges: 0,
       totalHydrationTimeMs,
       numChanges,
       reservedRows: undefined,
@@ -1347,6 +1370,10 @@ export class PipelineDriver {
         nextValue,
         rowKey,
       } of diff) {
+        // The diff counts every raw entry, whereas it only yields observed,
+        // non-no-op changes. Match the projection's progress to its raw total,
+        // but do not count the current change until its push has completed.
+        advanceContext.completedChanges = diff.changesScanned - 1;
         // Advance progress is checked each time a row is fetched
         // from a TableSource during push processing, but some pushes
         // don't read any rows.  Check progress here before processing
@@ -1359,11 +1386,13 @@ export class PipelineDriver {
         advanceContext.currentTable = table;
 
         let holds: HeldRows = 'fits';
+        let pushCompleted = false;
         try {
           try {
             const tableSource = this.#tables.get(table);
             if (!tableSource) {
               // no pipelines read from this table, so no need to process the change
+              pushCompleted = true;
               continue;
             }
             const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
@@ -1417,8 +1446,13 @@ export class PipelineDriver {
                 );
               }
             }
+            pushCompleted = true;
           } finally {
             advanceContext.pos++;
+            if (pushCompleted) {
+              progress.changesProcessed++;
+              advanceContext.completedChanges = diff.changesScanned;
+            }
           }
 
           this.#shouldAdvanceYieldMaybeAbortAdvance(false);
@@ -1439,6 +1473,9 @@ export class PipelineDriver {
           yield* this.#writeThrough(advanceContext, diff, holds);
         }
       }
+
+      // Include trailing skips, or an advancement that yielded no changes.
+      advanceContext.completedChanges = diff.changesScanned;
 
       // Set the new snapshot on all TableSources.
       const {curr} = diff;
@@ -1759,7 +1796,7 @@ export class PipelineDriver {
   #shouldAdvanceYieldMaybeAbortAdvance(checkYield = true): boolean {
     const {
       currentChangeStartMs,
-      pos,
+      completedChanges,
       numChanges,
       timer: advanceTimer,
       totalHydrationTimeMs,
@@ -1774,7 +1811,7 @@ export class PipelineDriver {
       shouldResetSlowCurrentChange(currentChangeElapsedMs, totalHydrationTimeMs)
     ) {
       this.#throwSlowCurrentChangeReset(
-        pos,
+        completedChanges,
         numChanges,
         elapsed,
         currentChangeElapsedMs,
@@ -1783,22 +1820,25 @@ export class PipelineDriver {
     }
     const projectedTotalTimeMs = projectedAdvancementTimeMs(
       elapsed,
-      pos,
+      completedChanges,
       numChanges,
     );
-    const shouldFinish = shouldFinishLateAdvancement(pos, numChanges);
+    const shouldFinish = shouldFinishLateAdvancement(
+      completedChanges,
+      numChanges,
+    );
     if (
       !shouldFinish &&
       shouldResetProjectedAdvancement(
         elapsed,
         projectedTotalTimeMs,
-        pos,
+        completedChanges,
         numChanges,
         totalHydrationTimeMs,
       )
     ) {
       this.#throwProjectedAdvancementReset(
-        pos,
+        completedChanges,
         numChanges,
         elapsed,
         projectedTotalTimeMs,
@@ -1814,7 +1854,7 @@ export class PipelineDriver {
         projectedTotalTimeMs - elapsed > totalHydrationTimeMs)
     ) {
       throw new ResetPipelinesSignal(
-        `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
+        `Advancement exceeded timeout at ${completedChanges} of ${numChanges} changes ` +
           `after ${elapsed} ms. Advancement time limited based on total ` +
           `hydration time of ${totalHydrationTimeMs} ms.`,
         'advancement-timeout',

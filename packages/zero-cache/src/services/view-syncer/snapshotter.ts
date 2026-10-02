@@ -286,17 +286,18 @@ export interface SnapshotDiff extends Iterable<Change> {
   };
 
   /**
-   * The number of ChangeLog entries between the snapshots. Note that this
-   * may not necessarily equal the number of `Change` objects that the iteration
-   * will produce, as `TRUNCATE` entries are counted as a single log entry which
-   * may be expanded into many changes (i.e. row deletes).
-   *
-   * TODO: Determine if it is worth changing the definition to count the
-   *       truncated rows. This would make diff computation more expensive
-   *       (requiring the count to be aggregated by operation type), which
-   *       may not be worth it for a presumable rare operation.
+   * The raw number of ChangeLog entries between the snapshots, before filtering
+   * out unobserved/non-syncable tables or no-op changes. Progress against this
+   * total must use {@link changesScanned}, rather than the number of yielded
+   * changes. Table-wide operations abort iteration and reset the pipelines.
    */
   readonly changes: number;
+
+  /** The number of raw ChangeLog entries read so far, including skipped entries. */
+  readonly changesScanned: number;
+
+  /** The scanned entries omitted because their table is unobserved/non-syncable or the change is a no-op. */
+  readonly changesSkipped: number;
 
   /**
    * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
@@ -623,6 +624,8 @@ class Diff implements SnapshotDiff {
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
+  changesScanned = 0;
+  changesSkipped = 0;
 
   constructor(
     appID: string,
@@ -685,6 +688,7 @@ class Diff implements SnapshotDiff {
               return {value, done: true};
             }
 
+            this.changesScanned++;
             const {table, rowKey, op, stateVersion} = v.parse(value, schema);
             if (op === RESET_OP) {
               // The current map of `TableSpec`s may not have the correct or complete information.
@@ -706,6 +710,7 @@ class Diff implements SnapshotDiff {
               table !== this.#permissionsTable
             ) {
               if (this.#allTableNames.has(table)) {
+                this.changesSkipped++;
                 continue; // skip change log entries for unobserved tables.
               }
               throw new Error(`change for unknown table ${table}`);
@@ -713,6 +718,7 @@ class Diff implements SnapshotDiff {
             const specs = this.#syncableTables.get(table);
             if (!specs) {
               if (this.#allTableNames.has(table)) {
+                this.changesSkipped++;
                 continue; // skip change log entries for non-syncable tables.
               }
               throw new Error(`change for unknown table ${table}`);
@@ -812,6 +818,7 @@ class Diff implements SnapshotDiff {
             if (prevValues.length === 0 && nextValue === null) {
               // Filter out no-op changes (e.g. a delete of a row that does not exist in prev).
               // TODO: Consider doing this for deep-equal values.
+              this.changesSkipped++;
               continue;
             }
 
