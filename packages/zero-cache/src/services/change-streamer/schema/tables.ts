@@ -267,35 +267,14 @@ export async function ensureReplicationConfig(
       );
 
       if (needsTruncate) {
-        // The TRUNCATE statements require ACCESS EXCLUSIVE locks, which may
-        // be blocked by old storer catchup reads. Race against a timeout
-        // that terminates the blocking backends if the TRUNCATE takes too
-        // long. The check is repeated until the statements complete, since
-        // the TRUNCATE may not yet be waiting on a lock when the timer fires.
-        let done = false;
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const scheduleTerminate = () => {
-          timer = setTimeoutFn(async () => {
-            lc.info?.(
-              'ensureReplicationConfig blocked, terminating lock holders',
-            );
-            try {
-              await terminateChangeDBLockHolders(lc, db, shard);
-            } catch (e) {
-              lc.warn?.('error terminating lock holders', e);
-            }
-            if (!done) {
-              scheduleTerminate();
-            }
-          }, LOCK_HOLDER_TERMINATE_TIMEOUT_MS);
-        };
-        scheduleTerminate();
-        try {
-          return await Promise.all(stmts);
-        } finally {
-          done = true;
-          clearTimeout(timer);
-        }
+        return runStatementsAndTerminateLockHolders(
+          lc,
+          db,
+          shard,
+          'ensureReplicationConfig',
+          stmts,
+          setTimeoutFn,
+        );
       }
       return Promise.all(stmts);
     }
@@ -321,6 +300,166 @@ export async function ensureReplicationConfig(
 // The time to wait for a TRUNCATE in ensureReplicationConfig before
 // terminating blocking backends via terminateChangeDBLockHolders.
 const LOCK_HOLDER_TERMINATE_TIMEOUT_MS = 5_000;
+
+/**
+ * Executes `stmts` that require ACCESS EXCLUSIVE locks (e.g. `TRUNCATE`),
+ * which may be blocked by old storer catchup reads. Races against a
+ * timeout that terminates the blocking backends if the `stmts` take too
+ * long. The check is repeated until the statements complete, since the
+ * `stmts` may not yet be waiting on a lock when the timer fires.
+ */
+async function runStatementsAndTerminateLockHolders(
+  lc: LogContext,
+  db: PostgresDB,
+  shard: ShardID,
+  name: string,
+  stmts: PendingQuery<Row[]>[],
+  setTimeoutFn: typeof setTimeout,
+) {
+  let done = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleTerminate = () => {
+    timer = setTimeoutFn(async () => {
+      lc.info?.(`${name} blocked, terminating lock holders`);
+      try {
+        await terminateChangeDBLockHolders(lc, db, shard);
+      } catch (e) {
+        lc.warn?.('error terminating lock holders', e);
+      }
+      if (!done) {
+        scheduleTerminate();
+      }
+    }, LOCK_HOLDER_TERMINATE_TIMEOUT_MS);
+  };
+  scheduleTerminate();
+  try {
+    return await Promise.all(stmts);
+  } finally {
+    done = true;
+    clearTimeout(timer);
+  }
+}
+
+export type ChangeLogReinitialization = {
+  /**
+   * The watermark of the replica from which the change log is re-initialized,
+   * i.e. the watermark from which the change stream will resume.
+   */
+  watermark: string;
+  cookies: {
+    tableMetadata: readonly {
+      schema: string;
+      table: string;
+      metadata: TableMetadata;
+    }[];
+    backfilling: readonly {
+      schema: string;
+      table: string;
+      column: string;
+      backfill: BackfillID;
+    }[];
+  };
+  owner: string;
+  ownerAddress: string;
+};
+
+/**
+ * Re-initializes the change log from the state of the replica if it does not
+ * contain all of the replica's changes, i.e. if its `lastWatermark` is before
+ * the replica's watermark. This is the case if the change log is no longer
+ * maintained (e.g. after running in high-availability mode), or if its last
+ * owner stopped before persisting changes that it had already forwarded
+ * (and backed up). Ownership of the change log is taken in the same
+ * transaction, in which:
+ *
+ * * The `replicationState`, `changeLog`, `tableMetadata`, and `backfilling`
+ *   tables are truncated. (The `replicationConfig` is kept;
+ *   {@link ensureReplicationConfig} handles changes of the replica version
+ *   or publications.)
+ * * The change log is seeded with an empty transaction at the replica's
+ *   watermark, so that subscribers at that watermark can be caught up, while
+ *   subscribers at earlier watermarks are rejected as being too old.
+ * * The `tableMetadata` and `backfilling` cookies are set from the replica.
+ *
+ * Returns `'maintained'` without modifying anything if the change log's
+ * `lastWatermark` is at or past the replica's watermark, i.e. the change log
+ * contains all of the replica's changes. Because a replication slot is only
+ * acked past a transaction once it has been backed up, this means that the
+ * change log contains every transaction up to the position of the replica's
+ * replication slot, and it can be taken over (and resumed from its head).
+ *
+ * This is called when the change log's head is behind the position of the
+ * replication slot (see `PgChangeLogPurgeLocker`). That position cannot be
+ * compared with the watermarks of transactions to determine whether the
+ * change log is maintained, as it is also advanced past positions of changes
+ * outside of the publication.
+ *
+ * @param purgeLock A purge lock held by the caller, if any, which is released
+ *     before the tables are truncated.
+ */
+export function reinitializeChangeLog(
+  lc: LogContext,
+  db: PostgresDB,
+  shard: ShardID,
+  {watermark, cookies, owner, ownerAddress}: ChangeLogReinitialization,
+  purgeLock?: PurgeLock,
+  setTimeoutFn: typeof setTimeout = setTimeout,
+): Promise<'reinitialized' | 'maintained'> {
+  const schema = cdcSchema(shard);
+  return runTx(db, async sql => {
+    // Lock the replicationState first, which is the order in which the
+    // storer acquires locks when writing the changeLog.
+    const state = await sql<{lastWatermark: string}[]>`
+      SELECT "lastWatermark" FROM ${sql(schema)}."replicationState" FOR UPDATE`;
+    const lastWatermark = state[0]?.lastWatermark;
+    if (lastWatermark !== undefined && lastWatermark >= watermark) {
+      lc.info?.(
+        `changeLog@${lastWatermark} contains the replica's changes (@${watermark})`,
+      );
+      return 'maintained';
+    }
+    lc.info?.(
+      `re-initializing changeLog@${lastWatermark} from the replica @${watermark}`,
+    );
+    const replicationState: ReplicationState = {
+      lastWatermark: watermark,
+      owner,
+      ownerAddress,
+    };
+    const initialTx: FullChangeLogEntry[] = [
+      {watermark, pos: 0, change: {tag: 'begin'}},
+      {watermark, pos: 1, change: {tag: 'commit'}},
+    ];
+    // The caller's purge lock would block the TRUNCATE. Releasing it is safe:
+    // a concurrent purge checks the ownership after deleting, which blocks
+    // on the replicationState lock held by this transaction.
+    await purgeLock?.release();
+    await runStatementsAndTerminateLockHolders(
+      lc,
+      db,
+      shard,
+      'reinitializeChangeLog',
+      [
+        sql`TRUNCATE TABLE ${sql(schema)}."replicationState"`,
+        sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
+        sql`TRUNCATE TABLE ${sql(schema)}."tableMetadata"`,
+        sql`TRUNCATE TABLE ${sql(schema)}."backfilling"`,
+      ],
+      setTimeoutFn,
+    );
+    await sql`INSERT INTO ${sql(schema)}."replicationState" ${sql(replicationState)}`;
+    for (const entry of initialTx) {
+      await sql`INSERT INTO ${sql(schema)}."changeLog" ${sql(entry)}`;
+    }
+    for (const row of cookies.tableMetadata) {
+      await sql`INSERT INTO ${sql(schema)}."tableMetadata" ${sql({...row})}`;
+    }
+    for (const row of cookies.backfilling) {
+      await sql`INSERT INTO ${sql(schema)}."backfilling" ${sql({...row})}`;
+    }
+    return 'reinitialized';
+  });
+}
 
 export const CHANGE_STREAMER_APP_NAME = 'zero-change-streamer';
 

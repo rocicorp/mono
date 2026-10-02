@@ -8,6 +8,7 @@ import {
   BigIntJSON,
   type JSONObject,
 } from '../../../../shared/src/bigint-json.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
@@ -53,7 +54,9 @@ import * as ErrorType from './error-type-enum.ts';
 import {
   AutoResetSignal,
   markResetRequired,
+  reinitializeChangeLog,
   type BackfillingColumn,
+  type ChangeLogReinitialization,
   type TableMetadataRow,
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
@@ -82,10 +85,21 @@ type QueueEntry =
     ]
   | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
+  | ['status', watermark: string]
   | ['abort']
   | 'stop';
 
+/**
+ * A transaction that is not stored because it was already stored by the
+ * previous owner of the change log (see {@link Storer.assumeOwnershipAtHead}).
+ */
+type SkippedTransaction = {
+  skipped: true;
+  ack: boolean;
+};
+
 type PendingTransaction = {
+  skipped?: undefined;
   pool: TransactionPool;
   preCommitWatermark: string;
   pos: number;
@@ -96,6 +110,30 @@ type PendingTransaction = {
   // The most recently issued flush (or metadata) process, awaited to bound
   // pipeline depth and to order the commit-time replicationState update.
   lastFlush: Promise<unknown> | undefined;
+  // Set if ownership of the change log is assumed in this transaction.
+  ownershipAssumed: AssumedOwnership | undefined;
+};
+
+/** The state of the change log at which ownership was assumed. */
+type AssumedOwnership = {
+  /** The last watermark stored by the previous owner. */
+  head: string;
+  /** Whether the change log has pending backfills. */
+  backfilling: boolean;
+};
+
+export type OwnershipTakeover = {
+  /**
+   * The lock that prevents the previous owner from purging the change log
+   * (from which this change-streamer's replica was restored), released once
+   * ownership is assumed.
+   */
+  purgeLock: PurgeLock | null;
+  /**
+   * Requests a restart of the change stream (at a transaction boundary),
+   * which is used to start pending backfills once ownership is assumed.
+   */
+  requestRestart: (reason: string) => void;
 };
 
 type ReplicationOwner = {
@@ -171,6 +209,20 @@ export class Storer implements Service {
   readonly #replicaVersion: string;
   readonly #onCommitted: (c: Commit) => void;
   readonly #onFatal: (err: Error) => void;
+
+  /**
+   * Set while waiting to assume ownership of the change log at its head
+   * (see {@link assumeOwnershipAtHead}).
+   */
+  #pendingOwnership:
+    | (OwnershipTakeover & {
+        /** The last known head of the change log, which only moves forward. */
+        head: string;
+        /** Whether a backfill transaction was skipped. */
+        skippedBackfill: boolean;
+        start: number;
+      })
+    | null = null;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
   readonly #statementTimeoutMs: number;
@@ -262,16 +314,165 @@ export class Storer implements Service {
     return result;
   }
 
-  async assumeOwnership(purgeLock?: PurgeLock | null) {
-    const db = this.#db;
-    const owner = this.#taskID;
+  #ownerAddress() {
     const ownerAddress = this.#discoveryAddress;
     const ownerProtocol = this.#discoveryProtocol;
     // we omit `ws://` so that old view syncer versions that are not expecting the protocol continue to not get it
-    const addressWithProtocol =
-      ownerProtocol === 'ws'
-        ? ownerAddress
-        : `${ownerProtocol}://${ownerAddress}`;
+    return ownerProtocol === 'ws'
+      ? ownerAddress
+      : `${ownerProtocol}://${ownerAddress}`;
+  }
+
+  /**
+   * Re-initializes a change log that is no longer maintained from the
+   * replica's state, taking ownership of it in the process (which is then
+   * assumed again at its new head, see {@link assumeOwnershipAtHead}).
+   * See {@link reinitializeChangeLog}.
+   */
+  reinitializeFromReplica(
+    params: Omit<ChangeLogReinitialization, 'owner' | 'ownerAddress'>,
+  ): Promise<'reinitialized' | 'maintained'> {
+    return reinitializeChangeLog(
+      this.#lc,
+      this.#db,
+      this.#shard,
+      {...params, owner: this.#taskID, ownerAddress: this.#ownerAddress()},
+      // The purge lock (if any) is released before the change log is
+      // truncated, as it locks a row of it.
+      this.#pendingOwnership?.purgeLock ?? undefined,
+    );
+  }
+
+  /**
+   * Prepares to assume ownership of the change log at its head, while it may
+   * still be owned and maintained by another change-streamer. This allows the
+   * previous owner to continue to serve subscribers while this change-source's
+   * upstream decodes the WAL to catch up to the head of the change log, which
+   * may be many minutes worth of transactions for large DBs.
+   *
+   * Once the change stream is started from the head of the change log:
+   *
+   * * Transactions that the change log already contains (i.e. stored by the
+   *   previous owner) are not stored again, but are otherwise processed
+   *   normally (e.g. for upstream acks, since they have been stored).
+   * * Ownership is assumed in the transaction that stores the first
+   *   transaction past the head of the change log. The previous owner's
+   *   (subsequent) transactions fail its ownership check, which makes this
+   *   transaction the one immediately after the previous owner's last one.
+   * * Ownership is also assumed upon a {@link status} at or past the head of
+   *   the change log (outside of a transaction), which covers an idle
+   *   upstream: all transactions up to the status position have been
+   *   received, and any past the head would have been stored.
+   *
+   * Subscribers are caught up from the change log as usual, as the stream
+   * (which is forwarded to them) starts from its head.
+   *
+   * Backfill transactions are synthesized by each change-streamer's change
+   * source, and thus never correspond to those stored by the previous owner.
+   * Until ownership is assumed, they are not stored, and no backfills are
+   * requested from the change log (see
+   * {@link getStartStreamInitializationParameters}). Once ownership is
+   * assumed, a restart of the change stream is requested if the change log has
+   * pending backfills or if a backfill transaction was skipped.
+   */
+  assumeOwnershipAtHead(takeover: OwnershipTakeover) {
+    this.#pendingOwnership = {
+      ...takeover,
+      head: '',
+      skippedBackfill: false,
+      start: performance.now(),
+    };
+  }
+
+  /**
+   * Whether ownership of the change log is pending, i.e. after
+   * {@link assumeOwnershipAtHead} and before ownership is assumed.
+   */
+  get ownershipPending(): boolean {
+    return this.#pendingOwnership !== null;
+  }
+
+  /**
+   * Relays a status message received outside of a transaction, which is
+   * used to assume ownership of the change log on an idle upstream. A no-op
+   * unless ownership is pending.
+   */
+  status(watermark: string) {
+    if (this.#pendingOwnership) {
+      this.#queue.enqueue(['status', watermark]);
+    }
+  }
+
+  /**
+   * Assumes ownership if the change log contains nothing past `watermark`.
+   * Otherwise, updates the known head of the change log.
+   *
+   * @param ifBefore When set, ownership is only assumed if the head of the
+   *     change log is before (rather than at or before) the `watermark`,
+   *     i.e. when the watermark is that of a transaction to be stored.
+   * @returns The state of the change log at which ownership is assumed (in
+   *     `tx`), or `null` if ownership was not assumed.
+   */
+  async #tryAssumeOwnership(
+    tx: TransactionPool,
+    watermark: string,
+    ifBefore: boolean,
+  ): Promise<AssumedOwnership | null> {
+    const pending = must(this.#pendingOwnership);
+    const [state] = await tx.processReadTask(
+      sql => sql<{lastWatermark: string}[]>`
+        SELECT "lastWatermark" FROM ${this.#cdc('replicationState')} FOR UPDATE`,
+    );
+    const head = state.lastWatermark;
+    pending.head = head > pending.head ? head : pending.head;
+    if (ifBefore ? head >= watermark : head > watermark) {
+      return null;
+    }
+    const owner = this.#taskID;
+    const ownerAddress = this.#ownerAddress();
+    void tx.process(sql => [
+      sql`UPDATE ${this.#cdc('replicationState')} SET ${sql({owner, ownerAddress})}`,
+    ]);
+    // Read with the replicationState row locked, i.e. consistent with the head.
+    const [{backfilling}] = await tx.processReadTask(
+      sql => sql<{backfilling: boolean}[]>`
+        SELECT EXISTS (SELECT 1 FROM ${this.#cdc('backfilling')}) AS "backfilling"`,
+    );
+    this.#lc.info?.(
+      `assuming ownership at ${ownerAddress} after change log head ${head}`,
+    );
+    return {head, backfilling};
+  }
+
+  #ownershipAssumed({head, backfilling}: AssumedOwnership) {
+    const {purgeLock, requestRestart, skippedBackfill, start} = must(
+      this.#pendingOwnership,
+    );
+    this.#pendingOwnership = null;
+    this.#lc.info?.(
+      `assumed ownership of the change log at ${head} after ` +
+        `${(performance.now() - start).toFixed(2)} ms`,
+    );
+    // Once ownership has been assumed, the initial purge lock can be released,
+    // as a change-streamer that was attempting to purge records will
+    // correspondingly abort on the ownership check.
+    void purgeLock?.release();
+    if (backfilling || skippedBackfill) {
+      requestRestart(`resuming backfills after assuming ownership`);
+    }
+  }
+
+  /**
+   * Assumes ownership of the change log immediately, regardless of its head.
+   * This is used for in tests.
+   *
+   * A production change-streamer instead takes over the change log at its head
+   * (see {@link assumeOwnershipAtHead}).
+   */
+  async assumeOwnership() {
+    const db = this.#db;
+    const owner = this.#taskID;
+    const addressWithProtocol = this.#ownerAddress();
     this.#lc.info?.(`assuming ownership at ${addressWithProtocol}`);
     const start = performance.now();
     await this.#withTimeout(
@@ -282,14 +483,6 @@ export class Storer implements Service {
     this.#lc.info?.(
       `assumed ownership at ${addressWithProtocol} (${elapsed} ms)`,
     );
-
-    if (purgeLock) {
-      // Once ownership has been assumed, any initial purge-lock preventing the
-      // purging of change-log records can be released, as a change-streamer
-      // that was attempting to purge records will correspondingly abort on the
-      // ownership check.
-      void purgeLock.release();
-    }
   }
 
   /**
@@ -363,7 +556,11 @@ export class Storer implements Service {
 
     return {
       lastWatermark,
-      backfillRequests: v.parse(result, backfillRequestsSchema),
+      // Backfills are not requested before ownership is assumed.
+      // See assumeOwnershipAtHead().
+      backfillRequests: this.#pendingOwnership
+        ? []
+        : v.parse(result, backfillRequestsSchema),
       cookies: {
         tableMetadata: [...tableMetadata],
         backfilling: [...backfilling],
@@ -663,7 +860,7 @@ export class Storer implements Service {
   }
 
   async #processQueue() {
-    let tx: PendingTransaction | null = null;
+    let tx: PendingTransaction | SkippedTransaction | null = null;
     let msg: QueueEntry | false;
 
     // Track the progress of each (previous and next) queue entry before it is
@@ -703,141 +900,225 @@ export class Storer implements Service {
             }
             continue;
           }
+          case 'status': {
+            const pending = this.#pendingOwnership;
+            if (pending && !tx && msg[1] >= pending.head) {
+              const pool = new TransactionPool(this.#lc, {
+                mode: Mode.READ_COMMITTED,
+              });
+              pool.run(this.#inserter);
+              const assumed = await this.#tryAssumeOwnership(
+                pool,
+                msg[1],
+                false,
+              );
+              if (assumed === null) {
+                pool.abort();
+                await pool.done();
+              } else {
+                pool.setDone();
+                await pool.done();
+                this.#ownershipAssumed(assumed);
+              }
+            }
+            continue;
+          }
           case 'abort': {
-            if (tx) {
+            if (tx && !tx.skipped) {
               tx.pool.abort();
               await tx.pool.done();
-              tx = null;
             }
+            tx = null;
             continue;
           }
         }
         // msgType === 'change'
-        const [_, watermark, json, storedChange, change] = msg;
-        const tag = change?.tag;
-        this.#approximateQueuedBytes -= json.length;
-
-        if (tag === 'begin') {
-          assert(!tx, 'received BEGIN in the middle of a transaction');
-          const {promise, resolve, reject} = resolver<ReplicationOwner>();
-          void promise.catch(() => {}); // handle rejections before the await
-          tx = {
-            pool: new TransactionPool(
-              this.#lc.withContext('watermark', watermark),
-              {mode: Mode.READ_COMMITTED},
-            ),
-            preCommitWatermark: watermark,
-            pos: 0,
-            startingReplicationState: promise,
-            ack: !change.skipAck,
-            batch: [],
-            lastFlush: undefined,
-          };
-          tx.pool.run(this.#inserter);
-          // Acquire a lock on the replicationState row to detect and/or prevent
-          // a concurrent ownership change.
-          void tx.pool.process(tx => {
-            tx<ReplicationOwner[]> /*sql*/ `
-          SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
-              ([result]) => resolve(result),
-              reject,
-            );
-            return [];
-          });
-        } else {
-          assert(tx, () => `received change outside of transaction: ${json}`);
-          tx.pos++;
-        }
-
-        const entry: ChangeLogRow = {
-          watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
-          precommit: tag === 'commit' ? tx.preCommitWatermark : null,
-          pos: tx.pos,
-          // For backwards compatibility, only the change message is stored
-          // in the cdc changeLog. It was serialized separately with the
-          // downstream envelope, so no full-message scan is needed here.
-          change: storedChange,
-        };
-
-        if (change !== null && isSchemaChange(change)) {
-          // Schema changes carry backfill / table-metadata statements that
-          // must be applied in stream order relative to the changeLog rows.
-          // Flush any buffered rows first, then write this row together with
-          // its metadata statements as a single unit (preserving the previous
-          // per-change ordering for schema changes).
-          await this.#flushChangeLog(tx);
-          tx.lastFlush = tx.pool.process(sql => [
-            sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
-            ...this.#trackBackfillMetadata(sql, change),
-          ]);
-        } else {
-          // Accumulate plain changeLog rows (begin, data changes, commit) and
-          // write them as a single multi-row INSERT. Collapsing the per-change
-          // single-row INSERTs into batches is the dominant cost reduction for
-          // large transactions, where the previous one-statement-per-change
-          // path dominated the upstream replication lag.
-          tx.batch.push(entry);
-          if (tx.batch.length >= this.#changeLogBatchSize) {
-            // Bound pipeline depth (and thus memory) by awaiting the previous
-            // flush before issuing the next. This is the batched analog of the
-            // previous per-100-statement backpressure await, and likewise
-            // guards against memory blowup on very large transactions.
-            const prevFlush = tx.lastFlush;
-            void this.#flushChangeLog(tx);
-            await prevFlush;
-          }
-        }
+        this.#approximateQueuedBytes -= msg[2].length;
+        tx = await this.#processChange(tx, msg);
+        // Released once the change has been processed (e.g. flushed), so that
+        // the upstream is held back by the progress of the change log.
         this.#maybeReleaseBackPressure();
-
-        if (tag === 'commit') {
-          // Flush any remaining buffered changeLog rows (including this commit
-          // row) before updating the replication state, so the state update is
-          // ordered after all changeLog inserts for this transaction.
-          void this.#flushChangeLog(tx);
-
-          const {owner} = await tx.startingReplicationState;
-          if (owner !== this.#taskID) {
-            // Ownership change reflected in the replicationState read in 'begin'.
-            tx.pool.fail(
-              new AbortError(
-                `changeLog ownership has been assumed by ${owner}`,
-              ),
-            );
-          } else {
-            // Update the replication state.
-            const lastWatermark = watermark;
-            void tx.pool.process(tx => [
-              tx`
-            UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
-            ]);
-            tx.pool.setDone();
-          }
-
-          await tx.pool.done();
-
-          // ACK the LSN to the upstream Postgres.
-          if (tx.ack) {
-            this.#onCommitted(['commit', change, {watermark}]);
-          }
-          tx = null;
-
+        if (tx === null) {
           // Before beginning the next transaction, open a READONLY snapshot to
-          // concurrently catchup any queued subscribers.
-          await this.#startCatchup(catchupQueue.splice(0));
-        } else if (tag === 'rollback') {
-          // Aborted transactions are not stored in the changeLog. Abort the current tx
-          // and process catchup of subscribers that were waiting for it to end.
-          tx.pool.abort();
-          await tx.pool.done();
-          tx = null;
-
+          // concurrently catchup subscribers that were waiting for the
+          // transaction to end.
           await this.#startCatchup(catchupQueue.splice(0));
         }
       }
+      // Subscribers waiting for a transaction that was interrupted (i.e.
+      // aborted before stopping) are disconnected so that they can reconnect,
+      // like those that are still in the queue.
+      this.#cancelQueueEntries(
+        catchupQueue.splice(0).map(sub => ['subscriber', sub]),
+        undefined,
+      );
     } catch (e) {
       catchupQueue.forEach(({subscriber}) => subscriber.fail(e));
       throw e;
     }
+  }
+
+  /**
+   * Processes a change from the queue, i.e. stores it in the change log as
+   * part of the current transaction (or skips it, see
+   * {@link assumeOwnershipAtHead}).
+   *
+   * @returns The transaction that is open after the change, or `null` if the
+   *     change ended (or was outside of) a transaction.
+   */
+  async #processChange(
+    tx: PendingTransaction | SkippedTransaction | null,
+    msg: Extract<QueueEntry, ['change', ...unknown[]]>,
+  ): Promise<PendingTransaction | SkippedTransaction | null> {
+    const [_, watermark, json, storedChange, change] = msg;
+    const tag = change?.tag;
+
+    if (tag === 'begin') {
+      assert(!tx, 'received BEGIN in the middle of a transaction');
+      const pending = this.#pendingOwnership;
+      if (pending) {
+        // Backfill transactions are neither stored nor used to assume
+        // ownership. See assumeOwnershipAtHead().
+        if (change.skipAck) {
+          pending.skippedBackfill = true;
+          return {skipped: true, ack: false};
+        }
+        if (watermark <= pending.head) {
+          return {skipped: true, ack: true};
+        }
+      }
+      const pool = new TransactionPool(
+        this.#lc.withContext('watermark', watermark),
+        {mode: Mode.READ_COMMITTED},
+      );
+      pool.run(this.#inserter);
+
+      const {promise, resolve, reject} = resolver<ReplicationOwner>();
+      void promise.catch(() => {}); // handle rejections before the await
+
+      const assumed = pending
+        ? await this.#tryAssumeOwnership(pool, watermark, true)
+        : undefined;
+      if (assumed === null) {
+        // Stored by the previous owner in the meantime.
+        pool.abort();
+        await pool.done();
+        return {skipped: true, ack: true};
+      }
+      if (pending) {
+        // Ownership was assumed in this transaction.
+        resolve({owner: this.#taskID});
+      } else {
+        // Acquire a lock on the replicationState row to detect and/or prevent
+        // a concurrent ownership change.
+        void pool.process(tx => {
+          tx<ReplicationOwner[]> /*sql*/ `
+            SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
+            ([result]) => resolve(result),
+            reject,
+          );
+          return [];
+        });
+      }
+
+      tx = {
+        pool,
+        preCommitWatermark: watermark,
+        pos: 0,
+        startingReplicationState: promise,
+        ack: !change.skipAck,
+        batch: [],
+        lastFlush: undefined,
+        ownershipAssumed: assumed,
+      };
+    } else if (tx?.skipped) {
+      if (tag === 'commit' && tx.ack) {
+        this.#onCommitted(['commit', change, {watermark}]);
+      }
+      return tag === 'commit' || tag === 'rollback' ? null : tx;
+    } else {
+      assert(tx, () => `received change outside of transaction: ${json}`);
+      tx.pos++;
+    }
+
+    const entry: ChangeLogRow = {
+      watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
+      precommit: tag === 'commit' ? tx.preCommitWatermark : null,
+      pos: tx.pos,
+      // For backwards compatibility, only the change message is stored
+      // in the cdc changeLog. It was serialized separately with the
+      // downstream envelope, so no full-message scan is needed here.
+      change: storedChange,
+    };
+
+    if (change !== null && isSchemaChange(change)) {
+      // Schema changes carry backfill / table-metadata statements that
+      // must be applied in stream order relative to the changeLog rows.
+      // Flush any buffered rows first, then write this row together with
+      // its metadata statements as a single unit (preserving the previous
+      // per-change ordering for schema changes).
+      await this.#flushChangeLog(tx);
+      tx.lastFlush = tx.pool.process(sql => [
+        sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+        ...this.#trackBackfillMetadata(sql, change),
+      ]);
+    } else {
+      // Accumulate plain changeLog rows (begin, data changes, commit) and
+      // write them as a single multi-row INSERT. Collapsing the per-change
+      // single-row INSERTs into batches is the dominant cost reduction for
+      // large transactions, where the previous one-statement-per-change
+      // path dominated the upstream replication lag.
+      tx.batch.push(entry);
+      if (tx.batch.length >= this.#changeLogBatchSize) {
+        // Bound pipeline depth (and thus memory) by awaiting the previous
+        // flush before issuing the next. This is the batched analog of the
+        // previous per-100-statement backpressure await, and likewise
+        // guards against memory blowup on very large transactions.
+        const prevFlush = tx.lastFlush;
+        void this.#flushChangeLog(tx);
+        await prevFlush;
+      }
+    }
+    if (tag === 'commit') {
+      // Flush any remaining buffered changeLog rows (including this commit
+      // row) before updating the replication state, so the state update is
+      // ordered after all changeLog inserts for this transaction.
+      void this.#flushChangeLog(tx);
+
+      const {owner} = await tx.startingReplicationState;
+      if (owner !== this.#taskID) {
+        // Ownership change reflected in the replicationState read in 'begin'.
+        tx.pool.fail(
+          new AbortError(`changeLog ownership has been assumed by ${owner}`),
+        );
+      } else {
+        // Update the replication state.
+        const lastWatermark = watermark;
+        void tx.pool.process(tx => [
+          tx`
+        UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
+        ]);
+        tx.pool.setDone();
+      }
+
+      await tx.pool.done();
+
+      const {ownershipAssumed, ack} = tx;
+      tx = null;
+      if (ownershipAssumed) {
+        this.#ownershipAssumed(ownershipAssumed);
+      }
+      // ACK the LSN to the upstream Postgres.
+      if (ack) {
+        this.#onCommitted(['commit', change, {watermark}]);
+      }
+    } else if (tag === 'rollback') {
+      // Aborted transactions are not stored in the changeLog.
+      tx.pool.abort();
+      await tx.pool.done();
+      tx = null;
+    }
+    return tx;
   }
 
   async #startCatchup(subs: SubscriberAndMode[]) {
@@ -1222,10 +1503,42 @@ export class PurgeLocker {
     return this.#db(`${cdcSchema(this.#shard)}.${table}`);
   }
 
-  async acquire() {
+  /**
+   * Locks the oldest row of the change log, preventing it from being purged.
+   *
+   * @param slotWatermark The position of the replication slot from which the
+   *     change log is to be resumed (as a watermark). If specified and the
+   *     head of the change log is behind it, the change log may be missing
+   *     transactions that the slot will not stream, in which case nothing is
+   *     locked and `'behind-slot'` is returned. Conversely, a head at or past
+   *     the slot's position means that the stream (which resumes from the
+   *     head) will not skip anything.
+   * @returns `null` if the change log is empty.
+   */
+  acquire(): Promise<PurgeLock | null>;
+  acquire(
+    slotWatermark?: string | undefined,
+  ): Promise<PurgeLock | null | 'behind-slot'>;
+  async acquire(
+    slotWatermark?: string,
+  ): Promise<PurgeLock | null | 'behind-slot'> {
     const tx = new TransactionPool(this.#lc, {mode: Mode.READ_COMMITTED}).run(
       this.#db,
     );
+    if (slotWatermark !== undefined) {
+      const [{lastWatermark}] = await tx.processReadTask(
+        sql => sql<{lastWatermark: string}[]>`
+        SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`,
+      );
+      if (lastWatermark < slotWatermark) {
+        this.#lc.info?.(
+          `changeLog@${lastWatermark} is behind the replication slot@${slotWatermark}`,
+        );
+        tx.setDone();
+        await tx.done();
+        return 'behind-slot';
+      }
+    }
     const row = await tx.processReadTask(
       sql => sql<{watermark: string}[]>`
       SELECT watermark FROM ${this.#cdc('changeLog')}

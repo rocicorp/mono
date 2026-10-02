@@ -101,8 +101,9 @@ export function assertNormalized(
   );
   if (pgReplicationSlotPerReplica) {
     assert(
-      !pgChangeLogEnabled,
-      `--upstream-pg-replication-slot-per-replica=true requires --change-streamer-pg-change-log-enabled=false`,
+      // Only require backupUsingV5 if a backupURL is set (e.g. replication-manager).
+      config.litestream.backupUsingV5 || !config.litestream.backupURL,
+      '--upstream-pg-replication-slot-per-replica requires a litestream v5 backup',
     );
   }
   if (!pgChangeLogEnabled) {

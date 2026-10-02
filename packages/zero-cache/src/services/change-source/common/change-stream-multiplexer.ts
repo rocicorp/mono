@@ -159,14 +159,8 @@ export class ChangeStreamMultiplexer {
    * in the stream.
    */
   pushStatus(message: DownstreamStatusMessage) {
-    // Let listeners know about all status messages.
     this.#listeners.forEach(l => l.onChange(message));
-    // The ChangeStreamer only cares about status messages requiring an ack
-    // or containing a lagReport. To reduce churn, avoid sending other status
-    // messages.
-    if (message[1].ack || message[1].lagReport) {
-      this.#sub.push(message);
-    }
+    this.#sub.push(message);
   }
 
   /**

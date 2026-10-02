@@ -14,9 +14,36 @@ import {
 import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource} from '../change-source.ts';
 
+export interface PurgeLock {
+  release(): Promise<void>;
+}
+
+/** A PurgeLock that also constrains the replica that can be restored. */
+export interface ConstrainingPurgeLock extends PurgeLock, ReplicaConstraints {}
+
+/**
+ * Acquires a purge lock on the PG change-log (if it is not empty).
+ *
+ * When resuming the change-log from a replication slot, `slotWatermark` is the
+ * slot's position (as a watermark). If the change-log's head is behind it, the
+ * change-log may be missing transactions that the slot will not stream, in
+ * which case nothing is locked and `'behind-slot'` is returned.
+ */
+export type PgChangeLogPurgeLocker = (
+  slotWatermark?: string,
+) => Promise<ConstrainingPurgeLock | null | 'behind-slot'>;
+
 export type RestoreOptions = {
   litestream?: LitestreamConfig;
-  constraints?: ReplicaConstraints | undefined;
+  /**
+   * With the PG change-log enabled, purge-locks the change-log before the
+   * replica is restored, which constrains the replica to one from which the
+   * change-log can be resumed. The lock is acquired as late as possible (i.e.
+   * after a replication slot is created, if applicable) because, if the
+   * change-db is the upstream db, a transaction holding the lock would block
+   * the creation of a replication slot.
+   */
+  acquirePurgeLock?: PgChangeLogPurgeLocker | undefined;
 };
 
 export type InitializeResult = {
@@ -43,6 +70,14 @@ export type InitializeResult = {
    * an abandoned replica is resumed.
    */
   waitForBackupBeforeServing: boolean;
+
+  /**
+   * Whether the PG change-log's head was behind the position of the
+   * replication slot from which replication resumes (see
+   * {@link PgChangeLogPurgeLocker}), in which case it is re-initialized from
+   * the restored replica if it does not contain the replica's changes.
+   */
+  pgChangeLogBehindSlot?: boolean | undefined;
 };
 
 // A short retry is much cheaper than an initial Postgres sync, while keeping a

@@ -11,6 +11,7 @@ import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
+import type {PgChangeLogPurgeLocker} from '../services/change-source/common/replica-restore.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source-init.ts';
 import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cleanup-monitor-factory.ts';
@@ -19,7 +20,10 @@ import {initializeStreamer} from '../services/change-streamer/change-streamer-se
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
-import {PurgeLocker} from '../services/change-streamer/storer.ts';
+import {
+  PurgeLocker,
+  type PurgeLock,
+} from '../services/change-streamer/storer.ts';
 import {
   exitAfter,
   ProcessManager,
@@ -124,14 +128,24 @@ export default async function runWorker(
   // Ensure the change DB schema is initialized/up-to-date.
   await initChangeStreamerSchema(lc, changeDB, shard);
 
-  // When restoring from litestream, acquire a lock to prevent change-log
+  // When restoring from litestream, a lock is acquired to prevent change-log
   // purges. This ensures that (this) change-streamer will be able to resume
-  // from the backup.
-  let purgeLock =
+  // from the backup. The lock is acquired by the change source initialization
+  // just before restoring (i.e. after a replication slot is created, if
+  // applicable), and released once this change-streamer takes over the
+  // change-log.
+  let purgeLock = null as PurgeLock | null;
+  const acquirePurgeLock: PgChangeLogPurgeLocker | undefined =
     pgChangeLogEnabled && litestream.backupURL && litestream.executable
-      ? await new PurgeLocker(lc, shard, changeDB).acquire()
-      : null;
-  const restoreOptions = {litestream, constraints: purgeLock ?? undefined};
+      ? async (slotWatermark?: string) => {
+          const lock = await new PurgeLocker(lc, shard, changeDB).acquire(
+            slotWatermark,
+          );
+          purgeLock = lock === 'behind-slot' ? null : lock;
+          return lock;
+        }
+      : undefined;
+  const restoreOptions = {litestream, acquirePurgeLock};
 
   let changeStreamer: ChangeStreamerService | undefined;
   let backupURL: string | undefined;
@@ -201,7 +215,6 @@ export default async function runWorker(
                 inactiveReplicaGracePeriodMs,
                 backupV5: litestream.backupUsingV5,
               },
-              purgeLock,
               upstream.pgStreamInboundTimeoutMs,
             )
           : await initializeCustomChangeSource(
@@ -408,8 +421,9 @@ export default async function runWorker(
     {
       port,
       keepaliveTimeoutMs,
-      // The startup delay is only relevant for RMv1, and is disabled for RMv2.
-      startupDelayMs: upstream.pgReplicationSlotPerReplica ? 0 : startupDelayMs,
+      // The startup delay is only relevant when taking over the PG change-log
+      // (RMv1 and RMv1.5), and is disabled for RMv2.
+      startupDelayMs: pgChangeLogEnabled ? startupDelayMs : 0,
       readinessGate,
       config,
       getProfileWorker,

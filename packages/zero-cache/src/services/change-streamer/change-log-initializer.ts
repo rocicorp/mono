@@ -112,6 +112,25 @@ export type ChangeLogInitializerSources = {
    * an error, since neither says anything about the two stores.
    */
   readonly changeLog: () => Database | undefined;
+  /**
+   * Re-initializes the Postgres change log from the replica's resume point
+   * (taking ownership of it) if it does not contain all of the replica's
+   * changes, re-checking under lock. Typically
+   * `Storer.reinitializeFromReplica()`.
+   *
+   * Supplied only when the change log's head is behind the position of the
+   * replication slot from which replication resumes, i.e. when it may be
+   * missing transactions that the slot will not stream. Otherwise, a replica
+   * that is ahead of the change log (as changes are forwarded before they are
+   * stored) is caught up by the change stream, which resumes from the change
+   * log's head.
+   */
+  readonly reinitializePgChangeLog?:
+    | ((params: {
+        watermark: string;
+        cookies: CookieSet;
+      }) => Promise<'reinitialized' | 'maintained'>)
+    | undefined;
 };
 
 type Opts = {
@@ -161,6 +180,12 @@ export class ChangeLogInitializer {
 
   #lastComparison: InitComparisonResult | undefined;
 
+  /**
+   * The (restored) replica's resume point that the Postgres change log must
+   * cover, read once. See {@link #pgChangeLog}.
+   */
+  #restoredReplica: InitializationParameters | undefined;
+
   constructor(
     lc: LogContext,
     {initFromPgChangeLog, initFromReplica}: Opts,
@@ -196,7 +221,7 @@ export class ChangeLogInitializer {
   async initialize(): Promise<InitializationParameters> {
     this.#lastComparison = undefined;
     const pg = this.#initFromPgChangeLog
-      ? await this.#sources.pgChangeLog()
+      ? await this.#pgChangeLog()
       : undefined;
     // The replica is required when Postgres is disabled. It seeds a new log and
     // supplies a resume point when the writer is unavailable.
@@ -230,6 +255,50 @@ export class ChangeLogInitializer {
       // watermark describe the same position.
       backfillRequests: backfillRequestsFrom(resumePoint.cookies),
     };
+  }
+
+  /**
+   * Reads the Postgres change log's initialization parameters, first
+   * re-initializing it from the replica (taking ownership of it) if it may be
+   * missing transactions that the replication slot will not stream, e.g. if it
+   * is no longer maintained after running in high-availability mode. This is
+   * the Postgres counterpart of seeding a new SQLite change log from the
+   * replica.
+   *
+   * This only applies when the change log's head is behind the slot's position
+   * (i.e. when {@link ChangeLogInitializerSources.reinitializePgChangeLog} is
+   * supplied), and the change log is only re-initialized if its head is also
+   * behind the replica's. Otherwise, it contains every transaction before the
+   * slot's position: one that was acked after being stored would be in the
+   * change log, and one that was acked after being backed up would be in the
+   * replica, which the change log's head covers.
+   *
+   * The replica is read only once, i.e. as it was restored from the backup,
+   * before any stream is started. The live replica is no reference: it is
+   * caught up from the forwarded changes, which can be ahead of what has been
+   * stored, e.g. by the change log's previous owner. Against that fixed
+   * resume point, re-initialization is idempotent: afterwards, the change log's
+   * head (which only advances) covers it, so subsequent stream connections
+   * leave it untouched.
+   */
+  async #pgChangeLog(): Promise<InitializationParameters> {
+    const pg = await this.#sources.pgChangeLog();
+    const reinitialize = this.#sources.reinitializePgChangeLog;
+    if (!reinitialize) {
+      return pg;
+    }
+    this.#restoredReplica ??= this.#sources.replica();
+    const {lastWatermark, cookies} = this.#restoredReplica;
+    if (pg.lastWatermark >= lastWatermark) {
+      return pg;
+    }
+    const result = await reinitialize({watermark: lastWatermark, cookies});
+    this.#lc.info?.(
+      `Postgres change log at ${pg.lastWatermark} is behind the replica at ` +
+        `${lastWatermark}: ${result}`,
+    );
+    // Either way, the change log has changed since it was read.
+    return this.#sources.pgChangeLog();
   }
 
   /**

@@ -49,7 +49,7 @@ export async function initializeCustomChangeSource(
   shard: ShardConfig,
   replicaDbFile: string,
   context: ServerContext,
-  {litestream, constraints}: RestoreOptions = {},
+  {litestream, acquirePurgeLock}: RestoreOptions = {},
 ): Promise<InitializeResult> {
   // At the moment, the custom change-source implementation does not support
   // per-RM backups (and thus does not support litestream v5 or RMv2). The
@@ -60,6 +60,10 @@ export async function initializeCustomChangeSource(
   // - restore from the subfolder with the latest ltx file
   // - backup to the subfolder with the oldest (or non-existent) ltx file
   if (litestream?.backupURL) {
+    // Without a replication slot, the change-log is never behind one.
+    const lock = await acquirePurgeLock?.();
+    const constraints =
+      lock === 'behind-slot' ? undefined : (lock ?? undefined);
     await restoreReplica(lc, litestream, replicaDbFile, constraints);
   }
 

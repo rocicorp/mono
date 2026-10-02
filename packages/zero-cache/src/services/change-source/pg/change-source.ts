@@ -509,8 +509,7 @@ export class Acker implements Listener {
         if (change[1].ack) {
           this.#expectDownstreamAck(watermark);
         } else {
-          // Keepalives with shouldRespond = false are sent to Listeners,
-          // but for efficiency they are not sent downstream to the
+          // Keepalives with shouldRespond = false are not acked by the
           // change-streamer. Ack them here if the change-streamer is caught
           // up. This updates the replication slot's `confirmed_flush_lsn`
           // more quickly (rather than waiting for the periodic shouldRespond),

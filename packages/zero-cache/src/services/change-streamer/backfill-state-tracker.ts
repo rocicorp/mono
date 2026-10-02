@@ -140,6 +140,15 @@ export class BackfillStateTracker {
     this.#logBackfills.apply(change);
   }
 
+  /**
+   * Requests a restart of the change stream (at the next transaction
+   * boundary), e.g. to start it with BackfillRequests that it was not
+   * started with.
+   */
+  requestRestart(reason: string) {
+    this.#restartReason ??= reason;
+  }
+
   /** Logs and records a (planned) restart for the {@link restartReason}. */
   recordRestart() {
     this.#lc.info?.(`restarting change stream: ${this.#restartReason}`);

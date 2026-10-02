@@ -397,10 +397,26 @@ export const zeroOptions = {
     pgReplicationSlotPerReplica: {
       type: v.boolean().default(false),
       desc: [
-        `Allocates a dedicated replication slot per replication-manager, allowing multiple tasks`,
-        `to run in tandem for high-availability.`,
+        `Creates a dedicated replication slot for each replication-manager, rather than`,
+        `having a new replication-manager take over the slot of the one it replaces.`,
+        ``,
+        `A new replication-manager restores its replica from the backup, creates its own slot`,
+        `and starts replicating from the head of the change-db's change log while the previous`,
+        `replication-manager continues to serve. Once it has caught up to that head, it takes`,
+        `over the change log. The replica's backup and the change-db remain compatible with`,
+        `the default (shared slot) mode, so disabling this option does not trigger a resync.`,
+        ``,
+        `This is a rollback-safe intermediate step towards an upcoming high-availability mode,`,
+        `in which multiple replication-managers run concurrently with their own slots, each`,
+        `maintaining a local change log instead of the global change log in the change-db.`,
+        `Running with this option first validates the per-replica slot setup, and rolling back`,
+        `from high-availability mode to this configuration re-initializes the change-db's change`,
+        `log from the replica rather than requiring a resync.`,
+        ``,
+        `Requires litestream v5 backups. Each slot retains upstream WAL until it is consumed or`,
+        `dropped. Slots of replication-managers that are no longer running are dropped`,
+        `automatically.`,
       ],
-      hidden: true, // Implementation flag, covered by --upstream-pg-high-availability-replication
     },
 
     pgHighAvailabilityReplication: {

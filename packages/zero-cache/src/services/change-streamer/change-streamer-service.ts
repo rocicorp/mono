@@ -161,6 +161,13 @@ export type TuningOptions = StorerOptions & {
    * backup are authoritative for all of those responsibilities.
    */
   pgChangeLogEnabled: boolean;
+  /**
+   * Whether the PG change log's head was behind the position of the
+   * replication slot from which replication resumes, in which case the
+   * change log is re-initialized from the (restored) replica if it does not
+   * contain all of the replica's changes (see `PgChangeLogPurgeLocker`).
+   */
+  pgChangeLogBehindSlot?: boolean | undefined;
   flowControlConsensusTimeoutProportion: number;
   flowControlSlowSubscriberGracePeriodMs?: number | undefined;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
@@ -654,14 +661,24 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       (!this.#pgChangeLogEnabled
         ? opts.sqliteChangeLogWriter?.replicaFile
         : undefined);
-    const replicaSource = replicaFileForInitialization
-      ? replicaInitializationSource(lc, replicaFileForInitialization)
+    // A Postgres change log whose head is behind the replication slot may be
+    // missing transactions that the slot will not stream (e.g. after running
+    // in high-availability mode), in which case it is re-initialized from the
+    // restored replica.
+    const replicaFileForReinitialization =
+      this.#pgChangeLogEnabled && opts.pgChangeLogBehindSlot
+        ? backupConfig?.replicaFile
+        : undefined;
+    const replicaFile =
+      replicaFileForInitialization ?? replicaFileForReinitialization;
+    const replicaSource = replicaFile
+      ? replicaInitializationSource(lc, replicaFile)
       : undefined;
     this.#initializer = new ChangeLogInitializer(
       lc,
       {
         initFromPgChangeLog: this.#pgChangeLogEnabled,
-        initFromReplica: replicaSource !== undefined,
+        initFromReplica: replicaFileForInitialization !== undefined,
       },
       {
         pgChangeLog: () =>
@@ -676,6 +693,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             ? this.#changeLogWriter?.reconcile(resumeFrom)
             : this.#changeLogWriter?.reconcileFromLog(seed),
         changeLog: () => this.#changeLogWriter?.connection,
+        reinitializePgChangeLog: replicaFileForReinitialization
+          ? params => this.#storer.reinitializeFromReplica(params)
+          : undefined,
       },
     );
     this.#sqliteCatchupOptions = opts.sqliteCatchup
@@ -726,10 +746,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#latestLagReportCommitTimeMs = lagReportInit.firstCommitTimeMs;
     }
 
-    // Once this change-streamer acquires "ownership" of the change DB,
-    // it is safe to start the storer.
     if (this.#pgChangeLogEnabled) {
-      await this.#storer.assumeOwnership(this.#purgeLock);
+      this.#storer.assumeOwnershipAtHead({
+        purgeLock: this.#purgeLock,
+        requestRestart: reason => this.#backfills.requestRestart(reason),
+      });
     }
     this.#purgeLock = null;
 
@@ -764,11 +785,16 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           lastWatermark,
           backfillRequests,
         );
+        this.#stream = stream;
+        if (!this.#state.shouldRun()) {
+          // Stopped while the stream was being started (which stop() could not
+          // cancel). The stream is cancelled on exiting the iteration.
+          break;
+        }
         if (this.#pgChangeLogEnabled) {
           this.#storer.run().catch(e => stream.changes.cancel(e));
         }
 
-        this.#stream = stream;
         if (
           this.#state.resetBackoff() >
           REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
@@ -783,24 +809,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
         watermark = null;
 
-        // With the PG change log enabled, the stream resumes from what it has
-        // persisted, so nothing before the stream is outstanding. Otherwise it
-        // resumes from the SQLite change log's head, which the backup can
-        // trail.
-        this.#acker.reset(
-          stream.acks,
-          this.#pgChangeLogEnabled ? '' : lastWatermark,
-        );
+        this.#acker.reset(stream.acks, lastWatermark);
 
         for await (const change of stream.changes) {
           this.#acker.trackDownstream(change);
 
           const [type, msg] = change;
-          if (
-            type === 'status' &&
-            watermark === null &&
-            this.#backfills.restartReason !== null
-          ) {
+          if (type === 'status' && watermark === null && this.#mayRestart()) {
             // A restart can happen at a status message outside of a
             // transaction, e.g. when the replication stream is otherwise idle.
             // Exiting the iteration cancels the stream.
@@ -808,6 +823,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           }
           switch (type) {
             case 'status':
+              if (watermark === null) {
+                // Allows ownership to be assumed on an idle upstream.
+                this.#storer.status(change[2].watermark);
+              }
               if (
                 msg.lagReport &&
                 msg.lagReport.lastTimings.commitTimeMs >=
@@ -916,7 +935,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // Restarts happen at transaction boundaries, so that the pending
           // backfills of the aligned subscribers (and the change log) are
           // consistent with the watermark from which the stream restarts.
-          if (type === 'commit' && this.#backfills.restartReason !== null) {
+          if (type === 'commit' && this.#mayRestart()) {
             // Exiting the iteration cancels the stream.
             break;
           }
@@ -1398,6 +1417,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   async #purgePGChangeLog(): Promise<void> {
+    if (this.#storer.ownershipPending) {
+      // Purging before ownership would only abort on the ownership check (or
+      // on this change-streamer's own purge lock).
+      return;
+    }
     try {
       const {backupWatermark, purgeWatermark, current} =
         this.#getCleanupFloor();
@@ -1465,6 +1489,19 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     ) {
       this.#sqlitePurgeContinuation = continuation;
     }
+  }
+
+  /**
+   * Whether the stream should be restarted (at a transaction boundary) for
+   * backfills. Restarts are held until ownership of the PG change log is
+   * assumed: a restarted stream would decode the WAL up to the change log's
+   * head again, and backfills cannot be stored until ownership is assumed
+   * anyway (see Storer.assumeOwnershipAtHead()).
+   */
+  #mayRestart() {
+    return (
+      this.#backfills.restartReason !== null && !this.#storer.ownershipPending
+    );
   }
 
   async stop(err?: unknown) {

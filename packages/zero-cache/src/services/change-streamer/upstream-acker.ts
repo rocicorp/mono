@@ -58,19 +58,29 @@ export class UpstreamAcker {
    * connection, so it counts as committed on this one: a status watermark past
    * it waits for the tracked stores to reach it, as it would for a commit on
    * this connection. Otherwise the first keepalive of a stream that resumes
-   * ahead of the stores -- a SQLite change log ahead of its backup, which is
-   * the normal state -- would move the replication slot past transactions that
-   * no store has persisted, and a task restored from the backup would then
+   * ahead of the stores -- a change log ahead of its backup, which is the
+   * normal state -- would move the replication slot past transactions that the
+   * backup has not persisted, and a task restored from the backup would then
    * resume below the slot, which the upstream moves forward without a word.
    *
-   * Pass `''` when the stream resumes from what a tracked store has itself
-   * persisted, which leaves nothing before it outstanding.
+   * When the PG change log is tracked, the stream resumes from its head, so
+   * `resumeWatermark` has been persisted in it (by this or another
+   * change-streamer). Without this, status messages would not be acked on an
+   * idle upstream until a commit is stored.
    */
   reset(upstream: Sink<ChangeSourceUpstream>, resumeWatermark: string) {
     this.#upstream = upstream;
     this.#lastTx = resumeWatermark;
     this.#lastStatus = '';
     this.#lastAck = '';
+    if (this.#trackPgChangeLog) {
+      this.#pgChangeLogWatermark = max(
+        resumeWatermark,
+        this.#pgChangeLogWatermark,
+      );
+    }
+    // Re-ack what the stores have persisted on the new connection.
+    this.#maybeAck();
   }
 
   trackDownstream(downstream: ChangeStreamMessage) {
