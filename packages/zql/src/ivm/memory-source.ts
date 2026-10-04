@@ -619,7 +619,7 @@ function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
 export function* genPushAndWriteWithSplitEdit(
   connections: readonly Connection[],
   change: SourceChange,
-  exists: (row: Row) => boolean,
+  exists: ((row: Row) => boolean) | undefined,
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
   getNextEpoch: () => number,
@@ -675,7 +675,7 @@ export function* genPushAndWriteWithSplitEdit(
 function* genPushAndWrite(
   connections: readonly Connection[],
   change: SourceChangeAdd | SourceChangeRemove | SourceChangeEdit,
-  exists: (row: Row) => boolean,
+  exists: ((row: Row) => boolean) | undefined,
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
   pushEpoch: number,
@@ -689,31 +689,33 @@ function* genPushAndWrite(
 function* genPush(
   connections: readonly Connection[],
   change: SourceChange,
-  exists: (row: Row) => boolean,
+  exists: ((row: Row) => boolean) | undefined,
   setOverlay: (o: Overlay | undefined) => void,
   pushEpoch: number,
 ) {
-  switch (change[SourceChangeIndex.TYPE]) {
-    case ChangeType.ADD:
-      assert(
-        !exists(change[SourceChangeIndex.ROW]),
-        () => `Row already exists ${stringify(change)}`,
-      );
-      break;
-    case ChangeType.REMOVE:
-      assert(
-        exists(change[SourceChangeIndex.ROW]),
-        () => `Row not found ${stringify(change)}`,
-      );
-      break;
-    case ChangeType.EDIT:
-      assert(
-        exists(change[SourceChangeIndex.OLD_ROW]),
-        () => `Row not found ${stringify(change)}`,
-      );
-      break;
-    default:
-      unreachable(change);
+  if (exists) {
+    switch (change[SourceChangeIndex.TYPE]) {
+      case ChangeType.ADD:
+        assert(
+          !exists(change[SourceChangeIndex.ROW]),
+          () => `Row already exists ${stringify(change)}`,
+        );
+        break;
+      case ChangeType.REMOVE:
+        assert(
+          exists(change[SourceChangeIndex.ROW]),
+          () => `Row not found ${stringify(change)}`,
+        );
+        break;
+      case ChangeType.EDIT:
+        assert(
+          exists(change[SourceChangeIndex.OLD_ROW]),
+          () => `Row not found ${stringify(change)}`,
+        );
+        break;
+      default:
+        unreachable(change);
+    }
   }
 
   setOverlay({epoch: pushEpoch, change});

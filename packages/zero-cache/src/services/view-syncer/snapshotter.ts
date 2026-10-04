@@ -540,17 +540,35 @@ class Snapshot {
     // 2. Performance: SQLite's MULTI-INDEX OR optimization completely fails when
     //    any branch involves NULL, falling back to a full table scan. This was
     //    causing slowdowns of hundreds of times on tables with nullable unique columns.
-    const validKeys: PrimaryKey[] = [];
-    let mask = 0;
+    let validKeys: PrimaryKey[] = keys;
+    let mask = (1 << keys.length) - 1;
+
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
-      if (
-        key.every(column => row[column] !== null && row[column] !== undefined)
-      ) {
-        validKeys.push(key);
-        mask |= 1 << i;
+      for (let j = 0; j < key.length; j++) {
+        const val = row[key[j]];
+        if (val === null || val === undefined) {
+          validKeys = [];
+          mask = 0;
+          for (let k = 0; k < keys.length; k++) {
+            const candidate = keys[k];
+            if (
+              candidate.every(
+                col => row[col] !== null && row[col] !== undefined,
+              )
+            ) {
+              validKeys.push(candidate);
+              mask |= 1 << k;
+            }
+          }
+          break;
+        }
+      }
+      if (validKeys !== keys) {
+        break;
       }
     }
+
     if (validKeys.length === 0) {
       return [];
     }
@@ -564,7 +582,13 @@ class Snapshot {
       keys === table.uniqueKeys && keys.length <= MAX_MEMOIZED_UNIQUE_KEYS
         ? getOrInsertComputed(reads.byUniqueKeys, mask, buildSQL)
         : buildSQL();
-    const args = validKeys.flatMap(key => key.map(column => row[column]));
+    const args: unknown[] = [];
+    for (let i = 0; i < validKeys.length; i++) {
+      const key = validKeys[i];
+      for (let j = 0; j < key.length; j++) {
+        args.push(row[key[j]]);
+      }
+    }
     const read = () =>
       this.db.statementCache.use(sql, cached => {
         cached.statement.safeIntegers(true);
@@ -620,6 +644,8 @@ class Diff implements SnapshotDiff {
   readonly #observedTables: TableFilter | undefined;
   readonly #rowCache: SnapshotRowCache | undefined;
   #prevWrites: PrevWrites;
+  readonly #prevTagUniform: string;
+  readonly #prevTagDivergent: string;
   #iterated = false;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
@@ -644,6 +670,8 @@ class Diff implements SnapshotDiff {
     this.#observedTables = observedTables;
     this.prev = prev;
     this.curr = curr;
+    this.#prevTagUniform = `p:${prev.version}`;
+    this.#prevTagDivergent = `p:${prev.version}:${curr.version}`;
     this.changes = curr.numChangesSince(prev.version);
     // Row values are only shared (via the cache) between Diffs that do not
     // straddle a table-wide op. This guarantees that any two Diffs that
@@ -778,8 +806,8 @@ class Diff implements SnapshotDiff {
                 ? undefined
                 : cache;
             const prevTag = prevDependsOnWrites
-              ? `p:${this.prev.version}:${this.curr.version}`
-              : `p:${this.prev.version}`;
+              ? this.#prevTagDivergent
+              : this.#prevTagUniform;
             const nextValue =
               op === SET_OP
                 ? this.curr.getRow(

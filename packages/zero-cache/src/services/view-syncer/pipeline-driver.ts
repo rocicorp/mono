@@ -1408,6 +1408,27 @@ export class PipelineDriver {
               continue;
             }
             const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+            // Early skip: If this change is an ADD of a row no connection can observe,
+            // or an in-place EDIT where neither the old nor new row can be observed
+            // and no secondary unique keys are displaced, skip immediately.
+            const isUnobservableAdd =
+              probedPrevValues.length === 0 &&
+              nextValue !== null &&
+              !tableSource.mayAcceptRow(nextValue as Row);
+            const isUnobservableEdit =
+              probedPrevValues.length === 1 &&
+              nextValue !== null &&
+              !tableSource.mayAcceptRow(nextValue as Row) &&
+              !tableSource.mayAcceptRow(probedPrevValues[0] as Row) &&
+              deepEqual(
+                getRowKey(primaryKey, probedPrevValues[0] as Row) as JSONValue,
+                rowKey as JSONValue,
+              );
+            if (isUnobservableAdd || isUnobservableEdit) {
+              pushCompleted = true;
+              continue;
+            }
+
             if (
               nextValue !== null &&
               !this.#reserveSecondRow(advanceContext, rowKey, primaryKey)

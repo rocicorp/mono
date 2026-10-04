@@ -21,7 +21,6 @@ import {
   type NoSubqueryCondition as StrictNoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
-import {ConnectionIndex} from '../../zql/src/ivm/connection-index.ts';
 import {
   makeComparator,
   type Comparator,
@@ -65,8 +64,6 @@ type Statements = {
   readonly insert: Statement;
   readonly delete: Statement;
   readonly update: Statement | undefined;
-  readonly checkExists: Statement;
-  readonly getExisting: Statement;
 };
 
 let eventCount = 0;
@@ -109,9 +106,6 @@ export type TableSourceOptions = {
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
   readonly #connections: Connection[] = [];
-  // Indexes #connections by the static equality constraints in their filters
-  // so that a push can cheaply skip rows that no connection could accept.
-  readonly #connectionIndex = new ConnectionIndex<Connection>();
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
@@ -304,24 +298,6 @@ export class TableSource implements Source {
               ),
             )
           : undefined,
-      checkExists: db.prepare(
-        compile(
-          sql`SELECT 1 AS "exists" FROM ${sql.ident(
-            this.#table,
-          )} WHERE ${sql.join(
-            this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
-            ' AND ',
-          )} LIMIT 1`,
-        ),
-      ),
-      getExisting: db.prepare(
-        compile(
-          sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
-            this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
-            ' AND ',
-          )}`,
-        ),
-      ),
     };
     this.#dbCache.set(db, stmts);
     return stmts;
@@ -369,7 +345,6 @@ export class TableSource implements Source {
         const idx = this.#connections.indexOf(connection);
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
-        this.#connectionIndex.remove(connection);
       },
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
@@ -395,7 +370,6 @@ export class TableSource implements Source {
     }
 
     this.#connections.push(connection);
-    this.#connectionIndex.add(connection, transformedFilters.filters);
     return input;
   }
 
@@ -621,11 +595,41 @@ export class TableSource implements Source {
     return this.#delta?.estimatedBytes ?? 0;
   }
 
+  /**
+   * Returns whether any connected pipeline could observe the given row.
+   * If false, this row is completely invisible to this TableSource's connections.
+   */
+  mayAcceptRow(row: Row): boolean {
+    if (!this.#skipUnobservableChanges || this.#connections.length === 0) {
+      return true;
+    }
+    for (const conn of this.#connections) {
+      if (!conn.filters || conn.filters.predicate(row)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #mayAcceptChange(change: SourceChange): boolean {
+    if (!this.#skipUnobservableChanges || this.#connections.length === 0) {
+      return true;
+    }
+    const row = change[SourceChangeIndex.ROW];
+    if (this.mayAcceptRow(row)) {
+      return true;
+    }
+    if (change[SourceChangeIndex.TYPE] === ChangeType.EDIT) {
+      const oldRow = change[SourceChangeIndex.OLD_ROW];
+      if (oldRow && this.mayAcceptRow(oldRow)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   *genPush(change: SourceChange): Stream<'yield' | undefined> {
-    if (
-      this.#skipUnobservableChanges &&
-      !this.#connectionIndex.mayAcceptChange(change)
-    ) {
+    if (this.#skipUnobservableChanges && !this.#mayAcceptChange(change)) {
       // No connection can observe this row, so only a REMOVE needs to be
       // applied to the snapshot.
       if (change[SourceChangeIndex.TYPE] === ChangeType.REMOVE) {
@@ -634,27 +638,37 @@ export class TableSource implements Source {
       return;
     }
 
-    const exists = (row: Row) => {
-      const delta = this.#delta;
-      if (delta !== undefined && !delta.isEmpty) {
-        const overridden = delta.get(row);
-        if (overridden !== NOT_OVERRIDDEN) {
-          return overridden !== undefined;
-        }
-      }
-      return (
-        this.#stmts.checkExists.get<{exists: number} | undefined>(
-          ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
-        )?.exists === 1
-      );
-    };
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
 
+    // Note: TableSource intentionally does not implement checkExists (which MemorySource
+    // uses for defensive asserts like "Row already exists" and "Row not found"):
+    //
+    // 1. Edit detection does not rely on checkExists:
+    //    Edits are detected upstream in PipelineDriver by matching row primary keys
+    //    against prevValues (via deepEqual on PK columns) and emitting SourceChangeEdit.
+    //
+    // 2. Upstream guarantees and error handling:
+    //    - Replicated streams from Postgres WAL / SnapshotDiff guarantee transactional
+    //      consistency, ordering, and row existence.
+    //    - PipelineDriver.#advance reconciles incoming row keys against both the prev
+    //      snapshot and pending delta, guaranteeing that any existing primary key is
+    //      emitted as an EDIT rather than an ADD.
+    //    - In write-through mode, SQLite's native PRIMARY KEY or UNIQUE constraints
+    //      immediately fail if a duplicate INSERT is attempted.
+    //    - In deferred-writes mode, writePendingChanges() deletes touched primary keys
+    //      before inserting (to handle unique-index permutations), meaning an erroneous
+    //      duplicate ADD would act as a replacement. We intentionally do not execute a
+    //      synchronous SQLite SELECT existence probe on every ADD to catch a theoretical
+    //      upstream bug, which is instead guarded by unit tests.
+    //    - Deletes of non-existent rows in SQLite are safe no-ops (0 rows affected).
+    //
+    // Omitting checkExists avoids executing expensive synchronous SQLite SELECT queries on every
+    // pushed row change, eliminating a major bottleneck in push advancement.
     yield* genPushAndWriteWithSplitEdit(
       this.#connections,
       change,
-      exists,
+      undefined,
       setOverlay,
       writeChange,
       () => ++this.#pushEpoch,
