@@ -89,6 +89,7 @@ export class ZeroContext extends QueryDelegateBase {
     addMetric: MetricsDelegate['addMetric'],
     assertValidRunOptions: (options?: RunOptions) => void,
     visibilityWatcher?: DocumentVisibilityWatcher | undefined,
+    measurePushes = true,
   ) {
     super();
     this.#lc = lc;
@@ -102,7 +103,11 @@ export class ZeroContext extends QueryDelegateBase {
     this.flushQueryChanges = flushQueryChanges;
     this.addMetric = addMetric;
     this.#visibilityWatcher = visibilityWatcher;
+    this.#measurePushes = measurePushes;
   }
+
+  /** `false` when `enableClientMetrics` is off: pushes are not timed. */
+  readonly #measurePushes: boolean;
 
   applyFiltersAnyway?: boolean | undefined;
 
@@ -257,7 +262,9 @@ export class ZeroContext extends QueryDelegateBase {
   }
 
   override decorateSourceInput(input: SourceInput, queryID: string): Input {
-    return new MeasurePushOperator(input, queryID, this, 'query-update-client');
+    return this.#measurePushes
+      ? new MeasurePushOperator(input, queryID, this, 'query-update-client')
+      : super.decorateSourceInput(input, queryID);
   }
 
   onTransactionCommit(cb: CommitListener): () => void {

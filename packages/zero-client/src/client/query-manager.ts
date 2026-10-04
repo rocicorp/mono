@@ -586,6 +586,36 @@ export class QueryManager implements InspectorDelegate {
     return this.#metrics;
   }
 
+  /**
+   * Logs a query's end-to-end materialization time, warning when it exceeds
+   * `slowMaterializeThreshold`. Called for every recorded end-to-end metric,
+   * and on its own when client metrics are disabled.
+   */
+  logMaterialization(
+    queryID: string,
+    ast: ClientMetricMap['query-materialization-end-to-end'][1],
+    value: number,
+  ): void {
+    if (
+      this.#slowMaterializeThreshold !== undefined &&
+      value > this.#slowMaterializeThreshold
+    ) {
+      this.#lc.warn?.(
+        'Slow query materialization (including server/network)',
+        queryID,
+        ast,
+        value,
+      );
+    } else {
+      this.#lc.debug?.(
+        'Materialized query (including server/network)',
+        queryID,
+        ast,
+        value,
+      );
+    }
+  }
+
   addMetric<K extends keyof ClientMetricMap>(
     metric: K,
     value: number,
@@ -603,26 +633,11 @@ export class QueryManager implements InspectorDelegate {
 
     // Handle slow query logging for end-to-end materialization
     if (metric === 'query-materialization-end-to-end') {
-      const ast = args[1];
-
-      if (
-        this.#slowMaterializeThreshold !== undefined &&
-        value > this.#slowMaterializeThreshold
-      ) {
-        this.#lc.warn?.(
-          'Slow query materialization (including server/network)',
-          queryID,
-          ast,
-          value,
-        );
-      } else {
-        this.#lc.debug?.(
-          'Materialized query (including server/network)',
-          queryID,
-          ast,
-          value,
-        );
-      }
+      this.logMaterialization(
+        queryID,
+        args[1] as ClientMetricMap['query-materialization-end-to-end'][1],
+        value,
+      );
     }
 
     // The query manager manages metrics that are per query.

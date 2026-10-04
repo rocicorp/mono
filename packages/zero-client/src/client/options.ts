@@ -356,6 +356,26 @@ export type ZeroOptions<
   slowMaterializeThreshold?: number | undefined;
 
   /**
+   * Whether to record client-side query metrics: how long each query took to
+   * materialize on the client, and the time spent applying each push through
+   * every query's pipeline. They are what the inspector reports as
+   * `hydrateClient`, `hydrateTotal` and `updateClientP50` / `updateClientP95`,
+   * and the client half of `inspector.metrics()`. Nothing else reads them, and
+   * they are never sent to the server.
+   *
+   * Recording them is not free: every source connection of every query is
+   * wrapped in a timing operator that calls `performance.now()` around each
+   * step of each push, and each push adds a sample to a t-digest. Set this to
+   * `false` in production builds that never open the inspector to skip both.
+   * The inspector's server-side information (server hydration and update
+   * times, row counts, `analyzeQuery`) is unaffected, and the slow
+   * materialization warning (`slowMaterializeThreshold`) still fires.
+   *
+   * Default value: `true`.
+   */
+  enableClientMetrics?: boolean | undefined;
+
+  /**
    * UI rendering libraries will often provide a utility for batching multiple
    * state updates into a single render. Some examples are React's
    * `unstable_batchedUpdates`, and solid-js's `batch`.

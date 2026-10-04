@@ -8,6 +8,7 @@ import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {MeasurePushOperator} from '../../../zql/src/query/measure-push-operator.ts';
 import {
   ZeroContext,
   type AddCustomQuery,
@@ -376,4 +377,41 @@ test('batchViewUpdates returns value', () => {
   expect(batchViewUpdatesCalls).toEqual(0);
   expect(context.batchViewUpdates(() => 'test value')).toEqual('test value');
   expect(batchViewUpdatesCalls).toEqual(1);
+});
+
+test('decorateSourceInput times pushes unless client metrics are off', () => {
+  const schema = createSchema({
+    tables: [
+      table('users').columns({id: string(), name: string()}).primaryKey('id'),
+    ],
+  });
+  const make = (measurePushes?: boolean) =>
+    new ZeroContext(
+      new LogContext('info'),
+      new IVMSourceBranch(schema.tables),
+      null as unknown as AddQuery,
+      null as unknown as AddCustomQuery,
+      null as unknown as UpdateQuery,
+      null as unknown as UpdateCustomQuery,
+      null as unknown as FlushQueryChanges,
+      testBatchViewUpdates,
+      () => {},
+      assertValidRunOptions,
+      undefined,
+      measurePushes,
+    ).markPipelinesReady();
+  const input = (context: ZeroContext) =>
+    // oxlint-disable-next-line no-non-null-assertion
+    context.getSource('users')!.connect([['id', 'asc']]);
+
+  const measured = make();
+  expect(measured.decorateSourceInput(input(measured), 'q1')).toBeInstanceOf(
+    MeasurePushOperator,
+  );
+
+  const unmeasured = make(false);
+  const unmeasuredInput = input(unmeasured);
+  expect(unmeasured.decorateSourceInput(unmeasuredInput, 'q1')).toBe(
+    unmeasuredInput,
+  );
 });

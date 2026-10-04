@@ -348,6 +348,21 @@ describe('query metrics', () => {
     await z.close();
   });
 
+  test('enableClientMetrics: false records no client metrics', async () => {
+    const z = zeroForTest({schema, enableClientMetrics: false});
+    await z.triggerConnected();
+
+    const zql = createBuilder(schema);
+
+    await z.run(zql.issue);
+
+    const metrics = await getMetrics(z.inspector, z);
+    expect(metrics['query-materialization-client'].count()).toBe(0);
+    expect(metrics['query-materialization-end-to-end'].count()).toBe(0);
+    expect(metrics['query-update-client'].count()).toBe(0);
+    await z.close();
+  });
+
   test('Attaching the metrics to the query', async () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();

@@ -542,6 +542,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
+      enableClientMetrics = true,
     } = options;
 
     if (userID === '') {
@@ -696,9 +697,10 @@ export class Zero<
         this.#queryManager.updateCustom(customQueryID, ttl),
       () => this.#queryManager.flushBatch(),
       batchViewUpdates,
-      this.#addMetric,
+      enableClientMetrics ? this.#addMetric : this.#logMaterialization,
       assertValidRunOptions,
       this.#visibilityWatcher,
+      enableClientMetrics,
     );
 
     this.query = createRunnableBuilder(this.#zeroContext, schema);
@@ -2883,6 +2885,23 @@ export class Zero<
       value,
       ...(args as ClientMetricMap[keyof ClientMetricMap]),
     );
+  };
+
+  /**
+   * The metrics delegate when `enableClientMetrics` is `false`: records
+   * nothing, and keeps only the slow materialization log line.
+   */
+  #logMaterialization: <K extends keyof MetricMap>(
+    metric: K,
+    value: number,
+    ...args: MetricMap[K]
+  ) => void = (metric, value, ...args) => {
+    if (metric !== 'query-materialization-end-to-end') {
+      return;
+    }
+    const [queryID, ast] =
+      args as ClientMetricMap['query-materialization-end-to-end'];
+    this.#queryManager.logMaterialization(queryID, ast, value);
   };
 
   #checkAuthValid(
