@@ -836,7 +836,19 @@ class TransactionProcessor {
 
   processDropIndex(drop: IndexDrop) {
     const name = liteTableName(drop.id);
+    const indexExisted = this.#db.db
+      .prepare(
+        `SELECT tbl_name as tableName FROM sqlite_master WHERE type = 'index' AND name = ?`,
+      )
+      .get(name) as {tableName: string} | undefined;
+
     this.#db.db.exec(`DROP INDEX IF EXISTS ${id(name)}`);
+
+    if (indexExisted) {
+      // indexes affect tables visibility (e.g. sync-ability is gated on
+      // having a unique index), so reset pipelines to refresh table schemas.
+      this.#logResetOp(indexExisted.tableName);
+    }
     this.#lc.info?.(drop.tag, name);
   }
 
