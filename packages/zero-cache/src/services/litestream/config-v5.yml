@@ -43,6 +43,7 @@ dbs:
 logging:
   level: ${ZERO_LITESTREAM_LOG_LEVEL}
   type: ${ZERO_LOG_FORMAT}
+  stderr: true # output logs to stderr so that command output can be parsed from stdout
 
 addr: localhost:${LITESTREAM_PORT}
 

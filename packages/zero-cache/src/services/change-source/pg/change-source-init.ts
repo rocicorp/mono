@@ -20,6 +20,7 @@ import {
   type ConstrainingPurgeLock,
   type InitializeResult,
   type RestoreOptions,
+  type ResumableBackup,
 } from '../common/replica-restore.ts';
 import {initReplica} from '../common/replica-schema.ts';
 import {PostgresChangeSource} from './change-source.ts';
@@ -96,6 +97,7 @@ export async function initializePostgresChangeSource(
       replica: restoredReplica,
       purgeLock,
       pgChangeLogBehindSlot,
+      resumableBackup,
     } = slotPerReplica
       ? await forkOrResumeReplica(
           lc,
@@ -161,16 +163,17 @@ export async function initializePostgresChangeSource(
       (initialSyncedReplica ?? restoredReplica)?.id,
     );
 
-    // With litestream v5, every replication-manager backs up to a new backup
-    // lineage.
-    const newBackupLineage = backupV5;
+    // With litestream v5, every replication-manager backs up to its own
+    // backup lineage.
+    const newBackupLineage = backupV5 && !resumableBackup;
     const backupPath = initialSyncedReplica
       ? // If initial sync was performed, use that initial backupPath.
         initialSyncedReplica.backupPath
-      : // Otherwise, use a new, unique path when backing up with litestream v5. This will be
-        // recorded in the replicas table by the PostgresChangeSource.
-        newBackupLineage
-        ? String(Date.now())
+      : // Otherwise, use the lineage prepared by the restore, or a new, unique
+        // path when backing up with litestream v5. This will be recorded in the
+        // replicas table by the PostgresChangeSource.
+        backupV5
+        ? (resumableBackup?.backupPath ?? String(Date.now()))
         : (restoredReplica?.backupPath ?? null);
 
     const changeSource = new PostgresChangeSource(
@@ -209,6 +212,7 @@ export async function initializePostgresChangeSource(
         backupPath !== (restoredReplica?.backupPath ?? null),
       pgChangeLogBehindSlot,
       newBackupLineage,
+      walKeeper: resumableBackup?.walKeeper,
     };
   } finally {
     await db.end();
@@ -219,6 +223,7 @@ type RestoredReplica = {
   replica: ReplicaState | undefined;
   purgeLock: ConstrainingPurgeLock | null;
   pgChangeLogBehindSlot?: boolean | undefined;
+  resumableBackup?: ResumableBackup | undefined;
 };
 
 // RMv1: Selects a replica to restore from and returns it, with the
@@ -228,7 +233,7 @@ async function selectAndRestoreReplica(
   sql: PostgresDB,
   shard: ShardID,
   replicaFile: string,
-  {litestream, acquirePurgeLock}: RestoreOptions,
+  {litestream, acquirePurgeLock, cleanup}: RestoreOptions,
 ): Promise<RestoredReplica> {
   // The purge lock constrains the generation of the replica to restore. With
   // a shared replication slot, the change-log is resumed from its head
@@ -257,12 +262,17 @@ async function selectAndRestoreReplica(
       `restoring replica from ${backupURL} (${slot}@${confirmedFlushLsn})`,
       {replicas},
     );
-    await restoreReplica(
+    const resumableBackup = await restoreReplica(
       lc,
       {...litestream, backupURL}, // includes the replica's backup sub-path
       replicaFile,
       constraints,
+      litestream.forkBackup
+        ? {type: 'fork', baseURL: backupBaseURL}
+        : undefined,
+      cleanup,
     );
+    return {replica, purgeLock, resumableBackup};
   }
   return {replica, purgeLock};
 }
@@ -336,12 +346,22 @@ async function forkOrResumeReplica(
       `restoring replica from ${backupURL} (${slot}@${confirmedFlushLsn})`,
       {restoreFrom, replicateTo},
     );
-    await restoreReplica(
+    const resumableBackup = await restoreReplica(
       lc,
       {...litestream, backupURL}, // includes the replica's backup sub-path
       replicaFile,
       constraints,
+      litestream.forkBackup
+        ? {type: 'fork', baseURL: backupBaseURL}
+        : undefined,
+      cleanup,
     );
+    return {
+      replica: replicateTo,
+      purgeLock,
+      pgChangeLogBehindSlot,
+      resumableBackup,
+    };
   }
   return {replica: replicateTo, purgeLock, pgChangeLogBehindSlot};
 }

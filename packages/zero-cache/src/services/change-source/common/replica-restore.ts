@@ -11,6 +11,7 @@ import {
   litestreamRestoreMetricAttrs,
   litestreamRestoreRuns,
 } from '../../litestream/metrics.ts';
+import type {WalKeeper} from '../../litestream/wal-keeper.ts';
 import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource} from '../change-source.ts';
 import type {InitCleanup} from './init-cleanup.ts';
@@ -95,8 +96,38 @@ export type InitializeResult = {
    * different lineage and must be discarded before replicating, or litestream
    * resolves its position from it and fails (and auto-recovers) on its first
    * sync to the empty lineage.
+   *
+   * This is false when the backup continues a lineage from the local
+   * litestream state (see {@link ResumableBackup}).
    */
   newBackupLineage: boolean;
+
+  /**
+   * Set when the backup to `destinationBackupURL` continues from the local
+   * litestream state (see {@link ResumableBackup}). It is registered with the
+   * initialization's {@link InitCleanup}, which releases it if the attempt
+   * fails; otherwise the caller must release it once the litestream backup
+   * has started.
+   */
+  walKeeper?: WalKeeper | undefined;
+};
+
+/**
+ * Where the backup goes after a restore, when it can continue from the
+ * restored replica's local litestream state instead of starting a new lineage
+ * with a full snapshot:
+ * - `fork`: a new, unique subfolder of `baseURL`, which the restore seeds with
+ *   the restored backup files.
+ */
+export type BackupDestination = {type: 'fork'; baseURL: string};
+
+/**
+ * A backup lineage at `backupPath` that the litestream backup continues from
+ * the local litestream state, whose WAL `walKeeper` holds.
+ */
+export type ResumableBackup = {
+  backupPath: string;
+  walKeeper: WalKeeper;
 };
 
 // A short retry is much cheaper than an initial Postgres sync, while keeping a
@@ -104,12 +135,20 @@ export type InitializeResult = {
 const MAX_RESTORE_ATTEMPTS = 3;
 const RESTORE_RETRY_DELAY_MS = 5_000;
 
+/**
+ * Restores the replica from `config.backupURL`. With a `destination`, it
+ * returns the backup that continues from the restored replica, if the
+ * restore prepared one (e.g. it was not skipped because the replica already
+ * exists). Its WAL keeper is registered with `cleanup`.
+ */
 export async function restoreReplica(
   lc: LogContext,
   config: LitestreamConfig,
   replicaFile: string,
   replicaConstraints: ReplicaConstraints | undefined,
-): Promise<void> {
+  destination?: BackupDestination | undefined,
+  cleanup?: InitCleanup | undefined,
+): Promise<ResumableBackup | undefined> {
   const start = performance.now();
   let result: RestoreResult | undefined;
   try {
@@ -118,6 +157,10 @@ export async function restoreReplica(
     // initial-sync fallback. Retry every thrown restore error twice before
     // falling back to the initial Postgres sync.
     for (let attemptNum = 1; attemptNum <= MAX_RESTORE_ATTEMPTS; attemptNum++) {
+      // Each attempt seeds a new subfolder, as a failed attempt can leave
+      // files in its subfolder.
+      const backupPath =
+        destination?.type === 'fork' ? String(Date.now()) : undefined;
       try {
         const attempt = await tryRestore(
           lc,
@@ -125,16 +168,25 @@ export async function restoreReplica(
           replicaFile,
           replicaConstraints,
           'replication_manager',
+          undefined,
+          backupPath
+            ? {
+                url: new URL(backupPath, destination?.baseURL).toString(),
+                cleanup,
+              }
+            : undefined,
         );
         result = attempt.result;
-        return;
+        return backupPath && attempt.walKeeper
+          ? {backupPath, walKeeper: attempt.walKeeper}
+          : undefined;
       } catch (e) {
         if (attemptNum === MAX_RESTORE_ATTEMPTS) {
           lc.error?.(
             `litestream restore failed after ${attemptNum} attempts; resyncing the replica`,
             e,
           );
-          return;
+          break;
         }
 
         lc.warn?.(
@@ -144,6 +196,7 @@ export async function restoreReplica(
         await sleep(RESTORE_RETRY_DELAY_MS);
       }
     }
+    return undefined;
   } finally {
     const attrs = litestreamRestoreMetricAttrs(config, 'replication_manager');
     const labels = {...attrs, result: result ?? 'error'};

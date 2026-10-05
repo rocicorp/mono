@@ -1268,6 +1268,21 @@ export const zeroOptions = {
       ],
     },
 
+    forkBackup: {
+      type: v.boolean().default(true), // TODO: Vet and make non-optional
+      hidden: true,
+      desc: [
+        `When a replication-manager restores from another replication-manager's`,
+        `backup, also copies the restored backup files into its own (new) backup`,
+        `subfolder, so that its first backup continues incrementally instead of`,
+        `uploading a full snapshot of the replica.`,
+        ``,
+        `This only works with a {bold ZERO_LITESTREAM_EXECUTABLE_V5} that supports`,
+        `{bold restore -fork-to-url}. The flag is ignored if {bold ZERO_LITESTREAM_BACKUP_USING_V5}`,
+        `is disabled.`,
+      ],
+    },
+
     configPath: {
       type: v.string().default('./src/services/litestream/config.yml'),
       desc: [

@@ -5,6 +5,7 @@ import {basename, dirname, join} from 'node:path';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../../shared/src/must.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {type LitestreamConfig} from '../../config/normalize.ts';
 import {deleteLiteDB} from '../../db/delete-lite-db.ts';
@@ -13,6 +14,7 @@ import {
   logSQLiteCorruptionDiagnostics,
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
+import type {InitCleanup} from '../change-source/common/init-cleanup.ts';
 import {deleteChangeLogDB} from '../replicator/change-log-db.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {litestreamSocketPath} from './litestream-controller.ts';
@@ -29,6 +31,7 @@ import {
   litestreamRestoreValidationDuration,
   type LitestreamRole,
 } from './metrics.ts';
+import {WalKeeper} from './wal-keeper.ts';
 
 export type ReplicaConstraints = {
   replicaVersion: string;
@@ -45,6 +48,26 @@ export type RestoreAttempt = {
   restored: boolean;
   backupURL: string | undefined;
   result: RestoreResult;
+  /**
+   * Set when the restore prepared the backup to continue from the restored
+   * replica (see {@link ForkBackup}). It is registered with the
+   * `cleanup`; otherwise the caller must release it (see {@link WalKeeper}).
+   */
+  walKeeper?: WalKeeper | undefined;
+};
+
+/**
+ * Prepares the restored replica to continue from a forked backup
+ * instead of starting a new lineage with a full snapshot.
+ */
+export type ForkBackup = {
+  /** The restore also forks its backup into the (new, empty) one at this URL. */
+  url: string;
+  /**
+   * Registers the resulting {@link WalKeeper} to be released if the
+   * initialization fails.
+   */
+  cleanup?: InitCleanup | undefined;
 };
 
 const MAX_LOGGED_RESTORE_DIRECTORY_ENTRIES = 100;
@@ -157,6 +180,7 @@ export async function tryRestore(
   replicaConstraints: ReplicaConstraints | undefined,
   role: LitestreamRole,
   signal?: AbortSignal,
+  forkBackup?: ForkBackup | undefined,
 ): Promise<RestoreAttempt> {
   const {reusedExisting, ...attempt} = await restoreOnce(
     lc,
@@ -165,6 +189,7 @@ export async function tryRestore(
     replicaConstraints,
     role,
     signal,
+    forkBackup,
   );
   if (attempt.result === 'invalid_replica' && reusedExisting) {
     // `-if-db-not-exists` made the restore a no-op, and the existing local
@@ -178,6 +203,7 @@ export async function tryRestore(
       replicaConstraints,
       role,
       signal,
+      forkBackup,
     );
     return retry;
   }
@@ -191,14 +217,24 @@ async function restoreOnce(
   replicaConstraints: ReplicaConstraints | undefined,
   role: LitestreamRole,
   signal: AbortSignal | undefined,
+  forkBackup: ForkBackup | undefined,
 ): Promise<RestoreAttempt & {reusedExisting: boolean}> {
-  const {backupURL} = config;
+  const {backupURL, backupUsingV5} = config;
+  if (forkBackup && !backupUsingV5) {
+    forkBackup = undefined; // Ignore forkBackup if v5 is disabled.
+  }
   const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
   let result: RestoreResult = 'error';
   try {
     logRestoreDirectoryContents(lc, replicaFile, 'before-temp-cleanup');
     deleteRestoreTempFiles(replicaFile);
     const reusedExisting = existsSync(replicaFile);
+    if (!reusedExisting) {
+      // The local litestream state (and anything recorded in it) describes a
+      // replica that no longer exists. Discard it before the restore, which
+      // (if it seeds a backup) writes the state that belongs to the new one.
+      deleteLitestreamMetaDir(replicaFile);
+    }
     const {litestream, env} = getLitestream(
       'restore',
       config,
@@ -229,6 +265,7 @@ async function restoreOnce(
         '-if-replica-exists',
         '-parallelism',
         String(parallelism),
+        ...(forkBackup ? ['-json', '-fork-to-url', forkBackup.url] : []),
         replicaFile,
       ],
       {env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, signal},
@@ -283,38 +320,60 @@ async function restoreOnce(
       return {restored: false, backupURL, result, reusedExisting};
     }
     const validationStart = performance.now();
-    const valid = replicaIsValid(lc, replicaFile, replicaConstraints);
+    // On success, the validating connection is kept open until it is either
+    // closed or kept as the WalKeeper. Until then, its close would be the last
+    // one, which checkpoints and deletes the WAL that a seeded backup continues
+    // from.
+    let db = openValidReplica(lc, replicaFile, replicaConstraints);
     litestreamRestoreValidationDuration().recordMs(
       performance.now() - validationStart,
-      {...attrs, result: valid ? 'success' : 'invalid_replica'},
+      {...attrs, result: db ? 'success' : 'invalid_replica'},
     );
-    if (!valid) {
+    if (!db) {
       result = 'invalid_replica';
       lc.info?.(`Deleting local replica and retrying restore`);
       deleteLiteDB(replicaFile);
       deleteChangeLogDB(replicaFile);
+      // The litestream state (e.g. the anchor of a seeded backup) describes
+      // the deleted replica.
+      deleteLitestreamMetaDir(replicaFile);
       return {restored: false, backupURL, result, reusedExisting};
     }
-    result = 'success';
-    if (!reusedExisting) {
-      // This restore materialized the replica file, so any change log beside it
-      // was written against a replica that is no longer there. Reconciliation
-      // is the safety net — a restored replica keeps its replicaVersion, so the
-      // rule falls through to truncate-or-reseed on head mismatch — but the log
-      // is a cache and deleting it here is the explicit statement that nothing
-      // in it survives the restore.
-      //
-      // A restore that reuses an existing replica (`-if-db-not-exists` made it
-      // a no-op) deliberately keeps the log: that is the process-restart path,
-      // where the log is still the one written beside this exact replica and
-      // discarding it would cost every reconnecting subscriber a `too-old`.
-      deleteChangeLogDB(replicaFile);
-      litestreamRestoredDbBytes().add(statSync(replicaFile).size, {
-        ...attrs,
-        result: 'success',
-      });
+    try {
+      result = 'success';
+      if (!reusedExisting) {
+        // This restore materialized the replica file, so any change log beside it
+        // was written against a replica that is no longer there. Reconciliation
+        // is the safety net — a restored replica keeps its replicaVersion, so the
+        // rule falls through to truncate-or-reseed on head mismatch — but the log
+        // is a cache and deleting it here is the explicit statement that nothing
+        // in it survives the restore.
+        //
+        // A restore that reuses an existing replica (`-if-db-not-exists` made it
+        // a no-op) deliberately keeps the log: that is the process-restart path,
+        // where the log is still the one written beside this exact replica and
+        // discarding it would cost every reconnecting subscriber a `too-old`.
+        deleteChangeLogDB(replicaFile);
+        litestreamRestoredDbBytes().add(statSync(replicaFile).size, {
+          ...attrs,
+          result: 'success',
+        });
+      }
+      // Last, so that nothing can fail after the WalKeeper is created.
+      const walKeeper =
+        forkBackup && !reusedExisting && restoreForked(lc, stdout)
+          ? new WalKeeper(lc, db)
+          : undefined;
+      if (walKeeper) {
+        db = undefined; // now owned by the WalKeeper
+        forkBackup?.cleanup?.onFailure('WAL keeper', () =>
+          walKeeper.release('initialization failed'),
+        );
+      }
+      return {restored: true, backupURL, result, reusedExisting, walKeeper};
+    } finally {
+      db?.close();
     }
-    return {restored: true, backupURL, result, reusedExisting};
   } finally {
     try {
       deleteRestoreTempFiles(replicaFile);
@@ -327,6 +386,50 @@ async function restoreOnce(
     logRestoreDirectoryContents(lc, replicaFile, 'after-temp-cleanup');
     litestreamRestoreAttempts().add(1, {...attrs, result});
   }
+}
+
+// From litestream/cmd/litestream/restore.go
+const restoreForkOutputSchema = v.object({
+  fork: v
+    .object({
+      forked: v.boolean(),
+      txid: v.string().optional(),
+    })
+    .optional(),
+});
+
+type RestoreForkOutput = v.Infer<typeof restoreForkOutputSchema>;
+
+/**
+ * Whether the `-json` output of `litestream restore -fork-to-url` reports that
+ * the backup was forked. A restore plan that cannot fork the backup is
+ * restored without forking.
+ */
+function restoreForked(lc: LogContext, stdout: string): boolean {
+  const start = stdout.indexOf('{');
+  const end = stdout.lastIndexOf('}');
+  if (start < 0 || end < start) {
+    lc.warn?.('litestream restore did not report a fork result');
+    return false;
+  }
+  let output: RestoreForkOutput;
+  try {
+    output = v.parse(
+      JSON.parse(stdout.slice(start, end + 1)),
+      restoreForkOutputSchema,
+      'passthrough',
+    );
+  } catch (e) {
+    lc.warn?.('unable to parse the litestream restore result', e);
+    return false;
+  }
+  const forked = output.fork?.forked === true;
+  lc.info?.(
+    forked
+      ? `forked the backup at txid ${output.fork?.txid}`
+      : 'restored without forking the backup',
+  );
+  return forked;
 }
 
 /**
@@ -394,11 +497,16 @@ function logRestoreDirectoryContents(
   }
 }
 
-function replicaIsValid(
+/**
+ * Opens and validates the restored replica. Returns the open connection if
+ * the replica is valid, which the caller must close; otherwise closes it and
+ * returns `undefined`.
+ */
+function openValidReplica(
   lc: LogContext,
   replica: string,
   constraints: ReplicaConstraints | undefined,
-) {
+): Database | undefined {
   let db: Database | undefined;
   try {
     // Note: Open the database and read the subscription state as a
@@ -413,26 +521,28 @@ function replicaIsValid(
           `Local replica version ${replicaVersion} does not match expected replicaVersion ${constraints.replicaVersion}`,
           constraints,
         );
-        return false;
+        return undefined;
       }
       if (watermark < constraints.minWatermark) {
         lc.warn?.(
           `Local replica watermark ${watermark} is earlier than minWatermark ${constraints.minWatermark}`,
         );
-        return false;
+        return undefined;
       }
       lc.info?.(
         `Local replica at version ${replicaVersion} and watermark ${watermark} is compatible`,
         constraints,
       );
     }
-    return true;
+    const valid = db;
+    db = undefined; // owned by the caller
+    return valid;
   } catch (e) {
     if (isSQLiteCorruption(e)) {
       logSQLiteCorruptionDiagnostics(lc, 'restored replica', replica, e);
     }
     lc.error?.('Error while validating restored replica', e);
-    return false;
+    return undefined;
   } finally {
     db?.close();
   }

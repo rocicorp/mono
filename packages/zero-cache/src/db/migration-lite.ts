@@ -104,11 +104,24 @@ export async function runSchemaMigrations(
       return versions;
     });
     if (versions.dataVersion < codeVersion) {
-      db.unsafeMode(true); // Enables journal_mode = OFF
-      db.pragma('locking_mode = EXCLUSIVE');
+      // Enables journal_mode = OFF, and lifts the guards against writing while
+      // iterating a query, which migrations may rely on.
+      db.unsafeMode(true);
       db.pragma('foreign_keys = OFF');
-      db.pragma('journal_mode = OFF');
-      db.pragma('synchronous = OFF');
+      if (versions.dataVersion === 0) {
+        // The setup migration (i.e. initial sync) populates a new database,
+        // which nothing else has open, as fast as possible.
+        db.pragma('locking_mode = EXCLUSIVE');
+        db.pragma('journal_mode = OFF');
+        db.pragma('synchronous = OFF');
+      } else {
+        // Incremental migrations are small, and run in the database's journal
+        // mode, which keeps each migration atomic and its WAL intact: resuming
+        // a litestream backup requires continue from the WAL (see WalKeeper),
+        // whose salt a WAL restart would change. Disable automatic checkpoints
+        // to avoid WAL restarts from schema updates.
+        db.pragma('wal_autocheckpoint = 0');
+      }
       // Unfortunately, AUTO_VACUUM is not compatible with BEGIN CONCURRENT,
       // so it is not an option for the replica file.
       // https://sqlite.org/forum/forumpost/25f183416a

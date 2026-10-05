@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -92,8 +93,16 @@ async function prepare(
   const replica = new Database(lc, file);
   let pageSize: number;
   try {
-    // Start by folding any (e.g. restored) WAL(2) files into the main db.
-    await setJournalMode(lc, replica, 'delete');
+    // Switching between WAL modes (e.g. from a restored 'wal' replica to
+    // 'wal2') goes through 'delete', which folds the WAL(2) files into the
+    // main db. A replica already in the target mode keeps its WAL, from which
+    // a litestream backup may continue (see WalKeeper).
+    const [{journal_mode: journalMode}] = replica.pragma<{
+      journal_mode: string;
+    }>('journal_mode');
+    if (journalMode !== walMode) {
+      await setJournalMode(lc, replica, 'delete');
+    }
 
     [{page_size: pageSize}] = replica.pragma<{page_size: number}>('page_size');
     const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
@@ -119,12 +128,23 @@ async function prepare(
         lc.info?.(`Performing maintenance cleanup on ${file}`);
         const t0 = performance.now();
         replica.unsafeMode(true);
-        replica.pragma('journal_mode = OFF');
-        replica.exec('VACUUM');
-        recordEvent(replica, 'vacuum');
-        replica.unsafeMode(false);
-        const t1 = performance.now();
-        lc.info?.(`VACUUM completed (${t1 - t0} ms)`);
+        try {
+          replica.pragma('journal_mode = OFF');
+          replica.exec('VACUUM');
+          recordEvent(replica, 'vacuum');
+          const t1 = performance.now();
+          lc.info?.(`VACUUM completed (${t1 - t0} ms)`);
+        } catch (e) {
+          // Another connection holds the replica open, e.g. the WalKeeper
+          // of a backup that litestream continues from the WAL. The VACUUM
+          // is retried at the next startup.
+          if (!(e instanceof SqliteError && e.code === 'SQLITE_BUSY')) {
+            throw e;
+          }
+          lc.warn?.(`Skipping VACUUM of ${file}: the database is locked`, e);
+        } finally {
+          replica.unsafeMode(false);
+        }
       }
     }
 
