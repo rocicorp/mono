@@ -321,22 +321,25 @@ function minProjectedAdvancementSampleChanges(numChanges: number): number {
   );
 }
 
-function shouldResetProjectedAdvancement(
+function canProjectAdvancement(
   elapsedMs: number,
   projectedTotalTimeMs: number | undefined,
   processedChanges: number,
   numChanges: number,
+): boolean {
+  return (
+    projectedTotalTimeMs !== undefined &&
+    numChanges >= MIN_PROJECTED_ADVANCEMENT_CHANGES &&
+    processedChanges >= minProjectedAdvancementSampleChanges(numChanges) &&
+    elapsedMs >= MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS
+  );
+}
+
+function shouldResetProjectedAdvancement(
+  elapsedMs: number,
+  projectedTotalTimeMs: number,
   totalHydrationTimeMs: number,
 ): boolean {
-  if (
-    projectedTotalTimeMs === undefined ||
-    numChanges < MIN_PROJECTED_ADVANCEMENT_CHANGES ||
-    processedChanges < minProjectedAdvancementSampleChanges(numChanges) ||
-    elapsedMs < MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS
-  ) {
-    return false;
-  }
-
   // The time already spent is spent whether or not the advancement is reset,
   // so a reset only saves the rest of it.
   return (
@@ -1898,38 +1901,41 @@ export class PipelineDriver {
       completedChanges,
       numChanges,
     );
-    if (
-      !shouldFinish &&
-      shouldResetProjectedAdvancement(
+    if (!shouldFinish) {
+      const canProject = canProjectAdvancement(
         elapsed,
         projectedTotalTimeMs,
         completedChanges,
         numChanges,
-        totalHydrationTimeMs,
-      )
-    ) {
-      this.#throwProjectedAdvancementReset(
-        completedChanges,
-        numChanges,
-        elapsed,
-        projectedTotalTimeMs,
-        totalHydrationTimeMs,
       );
-    }
-    if (
-      !shouldFinish &&
-      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
-      elapsed > totalHydrationTimeMs / 2 &&
-      // As above, only the rest of the advancement is saved by a reset.
-      (projectedTotalTimeMs === undefined ||
-        projectedTotalTimeMs - elapsed > totalHydrationTimeMs)
-    ) {
-      throw new ResetPipelinesSignal(
-        `Advancement exceeded timeout at ${completedChanges} of ${numChanges} changes ` +
-          `after ${elapsed} ms. Advancement time limited based on total ` +
-          `hydration time of ${totalHydrationTimeMs} ms.`,
-        'advancement-timeout',
-      );
+      if (canProject) {
+        const projectedTotal = must(projectedTotalTimeMs);
+        if (
+          shouldResetProjectedAdvancement(
+            elapsed,
+            projectedTotal,
+            totalHydrationTimeMs,
+          )
+        ) {
+          this.#throwProjectedAdvancementReset(
+            completedChanges,
+            numChanges,
+            elapsed,
+            projectedTotal,
+            totalHydrationTimeMs,
+          );
+        }
+      } else if (
+        elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+        elapsed > totalHydrationTimeMs
+      ) {
+        throw new ResetPipelinesSignal(
+          `Advancement exceeded timeout at ${completedChanges} of ${numChanges} changes ` +
+            `after ${elapsed} ms. Advancement time limited based on total ` +
+            `hydration time of ${totalHydrationTimeMs} ms.`,
+          'advancement-timeout',
+        );
+      }
     }
     return checkYield && advanceTimer.elapsedLap() > this.#yieldThresholdMs();
   }
