@@ -808,7 +808,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             if (result === 'success') {
               return;
             }
-            lc.info?.(`resetting pipelines: ${result.message}`);
+            lc.info?.(
+              `resetting pipelines: ${result.message}${result.breakdown ? ` (${result.breakdown})` : ''}`,
+            );
             this.#pipelineResets.add(1, {reason: result.reason});
             switch (result.reason) {
               case 'advancement-timeout':
@@ -926,7 +928,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // is hydrated at this point, so there is nothing else to tear down,
       // and `previousQueries` remain reusable for the same reason they were
       // for the reset that produced them.
-      lc.info?.(`resetting pipelines: ${e.message}`);
+      lc.info?.(
+        `resetting pipelines: ${e.message}${e.breakdown ? ` (${e.breakdown})` : ''}`,
+      );
       this.#pipelineResets.add(1, {reason: e.reason});
       this.#pipelines.reset(
         must(cvr.clientSchema, 'cvr.clientSchema missing after initialization'),
@@ -3246,7 +3250,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         lc,
         timer,
         generateRowChanges(this.#slowHydrateThreshold),
-        updater,
+        rows => updater.received(lc, rows),
         pokers,
       );
 
@@ -3447,7 +3451,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     timer: TimeSliceTimer,
     changes: Iterable<RowChange | 'yield'>,
-    updater: CVRQueryDrivenUpdater,
+    onBatch: (
+      rows: CustomKeyMap<RowID, RowUpdate>,
+    ) => Promise<PatchToVersion[]>,
     pokers: PokeHandler,
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
@@ -3463,7 +3469,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           lc.debug?.(
             `processing ${rows.size} (of ${total}) rows (${wallElapsed} ms)`,
           );
-          const patches = await updater.received(lc, rows);
+          const patches = await onBatch(rows);
 
           await startAsyncSpan(
             tracer,
@@ -3565,30 +3571,38 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           numChanges = advancement.numChanges;
           lc = lc.withContext('newVersion', version);
 
-          // Probably need a new updater type. CVRAdvancementUpdater?
-          updater = new CVRQueryDrivenUpdater(
-            this.#cvrStore,
-            cvr,
-            version,
-            this.#pipelines.replicaVersion,
-            queryID => this.#pipelines.rowSetSignature(queryID),
-          );
+          // Advance poke version if we're advancing beyond the CVR's current stateVersion.
+          const targetVersion: CVRVersion =
+            cmpVersions(cvr.version, {stateVersion: version}) < 0
+              ? {stateVersion: version}
+              : cvr.version;
+
           // Only poke clients that are at the cvr.version. New clients that
           // are behind need to first be caught up when their initConnection
           // message is processed (and #syncQueryPipelines is called).
-          pokers = startPoke(
-            lc,
-            this.#getClients(cvr.version),
-            updater.updatedVersion(),
-          );
+          pokers = startPoke(lc, this.#getClients(cvr.version), targetVersion);
           lc.debug?.(`applying ${numChanges} to advance to ${version}`);
           setupTimeMs = performance.now() - start;
 
+          // Lazily construct the updater only if row changes actually affect
+          // queries in this client group. While copy-on-write makes instantiation
+          // cheap, remaining lazy ensures that advancements with zero observable
+          // row changes skip CVR flushing (#flushPoked) and priority lock acquisition
+          // entirely.
           await this.#processChanges(
             lc,
             await timer.start(),
             advancement.changes,
-            updater,
+            rows => {
+              updater ??= new CVRQueryDrivenUpdater(
+                this.#cvrStore,
+                cvr,
+                version!,
+                this.#pipelines.replicaVersion,
+                queryID => this.#pipelines.rowSetSignature(queryID),
+              );
+              return updater.received(lc, rows);
+            },
             pokers,
           );
         } catch (e) {
@@ -3605,13 +3619,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           throw e;
         }
 
-        assert(
-          updater && pokers && version !== undefined,
-          'advancement state missing',
-        );
-        // Commit the changes and update the CVR snapshot.
-        this.#cvr = await this.#flushPoked(lc, updater, pokers);
-        const finalVersion = this.#cvr.version;
+        assert(pokers && version !== undefined, 'advancement state missing');
+        if (updater) {
+          // Commit the changes and update the CVR snapshot.
+          this.#cvr = await this.#flushPoked(lc, updater, pokers);
+        }
+        const finalVersion = (this.#cvr ?? cvr).version;
 
         // Signal clients to commit.
         await startAsyncSpan(tracer, 'vs.#advancePipelines.pokeEnd', () =>

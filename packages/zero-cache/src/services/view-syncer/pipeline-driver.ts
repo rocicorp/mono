@@ -223,6 +223,8 @@ type AdvanceContext = {
   currentTable: string | undefined;
   /** The processing time of each query's pushes, by query ID. */
   readonly queryStats: Map<string, QueryAdvanceStats>;
+  pushTimeMs: number;
+  stage: 'diff' | 'push' | 'between';
 };
 
 /**
@@ -366,6 +368,29 @@ function shouldResetSlowCurrentChange(
   return (
     currentChangeElapsedMs > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
     currentChangeElapsedMs > advancementResetTimeLimitMs(totalHydrationTimeMs)
+  );
+}
+
+function formatAdvancementBreakdown(
+  advanceContext: AdvanceContext,
+  elapsed: number,
+): string {
+  const {diff, pushTimeMs, stage, currentChangeStartMs, currentTable} =
+    advanceContext;
+  const currentPushMs =
+    stage === 'push' && currentChangeStartMs !== undefined
+      ? Math.max(0, elapsed - currentChangeStartMs)
+      : 0;
+  const totalPushMs = pushTimeMs + currentPushMs;
+  const stats = diff.stats;
+  const diffTimeMs = stats?.totalDiffMs ?? 0;
+  const clMs = stats
+    ? ` [changelog: ${stats.changeLogReadMs.toFixed(1)}ms, parse: ${stats.parseMs.toFixed(1)}ms, rows: ${stats.rowReadMs.toFixed(1)}ms]`
+    : '';
+  return (
+    `stage: ${stage}, diff: ${diffTimeMs.toFixed(1)}ms${clMs}, ` +
+    `push: ${totalPushMs.toFixed(1)}ms` +
+    (currentTable ? `, table: ${currentTable}` : '')
   );
 }
 
@@ -1358,6 +1383,8 @@ export class PipelineDriver {
       pos: 0,
       currentTable: undefined,
       queryStats: new Map(),
+      pushTimeMs: 0,
+      stage: 'diff',
     };
     this.#advanceContext = advanceContext;
     // The reservation is made here rather than in advance(), so that the
@@ -1385,6 +1412,7 @@ export class PipelineDriver {
         nextValue,
         rowKey,
       } of diff) {
+        advanceContext.stage = 'between';
         // The diff counts every raw entry, whereas it only yields observed,
         // non-no-op changes. Match the projection's progress to its raw total,
         // but do not count the current change until its push has completed.
@@ -1399,6 +1427,7 @@ export class PipelineDriver {
         const start = timer.totalElapsed();
         advanceContext.currentChangeStartMs = start;
         advanceContext.currentTable = table;
+        advanceContext.stage = 'push';
 
         let holds: HeldRows = 'fits';
         let pushCompleted = false;
@@ -1496,6 +1525,8 @@ export class PipelineDriver {
             holds = this.#holdPendingRows(advanceContext);
           }
         } finally {
+          advanceContext.pushTimeMs += timer.totalElapsed() - start;
+          advanceContext.stage = 'diff';
           advanceContext.currentChangeStartMs = undefined;
         }
 
@@ -1929,11 +1960,19 @@ export class PipelineDriver {
         elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
         elapsed > totalHydrationTimeMs
       ) {
+        const advanceContext = must(this.#advanceContext);
+        const breakdown = formatAdvancementBreakdown(advanceContext, elapsed);
+        this.#lc.warn?.(
+          `Advancement exceeded timeout at ${completedChanges} of ${numChanges} changes ` +
+            `after ${elapsed.toFixed(1)} ms (${breakdown}). ` +
+            `Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
+        );
         throw new ResetPipelinesSignal(
           `Advancement exceeded timeout at ${completedChanges} of ${numChanges} changes ` +
             `after ${elapsed} ms. Advancement time limited based on total ` +
             `hydration time of ${totalHydrationTimeMs} ms.`,
           'advancement-timeout',
+          breakdown,
         );
       }
     }
@@ -1978,12 +2017,22 @@ export class PipelineDriver {
     currentChangeElapsedMs: number,
     totalHydrationTimeMs: number,
   ): never {
+    const breakdown = this.#advanceContext
+      ? formatAdvancementBreakdown(this.#advanceContext, elapsed)
+      : undefined;
+    this.#lc.warn?.(
+      `Advancement slow current change at ${pos} of ${numChanges} changes ` +
+        `after ${currentChangeElapsedMs.toFixed(1)} ms (${elapsed.toFixed(1)} ms total)` +
+        (breakdown ? ` (${breakdown})` : '') +
+        `. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
+    );
     throw new ResetPipelinesSignal(
       `Advancement exceeded timeout processing current change at ${pos} of ` +
         `${numChanges} changes after ${currentChangeElapsedMs} ms ` +
         `(${elapsed} ms total). Advancement time limited based on total ` +
         `hydration time of ${totalHydrationTimeMs} ms.`,
       'advancement-timeout',
+      breakdown,
     );
   }
 
@@ -1994,10 +2043,20 @@ export class PipelineDriver {
     projectedTotalTimeMs: number | undefined,
     totalHydrationTimeMs: number,
   ): never {
+    const breakdown = this.#advanceContext
+      ? formatAdvancementBreakdown(this.#advanceContext, elapsed)
+      : undefined;
     const projection =
       projectedTotalTimeMs === undefined
         ? ''
         : ` Projected total advancement time is ${projectedTotalTimeMs} ms.`;
+    this.#lc.warn?.(
+      `Advancement projected timeout at ${pos} of ${numChanges} changes ` +
+        `after ${elapsed.toFixed(1)} ms` +
+        projection +
+        (breakdown ? ` (${breakdown})` : '') +
+        `. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
+    );
     throw new ResetPipelinesSignal(
       `Advancement projected to exceed hydration time at ${pos} of ` +
         `${numChanges} changes after ${elapsed} ms.` +
@@ -2005,6 +2064,7 @@ export class PipelineDriver {
         ` Advancement time limited based on total hydration time of ` +
         `${totalHydrationTimeMs} ms.`,
       'advancement-timeout',
+      breakdown,
     );
   }
 

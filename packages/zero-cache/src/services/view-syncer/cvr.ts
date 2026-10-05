@@ -155,8 +155,54 @@ export class CVRUpdater {
   ) {
     this._cvrStore = cvrStore;
     this._orig = cvr;
-    this._cvr = structuredClone(cvr) as CVR; // mutable deep copy
-    this._cvr.replicaVersion = replicaVersion;
+    this._cvr = {
+      ...cvr,
+      replicaVersion,
+    };
+  }
+
+  protected _mutableClients(): Record<string, ClientRecord> {
+    if (this._cvr.clients === this._orig.clients) {
+      this._cvr.clients = {...this._orig.clients};
+    }
+    return this._cvr.clients;
+  }
+
+  protected _mutableClient(id: string): ClientRecord {
+    const clients = this._mutableClients();
+    let client = clients[id];
+    assert(client !== undefined, () => `Client ${id} not found in CVR`);
+    if (client === this._orig.clients[id]) {
+      client = {
+        ...client,
+        desiredQueryIDs: [...client.desiredQueryIDs],
+      };
+      clients[id] = client;
+    }
+    return client;
+  }
+
+  protected _mutableQueries(): Record<string, QueryRecord> {
+    if (this._cvr.queries === this._orig.queries) {
+      this._cvr.queries = {...this._orig.queries};
+    }
+    return this._cvr.queries;
+  }
+
+  protected _mutableQuery(id: string): QueryRecord {
+    const queries = this._mutableQueries();
+    let query = queries[id];
+    assert(query !== undefined, () => `Query ${id} not found in CVR`);
+    if (query === this._orig.queries[id]) {
+      query = {
+        ...query,
+        ...(query.type !== 'internal'
+          ? {clientState: {...query.clientState}}
+          : {}),
+      };
+      queries[id] = query;
+    }
+    return query;
   }
 
   protected _setVersion(version: CVRVersion) {
@@ -231,7 +277,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
       // Add the ClientRecord and PutPatch
       client = {id, desiredQueryIDs: []};
-      this._cvr.clients[id] = client;
+      this._mutableClients()[id] = client;
 
       this._ensureNewVersion();
       this._cvrStore.insertClient(client);
@@ -261,13 +307,13 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
           },
           type: 'internal',
         };
-        this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
+        this._mutableQueries()[CLIENT_LMID_QUERY_ID] = lmidsQuery;
         this._cvrStore.putQuery(lmidsQuery);
       }
       if (!this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID]) {
         const mutationResultsQuery: InternalQueryRecord =
           getMutationResultsQuery(upstreamSchema(this.#shard), this._cvr.id);
-        this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID] =
+        this._mutableQueries()[CLIENT_MUTATION_RESULTS_QUERY_ID] =
           mutationResultsQuery;
         this._cvrStore.putQuery(mutationResultsQuery);
       }
@@ -379,15 +425,21 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         return patches;
       }
       const newVersion = this._ensureNewVersion();
-      client.desiredQueryIDs = toSorted(union(current, needed), stringCompare);
+      const mutableClient = this._mutableClient(clientID);
+      mutableClient.desiredQueryIDs = toSorted(
+        union(current, needed),
+        stringCompare,
+      );
 
       for (const id of needed) {
         const q = must(queries.find(({hash}) => hash === id));
         const {ast, name, args} = q;
 
         const ttl = clampTTL(q.ttl ?? DEFAULT_TTL_MS);
-        const query =
-          this._cvr.queries[id] ?? newQueryRecord(id, ast, name, args);
+        const existingQuery = this._cvr.queries[id];
+        const query = existingQuery
+          ? this._mutableQuery(id)
+          : newQueryRecord(id, ast, name, args);
         assertNotInternal(query);
 
         const inactivatedAt = undefined;
@@ -397,7 +449,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
           ttl,
           version: newVersion,
         };
-        this._cvr.queries[id] = query;
+        this._mutableQueries()[id] = query;
         patches.push({
           toVersion: newVersion,
           patch: {type: 'query', op: 'put', id, clientID},
@@ -407,7 +459,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         this._cvrStore.putDesiredQuery(
           newVersion,
           query,
-          client,
+          mutableClient,
           false,
           inactivatedAt,
           ttl,
@@ -448,16 +500,17 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
 
       const newVersion = this._ensureNewVersion();
-      client.desiredQueryIDs = toSorted(
+      const mutableClient = this._mutableClient(clientID);
+      mutableClient.desiredQueryIDs = toSorted(
         difference(current, remove),
         stringCompare,
       );
 
       for (const id of remove) {
-        const query = this._cvr.queries[id];
-        if (!query) {
+        if (!this._cvr.queries[id]) {
           continue; // Query itself has already been removed. Should not happen?
         }
+        const query = this._mutableQuery(id);
         assertNotInternal(query);
 
         let ttl = DEFAULT_TTL_MS;
@@ -486,7 +539,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         this._cvrStore.putDesiredQuery(
           newVersion,
           query,
-          client,
+          mutableClient,
           true,
           inactivatedAt,
           ttl,
@@ -524,7 +577,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         client.desiredQueryIDs,
         ttlClock,
       );
-      delete this._cvr.clients[clientID];
+      delete this._mutableClients()[clientID];
       this._cvrStore.deleteClient(clientID);
 
       return patches;
@@ -718,21 +771,25 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       let gotQueryPatch: Patch | undefined;
       const query = this._cvr.queries[queryID];
       if (query.transformationHash !== transformationHash) {
+        const mutableQuery = this._mutableQuery(queryID);
         const transformationVersion = this._ensureNewVersion();
 
-        if (query.type !== 'internal' && query.patchVersion === undefined) {
+        if (
+          mutableQuery.type !== 'internal' &&
+          mutableQuery.patchVersion === undefined
+        ) {
           // client query: desired -> gotten
-          query.patchVersion = transformationVersion;
+          mutableQuery.patchVersion = transformationVersion;
           gotQueryPatch = {
             type: 'query',
             op: 'put',
-            id: query.id,
+            id: mutableQuery.id,
           };
         }
 
-        query.transformationHash = transformationHash;
-        query.transformationVersion = transformationVersion;
-        this._cvrStore.updateQuery(query);
+        mutableQuery.transformationHash = transformationHash;
+        mutableQuery.transformationVersion = transformationVersion;
+        this._cvrStore.updateQuery(mutableQuery);
       }
       return gotQueryPatch ? [gotQueryPatch] : [];
     });
@@ -776,7 +833,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         `Query ${queryID} is not gotten`,
       );
 
-      delete this._cvr.queries[queryID];
+      delete this._mutableQueries()[queryID];
       const patch = {type: 'query', op: 'del', id: queryID} as const;
       this._cvrStore.markQueryAsDeleted(this._cvr.version, patch);
       patches.push({patch, toVersion: this._cvr.version});
@@ -850,7 +907,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         : ([] as PatchToVersion[]);
 
     for (const queryID of aborted) {
-      delete this._cvr.queries[queryID];
+      delete this._mutableQueries()[queryID];
       const patch = {type: 'query', op: 'del', id: queryID} as const;
       this._cvrStore.markQueryAsDeleted(this._cvr.version, patch);
       patches.push({patch, toVersion: this._cvr.version});
@@ -878,7 +935,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         () => `Query ${queryID} already tracked as executed or removed`,
       );
       this.#removedOrExecutedQueryIDs.add(queryID);
-      delete this._cvr.queries[queryID];
+      delete this._mutableQueries()[queryID];
 
       const newVersion = this._ensureNewVersion();
       const queryPatch = {type: 'query', op: 'del', id: queryID} as const;
@@ -950,7 +1007,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           continue;
         }
         const hex = formatSignature(sig);
-        query.rowSetSignature = hex;
+        const mutableQuery = this._mutableQuery(queryID);
+        mutableQuery.rowSetSignature = hex;
         this._cvrStore.updateRowSetSignature(queryID, hex);
       }
     }

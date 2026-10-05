@@ -275,6 +275,13 @@ export type PrevWrites = 'uniform' | 'divergent' | 'none';
  *
  * See {@link Snapshotter.advance()} for semantics and usage.
  */
+export type DiffTimingStats = {
+  changeLogReadMs: number;
+  rowReadMs: number;
+  parseMs: number;
+  totalDiffMs: number;
+};
+
 export interface SnapshotDiff extends Iterable<Change> {
   readonly prev: {
     readonly db: StatementRunner;
@@ -298,6 +305,9 @@ export interface SnapshotDiff extends Iterable<Change> {
 
   /** The scanned entries omitted because their table is unobserved/non-syncable or the change is a no-op. */
   readonly changesSkipped: number;
+
+  /** Timing metrics recorded during diff iteration. */
+  readonly stats?: DiffTimingStats | undefined;
 
   /**
    * Overrides the `prevWrites` passed to {@link Snapshotter.advance()}, for a
@@ -324,10 +334,12 @@ export type ResetPipelinesReason =
 export class ResetPipelinesSignal extends Error {
   readonly name = 'ResetPipelinesSignal';
   readonly reason: ResetPipelinesReason;
+  readonly breakdown?: string | undefined;
 
-  constructor(msg: string, reason: ResetPipelinesReason) {
+  constructor(msg: string, reason: ResetPipelinesReason, breakdown?: string) {
     super(msg);
     this.reason = reason;
+    this.breakdown = breakdown;
   }
 }
 
@@ -652,6 +664,12 @@ class Diff implements SnapshotDiff {
   readonly changes: number;
   changesScanned = 0;
   changesSkipped = 0;
+  readonly stats: DiffTimingStats = {
+    changeLogReadMs: 0,
+    rowReadMs: 0,
+    parseMs: 0,
+    totalDiffMs: 0,
+  };
 
   constructor(
     appID: string,
@@ -708,16 +726,21 @@ class Diff implements SnapshotDiff {
 
     return {
       next: () => {
+        const nextStart = performance.now();
         try {
           for (;;) {
+            const clStart = performance.now();
             const {value, done} = changes.next();
+            this.stats.changeLogReadMs += performance.now() - clStart;
             if (done) {
               cleanup();
               return {value, done: true};
             }
 
             this.changesScanned++;
+            const parseStart = performance.now();
             const {table, rowKey, op, stateVersion} = v.parse(value, schema);
+            this.stats.parseMs += performance.now() - parseStart;
             if (op === RESET_OP) {
               // The current map of `TableSpec`s may not have the correct or complete information.
               throw new ResetPipelinesSignal(
@@ -808,6 +831,7 @@ class Diff implements SnapshotDiff {
             const prevTag = prevDependsOnWrites
               ? this.#prevTagDivergent
               : this.#prevTagUniform;
+            const rowStart = performance.now();
             const nextValue =
               op === SET_OP
                 ? this.curr.getRow(
@@ -835,6 +859,7 @@ class Diff implements SnapshotDiff {
               );
               prevValues = prevValue ? [prevValue] : [];
             }
+            this.stats.rowReadMs += performance.now() - rowStart;
             if (nextValue === undefined) {
               throw new Error(
                 `Missing value for ${table} ${stringify(rowKey)}`,
@@ -888,6 +913,8 @@ class Diff implements SnapshotDiff {
           // This control flow path is not covered by the return() method (i.e. `break`).
           cleanup();
           throw e;
+        } finally {
+          this.stats.totalDiffMs += performance.now() - nextStart;
         }
       },
 
