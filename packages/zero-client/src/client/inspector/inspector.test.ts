@@ -663,7 +663,7 @@ describe('query metrics', () => {
         "query-update-client": [
           1000,
           0,
-          1,
+          32,
         ],
         "query-update-server": [
           100,

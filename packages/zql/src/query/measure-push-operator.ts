@@ -1,3 +1,4 @@
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Change} from '../ivm/change.ts';
 import type {Node} from '../ivm/data.ts';
 import {
@@ -18,20 +19,31 @@ export class MeasurePushOperator implements Operator {
   readonly #input: Input;
   readonly #queryID: string;
   readonly #metricsDelegate: MetricsDelegate;
+  readonly #sampleRate: number;
+  /** Pushes and reconciles so far, sampled or not. */
+  #count = 0;
 
   #output: Output = throwOutput;
   readonly #metricName: MetricName;
 
+  /**
+   * With a `sampleRate` of n, only the first of every n pushes (and
+   * reconciles) is timed and reported. The others go straight to the output,
+   * without a timer or the generator that measuring needs. The metrics
+   * delegate should weight each reported time by n.
+   */
   constructor(
     input: Input,
     queryID: string,
     metricsDelegate: MetricsDelegate,
     metricName: MetricName,
+    sampleRate = 1,
   ) {
     this.#input = input;
     this.#queryID = queryID;
     this.#metricsDelegate = metricsDelegate;
     this.#metricName = metricName;
+    this.#sampleRate = sampleRate;
     input.setOutput(this);
   }
 
@@ -52,14 +64,26 @@ export class MeasurePushOperator implements Operator {
   }
 
   push(change: Change): Stream<'yield'> {
+    if (!this.#sample()) {
+      return this.#output.push(change, this);
+    }
     return this.#measure(() => this.#output.push(change, this));
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    const reconcile = this.#output.reconcile?.bind(this.#output);
-    if (reconcile) {
-      yield* this.#measure(() => reconcile(this));
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    const output = this.#output;
+    if (output.reconcile === undefined) {
+      return emptyArray;
     }
+    if (!this.#sample()) {
+      return output.reconcile(this);
+    }
+    const reconcile = output.reconcile.bind(output);
+    return this.#measure(() => reconcile(this));
+  }
+
+  #sample(): boolean {
+    return this.#count++ % this.#sampleRate === 0;
   }
 
   /**

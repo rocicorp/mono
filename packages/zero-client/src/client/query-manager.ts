@@ -42,6 +42,16 @@ import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
 
+/**
+ * Client query updates are timed for only the first of every
+ * UPDATE_SAMPLE_RATE pushes to each source connection (see the
+ * MeasurePushOperator that ZeroContext adds), so each reported
+ * `query-update-client` time is recorded with this weight. Timing and
+ * recording every push is a noticeable cost when applying a large sync on
+ * React Native, for numbers only the inspector reads.
+ */
+export const UPDATE_SAMPLE_RATE = 32;
+
 type QueryHash = string;
 
 type Entry = {
@@ -597,7 +607,8 @@ export class QueryManager implements InspectorDelegate {
 
     // We track all materializations of queries as well as per
     // query materializations.
-    this.#metrics[metric].add(value);
+    const weight = metric === 'query-update-client' ? UPDATE_SAMPLE_RATE : 1;
+    this.#metrics[metric].add(value, weight);
 
     const queryID = args[0];
 
@@ -633,7 +644,7 @@ export class QueryManager implements InspectorDelegate {
     );
     switch (metric) {
       case 'query-update-client':
-        existing['query-update-client'].add(value);
+        existing['query-update-client'].add(value, weight);
         break;
       case 'query-materialization-client':
       case 'query-materialization-end-to-end':

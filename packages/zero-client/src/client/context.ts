@@ -18,7 +18,7 @@ import type {
 } from '../../../zql/src/query/query-delegate.ts';
 import type {RunOptions} from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
-import type {QueryManager} from './query-manager.ts';
+import {type QueryManager, UPDATE_SAMPLE_RATE} from './query-manager.ts';
 
 export type AddQuery = QueryManager['addLegacy'];
 export type AddCustomQuery = QueryManager['addCustom'];
@@ -257,7 +257,13 @@ export class ZeroContext extends QueryDelegateBase {
   }
 
   override decorateSourceInput(input: SourceInput, queryID: string): Input {
-    return new MeasurePushOperator(input, queryID, this, 'query-update-client');
+    return new MeasurePushOperator(
+      input,
+      queryID,
+      this,
+      'query-update-client',
+      UPDATE_SAMPLE_RATE,
+    );
   }
 
   onTransactionCommit(cb: CommitListener): () => void {

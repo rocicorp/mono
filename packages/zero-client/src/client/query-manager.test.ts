@@ -41,7 +41,7 @@ import {ClientErrorKind} from './client-error-kind.ts';
 import {ClientError} from './error.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
-import {QueryManager} from './query-manager.ts';
+import {QueryManager, UPDATE_SAMPLE_RATE} from './query-manager.ts';
 
 const slowMaterializeThreshold = Infinity; // Disable slow materialization logs for tests.
 
@@ -2754,4 +2754,33 @@ describe('gotCallback, persisted got is cached until authoritative', () => {
     queryManager.markGotQueriesAuthoritative();
     expect(gotCallback).nthCalledWith(2, true);
   });
+});
+
+test('sampled update times are weighted by UPDATE_SAMPLE_RATE', () => {
+  const queryManager = new QueryManager(
+    lc,
+    new MutationTracker(lc, ackMutations, onFatalError),
+    'client1',
+    schema.tables,
+    vi.fn(),
+    () => () => {},
+    0,
+    queryChangeThrottleMs,
+    slowMaterializeThreshold,
+    onFatalError,
+  );
+
+  queryManager.addMetric('query-update-client', 3, 'q1');
+  queryManager.addMetric('query-update-client', 5, 'q1');
+  queryManager.addMetric('query-materialization-client', 7, 'q1');
+
+  // Each update time stands for UPDATE_SAMPLE_RATE pushes.
+  expect(queryManager.metrics['query-update-client'].count()).toBe(
+    2 * UPDATE_SAMPLE_RATE,
+  );
+  expect(
+    queryManager.getQueryMetrics('q1')?.['query-update-client'].count(),
+  ).toBe(2 * UPDATE_SAMPLE_RATE);
+  // Materializations are not sampled.
+  expect(queryManager.metrics['query-materialization-client'].count()).toBe(1);
 });
