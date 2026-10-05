@@ -34,6 +34,7 @@ import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
+import {formatSignature, parseSignature} from './row-set-signature.ts';
 import {
   type ClientsRow,
   type DesiresRow,
@@ -116,15 +117,27 @@ type StringifiedQueriesRow = Omit<QueriesRow, 'queryArgs'> & {
   queryArgs: string | null;
 };
 
+/**
+ * Applies a pending row-set signature change (`null`: the query was deleted)
+ * to the persisted signatures, passed as `this`. A module-level function with
+ * `thisArg` rather than a closure, so that `forEach` allocates nothing and
+ * looks each entry up once.
+ */
+function applyPendingRowSetSignature(
+  this: Map<string, bigint>,
+  sig: bigint | null,
+  queryHash: string,
+): void {
+  if (sig === null) {
+    this.delete(queryHash);
+  } else {
+    this.set(queryHash, sig);
+  }
+}
+
 function asQuery(row: QueriesRow): QueryRecord {
   const maybeVersion = (s: string | null) =>
     s === null ? undefined : versionFromString(s);
-
-  // Only attach rowSetSignature when the column is non-null, so existing
-  // snapshots that don't include the field don't break.
-  const sigField = row.rowSetSignature
-    ? {rowSetSignature: row.rowSetSignature}
-    : {};
 
   if (row.clientAST === null) {
     // custom query
@@ -141,7 +154,6 @@ function asQuery(row: QueriesRow): QueryRecord {
       clientState: {},
       transformationHash: row.transformationHash ?? undefined,
       transformationVersion: maybeVersion(row.transformationVersion),
-      ...sigField,
     } satisfies CustomQueryRecord;
   }
 
@@ -153,7 +165,6 @@ function asQuery(row: QueriesRow): QueryRecord {
         ast,
         transformationHash: row.transformationHash ?? undefined,
         transformationVersion: maybeVersion(row.transformationVersion),
-        ...sigField,
       } satisfies InternalQueryRecord)
     : ({
         type: 'client',
@@ -163,7 +174,6 @@ function asQuery(row: QueriesRow): QueryRecord {
         clientState: {},
         transformationHash: row.transformationHash ?? undefined,
         transformationVersion: maybeVersion(row.transformationVersion),
-        ...sigField,
       } satisfies ClientQueryRecord);
 }
 
@@ -225,6 +235,26 @@ export class CVRStore {
   readonly #pendingQueryUpdates = new Map<string, StringifiedQueriesRow>();
   readonly #pendingDesireUpdates = new Map<string, DesiresRow>();
   readonly #pendingQueryPartialUpdates = new Map<string, Partial<QueriesRow>>();
+
+  /**
+   * The persisted `rowSetSignature` of each query of the loaded CVR that has
+   * one: an XOR of the hashes of the rows attached to the query (see
+   * row-set-signature.ts), maintained by the `PipelineDriver` and persisted
+   * by `CVRQueryDrivenUpdater.flush`. Used to detect drift when re-hydrating
+   * queries containing the `Cap` operator, which may pick a different N-row
+   * subset on re-execution. A query without one (e.g. from before signatures
+   * were introduced) is skipped by drift detection.
+   *
+   * This is kept here, rather than in the `QueryRecord`s of the CVR, because
+   * it changes on most advancements, and changing a `QueryRecord` requires
+   * the CVR updater to copy the CVR's whole `queries` map.
+   *
+   * Only updated once changes are flushed, so that, like the loaded/flushed
+   * CVR, it holds the persisted signatures of the CVR's (non-deleted) queries.
+   */
+  readonly #rowSetSignatures = new Map<string, bigint>();
+  /** Signature changes to apply to {@link #rowSetSignatures} on flush. */
+  readonly #pendingRowSetSignatures = new Map<string, bigint | null>();
 
   constructor(
     lc: LogContext,
@@ -475,9 +505,16 @@ export class CVRStore {
       };
     }
 
+    this.#rowSetSignatures.clear();
     for (const row of queryRows) {
       const query = asQuery(row);
       cvr.queries[row.queryHash] = query;
+      if (row.rowSetSignature) {
+        this.#rowSetSignatures.set(
+          row.queryHash,
+          parseSignature(row.rowSetSignature),
+        );
+      }
     }
 
     for (const row of desiresRows) {
@@ -624,10 +661,20 @@ export class CVRStore {
       transformationHash: null,
       transformationVersion: null,
     });
+    // A query that is added back starts without a signature.
+    this.#pendingRowSetSignatures.set(queryPatch.id, null);
   }
 
   putQuery(query: QueryRecord): void {
-    const change = queryRecordToQueryRow(this.#id, query);
+    // Keep the persisted signature. A change queued for this flush (by
+    // updateRowSetSignature() or markQueryAsDeleted()) is a partial update,
+    // which #flushQueries() merges over this row.
+    const sig = this.#rowSetSignatures.get(query.id);
+    const change = queryRecordToQueryRow(
+      this.#id,
+      query,
+      sig === undefined ? null : formatSignature(sig),
+    );
 
     const c = {
       ...change,
@@ -655,8 +702,21 @@ export class CVRStore {
     });
   }
 
-  updateRowSetSignature(queryHash: string, signature: string): void {
-    this.#updateQueryFields(queryHash, {rowSetSignature: signature});
+  /**
+   * The persisted row-set signature of the query, or `undefined` if it has
+   * none (e.g. a query from before signatures were introduced). Reflects the
+   * loaded/flushed CVR; changes made with {@link updateRowSetSignature} are
+   * only visible after they are flushed.
+   */
+  rowSetSignature(queryHash: string): bigint | undefined {
+    return this.#rowSetSignatures.get(queryHash);
+  }
+
+  updateRowSetSignature(queryHash: string, signature: bigint): void {
+    this.#updateQueryFields(queryHash, {
+      rowSetSignature: formatSignature(signature),
+    });
+    this.#pendingRowSetSignatures.set(queryHash, signature);
   }
 
   insertClient(client: ClientRecord): void {
@@ -1292,6 +1352,10 @@ export class CVRStore {
         lastConnectTime,
         verifyNoop,
       );
+      this.#pendingRowSetSignatures.forEach(
+        applyPendingRowSetSignature,
+        this.#rowSetSignatures,
+      );
       if (stats) {
         const elapsed = performance.now() - start;
         lc.info?.(
@@ -1337,6 +1401,7 @@ export class CVRStore {
     this.#pendingQueryUpdates.clear();
     this.#pendingDesireUpdates.clear();
     this.#pendingQueryPartialUpdates.clear();
+    this.#pendingRowSetSignatures.clear();
   }
 
   hasPendingUpdates(): boolean {

@@ -30,7 +30,6 @@ import {rowIDString} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
-import {formatSignature, parseSignature} from './row-set-signature.ts';
 import {
   cmpVersions,
   maxVersion,
@@ -1014,23 +1013,22 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       // signature of) every query on every flush is a significant source of
       // garbage for client groups with many queries. Queries without an
       // active pipeline (provider returns undefined) keep their stored value.
+      //
+      // The signatures live in the CVRStore rather than in the QueryRecords,
+      // so that persisting one does not copy the CVR's queries.
       for (const queryID of signatures.changedRowSetSignatures()) {
-        const query = this._cvr.queries[queryID];
-        if (query === undefined) {
+        if (this._cvr.queries[queryID] === undefined) {
           continue;
         }
         const sig = signatures.rowSetSignature(queryID);
         if (sig === undefined) {
           continue;
         }
-        const stored = parseSignature(query.rowSetSignature);
+        const stored = this._cvrStore.rowSetSignature(queryID) ?? 0n;
         if (stored === sig) {
           continue;
         }
-        const hex = formatSignature(sig);
-        const mutableQuery = this._mutableQuery(queryID);
-        mutableQuery.rowSetSignature = hex;
-        this._cvrStore.updateRowSetSignature(queryID, hex);
+        this._cvrStore.updateRowSetSignature(queryID, sig);
       }
     }
     const result = await super.flush(

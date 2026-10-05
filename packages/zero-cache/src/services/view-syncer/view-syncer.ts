@@ -111,7 +111,6 @@ import type {PipelineDriver, QueryInfo, RowChange} from './pipeline-driver.ts';
 import {planWarningMessage} from './plan-warnings.ts';
 import {QueryCoveringIndex} from './query-covering.ts';
 import {queryShape} from './query-shape.ts';
-import {parseSignature} from './row-set-signature.ts';
 import {
   cmpVersions,
   EMPTY_CVR_VERSION,
@@ -2201,9 +2200,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // queries get their signature initialized whenever they next re-execute
       // via the normal path (transformation hash change, etc.), at which
       // point drift detection becomes effective for subsequent cycles.
-      const storedSigHex = cvr.queries[queryID]?.rowSetSignature;
-      if (storedSigHex !== undefined && storedSigHex !== null) {
-        const priorSig = parseSignature(storedSigHex);
+      const priorSig = this.#cvrStore.rowSetSignature(queryID);
+      if (priorSig !== undefined) {
         const candidateSig = this.#pipelines.rowSetSignature(queryID) ?? 0n;
         if (priorSig !== candidateSig) {
           lc.warn?.(

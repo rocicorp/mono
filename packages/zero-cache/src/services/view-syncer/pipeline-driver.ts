@@ -407,8 +407,9 @@ export class PipelineDriver {
    * query, maintained as RowChanges are yielded from {@link addQuery} and
    * {@link advance}. ADDs / REMOVEs XOR the row's unit in (XOR is
    * self-inverse, so one op serves both directions); EDITs are no-ops.
-   * Hydration implicitly reseeds from `0n` because {@link addQuery} calls
-   * {@link removeQuery} first, which deletes the entry.
+   * Hydration starts the query's entry at `0n` (the empty row set), so every
+   * hydrated query has one, even if it has no rows. A hydration that does not
+   * finish removes it.
    */
   readonly #rowSetSignatures = new Map<string, bigint>();
   /**
@@ -995,6 +996,13 @@ export class PipelineDriver {
     // Only a finished hydration hands them over to #pipelines.
     let builtInputs: Input[] = [];
     try {
+      // Start from the signature of the empty row set, so that a query that
+      // hydrates to no rows has one too. Without it, rowSetSignature() would
+      // report "no pipeline" and a stale signature in the CVR would never be
+      // replaced, so drift would be detected again on every rehydration. The
+      // finally block removes it if the hydration does not finish.
+      this.#rowSetSignatures.set(queryID, 0n);
+      this.#changedRowSetSignatures.add(queryID);
       const {
         ast: resolvedQuery,
         companionRows,
@@ -1160,14 +1168,6 @@ export class PipelineDriver {
         companions: liveCompanions,
       });
       hydrationFinished = true;
-      // A query that hydrated to no rows has the signature of the empty row
-      // set. Without an entry, rowSetSignature() would report "no pipeline"
-      // and a stale signature in the CVR would never be replaced, so drift
-      // would be detected again on every rehydration.
-      if (!this.#rowSetSignatures.has(queryID)) {
-        this.#rowSetSignatures.set(queryID, 0n);
-        this.#changedRowSetSignatures.add(queryID);
-      }
       this.#queryStats?.recordHydration(
         {queryName, shape},
         {
