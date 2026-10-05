@@ -572,13 +572,12 @@ export class PipelineDriver {
     for (const table of fullTables.keys()) {
       this.#allTableNames.add(table);
     }
-    const primaryKeys = this.#primaryKeys ?? new Map<string, PrimaryKey>();
+    const primaryKeys = buildRowKeys(
+      clientSchema,
+      this.#tableSpecs,
+      this.#primaryKeys ?? undefined,
+    );
     this.#primaryKeys = primaryKeys;
-    primaryKeys.clear();
-    for (const [table, spec] of this.#tableSpecs.entries()) {
-      primaryKeys.set(table, spec.tableSpec.primaryKey);
-    }
-    buildPrimaryKeys(clientSchema, primaryKeys);
     this.#streamer ??= new Streamer(primaryKeys, this.#tableSpecs);
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
@@ -870,17 +869,7 @@ export class PipelineDriver {
       // subquery can tear it down below. A companion with no result is kept
       // alive too: it detects a future insert that creates the row.
       companionInputs.push(input);
-      // Consume the full stream rather than using first() to avoid
-      // triggering early return on Take's #initialFetch assertion.
-      // The subquery pins a unique key, so at most one row is produced.
-      let node: Node | undefined;
-      for (const n of skipYields(input.fetch({}))) {
-        node ??= n;
-      }
-      if (!node) {
-        return undefined;
-      }
-      return (node.row[childField] as LiteralValue) ?? null;
+      return fetchScalarValue(input, childField);
     };
 
     let resolved: AST;
@@ -2385,7 +2374,8 @@ function isKeyedBy(rowKey: RowKey, primaryKey: PrimaryKey): boolean {
 /**
  * Core hydration logic used by {@link PipelineDriver#addQuery}, extracted to a
  * function for reuse by the analyze-query RPC path so that analysis hydrates
- * queries the same way the view-syncer does in production.
+ * queries the same way the view-syncer does in production. As there, the rows
+ * of a table outside `clientSchema` are keyed by its key in the replica.
  */
 export function hydrate(
   input: Input,
@@ -2393,12 +2383,33 @@ export function hydrate(
   clientSchema: ClientSchema,
   tableSpecs: Map<string, LiteAndZqlSpec>,
 ): Iterable<RowChange | 'yield'> {
-  return new Streamer(buildPrimaryKeys(clientSchema), tableSpecs).streamNodes(
-    hash,
-    input.getSchema(),
-    ChangeType.ADD,
-    input.fetch({}),
-  );
+  return new Streamer(
+    buildRowKeys(clientSchema, tableSpecs),
+    tableSpecs,
+  ).streamNodes(hash, input.getSchema(), ChangeType.ADD, input.fetch({}));
+}
+
+/**
+ * Returns the value of `childField` in the row of `input`, the pipeline of a
+ * scalar subquery: `null` if the field is `NULL`, or `undefined` if there is
+ * no row. Used by {@link PipelineDriver#addQuery} and the analyze-query RPC
+ * path to resolve scalar subqueries the same way.
+ */
+export function fetchScalarValue(
+  input: Input,
+  childField: string,
+): LiteralValue | null | undefined {
+  // Consume the full stream rather than using first() to avoid
+  // triggering early return on Take's #initialFetch assertion.
+  // The subquery pins a unique key, so at most one row is produced.
+  let node: Node | undefined;
+  for (const n of skipYields(input.fetch({}))) {
+    node ??= n;
+  }
+  if (!node) {
+    return undefined;
+  }
+  return (node.row[childField] as LiteralValue) ?? null;
 }
 
 function buildPrimaryKeys(
@@ -2409,6 +2420,23 @@ function buildPrimaryKeys(
     primaryKeys.set(tableName, primaryKey as unknown as PrimaryKey);
   }
   return primaryKeys;
+}
+
+/**
+ * Sets `primaryKeys` to the columns that key the synced rows of each table:
+ * the table's primary key in `clientSchema`, or, for a table outside it, its
+ * key in the replica.
+ */
+function buildRowKeys(
+  clientSchema: ClientSchema,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
+  primaryKeys: Map<string, PrimaryKey> = new Map<string, PrimaryKey>(),
+): Map<string, PrimaryKey> {
+  primaryKeys.clear();
+  for (const [table, spec] of tableSpecs.entries()) {
+    primaryKeys.set(table, spec.tableSpec.primaryKey);
+  }
+  return buildPrimaryKeys(clientSchema, primaryKeys);
 }
 
 function mustGetPrimaryKey(

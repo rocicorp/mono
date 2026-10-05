@@ -19,8 +19,7 @@ import {
   type BuilderDelegate,
 } from '../../../zql/src/builder/builder.ts';
 import {ChangeType} from '../../../zql/src/ivm/change-type.ts';
-import type {Node} from '../../../zql/src/ivm/data.ts';
-import {skipYields} from '../../../zql/src/ivm/operator.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
@@ -29,7 +28,11 @@ import type {JWTAuth} from '../auth/auth.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
 import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
-import {hydrate} from './view-syncer/pipeline-driver.ts';
+import {
+  fetchScalarValue,
+  hydrate,
+  type RowChange,
+} from './view-syncer/pipeline-driver.ts';
 
 /**
  * Maximum number of synced rows returned per table, and read rows returned
@@ -108,24 +111,23 @@ export async function runAst(
     result.afterPermissions = await formatOutput(ast.table + astToZQL(ast));
   }
 
+  const hash = hashOfAST(ast);
+  const zqlSpecs = computeZqlSpecs(lc, db, {includeBackfillingColumns: false});
+
   // Resolve scalar subqueries (e.g. whereExists with {scalar: true}) to
   // literal equality conditions so that SQLite can use indexes effectively.
   // Without this, correlated subqueries get stripped from SQL filters and
   // queries on large tables fall back to full table scans.
+  // As in zero-cache, the rows the client reads for the gates are synced too,
+  // so the gates' pipelines are kept to be hydrated after the query's.
+  const companionInputs: Input[] = [];
   const executor = (
     subqueryAST: AST,
     childField: string,
   ): LiteralValue | null | undefined => {
     const input = buildPipeline(subqueryAST, host, 'scalar-subquery');
-    // Consume the full stream rather than using first() to avoid
-    // triggering early return on Take's #initialFetch assertion.
-    // The subquery AST already has limit: 1, so at most one row is produced.
-    let node: Node | undefined;
-    for (const n of skipYields(input.fetch({}))) {
-      node ??= n;
-    }
-    input.destroy();
-    return node ? ((node.row[childField] as LiteralValue) ?? null) : undefined;
+    companionInputs.push(input);
+    return fetchScalarValue(input, childField);
   };
 
   const {ast: resolvedAst, ignoredScalarHints} = resolveSimpleScalarSubqueries(
@@ -152,6 +154,19 @@ export async function runAst(
     options.planDebugger,
   );
 
+  // As in zero-cache, the rows of the gates follow the rows of the query.
+  function* rowChanges(): Iterable<RowChange | 'yield'> {
+    try {
+      for (const input of [pipeline, ...companionInputs]) {
+        yield* hydrate(input, hash, clientSchema, zqlSpecs);
+      }
+    } finally {
+      for (const input of companionInputs) {
+        input.destroy();
+      }
+    }
+  }
+
   const start = performance.now();
 
   let syncedRowCount = 0;
@@ -159,12 +174,7 @@ export async function runAst(
   // Dedupe on the row key rather than the whole row to bound memory.
   const seen: Set<string> = new Set();
   const truncatedTables: Set<string> = new Set();
-  for (const rowChange of hydrate(
-    pipeline,
-    hashOfAST(resolvedAst),
-    clientSchema,
-    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}),
-  )) {
+  for (const rowChange of rowChanges()) {
     if (rowChange === 'yield') {
       await yieldProcess();
       continue;
