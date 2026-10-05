@@ -130,11 +130,11 @@ export async function runAst(
     return fetchScalarValue(input, childField);
   };
 
-  const {ast: resolvedAst, ignoredScalarHints} = resolveSimpleScalarSubqueries(
-    ast,
-    options.tableSpecs,
-    executor,
-  );
+  const {
+    ast: resolvedAst,
+    companions,
+    ignoredScalarHints,
+  } = resolveSimpleScalarSubqueries(ast, options.tableSpecs, executor);
   for (const {table, uniqueKeys} of ignoredScalarHints) {
     lc.warn?.(
       `Ignoring {scalar: true} on the "${table}" subquery: it does not ` +
@@ -154,10 +154,15 @@ export async function runAst(
     options.planDebugger,
   );
 
-  // As in zero-cache, the rows of the gates follow the rows of the query.
+  // As in zero-cache, the rows of the gates follow the rows of the query,
+  // except for gates from a permission rule: rows read for a rule are never
+  // synced.
+  const syncedCompanionInputs = companionInputs.filter(
+    (_, i) => companions[i].system !== 'permissions',
+  );
   function* rowChanges(): Iterable<RowChange | 'yield'> {
     try {
-      for (const input of [pipeline, ...companionInputs]) {
+      for (const input of [pipeline, ...syncedCompanionInputs]) {
         yield* hydrate(input, hash, clientSchema, zqlSpecs);
       }
     } finally {

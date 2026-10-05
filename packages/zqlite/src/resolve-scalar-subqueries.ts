@@ -4,6 +4,7 @@ import type {
   CorrelatedSubqueryCondition,
   LiteralValue,
   SimpleCondition,
+  System,
 } from '../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 
@@ -18,6 +19,8 @@ export type CompanionSubquery = {
   ast: AST;
   /** The field in the subquery row whose value was resolved. */
   childField: string;
+  /** The system that added the gate. */
+  system: System | undefined;
   /** The resolved value, `null` if a row matched but the field was `NULL`,
    * or `undefined` if no row matched. */
   resolvedValue: LiteralValue | null | undefined;
@@ -189,6 +192,7 @@ function resolveScalarSubquery(
   out.companions.push({
     ast: subquery,
     childField,
+    system: condition.related.system,
     resolvedValue: value,
   });
 

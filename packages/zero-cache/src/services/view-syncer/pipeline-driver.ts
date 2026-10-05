@@ -1051,11 +1051,12 @@ export class PipelineDriver {
 
       // The client runs scalar gates as plain EXISTS, so the companions are
       // hydrated like the query: their rows, and the rows behind any EXISTS
-      // nested in them, are synced too.
-      for (const pipeline of [input, ...companionInputs]) {
+      // nested in them, are synced too. Index -1 is the query's own pipeline.
+      for (let i = -1; i < companionInputs.length; i++) {
+        const pipeline = i < 0 ? input : companionInputs[i];
         for (const change of must(this.#streamer).streamNodes(
           queryID,
-          pipeline.getSchema(),
+          i < 0 ? schema : companionStreamSchema(pipeline, companionMeta[i]),
           ChangeType.ADD,
           pipeline.fetch({}),
         )) {
@@ -1094,7 +1095,7 @@ export class PipelineDriver {
       for (let i = 0; i < companionMeta.length; i++) {
         const meta = companionMeta[i];
         const companionInput = companionInputs[i];
-        const companionSchema = companionInput.getSchema();
+        const companionSchema = companionStreamSchema(companionInput, meta);
         const {childField, resolvedValue} = meta;
         companionInput.setOutput({
           push: (change: Change) => {
@@ -2410,6 +2411,21 @@ export function fetchScalarValue(
     return undefined;
   }
   return (node.row[childField] as LiteralValue) ?? null;
+}
+
+/**
+ * The schema the rows of a companion pipeline are streamed with. A companion is
+ * built from the bare subquery, so its schema says `'client'` even when its
+ * gate came from a permission rule. Rows read for a rule are never synced, so
+ * such a companion takes the gate's system and the Streamer skips it, the rows
+ * behind any EXISTS nested in it included.
+ */
+function companionStreamSchema(
+  input: Input,
+  {system}: CompanionSubquery,
+): SourceSchema {
+  const schema = input.getSchema();
+  return system === 'permissions' ? {...schema, system} : schema;
 }
 
 function buildPrimaryKeys(
