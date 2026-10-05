@@ -398,21 +398,21 @@ describe('query metrics', () => {
     expect(queries[0].metrics).toMatchInlineSnapshot(`
       {
         "query-materialization-client": [
-          1000,
+          100,
           0,
           1,
         ],
         "query-materialization-end-to-end": [
-          1000,
+          100,
         ],
         "query-materialization-server": [
-          1000,
+          100,
         ],
         "query-update-client": [
-          1000,
+          100,
         ],
         "query-update-server": [
-          1000,
+          100,
         ],
       }
     `);
@@ -646,22 +646,22 @@ describe('query metrics', () => {
     expect(metrics).toMatchInlineSnapshot(`
       {
         "query-materialization-client": [
-          1000,
+          100,
           0,
           1,
         ],
         "query-materialization-end-to-end": [
-          1000,
+          100,
           50,
           1,
         ],
         "query-materialization-server": [
-          1000,
+          100,
           1,
           1,
         ],
         "query-update-client": [
-          1000,
+          100,
           0,
           32,
         ],

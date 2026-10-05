@@ -2,7 +2,7 @@
 // https://github.com/influxdata/tdigest
 
 import {binarySearch} from './binary-search.ts';
-import {Centroid, sortCentroidList, type CentroidList} from './centroid.ts';
+import {Centroid, type CentroidList} from './centroid.ts';
 import type {TDigestJSON} from './tdigest-schema.ts';
 
 export interface ReadonlyTDigest {
@@ -11,25 +11,52 @@ export interface ReadonlyTDigest {
   readonly cdf: (x: number) => number;
 }
 
+/** Initial capacity of the buffer of unprocessed values. */
+const INITIAL_CAPACITY = 16;
+
 // TDigest is a data structure for accurate on-line accumulation of
 // rank-based statistics such as quantiles and trimmed means.
+//
+// Unlike the Go original, centroids are kept as parallel arrays of means and
+// weights rather than as objects, so adding a value allocates nothing. New
+// values are buffered in a Float64Array and sorted with its native numeric
+// sort instead of Array.prototype.sort with a comparator. On an engine
+// without a JIT, such as Hermes in React Native, calling the comparator for
+// every comparison is what made adding values expensive.
 export class TDigest {
   readonly compression: number;
 
-  #maxProcessed: number;
-  #maxUnprocessed: number;
-  #processed!: CentroidList;
-  #unprocessed!: CentroidList;
+  readonly #maxUnprocessed: number;
+
+  /** Means of the processed centroids, ascending. */
+  #means!: number[];
+  /** Weights of the processed centroids, parallel to `#means`. */
+  #weights!: number[];
+
+  /** Means of the values added since the last `#process`, in order. */
+  #unprocessedMeans: Float64Array;
+  /** Weights of the unprocessed values, parallel to `#unprocessedMeans`. */
+  #unprocessedWeights: Float64Array;
+  #unprocessedCount!: number;
+
   #cumulative!: number[];
   #processedWeight!: number;
   #unprocessedWeight!: number;
   #min!: number;
   #max!: number;
 
-  constructor(compression: number = 1000) {
+  /**
+   * A digest keeps roughly `compression` centroids, and buffers up to eight
+   * times as many values between merges. The Go original defaults to 1000;
+   * 100 keeps p50, p95 and p99 within about 0.5% for a tenth of the memory
+   * and serialized size, which is plenty for the inspector's percentiles.
+   */
+  constructor(compression: number = 100) {
     this.compression = compression;
-    this.#maxProcessed = processedSize(0, this.compression);
     this.#maxUnprocessed = unprocessedSize(0, this.compression);
+    const capacity = Math.min(INITIAL_CAPACITY, this.#maxUnprocessed + 1);
+    this.#unprocessedMeans = new Float64Array(capacity);
+    this.#unprocessedWeights = new Float64Array(capacity);
     this.reset();
   }
 
@@ -49,8 +76,9 @@ export class TDigest {
   }
 
   reset(): void {
-    this.#processed = [];
-    this.#unprocessed = [];
+    this.#means = [];
+    this.#weights = [];
+    this.#unprocessedCount = 0;
     this.#cumulative = [];
     this.#processedWeight = 0;
     this.#unprocessedWeight = 0;
@@ -58,14 +86,33 @@ export class TDigest {
     this.#max = -Number.MAX_VALUE;
   }
 
-  add(mean: number, weight: number = 1) {
-    this.addCentroid(new Centroid(mean, weight));
+  /**
+   * Adds a value with the given weight.
+   * Weights which are not a number or are <= 0 are ignored, as are NaN means.
+   */
+  add(mean: number, weight: number = 1): void {
+    if (Number.isNaN(mean) || weight <= 0 || !Number.isFinite(weight)) {
+      return;
+    }
+
+    const n = this.#unprocessedCount;
+    if (n === this.#unprocessedMeans.length) {
+      this.#grow();
+    }
+    this.#unprocessedMeans[n] = mean;
+    this.#unprocessedWeights[n] = weight;
+    this.#unprocessedCount = n + 1;
+    this.#unprocessedWeight += weight;
+
+    if (this.#unprocessedCount > this.#maxUnprocessed) {
+      this.#process();
+    }
   }
 
   /** AddCentroidList can quickly add multiple centroids. */
   addCentroidList(centroidList: CentroidList) {
     for (const c of centroidList) {
-      this.addCentroid(c);
+      this.add(c.mean, c.weight);
     }
   }
 
@@ -74,24 +121,7 @@ export class TDigest {
    * Weights which are not a number or are <= 0 are ignored, as are NaN means.
    */
   addCentroid(c: Centroid): void {
-    if (
-      Number.isNaN(c.mean) ||
-      c.weight <= 0 ||
-      Number.isNaN(c.weight) ||
-      !Number.isFinite(c.weight)
-    ) {
-      return;
-    }
-
-    this.#unprocessed.push(new Centroid(c.mean, c.weight));
-    this.#unprocessedWeight += c.weight;
-
-    if (
-      this.#processed.length > this.#maxProcessed ||
-      this.#unprocessed.length > this.#maxUnprocessed
-    ) {
-      this.#process();
-    }
+    this.add(c.mean, c.weight);
   }
 
   /**
@@ -101,45 +131,124 @@ export class TDigest {
    **/
   merge(t2: TDigest) {
     t2.#process();
-    this.addCentroidList(t2.#processed);
+    // #process replaces the arrays rather than changing them, so these stay
+    // intact even if t2 is this digest.
+    const means = t2.#means;
+    const weights = t2.#weights;
+    for (let i = 0; i < means.length; i++) {
+      this.add(means[i], weights[i]);
+    }
   }
 
+  /** Doubles the unprocessed buffer, up to what `add` lets it hold. */
+  #grow(): void {
+    const capacity = Math.min(
+      this.#unprocessedMeans.length * 2,
+      this.#maxUnprocessed + 1,
+    );
+    const means = new Float64Array(capacity);
+    means.set(this.#unprocessedMeans);
+    this.#unprocessedMeans = means;
+    const weights = new Float64Array(capacity);
+    weights.set(this.#unprocessedWeights);
+    this.#unprocessedWeights = weights;
+  }
+
+  /**
+   * Merges the unprocessed values into the centroids: walks both in order of
+   * mean, folding each into the last centroid while that stays within its
+   * size limit, and starting a new centroid otherwise.
+   */
   #process() {
-    if (
-      this.#unprocessed.length > 0 ||
-      this.#processed.length > this.#maxProcessed
-    ) {
-      // Append all processed centroids to the unprocessed list and sort
-      this.#unprocessed.push(...this.#processed);
-      sortCentroidList(this.#unprocessed);
-
-      // Reset processed list with first centroid
-      this.#processed.length = 0;
-      this.#processed.push(this.#unprocessed[0]);
-
-      this.#processedWeight += this.#unprocessedWeight;
-      this.#unprocessedWeight = 0;
-      let soFar = this.#unprocessed[0].weight;
-      let limit = this.#processedWeight * this.#integratedQ(1);
-      for (let i = 1; i < this.#unprocessed.length; i++) {
-        const centroid = this.#unprocessed[i];
-        const projected = soFar + centroid.weight;
-        if (projected <= limit) {
-          soFar = projected;
-          // oxlint-disable-next-line typescript/no-non-null-assertion
-          this.#processed.at(-1)!.add(centroid);
-        } else {
-          const k1 = this.#integratedLocation(soFar / this.#processedWeight);
-          limit = this.#processedWeight * this.#integratedQ(k1 + 1);
-          soFar += centroid.weight;
-          this.#processed.push(centroid);
-        }
-      }
-      this.#min = Math.min(this.#min, this.#processed[0].mean);
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      this.#max = Math.max(this.#max, this.#processed.at(-1)!.mean);
-      this.#unprocessed.length = 0;
+    if (this.#unprocessedCount === 0) {
+      return;
     }
+    const [newMeans, newWeights] = this.#sortedUnprocessed();
+    const oldMeans = this.#means;
+    const oldWeights = this.#weights;
+    const n = newMeans.length;
+    const p = oldMeans.length;
+    this.#unprocessedCount = 0;
+    this.#processedWeight += this.#unprocessedWeight;
+    this.#unprocessedWeight = 0;
+    const total = this.#processedWeight;
+
+    const means: number[] = [];
+    const weights: number[] = [];
+    // The centroid being built, kept in locals rather than in the arrays,
+    // which is markedly faster without a JIT. Its weight is 0 until the first
+    // value.
+    let mean = 0;
+    let weight = 0;
+    let soFar = 0;
+    // A limit of 0 makes the first value start a centroid, whose limit then
+    // comes from the same formula as every other's. With soFar at 0 that is
+    // integratedQ(1): integratedLocation(0) is exactly 0, since
+    // Math.asin(-1) is -Math.PI / 2.
+    let limit = 0;
+    let i = 0;
+    let j = 0;
+    while (i < n || j < p) {
+      // On a tie the new value goes first, as in the original, which appended
+      // the old centroids to the new values and sorted them with a stable sort.
+      let m: number;
+      let w: number;
+      if (i < n && (j === p || newMeans[i] <= oldMeans[j])) {
+        m = newMeans[i];
+        w = newWeights[i++];
+      } else {
+        m = oldMeans[j];
+        w = oldWeights[j++];
+      }
+      if (soFar + w <= limit) {
+        // Same arithmetic as Centroid.add.
+        weight += w;
+        mean += (w * (m - mean)) / weight;
+      } else {
+        if (weight > 0) {
+          means.push(mean);
+          weights.push(weight);
+        }
+        const k = this.#integratedLocation(soFar / total);
+        limit = total * this.#integratedQ(k + 1);
+        mean = m;
+        weight = w;
+      }
+      soFar += w;
+    }
+    means.push(mean);
+    weights.push(weight);
+
+    this.#means = means;
+    this.#weights = weights;
+    this.#min = Math.min(this.#min, means[0]);
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    this.#max = Math.max(this.#max, means.at(-1)!);
+  }
+
+  /** The unprocessed means and weights, sorted by mean. */
+  #sortedUnprocessed(): [Float64Array, Float64Array] {
+    const n = this.#unprocessedCount;
+    const means = this.#unprocessedMeans.subarray(0, n);
+    const weights = this.#unprocessedWeights.subarray(0, n);
+    // fromJSON and merge add centroids in order of mean.
+    if (isSorted(means)) {
+      return [means, weights];
+    }
+    // With one weight for all the values, sorting the means alone keeps every
+    // value with its weight, and the native numeric sort needs no comparator.
+    if (allEqual(weights)) {
+      means.sort();
+      return [means, weights];
+    }
+    // A stable sort, so values with equal means stay in the order added.
+    const order = Array.from(means, (_, k) => k).sort(
+      (a, b) => means[a] - means[b],
+    );
+    return [
+      Float64Array.from(order, k => means[k]),
+      Float64Array.from(order, k => weights[k]),
+    ];
   }
 
   /**
@@ -151,7 +260,11 @@ export class TDigest {
    */
   centroids(cl: CentroidList = []): CentroidList {
     this.#process();
-    return [...cl, ...this.#processed];
+    const result = [...cl];
+    for (let i = 0; i < this.#means.length; i++) {
+      result.push(new Centroid(this.#means[i], this.#weights[i]));
+    }
+    return result;
   }
 
   count(): number {
@@ -169,8 +282,8 @@ export class TDigest {
   toJSON(): TDigestJSON {
     this.#process();
     const data: TDigestJSON = [this.compression];
-    for (const centroid of this.#processed) {
-      data.push(centroid.mean, centroid.weight);
+    for (let i = 0; i < this.#means.length; i++) {
+      data.push(this.#means[i], this.#weights[i]);
     }
     return data;
   }
@@ -185,19 +298,18 @@ export class TDigest {
     ) {
       return;
     }
-    const n = this.#processed.length + 1;
+    const n = this.#means.length + 1;
     if (this.#cumulative.length > n) {
       this.#cumulative.length = n;
     }
 
     let prev = 0;
-    for (let i = 0; i < this.#processed.length; i++) {
-      const centroid = this.#processed[i];
-      const cur = centroid.weight;
+    for (let i = 0; i < this.#means.length; i++) {
+      const cur = this.#weights[i];
       this.#cumulative[i] = prev + cur / 2;
       prev += cur;
     }
-    this.#cumulative[this.#processed.length] = prev;
+    this.#cumulative[this.#means.length] = prev;
   }
 
   // Quantile returns the (approximate) quantile of
@@ -206,18 +318,17 @@ export class TDigest {
   quantile(q: number): number {
     this.#process();
     this.#updateCumulative();
-    if (q < 0 || q > 1 || this.#processed.length === 0) {
+    if (q < 0 || q > 1 || this.#means.length === 0) {
       return NaN;
     }
-    if (this.#processed.length === 1) {
-      return this.#processed[0].mean;
+    if (this.#means.length === 1) {
+      return this.#means[0];
     }
     const index = q * this.#processedWeight;
-    if (index <= this.#processed[0].weight / 2) {
+    if (index <= this.#weights[0] / 2) {
       return (
         this.#min +
-        ((2 * index) / this.#processed[0].weight) *
-          (this.#processed[0].mean - this.#min)
+        ((2 * index) / this.#weights[0]) * (this.#means[0] - this.#min)
       );
     }
 
@@ -230,18 +341,17 @@ export class TDigest {
       const z1 = index - this.#cumulative[lower - 1];
       const z2 = this.#cumulative[lower] - index;
       return weightedAverage(
-        this.#processed[lower - 1].mean,
+        this.#means[lower - 1],
         z2,
-        this.#processed[lower].mean,
+        this.#means[lower],
         z1,
       );
     }
 
-    const z1 =
-      index - this.#processedWeight - this.#processed[lower - 1].weight / 2;
-    const z2 = this.#processed[lower - 1].weight / 2 - z1;
+    const z1 = index - this.#processedWeight - this.#weights[lower - 1] / 2;
+    const z2 = this.#weights[lower - 1] / 2 - z1;
     // oxlint-disable-next-line typescript/no-non-null-assertion
-    return weightedAverage(this.#processed.at(-1)!.mean, z1, this.#max, z2);
+    return weightedAverage(this.#means.at(-1)!, z1, this.#max, z2);
   }
 
   /**
@@ -250,7 +360,7 @@ export class TDigest {
   cdf(x: number): number {
     this.#process();
     this.#updateCumulative();
-    switch (this.#processed.length) {
+    switch (this.#means.length) {
       case 0:
         return 0;
       case 1: {
@@ -275,12 +385,12 @@ export class TDigest {
     if (x >= this.#max) {
       return 1;
     }
-    const m0 = this.#processed[0].mean;
+    const m0 = this.#means[0];
     // Left Tail
     if (x <= m0) {
       if (m0 - this.#min > 0) {
         return (
-          (((x - this.#min) / (m0 - this.#min)) * this.#processed[0].weight) /
+          (((x - this.#min) / (m0 - this.#min)) * this.#weights[0]) /
           this.#processedWeight /
           2
         );
@@ -289,14 +399,14 @@ export class TDigest {
     }
     // Right Tail
     // oxlint-disable-next-line typescript/no-non-null-assertion
-    const mn = this.#processed.at(-1)!.mean;
+    const mn = this.#means.at(-1)!;
     if (x >= mn) {
       if (this.#max - mn > 0) {
         return (
           1 -
           (((this.#max - x) / (this.#max - mn)) *
             // oxlint-disable-next-line typescript/no-non-null-assertion
-            this.#processed.at(-1)!.weight) /
+            this.#weights.at(-1)!) /
             this.#processedWeight /
             2
         );
@@ -305,15 +415,15 @@ export class TDigest {
     }
 
     const upper = binarySearch(
-      this.#processed.length,
+      this.#means.length,
       // Treat equals as greater than, so we can use the upper index
       // This is equivalent to:
-      //   i => this.#processed[i].mean > x ? -1 : 1,
-      i => x - this.#processed[i].mean || 1,
+      //   i => this.#means[i] > x ? -1 : 1,
+      i => x - this.#means[i] || 1,
     );
 
-    const z1 = x - this.#processed[upper - 1].mean;
-    const z2 = this.#processed[upper].mean - x;
+    const z1 = x - this.#means[upper - 1];
+    const z2 = this.#means[upper] - x;
     return (
       weightedAverage(
         this.#cumulative[upper - 1],
@@ -364,6 +474,24 @@ export function byteSizeForCompression(comp: number): number {
   return c * 40;
 }
 
+function isSorted(values: Float64Array): boolean {
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] < values[i - 1]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function allEqual(values: Float64Array): boolean {
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] !== values[0]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function weightedAverage(
   x1: number,
   w1: number,
@@ -384,13 +512,6 @@ function weightedAverageSorted(
 ): number {
   const x = (x1 * w1 + x2 * w2) / (w1 + w2);
   return Math.max(x1, Math.min(x, x2));
-}
-
-function processedSize(size: number, compression: number): number {
-  if (size === 0) {
-    return Math.ceil(compression) * 2;
-  }
-  return size;
 }
 
 function unprocessedSize(size: number, compression: number): number {

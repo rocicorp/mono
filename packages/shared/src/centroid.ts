@@ -27,7 +27,3 @@ export class Centroid {
 
 /** CentroidList is sorted by the mean of the centroid, ascending. */
 export type CentroidList = Centroid[];
-
-export function sortCentroidList(centroids: CentroidList): void {
-  centroids.sort((a, b) => a.mean - b.mean);
-}
