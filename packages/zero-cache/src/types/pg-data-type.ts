@@ -39,6 +39,12 @@ export function isPgNativeStringType(pgType: string): boolean {
   return Object.hasOwn(pgToZqlNativeStringTypeMap, formatTypeForLookup(pgType));
 }
 
+/** `character(n)`, a.k.a. `bpchar`. */
+export function isPgBpcharType(pgType: string): boolean {
+  const type = formatTypeForLookup(pgType);
+  return type === 'bpchar' || type === 'character';
+}
+
 export const pgToZqlTextRepresentedTypeMap = Object.freeze({
   cidr: 'string',
   ean13: 'string',

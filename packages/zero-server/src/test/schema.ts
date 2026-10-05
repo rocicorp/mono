@@ -70,6 +70,7 @@ export const schema = createSchema({
       .columns({
         id: string(),
         char: string(),
+        bpchar: string(),
         varchar: string(),
         numeric: number(),
         decimal: number(),
@@ -166,6 +167,7 @@ CREATE TABLE "jsonCases" (
 CREATE TABLE types_with_params (
   id TEXT PRIMARY KEY,
   char CHAR(10),
+  bpchar BPCHAR,
   varchar VARCHAR(20),
   numeric NUMERIC(8, 3),
   decimal DECIMAL(10, 5)

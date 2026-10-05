@@ -88,6 +88,10 @@ export async function getServerSchema<S extends Schema>(
       row.length
     ) {
       type = `${type}(${row.length})`;
+    } else if (type === 'character') {
+      // Without a length `character` means `character(1)`, so, like Postgres's
+      // own format_type, name an unbounded `bpchar` column `bpchar`.
+      type = 'bpchar';
     }
     if (
       (type === 'numeric' || type === 'decimal') &&

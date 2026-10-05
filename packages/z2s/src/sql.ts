@@ -7,6 +7,7 @@ import sql, {SQLItemType} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {
+  isPgBpcharType,
   isPgNativeStringType,
   isPgNumberType,
   isPgStringType,
@@ -185,7 +186,8 @@ function createPlaceholder(index: number, arg: SqlConvertArg) {
       const elType = pgTypeForLiteralType(arg.type);
       return formatPlural(index, `value::${elType}`);
     }
-    return `$${index}::text::${pgTypeForLiteralType(arg.type)}`;
+    const type = pgTypeForLiteralType(arg.type);
+    return `$${index}::text${type === 'text' ? '' : `::${type}`}`;
   }
 
   const common = formatCommonToSingularAndPlural(index, arg);
@@ -234,13 +236,20 @@ function formatCommonToSingularAndPlural(
     return `${valuePlaceholder}::text::"${arg.type}"`;
   }
   if (isPgNativeStringType(arg.type)) {
-    // For comparison cast to the general `text` type, not the
-    // specific column type (i.e. `arg.type`), because we don't want to
-    // force the value being compared to the size/max-size of the column
-    // type before comparison.
-    return arg.isComparison
-      ? `${valuePlaceholder}::text`
-      : `${valuePlaceholder}::text::${arg.type}`;
+    if (!arg.isComparison) {
+      return `${valuePlaceholder}::text::${arg.type}`;
+    }
+    // For comparison cast to an unbounded type, not the specific column
+    // type (i.e. `arg.type`), because we don't want to force the value
+    // being compared to the size/max-size of the column type before
+    // comparison.
+    //
+    // For `char(n)` that is `bpchar` (not `character`, which means
+    // `char(1)`), not `text`: Postgres compares `bpchar` to `text` by
+    // casting the column to `text`, which prevents it from using the
+    // column's indexes.
+    // https://www.postgresql.org/docs/current/datatype-character.html
+    return `${valuePlaceholder}::text${isPgBpcharType(arg.type) ? '::bpchar' : ''}`;
   }
   if (isPgTextRepresentedType(arg.type)) {
     return `${valuePlaceholder}::text::${arg.type}`;

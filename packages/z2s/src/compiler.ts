@@ -433,16 +433,34 @@ export function simple(
   table: Table,
 ): SQLQuery {
   switch (condition.op) {
+    case 'ILIKE':
+    case 'LIKE':
+    case 'NOT ILIKE':
+    case 'NOT LIKE': {
+      // The pattern is a string, not a value of the column's type. Converted
+      // to the `bpchar` of a `char(n)` column it would lose its trailing
+      // spaces. Like ZQL's own LIKE, non-string patterns match as strings.
+      const {right} = condition;
+      assert(
+        right.type === 'literal',
+        'Static parameters must be bound to a value before compiling to SQL',
+      );
+      return sql`${valueComparison(
+        spec,
+        condition.left,
+        table,
+        right,
+        false,
+      )} ${sql.__dangerous__rawValue(condition.op)} ${sqlConvertSingularLiteralArg(
+        right.value === null ? null : String(right.value),
+      )}`;
+    }
     case '!=':
     case '<':
     case '<=':
     case '=':
     case '>':
     case '>=':
-    case 'ILIKE':
-    case 'LIKE':
-    case 'NOT ILIKE':
-    case 'NOT LIKE':
       return sql`${valueComparison(
         spec,
         condition.left,
