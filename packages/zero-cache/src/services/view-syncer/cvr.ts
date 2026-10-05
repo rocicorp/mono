@@ -595,12 +595,27 @@ type RowPatchInfo = {
 };
 
 /**
- * Callback used by {@link CVRQueryDrivenUpdater.flush} to retrieve the
- * current row-set signature maintained by the pipeline driver for a given
- * query. Returning `undefined` means "no pipeline for this query right now" —
- * the stored signature on disk is left alone.
+ * The row-set signatures maintained by the pipeline driver, used by
+ * {@link CVRQueryDrivenUpdater.flush} to persist the ones that changed.
+ * Implemented by `PipelineDriver`.
  */
-export type RowSetSignatureProvider = (queryID: string) => bigint | undefined;
+export interface RowSetSignatureProvider {
+  /**
+   * IDs of the queries whose signature changed since the last
+   * {@link clearChangedRowSetSignatures}. Queries not in this set are not
+   * looked at, so that a flush does not have to visit every query.
+   */
+  changedRowSetSignatures(): Iterable<string>;
+
+  /**
+   * The current signature for the query. `undefined` means "no pipeline for
+   * this query right now" — the stored signature on disk is left alone.
+   */
+  rowSetSignature(queryID: string): bigint | undefined;
+
+  /** Called after the changed signatures have been flushed. */
+  clearChangedRowSetSignatures(): void;
+}
 
 /**
  * A {@link CVRQueryDrivenUpdater} is used for updating a CVR after making queries.
@@ -630,10 +645,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
   /**
    * @param stateVersion The `stateVersion` at which the queries were executed.
-   * @param rowSetSignature Optional callback that returns the current row-set
-   *        signature for a query, typically backed by
-   *        `PipelineDriver.rowSetSignature`. When provided, {@link flush}
-   *        persists any signature deltas it observes.
+   * @param rowSetSignature Optional source of the current row-set
+   *        signatures, typically the `PipelineDriver`. When provided,
+   *        {@link flush} persists the signatures that changed.
    */
   constructor(
     cvrStore: CVRStore,
@@ -985,20 +999,27 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return this._ensureNewVersion();
   }
 
-  override flush(
+  override async flush(
     lc: LogContext,
     lastConnectTime: number,
     lastActive: number,
     ttlClock: TTLClock,
     verifyNoop = false,
   ): Promise<{cvr: CVRSnapshot; flushed: CVRFlushStats | false}> {
-    if (this.#rowSetSignature) {
-      // Persist the per-query row-set signature for any query whose
-      // pipeline-driver signature differs from what's on disk. Queries
-      // without an active pipeline (provider returns undefined) keep their
-      // stored value.
-      for (const [queryID, query] of Object.entries(this._cvr.queries)) {
-        const sig = this.#rowSetSignature(queryID);
+    const signatures = this.#rowSetSignature;
+    if (signatures) {
+      // Persist the row-set signature of each query whose pipeline-driver
+      // signature changed and now differs from what's on disk. Only the
+      // changed queries are visited: scanning (and parsing the stored
+      // signature of) every query on every flush is a significant source of
+      // garbage for client groups with many queries. Queries without an
+      // active pipeline (provider returns undefined) keep their stored value.
+      for (const queryID of signatures.changedRowSetSignatures()) {
+        const query = this._cvr.queries[queryID];
+        if (query === undefined) {
+          continue;
+        }
+        const sig = signatures.rowSetSignature(queryID);
         if (sig === undefined) {
           continue;
         }
@@ -1012,7 +1033,17 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         this._cvrStore.updateRowSetSignature(queryID, hex);
       }
     }
-    return super.flush(lc, lastConnectTime, lastActive, ttlClock, verifyNoop);
+    const result = await super.flush(
+      lc,
+      lastConnectTime,
+      lastActive,
+      ttlClock,
+      verifyNoop,
+    );
+    // Only forget the changes once they are persisted. If the flush throws
+    // they are looked at again by the next flush.
+    signatures?.clearChangedRowSetSignatures();
+    return result;
   }
 
   /**

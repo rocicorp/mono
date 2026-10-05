@@ -3035,7 +3035,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         cvr,
         stateVersion,
         this.#pipelines.replicaVersion,
-        queryID => this.#pipelines.rowSetSignature(queryID),
+        this.#pipelines,
       );
 
       const sameHashRehydratedQueryIDs = addQueries
@@ -3599,7 +3599,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 cvr,
                 version!,
                 this.#pipelines.replicaVersion,
-                queryID => this.#pipelines.rowSetSignature(queryID),
+                this.#pipelines,
               );
               return updater.received(lc, rows);
             },

@@ -411,6 +411,12 @@ export class PipelineDriver {
    * {@link removeQuery} first, which deletes the entry.
    */
   readonly #rowSetSignatures = new Map<string, bigint>();
+  /**
+   * IDs of the queries whose {@link #rowSetSignatures} entry changed since the
+   * last {@link clearChangedRowSetSignatures}, so that the CVR flush only has
+   * to look at those instead of every query.
+   */
+  readonly #changedRowSetSignatures = new Set<string>();
 
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
@@ -541,6 +547,7 @@ export class PipelineDriver {
     this.#tables.clear();
     this.#allTableNames.clear();
     this.#rowSetSignatures.clear();
+    this.#changedRowSetSignatures.clear();
     this.#initAndResetCommon(clientSchema);
   }
 
@@ -663,6 +670,7 @@ export class PipelineDriver {
     }
     this.#tables.clear();
     this.#rowSetSignatures.clear();
+    this.#changedRowSetSignatures.clear();
     this.#storage.destroy();
     this.#snapshotter.destroy();
   }
@@ -1152,6 +1160,14 @@ export class PipelineDriver {
         companions: liveCompanions,
       });
       hydrationFinished = true;
+      // A query that hydrated to no rows has the signature of the empty row
+      // set. Without an entry, rowSetSignature() would report "no pipeline"
+      // and a stale signature in the CVR would never be replaced, so drift
+      // would be detected again on every rehydration.
+      if (!this.#rowSetSignatures.has(queryID)) {
+        this.#rowSetSignatures.set(queryID, 0n);
+        this.#changedRowSetSignatures.add(queryID);
+      }
       this.#queryStats?.recordHydration(
         {queryName, shape},
         {
@@ -1221,6 +1237,7 @@ export class PipelineDriver {
         // and rowSetSignature() must not report a signature for a query
         // without an active pipeline.
         this.#rowSetSignatures.delete(queryID);
+        this.#changedRowSetSignatures.delete(queryID);
       }
       this.#hydrateContext = null;
     }
@@ -1240,6 +1257,7 @@ export class PipelineDriver {
       this.#destroyPipeline(queryID, pipeline, stopReason);
     }
     this.#rowSetSignatures.delete(queryID);
+    this.#changedRowSetSignatures.delete(queryID);
   }
 
   #destroyPipeline(
@@ -1275,6 +1293,22 @@ export class PipelineDriver {
   }
 
   /**
+   * IDs of the queries whose {@link rowSetSignature} changed (by an ADD or
+   * REMOVE from {@link addQuery} or {@link advance}) since the last call to
+   * {@link clearChangedRowSetSignatures}.
+   */
+  changedRowSetSignatures(): ReadonlySet<string> {
+    return this.#changedRowSetSignatures;
+  }
+
+  /**
+   * Called once the {@link changedRowSetSignatures} have been persisted.
+   */
+  clearChangedRowSetSignatures(): void {
+    this.#changedRowSetSignatures.clear();
+  }
+
+  /**
    * Wraps an iterable of RowChanges, XORing each row's unit hash into the
    * query's signature (ADDs and REMOVEs share the same op; EDITs are no-ops).
    * Used to intercept the yield streams from {@link addQuery} and
@@ -1292,6 +1326,7 @@ export class PipelineDriver {
           rowKey: change.rowKey as RowKey,
         });
         this.#rowSetSignatures.set(change.queryID, cur ^ unit);
+        this.#changedRowSetSignatures.add(change.queryID);
       }
       yield change;
     }
