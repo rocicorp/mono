@@ -841,12 +841,10 @@ export class PipelineDriver {
 
   #resolveScalarSubqueries(ast: AST): {
     ast: AST;
-    companionRows: {table: string; row: Row}[];
     companions: CompanionSubquery[];
     companionInputs: Input[];
     ignoredScalarHints: IgnoredScalarHint[];
   } {
-    const companionRows: {table: string; row: Row}[] = [];
     const companionInputs: Input[] = [];
 
     const executor = (
@@ -856,6 +854,7 @@ export class PipelineDriver {
       const input = buildPipeline(
         subqueryAST,
         {
+          enableNotExists: true, // Server-side can handle NOT EXISTS
           disableCorrelatedPredicatePushdown:
             this.#disableCorrelatedPredicatePushdown(),
           getSource: name => this.#getSource(name),
@@ -873,7 +872,7 @@ export class PipelineDriver {
       companionInputs.push(input);
       // Consume the full stream rather than using first() to avoid
       // triggering early return on Take's #initialFetch assertion.
-      // The subquery AST already has limit: 1, so at most one row is produced.
+      // The subquery pins a unique key, so at most one row is produced.
       let node: Node | undefined;
       for (const n of skipYields(input.fetch({}))) {
         node ??= n;
@@ -881,7 +880,6 @@ export class PipelineDriver {
       if (!node) {
         return undefined;
       }
-      companionRows.push({table: subqueryAST.table, row: node.row as Row});
       return (node.row[childField] as LiteralValue) ?? null;
     };
 
@@ -902,7 +900,6 @@ export class PipelineDriver {
     }
     return {
       ast: resolved,
-      companionRows,
       companions,
       companionInputs,
       ignoredScalarHints,
@@ -1005,7 +1002,6 @@ export class PipelineDriver {
       this.#changedRowSetSignatures.add(queryID);
       const {
         ast: resolvedQuery,
-        companionRows,
         companions: companionMeta,
         companionInputs,
         ignoredScalarHints,
@@ -1064,28 +1060,21 @@ export class PipelineDriver {
         push: change => this.#streamPushed(queryID, schema, change),
       });
 
-      for (const change of must(this.#streamer).streamNodes(
-        queryID,
-        schema,
-        ChangeType.ADD,
-        input.fetch({}),
-      )) {
-        if (change !== 'yield') {
-          hydrationRowCount++;
-        }
-        yield change;
-      }
-
-      for (const {table, row} of companionRows) {
-        const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
-        hydrationRowCount++;
-        yield {
-          type: ChangeType.ADD,
+      // The client runs scalar gates as plain EXISTS, so the companions are
+      // hydrated like the query: their rows, and the rows behind any EXISTS
+      // nested in them, are synced too.
+      for (const pipeline of [input, ...companionInputs]) {
+        for (const change of must(this.#streamer).streamNodes(
           queryID,
-          table,
-          rowKey: getRowKey(primaryKey, row),
-          row,
-        } as RowChange;
+          pipeline.getSchema(),
+          ChangeType.ADD,
+          pipeline.fetch({}),
+        )) {
+          if (change !== 'yield') {
+            hydrationRowCount++;
+          }
+          yield change;
+        }
       }
 
       const hydrationTimeMs = timer.totalElapsed();
@@ -1132,7 +1121,9 @@ export class PipelineDriver {
                 newValue = undefined;
                 break;
               case ChangeType.CHILD:
-                return [];
+                // A change behind an EXISTS nested in the subquery leaves the
+                // value alone, but the client reads those rows too.
+                return this.#streamPushed(queryID, companionSchema, change);
             }
             if (!scalarValuesEqual(newValue, resolvedValue)) {
               throw new ResetPipelinesSignal(
