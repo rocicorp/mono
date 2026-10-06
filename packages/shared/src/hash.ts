@@ -25,6 +25,16 @@ const digests = new Uint32Array(MAX_WORDS);
 let encoder: TextEncoder | undefined;
 
 /**
+ * Inputs of up to this many UTF-16 code units are UTF-8 encoded into a reused
+ * buffer: `TextEncoder#encode` allocates a fresh Uint8Array per call, which for
+ * a row-key-sized string cost several times the hashing itself. Longer inputs
+ * still allocate: there the allocation is a small share of the cost, and not
+ * worth keeping a buffer that size alive.
+ */
+const MAX_REUSED_UNITS = 4096;
+let utf8: Uint8Array | undefined;
+
+/**
  * xxHash32 over the UTF-8 bytes of `str` under seeds `0..words-1`, leaving the
  * digests in `digests[0..words)`.
  *
@@ -35,8 +45,19 @@ let encoder: TextEncoder | undefined;
  * used to delegate to, and what `hash.test.ts` checks it still matches.
  */
 function digest(str: string, words: number): void {
-  const b = (encoder ??= new TextEncoder()).encode(str);
-  const len = b.length;
+  encoder ??= new TextEncoder();
+  let b: Uint8Array;
+  let len: number;
+  if (str.length <= MAX_REUSED_UNITS) {
+    // A UTF-16 code unit is at most 3 UTF-8 bytes (a surrogate pair is 2 units
+    // and 4 bytes), so the whole string always fits. Bytes past `len` are left
+    // over from earlier calls and never read.
+    b = utf8 ??= new Uint8Array(3 * MAX_REUSED_UNITS);
+    len = encoder.encodeInto(str, b).written;
+  } else {
+    b = encoder.encode(str);
+    len = b.length;
+  }
 
   for (let w = 0; w < words; w++) {
     accs[w] = (w + PRIME32_5) & 0xffffffff;
@@ -143,17 +164,26 @@ function digest(str: string, words: number): void {
   }
 }
 
+const wideView = new DataView(new ArrayBuffer(16));
+
 /**
- * A hash wider than 32 bits, folding `words` digests together highest seed
- * first.
+ * A hash wider than 32 bits, folding the digests together highest seed first.
+ *
+ * Every bigint operation allocates its result, so folding word by word with a
+ * `BigInt()`, a shift and an add per word allocated up to 6 bigints for h64 and
+ * 12 for h128. Laying the words out big-endian and reading them back with
+ * `getBigUint64` allocates 1 and 4 for the same values.
  */
-function wide(str: string, words: number): bigint {
+function wide(str: string, words: 2 | 4): bigint {
   digest(str, words);
-  let result = 0n;
-  for (let w = 0; w < words; w++) {
-    result = (result << 32n) + BigInt(digests[w]);
+  wideView.setUint32(0, digests[0]);
+  wideView.setUint32(4, digests[1]);
+  if (words === 2) {
+    return wideView.getBigUint64(0);
   }
-  return result;
+  wideView.setUint32(8, digests[2]);
+  wideView.setUint32(12, digests[3]);
+  return (wideView.getBigUint64(0) << 64n) | wideView.getBigUint64(8);
 }
 
 // Re-exported for zero-protocol's AST hash, which cannot import xxhash32.ts

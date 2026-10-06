@@ -3,6 +3,9 @@ import {xxHash32} from 'js-xxhash';
 import {expect, test} from 'vitest';
 import {h128, h32, h64} from './hash.ts';
 
+// hash.ts encodes inputs of up to this many UTF-16 units into a reused buffer.
+const MAX_REUSED_UNITS = 4096;
+
 /**
  * The original implementation: fold `words` independent `xxHash32` passes over
  * the string. `hash.ts` now does this in a single pass over a single UTF-8
@@ -27,6 +30,7 @@ const INTERESTING = [
   'ä'.repeat(17), // 2-byte UTF-8
   '€'.repeat(11), // 3-byte UTF-8
   '😀'.repeat(7), // surrogate pairs
+  '\ud800', // lone surrogate, encoded as U+FFFD
   'a\0b', // embedded NUL
   JSON.stringify({table: 'issue', where: null, limit: 100}),
   'x'.repeat(1000),
@@ -65,6 +69,32 @@ test('all three match the reference for arbitrary unicode', () => {
     }),
     {numRuns: 500},
   );
+});
+
+test('inputs around the reused-buffer limit match the reference', () => {
+  for (const units of [
+    MAX_REUSED_UNITS - 1,
+    MAX_REUSED_UNITS,
+    MAX_REUSED_UNITS + 1,
+  ]) {
+    // ASCII, the worst case of 3 bytes per unit, and surrogate pairs.
+    for (const s of [
+      'x'.repeat(units),
+      '€'.repeat(units),
+      '😀'.repeat(units >> 1) + 'x'.repeat(units & 1),
+    ]) {
+      expect(s.length).toBe(units);
+      expect(h32(s)).toBe(xxHash32(s, 0));
+      expect(h128(s)).toBe(referenceHash(s, 4));
+    }
+  }
+});
+
+test('a shorter input does not read bytes left by a longer one', () => {
+  const expected = h128('abc');
+  h128('€'.repeat(MAX_REUSED_UNITS));
+  expect(h128('abc')).toBe(expected);
+  expect(h128('abc')).toBe(referenceHash('abc', 4));
 });
 
 test('successive calls do not share state', () => {
