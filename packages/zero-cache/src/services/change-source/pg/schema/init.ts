@@ -296,7 +296,12 @@ function getIncrementalMigrations(
           // schema snapshots. Note that setupTriggers() also refreshes the
           // stored "publishedSchema" so that the change in format does not
           // manifest as a spurious schema change.
-          29: {
+          //
+          // v30: Upgrade the DDL event triggers so that DROP INDEX
+          // CONCURRENTLY is not rejected (no ddlStart message for DROP INDEX).
+          // Bumped from v29 rather than added as a separate (unconditional)
+          // version because this entry must remain the last one.
+          30: {
             migrateSchema: async (lc, sql) => {
               const [{publications}] = await sql<{publications: string[]}[]>`
                 SELECT publications FROM ${sql(shardConfigTable)}`;

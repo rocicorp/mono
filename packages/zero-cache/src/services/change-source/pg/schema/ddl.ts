@@ -280,6 +280,19 @@ DECLARE
 BEGIN
   -- serialize DDL statements to compute correct schema change diffs
   PERFORM pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
+
+  -- DROP INDEX CONCURRENTLY refuses to run in a transaction that has been
+  -- assigned an xid, and emitting a transactional message here assigns one.
+  -- The concurrent form cannot be distinguished at ddl_command_start, so no
+  -- ddlStart is emitted for any DROP INDEX. Nothing is lost: the ddlUpdate
+  -- emitted at ddl_command_end carries both the previous and the current
+  -- schema, and its own tag is the right context for it. (The advisory lock
+  -- assigns no xid, so it is still taken here.)
+  IF TG_TAG = 'DROP INDEX' THEN
+    PERFORM ${schema}.notice_ignore('deferred', TG_TAG, NULL);
+    RETURN;
+  END IF;
+
   PERFORM ${schema}.update_schemas('ddlStart', TG_TAG, NULL);
 END
 $$ LANGUAGE plpgsql;
@@ -295,6 +308,14 @@ DECLARE
   message TEXT;
   event TEXT;
 BEGIN
+  -- DROP INDEX CONCURRENTLY commits internally between ddl_command_start and
+  -- ddl_command_end, releasing the lock taken by emit_ddl_start(), so it is
+  -- taken again before the published schema is read and updated. For a
+  -- plain DROP INDEX it is already held, and this is a no-op.
+  IF TG_TAG = 'DROP INDEX' THEN
+    PERFORM pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
+  END IF;
+
   publications := ARRAY[${lit(publications)}];
 
   SELECT objid, object_type, object_identity 
