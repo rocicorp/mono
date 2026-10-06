@@ -52,7 +52,7 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
     const result = await serverPromise;
-    expect(result.type).toBe('success');
+    expect(result).toBeUndefined();
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
@@ -262,8 +262,8 @@ describe('MutationTracker', () => {
       mutation1.serverPromise,
       mutation2.serverPromise,
     ]);
-    expect(result1.type).toBe('success');
-    expect(result2.type).toBe('success');
+    expect(result1).toBeUndefined();
+    expect(result2).toBeUndefined();
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
@@ -593,7 +593,7 @@ describe('MutationTracker', () => {
     expect(() => tracker.processPushResponse(response)).not.toThrow();
   });
 
-  test('resolves pending mutation when alreadyProcessed error received', async () => {
+  test('alreadyProcessed leaves the mutation for the lmid advance to resolve', async () => {
     const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
@@ -610,10 +610,50 @@ describe('MutationTracker', () => {
         },
       ],
     });
+    expect(tracker.size).toBe(1);
 
+    tracker.lmidAdvanced(1);
     const result = await serverPromise;
-    expect(result.type).toBe('success');
+    expect(result).toBeUndefined();
     expect(tracker.size).toBe(0);
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  // The push response was lost and the mutation pushed again. The persisted
+  // result arrives in a poke after the retry's `alreadyProcessed`, and its
+  // data must still reach the caller.
+  test('returned data survives an alreadyProcessed retry', async () => {
+    const onFatalError = vi.fn();
+    let cb: ((diffs: NoIndexDiff) => void) | undefined;
+    const watch = (wcb: (diffs: NoIndexDiff) => void) => {
+      cb = wcb;
+      return () => {
+        cb = undefined;
+      };
+    };
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
+
+    tracker.processPushResponse({
+      mutations: [
+        {id: {clientID: CLIENT_ID, id: 1}, result: {error: 'alreadyProcessed'}},
+      ],
+    });
+    cb!([
+      mutationPatchToDiffOp({
+        op: 'put',
+        mutation: {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {data: {id: 'db-uuid-abc'}},
+        },
+      }),
+    ]);
+    tracker.lmidAdvanced(1);
+
+    expect(await serverPromise).toEqual({id: 'db-uuid-abc'});
     expect(onFatalError).not.toHaveBeenCalled();
   });
 

@@ -9,6 +9,7 @@ import {
   vi,
 } from 'vitest';
 import {zeroData} from '../../../replicache/src/transactions.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
@@ -1300,6 +1301,163 @@ describe('enableLegacyQueries', () => {
       m => Array.isArray(m) && m[0] === 'changeDesiredQueries',
     );
     expect(changeDesiredQueriesMessages.length).toBeGreaterThan(0);
+    await z.close();
+  });
+});
+
+describe('mutator return values', () => {
+  beforeEach(() => {
+    vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response()));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test('client promise resolves with the return value of the mutator', async () => {
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          create: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof legacySchema.tables.issue>,
+          ): Promise<ReadonlyJSONValue> => {
+            await tx.mutate.issue.insert(args);
+            return {id: args.id, shortID: args.id.slice(0, 4)};
+          },
+        },
+      } as const,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    const result = z.mutate.issue.create({
+      id: 'issue-001',
+      title: 'test',
+      closed: false,
+      description: '',
+      createdAt: 1743018138477,
+    });
+
+    const clientResult = await result.client;
+    assert(
+      clientResult.type === 'success',
+      'Expected client result type to be success',
+    );
+    expect(clientResult.data).toEqual({id: 'issue-001', shortID: 'issu'});
+
+    await z.close();
+  });
+
+  test('client promise resolves with undefined data when mutator returns void', async () => {
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          noop: async (_tx: MutatorTx) => {},
+        },
+      } as const,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    const result = z.mutate.issue.noop();
+    const clientResult = await result.client;
+    assert(
+      clientResult.type === 'success',
+      'Expected client result type to be success',
+    );
+    expect(clientResult.data).toBeUndefined();
+
+    await z.close();
+  });
+
+  test('server promise resolves with data from push response', async () => {
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          create: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof legacySchema.tables.issue>,
+          ): Promise<ReadonlyJSONValue> => {
+            await tx.mutate.issue.insert(args);
+            return {id: args.id};
+          },
+        },
+      } as const,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    const result = z.mutate.issue.create({
+      id: 'issue-001',
+      title: 'test',
+      closed: false,
+      description: '',
+      createdAt: 1743018138477,
+    });
+    await result.client;
+
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 1},
+          result: {data: {serverID: 'srv-001', canonicalID: 'issue-001'}},
+        },
+      ],
+    });
+
+    const serverResult = await result.server;
+    assert(
+      serverResult.type === 'success',
+      'Expected server result type to be success',
+    );
+    expect(serverResult.data).toEqual({
+      serverID: 'srv-001',
+      canonicalID: 'issue-001',
+    });
+
+    await z.close();
+  });
+
+  test('server promise resolves with undefined data when push response has no data', async () => {
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          noop: async (_tx: MutatorTx) => {},
+        },
+      } as const,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    const result = z.mutate.issue.noop();
+    await result.client;
+
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 1},
+          result: {},
+        },
+      ],
+    });
+
+    const serverResult = await result.server;
+    assert(
+      serverResult.type === 'success',
+      'Expected server result type to be success',
+    );
+    expect(serverResult.data).toBeUndefined();
+
     await z.close();
   });
 });

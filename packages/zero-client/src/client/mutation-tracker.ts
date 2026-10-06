@@ -8,6 +8,7 @@ import type {
 } from '../../../replicache/src/replicache-options.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {getErrorDetails} from '../../../shared/src/error.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -31,19 +32,16 @@ import type {
   PushOk,
   PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
-import type {MutatorResultSuccessDetails} from './custom.ts';
 import {isZeroError, type ZeroError} from './error.ts';
 import {MUTATIONS_KEY_PREFIX} from './keys.ts';
 
-type MutationSuccessType = MutatorResultSuccessDetails;
+type MutationSuccessType = ReadonlyJSONValue | undefined;
 type MutationErrorType = ApplicationError | ZeroError;
 
 let currentEphemeralID = 0;
 function nextEphemeralID(): EphemeralID {
   return ++currentEphemeralID as EphemeralID;
 }
-
-const successResultDetails: MutationSuccessType = {type: 'success'};
 
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
@@ -363,7 +361,10 @@ export class MutationTracker {
     );
 
     if (error.error === 'alreadyProcessed') {
-      this.#settleMutation(ephemeralID, entry, emptyObject);
+      // An earlier push committed this mutation, but its response was lost.
+      // Leave it outstanding: its persisted result (if the mutator returned
+      // data) or the lastMutationID advance arrives in a poke and settles it,
+      // so returned data isn't dropped.
       return;
     }
 
@@ -439,7 +440,7 @@ export class MutationTracker {
       // the mutator proxy catches both client and server errors
       entry.resolver.reject(result);
     } else {
-      entry.resolver.resolve(successResultDetails);
+      entry.resolver.resolve(result.data);
     }
 
     this.#outstandingMutations.delete(ephemeralID);
