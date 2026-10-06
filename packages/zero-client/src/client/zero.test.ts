@@ -47,6 +47,7 @@ import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   type CRUDOp,
@@ -3528,6 +3529,94 @@ test('a server error the client cannot recover keeps its error level', async () 
   ]);
 
   await z.close();
+});
+
+const levelsOfErrorMessageLogs = (z: TestZero<Schema>, kind: string) =>
+  z.testLogSink.messages
+    .filter(
+      ([_level, _context, args]) =>
+        typeof args[0] === 'string' && args[0].startsWith(`${kind}:\n\n`),
+    )
+    .map(([level]) => level);
+
+describe('an auth error is logged at warn, not error: the client asks for new auth', () => {
+  test.each([
+    [
+      'Unauthorized',
+      {
+        kind: ErrorKind.Unauthorized,
+        message: 'Unauthorized',
+        origin: ErrorOrigin.ZeroCache,
+      },
+    ],
+    [
+      'AuthInvalidated',
+      {
+        kind: ErrorKind.AuthInvalidated,
+        message: 'Auth invalidated',
+        origin: ErrorOrigin.ZeroCache,
+      },
+    ],
+    [
+      'PushFailed with HTTP 401',
+      {
+        kind: ErrorKind.PushFailed,
+        message: 'Unauthorized',
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 401,
+        mutationIDs: [],
+      },
+    ],
+    [
+      'TransformFailed with HTTP 403',
+      {
+        kind: ErrorKind.TransformFailed,
+        message: 'Forbidden',
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 403,
+        queryIDs: ['query1'],
+      },
+    ],
+  ] satisfies [string, ErrorBody][])('%s', async (_, body) => {
+    // The run loop moves to needs-auth and logs the connect failure at warn;
+    // the error message itself is the same event and gets the same level.
+    const z = zeroForTest({logLevel: 'debug', auth: 'initial-token'});
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    await z.triggerError(body);
+    await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+
+    expect(levelsOfErrorMessageLogs(z, body.kind)).toEqual(['warn']);
+    expect(
+      z.testLogSink.messages.filter(([level]) => level === 'error'),
+    ).toEqual([]);
+
+    await z.close();
+  });
+
+  test('a push or transform failure with another status keeps its error level', async () => {
+    const z = zeroForTest({logLevel: 'debug'});
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    await z.triggerError({
+      kind: ErrorKind.TransformFailed,
+      message: 'Internal Server Error',
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 500,
+      queryIDs: ['query1'],
+    });
+
+    expect(levelsOfErrorMessageLogs(z, ErrorKind.TransformFailed)).toEqual([
+      'error',
+    ]);
+
+    await z.close();
+  });
 });
 
 test.each(clientStateNotFoundErrorCases)(

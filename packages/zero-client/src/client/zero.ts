@@ -147,6 +147,7 @@ import {
   type ZeroError,
   getBackoffParams,
   getErrorConnectionTransition,
+  isAuthError,
   isClientError,
   isServerError,
   isZeroError,
@@ -1622,9 +1623,16 @@ export class Zero<
     // reported at warn so that a fleet-wide occurrence reads as recovery
     // rather than as an error storm.
     //
+    // An auth error (including a push or transform that the API server
+    // answered with HTTP 401 or 403) moves the connection to needs-auth, and
+    // the run loop logs that connect failure at warn. This is the same event
+    // and is logged at the same level.
+    //
     // Every other kind ends the connection and is logged at error.
     const level: LogLevel =
-      getBackoffParams(error) !== undefined || kind === ErrorKind.ClientNotFound
+      getBackoffParams(error) !== undefined ||
+      kind === ErrorKind.ClientNotFound ||
+      isAuthError(error)
         ? 'warn'
         : 'error';
     lc[level]?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
