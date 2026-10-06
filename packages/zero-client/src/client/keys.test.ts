@@ -1,5 +1,6 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
+import {h128} from '../../../shared/src/hash.ts';
 import type {
   PrimaryKey,
   PrimaryKeyValueRecord,
@@ -150,6 +151,16 @@ test('no clashes - multiple pk', () => {
         }
       },
     ),
+  );
+});
+
+test('compound keys are the decimal h128 of the JSON key values', () => {
+  fc.assert(
+    fc.property(fc.string(), fc.string(), (a, b) => {
+      expect(toPrimaryKeyStringImpl('t', ['a', 'b'], {a, b})).toBe(
+        'e/t/' + String(h128(JSON.stringify([a, b]))),
+      );
+    }),
   );
 });
 
