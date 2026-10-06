@@ -537,7 +537,7 @@ export async function getSourceAndDestinationReplicas(
               sql,
               shard,
               'resume-replica',
-              replica.slot,
+              replica,
             );
             if (!reserved) {
               lc.warn?.(

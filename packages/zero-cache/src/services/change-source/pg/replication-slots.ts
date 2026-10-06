@@ -315,16 +315,20 @@ export async function createReplicaAndSlot<T>(
 }
 
 /**
- * Claims an inactive slot for use by this task, opening a replication session
- * to mark it as active. The process should follow up by taking over the slot
- * via the PostgresChangeSource.
+ * Claims the inactive slot of the given replica for use by this task, opening
+ * a replication session to mark it as active. The process should follow up by
+ * taking over the slot via the PostgresChangeSource.
+ *
+ * The replica is identified by its ID (and not just its slot) because rows of
+ * replicas whose slots were dropped outside of zero-cache's control may share
+ * the slot name.
  */
 export async function claimSlotForResumption(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
   sessionName: string,
-  slot: string,
+  {id: replicaID, slot}: Pick<ReplicaState, 'id' | 'slot'>,
 ): Promise<ReservedSlot | null> {
   const replicationSession = createReplicationSessionFor(sql, sessionName);
   const lockName = replicationSlotManagementLock(shard);
@@ -334,19 +338,17 @@ export async function claimSlotForResumption(
     const reserved = await runTx(sql, async tx => {
       await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
 
-      const replicas = await tx<
-        {slot: string; active: boolean; replicaID: string; lsn: string}[]
-      > /*sql*/ `
-      SELECT slot_name as slot, active, replica.id as "replicaID", confirmed_flush_lsn as lsn
+      const replicas = await tx<{active: boolean; lsn: string}[]> /*sql*/ `
+      SELECT active, confirmed_flush_lsn as lsn
         FROM pg_replication_slots
         JOIN ${tx(replicasTable)} replica on slot_name = slot
-        WHERE slot_name = ${slot};
+        WHERE slot_name = ${slot} AND replica.id = ${replicaID};
     `;
       if (replicas.length === 0) {
-        lc.warn?.(`no replica found for slot ${slot}`);
+        lc.warn?.(`no replica ${replicaID} found for slot ${slot}`);
         return null;
       }
-      const [{active, replicaID, lsn}] = replicas;
+      const [{active, lsn}] = replicas;
       if (active) {
         lc.warn?.(
           `replica ${replicaID} for slot ${slot} is active and cannot be claimed`,
@@ -445,6 +447,26 @@ function dropUnclaimedSlots(
     `;
     if (dropped.length) {
       lc.info?.(`dropped inactive replication slots`, {dropped});
+    }
+
+    // Conversely, delete replicas whose slots no longer exist, e.g. because
+    // they were dropped outside of zero-cache's control (such as in an
+    // upstream failover). Slot names are reused, so such rows would otherwise
+    // be associated with a new slot of the same name. This is done (and
+    // committed) before the slot is created, both so that the rows are never
+    // associated with it, and because CREATE_REPLICATION_SLOT waits for
+    // transactions that have written (i.e. been assigned an xid).
+    const orphaned = await tx<{id: string}[]> /*sql*/ `
+      DELETE FROM ${tx(replicasTable)} replica
+        WHERE NOT EXISTS (
+          SELECT 1 FROM pg_replication_slots WHERE slot_name = replica.slot
+        )
+        RETURNING id;
+    `;
+    if (orphaned.length) {
+      lc.warn?.(`deleted replicas whose slots no longer exist`, {
+        replicas: orphaned.map(({id}) => id),
+      });
     }
 
     const remaining = await tx<
