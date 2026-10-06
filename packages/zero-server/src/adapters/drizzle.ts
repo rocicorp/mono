@@ -9,6 +9,7 @@ import type {
 } from '../../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
+import type {TransactionOptions} from '../transaction-options.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
@@ -61,8 +62,23 @@ export type DrizzleDatabase<
 > = DrizzleTransactionLike & {
   transaction<T>(
     transaction: (tx: TTransaction) => Promise<T>,
-    config?: never,
+    config?: DrizzleTransactionConfig | undefined,
   ): Promise<T>;
+};
+
+/**
+ * Mirrors drizzle's own `PgTransactionConfig` so a real drizzle database stays
+ * assignable to {@link DrizzleDatabase}. Only `isolationLevel` is passed
+ * through by this adapter.
+ */
+type DrizzleTransactionConfig = {
+  isolationLevel?:
+    | 'read uncommitted'
+    | 'read committed'
+    | 'repeatable read'
+    | 'serializable';
+  accessMode?: 'read only' | 'read write';
+  deferrable?: boolean;
 };
 
 /**
@@ -80,9 +96,14 @@ export class DrizzleConnection<
   TTransaction extends DrizzleTransactionLike = DrizzleTransaction<TDrizzle>,
 > implements DBConnection<TTransaction> {
   readonly #drizzle: DrizzleDatabase<TTransaction>;
+  readonly #options: TransactionOptions;
 
-  constructor(drizzle: TDrizzle & DrizzleDatabase<TTransaction>) {
+  constructor(
+    drizzle: TDrizzle & DrizzleDatabase<TTransaction>,
+    options: TransactionOptions = {},
+  ) {
     this.#drizzle = drizzle;
+    this.#options = options;
   }
 
   query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
@@ -92,12 +113,15 @@ export class DrizzleConnection<
   transaction<T>(
     fn: (tx: DBTransaction<TTransaction>) => Promise<T>,
   ): Promise<T> {
-    return this.#drizzle.transaction(drizzleTx =>
-      fn(
-        new DrizzleInternalTransaction(
-          drizzleTx,
-        ) as DBTransaction<TTransaction>,
-      ),
+    const {isolationLevel} = this.#options;
+    return this.#drizzle.transaction(
+      drizzleTx =>
+        fn(
+          new DrizzleInternalTransaction(
+            drizzleTx,
+          ) as DBTransaction<TTransaction>,
+        ),
+      isolationLevel === undefined ? undefined : {isolationLevel},
     );
   }
 }
@@ -233,9 +257,10 @@ export function zeroDrizzle<
 >(
   schema: TSchema,
   client: TDrizzle & DrizzleDatabase<TTransaction>,
+  options?: TransactionOptions,
 ): ZQLDatabase<TSchema, TTransaction> {
   return new ZQLDatabase(
-    new DrizzleConnection<TDrizzle, TTransaction>(client),
+    new DrizzleConnection<TDrizzle, TTransaction>(client, options),
     schema,
   );
 }
