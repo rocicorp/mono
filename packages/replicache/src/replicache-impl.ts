@@ -608,7 +608,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const perKVStore = kvStoreProvider.create(this.idbName);
     this.#perKVStore = perKVStore;
 
-    this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
+    this.#idbDatabases = new IDBDatabasesStore(
+      kvStoreProvider.create,
+      this.#lc,
+    );
     this.perdag = new StoreImpl(
       perKVStore,
       newRandomHash,
@@ -1656,7 +1659,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const {idbName, clientID} = this;
     let idbDatabases: IDBDatabasesStore | undefined;
     try {
-      idbDatabases = new IDBDatabasesStore(this.#kvStoreProvider.create);
+      idbDatabases = new IDBDatabasesStore(
+        this.#kvStoreProvider.create,
+        this.#lc,
+      );
       await dropDatabaseInternal(
         idbName,
         idbDatabases,

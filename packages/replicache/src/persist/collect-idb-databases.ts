@@ -303,7 +303,7 @@ export async function dropDatabase(dbName: string, opts?: DropDatabaseOptions) {
     if (!drops(dbName)) {
       continue;
     }
-    const store = new IDBDatabasesStore(provider.create);
+    const store = new IDBDatabasesStore(provider.create, logContext);
     try {
       await dropDatabaseInternal(dbName, store, provider.drop);
     } finally {
@@ -345,7 +345,7 @@ export async function dropMatchingDatabases(
   const dropped = new Set<string>();
   const errors: unknown[] = [];
   for (const {provider, drops} of dropTargets(logContext, opts)) {
-    const store = new IDBDatabasesStore(provider.create);
+    const store = new IDBDatabasesStore(provider.create, logContext);
     try {
       const databases = await store.getDatabases();
       const dbNames = Object.values(databases)
