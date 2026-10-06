@@ -1,6 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
-import {h128} from '../../../shared/src/hash.ts';
 import {getOrInsertComputed} from '../../../shared/src/map.ts';
 
 export type ColumnType = {readonly typeOid: number};
@@ -59,8 +58,7 @@ const rowIDStrings = new WeakMap<RowID, string>();
 
 /**
  * A normalized string representation of a {@link RowID} suitable to use
- * as a Map key. Use {@link rowIDHash} if you need string keys of bounded
- * length.
+ * as a Map key.
  */
 export function rowIDString(id: RowID): string {
   return getOrInsertComputed(rowIDStrings, id, rowIDStringUncached);
@@ -68,26 +66,4 @@ export function rowIDString(id: RowID): string {
 
 function rowIDStringUncached(id: RowID): string {
   return stringify([id.schema, id.table, ...tuples(id.rowKey)]);
-}
-
-const rowIDHashes = new WeakMap<RowID, string>();
-
-/**
- * A RowIDHash is a 128-bit column-order-agnostic hash of the schema, table name, and
- * column name / value tuples of a row key. It serves as a compact identifier for
- * a row in the database that:
- *
- * * is guaranteed to fit within the constraints of the CVR store (Durable Object
- *   storage keys cannot exceed 2KiB)
- * * can be used to compactly encode (and lookup) the rows of query results for CVR
- *   bookkeeping.
- *
- * The hash is encoded in `base36`, with the maximum 128-bit value being 25 characters long.
- */
-export function rowIDHash(id: RowID): string {
-  return getOrInsertComputed(rowIDHashes, id, rowIDHashUncached);
-}
-
-function rowIDHashUncached(id: RowID): string {
-  return h128(rowIDString(id)).toString(36);
 }
