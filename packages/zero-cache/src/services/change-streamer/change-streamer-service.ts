@@ -47,7 +47,6 @@ import {
 } from './change-log-initializer.ts';
 import {
   type ChangeStreamerService,
-  type Status,
   type SubscriberContext,
   type WatermarkedChange,
 } from './change-streamer.ts';
@@ -497,8 +496,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       'watermark. Counted once per reservation, by that source.',
   );
 
-  #latestStatus: Status;
   #latestLagReportCommitTimeMs = 0;
+  // Resolves to whether lag reporting is disabled, once the lag reporter
+  // has been started (or failed to start) in run(). Subscribers use this to
+  // decide whether to send a stand-in signal when they are caught up.
+  readonly #lagReportingDisabled = resolver<boolean>();
   #backupWatermark: string | undefined;
   #pgPurgedWatermark: string = '';
   /**
@@ -726,7 +728,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
-    this.#latestStatus = {tag: 'status'};
   }
 
   async run() {
@@ -735,10 +736,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#forwarder.startProgressMonitor();
 
     const lagReportInit = await this.#source.startLagReporter();
+    this.#lagReportingDisabled.resolve(!lagReportInit);
     if (lagReportInit) {
-      this.#latestStatus.lagReport = {
-        nextSendTimeMs: lagReportInit.nextSendTimeMs,
-      };
       // Record the commit time of the initiated lag report (i.e. "head")
       // for the purpose of skipping over any lag reports that are re-streamed
       // by the change-source in the case of a change-streamer starting from
@@ -832,14 +831,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
                 msg.lagReport.lastTimings.commitTimeMs >=
                   this.#latestLagReportCommitTimeMs
               ) {
-                // Lag reports are not stored in the cdc change log, but rather
-                // only forwarded on "live" connections. When a new subscriber
-                // is catching up, it is initialized with the #latestStatus
-                // from which it can measure lag while catching up.
-                this.#latestStatus.lagReport = msg.lagReport;
+                // Lag reports are not stored in the change log, but rather
+                // only forwarded on "live" connections. Subscribers that are
+                // catching up queue them behind the preceding changes so that
+                // they are processed in stream order, and thus measure the
+                // lag of the subscriber (including its catchup).
                 this.#latestLagReportCommitTimeMs =
                   msg.lagReport.lastTimings.commitTimeMs;
-                this.#forwarder.sendStatus(this.#latestStatus);
+                this.#forwarder.sendStatus({
+                  tag: 'status',
+                  lagReport: msg.lagReport,
+                });
               }
               continue;
             case 'control':
@@ -1037,8 +1039,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       mode,
       watermark,
       downstream,
-      () => this.#latestStatus,
-      {wsBatched, ...this.#backfills.subscriberOptions(lc, ctx)},
+      {
+        wsBatched,
+        lagReportingDisabled: this.#lagReportingDisabled.promise,
+        ...this.#backfills.subscriberOptions(lc, ctx),
+      },
     );
     this.#backfills.register(subscriber, downstream);
     const removeFromForwarder = () => {
@@ -1506,6 +1511,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   async stop(err?: unknown) {
     this.#state.stop(this.#lc, err);
+    // No-op if already resolved by run().
+    this.#lagReportingDisabled.resolve(false);
     this.#stream?.changes.cancel();
     this.#purgeScheduler?.stop();
     this.#comparator?.stop();

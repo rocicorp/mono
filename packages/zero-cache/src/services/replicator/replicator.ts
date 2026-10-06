@@ -9,6 +9,7 @@ import {
   publishReplicationError,
   type ReplicationStatusPublisher,
 } from './replication-status.ts';
+import type {ReplicationLagReadinessOptions} from './reporter/recorder.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
@@ -98,6 +99,7 @@ export class ReplicatorService implements Replicator, Service {
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
     statusPublisher: ReplicationStatusPublisher | null,
+    replicationLagReadinessOptions: ReplicationLagReadinessOptions = {},
     // The still-open connection from the snapshot reservation that produced
     // the replica this process just restored (serving mode only). Used for
     // IncrementalSyncer's first subscribe() so the replication-manager that
@@ -119,12 +121,17 @@ export class ReplicatorService implements Replicator, Service {
       worker,
       mode,
       statusPublisher,
+      replicationLagReadinessOptions,
       initialConnection,
     );
   }
 
   status() {
     return Promise.resolve({status: 'ok'});
+  }
+
+  ready(): Promise<void> {
+    return this.#incrementalSyncer.ready();
   }
 
   run() {

@@ -33,7 +33,6 @@ export function createSubscriber(
     mode,
     watermark,
     sub,
-    () => ({tag: 'status'}),
     {wsBatched: true, ...options},
   );
   if (caughtUp) {

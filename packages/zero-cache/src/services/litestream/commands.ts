@@ -81,6 +81,17 @@ export class BackupNotFoundException extends Error {
   }
 }
 
+/**
+ * The effective backup URL: the `backupURLOverride` if present (i.e. a
+ * lineage-specific location computed by the replication-manager), or
+ * otherwise the configured `backupURL`.
+ */
+export function backupDestinationURL(
+  config: Pick<LitestreamConfig, 'backupURL' | 'backupURLOverride'>,
+): string | undefined {
+  return config.backupURLOverride ?? config.backupURL;
+}
+
 function getLitestream(
   mode: 'restore' | 'replicate',
   config: LitestreamConfig,
@@ -95,7 +106,6 @@ function getLitestream(
     executableV5,
     restoreUsingV5,
     backupUsingV5,
-    backupURL,
     logLevel,
     configPath,
     configPathV5,
@@ -131,7 +141,7 @@ function getLitestream(
     env: {
       ...process.env,
       ['ZERO_REPLICA_FILE']: replicaFile,
-      ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
+      ['ZERO_LITESTREAM_BACKUP_URL']: must(backupDestinationURL(config)),
       ['ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT']: String(
         minCheckpointPageCount,
       ),
@@ -219,7 +229,8 @@ async function restoreOnce(
   signal: AbortSignal | undefined,
   forkBackup: ForkBackup | undefined,
 ): Promise<RestoreAttempt & {reusedExisting: boolean}> {
-  const {backupURL, backupUsingV5} = config;
+  const {backupUsingV5} = config;
+  const backupURL = backupDestinationURL(config);
   if (forkBackup && !backupUsingV5) {
     forkBackup = undefined; // Ignore forkBackup if v5 is disabled.
   }
@@ -555,7 +566,7 @@ export function startReplicaBackupProcess(
 ): ChildProcess {
   const {litestream, env} = getLitestream('replicate', config, replicaFile);
   const attrs = litestreamBackupProcessMetricAttrs(config);
-  lc.info?.(`starting litestream backup to ${config.backupURL}`);
+  lc.info?.(`starting litestream backup to ${backupDestinationURL(config)}`);
   const start = performance.now();
   const proc = spawn(litestream, ['replicate'], {
     env,
@@ -629,7 +640,7 @@ export async function getLastBackupTime(
     // distinguished from a failed one. Since a valid backup always contains
     // at least one snapshot, an empty listing is treated as a failure.
     throw new Error(
-      `no snapshots or WAL segments listed at ${config.backupURL}`,
+      `no snapshots or WAL segments listed at ${backupDestinationURL(config)}`,
     );
   }
   return new Date(Math.max(...times.map(time => time.getTime())));

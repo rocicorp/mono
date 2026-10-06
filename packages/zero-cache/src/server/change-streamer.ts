@@ -30,10 +30,7 @@ import {
   ProcessManager,
   runUntilKilled,
 } from '../services/life-cycle.ts';
-import {
-  deleteLitestreamMetaDir,
-  startReplicaBackupProcess,
-} from '../services/litestream/commands.ts';
+import {deleteLitestreamMetaDir} from '../services/litestream/commands.ts';
 import type {WalKeeper} from '../services/litestream/wal-keeper.ts';
 import {
   changeLogFileName,
@@ -378,39 +375,34 @@ export default async function runWorker(
 
   const processes = new ProcessManager(lc, parent);
   const profileSubWorkers: Worker[] = [];
-  if (backupURL) {
+  const {promise: replicatorReady, resolve} = resolver();
+  if (!backupURL) {
+    resolve(); // No backup replicator to wait for, so resolve immediately.
+  } else {
     lc.info?.('setting up backup to', backupURL);
-    litestream.backupURL = backupURL;
+    config.litestream.backupURLOverride = backupURL;
     if (newBackupLineage) {
       deleteLitestreamMetaDir(replica.file);
     }
-    const {promise: backupStarted, resolve} = resolver();
-
-    // Start a backup replicator and corresponding litestream backup process.
+    // Start a backup replicator, which starts up the corresponding
+    // litestream backup process.
     const backupReplicator = processes
       .addWorker(
-        childWorker(REPLICATOR_URL, env, 'backup' satisfies ReplicaFileMode),
+        childWorker(
+          REPLICATOR_URL,
+          {...env, ZERO_LITESTREAM_BACKUP_URL_OVERRIDE: backupURL},
+          'backup' satisfies ReplicaFileMode,
+        ),
         'supporting',
         'backup-replicator',
       )
-      // Wait for the replicator's first message (i.e. "ready") before starting
-      // litestream backup in order to avoid contending on the sqlite lock
-      // when the replicator first prepares the db file.
-      .once('message', () => {
-        processes.addSubprocess(
-          startReplicaBackupProcess(lc, litestream, replica.file),
-          'supporting',
-          'litestream',
-        );
-        resolve();
-      });
+      .onceMessageType('ready', () => resolve());
     profileSubWorkers.push(backupReplicator);
     // Relay profileResponse messages from backup-replicator up to parent
     backupReplicator.onMessageType<ProfileResponseMessage>(
       'profileResponse',
       res => parent.send(['profileResponse', res]),
     );
-    await backupStarted;
   }
 
   const backupMonitor = createBackupCleanupMonitor({
@@ -420,21 +412,30 @@ export default async function runWorker(
     changeStreamer,
   });
 
-  let readinessGate = promiseVoid;
+  let backupReady = promiseVoid;
   if (waitForFirstBackupBeforeServing) {
     const start = performance.now();
     lc.info?.(`awaiting initial backup ...`);
 
-    readinessGate = backupMonitor.firstBackupReceived().then(() => {
+    backupReady = backupMonitor.firstBackupReceived().then(() => {
       const elapsed = performance.now() - start;
       lc.info?.(`initial backup confirmed after ${elapsed.toFixed(2)}ms`);
     });
   }
   // By the initial backup, litestream holds the restored WAL itself.
-  void readinessGate.then(
+  void backupReady.then(
     () => walKeeper?.release('initial backup confirmed'),
     () => walKeeper?.release('initial backup failed'),
   );
+
+  // In RMv2, readiness additionally waits for the backup-replicator to catch
+  // up to the replication stream. This is not done in RMv1 (i.e. when the
+  // PG change-log is enabled), in which the change-streamer itself is only
+  // started after the readinessGate (plus a startup delay), and thus the
+  // backup-replicator cannot catch up before then.
+  const readinessGate = pgChangeLogEnabled
+    ? backupReady
+    : Promise.all([backupReady, replicatorReady]);
 
   // Create the broadcast facade once: each broadcastWorker() adds permanent
   // 'message' forwarders to every sub worker, so creating one per /profz

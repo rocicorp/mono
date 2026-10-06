@@ -10,7 +10,7 @@ export type Options = {
   keepaliveTimeoutMs: number | undefined;
 
   // Wait for the readinessGate to resolve before responding to health checks.
-  readinessGate?: Promise<void> | undefined;
+  readinessGate?: Promise<unknown> | undefined;
 };
 
 /**

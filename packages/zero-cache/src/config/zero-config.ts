@@ -1132,15 +1132,50 @@ export const zeroOptions = {
 
   replicationLag: {
     reportIntervalMs: {
-      type: v.number().default(30000),
+      type: v.number().default(10000),
       desc: [
-        `The minimum interval at which replication lag reports are written upstream and`,
+        `The approximate interval at which replication lag reports are written upstream and`,
         `reported via the {bold zero.replication.total_lag} opentelemetry metric. If`,
         `an expected report is not received before the next interval, Zero retries with`,
-        `a new report and increments {bold zero.replication.lag_report_retries}. A`,
-        `negative or 0 value disables lag reporting.`,
+        `a new report and increments {bold zero.replication.lag_report_retries}.`,
         ``,
-        `This monitoring feature is only support on the postgres upstream type.`,
+        `Note that the interval is approximate and scheduled with ~1 second jitter to allow`,
+        `multiple replication-managers (in RMv2) to cooperatively share the same reports.`,
+        ``,
+        `When enabled, lag reports are used to gate readiness of servers coming online by waiting`,
+        `for lag to fall below the {bold ZERO_REPLICATION_LAG_INITIAL_READINESS_THRESHOLD_MS}.`,
+        `As such, the reporting interval determines the time for which a new server waits for`,
+        `the next report to determine readiness.`,
+        ``,
+        `A negative or 0 value disables lag reporting and the associated readiness gating.`,
+        ``,
+        `This feature is only supported on the postgres upstream type.`,
+      ],
+    },
+
+    initialReadinessThresholdMs: {
+      type: v.number().default(1000),
+      desc: [
+        `The maximum replication lag in milliseconds that a server is allowed to have`,
+        `before it advertises readiness (to serve traffic). This prevents the server`,
+        `from serving stale data to clients when it is first started.`,
+        ``,
+        `Note that this is an initial readiness gate only. Once the server announces readiness,`,
+        `it will continue to serve traffic even if the replication lag exceeds this threshold`,
+        `thereafter.`,
+        ``,
+        `When lag reporting is disabled, readiness is not gated by replication lag.`,
+      ],
+    },
+
+    maxReadinessDelayMs: {
+      type: v.number().default(600_000), // 10 minutes
+      desc: [
+        `The maximum time in milliseconds that a server will wait for replication lag`,
+        `to fall below the {bold ZERO_REPLICATION_LAG_INITIAL_READINESS_THRESHOLD_MS}`,
+        `before it announces readiness. This prevents the server from waiting indefinitely`,
+        `for lag to fall below the threshold, which can occur if the upstream database`,
+        `is under heavy load or if there is a network partition.`,
       ],
     },
   },
@@ -1320,6 +1355,12 @@ export const zeroOptions = {
         `This is only consulted by the {bold replication-manager}.`,
         `{bold view-syncers} receive this information from the {bold replication-manager}.`,
       ],
+    },
+
+    backupURLOverride: {
+      type: v.string().optional(),
+      desc: [`Overrides the backup URL when present.`],
+      hidden: true, // internal use
     },
 
     endpoint: {

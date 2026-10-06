@@ -22,7 +22,10 @@ import {
   type ReplicationStatusPublisher,
 } from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
-import {ReplicationReportRecorder} from './reporter/recorder.ts';
+import {
+  ReplicationReportRecorder,
+  type ReplicationLagReadinessOptions,
+} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
@@ -68,6 +71,7 @@ export class IncrementalSyncer {
     worker: WriteWorkerClient,
     mode: ReplicatorMode,
     statusPublisher: ReplicationStatusPublisher | null,
+    replicationLagReadinessOptions: ReplicationLagReadinessOptions = {},
     initialConnection?: ReservationFollowup,
   ) {
     this.#lc = lc;
@@ -78,8 +82,15 @@ export class IncrementalSyncer {
     this.#mode = mode;
     this.#statusPublisher = statusPublisher;
     this.#notifier = new Notifier();
-    this.#reporter = new ReplicationReportRecorder(lc);
+    this.#reporter = new ReplicationReportRecorder(
+      lc,
+      replicationLagReadinessOptions,
+    );
     this.#initialConnection = initialConnection;
+  }
+
+  ready(): Promise<void> {
+    return this.#reporter.ready();
   }
 
   async run() {

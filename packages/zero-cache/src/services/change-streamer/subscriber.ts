@@ -55,7 +55,32 @@ export type SubscriberOptions = {
    * is aligned.
    */
   onBackfillIgnored?: ((columns: string[]) => void) | undefined;
+
+  /**
+   * Resolves to whether lag reporting is disabled upstream. If so, a
+   * {@link LAG_REPORTING_DISABLED} status is sent once the subscriber is
+   * aligned, as a stand-in for the lag reports that a subscriber would
+   * otherwise use to determine that it is caught up (e.g. to advertise
+   * readiness to serve traffic).
+   */
+  lagReportingDisabled?: Promise<boolean> | undefined;
 };
+
+/**
+ * A status message queued in the backlog, so that it is sent downstream in
+ * the order in which it was received relative to (backlogged) changes.
+ */
+type QueuedStatus = {readonly status: string};
+
+type BacklogEntry = WatermarkedChange | QueuedStatus;
+
+function isQueuedStatus(entry: BacklogEntry): entry is QueuedStatus {
+  return !Array.isArray(entry);
+}
+
+function entryBytes(entry: BacklogEntry): number {
+  return isQueuedStatus(entry) ? entry.status.length : entry[2].length;
+}
 
 export type BacklogFullWait = {
   readonly promise: Promise<void>;
@@ -83,11 +108,10 @@ export class Subscriber {
   readonly id: string;
   readonly mode: ReplicatorMode;
   readonly #downstream: Subscription<string | PreSerializedBatch>;
-  readonly #latestStatus: () => Status;
   readonly #wsBatched: boolean;
   #watermark: string;
   #acked: string;
-  #backlog: RingBuffer<WatermarkedChange> | null;
+  #backlog: RingBuffer<BacklogEntry> | null;
   // While catchup is running, live changes are buffered here instead of being
   // pushed downstream. RingBuffer lets drainBacklog consume that backlog without
   // shifting an array, which matters when a subscriber is far behind.
@@ -100,6 +124,7 @@ export class Subscriber {
   readonly #backfills: BackfillState | undefined;
   readonly #onAligned: ((subscriber: Subscriber) => void) | undefined;
   readonly #onBackfillIgnored: ((columns: string[]) => void) | undefined;
+  readonly #lagReportingDisabled: Promise<boolean> | undefined;
   #aligned = false;
 
   constructor(
@@ -108,14 +133,12 @@ export class Subscriber {
     mode: ReplicatorMode,
     watermark: string,
     downstream: Subscription<string | PreSerializedBatch>,
-    latestStatus: () => Status,
     options: SubscriberOptions = {},
   ) {
     this.#protocolVersion = protocolVersion;
     this.id = id;
     this.mode = mode;
     this.#downstream = downstream;
-    this.#latestStatus = latestStatus;
     this.#wsBatched = options.wsBatched ?? false;
     this.#watermark = watermark;
     this.#acked = watermark;
@@ -128,6 +151,7 @@ export class Subscriber {
     this.#backfills = options.backfills;
     this.#onAligned = options.onAligned;
     this.#onBackfillIgnored = options.onBackfillIgnored;
+    this.#lagReportingDisabled = options.lagReportingDisabled;
   }
 
   /**
@@ -276,14 +300,31 @@ export class Subscriber {
   #initialize() {
     if (!this.#initialized) {
       this.#initialized = true;
-      this.sendStatus(this.#latestStatus());
+      // The initial status precedes the catchup, so it bypasses the backlog.
+      void this.#sendDownstream(['status', {tag: 'status'}]);
     }
   }
 
+  /**
+   * Sends a status message (e.g. a lag report) downstream. While the
+   * subscriber is catching up, the status is queued in the backlog behind
+   * the changes that preceded it in the replication stream, so that the
+   * subscriber processes it in stream order. This is necessary for lag
+   * reports to measure the lag of the subscriber, including its catchup.
+   *
+   * Status messages received before the subscriber is initialized are
+   * dropped.
+   */
   sendStatus(status: Status) {
-    if (this.#initialized) {
-      void this.#sendDownstream(['status', status]);
+    if (!this.#initialized) {
+      return;
     }
+    const downstream: Downstream = ['status', status];
+    if (this.#backlog) {
+      this.#pushBacklog({status: BigIntJSON.stringify(downstream)});
+      return;
+    }
+    void this.#sendDownstream(downstream);
   }
 
   /** catchup() is called on ChangeEntries loaded from the store. */
@@ -542,10 +583,10 @@ export class Subscriber {
     return this.#bufferedBacklogBytes + this.#pendingBytes;
   }
 
-  #pushBacklog(change: WatermarkedChange) {
+  #pushBacklog(entry: BacklogEntry) {
     assert(this.#backlog, 'cannot push to backlog after catchup completed');
-    this.#backlog.push(change);
-    this.#backlogBytes += change[2].length;
+    this.#backlog.push(entry);
+    this.#backlogBytes += entryBytes(entry);
     if (this.backlogFull) {
       this.#resolveBacklogFullWaiters();
     }
@@ -569,8 +610,8 @@ export class Subscriber {
 
     try {
       for (;;) {
-        const change = this.#backlog?.shift();
-        if (!change) {
+        const entry = this.#backlog?.shift();
+        if (!entry) {
           const closed = this.#backlog === null;
           this.#backlog = null;
           this.#backlogBytes = 0;
@@ -582,11 +623,16 @@ export class Subscriber {
             // (and thus tracked), and subsequent changes are sent directly.
             this.#aligned = true;
             this.#onAligned?.(this);
+            void this.#lagReportingDisabled?.then(disabled => {
+              if (disabled) {
+                this.sendStatus(LAG_REPORTING_DISABLED);
+              }
+            });
           }
           break;
         }
 
-        const bytes = change[2].length;
+        const bytes = entryBytes(entry);
         this.#backlogBytes -= bytes;
         this.#backlogInFlightBytes += bytes;
         this.#backlogBackpressure.releaseIfUnderLowWater(
@@ -596,7 +642,10 @@ export class Subscriber {
         // Send backlog entries in order, but keep only a bounded byte window in
         // flight. This avoids replacing one unbounded buffer with another inside
         // the downstream Subscription during catchup completion.
-        const promise = this.#sendChange(change).finally(() => {
+        const send = isQueuedStatus(entry)
+          ? this.#sendStringifiedDownstream(entry.status).then(() => {})
+          : this.#sendChange(entry);
+        const promise = send.finally(() => {
           this.#backlogInFlightBytes -= bytes;
           this.#backlogBackpressure.releaseIfUnderLowWater(
             this.#bufferedBacklogBytes,
@@ -665,3 +714,14 @@ class ByteBackpressureGate {
     }
   }
 }
+
+/**
+ * Sent to an aligned subscriber when lag reporting is disabled upstream,
+ * signaling that the subscriber is caught up. This is a lag report with a
+ * `nextSendTimeMs` of 0 and no `lastTimings`, so that no lag is measured
+ * (see `isLagReportingDisabledSignal()` in the replicator's recorder).
+ */
+export const LAG_REPORTING_DISABLED: Status = {
+  tag: 'status',
+  lagReport: {nextSendTimeMs: 0},
+};

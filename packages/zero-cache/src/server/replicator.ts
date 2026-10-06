@@ -21,8 +21,13 @@ import {
   type SnapshotReserver,
 } from '../services/change-streamer/change-streamer-http.ts';
 import {reserveAndGetSnapshotStatus} from '../services/change-streamer/snapshot.ts';
-import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
+  exitAfter,
+  ProcessManager,
+  runUntilKilled,
+} from '../services/life-cycle.ts';
+import {
+  startReplicaBackupProcess,
   tryRestore,
   type RestoreAttempt,
   type RestoreResult,
@@ -100,6 +105,7 @@ export default async function runWorker(
         ? `http://localhost:${port}/`
         : undefined,
     },
+    replicationLag: {initialReadinessThresholdMs, maxReadinessDelayMs},
   } = config;
   const changeStreamer = new ChangeStreamerHttpClient(
     lc,
@@ -164,8 +170,20 @@ export default async function runWorker(
             : (config.litestream.maxWalSizeMB * 1024 ** 2) / pageSize,
         }
       : null;
+
   const workerClient = new ThreadWriteWorkerClient();
   await workerClient.init(dbPath, mode, pragmas, config.log, checkpoint);
+
+  // The backup-replicator manages the litestream backup process. It is
+  // started after the write worker has prepared the db file in order to
+  // avoid contending on the sqlite lock.
+  const processes =
+    mode === 'backup' ? new ProcessManager(lc, parent) : undefined;
+  processes?.addSubprocess(
+    startReplicaBackupProcess(lc, config.litestream, dbPath),
+    'supporting',
+    'litestream',
+  );
 
   const replicator = new ReplicatorService(
     lc,
@@ -178,20 +196,30 @@ export default async function runWorker(
       ? // publish ReplicationStatusEvents from backup-replicator only
         ReplicationStatusPublisher.forReplicaFile(dbPath)
       : null,
+    {
+      readinessThresholdMs: initialReadinessThresholdMs,
+      maxReadinessDelayMs,
+    },
     initialConnection,
   );
 
   setUpMessageHandlers(lc, replicator, parent);
 
-  const running = runUntilKilled(lc, parent, replicator);
-
-  // Signal readiness once the first ReplicaVersionReady notification is received.
-  for await (const _ of replicator.subscribe()) {
+  void replicator.ready().then(() => {
     parent.send(['ready', {ready: true}]);
-    break;
+  });
+
+  if (!processes) {
+    return runUntilKilled(lc, parent, replicator);
   }
 
-  return running;
+  try {
+    await runUntilKilled(lc, parent, replicator);
+  } catch (err) {
+    processes.logErrorAndExit(err, workerName);
+  } finally {
+    await processes.shutdown();
+  }
 }
 
 export function setupMetrics(

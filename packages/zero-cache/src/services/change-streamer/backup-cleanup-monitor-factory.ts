@@ -1,7 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {Source} from '../../types/streams.ts';
-import {getLastBackupTime} from '../litestream/commands.ts';
+import {
+  backupDestinationURL,
+  getLastBackupTime,
+} from '../litestream/commands.ts';
 import {type BackedUpWatermark, BackupMonitor} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import {LitestreamSyncRequester} from './litestream-sync-requester.ts';
@@ -27,7 +30,7 @@ export function createBackupCleanupMonitor({
   verifyBackupState,
 }: BackupCleanupMonitorFactoryOptions): BackupMonitor {
   const {litestream, replica} = config;
-  const {backupURL} = litestream;
+  const backupURL = backupDestinationURL(litestream);
 
   let stream: Source<BackedUpWatermark>;
 
