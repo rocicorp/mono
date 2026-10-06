@@ -18,7 +18,6 @@ export type {
   Location,
   MutateCRUD,
   Queryable,
-  RetryOptions,
   Row,
   ServerTransaction,
   Transaction,

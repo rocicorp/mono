@@ -131,7 +131,6 @@ export type {
 export type {
   AnyTransaction,
   Location,
-  RetryOptions,
   ServerTransaction,
   Transaction,
   TransactionReason,

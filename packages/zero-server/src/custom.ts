@@ -26,7 +26,6 @@ import type {
   DBTransaction,
   MutateCRUD,
   Queryable,
-  RetryOptions,
   ServerTransaction,
 } from '../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
@@ -38,7 +37,6 @@ import type {
   RunOptions,
 } from '../../zql/src/query/query.ts';
 import type {ConditionalSchemaQuery} from '../../zql/src/query/schema-query.ts';
-import {RetryRequest} from './retry-request.ts';
 import {getServerSchema} from './schema.ts';
 
 export type CustomMutatorDefs<TDBTransaction> = {
@@ -117,7 +115,6 @@ export class TransactionImpl<
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
   readonly clientID: string;
   readonly mutationID: number;
-  readonly attempt: number;
   readonly mutate: TransactionMutate<TSchema>;
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
@@ -134,12 +131,10 @@ export class TransactionImpl<
     mutate: TransactionMutate<TSchema>,
     schema: TSchema,
     serverSchema: ServerSchema,
-    attempt = 1,
   ) {
     this.dbTransaction = dbTransaction;
     this.clientID = clientID;
     this.mutationID = mutationID;
-    this.attempt = attempt;
     this.mutate = mutate;
     this.#schema = schema;
     this.#serverSchema = serverSchema;
@@ -150,10 +145,6 @@ export class TransactionImpl<
       serverSchema,
     );
     this.query = createRunnableBuilder(delegate, schema);
-  }
-
-  retry(options?: RetryOptions): never {
-    throw new RetryRequest(options?.delayMs);
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
@@ -252,7 +243,6 @@ export class CRUDMutatorFactory<S extends Schema> {
     dbTransaction: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
-    attempt = 1,
   ): Promise<TransactionImpl<S, TWrappedTransaction>> {
     const serverSchema = await this.getOrFetchServerSchema(dbTransaction);
     const executor = this.createExecutor(dbTransaction, serverSchema);
@@ -264,7 +254,6 @@ export class CRUDMutatorFactory<S extends Schema> {
       mutate,
       this.#schema,
       serverSchema,
-      attempt,
     );
   }
 }
