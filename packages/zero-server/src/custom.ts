@@ -26,6 +26,7 @@ import type {
   DBTransaction,
   MutateCRUD,
   Queryable,
+  RetryPredicate,
   ServerTransaction,
 } from '../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
@@ -123,6 +124,9 @@ export class TransactionImpl<
 
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
+  readonly #addRetryPredicate:
+    | ((shouldRetry: RetryPredicate) => void)
+    | undefined;
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
@@ -131,6 +135,7 @@ export class TransactionImpl<
     mutate: TransactionMutate<TSchema>,
     schema: TSchema,
     serverSchema: ServerSchema,
+    addRetryPredicate?: ((shouldRetry: RetryPredicate) => void) | undefined,
   ) {
     this.dbTransaction = dbTransaction;
     this.clientID = clientID;
@@ -138,6 +143,7 @@ export class TransactionImpl<
     this.mutate = mutate;
     this.#schema = schema;
     this.#serverSchema = serverSchema;
+    this.#addRetryPredicate = addRetryPredicate;
 
     const delegate = new ServerTransactionQueryDelegate(
       dbTransaction,
@@ -145,6 +151,17 @@ export class TransactionImpl<
       serverSchema,
     );
     this.query = createRunnableBuilder(delegate, schema);
+  }
+
+  retryOn(shouldRetry: RetryPredicate): void {
+    if (this.#addRetryPredicate === undefined) {
+      // Fail loudly: a predicate nothing will consult would silently turn
+      // every retryable failure into a recorded error.
+      throw new Error(
+        'tx.retryOn() is not supported on this transaction: nothing will re-run its mutator. A custom Database must pass TransactionProviderInput.addRetryPredicate on to createTransaction.',
+      );
+    }
+    this.#addRetryPredicate(shouldRetry);
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
@@ -243,6 +260,7 @@ export class CRUDMutatorFactory<S extends Schema> {
     dbTransaction: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
+    addRetryPredicate?: ((shouldRetry: RetryPredicate) => void) | undefined,
   ): Promise<TransactionImpl<S, TWrappedTransaction>> {
     const serverSchema = await this.getOrFetchServerSchema(dbTransaction);
     const executor = this.createExecutor(dbTransaction, serverSchema);
@@ -254,6 +272,7 @@ export class CRUDMutatorFactory<S extends Schema> {
       mutate,
       this.#schema,
       serverSchema,
+      addRetryPredicate,
     );
   }
 }

@@ -58,6 +58,18 @@ export type Transaction<
   TWrappedTransaction = DefaultWrappedTransaction,
 > = ServerTransaction<S, TWrappedTransaction> | ClientTransaction<S>;
 
+/**
+ * Decides whether to run a mutator again after a run fails. Gets what was
+ * thrown and the number of the re-run being decided: 1 after the first
+ * failure. Return `true` to re-run, or a promise resolving to `true` to re-run
+ * once it resolves, which is how to back off. Anything else, including a
+ * throw, counts as no.
+ */
+export type RetryPredicate = (
+  error: unknown,
+  attempt: number,
+) => boolean | Promise<boolean>;
+
 export interface ServerTransaction<
   S extends Schema = DefaultSchema,
   TWrappedTransaction = DefaultWrappedTransaction,
@@ -65,6 +77,28 @@ export interface ServerTransaction<
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
+
+  /**
+   * If this run fails, asks `shouldRetry` whether to run the mutator again in
+   * a fresh transaction. It sees any failure of the run: what the mutator
+   * throws, and errors the database raises at `COMMIT`, which the mutator
+   * cannot catch. Everything the failed run wrote is rolled back, and the
+   * re-run reads a new snapshot.
+   *
+   * Calls add up: the mutator is re-run if any predicate registered in the
+   * run says yes. They are all asked at once, so the re-run starts as soon as
+   * the first one answers yes, and the other answers are ignored. If none
+   * says yes, the error is recorded as the mutation's result.
+   *
+   * It covers this run only, so the re-run must call `retryOn` again to be
+   * retried again. Call it before anything that can fail. Within one push the
+   * mutator runs at most 5 times. Only use it for a mutator that is safe to
+   * run again.
+   *
+   * `shouldRetry` runs after this run's transaction is over, so it cannot use
+   * `tx`: reading, writing or reaching `dbTransaction` through it throws.
+   */
+  retryOn(shouldRetry: RetryPredicate): void;
 }
 
 /**

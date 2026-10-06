@@ -6,6 +6,7 @@ import type {
   DBConnection,
   DBTransaction,
   Queryable,
+  RetryPredicate,
 } from '../../zql/src/mutate/custom.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
@@ -13,6 +14,7 @@ import type {
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
+import {ClosableDBTransaction} from './closable-db-transaction.ts';
 import {CRUDMutatorFactory, type TransactionImpl} from './custom.ts';
 import {executePostgresQuery} from './pg-query-executor.ts';
 import type {
@@ -56,65 +58,76 @@ export class ZQLDatabase<
       clientGroupID = '',
       clientID = '',
       mutationID = 0,
+      addRetryPredicate,
     } = transactionInput ?? {};
     return this.connection.transaction(async dbTx => {
-      const zeroTx = await this.#makeServerTransaction(
-        dbTx,
-        clientID,
-        mutationID,
-      );
+      // What the mutator's `tx` uses. Closed once the callback settles, so a
+      // `tx` that outlives its transaction, such as one captured by a
+      // `tx.retryOn()` predicate, throws instead of reaching a connection
+      // that may already be back in the pool.
+      const mutatorTx = new ClosableDBTransaction(dbTx);
+      try {
+        const zeroTx = await this.#makeServerTransaction(
+          mutatorTx,
+          clientID,
+          mutationID,
+          addRetryPredicate,
+        );
 
-      return callback(zeroTx, {
-        async updateClientMutationID() {
-          const formatted = formatPg(
-            sql`INSERT INTO ${sql.ident(upstreamSchema)}.clients 
+        return await callback(zeroTx, {
+          async updateClientMutationID() {
+            const formatted = formatPg(
+              sql`INSERT INTO ${sql.ident(upstreamSchema)}.clients 
                     as current ("clientGroupID", "clientID", "lastMutationID")
                         VALUES (${clientGroupID}, ${clientID}, ${1})
                     ON CONFLICT ("clientGroupID", "clientID")
                     DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
                     RETURNING "lastMutationID"`,
-          );
+            );
 
-          const [{lastMutationID}] = (await dbTx.query(
-            formatted.text,
-            formatted.values,
-          )) as {lastMutationID: bigint}[];
+            const [{lastMutationID}] = (await dbTx.query(
+              formatted.text,
+              formatted.values,
+            )) as {lastMutationID: bigint}[];
 
-          return {lastMutationID};
-        },
+            return {lastMutationID};
+          },
 
-        async writeMutationResult(result) {
-          const formatted = formatPg(
-            sql`INSERT INTO ${sql.ident(upstreamSchema)}.mutations
+          async writeMutationResult(result) {
+            const formatted = formatPg(
+              sql`INSERT INTO ${sql.ident(upstreamSchema)}.mutations
                     ("clientGroupID", "clientID", "mutationID", "result")
                 VALUES (${clientGroupID}, ${result.id.clientID}, ${result.id.id}, ${JSON.stringify(
                   result.result,
                 )}::text::json)`,
-          );
-          await dbTx.query(formatted.text, formatted.values);
-        },
-
-        async deleteMutationResults(args: CleanupResultsArg) {
-          if ('type' in args && args.type === 'bulk') {
-            // Bulk deletion: delete all mutations for multiple clients
-            const formatted = formatPg(
-              sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
-                  WHERE "clientGroupID" = ${args.clientGroupID}
-                    AND "clientID" = ANY(${args.clientIDs})`,
             );
             await dbTx.query(formatted.text, formatted.values);
-          } else {
-            // Single client (explicit 'single' or legacy without type): delete up to mutation ID
-            const formatted = formatPg(
-              sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
+          },
+
+          async deleteMutationResults(args: CleanupResultsArg) {
+            if ('type' in args && args.type === 'bulk') {
+              // Bulk deletion: delete all mutations for multiple clients
+              const formatted = formatPg(
+                sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
+                  WHERE "clientGroupID" = ${args.clientGroupID}
+                    AND "clientID" = ANY(${args.clientIDs})`,
+              );
+              await dbTx.query(formatted.text, formatted.values);
+            } else {
+              // Single client (explicit 'single' or legacy without type): delete up to mutation ID
+              const formatted = formatPg(
+                sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
                   WHERE "clientGroupID" = ${args.clientGroupID}
                     AND "clientID" = ${args.clientID}
                     AND "mutationID" <= ${args.upToMutationID}`,
-            );
-            await dbTx.query(formatted.text, formatted.values);
-          }
-        },
-      });
+              );
+              await dbTx.query(formatted.text, formatted.values);
+            }
+          },
+        });
+      } finally {
+        mutatorTx.close();
+      }
     });
   }
 
@@ -122,8 +135,14 @@ export class ZQLDatabase<
     dbTx: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
+    addRetryPredicate: ((shouldRetry: RetryPredicate) => void) | undefined,
   ) {
-    return this.#crudFactory.createTransaction(dbTx, clientID, mutationID);
+    return this.#crudFactory.createTransaction(
+      dbTx,
+      clientID,
+      mutationID,
+      addRetryPredicate,
+    );
   }
 
   /**

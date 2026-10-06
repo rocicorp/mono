@@ -37,6 +37,7 @@ import {
   type MutationResponse,
   type PushBody,
 } from '../../zero-protocol/src/push.ts';
+import type {RetryPredicate} from '../../zql/src/mutate/custom.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
@@ -54,6 +55,11 @@ export interface TransactionProviderInput {
   clientGroupID: string;
   clientID: string;
   mutationID: number;
+  /**
+   * Receives each predicate the mutator registers with `tx.retryOn()`. A
+   * `Database` passes it on to the server transaction it creates.
+   */
+  addRetryPredicate?: ((shouldRetry: RetryPredicate) => void) | undefined;
 }
 
 /**
@@ -536,6 +542,13 @@ function normalizeLegacyMutateRequestArgs<
   };
 }
 
+/**
+ * The most times a mutator runs for one mutation within one push when its
+ * `tx.retryOn()` predicate keeps answering yes: the first run and four
+ * re-runs.
+ */
+export const MAX_MUTATOR_RUNS = 5;
+
 class Transactor<D extends Database<ExtractTransactionType<D>>> {
   readonly #dbProvider: D;
   readonly #req: PushBody;
@@ -549,14 +562,66 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     this.#lc = lc;
   }
 
+  /**
+   * Asks all of the run's `tx.retryOn()` predicates at once whether to run
+   * the mutator again. The first to answer yes decides it and the other
+   * answers are ignored; it is no once every predicate has answered no. A
+   * predicate that throws or rejects answers no: escaping here would skip
+   * recording the mutation's result, and the client would send it again.
+   */
+  #shouldRetry(
+    predicates: readonly RetryPredicate[],
+    error: unknown,
+    attempt: number,
+  ): Promise<boolean> {
+    if (predicates.length === 0) {
+      return Promise.resolve(false);
+    }
+    const ask = async (shouldRetry: RetryPredicate): Promise<boolean> => {
+      try {
+        return (await shouldRetry(error, attempt)) === true;
+      } catch (retryError) {
+        this.#lc.warn?.(
+          'retryOn predicate threw; treating it as no',
+          retryError,
+        );
+        return false;
+      }
+    };
+    return new Promise(resolve => {
+      let pending = predicates.length;
+      for (const shouldRetry of predicates) {
+        void ask(shouldRetry).then(yes => {
+          if (yes) {
+            resolve(true);
+          } else if (--pending === 0) {
+            resolve(false);
+          }
+        });
+      }
+    });
+  }
+
   transact = async (
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
     let appError: ApplicationError | undefined = undefined;
+    // Which run of the mutator this is: 1, then 2 for the first re-run, and so
+    // on. When a run fails, it is also the number of the re-run being decided.
+    let attempt = 1;
     for (;;) {
+      // What this run registers with `tx.retryOn()`. Each run starts empty.
+      const predicates: RetryPredicate[] = [];
       try {
-        const ret = await this.#transactImpl(mutation, cb, appError);
+        const ret = await this.#transactImpl(
+          mutation,
+          cb,
+          appError,
+          shouldRetry => {
+            predicates.push(shouldRetry);
+          },
+        );
         if (appError !== undefined) {
           this.#lc.warn?.(
             // log-leak-ignore -- mutation and client ids, not row data
@@ -597,11 +662,35 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
           throw error;
         }
 
-        // First attempt failed → store error and retry without mutator
+        // What the mutator or the database threw, without the wrapper. This
+        // includes errors raised at COMMIT, which the mutator cannot catch.
         const originalError =
           error instanceof DatabaseTransactionError
             ? (error.cause ?? error)
             : error;
+
+        // One of the run's `tx.retryOn()` predicates says to run it again → do
+        // so, in a fresh transaction.
+        //
+        // `continue` WITHOUT setting `appError` is the whole mechanism: it is
+        // `appError` being set that makes the next `#transactImpl` skip
+        // `cb(...)`. `#transactImpl` opens a new transaction each pass, so the
+        // re-run gets a new snapshot. `#checkAndIncrementLastMutationID` re-runs
+        // safely because the failed run rolled its increment back.
+        if (
+          attempt < MAX_MUTATOR_RUNS &&
+          (await this.#shouldRetry(predicates, originalError, attempt))
+        ) {
+          this.#lc.warn?.(
+            // log-leak-ignore -- mutation and client ids, not row data
+            `Mutation ${mutation.id} for client ${mutation.clientID} failed, re-running mutator (retry ${attempt})`,
+            originalError,
+          );
+          attempt++;
+          continue;
+        }
+
+        // Not re-run → store error and retry without mutator
         appError = wrapWithApplicationError(originalError);
         this.#lc.warn?.(
           // log-leak-ignore -- mutation and client ids, not row data
@@ -624,6 +713,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
       // noop callback since there's no transaction to execute
       () => promiseVoid,
       appError,
+      undefined,
     );
     return ret;
   }
@@ -632,6 +722,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
     appError: ApplicationError | undefined,
+    addRetryPredicate: ((shouldRetry: RetryPredicate) => void) | undefined,
   ): Promise<MutationResponse> {
     let transactionPhase: DatabaseTransactionPhase = 'open';
 
@@ -666,7 +757,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             result: {},
           };
         },
-        this.#getTransactionInput(mutation),
+        this.#getTransactionInput(mutation, addRetryPredicate),
       );
 
       return ret;
@@ -683,12 +774,16 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     }
   }
 
-  #getTransactionInput(mutation: CustomMutation): TransactionProviderInput {
+  #getTransactionInput(
+    mutation: CustomMutation,
+    addRetryPredicate: ((shouldRetry: RetryPredicate) => void) | undefined,
+  ): TransactionProviderInput {
     return {
       upstreamSchema: this.#params.schema,
       clientGroupID: this.#req.clientGroupID,
       clientID: mutation.clientID,
       mutationID: mutation.id,
+      addRetryPredicate,
     };
   }
 
