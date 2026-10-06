@@ -58,6 +58,14 @@ export type Transaction<
   TWrappedTransaction = DefaultWrappedTransaction,
 > = ServerTransaction<S, TWrappedTransaction> | ClientTransaction<S>;
 
+export type RetryOptions = {
+  /**
+   * How long to wait, once this run's transaction has rolled back, before
+   * running the mutator again.
+   */
+  delayMs?: number | undefined;
+};
+
 export interface ServerTransaction<
   S extends Schema = DefaultSchema,
   TWrappedTransaction = DefaultWrappedTransaction,
@@ -65,6 +73,27 @@ export interface ServerTransaction<
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
+
+  /**
+   * Which run of the mutator this is within the current push: 1 for the first,
+   * 2 for the first re-run after {@linkcode retry}, and so on. A push that is
+   * sent again, by zero-cache or the client, starts over at 1.
+   */
+  readonly attempt: number;
+
+  /**
+   * Abandons this run and runs the mutator again in a fresh transaction, after
+   * `delayMs` if given. Everything this run wrote is rolled back, and the
+   * re-run reads a new snapshot.
+   *
+   * Use it for failures that may pass on their own, such as a serialization
+   * failure or a rate-limited external API, and only in a mutator that is safe
+   * to run again. Within one push the mutator runs at most 5 times; a retry
+   * requested on the last run is recorded as the mutation's error. The wait
+   * holds the push request open, so a delay that outlasts the API server's
+   * request timeout gets the push sent again, starting over at attempt 1.
+   */
+  retry(options?: RetryOptions): never;
 }
 
 /**

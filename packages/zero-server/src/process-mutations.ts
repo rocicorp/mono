@@ -8,11 +8,12 @@ import {assert} from '../../shared/src/asserts.ts';
 import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {promiseVoid} from '../../shared/src/resolved-promises.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
-import type {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 import {
+  ApplicationError,
   isApplicationError,
   wrapWithApplicationError,
 } from '../../zero-protocol/src/application-error.ts';
@@ -42,6 +43,7 @@ import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
 import {separatorRe} from './push-processor.ts';
+import {MAX_MUTATOR_ATTEMPTS, RetryRequest} from './retry-request.ts';
 
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
@@ -54,6 +56,11 @@ export interface TransactionProviderInput {
   clientGroupID: string;
   clientID: string;
   mutationID: number;
+  /**
+   * Which run of the mutator this transaction is for: 1 for the first, 2 for
+   * the first re-run, and so on. Becomes `tx.attempt`.
+   */
+  attempt?: number | undefined;
 }
 
 /**
@@ -554,9 +561,12 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
     let appError: ApplicationError | undefined = undefined;
+    // The run of the mutator: 1 for the first, 2 for the first re-run after
+    // `tx.retry()`, and so on.
+    let attempt = 1;
     for (;;) {
       try {
-        const ret = await this.#transactImpl(mutation, cb, appError);
+        const ret = await this.#transactImpl(mutation, cb, appError, attempt);
         if (appError !== undefined) {
           this.#lc.warn?.(
             // log-leak-ignore -- mutation and client ids, not row data
@@ -597,12 +607,45 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
           throw error;
         }
 
-        // First attempt failed → store error and retry without mutator
+        // What the mutator or the database threw, without the wrapper.
         const originalError =
           error instanceof DatabaseTransactionError
             ? (error.cause ?? error)
             : error;
-        appError = wrapWithApplicationError(originalError);
+
+        // The mutator called `tx.retry()` → run it again, in a fresh
+        // transaction.
+        //
+        // `continue` WITHOUT setting `appError` is the whole mechanism: it is
+        // `appError` being set that makes the next `#transactImpl` skip
+        // `cb(...)`. `#transactImpl` opens a new transaction each pass, so the
+        // re-run gets a new snapshot — which is the point. Re-reading inside the
+        // same transaction cannot see the winner at `REPEATABLE READ`.
+        //
+        // `#checkAndIncrementLastMutationID` re-runs safely because the failed
+        // attempt rolled its increment back.
+        if (originalError instanceof RetryRequest) {
+          if (attempt < MAX_MUTATOR_ATTEMPTS) {
+            this.#lc.warn?.(
+              // log-leak-ignore -- mutation and client ids, not row data
+              `Mutation ${mutation.id} for client ${mutation.clientID} requested a retry, re-running mutator (attempt ${attempt + 1} of ${MAX_MUTATOR_ATTEMPTS})`,
+            );
+            // The run's transaction has rolled back, so the wait holds no
+            // connection or locks.
+            const {delayMs} = originalError;
+            if (delayMs !== undefined && delayMs > 0) {
+              await sleep(delayMs);
+            }
+            attempt++;
+            continue;
+          }
+          appError = new ApplicationError(
+            `Mutator requested a retry on all ${MAX_MUTATOR_ATTEMPTS} attempts`,
+          );
+        } else {
+          // Not re-run → store error and retry without mutator
+          appError = wrapWithApplicationError(originalError);
+        }
         this.#lc.warn?.(
           // log-leak-ignore -- mutation and client ids, not row data
           `Error processing mutation ${mutation.id} for client ${mutation.clientID}, retrying without mutator`,
@@ -624,6 +667,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
       // noop callback since there's no transaction to execute
       () => promiseVoid,
       appError,
+      1,
     );
     return ret;
   }
@@ -632,6 +676,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
     appError: ApplicationError | undefined,
+    attempt: number,
   ): Promise<MutationResponse> {
     let transactionPhase: DatabaseTransactionPhase = 'open';
 
@@ -666,7 +711,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             result: {},
           };
         },
-        this.#getTransactionInput(mutation),
+        this.#getTransactionInput(mutation, attempt),
       );
 
       return ret;
@@ -683,12 +728,16 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     }
   }
 
-  #getTransactionInput(mutation: CustomMutation): TransactionProviderInput {
+  #getTransactionInput(
+    mutation: CustomMutation,
+    attempt: number,
+  ): TransactionProviderInput {
     return {
       upstreamSchema: this.#params.schema,
       clientGroupID: this.#req.clientGroupID,
       clientID: mutation.clientID,
       mutationID: mutation.id,
+      attempt,
     };
   }
 

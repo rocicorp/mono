@@ -56,12 +56,14 @@ export class ZQLDatabase<
       clientGroupID = '',
       clientID = '',
       mutationID = 0,
+      attempt = 1,
     } = transactionInput ?? {};
     return this.connection.transaction(async dbTx => {
       const zeroTx = await this.#makeServerTransaction(
         dbTx,
         clientID,
         mutationID,
+        attempt,
       );
 
       return callback(zeroTx, {
@@ -122,8 +124,14 @@ export class ZQLDatabase<
     dbTx: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
+    attempt: number,
   ) {
-    return this.#crudFactory.createTransaction(dbTx, clientID, mutationID);
+    return this.#crudFactory.createTransaction(
+      dbTx,
+      clientID,
+      mutationID,
+      attempt,
+    );
   }
 
   /**
