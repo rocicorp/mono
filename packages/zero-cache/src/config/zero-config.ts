@@ -1525,10 +1525,12 @@ export const zeroOptions = {
     },
 
     multipartConcurrency: {
-      type: v.number().optional(() => 48),
+      type: v.number().optional(),
       desc: [
         `The number of parts (of size {bold --litestream-multipart-size} bytes)`,
         `to upload or download in parallel when backing up or restoring the snapshot.`,
+        `Leave this unset to use 48, reduced as needed to keep the parts within`,
+        `a quarter of the memory available to the container.`,
       ],
     },
 

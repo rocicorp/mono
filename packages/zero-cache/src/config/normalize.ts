@@ -1,4 +1,4 @@
-import {availableParallelism} from 'node:os';
+import {availableParallelism, totalmem} from 'node:os';
 import type {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
@@ -20,6 +20,7 @@ export type NormalizedZeroConfig = ZeroConfig & {
   };
   litestream: {
     port: number;
+    multipartConcurrency: number;
   };
   numSyncWorkers: number;
 };
@@ -36,6 +37,27 @@ function isRunningInECS(): boolean {
 }
 
 const DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS = 20_000;
+
+const MAX_DEFAULT_MULTIPART_CONCURRENCY = 48;
+
+/**
+ * Litestream buffers each multipart part in memory, in a process that shares
+ * the container's memory limit. Keep the default concurrency's parts within a
+ * quarter of that limit, which, for 16 MiB parts, allows the maximum in 3 GiB
+ * and 16 parts in 1 GiB.
+ */
+function defaultMultipartConcurrency(multipartSize: number): number {
+  // 0 means no known limit. A limit can also exceed the host's memory.
+  const limit = process.constrainedMemory() || Infinity;
+  const memory = Math.min(limit, totalmem());
+  return Math.max(
+    1, // streams downloads without buffering parts
+    Math.min(
+      MAX_DEFAULT_MULTIPART_CONCURRENCY,
+      Math.floor(memory / 4 / multipartSize),
+    ),
+  );
+}
 
 /**
  * Whether this process tree runs the change-streamer, as opposed to connecting
@@ -137,6 +159,10 @@ export function assertNormalized(
     );
   }
   assert(config.litestream.port, 'missing --litestream-port');
+  assertNotUndefined(
+    config.litestream.multipartConcurrency,
+    'missing --litestream-multipart-concurrency',
+  );
   assert(
     !config.litestream.backupUsingV5 || config.litestream.restoreUsingV5,
     '--litestream-backup-using-v5 requires --litestream-restore-using-v5',
@@ -193,6 +219,13 @@ export function normalizeZeroConfig(
     const numSyncers = Math.max(1, availableParallelism() - 1);
     config.numSyncWorkers = numSyncers;
     env['ZERO_NUM_SYNC_WORKERS'] = String(numSyncers);
+  }
+  if (config.litestream.multipartConcurrency === undefined) {
+    const concurrency = defaultMultipartConcurrency(
+      config.litestream.multipartSize,
+    );
+    config.litestream.multipartConcurrency = concurrency;
+    env['ZERO_LITESTREAM_MULTIPART_CONCURRENCY'] = String(concurrency);
   }
 
   const hostIP = getHostIp(
@@ -257,6 +290,7 @@ export function normalizeZeroConfig(
     litestream: {
       ...config.litestream,
       port: config.litestream.port,
+      multipartConcurrency: config.litestream.multipartConcurrency,
     },
 
     change: {
