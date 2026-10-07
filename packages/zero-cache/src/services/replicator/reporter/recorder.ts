@@ -87,7 +87,7 @@ export class ReplicationReportRecorder {
       if (!this.#ready && total <= this.#readinessThresholdMs) {
         this.#setReady(
           'info',
-          `replication lag is now below readiness threshold of ${this.#readinessThresholdMs} ms`,
+          `replicator is now ready with replication lag (${total} ms) less than ${this.#readinessThresholdMs} ms readiness threshold`,
         );
       }
     }
