@@ -492,7 +492,7 @@ async function startReplicationStream(
           // sometimes it takes time for Postgres to consider the slot
           // inactive.
           lc.warn?.(`attempt ${i + 1}: ${String(e)}`, e);
-          await sleep(10);
+          await sleep(Math.min(10 * 2 ** i, 1000));
           continue;
         }
         // error: This slot has been invalidated because it exceeded the maximum reserved size.
@@ -546,6 +546,13 @@ export async function keepSlotActiveUntilTakenOver(
     1,
   );
   lc.info?.(`keeping ${slot} active until taken over ...`);
+  // Discard the streamed messages. Otherwise the paused socket backs up the
+  // wal_sender (e.g. with keepalives and logical messages) for the duration
+  // of the initial sync / restore, and a wal_sender blocked on writing to the
+  // client does not exit (and release the slot) when it is terminated by the
+  // takeover; it instead blocks on sending the termination error to the
+  // client, until signaled again.
+  readable.resume();
   // Send periodic status messages upstream to indicate that the session is
   // alive, but keep the confirmed_flush_lsn at the initial lsn.
   const keepalive = setInterval(() => writeable.write(makeAck(lsn)), 10_000);
