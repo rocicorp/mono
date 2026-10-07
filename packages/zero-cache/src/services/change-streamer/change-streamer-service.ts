@@ -165,8 +165,12 @@ export type TuningOptions = StorerOptions & {
    * replication slot from which replication resumes, in which case the
    * change log is re-initialized from the (restored) replica if it does not
    * contain all of the replica's changes (see `PgChangeLogPurgeLocker`).
+   *
+   * Required so that a caller cannot silently drop it: without it, the
+   * stream resumes from a head that the slot cannot stream from, skipping
+   * transactions.
    */
-  pgChangeLogBehindSlot?: boolean | undefined;
+  pgChangeLogBehindSlot: boolean;
   flowControlConsensusTimeoutProportion: number;
   flowControlSlowSubscriberGracePeriodMs?: number | undefined;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
@@ -566,6 +570,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         'SQLite change-log comparison requires the PG change log',
       );
     }
+    // Without a restored replica, a change log that is behind the slot cannot
+    // be re-initialized, and resuming from its head would silently skip the
+    // transactions between it and the slot's position.
+    assert(
+      !(
+        this.#pgChangeLogEnabled &&
+        opts.pgChangeLogBehindSlot &&
+        !backupConfig?.replicaFile
+      ),
+      'the PG change log is behind the replication slot, but there is no ' +
+        'restored replica to re-initialize it from',
+    );
     this.#storer = new Storer(
       lc,
       shard,

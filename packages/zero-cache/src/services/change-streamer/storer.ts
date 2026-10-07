@@ -1459,17 +1459,25 @@ export class PurgeLock {
   readonly #tx: TransactionPool;
   readonly replicaVersion: string;
   readonly minWatermark: string;
+  /**
+   * The head of the change log (i.e. its `lastWatermark`) when the lock was
+   * acquired. The change log is resumed from its head, which only advances,
+   * so a stream cannot (correctly) be started from before it.
+   */
+  readonly headWatermark: string;
 
   constructor(
     lc: LogContext,
     tx: TransactionPool,
     replicaVersion: string,
     watermark: string,
+    headWatermark: string,
   ) {
     this.#lc = lc;
     this.#tx = tx;
     this.replicaVersion = replicaVersion;
     this.minWatermark = watermark;
+    this.headWatermark = headWatermark;
   }
 
   #released = false;
@@ -1525,19 +1533,29 @@ export class PurgeLocker {
     const tx = new TransactionPool(this.#lc, {mode: Mode.READ_COMMITTED}).run(
       this.#db,
     );
-    if (slotWatermark !== undefined) {
-      const [{lastWatermark}] = await tx.processReadTask(
-        sql => sql<{lastWatermark: string}[]>`
-        SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`,
+    const [state] = await tx.processReadTask(
+      sql => sql<{lastWatermark: string}[]>`
+      SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`,
+    );
+    // An uninitialized change log (i.e. without a head) is empty, and thus
+    // behind any replication slot.
+    const lastWatermark = state?.lastWatermark;
+    if (
+      slotWatermark !== undefined &&
+      (lastWatermark === undefined || lastWatermark < slotWatermark)
+    ) {
+      this.#lc.info?.(
+        `changeLog@${lastWatermark ?? '(uninitialized)'} is behind the replication slot@${slotWatermark}`,
       );
-      if (lastWatermark < slotWatermark) {
-        this.#lc.info?.(
-          `changeLog@${lastWatermark} is behind the replication slot@${slotWatermark}`,
-        );
-        tx.setDone();
-        await tx.done();
-        return 'behind-slot';
-      }
+      tx.setDone();
+      await tx.done();
+      return 'behind-slot';
+    }
+    if (lastWatermark === undefined) {
+      this.#lc.info?.(`changeLog is uninitialized. No rows to purge-lock.`);
+      tx.setDone();
+      await tx.done();
+      return null;
     }
     const row = await tx.processReadTask(
       sql => sql<{watermark: string}[]>`
@@ -1561,7 +1579,13 @@ export class PurgeLocker {
     this.#lc.info?.(
       `locked watermark ${watermark} from being purged from replica@${replicaVersion}`,
     );
-    return new PurgeLock(this.#lc, tx, replicaVersion, watermark);
+    return new PurgeLock(
+      this.#lc,
+      tx,
+      replicaVersion,
+      watermark,
+      lastWatermark,
+    );
   }
 }
 

@@ -98,6 +98,7 @@ export async function initializePostgresChangeSource(
       purgeLock,
       pgChangeLogBehindSlot,
       resumableBackup,
+      slotWatermark,
     } = slotPerReplica
       ? await forkOrResumeReplica(
           lc,
@@ -187,6 +188,12 @@ export async function initializePostgresChangeSource(
       lagReportIntervalMs,
       syncOptions.textCopy,
       streamInboundTimeoutMs,
+      minStartWatermark(
+        subscriptionState.watermark,
+        initialSyncedReplica !== undefined,
+        slotWatermark,
+        purgeLock,
+      ),
     );
 
     const destinationBackupURL =
@@ -224,6 +231,14 @@ type RestoredReplica = {
   purgeLock: ConstrainingPurgeLock | null;
   pgChangeLogBehindSlot?: boolean | undefined;
   resumableBackup?: ResumableBackup | undefined;
+  /**
+   * The position (as a watermark) of the replication slot from which
+   * replication resumes, when it was created (for a fork) or claimed (for a
+   * resumption), i.e. while it is held by this process. Absent for a shared
+   * slot (RMv1), whose position is advanced by its current owner until it is
+   * taken over.
+   */
+  slotWatermark?: string | undefined;
 };
 
 // RMv1: Selects a replica to restore from and returns it, with the
@@ -304,6 +319,7 @@ async function forkOrResumeReplica(
     return {replica: undefined, purgeLock: null};
   }
   const {restoreFrom, replicateTo, slotLSN, slotSession} = result;
+  const slotWatermark = toStateVersionString(slotLSN);
   // The slot is held active by a session in this process until it is taken
   // over by the PostgresChangeSource. If initialization fails before then,
   // the session must be released, or the slot remains active indefinitely,
@@ -328,9 +344,7 @@ async function forkOrResumeReplica(
   // the positions acked for such changes in the change-log, e.g. an
   // `ackedThrough` column, and checking the slot's position against that.
   // Resumption is uncommon, however, and involves downtime anyway.)
-  const lock = acquirePurgeLock
-    ? await acquirePurgeLock(toStateVersionString(slotLSN))
-    : null;
+  const lock = acquirePurgeLock ? await acquirePurgeLock(slotWatermark) : null;
   const pgChangeLogBehindSlot = lock === 'behind-slot';
   const purgeLock = lock === 'behind-slot' ? null : lock;
   // Absent a purge lock, still constrain the restore to the source's
@@ -361,9 +375,55 @@ async function forkOrResumeReplica(
       purgeLock,
       pgChangeLogBehindSlot,
       resumableBackup,
+      slotWatermark,
     };
   }
-  return {replica: replicateTo, purgeLock, pgChangeLogBehindSlot};
+  return {
+    replica: replicateTo,
+    purgeLock,
+    pgChangeLogBehindSlot,
+    slotWatermark,
+  };
+}
+
+/**
+ * The watermark below which the replication stream cannot (correctly) be
+ * started, i.e. from which it would skip transactions that the change log
+ * does not contain. It reflects the order in which each mode stores a
+ * transaction and then acks it to the slot, such that a correctly initialized
+ * stream always starts at or past it:
+ *
+ * * After an initial sync, the replica's watermark, which is the position
+ *   at which the new slot was created, and the change log is (re)initialized
+ *   at it.
+ * * With a slot per replica (RMv1.5 and RMv2), the minimum of the restored
+ *   replica's watermark and the slot's position. Transactions are only acked
+ *   once backed up (so a skipped interval ends at or before the replica), and
+ *   if the change log is behind the slot it is re-initialized from the
+ *   replica. Note that the slot can be past the replica (acked for keepalives,
+ *   with nothing skipped), and the replica past the change log (forwarded
+ *   before being stored, and streamed again from the slot), but the stream
+ *   never starts below both. (With RMv1.5's purge lock, the change log's head
+ *   is at or past the slot, so it does not lower the minimum.)
+ * * With a shared slot (RMv1), the change log's head when it was purge
+ *   locked, as the stream resumes from the head, which only advances. The
+ *   slot is not a reference: its owner acks it until it is taken over. Without
+ *   a purge lock (i.e. an empty change log), there is no floor.
+ */
+// Exported for testing.
+export function minStartWatermark(
+  replicaWatermark: string,
+  initialSynced: boolean,
+  slotWatermark: string | undefined,
+  purgeLock: ConstrainingPurgeLock | null,
+): string | undefined {
+  if (initialSynced) {
+    return replicaWatermark;
+  }
+  if (slotWatermark !== undefined) {
+    return replicaWatermark < slotWatermark ? replicaWatermark : slotWatermark;
+  }
+  return purgeLock?.headWatermark;
 }
 
 function restoreConstraints(

@@ -21,7 +21,13 @@ export interface PurgeLock {
 }
 
 /** A PurgeLock that also constrains the replica that can be restored. */
-export interface ConstrainingPurgeLock extends PurgeLock, ReplicaConstraints {}
+export interface ConstrainingPurgeLock extends PurgeLock, ReplicaConstraints {
+  /**
+   * The head of the change log when the lock was acquired, from which (or
+   * from past which) the change log is resumed.
+   */
+  readonly headWatermark: string;
+}
 
 /**
  * Acquires a purge lock on the PG change-log (if it is not empty).

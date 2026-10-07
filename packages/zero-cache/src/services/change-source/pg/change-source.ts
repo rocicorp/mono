@@ -37,6 +37,7 @@ import {
   majorVersionToString,
 } from '../../../types/state-version.ts';
 import type {Sink} from '../../../types/streams.ts';
+import {UnrecoverableError} from '../../running-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import {BackfillManager} from '../common/backfill-manager.ts';
 import {
@@ -69,7 +70,7 @@ import type {
   MessageRelation as PostgresRelation,
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe, type StreamMessage} from './logical-replication/stream.ts';
-import {fromBigInt, toBigInt, toStateVersionString} from './lsn.ts';
+import {fromBigInt, toBigInt, toStateVersionString, type LSN} from './lsn.ts';
 import {ReplicationSlotCleanupMonitor} from './replication-slot-cleanup-monitor.ts';
 import {registerReplicationSlotHealthMetrics} from './replication-slot-health.ts';
 import {replicationEventSchema, type ReplicationEvent} from './schema/ddl.ts';
@@ -114,6 +115,7 @@ export class PostgresChangeSource implements ChangeSource {
   readonly #lagReporter: LagReporter | null;
   readonly #textCopy: boolean;
   readonly #streamInboundTimeoutMs: number | undefined;
+  readonly #minStartWatermark: string | undefined;
   readonly #subscribe: typeof subscribe;
   readonly #streamBackfill: typeof streamBackfill;
   #stopped = false;
@@ -129,6 +131,12 @@ export class PostgresChangeSource implements ChangeSource {
     lagReportIntervalMs: number,
     textCopy?: boolean | undefined,
     streamInboundTimeoutMs?: number | undefined,
+    /**
+     * The watermark below which a stream cannot be started without skipping
+     * transactions, as Postgres would silently start from the slot's position
+     * instead (see `minStartWatermark()` in change-source-init.ts).
+     */
+    minStartWatermark?: string | undefined,
     // Injectable dependencies, overridable in tests. Default to the production
     // implementations.
     deps: {
@@ -158,6 +166,7 @@ export class PostgresChangeSource implements ChangeSource {
     this.#context = context;
     this.#textCopy = textCopy ?? false;
     this.#streamInboundTimeoutMs = streamInboundTimeoutMs;
+    this.#minStartWatermark = minStartWatermark;
     this.#lagReporter =
       lagReportIntervalMs > 0
         ? new LagReporter(
@@ -217,6 +226,7 @@ export class PostgresChangeSource implements ChangeSource {
     const config = await getInternalShardConfig(this.#db, this.#shard);
     const {slot} = this.#replica;
     this.#lc.info?.(`starting replication stream@${slot}`);
+    await this.#checkConfirmedFlushLSN(slot, clientWatermark);
     const changeStream = await this.startStreamInternal(
       slot,
       clientWatermark,
@@ -242,6 +252,21 @@ export class PostgresChangeSource implements ChangeSource {
     shardConfig: InternalShardConfig,
     backfillRequests: BackfillRequest[],
   ): Promise<ChangeStream> {
+    if (
+      this.#minStartWatermark !== undefined &&
+      majorVersionFromString(clientWatermark) <
+        majorVersionFromString(this.#minStartWatermark)
+    ) {
+      // Retrying would resume from the same watermark, so fail the service
+      // (rather than backing off). Nothing has been acked, so the slot is
+      // left intact.
+      throw new UnrecoverableError(
+        `cannot start replication stream@${slot} from ${clientWatermark}, ` +
+          `which is before its minimum start watermark ` +
+          `${this.#minStartWatermark}: transactions in between would be ` +
+          `silently skipped`,
+      );
+    }
     const clientStart = majorVersionFromString(clientWatermark) + 1n;
     const {messages, acks} = await this.#subscribe(
       this.#lc,
@@ -401,6 +426,47 @@ export class PostgresChangeSource implements ChangeSource {
       changes: changes.asSource(),
       acks: {push: status => acker.ack(status[2].watermark)},
     };
+  }
+
+  /**
+   * Warns if the stream is about to start from before the slot's
+   * `confirmed_flush_lsn`, from which Postgres starts streaming instead.
+   *
+   * This is benign if the slot was only acked past `clientWatermark` for
+   * keepalives (i.e. with no transactions in between), which the
+   * {@link Acker} does on a caught-up stream. It is therefore not an error
+   * (`minStartWatermark` is the bound that is), but it is the evidence needed
+   * to diagnose a skipped interval.
+   */
+  async #checkConfirmedFlushLSN(slot: string, clientWatermark: string) {
+    try {
+      const [row] = await this.#db<{confirmedFlushLSN: LSN | null}[]>`
+        SELECT confirmed_flush_lsn AS "confirmedFlushLSN"
+          FROM pg_replication_slots WHERE slot_name = ${slot}`;
+      const confirmed = row?.confirmedFlushLSN;
+      if (!confirmed) {
+        return;
+      }
+      const start = majorVersionFromString(clientWatermark);
+      const confirmedLSN = toBigInt(confirmed);
+      if (start < confirmedLSN) {
+        this.#lc.warn?.(
+          `starting replication stream@${slot} from ${clientWatermark}, ` +
+            `which is ${confirmedLSN - start} bytes before the slot's ` +
+            `confirmed_flush_lsn ${confirmed} ` +
+            `(${toStateVersionString(confirmed)}). Postgres starts from the ` +
+            `latter, which skips nothing only if the slot was acked past ` +
+            `${clientWatermark} for keepalives.`,
+        );
+      } else {
+        this.#lc.info?.(
+          `replication slot ${slot} confirmed_flush_lsn: ${confirmed} ` +
+            `(${toStateVersionString(confirmed)})`,
+        );
+      }
+    } catch (e) {
+      this.#lc.warn?.(`unable to read the position of slot ${slot}`, e);
+    }
   }
 
   async #logCurrentReplicaInfo() {

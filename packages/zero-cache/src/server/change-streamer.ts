@@ -210,6 +210,7 @@ export default async function runWorker(
         waitForBackupBeforeServing,
         newBackupLineage: initNewBackupLineage,
         walKeeper: initWalKeeper,
+        pgChangeLogBehindSlot,
       } = upstream.type === 'pg'
         ? await initializePostgresChangeSource(
             lc,
@@ -266,6 +267,7 @@ export default async function runWorker(
         autoReset ?? false,
         {
           pgChangeLogEnabled,
+          pgChangeLogBehindSlot: pgChangeLogBehindSlot ?? false,
           backPressureLimitHeapProportion,
           flowControlConsensusTimeoutProportion,
           flowControlSlowSubscriberGracePeriodMs:
