@@ -332,3 +332,40 @@ test('literalUnion', () => {
     new TypeError(`Expected literal value "a", "b", 1, true or 42n Got "c"`),
   );
 });
+
+test('toTerminals', () => {
+  // The emission order is a valita implementation detail; options.ts only
+  // depends on the set of terminals.
+  const names = (t: v.Type | v.Optional) => {
+    const out: string[] = [];
+    v.toTerminals(t, t =>
+      out.push(t.name === 'literal' ? `literal:${String(t.value)}` : t.name),
+    );
+    return out.sort();
+  };
+
+  expect(names(v.number())).toEqual(['number']);
+  expect(names(v.union(v.literal('a'), v.literal(1)))).toEqual([
+    'literal:1',
+    'literal:a',
+  ]);
+  expect(names(v.string().optional())).toEqual([
+    'optional',
+    'string',
+    'undefined',
+  ]);
+
+  // options.ts needs to see through the transforms created by
+  // `.optional(() => x)` and `.assert()`.
+  expect(names(v.number().optional(() => 1))).toEqual([
+    'number',
+    'optional',
+    'undefined',
+  ]);
+  expect(names(v.string().assert(s => s.length > 0))).toEqual(['string']);
+  expect(names(v.array(v.boolean()).optional(() => []))).toEqual([
+    'array',
+    'optional',
+    'undefined',
+  ]);
+});

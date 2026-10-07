@@ -15,7 +15,7 @@ import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
 export const deployPermissionsOptions = {
   schema: {
     path: {
-      type: v.string().default('schema.ts'),
+      type: v.string().optional(() => 'schema.ts'),
       desc: ['Relative path to the file containing the schema definition.'],
       alias: 'p',
     },
@@ -48,7 +48,7 @@ export const deployPermissionsOptions = {
     },
 
     format: {
-      type: v.literalUnion('sql', 'json', 'pretty').default('sql'),
+      type: v.literalUnion('sql', 'json', 'pretty').optional(() => 'sql'),
       desc: [
         `The desired format of the output file.`,
         ``,
@@ -62,7 +62,7 @@ export const deployPermissionsOptions = {
   },
 
   force: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [`Deploy to upstream without validation. Use at your own risk.`],
     alias: 'f',
   },

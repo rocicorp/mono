@@ -4,10 +4,10 @@ import * as v from '../../shared/src/valita.ts';
 export const logLevel = v.literalUnion('debug', 'info', 'warn', 'error');
 
 export const logOptions = {
-  level: logLevel.default('info'),
+  level: logLevel.optional(() => 'info'),
 
   format: {
-    type: v.literalUnion('text', 'json').default('text'),
+    type: v.literalUnion('text', 'json').optional(() => 'text'),
     desc: [
       `Use {bold text} for developer-friendly console logging`,
       `and {bold json} for consumption by structured-logging services`,
@@ -15,14 +15,14 @@ export const logOptions = {
   },
 
   slowRowThreshold: {
-    type: v.number().default(2),
+    type: v.number().optional(() => 2),
     desc: [
       `The number of ms a row must take to fetch from table-source before it is considered slow.`,
     ],
   },
 
   slowHydrateThreshold: {
-    type: v.number().default(100),
+    type: v.number().optional(() => 100),
     desc: [
       `The number of milliseconds a query hydration must take to print a slow warning.`,
       ``,
@@ -33,7 +33,7 @@ export const logOptions = {
   },
 
   slowAdvanceThreshold: {
-    type: v.number().default(100),
+    type: v.number().optional(() => 100),
     desc: [
       `The number of milliseconds a query must take to process one advancement`,
       `(the changes of a replicated transaction, or a batch of them) to print a`,
@@ -47,7 +47,7 @@ export const logOptions = {
   },
 
   planWarningRowThreshold: {
-    type: v.number().default(10_000),
+    type: v.number().optional(() => 10_000),
     desc: [
       `Log a warning when the query planner estimates that one read of a table`,
       `scans or sorts at least this many rows: a read that scans the whole`,
@@ -60,7 +60,7 @@ export const logOptions = {
   },
 
   planWarningCostThreshold: {
-    type: v.number().default(1_000_000),
+    type: v.number().optional(() => 1_000_000),
     desc: [
       `Log a warning when the best plan the query planner finds for a query is`,
       `still estimated to process at least this many rows. Throttled like`,
@@ -69,7 +69,7 @@ export const logOptions = {
   },
 
   queryStatsIntervalSeconds: {
-    type: v.number().default(60),
+    type: v.number().optional(() => 60),
     desc: [
       `How often each view-syncer worker logs the work done per query shape (the`,
       `query with its values redacted): the number of hydrations and`,
@@ -84,7 +84,7 @@ export const logOptions = {
   },
 
   ivmSampling: {
-    type: v.number().default(5000),
+    type: v.number().optional(() => 5000),
     desc: [
       `How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.`,
     ],

@@ -523,8 +523,8 @@ importers:
   packages/replicache:
     dependencies:
       '@badrap/valita':
-        specifier: 0.3.11
-        version: 0.3.11
+        specifier: 0.5.5
+        version: 0.5.5
       '@rocicorp/lock':
         specifier: ^1.0.4
         version: 1.0.4
@@ -712,8 +712,8 @@ importers:
   packages/shared:
     dependencies:
       '@badrap/valita':
-        specifier: 0.3.11
-        version: 0.3.11
+        specifier: 0.5.5
+        version: 0.5.5
       '@dotenvx/dotenvx':
         specifier: ^1.39.0
         version: 1.66.0
@@ -846,8 +846,8 @@ importers:
   packages/zero:
     dependencies:
       '@badrap/valita':
-        specifier: 0.3.11
-        version: 0.3.11
+        specifier: 0.5.5
+        version: 0.5.5
       '@databases/escape-identifier':
         specifier: ^1.0.3
         version: 1.0.3
@@ -1051,8 +1051,8 @@ importers:
   packages/zero-cache:
     dependencies:
       '@badrap/valita':
-        specifier: 0.3.11
-        version: 0.3.11
+        specifier: 0.5.5
+        version: 0.5.5
       '@databases/sql':
         specifier: ^3.3.0
         version: 3.3.0
@@ -1364,8 +1364,8 @@ importers:
   packages/zero-protocol:
     dependencies:
       '@badrap/valita':
-        specifier: 0.3.11
-        version: 0.3.11
+        specifier: 0.5.5
+        version: 0.5.5
       compare-utf8:
         specifier: ^0.2.3
         version: 0.2.3
@@ -2859,6 +2859,10 @@ packages:
   '@badrap/valita@0.3.11':
     resolution: {integrity: sha512-oak0W8bycFjnrLeVCVvZqkOWTGh74wCPKUxGLJyhRukRs+V/hQdfZp1eDcQE4Gf3UrtJWfR/Ou4Xe0DZqJZ2FA==}
     engines: {node: '>= 16'}
+
+  '@badrap/valita@0.5.5':
+    resolution: {integrity: sha512-+Hp6PfoOyD6hpONZOiJTIP3xiqPPLMtMzDjJ522Hoba1ynqKKnt7bW82L5+G8klLoUHmcuxfCNpND93KyiA7CQ==}
+    engines: {node: '>= 22'}
 
   '@balena/dockerignore@1.0.2':
     resolution: {integrity: sha512-wMue2Sy4GAVTk6Ic4tJVcnfdau+gx2EnG7S+uAEe+TWJFqE4YoWN4/H8MSLj4eYJKxGg26lZwboEniNiNwZQ6Q==}
@@ -14367,6 +14371,8 @@ snapshots:
 
   '@badrap/valita@0.3.11': {}
 
+  '@badrap/valita@0.5.5': {}
+
   '@balena/dockerignore@1.0.2': {}
 
   '@bcoe/v8-coverage@1.0.2': {}
@@ -19548,9 +19554,9 @@ snapshots:
       obug: 2.2.1
       std-env: 4.2.0
       tinyrainbow: 3.1.1
-      vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
     optionalDependencies:
-      '@vitest/browser': 5.0.0(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@5.0.0)
+      '@vitest/browser': 5.0.0(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@5.0.0)
 
   '@vitest/istanbul-lib-coverage@1.0.1': {}
 
@@ -19594,7 +19600,7 @@ snapshots:
       pathe: 2.0.3
       sirv: 3.0.2
       tinyrainbow: 3.1.1
-      vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
 
   '@vitest/utils@4.1.6':
     dependencies:

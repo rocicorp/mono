@@ -58,7 +58,7 @@ function displayList<T>(
 }
 
 function getMessage(
-  err: v.Err | v.ValitaError,
+  err: v.Err,
   v: unknown,
   schema: v.Type | v.Optional,
   mode: ParseOptionsMode | undefined,
@@ -112,15 +112,8 @@ function getMessage(
         ? getDeepestUnionParseError(v, schema as v.UnionType, mode ?? 'strict')
         : `Invalid union value${atPath}`;
 
-    case 'custom_error': {
-      const {error} = firstIssue;
-      const message = !error
-        ? 'unknown'
-        : typeof error === 'string'
-          ? error
-          : (error.message ?? 'unknown');
-      return `${message}${atPath}. Got ${toDisplayAtPath(v, path)}`;
-    }
+    case 'custom_error':
+      return `${firstIssue.message}${atPath}. Got ${toDisplayAtPath(v, path)}`;
   }
 }
 
@@ -217,14 +210,8 @@ export function test<T>(
   schema: v.Type<T>,
   mode?: ParseOptionsMode,
 ): Result<T> {
-  const res = schema.try(value, mode ? {mode} : undefined);
-  if (!res.ok) {
-    return {
-      ok: false,
-      error: getMessage(res, value, schema, mode),
-    };
-  }
-  return res;
+  // A Type<T> only yields undefined if T includes it.
+  return testOptional(value, schema, mode) as Result<T>;
 }
 
 /**
@@ -237,20 +224,11 @@ export function testOptional<T>(
   schema: v.Type<T> | v.Optional<T>,
   mode?: ParseOptionsMode,
 ): Result<T | undefined> {
-  let flags = 0x1; // FLAG_FORBID_EXTRA_KEYS;
-  if (mode === 'passthrough') {
-    flags = 0;
-  } else if (mode === 'strip') {
-    flags = 0x2; // FLAG_STRIP_EXTRA_KEYS;
+  const res = schema.try(value, mode ? {mode} : undefined);
+  if (!res.ok) {
+    return {ok: false, error: getMessage(res, value, schema, mode)};
   }
-  const res = schema.func(value, flags);
-  if (res === undefined) {
-    return {ok: true, value} as Result<T>;
-  } else if (res.ok) {
-    return res;
-  }
-  const err = new v.ValitaError(res);
-  return {ok: false, error: getMessage(err, value, schema, mode)};
+  return res;
 }
 
 /**
@@ -288,6 +266,27 @@ export function instanceOfAbstractType<T = unknown>(
   return obj instanceof AbstractType;
 }
 
+// valita does not export TerminalType.
+export type TerminalType = Parameters<Parameters<v.Type['_toTerminals']>[0]>[0];
+
+/**
+ * Calls `func` for each terminal type that `type` is composed of, looking
+ * through unions, optionals and the transforms created by
+ * `.optional(() => x)`, `.assert()`, `.map()` and `.chain()`.
+ *
+ * This is the only use of valita's internal `_toTerminals`. The public API
+ * has no way to look inside a transform, so there is no alternative. The
+ * `toTerminals` test in valita.test.ts pins the behavior options.ts depends
+ * on, so a valita upgrade that changes it fails there instead of misparsing
+ * flags.
+ */
+export function toTerminals(
+  type: v.Type | v.Optional,
+  func: (t: TerminalType) => void,
+): void {
+  type._toTerminals(func);
+}
+
 type ObjectShape = Record<string, typeof AbstractType>;
 
 /**
@@ -300,7 +299,9 @@ export function deepPartial<Shape extends ObjectShape>(
   const shape = {} as Record<string, unknown>;
   for (const [key, type] of Object.entries(s.shape)) {
     if (type.name === 'object') {
-      shape[key] = deepPartial(type as v.ObjectType).optional();
+      shape[key] = deepPartial(
+        type as v.ObjectType<ObjectShape, undefined>,
+      ).optional();
     } else {
       shape[key] = type.optional();
     }

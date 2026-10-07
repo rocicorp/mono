@@ -34,7 +34,7 @@ export const appOptions = {
   id: {
     type: v
       .string()
-      .default('zero')
+      .optional(() => 'zero')
       .assert(id => ALLOWED_APP_ID_CHARACTERS.test(id), INVALID_APP_ID_MESSAGE),
     desc: [
       'Unique identifier for the app.',
@@ -94,7 +94,7 @@ export const shardOptions = {
   },
 
   num: {
-    type: v.number().default(0),
+    type: v.number().optional(() => 0),
     desc: [
       `The shard number (from 0 to NUM_SHARDS) of the App. zero will eventually`,
       `support data sharding as a first-class primitive; until then, deploying`,
@@ -107,7 +107,7 @@ export const shardOptions = {
 
 const replicaOptions = {
   file: {
-    type: v.string().default('zero.db'),
+    type: v.string().optional(() => 'zero.db'),
     desc: [
       `File path to the SQLite replica that zero-cache maintains.`,
       `This can be lost, but if it is, zero-cache will have to re-replicate next`,
@@ -137,7 +137,7 @@ const perUserMutationLimit = {
     ],
   },
   windowMs: {
-    type: v.number().default(60_000),
+    type: v.number().optional(() => 60_000),
     desc: [
       `The sliding window over which the {bold perUserMutationLimitMax} is enforced.`,
     ],
@@ -195,14 +195,14 @@ const authOptions = {
     ],
   },
   revalidateIntervalSeconds: {
-    type: v.number().default(300),
+    type: v.number().optional(() => 300),
     desc: [
       `The interval in seconds between periodic /query auth revalidation for validated connections.`,
       `If unset, periodic auth revalidation is disabled.`,
     ],
   },
   retransformIntervalSeconds: {
-    type: v.number().default(300),
+    type: v.number().optional(() => 300),
     desc: [
       `The interval in seconds between periodic shared /query retransform work for a client group.`,
       `If unset, periodic shared retransform is disabled.`,
@@ -274,7 +274,7 @@ const makeMutatorQueryOptions = (
       : {}),
   },
   forwardCookies: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       `If true, zero-cache will forward cookies from the request.`,
       `This is useful for passing authentication cookies to the API server.`,
@@ -352,7 +352,7 @@ export const zeroOptions = {
     },
 
     type: {
-      type: v.literalUnion('pg', 'custom').default('pg'),
+      type: v.literalUnion('pg', 'custom').optional(() => 'pg'),
       desc: [
         `The meaning of the {bold upstream-db} depends on the upstream type:`,
         `* {bold pg}: The connection database string, e.g. "postgres://..."`,
@@ -363,7 +363,7 @@ export const zeroOptions = {
     },
 
     maxConns: {
-      type: v.number().default(20),
+      type: v.number().optional(() => 20),
       desc: [
         `The maximum number of connections to open to the upstream database`,
         `for committing mutations. This is divided evenly amongst sync workers.`,
@@ -395,7 +395,7 @@ export const zeroOptions = {
     },
 
     pgReplicationSlotPerReplica: {
-      type: v.boolean().default(false),
+      type: v.boolean().optional(() => false),
       desc: [
         `Creates a dedicated replication slot for each replication-manager, rather than`,
         `having a new replication-manager take over the slot of the one it replaces.`,
@@ -442,7 +442,7 @@ export const zeroOptions = {
     },
 
     pgResumeOrphanedSlotGracePeriodMs: {
-      type: v.number().default(20_000),
+      type: v.number().optional(() => 20_000),
       desc: [
         `The grace period to wait before taking over an inactive replication slot, "resuming"`,
         `the replica. With high availability replication, a new replica is generally "forked"`,
@@ -457,7 +457,7 @@ export const zeroOptions = {
     },
 
     pgReplicationEpoch: {
-      type: v.number().default(0),
+      type: v.number().optional(() => 0),
       desc: [
         `Replication managers sharing the same epoch attempt to converge on a single`,
         `generation (i.e. the result of an initial-sync); if multiple tasks are started`,
@@ -480,7 +480,7 @@ export const zeroOptions = {
     // deployment; enable it after all replication managers can consume
     // partial-index schema snapshots.
     pgPartialIndexTriggers: {
-      type: v.boolean().default(false),
+      type: v.boolean().optional(() => false),
       hidden: true,
     },
 
@@ -515,7 +515,7 @@ export const zeroOptions = {
   query: queryOptions,
 
   enableCrudMutations: {
-    type: v.boolean().default(true),
+    type: v.boolean().optional(() => true),
     desc: [
       `Enables support for legacy CRUD mutations. When this is {bold false}, no connections`,
       `are made from view-syncers to the upstream db, and push messages with CRUD mutations`,
@@ -524,7 +524,7 @@ export const zeroOptions = {
   },
 
   allowLegacyQueries: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       `Allows clients to send legacy query ASTs directly to zero-cache.`,
       `Keep this disabled when using custom queries so that zero-cache rejects`,
@@ -543,7 +543,7 @@ export const zeroOptions = {
     },
 
     maxConns: {
-      type: v.number().default(30),
+      type: v.number().optional(() => 30),
       desc: [
         `The maximum number of connections to open to the CVR database.`,
         `This is divided evenly amongst sync workers.`,
@@ -559,7 +559,7 @@ export const zeroOptions = {
     },
 
     garbageCollectionInactivityThresholdHours: {
-      type: v.number().default(24 * 7),
+      type: v.number().optional(() => 24 * 7),
       desc: [
         `The duration after which an inactive CVR is eligible for garbage collection.`,
         `Purging a CVR forces the next connection from that client group to`,
@@ -571,7 +571,7 @@ export const zeroOptions = {
     },
 
     garbageCollectionInitialIntervalSeconds: {
-      type: v.number().default(60),
+      type: v.number().optional(() => 60),
       desc: [
         `The initial interval at which to check and garbage collect inactive CVRs.`,
         `This interval is increased exponentially (up to 16 minutes) when there is`,
@@ -580,7 +580,7 @@ export const zeroOptions = {
     },
 
     garbageCollectionInitialBatchSize: {
-      type: v.number().default(25),
+      type: v.number().optional(() => 25),
       desc: [
         `The initial number of CVRs to purge per garbage collection interval.`,
         `This number is increased linearly if the rate of new CVRs exceeds the rate of`,
@@ -601,7 +601,7 @@ export const zeroOptions = {
   },
 
   sqliteCorruptionChecks: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       `Run SQLite quick_check and integrity_check when corruption is detected.`,
       `These checks scan the replica and can take a long time on large databases.`,
@@ -610,7 +610,7 @@ export const zeroOptions = {
   },
 
   snapshotRowCacheSize: {
-    type: v.number().default(50_000),
+    type: v.number().optional(() => 50_000),
     desc: [
       `The maximum number of entries in the per-worker cache of replica rows`,
       `read while advancing IVM pipelines. Every client group on a sync worker`,
@@ -624,7 +624,7 @@ export const zeroOptions = {
   },
 
   enableQueryPlanner: {
-    type: v.boolean().default(true),
+    type: v.boolean().optional(() => true),
     desc: [
       `Enable the query planner for optimizing ZQL queries.`,
       ``,
@@ -636,7 +636,7 @@ export const zeroOptions = {
   },
 
   enableCorrelatedPredicatePushdown: {
-    type: v.boolean().default(true),
+    type: v.boolean().optional(() => true),
     desc: [
       `Copy a query's equality conditions on a relationship's join columns`,
       `into the related subquery. This reduces the rows that are read when a`,
@@ -648,7 +648,7 @@ export const zeroOptions = {
   },
 
   enablePlannerAwarePushdown: {
-    type: v.boolean().default(true),
+    type: v.boolean().optional(() => true),
     desc: [
       `Copy the conditions of correlated predicate pushdown before the query`,
       `planner runs instead of after, so that the planner can use them. This`,
@@ -660,7 +660,7 @@ export const zeroOptions = {
   },
 
   enableQueryCovering: {
-    type: v.boolean().default(true),
+    type: v.boolean().optional(() => true),
     desc: [
       `Enable shadow-mode query covering detection during query hydration.`,
       ``,
@@ -672,7 +672,7 @@ export const zeroOptions = {
   },
 
   deferIvmWrites: {
-    type: v.boolean().default(true),
+    type: v.boolean().optional(() => true),
     desc: [
       `Derive IVM advancements without writing to the replica snapshot.`,
       ``,
@@ -698,7 +698,7 @@ export const zeroOptions = {
         value => value > 0 && value <= 1,
         'must be greater than 0 and at most 1',
       )
-      .default(0.25),
+      .optional(() => 0.25),
     desc: [
       `With {bold deferIvmWrites}, the proportion of {bold --max-old-space-size}`,
       `that the client groups of one sync worker may hold in memory at once.`,
@@ -716,7 +716,7 @@ export const zeroOptions = {
   },
 
   yieldThresholdMs: {
-    type: v.number().default(10),
+    type: v.number().optional(() => 10),
     desc: [
       `The maximum amount of time in milliseconds that a sync worker will`,
       `spend in IVM (processing query hydration and advancement) before yielding`,
@@ -732,7 +732,7 @@ export const zeroOptions = {
         value => Number.isSafeInteger(value) && value >= 0,
         'must be a nonnegative integer',
       )
-      .default(0),
+      .optional(() => 0),
     desc: [
       `The soft time budget in milliseconds for hydrating inactive queries`,
       `during a view-syncer hydration pass. Active and internal queries always`,
@@ -751,7 +751,7 @@ export const zeroOptions = {
         value => Number.isSafeInteger(value) && value >= 0,
         'must be a nonnegative integer',
       )
-      .default(0),
+      .optional(() => 0),
     desc: [
       `The maximum processing time in milliseconds that a view-syncer spends`,
       `hydrating a single client query. Time spent yielding to other work is`,
@@ -775,7 +775,7 @@ export const zeroOptions = {
 
     /** @deprecated */
     maxConns: {
-      type: v.number().default(5),
+      type: v.number().optional(() => 5),
       deprecated: [
         `Connections to the change db are created dynamically for subscriber catchup. Ensure`,
         `that the database supports sufficient connections for at least 5 + numViewSyncers.`,
@@ -784,7 +784,7 @@ export const zeroOptions = {
     },
 
     statementTimeoutMs: {
-      type: v.number().default(30_000),
+      type: v.number().optional(() => 30_000),
       desc: [
         `Fail change-log db operations that make no progress within the specified timeout. This`,
         `differs from a postgres {bold statement_timeout} in that it is implemented to handle a`,
@@ -801,7 +801,7 @@ export const zeroOptions = {
           n => Number.isInteger(n) && n >= 1,
           `change.logBatchSize must be an integer >= 1`,
         )
-        .default(2000),
+        .optional(() => 2000),
       desc: [
         `The maximum number of change-log rows written per multi-row INSERT to the change`,
         `database. Larger upstream transactions are persisted in batches of this size rather`,
@@ -825,7 +825,7 @@ export const zeroOptions = {
   auth: authOptions,
 
   port: {
-    type: v.number().default(4848),
+    type: v.number().optional(() => 4848),
     desc: [`The port for sync connections.`],
   },
 
@@ -862,7 +862,7 @@ export const zeroOptions = {
     },
 
     mode: {
-      type: v.literalUnion('dedicated', 'discover').default('dedicated'),
+      type: v.literalUnion('dedicated', 'discover').optional(() => 'dedicated'),
       desc: [
         `As an alternative to {bold ZERO_CHANGE_STREAMER_URI}, the {bold ZERO_CHANGE_STREAMER_MODE}`,
         `can be set to "{bold discover}" to instruct the {bold view-syncer} to connect to the `,
@@ -898,7 +898,7 @@ export const zeroOptions = {
 
     /** @deprecated */
     protocol: {
-      type: v.literalUnion('ws', 'wss').default('ws'),
+      type: v.literalUnion('ws', 'wss').optional(() => 'ws'),
       deprecated: [
         `Set the {bold ZERO_CHANGE_STREAMER_URI} on view-syncers instead.`,
       ],
@@ -906,7 +906,7 @@ export const zeroOptions = {
     },
 
     discoveryInterfacePreferences: {
-      type: v.array(v.string()).default([...DEFAULT_PREFERRED_PREFIXES]),
+      type: v.array(v.string()).optional(() => [...DEFAULT_PREFERRED_PREFIXES]),
       desc: [
         `The name prefixes to prefer when introspecting the network interfaces to determine`,
         `the externally reachable IP address for change-streamer discovery. This defaults`,
@@ -920,7 +920,7 @@ export const zeroOptions = {
     },
 
     startupDelayMs: {
-      type: v.number().default(15000),
+      type: v.number().optional(() => 15000),
       desc: [
         `The delay to wait before the change-streamer takes over the replication stream`,
         `(i.e. the handoff during replication-manager updates), to allow loadbalancers to register`,
@@ -931,7 +931,9 @@ export const zeroOptions = {
     },
 
     sqliteChangeLogMode: {
-      type: v.literalUnion('off', 'write', 'compare', 'serve').default('off'),
+      type: v
+        .literalUnion('off', 'write', 'compare', 'serve')
+        .optional(() => 'off'),
       desc: [
         `Controls the staged SQLite change-log rollout. Modes are cumulative:`,
         `{bold off}, {bold write}, {bold compare}, and {bold serve}.`,
@@ -940,7 +942,7 @@ export const zeroOptions = {
     },
 
     pgChangeLogEnabled: {
-      type: v.boolean().default(true),
+      type: v.boolean().optional(() => true),
       desc: [
         `Whether the legacy Postgres change log remains authoritative for`,
         `stream initialization, persistence, catchup, and upstream ACKs.`,
@@ -950,7 +952,7 @@ export const zeroOptions = {
     },
 
     sqliteChangeLogReadPercent: {
-      type: v.number().default(0),
+      type: v.number().optional(() => 0),
       desc: [
         `The stable percentage of eligible catchup subscriptions served from SQLite.`,
       ],
@@ -958,7 +960,7 @@ export const zeroOptions = {
     },
 
     sqliteChangeLogColdReadPercent: {
-      type: v.number().default(0),
+      type: v.number().optional(() => 0),
       desc: [
         `The stable percentage of eligible catchup subscriptions served from a`,
         `SQLite change log that is younger than its retention window, i.e. one`,
@@ -971,7 +973,7 @@ export const zeroOptions = {
     },
 
     sqliteChangeLogComparePercent: {
-      type: v.number().default(1),
+      type: v.number().optional(() => 1),
       desc: [
         `The stable percentage of committed transactions whose catchup output is`,
         `compared between the Postgres and SQLite change logs in {bold compare} mode.`,
@@ -980,25 +982,25 @@ export const zeroOptions = {
     },
 
     sqliteChangeLogRetentionMs: {
-      type: v.number().default(60_000),
+      type: v.number().optional(() => 60_000),
       desc: [`The minimum time window retained in the SQLite change log.`],
       hidden: true,
     },
 
     sqliteChangeLogReadBatchRows: {
-      type: v.number().default(1000),
+      type: v.number().optional(() => 1000),
       desc: [`The target number of rows in each SQLite catchup read batch.`],
       hidden: true,
     },
 
     sqliteChangeLogPurgeBatchRows: {
-      type: v.number().default(1000),
+      type: v.number().optional(() => 1000),
       desc: [`The target number of rows in each SQLite purge batch.`],
       hidden: true,
     },
 
     sqliteChangeLogBarrierTimeoutMs: {
-      type: v.number().default(300_000),
+      type: v.number().optional(() => 300_000),
       desc: [
         `The maximum wait for the SQLite required-head barrier. This is a`,
         `backstop for a wedged replica on an idle shard, where waiting costs`,
@@ -1011,7 +1013,7 @@ export const zeroOptions = {
     },
 
     backPressureLimitHeapProportion: {
-      type: v.number().default(0.04),
+      type: v.number().optional(() => 0.04),
       desc: [
         `The percentage of {bold --max-old-space-size} to use as a buffer for absorbing replication`,
         `stream spikes. When the estimated amount of queued data exceeds this threshold, back pressure`,
@@ -1035,7 +1037,7 @@ export const zeroOptions = {
     },
 
     flowControlConsensusTimeoutProportion: {
-      type: v.number().default(4.0),
+      type: v.number().optional(() => 4.0),
       desc: [
         `During periodic flow control checks (every 64kb), the amount of time to wait after the majority`,
         `of subscribers have acked, proportional to that interval, after which replication will continue`,
@@ -1063,7 +1065,7 @@ export const zeroOptions = {
     },
 
     flowControlSlowSubscriberGracePeriodSeconds: {
-      type: v.number().default(30),
+      type: v.number().optional(() => 30),
       desc: [
         `The period of time after which a lagging subscriber is disconnected and instructed to`,
         `restart. A subscriber is considered lagging if it {italic continuously} (1) exceeds the`,
@@ -1114,7 +1116,7 @@ export const zeroOptions = {
   },
 
   autoReset: {
-    type: v.boolean().default(true),
+    type: v.boolean().optional(() => true),
     desc: [
       `Automatically wipe and resync the replica when replication is halted.`,
       `This situation can occur for configurations in which the upstream database`,
@@ -1132,7 +1134,7 @@ export const zeroOptions = {
 
   replicationLag: {
     reportIntervalMs: {
-      type: v.number().default(10000),
+      type: v.number().optional(() => 10000),
       desc: [
         `The approximate interval at which replication lag reports are written upstream and`,
         `reported via the {bold zero.replication.total_lag} opentelemetry metric. If`,
@@ -1154,7 +1156,7 @@ export const zeroOptions = {
     },
 
     initialReadinessThresholdMs: {
-      type: v.number().default(1000),
+      type: v.number().optional(() => 1000),
       desc: [
         `The maximum replication lag in milliseconds that a server is allowed to have`,
         `before it advertises readiness (to serve traffic). This prevents the server`,
@@ -1169,7 +1171,7 @@ export const zeroOptions = {
     },
 
     maxReadinessDelayMs: {
-      type: v.number().default(600_000), // 10 minutes
+      type: v.number().optional(() => 600_000), // 10 minutes
       desc: [
         `The maximum time in milliseconds that a server will wait for replication lag`,
         `to fall below the {bold ZERO_REPLICATION_LAG_INITIAL_READINESS_THRESHOLD_MS}`,
@@ -1217,7 +1219,7 @@ export const zeroOptions = {
   },
 
   websocketCompression: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       'Enable WebSocket per-message deflate compression.',
       '',
@@ -1242,7 +1244,7 @@ export const zeroOptions = {
   },
 
   websocketMaxPayloadBytes: {
-    type: v.number().default(10 * 1024 * 1024),
+    type: v.number().optional(() => 10 * 1024 * 1024),
     desc: [
       'Maximum size of incoming WebSocket messages in bytes.',
       '',
@@ -1273,7 +1275,7 @@ export const zeroOptions = {
     },
 
     restoreUsingV5: {
-      type: v.boolean().default(true),
+      type: v.boolean().optional(() => true),
       desc: [
         `Restores the backup using the {bold ZERO_LITESTREAM_EXECUTABLE_V5} if specified.`,
         `This provides a recovery path if rolling back from {bold ZERO_LITESTREAM_BACKUP_USING_V5}`,
@@ -1282,7 +1284,7 @@ export const zeroOptions = {
     },
 
     backupUsingV5: {
-      type: v.boolean().default(true),
+      type: v.boolean().optional(() => true),
       desc: [
         `Backs up the replica using Litestream v0.5.x. This is required for (upcoming)`,
         `high-availability replication. Set to false to revert to Litestream v0.3.x backups.`,
@@ -1304,7 +1306,7 @@ export const zeroOptions = {
     },
 
     forkBackup: {
-      type: v.boolean().default(true), // TODO: Vet and make non-optional
+      type: v.boolean().optional(() => true), // TODO: Vet and make non-optional
       hidden: true,
       desc: [
         `When a replication-manager restores from another replication-manager's`,
@@ -1319,7 +1321,7 @@ export const zeroOptions = {
     },
 
     configPath: {
-      type: v.string().default('./src/services/litestream/config.yml'),
+      type: v.string().optional(() => './src/services/litestream/config.yml'),
       desc: [
         `Path to the litestream yaml config file. zero-cache will run this with its`,
         `environment variables, which can be referenced in the file via $\\{ENV\\}`,
@@ -1332,7 +1334,9 @@ export const zeroOptions = {
     },
 
     configPathV5: {
-      type: v.string().default('./src/services/litestream/config-v5.yml'),
+      type: v
+        .string()
+        .optional(() => './src/services/litestream/config-v5.yml'),
       desc: [
         `Path to the litestream v5 yaml config file. zero-cache will run this with its`,
         `environment variables, which can be referenced in the file via $\\{ENV\\}`,
@@ -1345,7 +1349,9 @@ export const zeroOptions = {
     },
 
     logLevel: {
-      type: v.literalUnion('debug', 'info', 'warn', 'error').default('warn'),
+      type: v
+        .literalUnion('debug', 'info', 'warn', 'error')
+        .optional(() => 'warn'),
     },
 
     backupURL: {
@@ -1391,7 +1397,7 @@ export const zeroOptions = {
     },
 
     checkpointThresholdMB: {
-      type: v.number().default(40),
+      type: v.number().optional(() => 40),
       desc: [
         `The size of the WAL file at which litestream performs background, best-effort (PASSIVE)`,
         `SQLite checkpoints to apply the writes in the WAL to the main database file. Checkpoints`,
@@ -1421,7 +1427,7 @@ export const zeroOptions = {
     },
 
     forceCheckpointThresholdMB: {
-      type: v.number().default(256),
+      type: v.number().optional(() => 256),
       desc: [
         `The size of the WAL file at which to pause writes and explicitly initiate a`,
         `local litestream sync. This is a safeguard for the situation in which litestream's`,
@@ -1444,7 +1450,7 @@ export const zeroOptions = {
     },
 
     maxWalSizeMB: {
-      type: v.number().default(10240),
+      type: v.number().optional(() => 10240),
       desc: [
         `A fail-safe that pauses writes once the un-checkpointed WAL reaches this size,`,
         `resuming when litestream manages to checkpoint it. This bounds WAL growth (and`,
@@ -1462,7 +1468,7 @@ export const zeroOptions = {
     },
 
     incrementalBackupIntervalMinutes: {
-      type: v.number().default(15),
+      type: v.number().optional(() => 15),
       desc: [
         `The interval between incremental v3 backups of the replica. Shorter intervals`,
         `reduce the amount of change history that needs to be replayed when catching`,
@@ -1476,7 +1482,7 @@ export const zeroOptions = {
     },
 
     snapshotBackupIntervalHours: {
-      type: v.number().default(12),
+      type: v.number().optional(() => 12),
       desc: [
         `The interval between snapshot backups of the replica. Applies to both`,
         `litestream v3 and v5 backups.`,
@@ -1495,7 +1501,7 @@ export const zeroOptions = {
     },
 
     incrementalBackupIntervalSeconds: {
-      type: v.number().default(15),
+      type: v.number().optional(() => 15),
       desc: [
         `The interval between incremental v5 backups of the replica. With litestream v5`,
         `the upstream change source is not ACKed until the corresponding changes have been`,
@@ -1511,7 +1517,7 @@ export const zeroOptions = {
     },
 
     restoreParallelism: {
-      type: v.number().default(48),
+      type: v.number().optional(() => 48),
       desc: [
         `The number of WAL files to download in parallel when performing the`,
         `initial restore of the replica from the backup.`,
@@ -1519,7 +1525,7 @@ export const zeroOptions = {
     },
 
     multipartConcurrency: {
-      type: v.number().default(48),
+      type: v.number().optional(() => 48),
       desc: [
         `The number of parts (of size {bold --litestream-multipart-size} bytes)`,
         `to upload or download in parallel when backing up or restoring the snapshot.`,
@@ -1527,7 +1533,7 @@ export const zeroOptions = {
     },
 
     multipartSize: {
-      type: v.number().default(16 * 1024 * 1024),
+      type: v.number().optional(() => 16 * 1024 * 1024),
       desc: [
         `The size of each part when uploading or downloading the snapshot with`,
         `{bold --multipart-concurrency}. Note that up to {bold concurrency * size}`,
@@ -1545,7 +1551,7 @@ export const zeroOptions = {
 
   initialSync: {
     tableCopyWorkers: {
-      type: v.number().default(5),
+      type: v.number().optional(() => 5),
       desc: [
         `The number of parallel workers used to copy tables during initial sync.`,
         `Each worker uses a database connection and will buffer up to (approximately)`,
@@ -1565,7 +1571,7 @@ export const zeroOptions = {
     },
 
     textCopy: {
-      type: v.boolean().default(false),
+      type: v.boolean().optional(() => false),
       desc: [
         `Use text-format COPY instead of binary COPY for initial sync and`,
         `backfill streaming. This is slower but can work around issues with`,
@@ -1576,7 +1582,7 @@ export const zeroOptions = {
 
   shadowSync: {
     enabled: {
-      type: v.boolean().default(false),
+      type: v.boolean().optional(() => false),
       desc: [
         `Periodically exercises the initial-sync code path against a sample of`,
         `rows from every published table, writing to a throwaway SQLite database.`,
@@ -1587,7 +1593,7 @@ export const zeroOptions = {
     },
 
     intervalHours: {
-      type: v.number().default(12),
+      type: v.number().optional(() => 12),
       desc: [
         `The interval between shadow initial-sync runs, in hours. The first`,
         `run fires within [2/3, 1) of this interval after startup, so the`,
@@ -1598,7 +1604,7 @@ export const zeroOptions = {
     },
 
     sampleRate: {
-      type: v.number().default(0.1),
+      type: v.number().optional(() => 0.1),
       desc: [
         `The BERNOULLI sampling rate for each table (0 < rate <= 1). A value of`,
         `1 disables sampling and copies all rows (still subject to`,
@@ -1607,7 +1613,7 @@ export const zeroOptions = {
     },
 
     maxRowsPerTable: {
-      type: v.number().default(10000),
+      type: v.number().optional(() => 10000),
       desc: [
         `The hard upper bound on rows copied per table per shadow run. Guards`,
         `against unexpectedly large tables consuming disk / upstream bandwidth.`,
@@ -1617,7 +1623,7 @@ export const zeroOptions = {
 
   /** @deprecated */
   targetClientRowCount: {
-    type: v.number().default(20_000),
+    type: v.number().optional(() => 20_000),
     deprecated: [
       'This option is no longer used and will be removed in a future version.',
       'The client-side cache no longer enforces a row limit. Instead, TTL-based expiration',
@@ -1627,7 +1633,7 @@ export const zeroOptions = {
   },
 
   lazyStartup: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       'Delay starting the majority of zero-cache until first request.',
       '',
@@ -1644,7 +1650,7 @@ export const zeroOptions = {
   },
 
   enableTelemetry: {
-    type: v.boolean().default(true),
+    type: v.boolean().optional(() => true),
     desc: [
       `Set to false to opt out of telemetry collection.`,
       ``,

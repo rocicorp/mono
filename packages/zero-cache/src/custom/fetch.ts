@@ -94,8 +94,8 @@ export type FetchMetricsOptions = {
   cleanupType?: ApiCleanupType | undefined;
 };
 
-export async function fetchFromAPIServer<TValidator extends Type>(
-  validator: TValidator,
+export async function fetchFromAPIServer<T>(
+  validator: Type<T>,
   source: 'push' | 'transform',
   lc: LogContext,
   ctx: ConnectionContext,

@@ -15,7 +15,7 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@badrap/valita": "0.3.11",
+    "@badrap/valita": "0.5.5",
     "compare-utf8": "^0.2.3"
   },
   "devDependencies": {

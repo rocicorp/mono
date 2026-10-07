@@ -98,23 +98,23 @@ const options = {
     ],
   },
   outputVendedRows: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       'Include the rows read from the replica to execute the query.',
       'Each row appears once per read.',
     ],
   },
   outputSyncedRows: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: ['Include the rows that would be synced to the client.'],
   },
   joinPlans: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: ['Include join planner diagnostics.'],
   },
   log: {
     ...logOptions,
-    level: logLevel.default('error'),
+    level: logLevel.optional(() => 'error'),
   },
 };
 

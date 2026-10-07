@@ -24,7 +24,7 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@badrap/valita": "0.3.11",
+    "@badrap/valita": "0.5.5",
     "@dotenvx/dotenvx": "^1.39.0",
     "@rocicorp/logger": "^6.1.0",
     "@rocicorp/resolver": "^1.0.2",

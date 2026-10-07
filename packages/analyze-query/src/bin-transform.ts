@@ -19,7 +19,7 @@ import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 const options = {
   cvr: {db: v.string()},
   schema: {
-    type: v.string().default('./schema.ts'),
+    type: v.string().optional(() => './schema.ts'),
     desc: ['Path to the schema file.'],
   },
   app: appOptions,

@@ -14,8 +14,8 @@ const reloadReasonSchema = v.tuple([
 ]);
 
 const backoffStateSchema = v.object({
-  lastReloadTime: v.number().default(0),
-  nextIntervalMs: v.number().default(0),
+  lastReloadTime: v.number().optional(() => 0),
+  nextIntervalMs: v.number().optional(() => 0),
 });
 
 export type BackoffState = v.Infer<typeof backoffStateSchema>;

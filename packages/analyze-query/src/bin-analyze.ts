@@ -74,7 +74,7 @@ const options = {
     ],
   },
   applyPermissions: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       'Whether to apply permissions (from your schema file) to the provided query.',
     ],
@@ -87,14 +87,14 @@ const options = {
     ],
   },
   outputVendedRows: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       'Whether to output the rows which were read from the replica in order to execute the analyzed query. ',
       'If the same row is read more than once it will be logged once for each time it was read.',
     ],
   },
   outputSyncedRows: {
-    type: v.boolean().default(false),
+    type: v.boolean().optional(() => false),
     desc: [
       'Whether to output the rows which would be synced to the client for the analyzed query.',
     ],
@@ -126,7 +126,7 @@ const options = {
     zeroOptions.enableCorrelatedPredicatePushdown,
   log: {
     ...logOptions,
-    level: logLevel.default('error'),
+    level: logLevel.optional(() => 'error'),
   },
 };
 

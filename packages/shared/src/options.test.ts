@@ -13,7 +13,7 @@ import * as v from './valita.ts';
 
 const options = {
   port: {
-    type: v.number().default(4848),
+    type: v.number().optional(() => 4848),
     desc: ['blah blah blah'],
     alias: 'p',
   },
@@ -21,11 +21,13 @@ const options = {
   litestream: v.boolean().optional(),
   log: {
     level: v.string(), // required grouped option tests deepPartial
-    format: v.union(v.literal('text'), v.literal('json')).default('text'),
+    format: v
+      .union(v.literal('text'), v.literal('json'))
+      .optional(() => 'text'),
   },
   shard: {
     id: {
-      type: v.string().default('0'),
+      type: v.string().optional(() => '0'),
       desc: ['blah blah blah'],
     },
     publications: {type: v.array(v.string()).optional(() => [])},
@@ -588,139 +590,62 @@ test('envSchema', () => {
   const schema = envSchema(options, 'ZERO_');
   expect(JSON.stringify(schema, null, 2)).toMatchInlineSnapshot(`
     "{
+      "name": "object",
       "shape": {
         "ZERO_PORT": {
+          "name": "optional",
           "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
+            "name": "string"
+          }
         },
         "ZERO_REPLICA_DB_FILE": {
-          "name": "string",
-          "issue": {
-            "ok": false,
-            "code": "invalid_type",
-            "expected": [
-              "string"
-            ]
-          }
+          "name": "string"
         },
         "ZERO_LITESTREAM": {
+          "name": "optional",
           "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
-        },
-        "ZERO_LOG_LEVEL": {
-          "name": "string",
-          "issue": {
-            "ok": false,
-            "code": "invalid_type",
-            "expected": [
-              "string"
-            ]
+            "name": "string"
           }
         },
+        "ZERO_LOG_LEVEL": {
+          "name": "string"
+        },
         "ZERO_LOG_FORMAT": {
+          "name": "optional",
           "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
+            "name": "string"
+          }
         },
         "ZERO_SHARD_ID": {
+          "name": "optional",
           "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
+            "name": "string"
+          }
         },
         "ZERO_SHARD_PUBLICATIONS": {
+          "name": "optional",
           "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
+            "name": "string"
+          }
         },
         "ZERO_TUPLE": {
+          "name": "optional",
           "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
+            "name": "string"
+          }
         },
         "ZERO_DEPRECATED_FLAG": {
+          "name": "optional",
           "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
+            "name": "string"
+          }
         },
         "ZERO_HIDE_ME": {
+          "name": "optional",
           "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
+            "name": "string"
+          }
         }
-      },
-      "name": "object",
-      "_invalidType": {
-        "ok": false,
-        "code": "invalid_type",
-        "expected": [
-          "object"
-        ]
       }
     }"
   `);
@@ -1069,14 +994,16 @@ test('unknown arguments', () => {
 test('ungrouped config', () => {
   const ungroupedOptions = {
     port: {
-      type: v.number().default(4848),
+      type: v.number().optional(() => 4848),
       desc: ['port description'],
       alias: 'p',
     },
-    format: v.union(v.literal('text'), v.literal('json')).default('text'),
+    format: v
+      .union(v.literal('text'), v.literal('json'))
+      .optional(() => 'text'),
     enabled: v.boolean().optional(),
     name: v.string(),
-    pids: v.array(v.number()).default([]),
+    pids: v.array(v.number()).optional(() => []),
     topLevelCamel: v.string().optional(),
   };
 

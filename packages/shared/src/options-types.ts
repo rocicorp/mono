@@ -53,13 +53,13 @@ export type Group = Record<string, Option>;
  *
  * ```ts
  * {
- *   port: v.number().default(8080),
+ *   port: v.number().optional(() => 8080),
  *
  *   numWorkers: v.number(),
  *
  *   log: {
  *     level: v.union(v.literal('debug'), v.literal('info'), ...),
- *     format: v.union(v.literal('text'), v.literal('json')).default('text'),
+ *     format: v.union(v.literal('text'), v.literal('json')).optional(() => 'text'),
  *   }
  * }
  * ```

@@ -140,11 +140,6 @@ export function envSchema<T extends Options>(options: T, envNamePrefix = '') {
   return v.object(Object.fromEntries(fields));
 }
 
-// type TerminalType is not exported from badrap/valita
-type TerminalType = Parameters<
-  Parameters<v.Type<unknown>['toTerminals']>[0]
->[0];
-
 function getRequiredOrDefault(type: OptionType) {
   const defaultResult = v.testOptional<Value>(undefined, type);
   return {
@@ -218,18 +213,20 @@ export function parseOptionsAdvanced<T extends Options>(
     const literals = new Set<string>();
     const terminalTypes = new Set<string>();
 
-    type.toTerminals(getTerminalTypes);
+    v.toTerminals(type, getTerminalTypes);
 
-    function getTerminalTypes(t: TerminalType) {
+    function getTerminalTypes(t: v.TerminalType) {
       switch (t.name) {
         case 'undefined':
         case 'optional':
           break;
         case 'array': {
           multiple = true;
-          t.prefix.forEach(t => t.toTerminals(getTerminalTypes));
-          t.rest?.toTerminals(getTerminalTypes);
-          t.suffix.forEach(t => t.toTerminals(getTerminalTypes));
+          t.prefix.forEach(t => v.toTerminals(t, getTerminalTypes));
+          if (t.restType) {
+            v.toTerminals(t.restType, getTerminalTypes);
+          }
+          t.suffix.forEach(t => v.toTerminals(t, getTerminalTypes));
           break;
         }
         case 'literal':
@@ -351,7 +348,9 @@ export function parseOptionsAdvanced<T extends Options>(
     let schema = configSchema(appOptions, envNamePrefix);
     if (allowPartial || !includeDefaults) {
       // TODO: Type configSchema() to return a v.ObjectType<...>
-      schema = v.deepPartial(schema as v.ObjectType) as v.Type<Config<T>>;
+      schema = v.deepPartial(
+        schema as v.ObjectType<Record<string, v.Type | v.Optional>, undefined>,
+      ) as v.Type<Config<T>>;
     }
     return {
       config: v.parse(parsedArgs, schema),
