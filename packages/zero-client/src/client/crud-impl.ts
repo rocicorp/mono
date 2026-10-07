@@ -52,9 +52,7 @@ export async function insert(
     await tx.set(key, val);
     if (ivmBranch) {
       consume(
-        must(ivmBranch.getSource(arg.tableName)).push(
-          makeSourceChangeAdd(arg.value),
-        ),
+        must(ivmBranch.getSource(arg.tableName)).push(makeSourceChangeAdd(val)),
       );
     }
   }

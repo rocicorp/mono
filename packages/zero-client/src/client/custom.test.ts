@@ -396,6 +396,38 @@ describe('custom mutators can query the local store during an optimistic mutatio
     ]);
   });
 
+  test('omitted optional columns read back as null', async () => {
+    const zql = createBuilder(legacySchema);
+    let isNullResult: readonly Row<typeof legacySchema.tables.issue>[] = [];
+
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          createAndQuery: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof legacySchema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+            isNullResult = await tx.run(zql.issue.where('ownerId', 'IS', null));
+          },
+        },
+      } as const,
+    });
+
+    await z.mutate.issue.createAndQuery({
+      id: '1',
+      title: 'test issue',
+      closed: false,
+      description: '',
+      createdAt: 1743018138477,
+    }).client;
+
+    expect(isNullResult).toEqual([
+      expect.objectContaining({id: '1', ownerId: null}),
+    ]);
+  });
+
   test('closeAll using tx.run', async () => {
     const zql = createBuilder(legacySchema);
 
