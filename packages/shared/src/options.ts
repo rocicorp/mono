@@ -245,13 +245,14 @@ export function parseOptionsAdvanced<T extends Options>(
     assert(terminalTypes.size === 1, 'Expected exactly one terminal type');
     const terminalType = [...terminalTypes][0];
 
-    if (processEnv[env]) {
-      if (multiple) {
-        // Technically not water-tight; assumes values for the string[] flag don't contain commas.
-        envArgv.push(`--${flag}`, ...processEnv[env].split(','));
-      } else {
-        envArgv.push(`--${flag}`, processEnv[env]);
-      }
+    const value = processEnv[env];
+    if (value) {
+      // Use the `--flag=value` form so that a value starting with `-` (e.g. a
+      // nanoid) is not parsed as a cluster of short flags, leaving `--flag`
+      // with a `null` value. Array values are comma-separated; technically not
+      // water-tight, as it assumes the values themselves don't contain commas.
+      const values = multiple ? value.split(',') : [value];
+      envArgv.push(...values.map(val => `--${flag}=${val}`));
     }
     names.set(flag, {field, env});
 

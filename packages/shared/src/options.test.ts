@@ -127,6 +127,37 @@ test.each([
     undefined,
   ],
   [
+    'env values starting with a dash',
+    [],
+    {
+      ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
+      ['Z_LOG_LEVEL']: 'info',
+      ['Z_SHARD_ID']: '-abcdefghijklmnopqrst',
+      ['Z_SHARD_PUBLICATIONS']: '-zero_foo,--zero_bar',
+    },
+    false,
+    {
+      port: 4848,
+      replicaDBFile: '/tmp/env-replica.db',
+      log: {level: 'info', format: 'text'},
+      shard: {
+        id: '-abcdefghijklmnopqrst',
+        publications: ['-zero_foo', '--zero_bar'],
+      },
+      tuple: ['a', 'b'],
+    },
+    {
+      Z_LOG_LEVEL: 'info',
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4848',
+      Z_REPLICA_DB_FILE: '/tmp/env-replica.db',
+      Z_SHARD_ID: '-abcdefghijklmnopqrst',
+      Z_SHARD_PUBLICATIONS: '-zero_foo,--zero_bar',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
+  ],
+  [
     'env value for array flag separated by commas',
     [],
     {
