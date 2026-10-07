@@ -6,6 +6,7 @@ import * as v from '../../../../shared/src/valita.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {recordIndexUsage} from '../../../../zqlite/src/index-usage.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
 import type {
   LiteAndZqlSpec,
@@ -518,7 +519,9 @@ class Snapshot {
       this.db.statementCache.use(sql, cached => {
         cached.statement.safeIntegers(true);
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        return cached.statement.get<any>(args);
+        const row = cached.statement.get<any>(args);
+        recordIndexUsage(cached.statement, table.name);
+        return row;
       });
     return cache
       ? cache.getOrRead(tag ?? '', sql, 'get', args, () => {
@@ -605,7 +608,9 @@ class Snapshot {
       this.db.statementCache.use(sql, cached => {
         cached.statement.safeIntegers(true);
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        return cached.statement.all<any>(args);
+        const rows = cached.statement.all<any>(args);
+        recordIndexUsage(cached.statement, table.name);
+        return rows;
       });
     return cache
       ? cache.getOrRead(tag ?? '', sql, 'all', args, () => {

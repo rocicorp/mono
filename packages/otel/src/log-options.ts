@@ -79,7 +79,8 @@ export const logOptions = {
       `summed across workers and over time to rank queries by the time they take.`,
       `Logged at the info level as {bold query-stats} events, for the 100 shapes`,
       `that took the most time in the interval, plus a {bold query-stats-summary}`,
-      `event with the totals. Set to 0 to disable.`,
+      `event with the totals and how often each index of the replica was read.`,
+      `Set to 0 to disable.`,
     ],
   },
 

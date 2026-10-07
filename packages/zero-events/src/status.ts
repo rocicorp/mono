@@ -65,6 +65,12 @@ export type IndexedColumn = {
 };
 
 export type ReplicatedIndex = {
+  /**
+   * The name of the index in the replica, which is that of the upstream
+   * index, qualified by its schema outside of `public`. Absent from the
+   * events of older versions of zero-cache.
+   */
+  name?: string | undefined;
   table: string;
   columns: IndexedColumn[];
   unique: boolean;

@@ -45,6 +45,7 @@ import {
 import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 import type {Database, Statement} from './db.ts';
+import {recordIndexUsage} from './index-usage.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
 import {
@@ -478,6 +479,7 @@ export class TableSource implements Source {
       } finally {
         // Ensure the SQLite iterate() is closed.
         rowIterator.return?.();
+        recordIndexUsage(cachedStatement.statement, this.#table);
         if (debug) {
           let totalNvisit = 0;
           const planLines: string[] = [];
@@ -882,11 +884,13 @@ export class TableSource implements Source {
     const keyCols = Object.keys(rowKey);
 
     const stmt = this.#getRowStmt(keyCols);
-    const raw = this.#stmts.cache.use(stmt, cached =>
-      cached.statement
+    const raw = this.#stmts.cache.use(stmt, ({statement}) => {
+      const row = statement
         .safeIntegers(true)
-        .get<Row>(...toSQLiteTypes(keyCols, rowKey, this.#columns)),
-    );
+        .get<Row>(...toSQLiteTypes(keyCols, rowKey, this.#columns));
+      recordIndexUsage(statement, this.#table);
+      return row;
+    });
     const row = raw ? fromSQLiteTypes(this.#columns, raw, this.#table) : raw;
 
     const delta = this.#delta;

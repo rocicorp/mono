@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import type {PlanWarning} from '../../../../zql/src/planner/planner-warnings.ts';
+import {takeIndexUsage} from '../../../../zqlite/src/index-usage.ts';
 import type {QueryShape} from './query-shape.ts';
 
 /** The query that work is accounted to. */
@@ -45,6 +46,9 @@ export type QueryStatsOptions = {
   readonly maxReported?: number | undefined;
 
   readonly now?: (() => number) | undefined;
+
+  /** Returns the index uses since the last call. See `recordIndexUsage()`. */
+  readonly takeIndexUsage?: (() => Map<string, number>) | undefined;
 };
 
 class Distribution {
@@ -171,7 +175,10 @@ class OverflowShapeCounter {
  * - a `query-stats` event per query shape, for the {@link
  *   QueryStatsOptions.maxReported} shapes that took the most time, and
  * - a `query-stats-summary` event with the totals of all shapes, including
- *   those not reported individually.
+ *   those not reported individually, and the `indexUses`: how often the
+ *   process read each index of the replica, like `pg_stat_user_indexes`. An
+ *   index that is never read is absent. The workers of a single-process
+ *   zero-cache share these counts, which the first of them to flush reports.
  *
  * The events carry counts, sums, minimums and maximums, which compose across
  * intervals and workers.
@@ -180,6 +187,7 @@ export class QueryStats {
   readonly #maxShapes: number;
   readonly #maxReported: number;
   readonly #now: () => number;
+  readonly #takeIndexUsage: () => Map<string, number>;
 
   #shapes = new Map<string, ShapeStats>();
   #totals = new Totals();
@@ -190,12 +198,14 @@ export class QueryStats {
     maxShapes = 1000,
     maxReported = 100,
     now = Date.now,
+    takeIndexUsage: takeIndexUsageFn = takeIndexUsage,
   }: QueryStatsOptions = {}) {
     assert(maxShapes > 0, 'maxShapes must be positive');
     assert(maxReported > 0, 'maxReported must be positive');
     this.#maxShapes = maxShapes;
     this.#maxReported = maxReported;
     this.#now = now;
+    this.#takeIndexUsage = takeIndexUsageFn;
     this.#intervalStart = now();
   }
 
@@ -239,12 +249,13 @@ export class QueryStats {
     const shapes = this.#shapes;
     const totals = this.#totals;
     const overflowShapes = this.#overflowShapes.estimatedCount;
+    const indexUses = this.#takeIndexUsage();
     this.#shapes = new Map();
     this.#totals = new Totals();
     this.#overflowShapes = new OverflowShapeCounter();
     this.#intervalStart = now;
 
-    if (shapes.size === 0 && overflowShapes === 0) {
+    if (shapes.size === 0 && overflowShapes === 0 && indexUses.size === 0) {
       return;
     }
     const reported = [...shapes.values()]
@@ -269,6 +280,7 @@ export class QueryStats {
       shapes: shapes.size + overflowShapes,
       shapesReported: reported.length,
       ...totals.toJSON(),
+      ...(indexUses.size > 0 && {indexUses: Object.fromEntries(indexUses)}),
     });
   }
 

@@ -330,7 +330,8 @@ function getReplicatedTables(db: Database): ReplicatedTable[] {
 }
 
 function getReplicatedIndexes(db: Database): ReplicatedIndex[] {
-  return listIndexes(db).map(({tableName: table, columns, unique}) => ({
+  return listIndexes(db).map(({name, tableName: table, columns, unique}) => ({
+    name,
     table,
     unique,
     columns: Object.entries(columns).map(([column, dir]) => ({column, dir})),
