@@ -9,7 +9,7 @@ import type {ChangeStreamerService} from './change-streamer.ts';
 
 export type BackedUpWatermark = {
   watermark: string;
-  writeTimeMs?: number | undefined; // optional for debuggin; available on v5
+  writeTimeMs?: number | undefined; // optional for debugging; available on v5
   backupTimeMs: number;
 };
 
@@ -55,15 +55,23 @@ export class BackupMonitor implements SingletonService {
     for await (const backedUp of this.#watermarks) {
       if (this.#latestBackup) {
         if (backedUp.watermark < this.#latestBackup.watermark) {
-          this.#lc.warn?.(`ignoring earlier backup watermark`, {backedUp});
+          this.#lc.warn?.(
+            `ignoring earlier backup watermark ${backedUp.watermark}`,
+            {backedUp},
+          );
           continue;
         }
         if (backedUp.watermark === this.#latestBackup.watermark) {
-          this.#lc.debug?.(`ignoring redundant backup watermark`, {backedUp});
+          this.#lc.debug?.(
+            `ignoring redundant backup watermark ${backedUp.watermark}`,
+            {backedUp},
+          );
           continue;
         }
       }
-      this.#lc.info?.(`received backup watermark`, {backedUp});
+      this.#lc.info?.(`received backup watermark ${backedUp.watermark}`, {
+        backedUp,
+      });
       this.#latestBackup = backedUp;
       this.#changeStreamer.trackBackupWatermark(backedUp.watermark);
       this.#checkFirstBackupCovers(backedUp);
