@@ -5,6 +5,7 @@ import {
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {runTx} from '../../../db/run-transaction.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
@@ -66,6 +67,10 @@ export type CreateSlotSpec = {
 
   // For overriding in tests.
   lockTimeout?: number;
+
+  // A (non-replication) connection to the same upstream instance, used to
+  // log what slot creation was waiting on if it times out.
+  diagnosticsDB?: PostgresDB | undefined;
 };
 
 // When creating a replication slot, Postgres waits for open transactions
@@ -76,7 +81,7 @@ export type CreateSlotSpec = {
 // However, to detect pathological situations, bound the amount of time that
 // the server waits for replication slot creation, so that a continual failure to
 // create a replication slot is surfaced by errors / alerts.
-const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 30_000;
+export const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 60_000;
 
 // The lock_timeout is set 1s before the client-side orTimeout so that
 // Postgres reliably aborts first and tears down the walsender cleanly.
@@ -94,6 +99,7 @@ export async function createReplicationSlot(
     failover,
     temporary,
     lockTimeout = SERVER_LOCK_TIMEOUT_MS,
+    diagnosticsDB,
   }: CreateSlotSpec,
 ): Promise<ReplicationSlot> {
   // CREATE_REPLICATION_SLOT can hang indefinitely waiting for long-running
@@ -113,9 +119,10 @@ export async function createReplicationSlot(
   // fires (~2h default) or the blocking transaction finishes.
   await session.unsafe(`SET lock_timeout = ${lockTimeout}`);
 
-  const {pgVersion} = (
-    await session.unsafe<{pgVersion: number}[]>(`
-      SELECT current_setting('server_version_num') as "pgVersion";
+  const {pgVersion, pid: walsenderPID} = (
+    await session.unsafe<{pgVersion: number; pid: number}[]>(`
+      SELECT current_setting('server_version_num') as "pgVersion",
+             pg_backend_pid() as "pid";
   `)
   )[0];
 
@@ -126,6 +133,9 @@ export async function createReplicationSlot(
 
   const raced = await orTimeout(createSlot, CREATE_REPLICATION_SLOT_TIMEOUT_MS);
   if (raced === 'timed-out') {
+    if (diagnosticsDB) {
+      await logSlotCreationBlockers(lc, diagnosticsDB, walsenderPID, slotName);
+    }
     // Create slot can block indefinitely waiting for old transactions. End
     // this connection in the background and fail fast so the process restarts.
     void session
@@ -134,13 +144,68 @@ export async function createReplicationSlot(
         lc.warn?.(`Error closing timed out replication slot session`, e),
       );
     throw new Error(
-      `Timed out after ${CREATE_REPLICATION_SLOT_TIMEOUT_MS} ms creating replication slot ${slotName}. ` +
-        `Crashing to force a clean restart.`,
+      `Timed out after ${CREATE_REPLICATION_SLOT_TIMEOUT_MS} ms creating replication slot ${slotName}.`,
     );
   }
   const [slot] = raced;
   lc.info?.(`Created replication slot ${slotName}`, slot);
   return slot;
+}
+
+const SLOT_DIAGNOSTICS_TIMEOUT_MS = 5_000;
+const SLOT_DIAGNOSTICS_MAX_TRANSACTIONS = 20;
+
+/**
+ * Best-effort logging of what a timed out CREATE_REPLICATION_SLOT was waiting
+ * on: the walsender's wait event and blocking pids, and the oldest
+ * transactions holding an xid. Slot creation waits for every such transaction
+ * on the instance (in all databases), each with its own lock_timeout, so a
+ * chain of overlapping transactions can exceed the client-side timeout
+ * without the lock_timeout ever firing.
+ *
+ * Query text is deliberately omitted since it can contain row values.
+ *
+ * Exported for testing.
+ */
+export async function logSlotCreationBlockers(
+  lc: LogContext,
+  sql: PostgresDB,
+  walsenderPID: number,
+  slotName: string,
+) {
+  try {
+    const result = await orTimeout(
+      Promise.all([
+        sql<JSONObject[]> /*sql*/ `
+          SELECT pid, wait_event_type as "waitEventType", wait_event as "waitEvent",
+                 pg_blocking_pids(pid) as "blockingPIDs"
+            FROM pg_stat_activity WHERE pid = ${walsenderPID}`,
+        sql<JSONObject[]> /*sql*/ `
+          SELECT pid, datname, usename, application_name as "applicationName",
+                 backend_type as "backendType", state,
+                 wait_event_type as "waitEventType", wait_event as "waitEvent",
+                 backend_xid::text as xid,
+                 xact_start::text as "xactStart",
+                 extract(epoch from now() - xact_start)::float8 as "xactAgeSec"
+            FROM pg_stat_activity
+            WHERE backend_xid IS NOT NULL AND pid <> ${walsenderPID}
+            ORDER BY xact_start NULLS LAST
+            LIMIT ${SLOT_DIAGNOSTICS_MAX_TRANSACTIONS}`,
+      ]),
+      SLOT_DIAGNOSTICS_TIMEOUT_MS,
+    );
+    if (result === 'timed-out') {
+      lc.warn?.(`Timed out collecting diagnostics for slot ${slotName}`);
+      return;
+    }
+    const [[walsender], transactions] = result;
+    lc.warn?.(`Replication slot ${slotName} creation blocked`, {
+      walsender: walsender ?? null,
+      transactions,
+    });
+  } catch (e) {
+    lc.warn?.(`Unable to collect diagnostics for slot ${slotName}`, e);
+  }
 }
 
 /**
@@ -248,6 +313,7 @@ export async function createReplicaAndSlot<T>(
         const slot = await createReplicationSlot(lc, replicationSession, {
           slotName,
           failover,
+          diagnosticsDB: sql,
         });
         const capturedSnapshot = await captureSnapshot(slot.snapshot_name);
         const initialSession = await keepSlotActiveUntilTakenOver(

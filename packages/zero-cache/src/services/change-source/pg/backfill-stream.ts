@@ -526,6 +526,7 @@ async function createSnapshotTransaction(
       await createReplicationSlot(lc, replicationSession, {
         slotName,
         temporary: true, // deletes the slot when the replicationSession ends
+        diagnosticsDB: db,
       });
 
     const {init, imported} = importSnapshot(snapshot);

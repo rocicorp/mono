@@ -464,10 +464,12 @@ export function pgClient(
   // `internal_query` fields -- e.g. a unique violation reports
   // `Key (email)=(someone@example.com) already exists` in `detail`. Forward
   // only the severity, SQLSTATE and schema location; never the Notice itself.
+  // The text is logged as `noticeMessage` because a `message` field would be
+  // clobbered by the log line's own message ("pg notice").
   const safeNotice = (n: Notice) => ({
     severity: n.severity,
     code: n.code,
-    message: n.message,
+    noticeMessage: n.message,
     schema: n.schema_name,
     table: n.table_name,
     column: n.column_name,
