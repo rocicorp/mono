@@ -55,6 +55,10 @@ const PATH_REGEX =
 
 const SUBSCRIBE_PATH = `/replication/v${PROTOCOL_VERSION}/subscribe`;
 
+// Max time for a client to establish the /subscribe websocket (TCP connect
+// plus upgrade) before abandoning the attempt.
+const CONNECT_TIMEOUT_MS = 10_000;
+
 type Options = HttpOptions & {
   startupDelayMs: number;
   config?:
@@ -451,7 +455,14 @@ export class ChangeStreamerHttpClient
     // taskID is carried in the query for observability/routing; the server
     // reads the authoritative taskID from the control messages themselves.
     const params = new URLSearchParams({taskID});
-    const ws = new WebSocket(uri + `?${params.toString()}`);
+    // Bound the TCP connect + HTTP upgrade. Without this, a SYN black-holed
+    // by a stale Service endpoint (e.g. a just-terminated replication-manager
+    // pod) is retransmitted by the kernel for ~2 minutes before ETIMEDOUT.
+    // Failing fast lets the caller's retry open a fresh connection that is
+    // routed to a live endpoint.
+    const ws = new WebSocket(uri + `?${params.toString()}`, {
+      handshakeTimeout: CONNECT_TIMEOUT_MS,
+    });
 
     const outbound = Subscription.create<SubscribeUpstream>();
     const instream = await streamInternalWithSize(
