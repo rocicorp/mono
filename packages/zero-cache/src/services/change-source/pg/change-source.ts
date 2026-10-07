@@ -288,7 +288,7 @@ export class PostgresChangeSource implements ChangeSource {
         msg.tag === 'message' &&
         msg.prefix === this.#lagReporter?.messagePrefix
       ) {
-        changes.pushStatus(this.#lagReporter.processLagReportMessage(msg));
+        changes.pushStatus(this.#lagReporter.processLagReportMessage(msg, lsn));
         return false;
       }
       // Checks if we are passed the LSN of the expected lag report, in which
@@ -657,6 +657,14 @@ export class LagReporter {
             )::text
           ) as lsn FROM CTE;
       `;
+        // The LSN returned by pg_logical_emit_message() is not necessarily
+        // comparable to the LSNs of the replication stream (e.g. on Aurora,
+        // it is in the cluster volume's separate logical WAL stream). The
+        // WAL insert position, read after the message is emitted, is in the
+        // stream's LSN space and is at or beyond the end of the message,
+        // which is what checkCurrentLSN() requires.
+        [{lsn}] = await this.#db /*sql*/ `
+          SELECT pg_current_wal_insert_lsn() AS lsn`;
       }
     } catch (e) {
       if (this.#expectingLagReport?.id === id) {
@@ -703,9 +711,15 @@ export class LagReporter {
    * of a replication session.
    *
    * To account for this, the last emitted lag report is considered "received"
-   * if the stream has advanced beyond the LSN of the report.
+   * if the stream has advanced beyond the WAL insert position read after the
+   * report was emitted (see initiateLagReport()).
+   *
+   * This is unnecessary in PG 17+, where reports are emitted with `flush`.
    */
   checkCurrentLSN(lsn: bigint): DownstreamStatusMessage | undefined {
+    if (this.#pgVersion >= PG_17) {
+      return undefined;
+    }
     if (this.#expectingLagReport?.lsn && lsn > this.#expectingLagReport.lsn) {
       this.#lc.info?.(
         `LSN ${fromBigInt(lsn)} is passed expected lag report ` +
@@ -769,16 +783,22 @@ export class LagReporter {
     }, this.#reportIntervalMs);
   }
 
-  processLagReportMessage(msg: MessageMessage): DownstreamStatusMessage {
+  /**
+   * @param lsn The LSN of the message in the replication stream (i.e. from the
+   *     XLogData header), rather than the `messageLsn` of the message itself,
+   *     which is not guaranteed to be comparable to other stream LSNs (e.g. on
+   *     Aurora). See {@link initiateLagReport}.
+   */
+  processLagReportMessage(
+    msg: MessageMessage,
+    lsn: bigint,
+  ): DownstreamStatusMessage {
     assert(
       msg.prefix === this.messagePrefix,
       `unexpected message prefix: ${msg.prefix}`,
     );
     const report = parseLogicalMessageContent(this.#lc, msg, lagReportSchema);
-    return this.#processLagReport(
-      report,
-      toStateVersionString(msg.messageLsn ?? '0/0'),
-    );
+    return this.#processLagReport(report, majorVersionToString(lsn));
   }
 
   #processLagReport(
