@@ -303,11 +303,14 @@ export async function createReplicaAndSlot<T>(
             WHERE replicas.slot = slots.slot_name AND NOT slots.active`;
         continue; // then let dropUnclaimedSlots() perform its cleanup
       }
-      // Otherwise, clean up any created slot if something went wrong.
+      // Otherwise, clean up any created slot if something went wrong. The
+      // slot may not exist (e.g. if its creation failed), and its name may
+      // have been reused since the lock was released, so leave it to
+      // dropUnclaimedSlots(), which only drops slots without a replica.
       if (slotName) {
         lc.warn?.(`deleting slot ${slotName} due to error`, e);
         await replicationSession.end();
-        await sql`SELECT pg_drop_replication_slot(${slotName})`;
+        await dropUnclaimedSlots(lc, sql, shard);
       }
       throw e;
     }
