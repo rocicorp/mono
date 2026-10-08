@@ -1,5 +1,6 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {Client} from 'pg';
-import {Pool, type PoolClient} from 'pg';
+import {DatabaseError, Pool, type PoolClient} from 'pg';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Format} from '../../../zero-types/src/format.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -10,6 +11,7 @@ import type {
   Row,
 } from '../../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
+import {createLogContext} from '../logging.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
@@ -38,6 +40,16 @@ export class NodePgConnection implements DBConnection<NodePgTransaction> {
   ): Promise<TRet> {
     const client =
       this.#pool instanceof Pool ? await this.#pool.connect() : this.#pool;
+    // The pool only listens for 'error' on a client idle in the pool. If the
+    // server ends the connection while the client is checked out here and no
+    // query is running (an idle_in_transaction_session_timeout while the
+    // mutator awaits something else, a restart, a failover), node-postgres
+    // emits 'error' on the client, and with no listener the process dies.
+    let connectionError: Error | undefined;
+    const onError = (e: Error) => {
+      connectionError ??= e;
+    };
+    client.on('error', onError);
     try {
       await client.query('BEGIN');
       const result = await fn(new NodePgTransactionInternal(client));
@@ -49,10 +61,17 @@ export class NodePgConnection implements DBConnection<NodePgTransaction> {
       } catch {
         // ignore rollback error; original error will be thrown
       }
-      throw error;
+      // After a connection error, a query only fails with "Client has
+      // encountered a connection error and is not queryable". Throw what
+      // ended the connection instead, unless the server reported an error of
+      // its own to the query.
+      throw connectionError && !(error instanceof DatabaseError)
+        ? connectionError
+        : error;
     } finally {
+      client.off('error', onError);
       if (this.#pool instanceof Pool && 'release' in client) {
-        client.release();
+        client.release(connectionError);
       }
     }
   }
@@ -102,6 +121,8 @@ async function nodePgQuery(
  *
  * @param schema - Zero schema.
  * @param pg - `pg` Pool or connection string.
+ * @param lc - Where to log errors from a pool built from a connection string.
+ * Defaults to `console` at level `warn`.
  *
  * @example
  * ```ts
@@ -134,9 +155,22 @@ async function nodePgQuery(
 export function zeroNodePg<S extends Schema>(
   schema: S,
   pg: NodePgTransaction | string,
+  lc: LogContext = createLogContext('warn'),
 ) {
   if (typeof pg === 'string') {
-    pg = new Pool({connectionString: pg});
+    const pool = new Pool({connectionString: pg});
+    // node-postgres emits 'error' on the pool when the server terminates a
+    // client idle in the pool (an idle_session_timeout, a restart, a
+    // failover). The pool has already discarded that client and will open
+    // another; with no listener the event is an uncaught exception and the
+    // process dies with whatever request it was serving. Log it and carry on.
+    pool.on('error', e => {
+      lc.warn?.(
+        'node-postgres pool error; the client was removed from the pool',
+        e,
+      );
+    });
+    pg = pool;
   }
   return new ZQLDatabase(new NodePgConnection(pg), schema);
 }
