@@ -3743,6 +3743,50 @@ describe('Mutation responses poked down', () => {
 
     await z.close();
   });
+
+  test('a result with a field from a newer server still settles', async () => {
+    const schema = createSchema({
+      tables: [
+        table('issues')
+          .columns({id: string(), value: number()})
+          .primaryKey('id'),
+      ],
+      enableLegacyMutators: true,
+    });
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issues: {
+          foo: (tx: Transaction<typeof schema>, {foo}: {foo: number}) =>
+            tx.mutate.issues.insert({id: foo.toString(), value: foo}),
+        },
+      } as const,
+    });
+    await z.triggerConnected();
+
+    const mutation = z.mutate.issues.foo({foo: 1});
+    await mutation.client;
+
+    // A newer server may add fields this client doesn't know.
+    const newerResult = {error: 'app', message: 'boom', newField: 1} as const;
+    await z.triggerPoke({
+      lastMutationIDChanges: {[z.clientID]: 1},
+      mutationsPatch: [
+        {
+          op: 'put',
+          mutation: {id: {clientID: z.clientID, id: 1}, result: newerResult},
+        },
+      ],
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    const result = await mutation.server;
+    assert(result.type === 'error', 'Expected result type to be error');
+    assert(result.error.type === 'app', 'Expected error type to be app');
+    expect(result.error.message).toBe('boom');
+
+    await z.close();
+  });
 });
 
 test('kvStore option', async () => {

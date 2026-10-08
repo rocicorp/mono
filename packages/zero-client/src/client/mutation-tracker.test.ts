@@ -397,6 +397,54 @@ describe('MutationTracker', () => {
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
+  test('mutation results with fields from a newer server still settle', async () => {
+    const onFatalError = vi.fn();
+    let cb: ((diffs: NoIndexDiff) => void) | undefined;
+    const watch = (wcb: (diffs: NoIndexDiff) => void) => {
+      cb = wcb;
+      return () => {
+        cb = undefined;
+      };
+    };
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const ok = tracker.trackMutation();
+    tracker.mutationIDAssigned(ok.ephemeralID, 1);
+    const appError = tracker.trackMutation();
+    tracker.mutationIDAssigned(appError.ephemeralID, 2);
+    const unknownError = tracker.trackMutation();
+    tracker.mutationIDAssigned(unknownError.ephemeralID, 3);
+
+    // Results are stored as the server sent them, so a newer server's extra
+    // fields and error kinds reach the tracker.
+    const results = [
+      {data: {x: 1}, newField: 1},
+      {error: 'app', message: 'server error', newField: 1},
+      {error: 'someFutureKind'},
+    ];
+    const patches = results.map(
+      (result, i) =>
+        ({
+          op: 'put',
+          mutation: {id: {clientID: CLIENT_ID, id: i + 1}, result},
+        }) as unknown as MutationPatch,
+    );
+
+    assert(cb, 'Expected the tracker to watch mutation results');
+    cb(patches.map(p => mutationPatchToDiffOp(p)));
+
+    await expect(ok.serverPromise).resolves.toBeDefined();
+    await expect(appError.serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'server error',
+    });
+    await expect(unknownError.serverPromise).rejects.toBeInstanceOf(
+      ProtocolError,
+    );
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
   test('tracked mutations are resolved on reconnect', async () => {
     const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
