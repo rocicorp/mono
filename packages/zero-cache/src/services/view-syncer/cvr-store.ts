@@ -558,6 +558,15 @@ export class CVRStore {
     return this.#rowCache.getRowRecords();
   }
 
+  /**
+   * Discards the cached row records, e.g. when the CVR may have been changed
+   * by another view-syncer, so that they are read again from the store
+   * (alongside the CVR on its next {@link load}).
+   */
+  invalidateRowRecords(): void {
+    this.#rowCache.clear();
+  }
+
   putRowRecord(row: RowRecord): void {
     this.#pendingRowRecordUpdates.set(row.id, row);
   }

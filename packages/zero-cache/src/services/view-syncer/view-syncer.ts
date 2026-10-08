@@ -117,6 +117,7 @@ import {
   versionFromString,
   versionString,
   versionToCookie,
+  versionToNullableCookie,
   type ClientQueryRecord,
   type CustomQueryRecord,
   type CVRVersion,
@@ -612,8 +613,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.keepalive();
   }
 
+  /**
+   * Runs `fn` within the `#lock` with the current CVR, loading it from the
+   * store if it is not cached. `fn` is told whether the CVR was `loaded` for
+   * this call, as opposed to being the copy cached from an earlier one.
+   */
   #runInLockWithCVR(
-    fn: (lc: LogContext, cvr: CVRSnapshot) => Promise<void> | void,
+    fn: (
+      lc: LogContext,
+      cvr: CVRSnapshot,
+      loaded: boolean,
+    ) => Promise<void> | void,
   ): Promise<void> {
     const rid = randomID();
     this.#lc.debug?.('about to acquire lock for cvr ', rid);
@@ -676,7 +686,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             await this.#maybeHydratePipelines(lc, this.#cvr, connCtx);
           }
         }
-        await fn(lc, this.#cvr);
+        await fn(lc, this.#cvr, reloaded);
       } catch (e) {
         // Clear cached state if an error is encountered.
         this.#cvr = undefined;
@@ -1682,36 +1692,69 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         let result: R | undefined;
         let connCtx: ConnectionContext | undefined;
         try {
-          await this.#runInLockWithCVR(async (lc, cvr) => {
-            lc = lc
-              .withContext('clientID', clientID)
-              .withContext('wsID', wsID)
-              .withContext('cmd', cmd);
-            lc.debug?.('acquired lock for cvr');
+          for (let attempt = 0; ; attempt++) {
+            try {
+              await this.#runInLockWithCVR(async (lc, cvr, loaded) => {
+                lc = lc
+                  .withContext('clientID', clientID)
+                  .withContext('wsID', wsID)
+                  .withContext('cmd', cmd);
+                lc.debug?.('acquired lock for cvr');
 
-            client = this.#clients.get(clientID);
-            if (client?.wsID !== wsID) {
-              lc.debug?.('mismatched wsID', client?.wsID, wsID);
-              // Only respond to messages of the currently connected client.
-              // Connections may have been drained or dropped due to an error.
-              return;
+                client = this.#clients.get(clientID);
+                if (client?.wsID !== wsID) {
+                  lc.debug?.('mismatched wsID', client?.wsID, wsID);
+                  // Only respond to messages of the currently connected client.
+                  // Connections may have been drained or dropped due to an error.
+                  return;
+                }
+
+                connCtx =
+                  this.connContextManager.getConnectionContext(selector);
+
+                if (newClient) {
+                  assert(
+                    newClient === client,
+                    'newClient must match existing client',
+                  );
+                  if (
+                    !loaded &&
+                    attempt === 0 &&
+                    cmpVersions(client.version(), cvr.version) > 0
+                  ) {
+                    // The client is ahead of the cached CVR, which is only
+                    // valid if another view-syncer has since advanced the
+                    // CVR (e.g. the client group was served elsewhere while
+                    // this instance stayed alive). Reload it before judging
+                    // the client's base cookie.
+                    lc.info?.(
+                      `client@${versionToNullableCookie(client.version())} ` +
+                        `is ahead of cached cvr@${versionString(cvr.version)}; ` +
+                        `reloading cvr`,
+                    );
+                    this.#cvrStore.invalidateRowRecords();
+                    throw new CachedCVRBehindClientError();
+                  }
+                  checkClientAndCVRVersions(client.version(), cvr.version);
+                } else if (!this.#clients.has(clientID)) {
+                  lc.warn?.(
+                    `Processing ${cmd} before initConnection was received`,
+                  );
+                }
+
+                lc.debug?.(cmd, body);
+                result = await fn(lc, clientID, body, cvr);
+              });
+              break;
+            } catch (e) {
+              // #runInLockWithCVR() has discarded the cached CVR, so the
+              // next attempt loads it from the store.
+              if (e instanceof CachedCVRBehindClientError) {
+                continue;
+              }
+              throw e;
             }
-
-            connCtx = this.connContextManager.getConnectionContext(selector);
-
-            if (newClient) {
-              assert(
-                newClient === client,
-                'newClient must match existing client',
-              );
-              checkClientAndCVRVersions(client.version(), cvr.version);
-            } else if (!this.#clients.has(clientID)) {
-              lc.warn?.(`Processing ${cmd} before initConnection was received`);
-            }
-
-            lc.debug?.(cmd, body);
-            result = await fn(lc, clientID, body, cvr);
-          });
+          }
         } catch (e) {
           const lc = this.#lc
             .withContext('clientID', clientID)
@@ -3911,6 +3954,14 @@ function contentsAndVersion(row: Row) {
 }
 
 const NEW_CVR_VERSION = {stateVersion: '00'};
+
+/**
+ * Thrown (and handled) within {@link ViewSyncerService} to reload a cached
+ * CVR that a connecting client is ahead of.
+ */
+class CachedCVRBehindClientError extends Error {
+  readonly name = 'CachedCVRBehindClientError';
+}
 
 function checkClientAndCVRVersions(
   client: NullableCVRVersion,
