@@ -9,7 +9,6 @@ import {
 } from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import type {
-  AvailableRelationships,
   DestTableName,
   ExistsOptions,
   GetFilterType,
@@ -122,7 +121,10 @@ export class ExpressionBuilder<
   or = or;
   not = not;
 
-  exists = <TRelationship extends AvailableRelationships<TTable, TSchema>>(
+  // The relationship names are inline for the reason given on `Query.related`.
+  exists = <
+    TRelationship extends keyof TSchema['relationships'][TTable] & string,
+  >(
     relationship: TRelationship,
     cb?: (
       query: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,

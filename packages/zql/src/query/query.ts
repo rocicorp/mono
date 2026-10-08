@@ -177,11 +177,6 @@ export type GetFilterType<
         | Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>
         | undefined;
 
-export type AvailableRelationships<
-  TTable extends string,
-  TSchema extends ZeroSchema,
-> = keyof TSchema['relationships'][TTable] & string;
-
 export type DestTableName<
   TTable extends string,
   TSchema extends ZeroSchema,
@@ -335,7 +330,13 @@ export interface Query<
    */
   readonly [pinnedColumns]?: ((pinned: TPinned) => void) | undefined;
 
-  related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+  // The relationship names are written inline rather than through an alias:
+  // tsc prints an alias by its name, with the whole schema as its argument, so
+  // a misspelled name would be reported against that instead of the union of
+  // names.
+  related<
+    TRelationship extends keyof TSchema['relationships'][TTable] & string,
+  >(
     relationship: TRelationship,
   ): Query<
     TTable,
@@ -348,7 +349,7 @@ export interface Query<
     TPinned
   >;
   related<
-    TRelationship extends AvailableRelationships<TTable, TSchema>,
+    TRelationship extends keyof TSchema['relationships'][TTable] & string,
     TSub extends Query<string, TSchema, any>,
   >(
     relationship: TRelationship,
@@ -416,13 +417,13 @@ export interface Query<
   // With no callback the subquery pins nothing, so `scalar` can never be
   // honored here.
   whereExists(
-    relationship: AvailableRelationships<TTable, TSchema>,
+    relationship: keyof TSchema['relationships'][TTable] & string,
     options?: ExistsOptions<false>,
   ): Query<TTable, TSchema, TReturn, TPinned>;
   // The `{scalar: true}` overload, tried first: it matches only when the
   // callback returns a query that pins a unique key of the destination table.
   whereExists<
-    TRelationship extends AvailableRelationships<TTable, TSchema>,
+    TRelationship extends keyof TSchema['relationships'][TTable] & string,
     TSubPinned extends string = never,
   >(
     relationship: TRelationship,
@@ -445,7 +446,9 @@ export interface Query<
   // last overload's, error. The branded `true` admits no real value; it is
   // there so that error spells out the requirement. It is written inline
   // because tsc prints a type alias by its name rather than its content.
-  whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+  whereExists<
+    TRelationship extends keyof TSchema['relationships'][TTable] & string,
+  >(
     relationship: TRelationship,
     cb: (
       q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
