@@ -285,7 +285,8 @@ export async function createReplicaAndSlot<T>(
           // With the lock acquired, ensure that only one initial sync is
           // active at a time. getRestoreCandidates() orders its results
           // with stage = InitialSync (and active = true) first.
-          const others = await getRestoreCandidates(lc, tx, shard, epoch);
+          const others = await getRestoreCandidates(tx, shard, epoch);
+          lc.info?.(`current replicas at epoch ${epoch}`, {replicas: others});
           if (others.length) {
             const [{id, stage, active}] = others;
             if (stage === InitialSync && active) {

@@ -438,7 +438,11 @@ async function currentWalLSN(sql: PostgresDB): Promise<LSN> {
   return lsn;
 }
 
-const REPLICA_POLL_INTERVAL_MS = 5_000;
+const REPLICA_POLL_INTERVAL_MS = 500;
+// Polling is frequent so that a fork proceeds as soon as the source replica
+// passes the fork LSN; logging is throttled by time rather than per poll.
+const PROGRESS_LOG_INTERVAL_MS = 5_000;
+const SLOW_PROGRESS_LOG_INTERVAL_MS = 60_000;
 const DEFAULT_INACTIVE_REPLICA_GRACE_PERIOD_MS = 20_000;
 
 // Exported for testing.
@@ -468,13 +472,26 @@ export async function getSourceAndDestinationReplicas(
   let destination: ReplicationSlotResult<void> | undefined;
   // The position after the creation of the destination replica.
   let forkLSN: LSN | undefined;
+  const lastLogged = new Map<string, number>();
+  const shouldLog = (key: string, intervalMs: number) => {
+    const now = Date.now();
+    const last = lastLogged.get(key);
+    if (last !== undefined && now - last < intervalMs) {
+      return false;
+    }
+    lastLogged.set(key, now);
+    return true;
+  };
 
   try {
     for (let i = 0; ; i++) {
       if (i > 0) {
         await sleep(pollIntervalMs);
       }
-      const replicas = await getRestoreCandidates(lc, sql, shard, epoch);
+      const replicas = await getRestoreCandidates(sql, shard, epoch);
+      if (shouldLog('replicas', PROGRESS_LOG_INTERVAL_MS)) {
+        lc.info?.(`current replicas at epoch ${epoch}`, {replicas});
+      }
       if (replicas.length === 0) {
         lc.info?.(`no suitable replicas to restore from`, {replicas});
         destination?.initialSession.destroy();
@@ -492,7 +509,12 @@ export async function getSourceAndDestinationReplicas(
         // getRestoreCandidates().
         if (replica.stage === InitialSync) {
           // Log periodically; initial-sync can be long
-          if (i % 12 === 0) {
+          if (
+            shouldLog(
+              `initial-sync:${replica.id}`,
+              SLOW_PROGRESS_LOG_INTERVAL_MS,
+            )
+          ) {
             lc.info?.(`waiting for initial sync of ${replica.id}`, {replica});
           }
           break;
@@ -526,10 +548,12 @@ export async function getSourceAndDestinationReplicas(
             // change-log can be resumed from the destination slot.
             forkLSN ??= await currentWalLSN(sql);
             if (toBigInt(confirmedFlushLsn) < toBigInt(forkLSN)) {
-              lc.info?.(
-                `waiting for ${replica.id}@${confirmedFlushLsn} to reach ${forkLSN} (after ${destination.slot.slot_name}@${destination.slot.consistent_point})`,
-                {replica},
-              );
+              if (shouldLog(`fork:${replica.id}`, PROGRESS_LOG_INTERVAL_MS)) {
+                lc.info?.(
+                  `waiting for ${replica.id}@${confirmedFlushLsn} to reach ${forkLSN} (after ${destination.slot.slot_name}@${destination.slot.consistent_point})`,
+                  {replica},
+                );
+              }
               break;
             }
           }
@@ -569,7 +593,9 @@ export async function getSourceAndDestinationReplicas(
           replica.id !== destination?.replica.id
         ) {
           // Another task is restoring (e.g. resuming) this replica.
-          if (i % 12 === 0) {
+          if (
+            shouldLog(`restoring:${replica.id}`, SLOW_PROGRESS_LOG_INTERVAL_MS)
+          ) {
             lc.info?.(
               `waiting for replica ${replica.id}@${replica.slot} being restored by another task`,
               {replica},
@@ -587,10 +613,15 @@ export async function getSourceAndDestinationReplicas(
           // is a last resort only taken in the absence of alternatives.
           const now = Date.now();
           const inactiveMs = now - (inactiveSince.get(replica.id) ?? now);
-          lc.info?.(
-            `replica ${replica.id}@${replica.slot} as been inactive for ${inactiveMs}ms`,
-            {replica},
-          );
+          if (
+            inactiveMs >= gracePeriodMs ||
+            shouldLog(`inactive:${replica.id}`, PROGRESS_LOG_INTERVAL_MS)
+          ) {
+            lc.info?.(
+              `replica ${replica.id}@${replica.slot} has been inactive for ${inactiveMs}ms`,
+              {replica},
+            );
+          }
           if (inactiveMs >= gracePeriodMs) {
             const reserved = await claimSlotForResumption(
               lc,

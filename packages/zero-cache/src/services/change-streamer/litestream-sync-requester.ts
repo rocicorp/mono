@@ -24,6 +24,17 @@ const CLIENT_TIMEOUT_MS = (SERVER_TIMEOUT_SECONDS + 5) * 1000;
 
 const ERROR_LOG_INTERVAL_MS = 60_000;
 
+/**
+ * Initial delay before retrying a failed request, doubled on each consecutive
+ * failure until it reaches the configured interval, after which the regular
+ * ticks alone retry, so that a busy litestream sees no more requests than the
+ * interval allows. The first request is typically issued before litestream's
+ * control socket is listening; retrying quickly (rather than after a full
+ * interval) keeps the initial backup confirmation, which gates readiness, from
+ * waiting out an interval.
+ */
+const MIN_RETRY_DELAY_MS = 250;
+
 const localWatermarkSchema = v.object({
   stateVersion: v.string(),
   writeTimeMs: v.number(),
@@ -62,7 +73,9 @@ export type SyncRequesterConfig = {
  * litestream: there is nothing to seal or upload, and no backup reads.
  *
  * At most one request is outstanding at a time. Failed or timed-out requests
- * are retried on the next tick, and nothing is published until one succeeds.
+ * are retried with a backoff that starts short and, once it grows to the
+ * interval, defers to the regular ticks. Nothing is published until a request
+ * succeeds.
  */
 export class LitestreamSyncRequester {
   readonly #lc: LogContext;
@@ -73,6 +86,8 @@ export class LitestreamSyncRequester {
   readonly #stream: Subscription<BackedUpWatermark>;
 
   #timer: NodeJS.Timeout | undefined;
+  #retryTimer: NodeJS.Timeout | undefined;
+  #retryDelayMs = MIN_RETRY_DELAY_MS;
   #inFlight: Promise<void> | undefined;
   #backedUp: string | undefined;
   #lastErrorLogMs = 0;
@@ -94,6 +109,7 @@ export class LitestreamSyncRequester {
     this.#stream = Subscription.create<BackedUpWatermark>({
       cleanup: () => {
         clearInterval(this.#timer);
+        clearTimeout(this.#retryTimer);
         this.#state.stop(this.#lc);
         this.#litestream.close();
         db.close();
@@ -149,6 +165,7 @@ export class LitestreamSyncRequester {
         },
         this.#state.signal,
       );
+      this.#retryDelayMs = MIN_RETRY_DELAY_MS;
       this.#publish(local, Date.now());
       this.#lc.debug?.(`backed up watermark ${local.stateVersion}`, result);
     } catch (e) {
@@ -157,7 +174,8 @@ export class LitestreamSyncRequester {
       }
       // Expected while litestream is starting up or busy with a long sync or
       // upload (e.g. the initial snapshot of a large replica); the request is
-      // retried on the next tick.
+      // retried after a backoff, or on the next tick if that comes first.
+      this.#scheduleRetry();
       const now = Date.now();
       if (now - this.#lastErrorLogMs >= ERROR_LOG_INTERVAL_MS) {
         this.#lastErrorLogMs = now;
@@ -167,6 +185,16 @@ export class LitestreamSyncRequester {
         );
       }
     }
+  }
+
+  #scheduleRetry() {
+    clearTimeout(this.#retryTimer);
+    const delayMs = this.#retryDelayMs;
+    if (delayMs >= this.#config.intervalMs) {
+      return; // backed off to the interval; the regular ticks retry
+    }
+    this.#retryDelayMs = delayMs * 2;
+    this.#retryTimer = setTimeout(this.tick, delayMs);
   }
 
   #publish({stateVersion, writeTimeMs}: LocalWatermark, backupTimeMs: number) {

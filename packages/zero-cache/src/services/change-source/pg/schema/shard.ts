@@ -448,7 +448,6 @@ export async function getActiveReplicas(
  *   as a last resort.
  */
 export async function getRestoreCandidates(
-  lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
   epoch: number,
@@ -489,9 +488,7 @@ export async function getRestoreCandidates(
         active DESC,               -- prefer active slots (fork over resume)
         confirmed_flush_lsn DESC;  -- prefer replicas further ahead
   `;
-  const replicas = v.parse(results, v.array(replicaStateSchema), 'passthrough');
-  lc.info?.(`current replicas at epoch ${epoch}`, {replicas});
-  return replicas;
+  return v.parse(results, v.array(replicaStateSchema), 'passthrough');
 }
 
 export async function getReplicaState(
