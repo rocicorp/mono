@@ -652,7 +652,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -663,7 +663,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/prefix' as WSString,
@@ -674,7 +674,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/prefix/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/prefix/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/prefix/' as WSString,
@@ -685,7 +685,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/prefix/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/prefix/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -696,7 +696,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -707,7 +707,7 @@ describe('createSocket', () => {
       lmid: 123,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -718,7 +718,7 @@ describe('createSocket', () => {
       lmid: 123,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -729,7 +729,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -740,7 +740,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 0,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -751,7 +751,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: true,
       now: 0,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&debugPerf=true&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&debugPerf=true&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -762,7 +762,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 456,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ`,
     },
     {
       socketURL: 'ws://example.com/' as WSString,
@@ -773,7 +773,7 @@ describe('createSocket', () => {
       lmid: 0,
       debugPerf: false,
       now: 456,
-      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&baseCookie=&ts=456&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=Aw&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
+      expectedURL: `ws://example.com/sync/v51/connect?clientID=clientID&clientGroupID=testClientGroupID&baseCookie=&ts=456&lmid=0&wsid=wsidx&profileID=${mockProfileID}&f=AQ&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
       additionalConnectParams: {
         reason: 'rehome',
         backoff: '100',
