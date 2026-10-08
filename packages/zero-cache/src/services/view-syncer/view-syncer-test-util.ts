@@ -17,6 +17,7 @@ import type {
 } from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {PokePartBody} from '../../../../zero-protocol/src/poke.ts';
+import {ProtocolFlags} from '../../../../zero-protocol/src/protocol-flag.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {
@@ -48,7 +49,6 @@ import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
-import {FeatureFlagSet} from '../../workers/connect-params.ts';
 import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
@@ -875,7 +875,7 @@ export async function setup(
         lmID: 0,
         wsID: ctx.wsID,
         debugPerf: false,
-        features: new FeatureFlagSet(),
+        protocolFlags: new ProtocolFlags(),
         auth: ctx.auth?.raw,
         userID: ctx.userID,
         initConnectionMsg: undefined,
@@ -1062,7 +1062,7 @@ export function restartViewSyncer(params: {
         lmID: 0,
         wsID: ctx.wsID,
         debugPerf: false,
-        features: new FeatureFlagSet(),
+        protocolFlags: new ProtocolFlags(),
         auth: ctx.auth?.raw,
         userID: ctx.userID,
         initConnectionMsg: undefined,

@@ -46,7 +46,7 @@ import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {
   encodeSecProtocols,
-  setFeatureFlags,
+  setProtocolFlags,
 } from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -3058,7 +3058,7 @@ export async function createConnectionURL(
   if (debugPerf) {
     searchParams.set('debugPerf', true.toString());
   }
-  setFeatureFlags(searchParams);
+  setProtocolFlags(searchParams);
   if (additionalConnectParams) {
     for (const k in additionalConnectParams) {
       if (searchParams.has(k)) {

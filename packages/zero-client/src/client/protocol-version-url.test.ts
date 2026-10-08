@@ -32,10 +32,10 @@ test('When the URL changes we need to update the protocol version', async () => 
   const hash = h64(sorted.toString()).toString(36);
 
   // If this test fails the URL search params have changed. Old servers ignore
-  // parameters they don't know, so a new optional parameter or feature flag
+  // parameters they don't know, so a new optional parameter or protocol flag
   // is fine. A change old servers can't ignore needs a CLIENT_PROTOCOL_VERSION
   // bump (see protocol-version.ts). Then update the expected values.
-  expect(hash).toBe('30nqhuku9q5i7');
+  expect(hash).toBe('sar2d29q3rdw');
   expect(CLIENT_PROTOCOL_VERSION).toBe(51);
   expect(url.pathname).toBe(`/sync/v51/connect`);
 });

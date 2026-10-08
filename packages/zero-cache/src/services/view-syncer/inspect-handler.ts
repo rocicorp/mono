@@ -4,7 +4,6 @@ import {must} from '../../../../shared/src/must.ts';
 import {TDigest} from '../../../../shared/src/tdigest.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
-import {FeatureFlag} from '../../../../zero-protocol/src/feature-flag.ts';
 import type {
   QueryServerMetrics,
   ServerMetrics,
@@ -13,6 +12,7 @@ import {
   inspectAnalyzeQueryUpSchema,
   type UnparsedInspectUpBody,
 } from '../../../../zero-protocol/src/inspect-up.ts';
+import {ProtocolFlag} from '../../../../zero-protocol/src/protocol-flag.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
@@ -170,7 +170,7 @@ export async function handleInspect(
         client.sendInspectResponse(lc, {
           op: 'analyze-query',
           id: body.id,
-          value: ctx.features.has(FeatureFlag.AnalyzeFilterNode)
+          value: ctx.protocolFlags.has(ProtocolFlag.AnalyzeFilterNode)
             ? result
             : withoutFilterNodes(result),
         });

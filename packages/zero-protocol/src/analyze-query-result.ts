@@ -109,7 +109,7 @@ const bestPlanSelectedEventJSONSchema = v.object({
 
 /**
  * The first protocol version that receives `filter` planner nodes without the
- * `AnalyzeFilterNode` feature flag. Older clients fail to parse them.
+ * `AnalyzeFilterNode` protocol flag. Older clients fail to parse them.
  */
 export const ANALYZE_FILTER_NODE_PROTOCOL_VERSION = 53;
 

@@ -13,12 +13,12 @@ import {
   isProtocolError,
   type ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
-import {FeatureFlag} from '../../../zero-protocol/src/feature-flag.ts';
 import {
   type PokeChunk,
   type PokeEndMessage,
   type PokePartMessage,
 } from '../../../zero-protocol/src/poke.ts';
+import {ProtocolFlag} from '../../../zero-protocol/src/protocol-flag.ts';
 import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
@@ -183,7 +183,7 @@ export class Connection {
     this.#downstreamSender = new DownstreamSender(
       this.#lc,
       ws,
-      connectParams.features.has(FeatureFlag.PokeChunk),
+      connectParams.protocolFlags.has(ProtocolFlag.PokeChunk),
     );
     this.#lc.debug?.('new connection');
     this.#onClose = onClose;

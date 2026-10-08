@@ -18,7 +18,7 @@ import {nullableVersionSchema, versionSchema} from './version.ts';
  *
  * Through protocol version 51, the poke continues with zero to many
  * `poke-part` JSON messages. Starting in version 52, or when the client sends
- * the `PokeChunk` feature flag, it continues with zero to many binary
+ * the `PokeChunk` protocol flag, it continues with zero to many binary
  * `pokeChunk` messages instead. Each binary message starts with a message
  * type byte. Concatenating and decoding the payload after that byte produces a
  * PokePartBody array. pokeChunk boundaries have no semantic meaning.
@@ -105,13 +105,13 @@ export const POKE_CHUNK_MESSAGE_TYPE = 0x00;
 
 /**
  * The first protocol version that receives binary poke chunks without the
- * `PokeChunk` feature flag.
+ * `PokeChunk` protocol flag.
  */
 export const POKE_CHUNK_PROTOCOL_VERSION = 52;
 
 /**
  * The last protocol version that receives JSON pokePart messages unless the
- * client sends the `PokeChunk` feature flag.
+ * client sends the `PokeChunk` protocol flag.
  */
 export const LAST_POKE_PART_PROTOCOL_VERSION = 51;
 

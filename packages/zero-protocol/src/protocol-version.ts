@@ -13,8 +13,8 @@ import {assert} from '../../shared/src/asserts.ts';
  * that clients and `zero-cache` can be updated and rolled back in either
  * order. Two rules keep that working:
  *
- * 1. A change an old server can ignore goes behind a feature flag (see
- *    `feature-flag-enum.ts`) and the client keeps sending the same
+ * 1. A change an old server can ignore goes behind a protocol flag (see
+ *    `protocol-flag-enum.ts`) and the client keeps sending the same
  *    {@link CLIENT_PROTOCOL_VERSION}. Old servers ignore flags they don't
  *    know, so the client must keep supporting the old behavior.
  * 2. A change an old server can't ignore (e.g. new `AST` functionality)
@@ -68,7 +68,7 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 51 changes inspector metrics fields
 // -- version 52 replaces JSON pokePart messages with binary poke chunks for
 //    clients using protocol version 52 or newer. Older clients retain pokePart
-//    unless they send the `PokeChunk` feature flag. (1.10 canaries)
+//    unless they send the `PokeChunk` protocol flag. (1.10 canaries)
 // -- version 53 adds 'filter' node type to AnalyzeQueryResult (1.11 canaries)
 export const PROTOCOL_VERSION = 53;
 
@@ -77,7 +77,7 @@ export const PROTOCOL_VERSION = 53;
  *
  * Kept below {@link PROTOCOL_VERSION} so that clients can connect to servers
  * from earlier releases: 1.9 servers accept versions up to 51. Clients ask for
- * newer behavior with feature flags instead (rule 1 above). Only increase it
+ * newer behavior with protocol flags instead (rule 1 above). Only increase it
  * to a version that every supported server already accepts (rule 2 above).
  *
  * This number is also part of the client's local database name (Replicache
