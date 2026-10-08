@@ -1,6 +1,12 @@
+import {fromBase64url, toBase64url} from '../../shared/src/base64.ts';
+import {
+  packBooleanMap,
+  unpackBooleanMap,
+} from '../../shared/src/packed-boolean-map.ts';
 import * as v from '../../shared/src/valita.ts';
 import {clientSchemaSchema} from './client-schema.ts';
 import {deleteClientsBodySchema} from './delete-clients.ts';
+import {FeatureFlag} from './feature-flag.ts';
 import {upQueriesPatchSchema} from './queries-patch.ts';
 
 /**
@@ -56,6 +62,40 @@ export type ConnectedBody = v.Infer<typeof connectedBodySchema>;
 export type ConnectedMessage = v.Infer<typeof connectedMessageSchema>;
 export type InitConnectionBody = v.Infer<typeof initConnectionBodySchema>;
 export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;
+
+/**
+ * The feature flags a client sent. A missing flag means the server's default.
+ */
+export type FeatureFlags = ReadonlyMap<FeatureFlag, boolean>;
+
+// The connect URL parameter that carries the feature flags: a byte array with
+// two bits per flag, the low bit saying the client sent the flag and the high
+// bit its value (see packed-boolean-map.ts), in unpadded base64url.
+const FEATURE_FLAGS_PARAM = 'f';
+
+/**
+ * Adds the client's feature flags to the connect URL: every flag this client
+ * knows, turned on.
+ */
+export function setFeatureFlags(params: URLSearchParams): void {
+  const flags = new Map(Object.values(FeatureFlag).map(flag => [flag, true]));
+  params.set(FEATURE_FLAGS_PARAM, toBase64url(packBooleanMap(flags)));
+}
+
+/**
+ * Reads the feature flags a client sent in the connect URL. Flags this server
+ * doesn't know are dropped, and a malformed value counts as no flags, so newer
+ * clients can always connect.
+ */
+export function getFeatureFlags(params: URLSearchParams): FeatureFlags {
+  let bytes: Uint8Array;
+  try {
+    bytes = fromBase64url(params.get(FEATURE_FLAGS_PARAM) ?? '');
+  } catch {
+    return new Map();
+  }
+  return unpackBooleanMap(bytes, Object.values(FeatureFlag));
+}
 
 export function encodeSecProtocols(
   initConnectionMessage: InitConnectionMessage | undefined,

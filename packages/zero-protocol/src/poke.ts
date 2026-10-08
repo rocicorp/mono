@@ -17,8 +17,9 @@ import {nullableVersionSchema, versionSchema} from './version.ts';
  * the poke is updating from and the `cookie` the poke is updating to.
  *
  * Through protocol version 51, the poke continues with zero to many
- * `poke-part` JSON messages. Starting in version 52, it continues with zero to
- * many binary `pokeChunk` messages. Each binary message starts with a message
+ * `poke-part` JSON messages. Starting in version 52, or when the client sends
+ * the `PokeChunk` feature flag, it continues with zero to many binary
+ * `pokeChunk` messages instead. Each binary message starts with a message
  * type byte. Concatenating and decoding the payload after that byte produces a
  * PokePartBody array. pokeChunk boundaries have no semantic meaning.
  *
@@ -102,10 +103,16 @@ export type PokeEndBody = v.Infer<typeof pokeEndBodySchema>;
 /** The first byte identifying a binary WebSocket message as a poke chunk. */
 export const POKE_CHUNK_MESSAGE_TYPE = 0x00;
 
-/** The first protocol version that receives binary poke chunks. */
+/**
+ * The first protocol version that receives binary poke chunks without the
+ * `PokeChunk` feature flag.
+ */
 export const POKE_CHUNK_PROTOCOL_VERSION = 52;
 
-/** The last protocol version that receives JSON pokePart messages. */
+/**
+ * The last protocol version that receives JSON pokePart messages unless the
+ * client sends the `PokeChunk` feature flag.
+ */
 export const LAST_POKE_PART_PROTOCOL_VERSION = 51;
 
 /** A tagged binary poke chunk WebSocket message. */

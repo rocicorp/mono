@@ -165,8 +165,10 @@ test('logged-out client uses a private storage sentinel for idb naming', async (
     kvStore: 'mem',
   });
 
+  // 51 is CLIENT_PROTOCOL_VERSION. Changing it renames the local database and
+  // drops unsent mutations; see protocol-version.ts.
   expect(zero.idbName).toEqual(
-    `rep:zero-${LOGGED_OUT_STORAGE_USER_ID}-o92aeop6ci3f:7:52.32bj126fs2e3f`,
+    `rep:zero-${LOGGED_OUT_STORAGE_USER_ID}-o92aeop6ci3f:7:51.32bj126fs2e3f`,
   );
 
   await zero.close();

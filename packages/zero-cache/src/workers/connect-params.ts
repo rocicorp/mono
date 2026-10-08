@@ -2,8 +2,12 @@ import type {IncomingHttpHeaders} from 'node:http';
 import {must} from '../../../shared/src/must.ts';
 import {
   decodeSecProtocols,
+  getFeatureFlags,
+  type FeatureFlags,
   type InitConnectionMessage,
 } from '../../../zero-protocol/src/connect.ts';
+import {FeatureFlag} from '../../../zero-protocol/src/feature-flag.ts';
+import {POKE_CHUNK_PROTOCOL_VERSION} from '../../../zero-protocol/src/poke.ts';
 import {URLParams} from '../types/url-params.ts';
 
 export type ConnectParams = {
@@ -16,6 +20,7 @@ export type ConnectParams = {
   readonly lmID: number;
   readonly wsID: string;
   readonly debugPerf: boolean;
+  readonly features: FeatureFlagSet;
   readonly auth: string | undefined;
   readonly userID: string | undefined;
   readonly initConnectionMsg: InitConnectionMessage | undefined;
@@ -40,6 +45,40 @@ function normalizeHeaders(
     normalized[key] = Array.isArray(value) ? value.join(', ') : value;
   }
   return normalized;
+}
+
+/**
+ * The protocol version from which a client that doesn't send a flag gets the
+ * feature. Clients below it get the feature only by sending the flag.
+ */
+const featureOnByDefaultFrom = {
+  [FeatureFlag.PokeChunk]: POKE_CHUNK_PROTOCOL_VERSION,
+} as const satisfies Record<FeatureFlag, number>;
+
+/** The features a client gets. See {@link resolveFeatures}. */
+export type FeatureFlagSet = ReadonlySet<FeatureFlag>;
+
+/** `Set`, typed so that `new FeatureFlagSet()` needs no type argument. */
+export const FeatureFlagSet = Set<FeatureFlag>;
+
+/**
+ * The features a client gets: the flags it sent, and for the flags it didn't
+ * send, the features its protocol version has on by default.
+ */
+export function resolveFeatures(
+  protocolVersion: number,
+  featureFlags: FeatureFlags,
+): FeatureFlagSet {
+  const features = new FeatureFlagSet();
+  for (const flag of Object.values(FeatureFlag)) {
+    if (
+      featureFlags.get(flag) ??
+      protocolVersion >= featureOnByDefaultFrom[flag]
+    ) {
+      features.add(flag);
+    }
+  }
+  return features;
 }
 
 export function getConnectParams(
@@ -67,6 +106,10 @@ export function getConnectParams(
     const wsID = params.get('wsid', false) ?? '';
     const userID = params.get('userID', false) ?? undefined;
     const debugPerf = params.getBoolean('debugPerf');
+    const features = resolveFeatures(
+      protocolVersion,
+      getFeatureFlags(url.searchParams),
+    );
     const {initConnectionMessage, authToken} = decodeSecProtocols(
       must(headers['sec-websocket-protocol']),
     );
@@ -82,6 +125,7 @@ export function getConnectParams(
         lmID,
         wsID,
         debugPerf,
+        features,
         initConnectionMsg: initConnectionMessage,
         auth: authToken,
         userID,
