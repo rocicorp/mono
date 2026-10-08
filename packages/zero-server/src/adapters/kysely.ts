@@ -11,6 +11,7 @@ import type {
 } from '../../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
+import type {TransactionOptions} from '../transaction-options.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
@@ -31,9 +32,11 @@ export class KyselyConnection<TDatabase> implements DBConnection<
   WrappedKyselyTransaction<TDatabase>
 > {
   readonly #client: Kysely<TDatabase>;
+  readonly #options: TransactionOptions;
 
-  constructor(client: Kysely<TDatabase>) {
+  constructor(client: Kysely<TDatabase>, options: TransactionOptions = {}) {
     this.#client = client;
+    this.#options = options;
   }
 
   query(sql: string, params: unknown[]): Promise<Row[]> {
@@ -43,9 +46,14 @@ export class KyselyConnection<TDatabase> implements DBConnection<
   transaction<T>(
     fn: (tx: DBTransaction<WrappedKyselyTransaction<TDatabase>>) => Promise<T>,
   ): Promise<T> {
-    return this.#client
-      .transaction()
-      .execute(kyselyTx => fn(new KyselyInternalTransaction(kyselyTx)));
+    const {isolationLevel} = this.#options;
+    const builder =
+      isolationLevel === undefined
+        ? this.#client.transaction()
+        : this.#client.transaction().setIsolationLevel(isolationLevel);
+    return builder.execute(kyselyTx =>
+      fn(new KyselyInternalTransaction(kyselyTx)),
+    );
   }
 }
 
@@ -97,6 +105,7 @@ async function kyselyQuery<TDatabase>(
  *
  * @param schema - Zero schema.
  * @param client - Kysely client.
+ * @param options - Transaction options, e.g. `{isolationLevel: 'repeatable read'}`.
  *
  * @example
  * ```ts
@@ -142,6 +151,7 @@ async function kyselyQuery<TDatabase>(
 export function zeroKysely<TSchema extends Schema, TDatabase>(
   schema: TSchema,
   client: Kysely<TDatabase>,
+  options?: TransactionOptions,
 ): ZQLDatabase<TSchema, WrappedKyselyTransaction<TDatabase>> {
-  return new ZQLDatabase(new KyselyConnection(client), schema);
+  return new ZQLDatabase(new KyselyConnection(client, options), schema);
 }
