@@ -12,7 +12,10 @@ import {
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {compileUrlPattern} from '../../custom/fetch.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
-import type {ConnectParams} from '../../workers/connect-params.ts';
+import type {
+  ConnectParams,
+  FeatureFlagSet,
+} from '../../workers/connect-params.ts';
 
 export type ConnectionState = 'provisional' | 'validated';
 
@@ -74,6 +77,7 @@ export type ConnectionContext = {
   readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
+  readonly features: FeatureFlagSet;
 
   readonly revision: number;
 
@@ -263,6 +267,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       profileID: connectParams.profileID,
       baseCookie: connectParams.baseCookie,
       protocolVersion: connectParams.protocolVersion,
+      features: connectParams.features,
 
       revalidateAt: undefined,
 

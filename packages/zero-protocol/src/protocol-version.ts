@@ -1,16 +1,25 @@
 import {assert} from '../../shared/src/asserts.ts';
 
 /**
- * The current `PROTOCOL_VERSION` of the code.
+ * The highest sync protocol version `zero-cache` accepts (i.e. the version
+ * declared in the "/sync/v{#}/connect" URL). Clients send
+ * {@link CLIENT_PROTOCOL_VERSION}.
  *
- * The `PROTOCOL_VERSION` encompasses both the wire-protocol of the `/sync/...`
+ * The protocol encompasses both the wire-protocol of the `/sync/...`
  * connection between the browser and `zero-cache`, as well as the format of
  * the `AST` objects stored in both components (i.e. IDB and CVR).
  *
- * A change in the `AST` schema (e.g. new functionality added) must be
- * accompanied by an increment of the `PROTOCOL_VERSION` and a new major
- * release. The server (`zero-cache`) must be deployed before clients start
- * running the new code.
+ * A client one release ahead of the server must still be able to connect, so
+ * that clients and `zero-cache` can be updated and rolled back in either
+ * order. Two rules keep that working:
+ *
+ * 1. A change an old server can ignore goes behind a feature flag (see
+ *    `feature-flag-enum.ts`) and the client keeps sending the same
+ *    {@link CLIENT_PROTOCOL_VERSION}. Old servers ignore flags they don't
+ *    know, so the client must keep supporting the old behavior.
+ * 2. A change an old server can't ignore (e.g. new `AST` functionality)
+ *    increments `PROTOCOL_VERSION` one release before clients start sending
+ *    it in {@link CLIENT_PROTOCOL_VERSION}.
  */
 // History:
 // -- Version 5 adds support for `pokeEnd.cookie`. (0.14)
@@ -58,9 +67,26 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 50 adds OTEL headers to push and query messages
 // -- version 51 changes inspector metrics fields
 // -- version 52 replaces JSON pokePart messages with binary poke chunks for
-//    clients using protocol version 52 or newer. Older clients retain pokePart.
-// -- version 53 adds 'filter' node type to AnalyzeQueryResult
+//    clients using protocol version 52 or newer. Older clients retain pokePart
+//    unless they send the `PokeChunk` feature flag. (1.10 canaries)
+// -- version 53 adds 'filter' node type to AnalyzeQueryResult (1.11 canaries)
 export const PROTOCOL_VERSION = 53;
+
+/**
+ * The sync protocol version clients send in the "/sync/v{#}/connect" URL.
+ *
+ * Kept below {@link PROTOCOL_VERSION} so that clients can connect to servers
+ * from earlier releases: 1.9 servers accept versions up to 51. Clients ask for
+ * newer behavior with feature flags instead (rule 1 above). Only increase it
+ * to a version that every supported server already accepts (rule 2 above).
+ *
+ * This number is also part of the client's local database name (Replicache
+ * `schemaVersion`). Changing it opens a fresh local database, which drops
+ * unsent mutations because Zero disables mutation recovery. Canary clients
+ * already used 52 and 53 in their database names, so if the name changes it
+ * must move above 53; reusing 52 or 53 would open a stale canary database.
+ */
+export const CLIENT_PROTOCOL_VERSION = 51;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
@@ -80,6 +106,7 @@ export const PROTOCOL_VERSION = 53;
 export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 30;
 
 assert(
-  MIN_SERVER_SUPPORTED_SYNC_PROTOCOL < PROTOCOL_VERSION,
-  'MIN_SERVER_SUPPORTED_SYNC_PROTOCOL must be less than PROTOCOL_VERSION',
+  MIN_SERVER_SUPPORTED_SYNC_PROTOCOL <= CLIENT_PROTOCOL_VERSION &&
+    CLIENT_PROTOCOL_VERSION <= PROTOCOL_VERSION,
+  'CLIENT_PROTOCOL_VERSION must be between MIN_SERVER_SUPPORTED_SYNC_PROTOCOL and PROTOCOL_VERSION',
 );

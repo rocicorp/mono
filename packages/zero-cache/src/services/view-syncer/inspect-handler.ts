@@ -3,6 +3,8 @@ import {unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {TDigest} from '../../../../shared/src/tdigest.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
+import {FeatureFlag} from '../../../../zero-protocol/src/feature-flag.ts';
 import type {
   QueryServerMetrics,
   ServerMetrics,
@@ -168,7 +170,9 @@ export async function handleInspect(
         client.sendInspectResponse(lc, {
           op: 'analyze-query',
           id: body.id,
-          value: result,
+          value: ctx.features.has(FeatureFlag.AnalyzeFilterNode)
+            ? result
+            : withoutFilterNodes(result),
         });
         break;
       }
@@ -184,6 +188,27 @@ export async function handleInspect(
       value: (e as Error).message,
     });
   }
+}
+
+/**
+ * Removes the planner's `filter` nodes from `joinPlans` for clients that
+ * can't parse them: a `filter` node fails an older client's parse of the
+ * whole message, which disconnects it.
+ *
+ * @visibleForTesting
+ */
+export function withoutFilterNodes(
+  result: AnalyzeQueryResult,
+): AnalyzeQueryResult {
+  if (result.joinPlans === undefined) {
+    return result;
+  }
+  return {
+    ...result,
+    joinPlans: result.joinPlans.filter(
+      event => !('nodeType' in event && event.nodeType === 'filter'),
+    ),
+  };
 }
 
 /**

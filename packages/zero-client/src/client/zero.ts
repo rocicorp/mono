@@ -44,7 +44,10 @@ import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
-import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
+import {
+  encodeSecProtocols,
+  setFeatureFlags,
+} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
@@ -69,7 +72,7 @@ import {
   type PokePartMessage,
   type PokeStartMessage,
 } from '../../../zero-protocol/src/poke.ts';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import {CLIENT_PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
   PullRequestMessage,
   PullResponseBody,
@@ -652,8 +655,9 @@ export class Zero<
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
       // The schema stored in IDB is dependent upon both the ClientSchema
-      // and the AST schema (i.e. PROTOCOL_VERSION).
-      schemaVersion: `${PROTOCOL_VERSION}.${hash}`,
+      // and the AST schema (i.e. CLIENT_PROTOCOL_VERSION). Changing either
+      // opens a fresh local database.
+      schemaVersion: `${CLIENT_PROTOCOL_VERSION}.${hash}`,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
@@ -3030,7 +3034,7 @@ export async function createConnectionURL(
   lc: LogContext<unknown[], unknown[], unknown[], unknown[]>,
 ) {
   const url = new URL(
-    appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
+    appendPath(socketOrigin, `/sync/v${CLIENT_PROTOCOL_VERSION}/connect`),
   );
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
@@ -3046,6 +3050,7 @@ export async function createConnectionURL(
   if (debugPerf) {
     searchParams.set('debugPerf', true.toString());
   }
+  setFeatureFlags(searchParams);
   if (additionalConnectParams) {
     for (const k in additionalConnectParams) {
       if (searchParams.has(k)) {
