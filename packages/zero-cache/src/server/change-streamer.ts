@@ -230,6 +230,7 @@ export default async function runWorker(
               slotPerReplica,
               inactiveReplicaGracePeriodMs,
               backupV5: litestream.backupUsingV5,
+              pgChangeLog: pgChangeLogEnabled,
             },
             upstream.pgStreamInboundTimeoutMs,
           )

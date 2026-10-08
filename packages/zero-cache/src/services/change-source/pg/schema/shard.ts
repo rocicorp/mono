@@ -207,6 +207,8 @@ export function shardSetup(
     "stage"              INT4 DEFAULT ${InitialSync},
     "backupPath"         TEXT,  -- subpath within the litestream backup URL
     "backupV5"           BOOL DEFAULT false,
+    -- Whether the slot is acked only after storing in the PG change log.
+    "pgChangeLog"        BOOL DEFAULT false,
     "initialSchema"      JSON,  -- set after initial sync
     "initialSyncContext" JSON,
     "subscriberContext"  JSON
@@ -251,6 +253,14 @@ const replicaInfoSchema = v.object({
   stage: replicaStageSchema,
   backupPath: v.string().nullable(),
   backupV5: v.boolean(),
+  /**
+   * Whether the replication-manager that took over the replica's slot acks it
+   * only after storing transactions in the PG change log (i.e. RMv1.5). The
+   * slot's position past the change log's head then reflects acked
+   * keepalives, rather than transactions missing from the change log.
+   * False if unknown.
+   */
+  pgChangeLog: v.boolean(),
 });
 
 const fullReplicaRowSchema = replicaInfoSchema.extend({
@@ -290,6 +300,8 @@ function triggerSetup(shard: ShardConfig): string {
 export type BackupOptions = {
   backupPath: string | null;
   backupV5: boolean;
+  /** See `pgChangeLog` in {@link ReplicaState}. */
+  pgChangeLog: boolean;
 };
 
 /**
@@ -308,7 +320,7 @@ export async function createReplica(
   slot: string,
   epoch: number,
   replicaVersion: string,
-  {backupPath, backupV5}: BackupOptions,
+  {backupPath, backupV5, pgChangeLog}: BackupOptions,
   stage: ReplicaStage,
 ) {
   const schema = upstreamSchema(shard);
@@ -319,6 +331,7 @@ export async function createReplica(
     generation: replicaVersion,
     backupPath,
     backupV5,
+    pgChangeLog,
     stage,
   };
   await sql`INSERT INTO ${sql(schema)}.replicas ${sql(values)}`;
@@ -380,6 +393,7 @@ export async function getReplicaAtVersion(
       replicas."stage",
       replicas."backupPath",
       replicas."backupV5",
+      replicas."pgChangeLog",
       replicas."initialSchema",
       replicas."initialSyncContext",
       replicas."subscriberContext",
@@ -421,6 +435,7 @@ export async function getActiveReplicas(
       replicas."stage",
       replicas."backupPath",
       replicas."backupV5",
+      replicas."pgChangeLog",
       slots."active",
       slots."confirmed_flush_lsn" as "confirmedFlushLsn"
     FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name
@@ -463,6 +478,7 @@ export async function getRestoreCandidates(
       replicas."stage",
       replicas."backupPath",
       replicas."backupV5",
+      replicas."pgChangeLog",
       slots."active",
       slots."confirmed_flush_lsn" as "confirmedFlushLsn"
     FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name
@@ -507,6 +523,7 @@ export async function getReplicaState(
       replicas."stage",
       replicas."backupPath",
       replicas."backupV5",
+      replicas."pgChangeLog",
       slots."active",
       slots."confirmed_flush_lsn" as "confirmedFlushLsn"
     FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name

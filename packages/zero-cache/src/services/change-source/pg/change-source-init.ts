@@ -55,6 +55,14 @@ export type InitializeOptions = ReplicaOptions & {
   slotPerReplica: boolean | undefined;
 
   inactiveReplicaGracePeriodMs: number;
+
+  /**
+   * Whether this replication-manager maintains the PG change log, i.e. acks
+   * the replication slot only after transactions are stored in it. Recorded
+   * with the replica (see `pgChangeLog` in `ReplicaState`) when its slot is
+   * taken over.
+   */
+  pgChangeLog: boolean;
 };
 
 /**
@@ -76,11 +84,13 @@ export async function initializePostgresChangeSource(
     slotPerReplica,
     backupV5,
     inactiveReplicaGracePeriodMs,
+    pgChangeLog,
   }: InitializeOptions = {
     epoch: 0,
     slotPerReplica: false,
     backupV5: true,
     inactiveReplicaGracePeriodMs: DEFAULT_INACTIVE_REPLICA_GRACE_PERIOD_MS,
+    pgChangeLog: false,
   },
   streamInboundTimeoutMs?: number | undefined,
 ): Promise<InitializeResult> {
@@ -142,7 +152,7 @@ export async function initializePostgresChangeSource(
           upstreamURI,
           syncOptions,
           context,
-          {epoch, backupV5},
+          {epoch, backupV5, pgChangeLog},
           restoreOptions.cleanup,
         );
       },
@@ -183,7 +193,7 @@ export async function initializePostgresChangeSource(
       shard,
       upstreamReplica,
       pgVersion,
-      {backupPath, backupV5},
+      {backupPath, backupV5, pgChangeLog},
       context,
       lagReportIntervalMs,
       syncOptions.textCopy,
@@ -236,7 +246,9 @@ type RestoredReplica = {
    * replication resumes, when it was created (for a fork) or claimed (for a
    * resumption), i.e. while it is held by this process. Absent for a shared
    * slot (RMv1), whose position is advanced by its current owner until it is
-   * taken over.
+   * taken over, and for a resumed slot that was acked only once transactions
+   * were stored in the PG change-log (RMv1.5), whose position may be past the
+   * change-log's head for acked keepalives.
    */
   slotWatermark?: string | undefined;
 };
@@ -319,7 +331,16 @@ async function forkOrResumeReplica(
     return {replica: undefined, purgeLock: null};
   }
   const {restoreFrom, replicateTo, slotLSN, slotSession} = result;
-  const slotWatermark = toStateVersionString(slotLSN);
+  // A resumed slot (i.e. of the same replica) that was acked only once
+  // transactions were stored in the PG change-log (RMv1.5) cannot have been
+  // acked past a transaction missing from the change-log. Its position past
+  // the change-log's head only reflects acked keepalives, so it is not
+  // compared with the head (see below).
+  const resumedAfterPgChangeLog =
+    restoreFrom.id === replicateTo.id && restoreFrom.pgChangeLog;
+  const slotWatermark = resumedAfterPgChangeLog
+    ? undefined
+    : toStateVersionString(slotLSN);
   // The slot is held active by a session in this process until it is taken
   // over by the PostgresChangeSource. If initialization fails before then,
   // the session must be released, or the slot remains active indefinitely,
@@ -338,12 +359,14 @@ async function forkOrResumeReplica(
   // a transaction (in the publication) after the new slot's position.
   //
   // For a resumed slot, the slot can also have been acked past the head of a
-  // maintained change-log, for changes outside of the publication (e.g. on an
-  // idle upstream). The change-log is then re-initialized unnecessarily, which
-  // resets subscribers behind the replica. (This could be avoided by recording
-  // the positions acked for such changes in the change-log, e.g. an
-  // `ackedThrough` column, and checking the slot's position against that.
-  // Resumption is uncommon, however, and involves downtime anyway.)
+  // maintained change-log, for keepalives (e.g. for changes outside of the
+  // publication, or on an idle upstream). If the slot was acked by a
+  // replication-manager that maintains the change-log, it is therefore not
+  // checked against the slot's position, which would otherwise re-initialize
+  // the change-log unnecessarily, resetting subscribers behind the replica.
+  // Otherwise (e.g. RMv2, or unknown), it is: the change-log is then
+  // re-initialized from the replica if it does not contain the replica's
+  // changes.
   const lock = acquirePurgeLock ? await acquirePurgeLock(slotWatermark) : null;
   const pgChangeLogBehindSlot = lock === 'behind-slot';
   const purgeLock = lock === 'behind-slot' ? null : lock;
@@ -405,10 +428,13 @@ async function forkOrResumeReplica(
  *   before being stored, and streamed again from the slot), but the stream
  *   never starts below both. (With RMv1.5's purge lock, the change log's head
  *   is at or past the slot, so it does not lower the minimum.)
- * * With a shared slot (RMv1), the change log's head when it was purge
- *   locked, as the stream resumes from the head, which only advances. The
- *   slot is not a reference: its owner acks it until it is taken over. Without
- *   a purge lock (i.e. an empty change log), there is no floor.
+ * * With a shared slot (RMv1), or a resumed slot that was acked only once
+ *   transactions were stored in the change log (RMv1.5), the change log's
+ *   head when it was purge locked, as the stream resumes from the head, which
+ *   only advances. The slot is not a reference: a shared slot is acked by its
+ *   owner until it is taken over, and a resumed RMv1.5 slot can be past the
+ *   head for acked keepalives. Without a purge lock (i.e. an empty change
+ *   log), there is no floor.
  */
 // Exported for testing.
 export function minStartWatermark(
@@ -535,6 +561,9 @@ export async function getSourceAndDestinationReplicas(
               {
                 backupPath: null, // set only after the backup has been confirmed
                 backupV5: true, // RMv2 requires backupV5
+                // The slot is not acked until it is taken over, which sets
+                // this. Until then, it is unknown.
+                pgChangeLog: false,
               },
               () => promiseVoid,
               ReplicaStage.Restore,

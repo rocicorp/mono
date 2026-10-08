@@ -518,7 +518,8 @@ export class PostgresChangeSource implements ChangeSource {
         SET "stage" = ${Replicate},
             "subscriberContext" = ${this.#context},
             "backupPath" = ${this.#backupOptions.backupPath},
-            "backupV5" = ${this.#backupOptions.backupV5}
+            "backupV5" = ${this.#backupOptions.backupV5},
+            "pgChangeLog" = ${this.#backupOptions.pgChangeLog}
         WHERE id = ${replicaID}`;
 
     const result = await sql`

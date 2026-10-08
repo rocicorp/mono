@@ -102,6 +102,12 @@ export type InitialSyncOptions = {
 export type ReplicaOptions = {
   epoch: number;
   backupV5: boolean;
+  /**
+   * Whether the replica's slot is acked only after transactions are stored in
+   * the PG change log (see `pgChangeLog` in `ReplicaState`). Defaults to
+   * false, i.e. unknown.
+   */
+  pgChangeLog: boolean;
 };
 
 /** Server context to store with the initial sync metadata for debugging. */
@@ -118,7 +124,11 @@ export async function initialSync(
   upstreamURI: string,
   syncOptions: InitialSyncOptions,
   context: ServerContext,
-  {epoch, backupV5}: ReplicaOptions = {epoch: 0, backupV5: true},
+  {epoch, backupV5, pgChangeLog}: ReplicaOptions = {
+    epoch: 0,
+    backupV5: true,
+    pgChangeLog: false,
+  },
   cleanup?: InitCleanup,
 ): Promise<ReplicaState | undefined> {
   if (!ALLOWED_APP_ID_CHARACTERS.test(shard.appID)) {
@@ -255,6 +265,7 @@ export async function initialSync(
           // (and there are no v3 "generations" to workaround it).
           backupPath: backupV5 ? replicaID : null,
           backupV5,
+          pgChangeLog,
         },
         captureSnapshot,
         InitialSync,

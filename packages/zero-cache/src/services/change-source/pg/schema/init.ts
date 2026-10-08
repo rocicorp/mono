@@ -289,14 +289,51 @@ function getIncrementalMigrations(
       },
     },
 
-    // Note: While this is conditional, it always has to be bumped to the last version.
+    // v30: Adds the "pgChangeLog" column, which records whether the
+    // replication-manager that took over a replica's slot acks it only after
+    // storing transactions in the PG change log (RMv1.5), in which case a
+    // slot position past the change log's head reflects acked keepalives
+    // rather than missing transactions.
+    //
+    // The column defaults to false (i.e. unknown), so that a slot is assumed
+    // to be possibly ahead of the change log until it is taken over by a
+    // replication-manager that sets it. Existing replicas that have been taken
+    // over are backfilled as true (see migrateData). Note that a replication-manager that
+    // predates this column does not reset it when taking over a slot, so
+    // once the column is set, RMv2 (in which acks are not gated on the PG
+    // change log) must run at least this version.
+    30: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            ADD COLUMN IF NOT EXISTS "pgChangeLog" BOOL DEFAULT false;
+        `;
+      },
+
+      // Existing replicas whose slots have been taken over (i.e. that have a
+      // subscriberContext) were acked by RMv1 or RMv1.5, which store
+      // transactions in the PG change log before acking them. This assumes
+      // that no RMv2 is running when the migration is run. Replicas that have
+      // not been taken over (e.g. fork destinations) remain unknown, as their
+      // slots have not been acked.
+      migrateData: async (_, sql) => {
+        await sql`
+          UPDATE ${sql(upstreamSchema(shard))}.replicas SET "pgChangeLog" = true
+            WHERE "subscriberContext" IS NOT NULL;
+        `;
+      },
+    },
+
+    // Note: While this is conditional, it always has to be bumped to the last
+    // version. (It was v29, and is re-run for shards at v29 when it is bumped,
+    // which is harmless as setupTriggers() is idempotent.)
     ...(installPartialIndexTriggers
       ? {
-          // v28: Upgrade the DDL event triggers to include partial indexes in
+          // v31: Upgrade the DDL event triggers to include partial indexes in
           // schema snapshots. Note that setupTriggers() also refreshes the
           // stored "publishedSchema" so that the change in format does not
           // manifest as a spurious schema change.
-          29: {
+          31: {
             migrateSchema: async (lc, sql) => {
               const [{publications}] = await sql<{publications: string[]}[]>`
                 SELECT publications FROM ${sql(shardConfigTable)}`;
