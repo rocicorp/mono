@@ -105,7 +105,7 @@ type CoversSomeKey<
  * `{scalar: true}` overload: `unknown` (a no-op) when the subquery pins a
  * unique key, and otherwise an object the returned query does not have, so
  * that overload stops matching and the call falls through to the general one —
- * where `scalar` may only be `false`.
+ * where `scalar` may only be `false`, and where the error is reported.
  *
  * The requirement rides on the callback's return type rather than on the
  * options parameter because TypeScript fixes `TSubPinned` to its default
@@ -120,11 +120,17 @@ type ScalarRequirement<
 > =
   CoversSomeKey<UniqueKeysOf<TTable, TSchema>, TPinned> extends true
     ? unknown
-    : {
-        readonly [scalarNeedsUniqueKey]: 'To use {scalar: true}, the subquery must constrain every column of the primary key — or of a key declared with .unique() — to a literal with `=`. Otherwise the server ignores the hint and runs a plain EXISTS.';
-      };
+    : {readonly [scalarNeedsUniqueKey]: ScalarNeedsUniqueKey};
 
 declare const scalarNeedsUniqueKey: unique symbol;
+
+/**
+ * Why a `{scalar: true}` was rejected. tsc reports a call that matches no
+ * overload against the *last* overload only, so the message has to be in the
+ * type of the general `whereExists` overload's `scalar` option.
+ */
+type ScalarNeedsUniqueKey =
+  'To use {scalar: true}, the subquery must constrain every column of the primary key — or of a key declared with .unique() — to a literal with `=`. Otherwise the server ignores the hint and runs a plain EXISTS.';
 
 /**
  * The columns an honored `{scalar: true}` gate pins on the *parent* query.
@@ -435,12 +441,18 @@ export interface Query<
     TReturn,
     TPinned | ScalarPins<TTable, TSchema, TRelationship>
   >;
+  // A rejected `{scalar: true}` lands here, and tsc reports only this, the
+  // last overload's, error. The branded `true` admits no real value; it is
+  // there so that error spells out the requirement. It is written inline
+  // because tsc prints a type alias by its name rather than its content.
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
     ) => Query<string, TSchema, any>,
-    options?: ExistsOptions<false>,
+    options?: ExistsOptions<
+      false | (true & {readonly [scalarNeedsUniqueKey]: ScalarNeedsUniqueKey})
+    >,
   ): Query<TTable, TSchema, TReturn, TPinned>;
 
   start(
