@@ -202,8 +202,15 @@ jobs:
           set -euo pipefail
           mkdir -p source/packages/zero/pkgs "$(dirname "$IMAGE_ARCHIVE")"
           cp "$TARBALL_PATH" "source/packages/zero/pkgs/$TARBALL"
+          # Older maintenance branches (1.10) build vfs-query from go/, which
+          # their Dockerfile reads from the named build context `monogo`.
+          build_contexts=()
+          if grep -q -- '--from=monogo' source/packages/zero/Dockerfile; then
+            build_contexts+=(--build-context monogo=source/go)
+          fi
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
+            "${build_contexts[@]}" \
             --build-arg ZERO_VERSION="$VERSION" \
             --build-arg ZERO_PACKAGE="$TARBALL" \
             --label org.opencontainers.image.revision="$SOURCE_SHA" \
