@@ -162,7 +162,14 @@ export class MutationTracker {
       largestLmid = Math.max(largestLmid, mutationID);
       switch (diff.op) {
         case 'add': {
-          const result = v.parse(diff.newValue, mutationResultSchema);
+          // Results are stored as the server sent them, so a newer server can
+          // add fields. Don't use 'strip': mutationResultSchema's OK branch
+          // has no discriminator, so it would turn every error into `{}`.
+          const result = v.parse(
+            diff.newValue,
+            mutationResultSchema,
+            'passthrough',
+          );
           if ('error' in result) {
             this.#processMutationError(clientID, mutationID, result);
           } else {
