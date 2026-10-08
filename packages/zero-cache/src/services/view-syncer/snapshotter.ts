@@ -227,8 +227,13 @@ export class Snapshotter {
    * no longer needed.
    */
   destroy() {
-    this.#curr?.db.db.close();
-    this.#prev?.db.db.close();
+    // The replica's statistics are maintained by the replicator. The
+    // `PRAGMA optimize` that closing a writable connection otherwise runs
+    // analyzes the tables that the connection read, which blocks the worker
+    // for as long as that takes, and what it finds is discarded with the
+    // snapshot's transaction.
+    this.#curr?.db.db.close({optimize: false});
+    this.#prev?.db.db.close({optimize: false});
     this.#lc.debug?.('closed database connections');
   }
 }
