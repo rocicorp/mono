@@ -30,6 +30,7 @@ import {
   type ReplicaOptions,
   type ServerContext,
 } from './initial-sync.ts';
+import {endSession} from './logical-replication/stream.ts';
 import {toBigInt, toStateVersionString, type LSN} from './lsn.ts';
 import {
   claimSlotForResumption,
@@ -520,7 +521,7 @@ export async function getSourceAndDestinationReplicas(
       }
       if (replicas.length === 0) {
         lc.info?.(`no suitable replicas to restore from`, {replicas});
-        destination?.initialSession.destroy();
+        await endSession(destination?.initialSession);
         return undefined;
       }
       for (const replica of replicas) {
@@ -667,7 +668,7 @@ export async function getSourceAndDestinationReplicas(
               lc.info?.(`resuming replica ${replica.id}@${replica.slot}`);
               // If a new replication slot was created in anticipation of forking,
               // cancel it
-              destination?.initialSession.destroy();
+              await endSession(destination?.initialSession);
               return {
                 restoreFrom: replica,
                 replicateTo: reserved.replica,
@@ -681,7 +682,7 @@ export async function getSourceAndDestinationReplicas(
       }
     }
   } catch (e) {
-    destination?.initialSession.destroy();
+    await endSession(destination?.initialSession);
     throw e;
   }
 }

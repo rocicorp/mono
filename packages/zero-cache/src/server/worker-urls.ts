@@ -20,5 +20,6 @@ export const MUTATOR_URL = resolve('./mutator.ts');
 export const REAPER_URL = resolve('./reaper.ts');
 export const REPLICATOR_URL = resolve('./replicator.ts');
 export const SHADOW_SYNCER_URL = resolve('./shadow-syncer.ts');
+export const SLOT_KEEPER_URL = resolve('./slot-keeper.ts');
 export const SYNCER_URL = resolve('./syncer.ts');
 export const WRITE_WORKER_URL = resolve('./write-worker.ts');

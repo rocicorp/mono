@@ -15,6 +15,8 @@ import {orTimeout} from '../../../types/timeout.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
   createReplicationSessionFor,
+  endSession,
+  extractConnectionConfig,
   keepSlotActiveUntilTakenOver,
 } from './logical-replication/stream.ts';
 import {toBigInt, toStateVersionString} from './lsn.ts';
@@ -267,8 +269,8 @@ export async function createReplicaAndSlot<T>(
   captureSnapshot: (snapshot: string) => Promise<T>,
   stage: ReplicaStage,
 ): Promise<ReplicationSlotResult<T>> {
-  // Note: The replicationSession is closed by keepSlotActiveUntilTakenOver,
-  // and only closed in this function if an error occurrs.
+  // Note: The replicationSession is used to create the replication slot
+  // and closed immediately afterwards, or on error.
   const replicationSession = createReplicationSessionFor(sql, sessionName);
   const lockName = replicationSlotManagementLock(shard);
   const slotPoolPrefix = replicationSlotPrefix(shard);
@@ -277,6 +279,7 @@ export async function createReplicaAndSlot<T>(
     await dropUnclaimedSlots(lc, sql, shard);
 
     let slotName: string | undefined;
+    let initialSession: Readable | undefined;
     try {
       return await runTx(sql, async tx => {
         await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
@@ -317,13 +320,16 @@ export async function createReplicaAndSlot<T>(
           diagnosticsDB: sql,
         });
         const capturedSnapshot = await captureSnapshot(slot.snapshot_name);
-        const initialSession = await keepSlotActiveUntilTakenOver(
-          lc,
-          replicationSession,
-          slot.slot_name,
-          metadataPublicationName(shard.appID, shard.shardNum),
-          toBigInt(slot.consistent_point),
-        );
+        await replicationSession.end();
+        initialSession = await keepSlotActiveUntilTakenOver(lc, {
+          db: extractConnectionConfig(sql),
+          slot: slot.slot_name,
+          dummyPublication: metadataPublicationName(
+            shard.appID,
+            shard.shardNum,
+          ),
+          lsn: String(toBigInt(slot.consistent_point)),
+        });
 
         await createReplica(
           tx,
@@ -370,13 +376,20 @@ export async function createReplicaAndSlot<T>(
             WHERE replicas.slot = slots.slot_name AND NOT slots.active`;
         continue; // then let dropUnclaimedSlots() perform its cleanup
       }
+      if (initialSession) {
+        try {
+          await endSession(initialSession);
+        } catch {}
+      }
       // Otherwise, clean up any created slot if something went wrong. The
       // slot may not exist (e.g. if its creation failed), and its name may
       // have been reused since the lock was released, so leave it to
       // dropUnclaimedSlots(), which only drops slots without a replica.
       if (slotName) {
         lc.warn?.(`deleting slot ${slotName} due to error`, e);
-        await replicationSession.end();
+        try {
+          await replicationSession.end();
+        } catch {}
         await dropUnclaimedSlots(lc, sql, shard);
       }
       throw e;
@@ -397,13 +410,13 @@ export async function claimSlotForResumption(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
-  sessionName: string,
+  _sessionName: string,
   {id: replicaID, slot}: Pick<ReplicaState, 'id' | 'slot'>,
 ): Promise<ReservedSlot | null> {
-  const replicationSession = createReplicationSessionFor(sql, sessionName);
   const lockName = replicationSlotManagementLock(shard);
   const replicasTable = `${upstreamSchema(shard)}.replicas`;
 
+  let reservation: Readable | undefined;
   try {
     const reserved = await runTx(sql, async tx => {
       await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
@@ -434,23 +447,27 @@ export async function claimSlotForResumption(
         `replica ${replicaID} disappeared`,
       );
 
+      reservation = await keepSlotActiveUntilTakenOver(lc, {
+        db: extractConnectionConfig(sql),
+        slot,
+        dummyPublication: metadataPublicationName(shard.appID, shard.shardNum),
+        lsn: String(toBigInt(lsn)),
+      });
       return {
         slot,
         replica,
-        reservation: await keepSlotActiveUntilTakenOver(
-          lc,
-          replicationSession,
-          slot,
-          metadataPublicationName(shard.appID, shard.shardNum),
-          toBigInt(lsn),
-        ),
+        reservation,
       };
     });
     lc.info?.(`successfully claimed slot ${slot}`);
     return reserved;
   } catch (e) {
+    if (reservation) {
+      try {
+        await endSession(reservation);
+      } catch {}
+    }
     lc.error?.(`unable to claim replication slot ${slot}`, e);
-    await replicationSession.end();
     return null;
   }
 }

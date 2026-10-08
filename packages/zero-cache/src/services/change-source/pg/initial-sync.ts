@@ -59,6 +59,7 @@ import {
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import type {InitCleanup} from '../common/init-cleanup.ts';
+import {endSession} from './logical-replication/stream.ts';
 import {toStateVersionString} from './lsn.ts';
 import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
@@ -412,7 +413,7 @@ export async function initialSync(
       // pathological cases that result in repeated failures.
       lc.warn?.(`dropping replication slot ${slotName}`, e);
       // release any initial replication session so the slot can be dropped
-      slotSession?.destroy();
+      await endSession(slotSession);
       await sql`
         SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
           WHERE slot_name = ${slotName};
