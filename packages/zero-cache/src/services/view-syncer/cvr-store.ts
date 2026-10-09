@@ -489,10 +489,12 @@ export class CVRStore {
       cvr.profileID = profileID;
 
       try {
+        // Strip: a newer zero-cache that was rolled back may have stored
+        // fields this one doesn't know.
         cvr.clientSchema =
           clientSchema === null
             ? null
-            : v.parse(clientSchema, clientSchemaSchema);
+            : v.parse(clientSchema, clientSchemaSchema, 'strip');
       } catch (e) {
         throw new InvalidClientSchemaError(e);
       }
