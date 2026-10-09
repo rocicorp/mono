@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
-import {CLIENT_PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {
   type HTTPString,
@@ -107,7 +107,7 @@ function checkRenderGet(id: string, signal: AbortSignal) {
 
 function checkCfGet(id: string, server: HTTPString, signal: AbortSignal) {
   const cfGetCheckBaseURL = new URL(
-    appendPath(server, `/canary/v${CLIENT_PROTOCOL_VERSION}/get`),
+    appendPath(server, `/canary/v${PROTOCOL_VERSION}/get`),
   );
   const url = cfGetCheckBaseURL.toString();
   assertHTTPString(url);
@@ -152,7 +152,7 @@ function checkCfSocket(
   signal: AbortSignal,
 ) {
   const cfSocketCheckBaseURL = new URL(
-    appendPath(socketOrigin, `/canary/v${CLIENT_PROTOCOL_VERSION}/websocket`),
+    appendPath(socketOrigin, `/canary/v${PROTOCOL_VERSION}/websocket`),
   );
   const url = cfSocketCheckBaseURL.toString();
   assertWSString(url);

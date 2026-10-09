@@ -2,7 +2,6 @@ import type {LogContext} from '@rocicorp/logger';
 import type {InitConnectionBody} from '../../../../zero-protocol/src/connect.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import type {ProtocolFlags} from '../../../../zero-protocol/src/protocol-flag.ts';
 import type {UpdateAuthBody} from '../../../../zero-protocol/src/update-auth.ts';
 import {
   authEquals,
@@ -75,7 +74,6 @@ export type ConnectionContext = {
   readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
-  readonly protocolFlags: ProtocolFlags;
 
   readonly revision: number;
 
@@ -265,7 +263,6 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       profileID: connectParams.profileID,
       baseCookie: connectParams.baseCookie,
       protocolVersion: connectParams.protocolVersion,
-      protocolFlags: connectParams.protocolFlags,
 
       revalidateAt: undefined,
 

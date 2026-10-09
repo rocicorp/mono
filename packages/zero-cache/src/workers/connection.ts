@@ -14,11 +14,11 @@ import {
   type ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
 import {
+  POKE_CHUNK_PROTOCOL_VERSION,
   type PokeChunk,
   type PokeEndMessage,
   type PokePartMessage,
 } from '../../../zero-protocol/src/poke.ts';
-import {ProtocolFlag} from '../../../zero-protocol/src/protocol-flag.ts';
 import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
@@ -183,7 +183,7 @@ export class Connection {
     this.#downstreamSender = new DownstreamSender(
       this.#lc,
       ws,
-      connectParams.protocolFlags.has(ProtocolFlag.PokeChunk),
+      protocolVersion,
     );
     this.#lc.debug?.('new connection');
     this.#onClose = onClose;
@@ -493,22 +493,22 @@ export function send(
 }
 
 /**
- * Sends downstream messages in the format the client supports. Keep format
- * forks contained here so the view-syncer can continue producing one
- * canonical poke representation.
+ * Sends downstream messages in the format supported by a connection's sync
+ * protocol version. Keep version forks contained here so the view-syncer can
+ * continue producing one canonical poke representation.
  *
  * Exported for compatibility testing.
  */
 export class DownstreamSender {
   readonly #lc: LogContext;
   readonly #ws: WebSocketLike;
-  readonly #pokeChunks: boolean;
+  readonly #protocolVersion: number;
   #pokeChunkEncoder: PokeChunkEncoder | undefined;
 
-  constructor(lc: LogContext, ws: WebSocketLike, pokeChunks: boolean) {
+  constructor(lc: LogContext, ws: WebSocketLike, protocolVersion: number) {
     this.#lc = lc;
     this.#ws = ws;
-    this.#pokeChunks = pokeChunks;
+    this.#protocolVersion = protocolVersion;
   }
 
   send(
@@ -516,7 +516,7 @@ export class DownstreamSender {
     callback: ((err?: Error | null) => void) | 'ignore-backpressure',
     serialized?: string | undefined,
   ): void {
-    if (this.#pokeChunks) {
+    if (this.#protocolVersion >= POKE_CHUNK_PROTOCOL_VERSION) {
       switch (data[0]) {
         case 'pokeStart':
           assert(

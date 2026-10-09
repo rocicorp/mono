@@ -3,7 +3,6 @@ import {unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {TDigest} from '../../../../shared/src/tdigest.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {
   QueryServerMetrics,
   ServerMetrics,
@@ -12,7 +11,6 @@ import {
   inspectAnalyzeQueryUpSchema,
   type UnparsedInspectUpBody,
 } from '../../../../zero-protocol/src/inspect-up.ts';
-import {ProtocolFlag} from '../../../../zero-protocol/src/protocol-flag.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
@@ -170,9 +168,7 @@ export async function handleInspect(
         client.sendInspectResponse(lc, {
           op: 'analyze-query',
           id: body.id,
-          value: ctx.protocolFlags.has(ProtocolFlag.AnalyzeFilterNode)
-            ? result
-            : withoutFilterNodes(result),
+          value: result,
         });
         break;
       }
@@ -188,27 +184,6 @@ export async function handleInspect(
       value: (e as Error).message,
     });
   }
-}
-
-/**
- * Removes the planner's `filter` nodes from `joinPlans` for clients that
- * can't parse them: a `filter` node fails an older client's parse of the
- * whole message, which disconnects it.
- *
- * @visibleForTesting
- */
-export function withoutFilterNodes(
-  result: AnalyzeQueryResult,
-): AnalyzeQueryResult {
-  if (result.joinPlans === undefined) {
-    return result;
-  }
-  return {
-    ...result,
-    joinPlans: result.joinPlans.filter(
-      event => !('nodeType' in event && event.nodeType === 'filter'),
-    ),
-  };
 }
 
 /**

@@ -17,7 +17,6 @@ import type {
 } from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {PokePartBody} from '../../../../zero-protocol/src/poke.ts';
-import {ProtocolFlags} from '../../../../zero-protocol/src/protocol-flag.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {
@@ -875,7 +874,6 @@ export async function setup(
         lmID: 0,
         wsID: ctx.wsID,
         debugPerf: false,
-        protocolFlags: new ProtocolFlags(),
         auth: ctx.auth?.raw,
         userID: ctx.userID,
         initConnectionMsg: undefined,
@@ -1062,7 +1060,6 @@ export function restartViewSyncer(params: {
         lmID: 0,
         wsID: ctx.wsID,
         debugPerf: false,
-        protocolFlags: new ProtocolFlags(),
         auth: ctx.auth?.raw,
         userID: ctx.userID,
         initConnectionMsg: undefined,
