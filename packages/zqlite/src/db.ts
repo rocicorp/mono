@@ -36,6 +36,12 @@ export class Database implements Disposable {
       this.#db = new SQLite3Database(path, options);
       this.#threshold = slowQueryThreshold;
 
+      // Keep the WAL when this is the last connection to close the database,
+      // which would otherwise checkpoint and delete it. Deleting it discards
+      // the WAL that a litestream backup continues from, forcing a new
+      // snapshot. See persistWal() for switching out of WAL mode.
+      this.#db.persistWal();
+
       // Match Postgres LIKE/ILIKE semantics. Postgres LIKE is case-sensitive,
       // but SQLite's LIKE operator is case-insensitive by default; enable
       // case-sensitive LIKE so the bare operator matches Postgres. Case-
@@ -122,6 +128,17 @@ export class Database implements Disposable {
 
   unsafeMode(unsafe: boolean) {
     this.#db.unsafeMode(unsafe);
+  }
+
+  /**
+   * Toggles whether the WAL is kept when this is the last connection to close
+   * the database (on by default). Turn it off before switching the database
+   * out of WAL mode (e.g. `journal_mode = DELETE` or `OFF`): with it on, the
+   * WAL file is left behind and reopened by the next transaction, so the
+   * database effectively stays in WAL mode.
+   */
+  persistWal(persist: boolean) {
+    this.#db.persistWal(persist);
   }
 
   #run<T>(method: string, sql: string, fn: () => T): T {

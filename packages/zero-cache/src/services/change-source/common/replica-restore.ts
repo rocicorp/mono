@@ -11,7 +11,6 @@ import {
   litestreamRestoreMetricAttrs,
   litestreamRestoreRuns,
 } from '../../litestream/metrics.ts';
-import type {WalKeeper} from '../../litestream/wal-keeper.ts';
 import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource} from '../change-source.ts';
 import type {InitCleanup} from './init-cleanup.ts';
@@ -107,15 +106,6 @@ export type InitializeResult = {
    * litestream state (see {@link ResumableBackup}).
    */
   newBackupLineage: boolean;
-
-  /**
-   * Set when the backup to `destinationBackupURL` continues from the local
-   * litestream state (see {@link ResumableBackup}). It is registered with the
-   * initialization's {@link InitCleanup}, which releases it if the attempt
-   * fails; otherwise the caller must release it once the litestream backup
-   * has started.
-   */
-  walKeeper?: WalKeeper | undefined;
 };
 
 /**
@@ -129,11 +119,10 @@ export type BackupDestination = {type: 'fork'; baseURL: string};
 
 /**
  * A backup lineage at `backupPath` that the litestream backup continues from
- * the local litestream state, whose WAL `walKeeper` holds.
+ * the local litestream state and the restored replica's WAL.
  */
 export type ResumableBackup = {
   backupPath: string;
-  walKeeper: WalKeeper;
 };
 
 // A short retry is much cheaper than an initial Postgres sync, while keeping a
@@ -145,7 +134,7 @@ const RESTORE_RETRY_DELAY_MS = 5_000;
  * Restores the replica from `config.backupURL`. With a `destination`, it
  * returns the backup that continues from the restored replica, if the
  * restore prepared one (e.g. it was not skipped because the replica already
- * exists). Its WAL keeper is registered with `cleanup`.
+ * exists).
  */
 export async function restoreReplica(
   lc: LogContext,
@@ -153,7 +142,6 @@ export async function restoreReplica(
   replicaFile: string,
   replicaConstraints: ReplicaConstraints | undefined,
   destination?: BackupDestination | undefined,
-  cleanup?: InitCleanup | undefined,
 ): Promise<ResumableBackup | undefined> {
   const start = performance.now();
   let result: RestoreResult | undefined;
@@ -176,16 +164,11 @@ export async function restoreReplica(
           'replication_manager',
           undefined,
           backupPath
-            ? {
-                url: new URL(backupPath, destination?.baseURL).toString(),
-                cleanup,
-              }
+            ? {url: new URL(backupPath, destination?.baseURL).toString()}
             : undefined,
         );
         result = attempt.result;
-        return backupPath && attempt.walKeeper
-          ? {backupPath, walKeeper: attempt.walKeeper}
-          : undefined;
+        return backupPath && attempt.forked ? {backupPath} : undefined;
       } catch (e) {
         if (attemptNum === MAX_RESTORE_ATTEMPTS) {
           lc.error?.(

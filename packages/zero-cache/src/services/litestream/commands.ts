@@ -14,7 +14,6 @@ import {
   logSQLiteCorruptionDiagnostics,
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import type {InitCleanup} from '../change-source/common/init-cleanup.ts';
 import {deleteChangeLogDB} from '../replicator/change-log-db.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {litestreamSocketPath} from './litestream-controller.ts';
@@ -31,7 +30,6 @@ import {
   litestreamRestoreValidationDuration,
   type LitestreamRole,
 } from './metrics.ts';
-import {WalKeeper} from './wal-keeper.ts';
 
 export type ReplicaConstraints = {
   replicaVersion: string;
@@ -49,11 +47,11 @@ export type RestoreAttempt = {
   backupURL: string | undefined;
   result: RestoreResult;
   /**
-   * Set when the restore prepared the backup to continue from the restored
-   * replica (see {@link ForkBackup}). It is registered with the
-   * `cleanup`; otherwise the caller must release it (see {@link WalKeeper}).
+   * Set when the restore forked the backup (see {@link ForkBackup}), which
+   * then continues from the restored replica's WAL. The WAL is kept when the
+   * last connection closes (see `Database.persistWal()`).
    */
-  walKeeper?: WalKeeper | undefined;
+  forked?: boolean | undefined;
 };
 
 /**
@@ -63,11 +61,6 @@ export type RestoreAttempt = {
 export type ForkBackup = {
   /** The restore also forks its backup into the (new, empty) one at this URL. */
   url: string;
-  /**
-   * Registers the resulting {@link WalKeeper} to be released if the
-   * initialization fails.
-   */
-  cleanup?: InitCleanup | undefined;
 };
 
 const MAX_LOGGED_RESTORE_DIRECTORY_ENTRIES = 100;
@@ -331,11 +324,7 @@ async function restoreOnce(
       return {restored: false, backupURL, result, reusedExisting};
     }
     const validationStart = performance.now();
-    // On success, the validating connection is kept open until it is either
-    // closed or kept as the WalKeeper. Until then, its close would be the last
-    // one, which checkpoints and deletes the WAL that a seeded backup continues
-    // from.
-    let db = openValidReplica(lc, replicaFile, replicaConstraints);
+    const db = openValidReplica(lc, replicaFile, replicaConstraints);
     litestreamRestoreValidationDuration().recordMs(
       performance.now() - validationStart,
       {...attrs, result: db ? 'success' : 'invalid_replica'},
@@ -370,20 +359,13 @@ async function restoreOnce(
           result: 'success',
         });
       }
-      // Last, so that nothing can fail after the WalKeeper is created.
-      const walKeeper =
-        forkBackup && !reusedExisting && restoreForked(lc, stdout)
-          ? new WalKeeper(lc, db)
-          : undefined;
-      if (walKeeper) {
-        db = undefined; // now owned by the WalKeeper
-        forkBackup?.cleanup?.onFailure('WAL keeper', () =>
-          walKeeper.release('initialization failed'),
-        );
-      }
-      return {restored: true, backupURL, result, reusedExisting, walKeeper};
+      const forked =
+        forkBackup !== undefined &&
+        !reusedExisting &&
+        restoreForked(lc, stdout);
+      return {restored: true, backupURL, result, reusedExisting, forked};
     } finally {
-      db?.close();
+      db.close();
     }
   } finally {
     try {

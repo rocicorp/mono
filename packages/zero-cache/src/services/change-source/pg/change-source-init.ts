@@ -230,7 +230,6 @@ export async function initializePostgresChangeSource(
         backupPath !== (restoredReplica?.backupPath ?? null),
       pgChangeLogBehindSlot,
       newBackupLineage,
-      walKeeper: resumableBackup?.walKeeper,
     };
   } finally {
     await db.end();
@@ -261,7 +260,7 @@ async function selectAndRestoreReplica(
   sql: PostgresDB,
   shard: ShardID,
   replicaFile: string,
-  {litestream, acquirePurgeLock, cleanup}: RestoreOptions,
+  {litestream, acquirePurgeLock}: RestoreOptions,
 ): Promise<RestoredReplica> {
   // The purge lock constrains the generation of the replica to restore. With
   // a shared replication slot, the change-log is resumed from its head
@@ -298,7 +297,6 @@ async function selectAndRestoreReplica(
       litestream.forkBackup
         ? {type: 'fork', baseURL: backupBaseURL}
         : undefined,
-      cleanup,
     );
     return {replica, purgeLock, resumableBackup};
   }
@@ -392,7 +390,6 @@ async function forkOrResumeReplica(
       litestream.forkBackup
         ? {type: 'fork', baseURL: backupBaseURL}
         : undefined,
-      cleanup,
     );
     return {
       replica: replicateTo,

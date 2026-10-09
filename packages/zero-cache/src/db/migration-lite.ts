@@ -117,9 +117,9 @@ export async function runSchemaMigrations(
       } else {
         // Incremental migrations are small, and run in the database's journal
         // mode, which keeps each migration atomic and its WAL intact: resuming
-        // a litestream backup requires continue from the WAL (see WalKeeper),
-        // whose salt a WAL restart would change. Disable automatic checkpoints
-        // to avoid WAL restarts from schema updates.
+        // a litestream backup requires continuing from the WAL, whose salt a
+        // WAL restart would change. Disable automatic checkpoints to avoid WAL
+        // restarts from schema updates.
         db.pragma('wal_autocheckpoint = 0');
       }
       // Unfortunately, AUTO_VACUUM is not compatible with BEGIN CONCURRENT,

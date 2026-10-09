@@ -31,7 +31,6 @@ import {
   runUntilKilled,
 } from '../services/life-cycle.ts';
 import {deleteLitestreamMetaDir} from '../services/litestream/commands.ts';
-import type {WalKeeper} from '../services/litestream/wal-keeper.ts';
 import {
   changeLogFileName,
   deleteChangeLogDB,
@@ -165,7 +164,6 @@ export default async function runWorker(
 
   let waitForFirstBackupBeforeServing = false;
   let newBackupLineage = false;
-  let walKeeper: WalKeeper | undefined;
   for (const first of [true, false]) {
     // Resources acquired by an initialization attempt (e.g. a claimed
     // replication slot, the purge lock) to be released if the attempt fails.
@@ -209,7 +207,6 @@ export default async function runWorker(
         replicaID,
         waitForBackupBeforeServing,
         newBackupLineage: initNewBackupLineage,
-        walKeeper: initWalKeeper,
         pgChangeLogBehindSlot,
       } = upstream.type === 'pg'
         ? await initializePostgresChangeSource(
@@ -242,7 +239,6 @@ export default async function runWorker(
             context,
             restoreOptions,
           );
-      walKeeper = initWalKeeper;
 
       const replicationStatusPublisher =
         ReplicationStatusPublisher.forReplicaFile(replica.file);
@@ -348,8 +344,6 @@ export default async function runWorker(
       //   also necessary to avoid a self-deadlock when CHANGE_DB ==
       //   UPSTREAM_DB: CREATE_REPLICATION_SLOT waits for all older
       //   transactions to finish, including this lock's open transaction.
-      // * The WAL keeper of a restore that prepared a backup lineage to
-      //   continue, which would otherwise hold the (deleted) replica open.
       await cleanup.release();
       if (first && e instanceof AutoResetSignal) {
         lc.warn?.(`resetting replica ${replica.file}`, e);
@@ -425,11 +419,6 @@ export default async function runWorker(
       lc.info?.(`initial backup confirmed after ${elapsed.toFixed(2)}ms`);
     });
   }
-  // By the initial backup, litestream holds the restored WAL itself.
-  void backupReady.then(
-    () => walKeeper?.release('initial backup confirmed'),
-    () => walKeeper?.release('initial backup failed'),
-  );
 
   // In RMv2, readiness additionally waits for the backup-replicator to catch
   // up to the replication stream. This is not done in RMv1 (i.e. when the
@@ -481,7 +470,6 @@ export default async function runWorker(
   } catch (err) {
     processes.logErrorAndExit(err, 'change-streamer');
   } finally {
-    walKeeper?.release('shutting down');
     await processes.shutdown();
   }
 }
