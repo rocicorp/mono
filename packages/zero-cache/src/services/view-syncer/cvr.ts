@@ -704,7 +704,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
       // Immediately attach a rejection handler to avoid unhandled rejections.
       // The error will surface when this.#existingRows is awaited.
-      void this.#existingRows.then(() => {});
+      this.#existingRows.catch(() => {});
 
       const versionBumped =
         cmpVersions(this._orig.version, this._cvr.version) < 0;
