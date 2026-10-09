@@ -1,8 +1,6 @@
-import {fromBase64url, toBase64url} from '../../shared/src/base64.ts';
 import * as v from '../../shared/src/valita.ts';
 import {clientSchemaSchema} from './client-schema.ts';
 import {deleteClientsBodySchema} from './delete-clients.ts';
-import {ProtocolFlag, ProtocolFlags} from './protocol-flag.ts';
 import {upQueriesPatchSchema} from './queries-patch.ts';
 
 /**
@@ -58,43 +56,6 @@ export type ConnectedBody = v.Infer<typeof connectedBodySchema>;
 export type ConnectedMessage = v.Infer<typeof connectedMessageSchema>;
 export type InitConnectionBody = v.Infer<typeof initConnectionBodySchema>;
 export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;
-
-// The connect URL parameter that carries the protocol flags: a bit set with
-// flag n at bit n % 8 of byte floor(n / 8), in unpadded base64url.
-const PROTOCOL_FLAGS_PARAM = 'f';
-
-/**
- * Adds the client's protocol flags to the connect URL: every flag this client
- * knows.
- */
-export function setProtocolFlags(params: URLSearchParams): void {
-  const flags = Object.values(ProtocolFlag);
-  const bytes = new Uint8Array((Math.max(...flags) >> 3) + 1);
-  for (const flag of flags) {
-    bytes[flag >> 3] |= 1 << (flag & 7);
-  }
-  params.set(PROTOCOL_FLAGS_PARAM, toBase64url(bytes));
-}
-
-/**
- * Reads the protocol flags a client sent in the connect URL. A flag it didn't
- * send means the server's default. Flags this server doesn't know are dropped,
- * and a malformed value counts as no flags, so newer clients can always
- * connect.
- */
-export function getProtocolFlags(params: URLSearchParams): ProtocolFlags {
-  let bytes: Uint8Array;
-  try {
-    bytes = fromBase64url(params.get(PROTOCOL_FLAGS_PARAM) ?? '');
-  } catch {
-    return new ProtocolFlags();
-  }
-  return new ProtocolFlags(
-    Object.values(ProtocolFlag).filter(
-      flag => (((bytes[flag >> 3] ?? 0) >> (flag & 7)) & 1) !== 0,
-    ),
-  );
-}
 
 export function encodeSecProtocols(
   initConnectionMessage: InitConnectionMessage | undefined,
