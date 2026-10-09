@@ -537,7 +537,8 @@ async function createSnapshotTransaction(
     lc.info?.(`Opened snapshot transaction at LSN ${lsn} (${watermark})`);
     return {tx, watermark};
   } finally {
-    await replicationSession.end();
+    // With a timeout, in case a hung slot creation is still pending.
+    await replicationSession.end({timeout: 5});
   }
 }
 

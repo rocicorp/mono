@@ -2,11 +2,14 @@ import type {Readable} from 'node:stream';
 import {
   PG_CONFIGURATION_LIMIT_EXCEEDED,
   PG_INSUFFICIENT_PRIVILEGE,
+  PG_LOCK_NOT_AVAILABLE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import type postgres from 'postgres';
+import {defu} from 'defu';
+import postgres, {type Options, type PostgresType} from 'postgres';
 import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {sleep} from '../../../../../shared/src/sleep.ts';
 import {runTx} from '../../../db/run-transaction.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
 import {isPostgresError, type PostgresDB} from '../../../types/pg.ts';
@@ -68,7 +71,7 @@ export type CreateSlotSpec = {
   temporary?: boolean;
 
   // For overriding in tests.
-  lockTimeout?: number;
+  lockTimeout?: number | undefined;
 
   // A (non-replication) connection to the same upstream instance, used to
   // log what slot creation was waiting on if it times out.
@@ -89,6 +92,11 @@ export const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 60_000;
 // Postgres reliably aborts first and tears down the walsender cleanly.
 // The client-side timeout remains as a fallback for network-level failures.
 const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
+
+/** Thrown when the client-side timeout for creating a slot is reached. */
+export class SlotCreationTimeoutError extends Error {
+  readonly name = 'SlotCreationTimeoutError';
+}
 
 // Note: The replication connection does not support the extended query protocol,
 //       so all commands must be sent using sql.unsafe(). This is technically safe
@@ -133,25 +141,32 @@ export async function createReplicationSlot(
   const createSlot = session.unsafe<ReplicationSlot[]>(/*sql*/ `
     CREATE_REPLICATION_SLOT "${slotName}" ${maybeTemporary} LOGICAL pgoutput ${options}`);
 
-  const raced = await orTimeout(createSlot, CREATE_REPLICATION_SLOT_TIMEOUT_MS);
-  if (raced === 'timed-out') {
-    if (diagnosticsDB) {
+  try {
+    const raced = await orTimeout(
+      createSlot,
+      CREATE_REPLICATION_SLOT_TIMEOUT_MS,
+    );
+    if (raced === 'timed-out') {
+      throw new SlotCreationTimeoutError(
+        `Timed out after ${CREATE_REPLICATION_SLOT_TIMEOUT_MS} ms creating replication slot ${slotName}.`,
+      );
+    }
+    const [slot] = raced;
+    lc.info?.(`Created replication slot ${slotName}`, slot);
+    return slot;
+  } catch (e) {
+    if (
+      diagnosticsDB &&
+      (isPostgresError(e, PG_LOCK_NOT_AVAILABLE) ||
+        e instanceof SlotCreationTimeoutError)
+    ) {
+      // After a lock_timeout, the walsender is no longer waiting, but the
+      // transactions it was waiting on are likely still running. After the
+      // client-side timeout, it may still be waiting on them.
       await logSlotCreationBlockers(lc, diagnosticsDB, walsenderPID, slotName);
     }
-    // Create slot can block indefinitely waiting for old transactions. End
-    // this connection in the background and fail fast so the process restarts.
-    void session
-      .end()
-      .catch(e =>
-        lc.warn?.(`Error closing timed out replication slot session`, e),
-      );
-    throw new Error(
-      `Timed out after ${CREATE_REPLICATION_SLOT_TIMEOUT_MS} ms creating replication slot ${slotName}.`,
-    );
+    throw e;
   }
-  const [slot] = raced;
-  lc.info?.(`Created replication slot ${slotName}`, slot);
-  return slot;
 }
 
 const SLOT_DIAGNOSTICS_TIMEOUT_MS = 5_000;
@@ -211,12 +226,66 @@ export async function logSlotCreationBlockers(
 }
 
 /**
- * Replica and slot creation involves two sessions for proper coordination
- * with other replica management logic:
+ * Whether slot creation failed because it was waiting on transactions on the
+ * upstream instance: the server's lock_timeout fired, the client-side timeout
+ * was reached, or the replication session was closed while it was waiting.
+ * Such failures are expected on busy upstreams, and leave no durable state,
+ * so the attempt can simply be retried.
+ */
+function isSlotCreationBlocked(e: unknown): boolean {
+  return (
+    isPostgresError(e, PG_LOCK_NOT_AVAILABLE) ||
+    e instanceof SlotCreationTimeoutError ||
+    (e instanceof Error && (e as {code?: unknown}).code === 'CONNECTION_CLOSED')
+  );
+}
+
+// Slot creation is retried while it is blocked by upstream transactions, but
+// a slot that cannot be created for this long is surfaced as an error (i.e.
+// by exiting the process).
+const DEFAULT_MAX_SLOT_CREATION_BLOCKED_MS = 30 * 60 * 1000;
+
+// Base delay between retries of blocked slot creation. The actual delay is
+// jittered to between 1x and 5x of this value.
+const DEFAULT_SLOT_CREATION_RETRY_DELAY_MS = 1_000;
+
+export type CreateReplicaAndSlotOptions = {
+  // For overriding in tests.
+  lockTimeout?: number | undefined;
+  maxBlockedMs?: number | undefined;
+  retryDelayMs?: number | undefined;
+};
+
+/**
+ * Creates a dedicated (non-pooled) session for holding the session-level
+ * replication slot management lock. Ending the session releases the lock,
+ * which guarantees that the lock never outlives the attempt.
+ */
+function createLockSessionFor(db: PostgresDB, applicationName: string) {
+  return postgres(
+    defu(
+      {
+        max: 1,
+        ['idle_timeout']: null,
+        ['max_lifetime']: null as unknown as number,
+        connection: {['application_name']: applicationName},
+      },
+      // See createReplicationSessionFor() for why this cast is necessary.
+      db.options as unknown as Options<Record<string, PostgresType>>,
+    ),
+  );
+}
+
+/**
+ * Replica and slot creation involves several sessions for proper
+ * coordination with other replica management logic:
  *
- * * A normal transaction is started and acquires an advisory lock for
+ * * A dedicated session acquires a (session-level) advisory lock for
  *   replica slot management. This is the same lock that cleanup logic
- *   acquires before cleaning up replication slots.
+ *   acquires before cleaning up replication slots. The lock is held
+ *   outside of a transaction so that the session is not "idle in
+ *   transaction" while slot creation waits on upstream transactions,
+ *   which some upstreams terminate (e.g. idle_in_transaction_session_timeout).
  * * With the lock held, a new replication slot is created in a
  *   replication session. The API of CREATE_REPLICATION_SLOT is such
  *   that it cannot be done in a transaction, and cannot be followed by
@@ -224,6 +293,14 @@ export async function logSlotCreationBlockers(
  *   would be invalidated.
  * * Once the slot is created, the slot and replica information are recorded
  *   in the `replicas` table before releasing the lock.
+ *
+ * Slot creation waits for all transactions on the upstream instance that
+ * hold an xid, so it can be blocked by long-running transactions. A blocked
+ * attempt is abandoned (see {@link CREATE_REPLICATION_SLOT_TIMEOUT_MS}) and
+ * retried in-process, as it leaves no durable state: the `replicas` row is
+ * only inserted after the slot has been created. Retries continue until the
+ * slot is created or until `maxBlockedMs` has elapsed, after which the error
+ * is thrown.
  *
  * This locking ensures that:
  * 1. multiple replication managers attempting to create a replication slot
@@ -268,69 +345,89 @@ export async function createReplicaAndSlot<T>(
   backupOptions: BackupOptions,
   captureSnapshot: (snapshot: string) => Promise<T>,
   stage: ReplicaStage,
+  {
+    lockTimeout,
+    maxBlockedMs = DEFAULT_MAX_SLOT_CREATION_BLOCKED_MS,
+    retryDelayMs = DEFAULT_SLOT_CREATION_RETRY_DELAY_MS,
+  }: CreateReplicaAndSlotOptions = {},
 ): Promise<ReplicationSlotResult<T>> {
-  // Note: The replicationSession is used to create the replication slot
-  // and closed immediately afterwards, or on error.
-  const replicationSession = createReplicationSessionFor(sql, sessionName);
   const lockName = replicationSlotManagementLock(shard);
   const slotPoolPrefix = replicationSlotPrefix(shard);
+  const start = Date.now();
+  let addedReplicationRole = false;
+  let cleanedUpForSlotLimit = false;
 
-  for (let first = true; ; first = false) {
+  for (let attempt = 1; ; attempt++) {
     await dropUnclaimedSlots(lc, sql, shard);
+
+    // Note: The replicationSession is used to create the replication slot
+    // and closed immediately afterwards, or on error. A new session is used
+    // for each attempt, since a failed attempt closes it.
+    const replicationSession = createReplicationSessionFor(sql, sessionName);
+    const lockSession = createLockSessionFor(sql, `${sessionName}-lock`);
+    // Ending the lock session releases the replication slot management lock.
+    // The sessions are ended with a timeout in case a hung slot creation
+    // (e.g. after a network partition) is still pending.
+    const endSessions = () =>
+      Promise.allSettled([
+        replicationSession.end({timeout: 5}),
+        lockSession.end({timeout: 5}),
+      ]);
 
     let slotName: string | undefined;
     let initialSession: Readable | undefined;
+    let creatingSlot = false;
     try {
-      return await runTx(sql, async tx => {
-        await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
+      await lockSession`SELECT pg_advisory_lock(hashtext(${lockName}))`;
 
-        if (stage === InitialSync) {
-          // With the lock acquired, ensure that only one initial sync is
-          // active at a time. getRestoreCandidates() orders its results
-          // with stage = InitialSync (and active = true) first.
-          const others = await getRestoreCandidates(tx, shard, epoch);
-          lc.info?.(`current replicas at epoch ${epoch}`, {replicas: others});
-          if (others.length) {
-            const [{id, stage, active}] = others;
-            if (stage === InitialSync && active) {
-              throw new AutoResetSignal(
-                `another replica (${id}) is performing initial sync`,
-              );
-            }
+      if (stage === InitialSync) {
+        // With the lock acquired, ensure that only one initial sync is
+        // active at a time. getRestoreCandidates() orders its results
+        // with stage = InitialSync (and active = true) first.
+        const others = await getRestoreCandidates(sql, shard, epoch);
+        lc.info?.(`current replicas at epoch ${epoch}`, {replicas: others});
+        if (others.length) {
+          const [{id, stage, active}] = others;
+          if (stage === InitialSync && active) {
+            throw new AutoResetSignal(
+              `another replica (${id}) is performing initial sync`,
+            );
           }
         }
+      }
 
-        // Pick an available slotName from the slotPoolPrefix pool.
-        const names = await tx<{name: string}[]> /*sql*/ `
-          SELECT slot_name as name FROM pg_replication_slots
-            WHERE slot_name LIKE ${slotPoolPrefix + '%'};
-        `.values();
-        const inUse = new Set(names.flat());
-        for (let next = 0; ; next++) {
-          const candidateName = `${slotPoolPrefix}${slotPoolSuffix(next)}`;
-          if (!inUse.has(candidateName)) {
-            slotName = candidateName;
-            break;
-          }
+      // Pick an available slotName from the slotPoolPrefix pool.
+      const names = await sql<{name: string}[]> /*sql*/ `
+        SELECT slot_name as name FROM pg_replication_slots
+          WHERE slot_name LIKE ${slotPoolPrefix + '%'};
+      `.values();
+      const inUse = new Set(names.flat());
+      for (let next = 0; ; next++) {
+        const candidateName = `${slotPoolPrefix}${slotPoolSuffix(next)}`;
+        if (!inUse.has(candidateName)) {
+          slotName = candidateName;
+          break;
         }
+      }
 
-        const slot = await createReplicationSlot(lc, replicationSession, {
-          slotName,
-          failover,
-          diagnosticsDB: sql,
-        });
-        const capturedSnapshot = await captureSnapshot(slot.snapshot_name);
-        await replicationSession.end();
-        initialSession = await keepSlotActiveUntilTakenOver(lc, {
-          db: extractConnectionConfig(sql),
-          slot: slot.slot_name,
-          dummyPublication: metadataPublicationName(
-            shard.appID,
-            shard.shardNum,
-          ),
-          lsn: String(toBigInt(slot.consistent_point)),
-        });
+      creatingSlot = true;
+      const slot = await createReplicationSlot(lc, replicationSession, {
+        slotName,
+        failover,
+        lockTimeout,
+        diagnosticsDB: sql,
+      });
+      creatingSlot = false;
+      const capturedSnapshot = await captureSnapshot(slot.snapshot_name);
+      await replicationSession.end({timeout: 5});
+      initialSession = await keepSlotActiveUntilTakenOver(lc, {
+        db: extractConnectionConfig(sql),
+        slot: slot.slot_name,
+        dummyPublication: metadataPublicationName(shard.appID, shard.shardNum),
+        lsn: String(toBigInt(slot.consistent_point)),
+      });
 
+      const replica = await runTx(sql, async tx => {
         await createReplica(
           tx,
           shard,
@@ -343,28 +440,38 @@ export async function createReplicaAndSlot<T>(
           backupOptions,
           stage,
         );
-
-        const replica = must(
+        return must(
           await getReplicaState(tx, shard, replicaID),
           `replica ${replicaID} was not created`,
         );
-
-        return {slot, capturedSnapshot, initialSession, replica};
       });
+
+      return {slot, capturedSnapshot, initialSession, replica};
     } catch (e) {
-      if (first && isPostgresError(e, PG_INSUFFICIENT_PRIVILEGE)) {
+      // Release the lock (and end the attempt's sessions) before handling the
+      // error, e.g. as dropUnclaimedSlots() acquires the lock from a different
+      // session.
+      await endSessions();
+      if (
+        !addedReplicationRole &&
+        isPostgresError(e, PG_INSUFFICIENT_PRIVILEGE)
+      ) {
         // Some Postgres variants (e.g. Google Cloud SQL) require that
         // the user have the REPLICATION role in order to create a slot.
         // Note that this must be done by the upstreamDB connection, and
         // does not work in the replicationSession itself.
         await sql`ALTER ROLE current_user WITH REPLICATION`;
         lc.info?.(`Added the REPLICATION role to database user`);
+        addedReplicationRole = true;
         continue;
       }
       // Note: This is currently manually tested since max_replication_slots
       //       is a PG startup parameter that other tests depend on.
       // TODO: Figure out a way to unit test this (with the full PG setup).
-      if (first && isPostgresError(e, PG_CONFIGURATION_LIMIT_EXCEEDED)) {
+      if (
+        !cleanedUpForSlotLimit &&
+        isPostgresError(e, PG_CONFIGURATION_LIMIT_EXCEEDED)
+      ) {
         lc.warn?.(
           `Reached max replication slots. Attempting to clean up unused slots`,
           e,
@@ -374,6 +481,7 @@ export async function createReplicaAndSlot<T>(
         await sql`
           DELETE FROM ${sql(replicasTable)} USING pg_replication_slots slots
             WHERE replicas.slot = slots.slot_name AND NOT slots.active`;
+        cleanedUpForSlotLimit = true;
         continue; // then let dropUnclaimedSlots() perform its cleanup
       }
       if (initialSession) {
@@ -381,18 +489,31 @@ export async function createReplicaAndSlot<T>(
           await endSession(initialSession);
         } catch {}
       }
-      // Otherwise, clean up any created slot if something went wrong. The
-      // slot may not exist (e.g. if its creation failed), and its name may
-      // have been reused since the lock was released, so leave it to
-      // dropUnclaimedSlots(), which only drops slots without a replica.
+      // The slot may not exist (e.g. if its creation failed), and its name
+      // may be reused once the lock is released, so any created slot is
+      // left to dropUnclaimedSlots(), which only drops slots without a
+      // replica. This runs at the start of the next attempt.
+      const blockedMs = Date.now() - start;
+      if (
+        creatingSlot &&
+        isSlotCreationBlocked(e) &&
+        blockedMs < maxBlockedMs
+      ) {
+        lc.warn?.(
+          `Replication slot ${slotName} creation blocked by upstream transactions ` +
+            `(attempt ${attempt}, ${blockedMs} ms). Retrying.`,
+          e,
+        );
+        await sleep(retryDelayMs * (1 + 4 * Math.random()));
+        continue;
+      }
       if (slotName) {
         lc.warn?.(`deleting slot ${slotName} due to error`, e);
-        try {
-          await replicationSession.end();
-        } catch {}
         await dropUnclaimedSlots(lc, sql, shard);
       }
       throw e;
+    } finally {
+      await endSessions();
     }
   }
 }
