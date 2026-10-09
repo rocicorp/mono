@@ -6,6 +6,7 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {defu} from 'defu';
 import postgres, {type Options, type PostgresType} from 'postgres';
 import {sleep} from '../../../shared/src/sleep.ts';
+import {getLogConfig} from '../config/zero-config.ts';
 import {
   DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
   makeAck,
@@ -20,6 +21,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {createLogContext} from './logging.ts';
 
 export type SlotKeeperConfig = {
   db: PgConnectionConfig;
@@ -84,10 +86,12 @@ let lc = new LogContext('info', {}, consoleLogSink);
 
 export default async function runWorker(
   parent: Worker,
-  _env: NodeJS.ProcessEnv,
+  env: NodeJS.ProcessEnv,
   depsOrArg?: string | SlotKeeperDependencies,
-  ..._argv: string[]
+  ...argv: string[]
 ): Promise<void> {
+  // Only logging config is needed; avoid requiring the full (normalized) config.
+  const logConfig = getLogConfig({env, argv});
   const deps: SlotKeeperDependencies =
     typeof depsOrArg === 'object' && depsOrArg !== null ? depsOrArg : {};
   const createSession =
@@ -114,7 +118,9 @@ export default async function runWorker(
 
   const config = await waitForStartConfig(parent);
 
-  lc = (deps.logContext ?? lc).withContext('slot', config.slot);
+  lc = (
+    deps.logContext ?? createLogContext(logConfig, 'slot-keeper')
+  ).withContext('slot', config.slot);
   lc.info?.(`starting slot-keeper for ${config.slot}`);
 
   let stopped = false;

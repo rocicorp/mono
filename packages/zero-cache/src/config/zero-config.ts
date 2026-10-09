@@ -1711,6 +1711,25 @@ export function getZeroConfig(
 }
 
 /**
+ * Parses only the log options, ignoring all other flags and environment
+ * variables. For lightweight workers that need to set up logging but do not
+ * need (or require) the rest of the zero config to be present or normalized.
+ */
+export function getLogConfig(
+  opts: Omit<ParseOptions, 'envNamePrefix' | 'allowUnknown'> = {},
+): Pick<ZeroConfig, 'log'> {
+  return parseOptions(
+    {log: logOptions},
+    {
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+      emitDeprecationWarnings: false,
+      allowUnknown: true,
+      ...opts,
+    },
+  );
+}
+
+/**
  * Same as {@link getZeroConfig}, with an additional check that the
  * config has already been normalized (i.e. by the top level server/runner).
  */
