@@ -198,6 +198,15 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
       break;
     }
 
+    // A MULTI-INDEX OR nested in a branch of another one gets a scanstatus
+    // entry without an OP_Explain: SQLite reports its SELECTID and PARENTID
+    // as -1 and its EXPLAIN as NULL. The nested OR's own `MULTI-INDEX OR` and
+    // `INDEX n` loops are reported separately, and the entry is never a
+    // top-level loop, so nothing the estimate reads is lost by skipping it.
+    if (selectId === -1) {
+      continue;
+    }
+
     loops.push({
       selectId: must(selectId),
       parentId: must(
