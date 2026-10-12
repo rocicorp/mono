@@ -57,6 +57,7 @@ import {testDeferredWritesBudget} from './deferred-writes-test-util.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
 import type {MonotonicClock} from './hydration-budget.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
+import type {ShouldCutOffPush} from './push-cutoff.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
@@ -593,6 +594,12 @@ type SetupOptions = Readonly<{
   lc?: LogContext | undefined;
   monotonicClock?: MonotonicClock | undefined;
   /**
+   * Turns on `costBasedSyncEnabled`, with this deciding when to stop pushing
+   * to a query instead of the query's push and hydration times.
+   */
+  pushCutoff?: ShouldCutOffPush | undefined;
+  rebuildMargin?: number | undefined;
+  /**
    * Enables a default `/query` stub for PG integration tests that should still
    * exercise real auth-validation code paths without having to model full
    * custom-query transform responses.
@@ -648,6 +655,8 @@ export async function setup(
     queryHydrationTimeoutMs = 0,
     lc = createSilentLogContext(),
     monotonicClock,
+    pushCutoff,
+    rebuildMargin,
     queryFetchMode = 'none',
   } = options;
   const effectiveQueryConfig: ZeroConfig['query'] =
@@ -782,6 +791,8 @@ export async function setup(
     },
     viewSyncerHydrationBudgetMs: hydrationBudgetMs,
     viewSyncerQueryHydrationTimeoutMs: queryHydrationTimeoutMs,
+    costBasedSyncEnabled: pushCutoff !== undefined,
+    syncRebuildMargin: rebuildMargin,
   } as NormalizedZeroConfig;
 
   // Create the custom query transformer if configured
@@ -846,6 +857,7 @@ export async function setup(
     undefined,
     setTimeoutFn,
     monotonicClock,
+    pushCutoff,
   );
   if (permissions) {
     const json = JSON.stringify(permissions);

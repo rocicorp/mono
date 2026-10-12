@@ -638,6 +638,13 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     rowIDString,
   );
   readonly #lastPatches = new CustomKeyMap<RowID, RowPatchInfo>(rowIDString);
+  /**
+   * Rows that {@link retractQueries} left without references, and the patch
+   * version of their deletion. The 'del' patches are held back until
+   * {@link deleteUnreferencedRows}, because the retracted queries are
+   * executed again and usually reference most of these rows again.
+   */
+  readonly #retractedRows = new CustomKeyMap<RowID, CVRVersion>(rowIDString);
   readonly #rowSetSignature: RowSetSignatureProvider | undefined;
 
   #existingRows: Promise<Iterable<RowRecord>> | undefined = undefined;
@@ -889,9 +896,30 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       assertNotInternal(query);
     }
 
-    // Unref the rows received for the aborted queries. The version of each
-    // unref is the version the row currently has in this update, so a row that
-    // stays referenced does not get a spurious patch version bump.
+    const patches = await this.#unrefReceivedRows(lc, aborted);
+
+    for (const queryID of aborted) {
+      delete this._mutableQueries()[queryID];
+      const patch = {type: 'query', op: 'del', id: queryID} as const;
+      this._cvrStore.markQueryAsDeleted(this._cvr.version, patch);
+      patches.push({patch, toVersion: this._cvr.version});
+    }
+    return patches;
+  }
+
+  /**
+   * Strips the references of `queryIDs` from every row received so far in
+   * this update. A row left with no references is deleted, and the 'del'
+   * patch cancels the 'put' the client has already received in this poke. The
+   * version of each unref is the version the row currently has in this
+   * update, so a row that stays referenced does not get a spurious patch
+   * version bump.
+   */
+  async #unrefReceivedRows(
+    lc: LogContext,
+    queryIDs: ReadonlySet<string>,
+    holdDeletes = false,
+  ): Promise<PatchToVersion[]> {
     const existingRows = await this._cvrStore.getRowRecords();
     const unrefs = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
     for (const [id, refCounts] of this.#receivedRows) {
@@ -899,7 +927,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         continue;
       }
       let unref: RowUpdate | undefined;
-      for (const queryID of aborted) {
+      for (const queryID of queryIDs) {
         const count = refCounts[queryID];
         if (!count) {
           continue;
@@ -914,16 +942,71 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         unref.refCounts[queryID] = -count;
       }
     }
-    const patches =
-      unrefs.size > 0
-        ? await this.received(lc, unrefs)
-        : ([] as PatchToVersion[]);
+    return unrefs.size > 0 ? this.#receive(lc, unrefs, holdDeletes) : [];
+  }
 
-    for (const queryID of aborted) {
-      delete this._mutableQueries()[queryID];
-      const patch = {type: 'query', op: 'del', id: queryID} as const;
-      this._cvrStore.markQueryAsDeleted(this._cvr.version, patch);
-      patches.push({patch, toVersion: this._cvr.version});
+  /**
+   * Retracts what queries have contributed to this update, so that they can
+   * be executed again from scratch in the same update. This is for a query
+   * whose changes were being received incrementally (see
+   * `PipelineDriver.advance()`) until its pipeline was abandoned in favor of
+   * hydrating it again.
+   *
+   * Rows received so far in this update have the queries' references
+   * stripped, as in {@link abortExecutedQueries}, except that a row left
+   * with no references is only deleted by {@link deleteUnreferencedRows}, if
+   * it is still unreferenced by then. Until then the clients keep the row
+   * and the patches they received for it in this update, so a row that is
+   * received again unchanged needs no patch at all. The queries are then
+   * tracked as executed, without changing them in the CVR: the references
+   * they held before this update are replaced, rather than adjusted, by the
+   * rows subsequently {@link received} for them, and
+   * {@link deleteUnreferencedRows} drops the references of rows that are not
+   * received again.
+   *
+   * Unlike {@link trackQueries}, this can be called on an updater that has
+   * not tracked any queries, and after rows have been received. All rows
+   * that the queries' pipelines have output must have been {@link received}
+   * first, and {@link deleteUnreferencedRows} must be called once the
+   * queries' rows have been received again.
+   */
+  async retractQueries(
+    lc: LogContext,
+    queryIDs: readonly string[],
+  ): Promise<PatchToVersion[]> {
+    assert(
+      cmpVersions(this._orig.version, this._cvr.version) < 0,
+      'A final CVR version must be set before retracting queries',
+    );
+    const retracted = new Set(queryIDs);
+    for (const queryID of retracted) {
+      assert(
+        this._cvr.queries[queryID] !== undefined,
+        () => `Query ${queryID} is not in the CVR`,
+      );
+      assert(
+        this.#executedQueryIDs.has(queryID) ||
+          !this.#removedOrExecutedQueryIDs.has(queryID),
+        () => `Query ${queryID} was tracked as removed`,
+      );
+    }
+
+    const patches = await this.#unrefReceivedRows(lc, retracted, true);
+
+    let tracked = false;
+    for (const queryID of retracted) {
+      if (!this.#executedQueryIDs.has(queryID)) {
+        this.#removedOrExecutedQueryIDs.add(queryID);
+        this.#executedQueryIDs.add(queryID);
+        tracked = true;
+      }
+    }
+    if (tracked) {
+      // The rows that reference the newly tracked queries have to be
+      // reconciled too. The lookup reads the row records as they were before
+      // this update, so it can be redone at any point in it.
+      this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
+      void this.#existingRows.then(() => {});
     }
     return patches;
   }
@@ -1051,8 +1134,20 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * patchVersion so that only the patches new to the clients are sent.
    */
   received(
+    lc: LogContext,
+    rows: Map<RowID, RowUpdate>,
+  ): Promise<PatchToVersion[]> {
+    return this.#receive(lc, rows, false);
+  }
+
+  /**
+   * @param holdDeletes Whether to hold back the 'del' patches of rows that
+   *        are left without references until {@link deleteUnreferencedRows}.
+   */
+  #receive(
     _lc: LogContext,
     rows: Map<RowID, RowUpdate>,
+    holdDeletes: boolean,
   ): Promise<PatchToVersion[]> {
     return startAsyncSpan(
       tracer,
@@ -1078,6 +1173,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
                 );
 
           this.#receivedRows.set(id, merged);
+          // A held deletion stands until the row is referenced again.
+          if (merged !== null) {
+            this.#retractedRows.delete(id);
+          }
 
           const newRowVersion = merged === null ? undefined : version;
           const patchVersion =
@@ -1123,8 +1222,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
             // All refCounts have gone to zero, if row was previously synced
             // delete it.
             if (existing || previouslyReceived) {
-              // dedupe
-              if (lastPatch?.rowVersion !== null) {
+              if (holdDeletes) {
+                this.#retractedRows.set(id, toVersion);
+              } else if (lastPatch?.rowVersion !== null) {
+                // dedupe
                 patches.push({
                   patch: {
                     type: 'row',
@@ -1193,6 +1294,19 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
         const start = Date.now();
         assert(this.#existingRows, `trackQueries() was not called`);
+        // Rows that retracted queries referenced and that were not received
+        // again. Their row records were written when they were retracted.
+        for (const [id, deletedVersion] of this.#retractedRows) {
+          const lastPatch = this.#lastPatches.get(id);
+          if (lastPatch?.rowVersion === null) {
+            continue;
+          }
+          const toVersion = maxVersion(deletedVersion, lastPatch?.toVersion);
+          patches.push({toVersion, patch: {type: 'row', op: 'del', id}});
+          this.#lastPatches.set(id, {rowVersion: null, toVersion});
+        }
+        this.#retractedRows.clear();
+
         for (const existing of await this.#existingRows) {
           const deletedID = this.#deleteUnreferencedRow(existing);
           if (deletedID === null) {

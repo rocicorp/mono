@@ -107,8 +107,15 @@ import {E2EServingLagTracker} from './e2e-serving-lag.ts';
 import {HydrationBudget, type MonotonicClock} from './hydration-budget.ts';
 import {HydrationCircuitBreaker} from './hydration-circuit-breaker.ts';
 import {handleInspect} from './inspect-handler.ts';
-import type {PipelineDriver, QueryInfo, RowChange} from './pipeline-driver.ts';
+import type {
+  AbandonedQuery,
+  CostBasedAdvance,
+  PipelineDriver,
+  QueryInfo,
+  RowChange,
+} from './pipeline-driver.ts';
 import {planWarningMessage} from './plan-warnings.ts';
+import {shouldCutOffPush, type ShouldCutOffPush} from './push-cutoff.ts';
 import {QueryCoveringIndex} from './query-covering.ts';
 import {queryShape} from './query-shape.ts';
 import {
@@ -251,6 +258,31 @@ export const TTL_TIMER_HYSTERESIS = 50; // ms
  * per process. See {@link LogThrottle}.
  */
 const SLOW_HYDRATION_LOG_WINDOW_MS = 5 * 60_000;
+
+/** See `ViewSyncerService.#logRebuilds()`. */
+const REBUILD_LOG_INTERVAL_MS = 60_000;
+const REBUILD_LOG_MIN_MS = 1000;
+
+function newRebuildLog() {
+  return {
+    /** The batches that hydrated queries again. */
+    batches: 0,
+    /** How many of them were not read, which hydrates every query again. */
+    batchesNotRead: 0,
+    /** The queries that they abandoned, and why. */
+    queries: 0,
+    estimate: 0,
+    read: 0,
+    cutoff: 0,
+    /** How many of those were hydrated again, and how long that took. */
+    hydrated: 0,
+    hydrationTimeMs: 0,
+    /** How many were removed instead. */
+    timedOut: 0,
+    rejectedByCircuitBreaker: 0,
+    evictedForHydrationBudget: 0,
+  };
+}
 
 // Shared by all ViewSyncers in the process, so that a query shape is
 // throttled across client groups.
@@ -549,6 +581,43 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: NormalizedZeroConfig;
+  /**
+   * Set when `costBasedSyncEnabled`: advancements are then bounded by
+   * cutting off the queries this says to and hydrating them again in the
+   * same poke, instead of by the advancement time limit that resets every
+   * pipeline of the client group.
+   */
+  readonly #pushCutoff: ShouldCutOffPush | undefined;
+
+  /** What batches have hydrated again since that was last logged. */
+  #rebuildLog = newRebuildLog();
+  #rebuildsLoggedAt = -Infinity;
+  readonly #queryRebuilds = getOrCreateCounter('sync', 'query-rebuilds', {
+    description:
+      'Number of queries hydrated again by an advancement instead of ' +
+      'being pushed (all of) its changes, by reason: "estimate" if pushing ' +
+      'them to it was estimated to cost more, "read" if reading them was, ' +
+      'for the queries that were left to push them to, or "cutoff" if the ' +
+      'pushes had taken as long as hydrating the query did',
+    unit: '{query}',
+  });
+  readonly #queryRebuildTime = getOrCreateLatencyHistogram(
+    'sync',
+    'query-rebuild-time',
+    'Time to hydrate a query again in an advancement.',
+  );
+  readonly #pushEstimateRatio = getOrCreateValueHistogram(
+    'sync',
+    'push-estimate-ratio',
+    {
+      description:
+        'The estimated time to push the changes of an advancement to a ' +
+        'query, divided by the time it took, for queries that were pushed ' +
+        'all of the changes',
+      unit: '1',
+      bucketBoundaries: [0.1, 0.25, 0.5, 0.8, 1.25, 2, 4, 10],
+    },
+  );
   #runPriorityOp: <T>(
     lc: LogContext,
     description: string,
@@ -577,8 +646,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
     now: MonotonicClock = performance.now.bind(performance),
+    // Overridden by tests, as push times are measured with the real clock.
+    pushCutoff: ShouldCutOffPush = shouldCutOffPush,
   ) {
     this.#config = config;
+    this.#pushCutoff = config.costBasedSyncEnabled ? pushCutoff : undefined;
     this.id = clientGroupID;
     this.connContextManager = connContextManager;
     this.#shard = shard;
@@ -824,7 +896,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                   q => q.type === 'client',
                 );
                 if (!hasClientQueries) {
-                  previousQueries = new Map(this.#pipelines.queries());
+                  previousQueries = new Map<string, QueryInfo>([
+                    ...this.#pipelines.queries(),
+                    // The queries that the advancement was going to hydrate
+                    // again have no pipeline at this point.
+                    ...this.#pipelines.abandonedQueries(),
+                  ]);
                 }
                 break;
               }
@@ -3558,13 +3635,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const timer = new TimeSliceTimer(lc);
       let outcome: AdvancementOutcome = {outcome: 'error'};
       let setupTimeMs: number | undefined;
+      let rebuildTimeMs = 0;
+      let evictedQueries = false;
       try {
         let pokers: ReturnType<typeof startPoke> | undefined;
         let updater: CVRQueryDrivenUpdater | undefined;
         let version: string | undefined;
         let numChanges = 0;
         try {
-          const advancement = this.#pipelines.advance(timer);
+          const advancement = this.#pipelines.advance(
+            timer,
+            this.#costBasedAdvance(cvr),
+          );
           version = advancement.version;
           numChanges = advancement.numChanges;
           lc = lc.withContext('newVersion', version);
@@ -3603,6 +3685,33 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             },
             pokers,
           );
+
+          for (const {estimatedPushMs, pushTimeMs} of advancement.estimates()) {
+            if (pushTimeMs > 0) {
+              this.#pushEstimateRatio.record(estimatedPushMs / pushTimeMs);
+            }
+          }
+
+          const abandoned = advancement.abandoned();
+          if (abandoned.length > 0) {
+            updater ??= new CVRQueryDrivenUpdater(
+              this.#cvrStore,
+              cvr,
+              version,
+              this.#pipelines.replicaVersion,
+              this.#pipelines,
+            );
+            // The rebuild is timed separately, per query.
+            timer.stop();
+            ({rebuildTimeMs, evictedQueries} =
+              await this.#rebuildAbandonedQueries(
+                lc,
+                cvr,
+                abandoned,
+                updater,
+                pokers,
+              ));
+          }
         } catch (e) {
           setupTimeMs ??= performance.now() - start;
           if (e instanceof ResetPipelinesSignal) {
@@ -3621,6 +3730,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (updater) {
           // Commit the changes and update the CVR snapshot.
           this.#cvr = await this.#flushPoked(lc, updater, pokers);
+          if (evictedQueries) {
+            this.#scheduleExpireEviction(lc, this.#cvr);
+          }
         }
         const finalVersion = (this.#cvr ?? cvr).version;
 
@@ -3634,7 +3746,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#markVersionServed(version);
 
         const wallTime = performance.now() - start;
-        const totalProcessTime = timer.totalElapsed();
+        const totalProcessTime = timer.totalElapsed() + rebuildTimeMs;
         lc.debug?.(
           `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
         );
@@ -3645,7 +3757,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // Setup is synchronous. The running timer excludes time-slice waits
         // but includes asynchronous I/O such as the CVR flush.
         const setupMs = must(setupTimeMs);
-        const processingTimeMs = setupMs + timer.totalElapsed();
+        const processingTimeMs = setupMs + timer.totalElapsed() + rebuildTimeMs;
         const wallTimeMs = performance.now() - start;
         this.#advancementMetrics.record(
           {
@@ -3657,6 +3769,258 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
       }
     });
+  }
+
+  /**
+   * What a cost-based advancement needs, or `undefined` if advancements are
+   * bounded by the advancement time limit.
+   */
+  #costBasedAdvance(cvr: CVRSnapshot): CostBasedAdvance | undefined {
+    const shouldCutOff = this.#pushCutoff;
+    if (shouldCutOff === undefined) {
+      return undefined;
+    }
+    // Hydrating a query again in an advancement needs a new CVR version,
+    // which an advancement that is catching up to the CVR does not have. It
+    // is bounded by the advancement time limit instead.
+    if (this.#pipelines.currentVersion() < cvr.version.stateVersion) {
+      return undefined;
+    }
+    return {shouldCutOff, rebuildMargin: this.#config.syncRebuildMargin ?? 2};
+  }
+
+  /**
+   * Hydrates the queries whose pipelines an advancement abandoned, at the
+   * snapshot it advanced to, within the advancement's CVR update and poke.
+   * What the queries contributed to the update before they were abandoned
+   * is retracted first.
+   *
+   * The hydrations are protected as they are in a hydration pass (see
+   * {@link #addAndRemoveQueries}). A query that exceeds the query hydration
+   * timeout, or whose circuit breaker is open, is removed and errored to its
+   * clients. Inactive queries are hydrated last, and those not reached
+   * before the hydration budget is spent are evicted.
+   *
+   * @returns the time spent hydrating, and whether inactive queries were
+   *          evicted.
+   */
+  async #rebuildAbandonedQueries(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+    abandoned: readonly AbandonedQuery[],
+    updater: CVRQueryDrivenUpdater,
+    pokers: PokeHandler,
+  ): Promise<{rebuildTimeMs: number; evictedQueries: boolean}> {
+    for (const patch of await updater.retractQueries(
+      lc,
+      abandoned.map(q => q.queryID),
+    )) {
+      await pokers.addPatch(patch);
+    }
+    // The budget is for the hydrations of this advancement, as it is for
+    // those of a hydration pass. The retraction is not hydration: evicting
+    // queries does not make it any shorter.
+    const hydrationBudget = new HydrationBudget(
+      this.#config.viewSyncerHydrationBudgetMs ?? 0,
+      this.#now,
+    );
+
+    const abandonedByID = new Map(abandoned.map(q => [q.queryID, q]));
+    const {required, optional} = classifyQueriesForHydration(
+      abandoned.map(q => must(cvr.queries[q.queryID])),
+    );
+    const byRecord = (queries: readonly QueryRecord[]) =>
+      queries.map(({id}) => must(abandonedByID.get(id)));
+
+    const timer = new TimeSliceTimer(lc);
+    const pipelines = this.#pipelines;
+    const circuitBreaker = this.#hydrationCircuitBreaker;
+    const budgetEvicted: AbandonedQuery[] = [];
+    const timedOut: AbandonedQuery[] = [];
+    const rejected: AbandonedQuery[] = [];
+    const rebuilt = {active: 0, inactive: 0};
+    // oxlint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    let total = 0;
+    function* rebuild(queries: readonly AbandonedQuery[], inactive: boolean) {
+      for (let i = 0; i < queries.length; i++) {
+        // The budget is soft: it is only consulted between queries.
+        if (inactive && hydrationBudget.exhausted()) {
+          budgetEvicted.push(...queries.slice(i));
+          return;
+        }
+        const q = must(queries[i]);
+        const hydrationQuery = {
+          id: q.queryID,
+          ast: q.originalAst,
+          transformationHash: q.transformationHash,
+          name: q.queryName,
+        };
+        // Internal queries are never aborted.
+        const breakable = cvr.queries[q.queryID]?.type !== 'internal';
+        if (breakable && circuitBreaker.isOpen(q.transformationHash)) {
+          rejected.push(q);
+          self.#recordCircuitBreakerRejection(lc, hydrationQuery);
+          continue;
+        }
+        let aborted = false;
+        for (const change of pipelines.addQuery(
+          q.transformationHash,
+          q.queryID,
+          q.originalAst,
+          timer.startWithoutYielding(),
+          q.queryName,
+          'unchanged-query-rehydrate',
+        )) {
+          if (
+            change === 'yield' &&
+            breakable &&
+            circuitBreaker.exceeded(timer.totalElapsed())
+          ) {
+            // Breaking out returns the addQuery generator, which tears down
+            // the partially built pipeline. The time slice that exposed the
+            // timeout still ends with a yield.
+            aborted = true;
+            yield change;
+            break;
+          }
+          yield change;
+        }
+        const elapsed = timer.stop();
+        total += elapsed;
+        if (aborted) {
+          timedOut.push(q);
+          self.#recordHydrationTimeout(lc, hydrationQuery, elapsed);
+          continue;
+        }
+        if (inactive) {
+          rebuilt.inactive++;
+        } else {
+          rebuilt.active++;
+        }
+        self.#queryRebuilds.add(1, {reason: q.reason});
+        self.#queryRebuildTime.recordMs(elapsed);
+        self.#addQueryMaterializationServerMetric(q.queryID, elapsed);
+        if (elapsed > self.#slowHydrateThreshold) {
+          self.#logSlowHydration(lc, hydrationQuery, elapsed);
+        }
+      }
+    }
+    function* rebuildAll() {
+      yield* rebuild(byRecord(required), false);
+      yield* rebuild(byRecord(optional), true);
+    }
+    await this.#processChanges(
+      lc,
+      timer,
+      rebuildAll(),
+      rows => updater.received(lc, rows),
+      pokers,
+    );
+
+    const abortedQueries = [...timedOut, ...rejected];
+    if (abortedQueries.length > 0) {
+      for (const patch of await updater.abortExecutedQueries(
+        lc,
+        abortedQueries.map(q => q.queryID),
+      )) {
+        await pokers.addPatch(patch);
+      }
+      if (timedOut.length > 0) {
+        this.#queryEvictions.add(timedOut.length, {
+          reason: 'hydration-timeout',
+        });
+      }
+      if (rejected.length > 0) {
+        this.#queryEvictions.add(rejected.length, {
+          reason: 'hydration-circuit-breaker',
+        });
+      }
+      this.#sendHydrationTimeoutErrors(
+        cvr,
+        abortedQueries.map(q => ({id: q.queryID, name: q.queryName})),
+      );
+    }
+    const evictedQueryIDs = budgetEvicted.map(q => q.queryID);
+    for (const patch of updater.removeTrackedQueries(evictedQueryIDs)) {
+      await pokers.addPatch(patch);
+    }
+    for (const {queryID} of [...abortedQueries, ...budgetEvicted]) {
+      // Their pipelines are gone. This is for the driver to forget that they
+      // were abandoned.
+      this.#pipelines.removeQuery(queryID);
+      this.#inspectorDelegate.removeQuery(queryID);
+      this.#queryReplacements.delete(queryID);
+    }
+    this.#recordHydrationBudgetExhaustion(
+      lc,
+      hydrationBudget,
+      rebuilt.active,
+      rebuilt.inactive,
+      evictedQueryIDs,
+    );
+
+    for (const patch of await updater.deleteUnreferencedRows(lc)) {
+      await pokers.addPatch(patch);
+    }
+
+    this.#logRebuilds(lc, abandoned, {
+      hydrated: rebuilt.active + rebuilt.inactive,
+      hydrationTimeMs: total,
+      timedOut: timedOut.length,
+      rejectedByCircuitBreaker: rejected.length,
+      evictedForHydrationBudget: budgetEvicted.length,
+    });
+    return {rebuildTimeMs: total, evictedQueries: evictedQueryIDs.length > 0};
+  }
+
+  /**
+   * Says in the log that this client group's batches hydrate queries again,
+   * which can be every batch. Nothing else is logged at `info` for a batch,
+   * so this is at most once a minute, for the batches since the last time,
+   * and not before their hydrations add up to a second. Which queries they
+   * were is in the query stats, by query shape (see `QueryStats`).
+   */
+  #logRebuilds(
+    lc: LogContext,
+    abandoned: readonly AbandonedQuery[],
+    batch: {
+      hydrated: number;
+      hydrationTimeMs: number;
+      timedOut: number;
+      rejectedByCircuitBreaker: number;
+      evictedForHydrationBudget: number;
+    },
+  ): void {
+    const log = this.#rebuildLog;
+    log.batches++;
+    log.queries += abandoned.length;
+    for (const {reason} of abandoned) {
+      log[reason]++;
+    }
+    // A batch that is not read abandons every query for that.
+    if (abandoned.some(q => q.reason === 'read')) {
+      log.batchesNotRead++;
+    }
+    log.hydrated += batch.hydrated;
+    log.hydrationTimeMs += batch.hydrationTimeMs;
+    log.timedOut += batch.timedOut;
+    log.rejectedByCircuitBreaker += batch.rejectedByCircuitBreaker;
+    log.evictedForHydrationBudget += batch.evictedForHydrationBudget;
+
+    const now = this.#now();
+    if (
+      log.hydrationTimeMs < REBUILD_LOG_MIN_MS ||
+      now - this.#rebuildsLoggedAt < REBUILD_LOG_INTERVAL_MS
+    ) {
+      return;
+    }
+    lc.info?.(
+      'Client group hydrated queries again in its batches of changes instead of pushing the changes to them',
+      {clientGroupID: this.id, ...log},
+    );
+    this.#rebuildsLoggedAt = now;
+    this.#rebuildLog = newRebuildLog();
   }
 
   async inspect(

@@ -715,6 +715,41 @@ export const zeroOptions = {
     hidden: true,
   },
 
+  costBasedSyncEnabled: {
+    type: v.boolean().optional(() => false),
+    desc: [
+      `Choose per query, by cost, between pushing a batch of changes through`,
+      `its pipeline and hydrating it again.`,
+      ``,
+      `When enabled, a query that is estimated to be cheaper to hydrate again`,
+      `than to push a batch of changes to (counting what the batch costs to`,
+      `read), or whose pushes turn out to have taken as long as hydrating it`,
+      `did, is hydrated again at the batch's snapshot, within the same poke.`,
+      `This replaces the advancement time limit, which resets every query of`,
+      `a client group.`,
+      ``,
+      `When disabled (the default), a batch of changes is pushed through`,
+      `every query that reads it as soon as it is replicated, unless that`,
+      `runs into the advancement time limit.`,
+    ],
+    hidden: true,
+  },
+
+  syncRebuildMargin: {
+    type: v
+      .number()
+      .assert(value => value >= 1, 'must be at least 1')
+      .optional(() => 2),
+    desc: [
+      `With {bold costBasedSyncEnabled}, how many times the cost of hydrating`,
+      `a query again the cost of pushing a batch of changes to it must be`,
+      `estimated to be, for the query to be hydrated again without pushing.`,
+      `A query below the margin is pushed, until the pushes have taken as`,
+      `long as hydrating it did.`,
+    ],
+    hidden: true,
+  },
+
   yieldThresholdMs: {
     type: v.number().optional(() => 10),
     desc: [
