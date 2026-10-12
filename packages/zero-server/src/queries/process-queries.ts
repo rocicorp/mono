@@ -242,7 +242,8 @@ async function transform<S extends Schema>(
       body = args.jsonBody;
     }
 
-    parsed = v.parse(body, transformRequestMessageSchema);
+    // Strip, so a newer zero-cache can add fields to the request.
+    parsed = v.parse(body, transformRequestMessageSchema, 'strip');
 
     queryIDs = parsed[1].map(r => r.id);
   } catch (error) {
