@@ -297,7 +297,7 @@ export function useSuspenseQuery<
     ({
       enabled = true,
       ttl = DEFAULT_TTL_MS,
-      suspendUntil = 'complete',
+      suspendUntil = 'partial',
     } = options);
   }
 

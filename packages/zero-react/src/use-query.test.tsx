@@ -883,6 +883,28 @@ describe('useSuspenseQuery', () => {
     await expect.poll(dom.text).toBe('2:[{"a":1}]');
   });
 
+  test.each([
+    {name: 'no options are passed', options: undefined},
+    {name: 'options omit it', options: {ttl: '1m'}},
+  ] as const)(
+    'suspendUntil defaults to partial when $name',
+    async ({options}) => {
+      const {q, zero} = newQueryAndZero();
+
+      function Comp() {
+        const [data] = useSuspenseQuery(q, options);
+        return <div>{JSON.stringify(data)}</div>;
+      }
+
+      renderSuspense(zero, <Comp />);
+      await expect.poll(dom.text).toBe('loading');
+
+      // A partial (non-complete) result must unsuspend the component.
+      materializedView(zero).emit([{a: 1}], 'unknown');
+      await expect.poll(dom.text).toBe('[{"a":1}]');
+    },
+  );
+
   describe('error handling', () => {
     const getErroredQuery = (
       message: string,
