@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Zero Bugs</title>
+    <script>
+      // ?light shows the light theme. Set it before the first paint so the
+      // page does not flash the dark theme. Keep in sync with index.html.
+      if (new URLSearchParams(location.search).has('light')) {
+        document.documentElement.dataset.theme = 'light';
+      }
+    </script>
     <link rel="preconnect" href="%VITE_PUBLIC_SERVER%" />
     <link
       rel="preload"

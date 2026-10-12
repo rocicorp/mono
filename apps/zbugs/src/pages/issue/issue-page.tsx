@@ -551,6 +551,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           <div className="sidebar-item">
             <p className="issue-detail-label">Notifications</p>
             <Combobox<NotificationType>
+              editable={false}
               disabled={!login.loginState?.decoded?.sub || isOffline}
               items={[
                 {

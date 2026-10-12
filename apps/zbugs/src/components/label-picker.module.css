@@ -72,13 +72,16 @@
   border-radius: 0.5rem;
   border: 1px solid var(--color-modal-outline);
   padding: 0.25rem 0.5rem;
-  outline: none;
   transition: all 0.3s ease-in-out;
 }
 
-.labelFilter:focus {
-  outline: none;
-  border: 1px solid var(--color-text-primary-active);
+/* Light mode overrides */
+[data-theme='light'] .popover {
+  scrollbar-color: auto;
+}
+
+[data-theme='light'] .popoverWrapper::after {
+  border-color: transparent transparent transparent var(--color-background);
 }
 
 .root .newLabel {
