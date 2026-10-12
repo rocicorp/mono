@@ -73,14 +73,28 @@ function hasSelectStar(source) {
   return selectStar.test(source);
 }
 
+/**
+ * Normalize a filesystem path to forward slashes, so the `/`-bearing comparisons
+ * in `shouldCheck` mean the same thing wherever the linter runs.
+ *
+ * Comparing against a raw filename makes every one of them false where paths use
+ * backslashes, and a rule that never matches a path never runs — which reads
+ * exactly like a codebase with nothing to report.
+ */
+function toPosixPath(filename) {
+  return filename.replaceAll('\\', '/');
+}
+
 function shouldCheck(filename, include) {
+  const path = toPosixPath(filename);
   return (
-    include.some(path => filename.includes(path)) &&
-    !filename.endsWith('.test.ts') &&
-    !filename.includes('/test/') &&
-    !filename.includes('/__snapshots__/') &&
-    !filename.endsWith('_generated.ts')
+    include.some(included => path.includes(toPosixPath(included))) &&
+    !path.endsWith('.test.ts') &&
+    !path.includes('/test/') &&
+    !path.includes('/__snapshots__/') &&
+    !path.endsWith('_generated.ts')
   );
 }
 
 export default plugin;
+export {hasSelectStar, shouldCheck, stripCommentOnlyLines, toPosixPath};
