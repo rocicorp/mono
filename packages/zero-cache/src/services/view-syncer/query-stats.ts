@@ -31,6 +31,9 @@ export type AdvanceRecord = {
   readonly timedOut: boolean;
 };
 
+/** Why an advancement stopped pushing to a query and hydrated it again. */
+export type AbandonReason = 'estimate' | 'read' | 'cutoff';
+
 export type QueryStatsOptions = {
   /**
    * The most query shapes tracked per interval. Work on shapes beyond this is
@@ -83,6 +86,15 @@ class Totals {
   readonly advances = new Distribution();
   advanceChanges = 0;
   advanceTimeouts = 0;
+  /**
+   * The advancements that hydrated the query again instead of pushing (all
+   * of) their changes to it, by why. The hydrations are in `hydrations`.
+   */
+  readonly advancesAbandoned: Record<AbandonReason, number> = {
+    estimate: 0,
+    read: 0,
+    cutoff: 0,
+  };
 
   get timeMs() {
     return this.hydrations.sumMs + this.advances.sumMs;
@@ -118,6 +130,10 @@ class Totals {
       advances: this.advances.toJSON(),
       advanceChanges: this.advanceChanges,
       advanceTimeouts: this.advanceTimeouts,
+      // Only with cost-based sync, without which there are none.
+      ...(Object.values(this.advancesAbandoned).some(n => n > 0) && {
+        advancesAbandoned: {...this.advancesAbandoned},
+      }),
     };
   }
 }
@@ -223,6 +239,18 @@ export class QueryStats {
   recordAdvance(query: QueryIdentity, record: AdvanceRecord): void {
     this.#totals.addAdvance(record);
     this.#stats(query)?.addAdvance(record);
+  }
+
+  /**
+   * Records that an advancement abandoned the query's pipeline, to hydrate
+   * the query again.
+   */
+  recordAbandoned(query: QueryIdentity, reason: AbandonReason): void {
+    this.#totals.advancesAbandoned[reason]++;
+    const stats = this.#stats(query);
+    if (stats) {
+      stats.advancesAbandoned[reason]++;
+    }
   }
 
   #stats(query: QueryIdentity): ShapeStats | undefined {

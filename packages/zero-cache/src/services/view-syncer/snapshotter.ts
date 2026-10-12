@@ -194,16 +194,51 @@ export class Snapshotter {
     observedTables?: TableFilter | undefined,
     prevWrites: PrevWrites = 'uniform',
   ): SnapshotDiff {
-    const {prev, curr} = this.advanceWithoutDiff();
+    this.advanceWithoutDiff();
+    return this.diff(syncableTables, allTableNames, observedTables, prevWrites);
+  }
+
+  /**
+   * The diff between the two snapshots of the last
+   * {@link advanceWithoutDiff()}, as {@link advance()} returns it.
+   *
+   * @param counts The counts of the change log entries between the two
+   *        snapshots, if the caller has counted them already (see
+   *        `Snapshot.countChangesSince()`). The diff then does not count
+   *        them again.
+   * @param readTables If set, only the change log entries of these tables
+   *        (and of the permissions table) are read, along with the
+   *        table-wide ops of every table, where `observedTables` reads the
+   *        entries of every table and skips those it does not have. For a
+   *        caller that does not need the changes of the other tables, this
+   *        saves reading and parsing their entries. This requires `counts`.
+   *        If they show that there is no entry of these tables and no
+   *        table-wide op, the change log is not read at all, and the
+   *        diff's `changes` is 0.
+   */
+  diff(
+    syncableTables: Map<string, LiteAndZqlSpec>,
+    allTableNames: Set<string>,
+    observedTables?: TableFilter | undefined,
+    prevWrites: PrevWrites = 'uniform',
+    counts?: ChangeLogCounts | undefined,
+    readTables?: Iterable<string> | undefined,
+  ): SnapshotDiff {
+    assert(
+      this.#prev !== undefined && this.#curr !== undefined,
+      'Snapshotter has not been advanced',
+    );
     return new Diff(
       this.#appID,
       syncableTables,
       allTableNames,
-      prev,
-      curr,
+      this.#prev,
+      this.#curr,
       observedTables,
       this.#rowCache,
       prevWrites,
+      counts,
+      readTables,
     );
   }
 
@@ -220,6 +255,98 @@ export class Snapshotter {
     this.#prev = this.#curr;
     this.#curr = next;
     return {prev: this.#prev, curr: this.#curr};
+  }
+
+  /**
+   * The reset of the pipelines that iterating over the changes from the
+   * previous snapshot to the current one ends in, if it does: the first of
+   * a schema change, a truncation, and a change of the permissions. It is
+   * found without iterating, so that a caller that would reset the pipelines
+   * anyway does not first process the changes that come before it.
+   *
+   * If there is none, iterating over a {@link diff()} of the two snapshots
+   * does not throw a {@link ResetPipelinesSignal}, and can be stopped at any
+   * point without missing one.
+   *
+   * @param counts The changes from the previous snapshot to the current
+   *        one, from which it is known whether there is anything to look
+   *        for.
+   */
+  pendingReset(
+    syncableTables: Map<string, LiteAndZqlSpec>,
+    counts: ChangeLogCounts,
+  ): ResetPipelinesSignal | undefined {
+    assert(
+      this.#prev !== undefined && this.#curr !== undefined,
+      'Snapshotter has not been advanced',
+    );
+    const prev = this.#prev;
+    const curr = this.#curr;
+    let first: (ChangeLogPosition & {signal: ResetPipelinesSignal}) | undefined;
+
+    if (counts.tableWideOps > 0) {
+      // Iterating aborts at a table-wide op whatever its table is.
+      const {stateVersion, pos, table, op} = curr.firstTableWideOpSince(
+        prev.version,
+      );
+      first = {
+        stateVersion,
+        pos,
+        signal:
+          op === TRUNCATE_OP
+            ? new ResetPipelinesSignal(
+                `table ${table} has been truncated`,
+                'truncation',
+              )
+            : new ResetPipelinesSignal(
+                `schema for table ${table} has changed`,
+                'schema-change',
+              ),
+      };
+    }
+
+    // An entry of the permissions table only aborts the iteration if the
+    // permissions are different, which takes reading the row to know.
+    const permissionsTable = `${this.#appID}.permissions`;
+    const specs = syncableTables.get(permissionsTable);
+    if (
+      specs &&
+      (counts.sampled || (counts.byTable.get(permissionsTable) ?? 0) > 0)
+    ) {
+      const {tableSpec} = specs;
+      for (const entry of curr.entriesSince(permissionsTable, prev.version)) {
+        if (first && !isBefore(entry, first)) {
+          break;
+        }
+        const rowKey: JSONValue = entry.rowKey && JSON.parse(entry.rowKey);
+        if (rowKey === null) {
+          continue;
+        }
+        const nextValue =
+          entry.op === SET_OP ? curr.getRow(tableSpec, rowKey) : null;
+        let prevValues;
+        if (nextValue) {
+          prevValues = prev.getRows(tableSpec, tableSpec.uniqueKeys, nextValue);
+        } else {
+          const prevValue = prev.getRow(tableSpec, rowKey);
+          prevValues = prevValue ? [prevValue] : [];
+        }
+        const changed = prevValues.find(
+          prevValue => prevValue.permissions !== nextValue?.permissions,
+        );
+        if (changed) {
+          first = {
+            ...entry,
+            signal: new ResetPipelinesSignal(
+              `Permissions have changed ${changed.hash} => ${nextValue?.hash}`,
+              'permissions-change',
+            ),
+          };
+          break;
+        }
+      }
+    }
+    return first?.signal;
   }
 
   /**
@@ -250,6 +377,41 @@ export type Change = {
   readonly nextValue: Readonly<Row> | null;
   readonly rowKey: RowKey;
 };
+
+/** See `Snapshot.countChangesSince()`. */
+/** Where an entry is in the order that the change log is read in. */
+type ChangeLogPosition = {
+  readonly stateVersion: string;
+  readonly pos: number;
+};
+
+function isBefore(a: ChangeLogPosition, b: ChangeLogPosition): boolean {
+  return a.stateVersion === b.stateVersion
+    ? a.pos < b.pos
+    : a.stateVersion < b.stateVersion;
+}
+
+export type ChangeLogCounts = {
+  /** The number of entries. */
+  readonly total: number;
+  /** The number of them that are table-wide ops (a RESET or TRUNCATE). */
+  readonly tableWideOps: number;
+  /**
+   * The number of entries of each table. If {@link sampled}, these are
+   * estimates, and a table with few entries may be missing.
+   */
+  readonly byTable: ReadonlyMap<string, number>;
+  /** Whether {@link byTable} was estimated from a sample of the entries. */
+  readonly sampled: boolean;
+};
+
+/**
+ * The most change log entries that are read to count a batch's changes by
+ * table. Reading an entry costs microseconds, and nothing else runs on the
+ * sync worker in the meantime, so the cost of counting must not grow with
+ * the number of changes that a client group has to catch up on.
+ */
+export const CHANGE_LOG_SAMPLE_SIZE = 1000;
 
 export interface TableFilter {
   has(table: string): boolean;
@@ -309,8 +471,22 @@ export interface SnapshotDiff extends Iterable<Change> {
   /** The number of raw ChangeLog entries read so far, including skipped entries. */
   readonly changesScanned: number;
 
+  /**
+   * The raw ChangeLog entries read so far, by table. Like
+   * {@link changesScanned}, this includes the entries that are not yielded,
+   * so it counts the same entries as {@link ChangeLogCounts.byTable} does.
+   */
+  readonly changesScannedByTable: ReadonlyMap<string, number>;
+
   /** The scanned entries omitted because their table is unobserved/non-syncable or the change is a no-op. */
   readonly changesSkipped: number;
+
+  /**
+   * The scanned entries whose rows were looked up in the snapshots. Unlike
+   * the entries that are yielded, this includes the no-op changes, which are
+   * only known to be that from their rows.
+   */
+  readonly changesLookedUp: number;
 
   /** Timing metrics recorded during diff iteration. */
   readonly stats?: DiffTimingStats | undefined;
@@ -400,6 +576,21 @@ const MAX_MEMOIZED_UNIQUE_KEYS = 30;
  */
 const CHANGE_LOG_STATE_VERSION_INDEX = 'sqlite_autoindex__zero.changeLog2_1';
 
+/**
+ * The index that SQLite creates for the `UNIQUE("table", "rowKey")` of
+ * `_zero.changeLog2` (the second constraint of its CREATE TABLE statement).
+ */
+const CHANGE_LOG_TABLE_INDEX = 'sqlite_autoindex__zero.changeLog2_2';
+
+/**
+ * Selects the change log entries of the tables in a JSON array of names,
+ * and the table-wide ops (RESET and TRUNCATE) of every table, which abort
+ * the diff whatever table they are for. Binds the two ops, then the array.
+ * The array is a single parameter so that the statement is the same, and is
+ * prepared once, for any set of tables.
+ */
+const CHANGE_LOG_TABLES_FILTER = `("op" IN (?, ?) OR "table" IN (SELECT "value" FROM json_each(?)))`;
+
 class Snapshot {
   static create(
     lc: LogContext,
@@ -454,6 +645,66 @@ class Snapshot {
   }
 
   /**
+   * Counts the change log entries after `prevVersion`. The change log keeps
+   * the latest entry of a row, so these are counts of the rows that changed,
+   * which is what a diff from `prevVersion` to this snapshot reads.
+   *
+   * The total, and the number of table-wide ops (a RESET or TRUNCATE), are
+   * exact, and are counted from the index alone. The counts by table are
+   * exact if there are at most `sampleSize` entries. Otherwise they are
+   * estimated from the newest `sampleSize` entries, so that at most that
+   * many entries are read however many there are.
+   */
+  countChangesSince(
+    prevVersion: string,
+    sampleSize = CHANGE_LOG_SAMPLE_SIZE,
+  ): ChangeLogCounts {
+    // The index has the stateVersion and pos of every entry, and a
+    // table-wide op is logged at pos -1 (see ChangeLog), so no entry is read.
+    const {total, tableWideOps} = this.db.get(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(pos < 0), 0) AS tableWideOps
+         FROM "_zero.changeLog2" INDEXED BY "${CHANGE_LOG_STATE_VERSION_INDEX}"
+         WHERE stateVersion > ?`,
+      prevVersion,
+    );
+    const byTable = new Map<string, number>();
+    if (total === 0) {
+      return {total, tableWideOps, byTable, sampled: false};
+    }
+    const rows: {table: string; count: number}[] = this.db.all(
+      `SELECT "table", COUNT(*) AS count FROM (
+           SELECT "table"
+             FROM "_zero.changeLog2" INDEXED BY "${CHANGE_LOG_STATE_VERSION_INDEX}"
+             WHERE stateVersion > ?
+             ORDER BY stateVersion DESC, pos DESC LIMIT ?
+         ) GROUP BY "table"`,
+      prevVersion,
+      sampleSize,
+    );
+    const sampled = total > sampleSize;
+    const scale = sampled ? total / sampleSize : 1;
+    for (const {table, count} of rows) {
+      byTable.set(table, count * scale);
+    }
+    return {total, tableWideOps, byTable, sampled};
+  }
+
+  /**
+   * Whether an entry of `table` was logged after `prevVersion`. This reads
+   * the table's entries in the change log, however old, so it is for tables
+   * with few rows.
+   */
+  tableChangedSince(table: string, prevVersion: string): boolean {
+    const row = this.db.get(
+      `SELECT 1 FROM "_zero.changeLog2" INDEXED BY "${CHANGE_LOG_TABLE_INDEX}"
+         WHERE "table" = ? AND stateVersion > ? LIMIT 1`,
+      table,
+      prevVersion,
+    );
+    return row !== undefined;
+  }
+
+  /**
    * Whether a table-wide RESET op (i.e. a schema change) was logged after
    * `prevVersion`. Table specs computed at or before `prevVersion` are
    * stale with respect to this snapshot if so.
@@ -484,15 +735,63 @@ class Snapshot {
     return row !== undefined;
   }
 
-  changesSince(prevVersion: string) {
+  /**
+   * The first table-wide op (a schema change or a truncation) logged after
+   * `prevVersion`, in the order that {@link changesSince} reads the entries.
+   */
+  firstTableWideOpSince(
+    prevVersion: string,
+  ): ChangeLogPosition & {table: string; op: string} {
+    return this.db.get(
+      `SELECT "stateVersion", "pos", "table", "op" FROM "_zero.changeLog2" INDEXED BY "${CHANGE_LOG_STATE_VERSION_INDEX}"
+         WHERE "stateVersion" > ? AND "pos" < 0
+         ORDER BY "stateVersion" ASC, "pos" ASC LIMIT 1`,
+      prevVersion,
+    );
+  }
+
+  /**
+   * The entries of `table` logged after `prevVersion`, in the order that
+   * {@link changesSince} reads them. For a table with few rows.
+   */
+  entriesSince(
+    table: string,
+    prevVersion: string,
+  ): (ChangeLogPosition & {rowKey: string | null; op: string})[] {
+    return this.db.all(
+      `SELECT "stateVersion", "pos", "rowKey", "op" FROM "_zero.changeLog2" INDEXED BY "${CHANGE_LOG_TABLE_INDEX}"
+         WHERE "table" = ? AND "stateVersion" > ?
+         ORDER BY "stateVersion" ASC, "pos" ASC`,
+      table,
+      prevVersion,
+    );
+  }
+
+  /**
+   * @param tables If set, only the entries of these tables, and the
+   *        table-wide ops of every table, are read.
+   */
+  changesSince(prevVersion: string, tables?: string | undefined) {
     // Note: The queried fields are constrained to only those that are relevant
     // to the snapshot diff, i.e. those defined in the changeLogEntrySchema.
     const cached = this.db.statementCache.get(
-      `SELECT "stateVersion", "table", "rowKey", "op" FROM "_zero.changeLog2"
-         WHERE "stateVersion" > ? ORDER BY "stateVersion" ASC, "pos" ASC`,
+      tables === undefined
+        ? `SELECT "stateVersion", "table", "rowKey", "op" FROM "_zero.changeLog2"
+         WHERE "stateVersion" > ? ORDER BY "stateVersion" ASC, "pos" ASC`
+        : `SELECT "stateVersion", "table", "rowKey", "op" FROM "_zero.changeLog2"
+         WHERE "stateVersion" > ? AND ${CHANGE_LOG_TABLES_FILTER}
+         ORDER BY "stateVersion" ASC, "pos" ASC`,
     );
     return {
-      changes: cached.statement.iterate(prevVersion),
+      changes:
+        tables === undefined
+          ? cached.statement.iterate(prevVersion)
+          : cached.statement.iterate(
+              prevVersion,
+              RESET_OP,
+              TRUNCATE_OP,
+              tables,
+            ),
       cleanup: () => this.db.statementCache.return(cached),
     };
   }
@@ -665,6 +964,10 @@ class Diff implements SnapshotDiff {
   readonly #allTableNames: Set<string>;
   readonly #observedTables: TableFilter | undefined;
   readonly #rowCache: SnapshotRowCache | undefined;
+  /** The JSON array of the names of the tables whose entries are read. */
+  readonly #readTables: string | undefined;
+  #permissionsChanged: boolean | undefined;
+  #nothingToRead = false;
   #prevWrites: PrevWrites;
   readonly #prevTagUniform: string;
   readonly #prevTagDivergent: string;
@@ -673,7 +976,9 @@ class Diff implements SnapshotDiff {
   readonly curr: Snapshot;
   readonly changes: number;
   changesScanned = 0;
+  readonly changesScannedByTable = new Map<string, number>();
   changesSkipped = 0;
+  changesLookedUp = 0;
   readonly stats: DiffTimingStats = {
     changeLogReadMs: 0,
     rowReadMs: 0,
@@ -690,9 +995,14 @@ class Diff implements SnapshotDiff {
     observedTables?: TableFilter | undefined,
     rowCache?: SnapshotRowCache | undefined,
     prevWrites: PrevWrites = 'uniform',
+    counts?: ChangeLogCounts | undefined,
+    readTables?: Iterable<string> | undefined,
   ) {
     this.#prevWrites = prevWrites;
     this.#permissionsTable = `${appID}.permissions`;
+    // A change of the permissions is always looked for.
+    const read = readTables && new Set(readTables).add(this.#permissionsTable);
+    this.#readTables = read && JSON.stringify([...read]);
     this.#syncableTables = syncableTables;
     this.#allTableNames = allTableNames;
     this.#observedTables = observedTables;
@@ -700,17 +1010,50 @@ class Diff implements SnapshotDiff {
     this.curr = curr;
     this.#prevTagUniform = `p:${prev.version}`;
     this.#prevTagDivergent = `p:${prev.version}:${curr.version}`;
-    this.changes = curr.numChangesSince(prev.version);
+    if (counts === undefined) {
+      assert(read === undefined, 'readTables requires counts');
+      this.changes = curr.numChangesSince(prev.version);
+    } else {
+      // Without an entry of a table that is read, or a table-wide op (which
+      // aborts the diff whatever table it is for), there is nothing to read.
+      const hasEntries = (table: string) => this.#hasEntries(counts, table);
+      this.#nothingToRead =
+        counts.total === 0 ||
+        (read !== undefined &&
+          counts.tableWideOps === 0 &&
+          ![...read].some(hasEntries));
+      // As without counts, this is the number of entries of every table.
+      this.changes = this.#nothingToRead ? 0 : counts.total;
+    }
     // Row values are only shared (via the cache) between Diffs that do not
     // straddle a table-wide op. This guarantees that any two Diffs that
     // encounter the same change log entry read the row from tables with
     // the same schema (and contents), since a RESET or TRUNCATE between
     // their `curr` versions would necessarily fall within the range of the
     // later Diff. (Such a Diff aborts with a ResetPipelinesSignal anyway.)
-    this.#rowCache =
-      rowCache && !curr.hasTableWideOpSince(prev.version)
-        ? rowCache
-        : undefined;
+    const hasTableWideOp = counts
+      ? counts.tableWideOps > 0
+      : curr.hasTableWideOpSince(prev.version);
+    this.#rowCache = rowCache && !hasTableWideOp ? rowCache : undefined;
+  }
+
+  /**
+   * Whether the diff has an entry of `table`. Sampled counts cannot show
+   * that a table has none, so the answer is then `true`, except for the
+   * permissions table: it has few rows, so whether it has an entry is
+   * looked up instead.
+   */
+  #hasEntries(counts: ChangeLogCounts, table: string): boolean {
+    if (!counts.sampled) {
+      return (counts.byTable.get(table) ?? 0) > 0;
+    }
+    if (table !== this.#permissionsTable) {
+      return true;
+    }
+    return (this.#permissionsChanged ??= this.curr.tableChangedSince(
+      table,
+      this.prev.version,
+    ));
   }
 
   setPrevWrites(prevWrites: PrevWrites): void {
@@ -723,7 +1066,13 @@ class Diff implements SnapshotDiff {
 
   [Symbol.iterator](): Iterator<Change> {
     this.#iterated = true;
-    const {changes, cleanup: done} = this.curr.changesSince(this.prev.version);
+    if (this.#nothingToRead) {
+      return [][Symbol.iterator]();
+    }
+    const {changes, cleanup: done} = this.curr.changesSince(
+      this.prev.version,
+      this.#readTables,
+    );
 
     const cleanup = () => {
       try {
@@ -751,6 +1100,10 @@ class Diff implements SnapshotDiff {
             const parseStart = performance.now();
             const {table, rowKey, op, stateVersion} = v.parse(value, schema);
             this.stats.parseMs += performance.now() - parseStart;
+            this.changesScannedByTable.set(
+              table,
+              (this.changesScannedByTable.get(table) ?? 0) + 1,
+            );
             if (op === RESET_OP) {
               // The current map of `TableSpec`s may not have the correct or complete information.
               throw new ResetPipelinesSignal(
@@ -841,6 +1194,7 @@ class Diff implements SnapshotDiff {
             const prevTag = prevDependsOnWrites
               ? this.#prevTagDivergent
               : this.#prevTagUniform;
+            this.changesLookedUp++;
             const rowStart = performance.now();
             const nextValue =
               op === SET_OP

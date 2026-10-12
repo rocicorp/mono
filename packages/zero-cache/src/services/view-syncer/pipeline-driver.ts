@@ -79,10 +79,21 @@ import {
 import {checkClientSchema} from './client-schema.ts';
 import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {planWarningMessage} from './plan-warnings.ts';
+import {
+  PushCostEstimator,
+  ReadCostEstimator,
+  shouldRebuildInsteadOfReading,
+  shouldStartOnRebuild,
+} from './push-cost.ts';
+import {
+  PushCutoff,
+  type QueryPushProgress,
+  type ShouldCutOffPush,
+} from './push-cutoff.ts';
 import {queryShape, type QueryShape} from './query-shape.ts';
 import type {QueryStats} from './query-stats.ts';
 import {rowIDSignatureUnit} from './row-set-signature.ts';
-import type {Snapshotter} from './snapshotter.ts';
+import type {ChangeLogCounts, Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
 type RowOp<Op extends Omit<ChangeType, ChangeType.CHILD>> = {
@@ -123,6 +134,8 @@ type Pipeline = {
   readonly transformationHash: string;
   readonly queryName?: string | undefined;
   readonly companions: readonly CompanionPipeline[];
+  /** The tables that the pipeline and its companions read. */
+  readonly tables: ReadonlySet<string>;
 };
 
 export type QueryInfo = {
@@ -168,6 +181,7 @@ export type PipelineHydrationReason =
 type PipelineStopReason =
   | 'replace-query'
   | 'remove-query'
+  | 'abandon-advance'
   | 'reset'
   | 'destroy';
 
@@ -183,6 +197,23 @@ type QueryPipelineLifecycleLog = {
   readonly hydrationRowCount?: number | undefined;
   readonly hydrationRowsRead?: number | undefined;
   readonly pipelineLifetimeMs?: number | undefined;
+  /**
+   * For a pipeline that an advancement abandoned (`stopReason` is
+   * `abandon-advance`): why, and what the decision was made from. The
+   * hydration time that these are compared with is `hydrationTimeMs`.
+   */
+  readonly abandonReason?: AbandonedQuery['reason'] | undefined;
+  readonly estimatedPushMs?: number | undefined;
+  readonly pushTimeMs?: number | undefined;
+  readonly pushedChanges?: number | undefined;
+  /**
+   * `debug` for the events of a query that an advancement hydrates again.
+   * That can be every query of a client group in every batch of changes,
+   * which is far more often than anything else that is logged at `info`.
+   * What is logged at `info` about those is by query shape, by the
+   * {@link QueryStats}, and by client group, by the view syncer.
+   */
+  readonly level?: 'info' | 'debug' | undefined;
 };
 
 export type AdvancementProgress = {
@@ -192,6 +223,58 @@ export type AdvancementProgress = {
   readonly changesProcessed: number;
   /** Raw entries omitted by the snapshot diff. */
   readonly changesSkipped: number;
+};
+
+/**
+ * A query whose pipeline was removed by a {@link CostBasedAdvance}, either
+ * before the advancement's changes were pushed or partway through them
+ * (`'cutoff'`). Before, it is because pushing them to the query was
+ * estimated to cost more than hydrating it again (`'estimate'`), or because
+ * reading them was, for the queries that were left to push them to
+ * (`'read'`). The row changes it output before then have been returned by
+ * the advancement. To bring the query to the advancement's
+ * version, hydrate it again with {@link PipelineDriver.addQuery}, passing its
+ * `originalAst`, once the advancement's changes have been iterated over in
+ * their entirety.
+ */
+export type AbandonedQuery = QueryPushProgress & {
+  readonly reason: 'estimate' | 'read' | 'cutoff';
+  /** What pushing the advancement's changes to it was estimated to cost. */
+  readonly estimatedPushMs?: number | undefined;
+  readonly transformationHash: string;
+  readonly transformedAst: AST;
+  /** The AST the query was added with. */
+  readonly originalAst: AST;
+  readonly queryName?: string | undefined;
+};
+
+/**
+ * Bounds the cost of an advancement query by query, by hydrating a query
+ * again when that is cheaper than pushing the advancement's changes through
+ * its pipeline. This is an alternative to the client group's advancement
+ * time limit, which does not apply to an advancement that is given this.
+ * Such an advancement is never aborted for taking too long.
+ */
+export type CostBasedAdvance = {
+  /**
+   * Between changes, the pipeline of each query that this says to stop
+   * pushing to is removed (see {@link PushCutoff}).
+   */
+  readonly shouldCutOff: ShouldCutOffPush;
+  /**
+   * Before any change is pushed, the pipelines of the queries that are
+   * estimated to be cheaper to hydrate again than to push the advancement's
+   * changes to are removed (see {@link shouldStartOnRebuild}). This is how
+   * many times cheaper.
+   */
+  readonly rebuildMargin: number;
+};
+
+/** How an estimate of a query's push time compared with the actual time. */
+export type PushEstimate = {
+  readonly queryID: string;
+  readonly estimatedPushMs: number;
+  readonly pushTimeMs: number;
 };
 
 type AdvancementLogFields = AdvancementProgress & {
@@ -223,8 +306,24 @@ type AdvanceContext = {
   currentTable: string | undefined;
   /** The processing time of each query's pushes, by query ID. */
   readonly queryStats: Map<string, QueryAdvanceStats>;
+  /**
+   * How the advancement is bounded: query by query if set, and otherwise by
+   * the client group's advancement time limit.
+   */
+  readonly costBased: CostBasedAdvanceContext | undefined;
   pushTimeMs: number;
   stage: 'diff' | 'push' | 'between';
+};
+
+/** The state of a {@link CostBasedAdvance}. */
+type CostBasedAdvanceContext = {
+  readonly cutoff: PushCutoff;
+  /** The entries of the change log since the previous snapshot. */
+  readonly entries: number;
+  /** The estimated push times of the queries that started on push. */
+  readonly estimatedPushMs: ReadonlyMap<string, number>;
+  readonly abandoned: AbandonedQuery[];
+  readonly estimates: PushEstimate[];
 };
 
 /**
@@ -436,6 +535,22 @@ export class PipelineDriver {
   #pushedRowChanges: RowChange[] | null = null;
   #hydrateContext: HydrateContext | null = null;
   #advanceContext: AdvanceContext | null = null;
+  /**
+   * Whether a {@link CostBasedAdvance} has been set up and has not
+   * completed. It may already have removed pipelines, but the sources only
+   * move to the new snapshot when the iteration over its changes completes,
+   * so nothing can be hydrated until then. If the iteration is given up on
+   * or throws, they never do, and nothing can be hydrated until the
+   * pipelines are {@link reset()}.
+   */
+  #costBasedAdvanceIncomplete = false;
+  /**
+   * The queries abandoned by a {@link CostBasedAdvance} that have not been
+   * added again since.
+   */
+  readonly #abandoned = new Map<string, AbandonedQuery>();
+  readonly #pushCosts = new PushCostEstimator();
+  readonly #readCosts = new ReadCostEstimator();
   #replicaVersion: string | null = null;
   #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
@@ -545,6 +660,8 @@ export class PipelineDriver {
       this.#pipelines.delete(queryID);
       this.#destroyPipeline(queryID, pipeline, 'reset');
     }
+    this.#abandoned.clear();
+    this.#costBasedAdvanceIncomplete = false;
     this.#tables.clear();
     this.#allTableNames.clear();
     this.#rowSetSignatures.clear();
@@ -681,6 +798,16 @@ export class PipelineDriver {
   }
 
   /**
+   * The queries whose pipelines a {@link CostBasedAdvance} removed and that
+   * have not been hydrated again since, by query ID. They are not in
+   * {@link queries()}. A query whose hydration is started but does not
+   * finish is still one of them.
+   */
+  abandonedQueries(): ReadonlyMap<string, AbandonedQuery> {
+    return this.#abandoned;
+  }
+
+  /**
    * Stats from the hydration of the pipeline for `queryID`, or `undefined` if
    * the query has no pipeline.
    */
@@ -784,6 +911,11 @@ export class PipelineDriver {
     hydrationRowCount,
     hydrationRowsRead,
     pipelineLifetimeMs,
+    abandonReason,
+    estimatedPushMs,
+    pushTimeMs,
+    pushedChanges,
+    level = 'info',
   }: QueryPipelineLifecycleLog): void {
     let lc = this.#lc
       .withContext('zeroEvent', zeroEvent)
@@ -811,7 +943,19 @@ export class PipelineDriver {
     if (pipelineLifetimeMs !== undefined) {
       lc = lc.withContext('pipelineLifetimeMs', pipelineLifetimeMs);
     }
-    lc.info?.('query pipeline lifecycle');
+    if (abandonReason !== undefined) {
+      lc = lc.withContext('abandonReason', abandonReason);
+    }
+    if (estimatedPushMs !== undefined) {
+      lc = lc.withContext('estimatedPushMs', estimatedPushMs);
+    }
+    if (pushTimeMs !== undefined) {
+      lc = lc.withContext('pushTimeMs', pushTimeMs);
+    }
+    if (pushedChanges !== undefined) {
+      lc = lc.withContext('pushedChanges', pushedChanges);
+    }
+    lc[level]?.('query pipeline lifecycle');
   }
 
   /**
@@ -838,7 +982,10 @@ export class PipelineDriver {
     return this.#config?.enableCorrelatedPredicatePushdown === false;
   }
 
-  #resolveScalarSubqueries(ast: AST): {
+  #resolveScalarSubqueries(
+    ast: AST,
+    tables: Set<string>,
+  ): {
     ast: AST;
     companions: CompanionSubquery[];
     companionInputs: Input[];
@@ -856,7 +1003,10 @@ export class PipelineDriver {
           enableNotExists: true, // Server-side can handle NOT EXISTS
           disableCorrelatedPredicatePushdown:
             this.#disableCorrelatedPredicatePushdown(),
-          getSource: name => this.#getSource(name),
+          getSource: name => {
+            tables.add(name);
+            return this.#getSource(name);
+          },
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput): Input => input,
           decorateInput: input => input,
@@ -945,6 +1095,8 @@ export class PipelineDriver {
     this.removeQuery(queryID, 'replace-query');
     const pipelineRunID = randomID();
     const shape = queryShape(query);
+    // A query that an advancement abandoned is being hydrated again.
+    const level = this.#abandoned.has(queryID) ? 'debug' : 'info';
     this.#logQueryPipelineLifecycle({
       zeroEvent: 'query-pipeline-hydrate-start',
       pipelineRunID,
@@ -952,6 +1104,7 @@ export class PipelineDriver {
       transformationHash,
       queryName,
       hydrationReason,
+      level,
     });
     const debugDelegate = runtimeDebugFlags.trackRowsVended
       ? new Debug(true)
@@ -964,6 +1117,10 @@ export class PipelineDriver {
     assert(
       this.#advanceContext === null,
       'Cannot hydrate while advance is in progress',
+    );
+    assert(
+      !this.#costBasedAdvanceIncomplete,
+      'Cannot hydrate before the advance has completed',
     );
     this.#hydrateContext = {
       timer,
@@ -981,6 +1138,7 @@ export class PipelineDriver {
     // does not finish (aborted by the consumer or failed) can tear them down.
     // Only a finished hydration hands them over to #pipelines.
     let builtInputs: Input[] = [];
+    const tables = new Set<string>();
     try {
       // Start from the signature of the empty row set, so that a query that
       // hydrates to no rows has one too. Without it, rowSetSignature() would
@@ -994,7 +1152,7 @@ export class PipelineDriver {
         companions: companionMeta,
         companionInputs,
         ignoredScalarHints,
-      } = this.#resolveScalarSubqueries(query);
+      } = this.#resolveScalarSubqueries(query, tables);
       builtInputs = [...companionInputs];
 
       this.#warnIgnoredScalarHints(queryID, ignoredScalarHints);
@@ -1008,7 +1166,10 @@ export class PipelineDriver {
             this.#disableCorrelatedPredicatePushdown(),
           enablePlannerAwarePushdown:
             this.#config?.enablePlannerAwarePushdown !== false,
-          getSource: name => this.#getSource(name),
+          getSource: name => {
+            tables.add(name);
+            return this.#getSource(name);
+          },
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
             new MeasurePushOperator(
@@ -1147,7 +1308,9 @@ export class PipelineDriver {
         transformationHash,
         ...(queryName !== undefined && {queryName}),
         companions: liveCompanions,
+        tables,
       });
+      this.#abandoned.delete(queryID);
       hydrationFinished = true;
       this.#queryStats?.recordHydration(
         {queryName, shape},
@@ -1169,6 +1332,7 @@ export class PipelineDriver {
         hydrationTimeMs,
         hydrationRowCount,
         hydrationRowsRead,
+        level,
       });
     } catch (e) {
       hydrationFailed = true;
@@ -1232,19 +1396,40 @@ export class PipelineDriver {
     queryID: string,
     stopReason: PipelineStopReason = 'remove-query',
   ) {
+    this.#removeQuery(queryID, stopReason);
+  }
+
+  /**
+   * @param abandoned If an advancement is abandoning the query's pipeline,
+   *        the record of that, which is logged.
+   */
+  #removeQuery(
+    queryID: string,
+    stopReason: PipelineStopReason,
+    abandoned?: AbandonedQuery,
+  ) {
     const pipeline = this.#pipelines.get(queryID);
     if (pipeline) {
       this.#pipelines.delete(queryID);
-      this.#destroyPipeline(queryID, pipeline, stopReason);
+      this.#destroyPipeline(queryID, pipeline, stopReason, abandoned);
     }
     this.#rowSetSignatures.delete(queryID);
     this.#changedRowSetSignatures.delete(queryID);
+    if (stopReason !== 'replace-query') {
+      // A query that is being hydrated again stays abandoned until that
+      // succeeds (see addQuery()).
+      this.#abandoned.delete(queryID);
+    }
+    if (stopReason === 'remove-query') {
+      this.#pushCosts.forget(queryID);
+    }
   }
 
   #destroyPipeline(
     queryID: string,
     pipeline: Pipeline,
     stopReason: PipelineStopReason,
+    abandoned?: AbandonedQuery,
   ): void {
     this.#logQueryPipelineLifecycle({
       zeroEvent: 'query-pipeline-stop',
@@ -1257,6 +1442,13 @@ export class PipelineDriver {
       hydrationTimeMs: pipeline.hydrationTimeMs,
       hydrationRowCount: pipeline.hydrationRowCount,
       pipelineLifetimeMs: Date.now() - pipeline.pipelineReadyAtMs,
+      ...(abandoned && {
+        abandonReason: abandoned.reason,
+        estimatedPushMs: abandoned.estimatedPushMs,
+        pushTimeMs: abandoned.pushTimeMs,
+        pushedChanges: abandoned.changes,
+        level: 'debug',
+      }),
     });
     pipeline.input.destroy();
     for (const companion of pipeline.companions) {
@@ -1331,30 +1523,90 @@ export class PipelineDriver {
    *        measure the progress of the advancement and abort with a
    *        {@link ResetPipelinesSignal} if it is estimated to take longer
    *        than a hydration.
+   * @param costBased If given, the advancement is bounded query by query
+   *        instead (see {@link CostBasedAdvance}).
    * @return The resulting row changes for all added queries. Note that the
    *         `changes` must be iterated over in their entirety in order to
    *         advance the database snapshot.
+   * @throws A {@link ResetPipelinesSignal} if `costBased` is given and the
+   *         changes include a schema change, a truncation or a change of
+   *         the permissions. It is thrown before any change is pushed or
+   *         any pipeline is removed, as the caller resets the pipelines
+   *         either way. Without `costBased`, it is iterating over the
+   *         `changes` that throws it, on getting to that change.
    */
-  advance(timer: Timer): {
+  advance(
+    timer: Timer,
+    costBased?: CostBasedAdvance,
+  ): {
     version: string;
     numChanges: number;
     changes: Iterable<RowChange | 'yield'>;
     /** Available throughout iteration and after completion or an abort. */
     progress: () => AdvancementProgress;
+    /**
+     * The queries whose pipelines the {@link CostBasedAdvance} has removed
+     * so far. They can be hydrated again once `changes` has been iterated
+     * over.
+     */
+    abandoned: () => readonly AbandonedQuery[];
+    /**
+     * How the estimates of the {@link CostBasedAdvance} compared with the
+     * actual push times, for the queries that had an estimate and were
+     * pushed all of the changes. Available once `changes` has been iterated
+     * over.
+     */
+    estimates: () => readonly PushEstimate[];
   } {
     assert(
       this.initialized(),
       'Pipeline driver must be initialized before advancing',
     );
-    const diff = this.#snapshotter.advance(
-      this.#tableSpecs,
-      this.#allTableNames,
-      this.#tables,
-      // Sources skip changes that none of this client group's pipelines can
-      // observe, so a `prev` they write to diverges from other groups'.
-      // #advance() overrides this if it holds the changes in memory.
-      'divergent',
-    );
+    let diff: SnapshotDiff;
+    let context: CostBasedAdvanceContext | undefined;
+    if (costBased === undefined) {
+      diff = this.#snapshotter.advance(
+        this.#tableSpecs,
+        this.#allTableNames,
+        this.#tables,
+        // Sources skip changes that none of this client group's pipelines can
+        // observe, so a `prev` they write to diverges from other groups'.
+        // #advance() overrides this if it holds the changes in memory.
+        'divergent',
+      );
+    } else {
+      const {prev, curr} = this.#snapshotter.advanceWithoutDiff();
+      // The one count of the batch's changes: it sizes the batch, the push
+      // costs are estimated from it, and it says if a batch whose queries
+      // are all hydrated again has anything to read from the change log.
+      const counts = curr.countChangesSince(prev.version);
+      // A batch with a schema change, a truncation or a change of the
+      // permissions ends in a reset of the pipelines, whatever is pushed
+      // before the iteration gets to it. So nothing is.
+      const reset = this.#snapshotter.pendingReset(this.#tableSpecs, counts);
+      if (reset) {
+        throw reset;
+      }
+      context = this.#startCostBasedAdvance(
+        costBased,
+        // Hydrating a query again only makes sense, and can only be told to
+        // the clients as a new version, if there is something new.
+        curr.version > prev.version,
+        counts,
+      );
+      diff = this.#snapshotter.diff(
+        this.#tableSpecs,
+        this.#allTableNames,
+        this.#tables,
+        'divergent',
+        counts,
+        // The pipelines that were just removed are hydrated again from the
+        // new snapshot, so the changes of the tables that only they read
+        // are not needed, and are left out of what is read.
+        context.abandoned.length > 0 ? this.#tablesRead() : undefined,
+      );
+      this.#costBasedAdvanceIncomplete = true;
+    }
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
       `advance ${prev.version} => ${curr.version}: ${changes} changes`,
@@ -1365,8 +1617,10 @@ export class PipelineDriver {
       version: curr.version,
       numChanges: changes,
       changes: this.#trackRowSetSignatures(
-        this.#advance(diff, timer, changes, progress),
+        this.#advance(diff, timer, changes, progress, context),
       ),
+      abandoned: () => context?.abandoned ?? [],
+      estimates: () => context?.estimates ?? [],
       progress: () => ({
         changesScanned: diff.changesScanned,
         changesProcessed: progress.changesProcessed,
@@ -1375,11 +1629,175 @@ export class PipelineDriver {
     };
   }
 
+  /** The tables that the pipelines read. */
+  #tablesRead(): Set<string> {
+    const tables = new Set<string>();
+    for (const pipeline of this.#pipelines.values()) {
+      for (const table of pipeline.tables) {
+        tables.add(table);
+      }
+    }
+    return tables;
+  }
+
+  /**
+   * Removes the pipelines of the queries that are estimated to be cheaper to
+   * hydrate again than to push the advancement's changes to: first each
+   * query for what pushing costs it, and then the ones that are left for
+   * what reading the changes costs them together.
+   *
+   * @param canAbandon Whether pipelines can be removed, by this or by the
+   *        cutoff.
+   * @param counts The rows that changed since the previous snapshot.
+   */
+  #startCostBasedAdvance(
+    {shouldCutOff, rebuildMargin}: CostBasedAdvance,
+    canAbandon: boolean,
+    counts: ChangeLogCounts,
+  ): CostBasedAdvanceContext {
+    const changes = counts.byTable;
+    const estimatedPushMs = new Map<string, number>();
+    const abandoned: AbandonedQuery[] = [];
+    if (canAbandon) {
+      for (const [queryID, pipeline] of this.#pipelines) {
+        const estimate = this.#pushCosts.estimate(
+          queryID,
+          pipeline.tables,
+          changes,
+        );
+        if (estimate === undefined) {
+          continue;
+        }
+        if (
+          shouldStartOnRebuild(
+            estimate,
+            pipeline.hydrationTimeMs,
+            rebuildMargin,
+          )
+        ) {
+          this.#abandon(abandoned, 'estimate', pipeline, {
+            queryID,
+            pushTimeMs: 0,
+            changes: 0,
+            hydrationTimeMs: pipeline.hydrationTimeMs,
+            estimatedPushMs: estimate,
+          });
+        } else {
+          estimatedPushMs.set(queryID, estimate);
+        }
+      }
+      this.#abandonInsteadOfReading(
+        counts,
+        rebuildMargin,
+        estimatedPushMs,
+        abandoned,
+      );
+    }
+    return {
+      cutoff: new PushCutoff(canAbandon ? shouldCutOff : () => false),
+      entries: counts.total,
+      estimatedPushMs,
+      abandoned,
+      estimates: [],
+    };
+  }
+
+  /**
+   * Removes the pipelines that are left, if reading the advancement's
+   * changes and pushing them to those is estimated to cost more than
+   * hydrating them again. The changes are then not read at all.
+   */
+  #abandonInsteadOfReading(
+    counts: ChangeLogCounts,
+    rebuildMargin: number,
+    estimatedPushMs: Map<string, number>,
+    abandoned: AbandonedQuery[],
+  ): void {
+    if (this.#pipelines.size === 0) {
+      return;
+    }
+    let entriesOfTablesRead = 0;
+    for (const table of this.#tablesRead()) {
+      entriesOfTablesRead += counts.byTable.get(table) ?? 0;
+    }
+    const queries = Array.from(this.#pipelines, ([queryID, pipeline]) => ({
+      queryID,
+      pipeline,
+      estimatedPushMs: estimatedPushMs.get(queryID),
+      hydrationTimeMs: pipeline.hydrationTimeMs,
+    }));
+    const estimatedReadMs = this.#readCosts.estimate({
+      walk: counts.total,
+      // The walk is only told which tables are read if pipelines have
+      // been removed (see advance()).
+      parse: abandoned.length > 0 ? entriesOfTablesRead : counts.total,
+      lookup: entriesOfTablesRead,
+    });
+    if (
+      !shouldRebuildInsteadOfReading(estimatedReadMs, queries, rebuildMargin)
+    ) {
+      return;
+    }
+    // Every query that was left is hydrated again, the client group's own
+    // included, which the reason of one query does not explain. At `debug`,
+    // as this can be every batch of a client group.
+    let pushMs = 0;
+    let hydrationMs = 0;
+    for (const query of queries) {
+      pushMs += query.estimatedPushMs ?? 0;
+      hydrationMs += query.hydrationTimeMs;
+    }
+    this.#lc.debug?.(
+      'Not reading a batch of changes: hydrating its queries again is estimated to cost less',
+      {
+        entries: counts.total,
+        entriesOfTablesRead,
+        estimatedReadMs,
+        estimatedPushMs: pushMs,
+        hydrationTimeMs: hydrationMs,
+        rebuildMargin,
+        queries: queries.length,
+      },
+    );
+    for (const {queryID, pipeline, ...estimate} of queries) {
+      this.#abandon(abandoned, 'read', pipeline, {
+        queryID,
+        pushTimeMs: 0,
+        changes: 0,
+        ...estimate,
+      });
+    }
+    estimatedPushMs.clear();
+  }
+
+  #abandon(
+    abandoned: AbandonedQuery[],
+    reason: AbandonedQuery['reason'],
+    pipeline: Pipeline,
+    progress: QueryPushProgress & {estimatedPushMs?: number | undefined},
+  ): void {
+    const {transformationHash, transformedAst, originalAst, queryName} =
+      pipeline;
+    const query: AbandonedQuery = {
+      ...progress,
+      reason,
+      transformationHash,
+      transformedAst,
+      originalAst,
+      ...(queryName !== undefined && {queryName}),
+    };
+    this.#removeQuery(progress.queryID, 'abandon-advance', query);
+    this.#abandoned.set(progress.queryID, query);
+    abandoned.push(query);
+    this.#queryStats?.recordAbandoned(pipeline, reason);
+  }
+
   *#advance(
     diff: SnapshotDiff,
     timer: Timer,
     numChanges: number,
     progress: {changesProcessed: number},
+    costBased: CostBasedAdvanceContext | undefined,
   ): Iterable<RowChange | 'yield'> {
     assert(
       this.#hydrateContext === null,
@@ -1399,6 +1817,7 @@ export class PipelineDriver {
       pos: 0,
       currentTable: undefined,
       queryStats: new Map(),
+      costBased,
       pushTimeMs: 0,
       stage: 'diff',
     };
@@ -1407,6 +1826,9 @@ export class PipelineDriver {
     // finally below is guaranteed to release it: a generator that is never
     // started never runs its finally.
     let timedOut = false;
+    // Whether every change was read, as opposed to the iteration stopping
+    // once no pipeline was left.
+    let readToEnd = true;
     try {
       advanceContext.reservedRows = this.#reserveDeferredWrites(numChanges);
       const deferWrites = advanceContext.reservedRows !== undefined;
@@ -1437,8 +1859,20 @@ export class PipelineDriver {
         // from a TableSource during push processing, but some pushes
         // don't read any rows.  Check progress here before processing
         // the next change.
-        if (this.#shouldAdvanceYieldMaybeAbortAdvance()) {
+        if (this.#checkAdvance(advanceContext)) {
           yield 'yield';
+        }
+        if (costBased) {
+          // No push is in progress, and every row change the pipelines have
+          // output has been yielded, so a pipeline can be removed cleanly.
+          this.#cutOffQueries(advanceContext, costBased, diff, table);
+          if (this.#pipelines.size === 0) {
+            // No pipeline is left to push the changes to, and none of the
+            // remaining changes resets the pipelines (see advance()), so
+            // they do not have to be read.
+            readToEnd = false;
+            break;
+          }
         }
         const start = timer.totalElapsed();
         advanceContext.currentChangeStartMs = start;
@@ -1536,7 +1970,7 @@ export class PipelineDriver {
             }
           }
 
-          this.#shouldAdvanceYieldMaybeAbortAdvance(false);
+          this.#checkAdvance(advanceContext, false);
           if (holds === 'fits') {
             holds = this.#holdPendingRows(advanceContext);
           }
@@ -1565,9 +1999,30 @@ export class PipelineDriver {
       for (const table of this.#tables.values()) {
         table.setDB(curr.db.db);
       }
+      this.#costBasedAdvanceIncomplete = false;
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
       this.#lc.debug?.(`Advanced to ${curr.version}`);
       this.#logSlowAdvances(advanceContext);
+      if (costBased) {
+        this.#recordPushCosts(
+          advanceContext,
+          costBased,
+          diff.changesScannedByTable,
+        );
+        // A diff with nothing to read reports no changes, and did not walk
+        // the change log.
+        if (readToEnd && diff.changes > 0 && diff.stats) {
+          const {changeLogReadMs, parseMs, rowReadMs} = diff.stats;
+          this.#readCosts.record(
+            {walk: changeLogReadMs, parse: parseMs, lookup: rowReadMs},
+            {
+              walk: costBased.entries,
+              parse: diff.changesScanned,
+              lookup: diff.changesLookedUp,
+            },
+          );
+        }
+      }
     } catch (e) {
       if (
         e instanceof ResetPipelinesSignal &&
@@ -1590,6 +2045,109 @@ export class PipelineDriver {
       this.#releaseDeferredWrites(advanceContext);
       this.#advanceContext = null;
       this.#recordAdvanceStats(advanceContext, timedOut);
+    }
+  }
+
+  /**
+   * Checks the progress of the advancement. Returns whether it should yield.
+   *
+   * An advancement is bounded in one of two ways, never both. A
+   * {@link CostBasedAdvance} cuts queries off one by one between changes
+   * (see {@link #cutOffQueries}) and always runs to completion.
+   * Without one, {@link #shouldAdvanceYieldMaybeAbortAdvance} aborts the
+   * advancement with a {@link ResetPipelinesSignal} if it takes too long.
+   */
+  #checkAdvance(advanceContext: AdvanceContext, checkYield = true): boolean {
+    if (advanceContext.costBased === undefined) {
+      return this.#shouldAdvanceYieldMaybeAbortAdvance(checkYield);
+    }
+    return (
+      checkYield && advanceContext.timer.elapsedLap() > this.#yieldThresholdMs()
+    );
+  }
+
+  /**
+   * Removes the pipelines of the queries that the cutoff says to.
+   *
+   * @param nextTable The table of the change that `diff` has just yielded,
+   *        which has not been pushed yet.
+   */
+  #cutOffQueries(
+    {queryStats}: AdvanceContext,
+    costBased: CostBasedAdvanceContext,
+    diff: SnapshotDiff,
+    nextTable: string,
+  ): void {
+    const cutOff = costBased.cutoff.takeCutOff(queryID => {
+      const pipeline = this.#pipelines.get(queryID);
+      const stats = queryStats.get(queryID);
+      return pipeline === undefined || stats === undefined
+        ? undefined
+        : {
+            queryID,
+            pushTimeMs: stats.timeMs,
+            changes: stats.changes,
+            hydrationTimeMs: pipeline.hydrationTimeMs,
+          };
+    });
+    if (cutOff.length === 0) {
+      return;
+    }
+    // The entries that were read before the change that is yet to be pushed.
+    // They are counted whether or not they were yielded, as an estimate is
+    // the cost per entry times the entries counted in the change log, and
+    // those include the ones that turn out to change nothing.
+    const entriesByTable = new Map(diff.changesScannedByTable);
+    entriesByTable.set(nextTable, (entriesByTable.get(nextTable) ?? 1) - 1);
+    for (const progress of cutOff) {
+      const {queryID} = progress;
+      const pipeline = must(this.#pipelines.get(queryID));
+      // What the pushes cost up to here is as good a sample as any.
+      this.#pushCosts.record(
+        queryID,
+        pipeline.tables,
+        queryStats.get(queryID)?.timeMsByTable,
+        entriesByTable,
+      );
+      // Recorded here because #recordAdvanceStats only knows the queries
+      // that still have a pipeline when the advancement ends.
+      this.#queryStats?.recordAdvance(pipeline, {
+        timeMs: progress.pushTimeMs,
+        changes: progress.changes,
+        timedOut: false,
+      });
+      this.#abandon(costBased.abandoned, 'cutoff', pipeline, {
+        ...progress,
+        estimatedPushMs: costBased.estimatedPushMs.get(queryID),
+      });
+    }
+  }
+
+  /**
+   * Learns from a completed advancement what its changes cost the queries
+   * that were pushed all of them.
+   */
+  #recordPushCosts(
+    {queryStats}: AdvanceContext,
+    {estimatedPushMs, estimates}: CostBasedAdvanceContext,
+    entriesByTable: ReadonlyMap<string, number>,
+  ): void {
+    for (const [queryID, pipeline] of this.#pipelines) {
+      const stats = queryStats.get(queryID);
+      this.#pushCosts.record(
+        queryID,
+        pipeline.tables,
+        stats?.timeMsByTable,
+        entriesByTable,
+      );
+      const estimate = estimatedPushMs.get(queryID);
+      if (estimate !== undefined) {
+        estimates.push({
+          queryID,
+          estimatedPushMs: estimate,
+          pushTimeMs: stats?.timeMs ?? 0,
+        });
+      }
     }
   }
 
@@ -1707,6 +2265,7 @@ export class PipelineDriver {
       timeMsByTable: new Map(),
     }));
     stats.timeMs += timeMs;
+    advance.costBased?.cutoff.recordPush(queryID);
     if (stats.lastPos !== advance.pos) {
       stats.lastPos = advance.pos;
       stats.changes++;
@@ -1903,7 +2462,7 @@ export class PipelineDriver {
       return this.#hydrateContext.timer.elapsedLap() > this.#yieldThresholdMs();
     }
     if (this.#advanceContext) {
-      return this.#shouldAdvanceYieldMaybeAbortAdvance();
+      return this.#checkAdvance(this.#advanceContext);
     }
     throw new Error('shouldYield called outside of hydration or advancement');
   }
