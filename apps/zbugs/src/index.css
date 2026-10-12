@@ -1656,6 +1656,35 @@ textarea.autoResize {
     background-size: 1rem;
     width: max-content;
   }
+
+  .add-filter-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition:
+      top 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  /* Move up out of the way of the on-screen keyboard */
+  @media (pointer: coarse) {
+    .add-filter-modal:has(input:focus) {
+      top: 1rem;
+      transform: translate(-50%, 0);
+    }
+  }
+
+  /* Too short to fit the panel (e.g. a phone in landscape): scroll inside
+     it, since the page itself is locked. Only here, because scrolling
+     clips the pickers' dropdowns to the panel. */
+  @media (max-height: 500px) {
+    .add-filter-modal {
+      max-height: calc(100% - 2rem);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+  }
 }
 
 @media (max-width: 650px) {

@@ -1,6 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
-import {memo, useMemo, useState} from 'react';
+import {memo, useEffect, useMemo, useState} from 'react';
 import {queries} from '../../shared/queries.ts';
 import labelIcon from '../assets/icons/label.svg';
 import {Button} from './button.tsx';
@@ -31,6 +31,24 @@ export const Filter = memo(function Filter({projectName, onSelect}: Props) {
     setIsOpen(!isOpen);
     onSelect?.(selection);
   };
+
+  // Undo page scroll while the modal is open on touch devices
+  // This fixes the issue where the keyboard causes content to scroll under the header
+  useEffect(() => {
+    if (!isOpen || !window.matchMedia('(pointer: coarse)').matches) return;
+
+    const {scrollX, scrollY} = window;
+    const handleScroll = () => {
+      window.scrollTo(scrollX, scrollY);
+    };
+
+    // Scroll events can't be cancelled, so restore the position instead
+    window.addEventListener('scroll', handleScroll);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [isOpen]);
 
   return (
     <div className="add-filter-container">
