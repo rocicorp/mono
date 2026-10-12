@@ -276,6 +276,14 @@ class PushWorker {
     string,
     {wsID: string; downstream: Subscription<Downstream>}
   >;
+  /**
+   * The wsID of each client whose downstream a push failure has already
+   * failed. Mutations queued on that socket are not sent: the failed push left
+   * a gap in the client's mutation IDs, so the API server could only reject
+   * them as out of order. The client re-sends every pending mutation when it
+   * reconnects.
+   */
+  readonly #failedConnections = new Map<string, string>();
 
   readonly #customMutations = getOrCreateCounter(
     'mutation',
@@ -316,6 +324,7 @@ class PushWorker {
     if (existing) {
       existing.downstream.cancel();
     }
+    this.#failedConnections.delete(selector.clientID);
 
     const downstream = Subscription.create<Downstream>({
       cleanup: () => {
@@ -342,6 +351,17 @@ class PushWorker {
       const rest = this.#queue.drain();
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
+        if (this.#isFailedConnection(push.connCtx)) {
+          this.#lc.debug?.(
+            'Not sending push for a connection whose downstream already failed; the client re-sends on reconnect',
+            {
+              clientID: push.connCtx.clientID,
+              wsID: push.connCtx.wsID,
+              mutationIDs: push.push.mutations.map(m => m.id),
+            },
+          );
+          continue;
+        }
         const parentContext = push.push.traceparent
           ? propagation.extract(ROOT_CONTEXT, {
               traceparent: push.push.traceparent,
@@ -426,9 +446,9 @@ class PushWorker {
                           : 'An unknown error occurred while pushing to the API server',
                   };
 
-          this.#failDownstream(client.downstream, pushFailedBody);
+          this.#failDownstream(clientID, client, pushFailedBody);
         } else {
-          this.#failDownstream(client.downstream, response);
+          this.#failDownstream(clientID, client, response);
         }
       }
     } else {
@@ -479,7 +499,7 @@ class PushWorker {
 
         if (failure) {
           connectionTerminations.push(() =>
-            this.#failDownstream(client.downstream, failure),
+            this.#failDownstream(clientID, client, failure),
           );
         }
       }
@@ -611,10 +631,16 @@ class PushWorker {
   }
 
   #failDownstream(
-    downstream: Subscription<Downstream>,
+    clientID: string,
+    client: {wsID: string; downstream: Subscription<Downstream>},
     errorBody: PushFailedBody,
   ): void {
-    downstream.fail(new ProtocolErrorWithLevel(errorBody, 'warn'));
+    this.#failedConnections.set(clientID, client.wsID);
+    client.downstream.fail(new ProtocolErrorWithLevel(errorBody, 'warn'));
+  }
+
+  #isFailedConnection(connCtx: ConnectionContext): boolean {
+    return this.#failedConnections.get(connCtx.clientID) === connCtx.wsID;
   }
 }
 
