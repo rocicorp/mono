@@ -719,18 +719,60 @@ export const zeroOptions = {
     type: v.boolean().optional(() => false),
     desc: [
       `Choose per query, by cost, between pushing a batch of changes through`,
-      `its pipeline and hydrating it again.`,
+      `its pipeline and hydrating it again, and pace the batches of the client`,
+      `groups of a sync worker.`,
       ``,
       `When enabled, a query that is estimated to be cheaper to hydrate again`,
       `than to push a batch of changes to (counting what the batch costs to`,
       `read), or whose pushes turn out to have taken as long as hydrating it`,
       `did, is hydrated again at the batch's snapshot, within the same poke.`,
       `This replaces the advancement time limit, which resets every query of`,
-      `a client group.`,
+      `a client group. A sync worker whose client groups spend more than`,
+      `{bold syncUpdateShareTarget} of its time on batches makes them wait`,
+      `between batches, in proportion to what their batches cost.`,
       ``,
       `When disabled (the default), a batch of changes is pushed through`,
       `every query that reads it as soon as it is replicated, unless that`,
       `runs into the advancement time limit.`,
+    ],
+    hidden: true,
+  },
+
+  syncUpdateShareTarget: {
+    type: v
+      .number()
+      .assert(
+        // A target close to all of a worker's time cannot be held. A worker
+        // that is busy for 95% of its time or more is treated as having no
+        // time to spare, and its client groups' waits are raised by a lot
+        // at once (see `BatchPacer`). Held near such a target, a worker
+        // keeps crossing that line: its use swings by a fifth every few
+        // seconds and averages less than a lower target gets it. In
+        // simulation a target of 0.92 is held and one of 0.94 is not, so
+        // this stops short of both. 1 is allowed because no worker is ever
+        // over it: it is how to never make client groups wait.
+        value => (value > 0 && value <= 0.9) || value === 1,
+        'must be greater than 0 and at most 0.9, or 1',
+      )
+      .optional(() => 0.7),
+    desc: [
+      `With {bold costBasedSyncEnabled}, the largest share of its time that a`,
+      `sync worker may be busy before its client groups are made to wait`,
+      `between batches of changes: at most 0.9, or 1 for them never to be`,
+      `made to wait.`,
+    ],
+    hidden: true,
+  },
+
+  syncMaxBatchIntervalMs: {
+    type: v
+      .number()
+      .assert(value => value >= 0, 'must be nonnegative')
+      .optional(() => 30_000),
+    desc: [
+      `With {bold costBasedSyncEnabled}, the longest that a client group is`,
+      `made to wait between batches of changes, in milliseconds. This bounds`,
+      `how stale the data of a paced client group can get.`,
     ],
     hidden: true,
   },

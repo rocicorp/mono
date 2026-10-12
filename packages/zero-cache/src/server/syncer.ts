@@ -22,6 +22,7 @@ import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
+import {BatchPacer} from '../services/view-syncer/batch-pacer.ts';
 import {
   type ConnectionContextManager,
   ConnectionContextManagerImpl,
@@ -217,6 +218,30 @@ export default async function runWorker(
     }).addCallback(o => o.observe(deferredWritesBudget.heldBytes));
   }
 
+  // Shared by all of the view-syncers on this worker, whose batches of
+  // changes together are held to a share of the worker's time.
+  const batchPacer = config.costBasedSyncEnabled
+    ? new BatchPacer({
+        shareTarget: config.syncUpdateShareTarget,
+        maxIntervalMs: config.syncMaxBatchIntervalMs,
+        lc,
+      })
+    : undefined;
+  if (batchPacer) {
+    getOrCreateGauge('sync', 'worker-busy-share', {
+      description:
+        'Share of its time that a sync worker was busy over the last few ' +
+        'seconds, which the pacing of its client groups holds to a target',
+      unit: '1',
+    }).addCallback(o => o.observe(batchPacer.share));
+    getOrCreateGauge('sync', 'batch-wait-multiplier', {
+      description:
+        'How many times the processing time of a batch of changes the ' +
+        'client groups of a sync worker wait before their next batch',
+      unit: '1',
+    }).addCallback(o => o.observe(batchPacer.multiplier));
+  }
+
   // Shared by all of the view-syncers on this worker, so that the work done
   // for each query shape is logged once per worker per interval.
   const queryStats =
@@ -301,6 +326,11 @@ export default async function runWorker(
       connContextManager,
       customQueryTransformer,
       runPriorityOp,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      batchPacer,
     );
   };
 

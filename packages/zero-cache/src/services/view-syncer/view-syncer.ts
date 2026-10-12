@@ -78,6 +78,7 @@ import {
   AdvancementMetrics,
   type AdvancementOutcome,
 } from './advancement-metrics.ts';
+import type {BatchPacer} from './batch-pacer.ts';
 import {
   ClientHandler,
   startPoke,
@@ -588,6 +589,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * pipeline of the client group.
    */
   readonly #pushCutoff: ShouldCutOffPush | undefined;
+  /**
+   * Shared by the client groups of the sync worker. Set when
+   * `costBasedSyncEnabled`.
+   */
+  readonly #pacer: BatchPacer | undefined;
+  /**
+   * The time that the pipelines took for the batch being processed, if the
+   * pipelines were advanced: reading the changes, pushing them, and
+   * hydrating queries again. Unlike the processing time of the advancement,
+   * this leaves out the time spent awaiting I/O (e.g. the CVR flush), during
+   * which other client groups run.
+   */
+  #batchTimeMs: number | undefined;
+  readonly #pipelineTime = {ms: 0};
+  /** What the client group's batches have been taking, for pacing. */
+  #smoothedBatchTimeMs: number | undefined;
+  /** Ends the wait between batches, if the client group is in one. */
+  #endBatchWait: (() => void) | undefined;
+  /** The waits between batches since the last time they were logged. */
+  #batchWaitLog = {loggedAt: -Infinity, waits: 0, waitedMs: 0};
 
   /** What batches have hydrated again since that was last logged. */
   #rebuildLog = newRebuildLog();
@@ -617,6 +638,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       unit: '1',
       bucketBoundaries: [0.1, 0.25, 0.5, 0.8, 1.25, 2, 4, 10],
     },
+  );
+  readonly #batchWaitTime = getOrCreateLatencyHistogram(
+    'sync',
+    'batch-wait-time',
+    'Time a client group is made to wait between advancements by pacing.',
   );
   #runPriorityOp: <T>(
     lc: LogContext,
@@ -648,9 +674,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     now: MonotonicClock = performance.now.bind(performance),
     // Overridden by tests, as push times are measured with the real clock.
     pushCutoff: ShouldCutOffPush = shouldCutOffPush,
+    pacer?: BatchPacer,
   ) {
     this.#config = config;
     this.#pushCutoff = config.costBasedSyncEnabled ? pushCutoff : undefined;
+    this.#pacer = config.costBasedSyncEnabled ? pacer : undefined;
     this.id = clientGroupID;
     this.connContextManager = connContextManager;
     this.#shard = shard;
@@ -851,6 +879,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
         assert(state === 'version-ready', 'state should be version-ready'); // This is the only state change used.
         this.#e2eServingLagTracker.onVersionReady(replicaState);
+        this.#batchTimeMs = undefined;
 
         await this.#runInLockWithCVR(async (lc, cvr) => {
           const clientSchema = must(
@@ -933,7 +962,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               'No validated background connection; deferring pipeline init',
             );
           }
+          if (this.#batchTimeMs !== undefined) {
+            // The advancement was abandoned for hydrating every query again.
+            this.#batchTimeMs += this.#totalHydrationTimeMs();
+          }
         });
+
+        if (this.#pacer && this.#batchTimeMs !== undefined) {
+          await this.#paceBatches(this.#pacer, this.#batchTimeMs);
+        }
       }
 
       // If this view-syncer exited due to an elective or forced drain,
@@ -994,7 +1031,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     let version: string;
     try {
-      version = this.#pipelines.advanceWithoutDiff();
+      version = this.#pipelines.advanceWithoutDiff(
+        // A paced client group may not advance again for a while.
+        this.#pushCutoff !== undefined,
+      );
     } catch (e) {
       if (!(e instanceof ResetPipelinesSignal)) {
         throw e;
@@ -2182,7 +2222,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         coveredHydratedQueries++;
         firstCoveredQuery ??= covered;
       }
-      const timer = new TimeSliceTimer(lc);
+      const timer = this.#timer(lc, 'hydration');
       let count = 0;
       let timedOut = false;
       await startAsyncSpan(
@@ -3185,7 +3225,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let totalProcessTime = 0;
-      const timer = new TimeSliceTimer(lc);
+      const timer = this.#timer(lc, 'hydration');
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
@@ -3205,7 +3245,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // yield at the very beginning so that the first time slice
       // is properly processed by the time-slice queue.
-      await yieldProcess(lc);
+      await (this.#pacer
+        ? this.#pacer.yieldSlice('hydration')
+        : yieldProcess(lc));
 
       function* hydrateQueries(
         queries: readonly HydrationQuery[],
@@ -3632,11 +3674,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'pipelines must be initialized (advancePipelines',
       );
       const start = performance.now();
-      const timer = new TimeSliceTimer(lc);
+      const timer = this.#timer(lc, 'batch');
       let outcome: AdvancementOutcome = {outcome: 'error'};
       let setupTimeMs: number | undefined;
       let rebuildTimeMs = 0;
       let evictedQueries = false;
+      this.#pipelineTime.ms = 0;
       try {
         let pokers: ReturnType<typeof startPoke> | undefined;
         let updater: CVRQueryDrivenUpdater | undefined;
@@ -3672,7 +3715,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           await this.#processChanges(
             lc,
             await timer.start(),
-            advancement.changes,
+            this.#timed(advancement.changes),
             rows => {
               updater ??= new CVRQueryDrivenUpdater(
                 this.#cvrStore,
@@ -3758,6 +3801,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // but includes asynchronous I/O such as the CVR flush.
         const setupMs = must(setupTimeMs);
         const processingTimeMs = setupMs + timer.totalElapsed() + rebuildTimeMs;
+        this.#batchTimeMs = setupMs + this.#pipelineTime.ms;
         const wallTimeMs = performance.now() - start;
         this.#advancementMetrics.record(
           {
@@ -3832,7 +3876,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const byRecord = (queries: readonly QueryRecord[]) =>
       queries.map(({id}) => must(abandonedByID.get(id)));
 
-    const timer = new TimeSliceTimer(lc);
+    const timer = this.#timer(lc, 'batch');
     const pipelines = this.#pipelines;
     const circuitBreaker = this.#hydrationCircuitBreaker;
     const budgetEvicted: AbandonedQuery[] = [];
@@ -3913,7 +3957,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#processChanges(
       lc,
       timer,
-      rebuildAll(),
+      this.#timed(rebuildAll()),
       rows => updater.received(lc, rows),
       pokers,
     );
@@ -4021,6 +4065,112 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     this.#rebuildsLoggedAt = now;
     this.#rebuildLog = newRebuildLog();
+  }
+
+  /**
+   * Adds the time that the pipelines take to produce `values` to the time
+   * of the batch being processed (see {@link #batchTimeMs}).
+   */
+  #timed<T>(values: Iterable<T>): Iterable<T> {
+    return this.#pacer ? timeIteration(values, this.#pipelineTime) : values;
+  }
+
+  /**
+   * A timer for a batch, or for the hydration of new queries, which has
+   * priority over batches for the worker's time slices (see
+   * `BatchPacer.yieldSlice()`).
+   */
+  #timer(lc: LogContext, kind: 'hydration' | 'batch'): TimeSliceTimer {
+    const pacer = this.#pacer;
+    return new TimeSliceTimer(lc, pacer && (() => pacer.yieldSlice(kind)));
+  }
+
+  /**
+   * Waits as long as the worker's pacer says before the next batch, after
+   * one that took `batchTimeMs`. The wait is outside of the
+   * lock, so connections and query changes are served as usual, at the
+   * pipelines' current snapshot. `version-ready` notifications received in
+   * the meantime are coalesced by the subscription, so the next batch covers
+   * all of them.
+   */
+  async #paceBatches(pacer: BatchPacer, batchTimeMs: number): Promise<void> {
+    // One slow batch (e.g. one that a garbage collection landed in) should
+    // not make the client group wait several times as long as it usually
+    // does, so the wait is for what its batches have been taking.
+    this.#smoothedBatchTimeMs =
+      this.#smoothedBatchTimeMs === undefined
+        ? batchTimeMs
+        : this.#smoothedBatchTimeMs +
+          BATCH_TIME_SMOOTHING * (batchTimeMs - this.#smoothedBatchTimeMs);
+    // Client groups whose batches take about as long would otherwise wait
+    // about as long, and all start their next batches together.
+    const processingMs =
+      this.#smoothedBatchTimeMs *
+      (1 + BATCH_WAIT_JITTER * (Math.random() * 2 - 1));
+
+    const start = performance.now();
+    let waited = false;
+    // The pacer's multiplier changes as the load on the worker does, so the
+    // wait is taken in steps, and is as long as the pacer last said.
+    for (;;) {
+      const remaining =
+        pacer.waitMs(processingMs) - (performance.now() - start);
+      if (remaining <= 0 || !this.#stateChanges.active) {
+        break;
+      }
+      waited = true;
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(
+          resolve,
+          Math.min(remaining, BATCH_WAIT_STEP_MS),
+        );
+        // Ended early by stop().
+        this.#endBatchWait = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+      this.#endBatchWait = undefined;
+    }
+    // Only the batches that are held back: a client group that is not made
+    // to wait would otherwise report a wait of no time for every batch.
+    if (waited) {
+      const waitedMs = performance.now() - start;
+      this.#batchWaitTime.recordMs(waitedMs);
+      this.#logBatchWait(pacer, waitedMs);
+    }
+  }
+
+  /**
+   * Says in the log that this client group is being held back, which the
+   * worker's metrics do not tell one client group from another by. A client
+   * group that is held back is after every batch, so this is at most once
+   * a minute, for the waits since the last time, and not for waits that add
+   * up to less than a second.
+   */
+  #logBatchWait(pacer: BatchPacer, waitedMs: number): void {
+    const log = this.#batchWaitLog;
+    log.waits++;
+    log.waitedMs += waitedMs;
+    const now = this.#now();
+    if (
+      log.waitedMs < BATCH_WAIT_LOG_MIN_MS ||
+      now - log.loggedAt < BATCH_WAIT_LOG_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.#lc.info?.(
+      'Client group is waiting between batches: its sync worker is over its share target',
+      {
+        clientGroupID: this.id,
+        waits: log.waits,
+        waitedMs: log.waitedMs,
+        lastWaitMs: waitedMs,
+        batchTimeMs: this.#smoothedBatchTimeMs,
+        waitMultiplier: pacer.multiplier,
+      },
+    );
+    this.#batchWaitLog = {loggedAt: now, waits: 0, waitedMs: 0};
   }
 
   async inspect(
@@ -4195,6 +4345,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.connContextManager.setSharedRetransformReady(false);
     this.#initialized.reject(shutdownBeforeInitializationError());
     this.#stateChanges.cancel();
+    this.#endBatchWait?.();
     return this.#stopped.promise;
   }
 
@@ -4349,19 +4500,63 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
   return false;
 }
 
+/**
+ * Iterates over `values`, adding the time spent producing them to
+ * `total.ms`. The time that the consumer takes between values, including
+ * any that it spends awaiting, is not counted.
+ */
+function* timeIteration<T>(
+  values: Iterable<T>,
+  total: {ms: number},
+): Iterable<T> {
+  const iterator = values[Symbol.iterator]();
+  try {
+    for (;;) {
+      const start = performance.now();
+      const result = iterator.next();
+      total.ms += performance.now() - start;
+      if (result.done) {
+        return;
+      }
+      yield result.value;
+    }
+  } finally {
+    iterator.return?.();
+  }
+}
+
+/** How often a client group that is waiting between batches asks again. */
+const BATCH_WAIT_STEP_MS = 250;
+
+/** See `ViewSyncerService.#logBatchWait()`. */
+const BATCH_WAIT_LOG_INTERVAL_MS = 60_000;
+const BATCH_WAIT_LOG_MIN_MS = 1000;
+
+/** The weight of the latest batch in a client group's smoothed batch time. */
+const BATCH_TIME_SMOOTHING = 0.3;
+
+/** How far, as a fraction, a client group's wait is varied at random. */
+const BATCH_WAIT_JITTER = 0.3;
+
 export class TimeSliceTimer {
   #total = 0;
   #start = 0;
   #lc: LogContext;
+  readonly #yieldSlice: (() => Promise<void>) | undefined;
 
-  constructor(lc: LogContext) {
+  /**
+   * @param yieldSlice How the timer yields the process, if not by taking
+   *        turns with the rest of the worker's work (see `yieldProcess()`).
+   */
+  constructor(lc: LogContext, yieldSlice?: () => Promise<void>) {
     this.#lc = lc;
+    this.#yieldSlice = yieldSlice;
   }
 
   async start() {
     // yield at the very beginning so that the first time slice
     // is properly processed by the time-slice queue.
-    await yieldProcess(this.#lc);
+    await (this.#yieldSlice ? this.#yieldSlice() : yieldProcess(this.#lc));
     return this.startWithoutYielding();
   }
 
@@ -4373,7 +4568,7 @@ export class TimeSliceTimer {
 
   async yieldProcess(_msgForTesting?: string) {
     this.#stopLap();
-    await yieldProcess(this.#lc);
+    await (this.#yieldSlice ? this.#yieldSlice() : yieldProcess(this.#lc));
     this.#startLap();
   }
 

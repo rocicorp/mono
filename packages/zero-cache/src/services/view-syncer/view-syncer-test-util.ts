@@ -52,6 +52,7 @@ import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.ts';
+import type {BatchPacer} from './batch-pacer.ts';
 import {ConnectionContextManagerImpl} from './connection-context-manager.ts';
 import {testDeferredWritesBudget} from './deferred-writes-test-util.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
@@ -598,6 +599,8 @@ type SetupOptions = Readonly<{
    * to a query instead of the query's push and hydration times.
    */
   pushCutoff?: ShouldCutOffPush | undefined;
+  /** The worker's pacer, with `costBasedSyncEnabled`. */
+  pacer?: BatchPacer | undefined;
   rebuildMargin?: number | undefined;
   /**
    * Enables a default `/query` stub for PG integration tests that should still
@@ -656,6 +659,7 @@ export async function setup(
     lc = createSilentLogContext(),
     monotonicClock,
     pushCutoff,
+    pacer,
     rebuildMargin,
     queryFetchMode = 'none',
   } = options;
@@ -791,7 +795,7 @@ export async function setup(
     },
     viewSyncerHydrationBudgetMs: hydrationBudgetMs,
     viewSyncerQueryHydrationTimeoutMs: queryHydrationTimeoutMs,
-    costBasedSyncEnabled: pushCutoff !== undefined,
+    costBasedSyncEnabled: pushCutoff !== undefined || pacer !== undefined,
     syncRebuildMargin: rebuildMargin,
   } as NormalizedZeroConfig;
 
@@ -858,6 +862,7 @@ export async function setup(
     setTimeoutFn,
     monotonicClock,
     pushCutoff,
+    pacer,
   );
   if (permissions) {
     const json = JSON.stringify(permissions);

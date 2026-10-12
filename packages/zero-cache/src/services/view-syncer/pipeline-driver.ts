@@ -748,8 +748,12 @@ export class PipelineDriver {
    * {@link reset()} before hydrating. ({@link advance()} detects this when
    * the diff encounters the RESET op; this path skips the diff and so must
    * check explicitly.)
+   *
+   * @param releasePreviousSnapshot Whether to release the snapshot that the
+   *        driver was at, which is otherwise left open until the next
+   *        advance (see `Snapshotter.releasePrevious()`).
    */
-  advanceWithoutDiff(): string {
+  advanceWithoutDiff(releasePreviousSnapshot = false): string {
     const {prev, curr} = this.#snapshotter.advanceWithoutDiff();
     if (curr.schemaChangedSince(prev.version)) {
       throw new ResetPipelinesSignal(
@@ -759,6 +763,9 @@ export class PipelineDriver {
     }
     for (const table of this.#tables.values()) {
       table.setDB(curr.db.db);
+    }
+    if (releasePreviousSnapshot) {
+      this.#snapshotter.releasePrevious();
     }
     return curr.version;
   }
@@ -2022,6 +2029,11 @@ export class PipelineDriver {
             },
           );
         }
+        // The sources have moved to the new snapshot, so nothing reads the
+        // previous one any more. Left open until the next advancement,
+        // which may be a long wait away, it would keep the replica from
+        // checkpointing its write-ahead log.
+        this.#snapshotter.releasePrevious();
       }
     } catch (e) {
       if (

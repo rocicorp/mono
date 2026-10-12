@@ -350,6 +350,18 @@ export class Snapshotter {
   }
 
   /**
+   * Releases the previous snapshot, i.e. the `prev` of the last
+   * {@link advance()} or {@link advanceWithoutDiff()}. It is only read
+   * while the diff that it is the start of is iterated over, but its read
+   * transaction otherwise stays open until the next advance, which keeps
+   * the replica from checkpointing its write-ahead log past it. A diff that
+   * starts at it can no longer be iterated over.
+   */
+  releasePrevious(): void {
+    this.#prev?.release();
+  }
+
+  /**
    * Call this to close the database connections when the Snapshotter is
    * no longer needed.
    */
@@ -624,8 +636,14 @@ class Snapshot {
   readonly version: string;
   #reset = false;
 
-  constructor(db: StatementRunner, appID: string) {
-    db.beginConcurrent();
+  /**
+   * @param begun Whether `db` is already in a `BEGIN CONCURRENT` transaction
+   *        that has not read anything.
+   */
+  constructor(db: StatementRunner, appID: string, begun = false) {
+    if (!begun) {
+      db.beginConcurrent();
+    }
     // Note: The subsequent read is necessary to acquire the read lock
     // (which results in the logical creation of the snapshot). Calling
     // `BEGIN CONCURRENT` alone does not result in acquiring the read lock.
@@ -943,18 +961,36 @@ class Snapshot {
   }
 
   /**
-   * Whether the connection has been reset to a newer snapshot (i.e. via
-   * {@link resetToHead()}), after which reads no longer reflect
-   * {@link version}.
+   * Whether the snapshot has been released, or its connection reset to a
+   * newer snapshot (i.e. via {@link release()} or {@link resetToHead()}),
+   * after which reads no longer reflect {@link version}.
    */
   get reset(): boolean {
     return this.#reset;
   }
 
+  /**
+   * Ends the snapshot's read transaction, after which reads no longer
+   * reflect {@link version}. An open read transaction keeps SQLite from
+   * checkpointing the write-ahead log past the snapshot, so a snapshot that
+   * is no longer read should not be left open.
+   */
+  release(): void {
+    if (!this.#reset) {
+      this.#reset = true;
+      this.db.rollback();
+      // The connection is put back into a transaction, which holds nothing
+      // until it reads. A snapshot's connection is writable, and outside of
+      // a transaction anything that is run on it would be committed to the
+      // replica under the replica's write lock, which only the replicator
+      // should take.
+      this.db.beginConcurrent();
+    }
+  }
+
   resetToHead(): Snapshot {
-    this.#reset = true;
-    this.db.rollback();
-    return new Snapshot(this.db, this.#appID);
+    this.release();
+    return new Snapshot(this.db, this.#appID, true);
   }
 }
 
