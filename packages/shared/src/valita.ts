@@ -231,6 +231,23 @@ export function testOptional<T>(
   return res;
 }
 
+const STRICT = {mode: 'strict'} as const;
+
+/**
+ * Parses `schema` in strict mode, whatever mode the enclosing parse uses. Use
+ * it for the parts of a message that a reader must not silently ignore inside
+ * a lenient parse.
+ *
+ * Wrap a field, not a union variant: a union sees the wrapped type as
+ * `unknown`, so it can no longer pick the variant by its literal fields.
+ */
+export function strict<T>(schema: v.Type<T>): v.Type<T> {
+  const type = v.unknown().chain(value => schema.try(value, STRICT));
+  // A transform serializes as just its name. Show the wrapped schema too, so a
+  // change to it still changes the hash in protocol-version.test.ts.
+  return Object.assign(type, {strict: schema});
+}
+
 /**
  * Shallowly marks the schema as readonly.
  */

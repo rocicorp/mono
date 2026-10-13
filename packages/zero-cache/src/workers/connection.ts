@@ -105,6 +105,13 @@ const LEGACY_QUERIES_DISABLED_MESSAGE =
   'Legacy queries are disabled by this Zero server. This client must use custom queries instead of sending query ASTs directly. To temporarily restore compatibility, set ZERO_ALLOW_LEGACY_QUERIES=true on zero-cache.';
 
 // Exported for testing purposes.
+//
+// Client messages are parsed in strip mode, so a newer client can add fields
+// that this server drops. Strip rather than passthrough: nothing this server
+// doesn't know reaches the CVR or the API server, and valita's passthrough
+// drops unknown fields anyway on any object with a transformed field below it
+// (such as jsonSchema args). ASTs stay strict in the schema, because a server
+// that ignored an AST field would run a different query.
 export function parseUpstreamMessage(
   value: unknown,
   allowLegacyQueries: boolean,
@@ -112,7 +119,7 @@ export function parseUpstreamMessage(
   if (!allowLegacyQueries && containsLegacyQuery(value)) {
     throw new Error(LEGACY_QUERIES_DISABLED_MESSAGE);
   }
-  return valita.parse(value, upstreamSchemaWithUnparsedAnalyzeQuery);
+  return valita.parse(value, upstreamSchemaWithUnparsedAnalyzeQuery, 'strip');
 }
 
 // Ensures that a downstream message is sent at least every interval, sending a

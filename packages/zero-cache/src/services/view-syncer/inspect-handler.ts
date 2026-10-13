@@ -121,7 +121,7 @@ export async function handleInspect(
       }
 
       case 'analyze-query': {
-        const parsedBody = v.parse(body, inspectAnalyzeQueryUpSchema);
+        const parsedBody = v.parse(body, inspectAnalyzeQueryUpSchema, 'strip');
         let ast = parsedBody.ast ?? parsedBody.value;
         let legacyQuery = true;
 

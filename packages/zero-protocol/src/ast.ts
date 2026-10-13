@@ -267,13 +267,24 @@ function conditionExceedsDepth(
  * (e.g. in the CVR) are parsed with {@link astSchema} so that ones stored
  * before the limit existed can still be read.
  */
-export const depthBoundedAstSchema: v.Type<AST> = v
-  .unknown()
-  .chain((value, options) =>
-    exceedsASTDepth(value)
-      ? v.err(`AST exceeds the maximum depth of ${MAX_AST_DEPTH}`)
-      : astSchema.try(value, options),
-  );
+export const depthBoundedAstSchema: v.Type<AST> = Object.assign(
+  v
+    .unknown()
+    .chain((value, options) =>
+      exceedsASTDepth(value)
+        ? v.err(`AST exceeds the maximum depth of ${MAX_AST_DEPTH}`)
+        : astSchema.try(value, options),
+    ),
+  // A transform serializes as just its name. Show astSchema too, so a change
+  // to it still changes the hash in protocol-version.test.ts.
+  {depthBounded: astSchema},
+);
+
+/**
+ * {@link depthBoundedAstSchema} parsed strictly even inside a lenient parse. A
+ * server that ignored an AST field it doesn't know would run a different query.
+ */
+export const strictASTSchema: v.Type<AST> = v.strict(depthBoundedAstSchema);
 
 export type Bound = {
   row: Row;

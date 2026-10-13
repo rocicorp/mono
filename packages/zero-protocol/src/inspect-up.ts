@@ -1,6 +1,6 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
-import {depthBoundedAstSchema} from './ast.ts';
+import {strictASTSchema} from './ast.ts';
 
 const inspectUpBase = v.object({
   id: v.string(),
@@ -45,9 +45,9 @@ export type AnalyzeQueryOptions = v.Infer<typeof analyzeQueryOptionsSchema>;
 export const inspectAnalyzeQueryUpSchema = inspectUpBase.extend({
   op: v.literal('analyze-query'),
   /** @deprecated Use {@linkcode ast} instead */
-  value: depthBoundedAstSchema.optional(),
+  value: strictASTSchema.optional(),
   options: analyzeQueryOptionsSchema.optional(),
-  ast: depthBoundedAstSchema.optional(),
+  ast: strictASTSchema.optional(),
   name: v.string().optional(),
   args: v.readonlyArray(jsonSchema).optional(),
 });

@@ -333,6 +333,31 @@ test('literalUnion', () => {
   );
 });
 
+test('strict', () => {
+  const inner = v.object({a: v.number()});
+  const strictInner = v.strict(inner);
+  expectTypeOf(strictInner).toEqualTypeOf<v.Type<{a: number}>>();
+  const s = v.object({
+    strict: strictInner.optional(),
+    other: inner.optional(),
+  });
+
+  for (const mode of ['strip', 'passthrough'] as const) {
+    expect(v.parse({strict: {a: 1}}, s, mode)).toEqual({strict: {a: 1}});
+    expect(() => v.parse({strict: {a: 1, b: 2}}, s, mode)).toThrow(
+      new TypeError('Unexpected property b at strict'),
+    );
+    expect(() => v.parse({strict: {a: 'x'}}, s, mode)).toThrow(
+      new TypeError('Expected number at strict.a. Got "x"'),
+    );
+  }
+  // The enclosing mode applies everywhere else.
+  expect(v.parse({strict: {a: 1}, other: {a: 1, b: 2}}, s, 'strip')).toEqual({
+    strict: {a: 1},
+    other: {a: 1},
+  });
+});
+
 test('toTerminals', () => {
   // The emission order is a valita implementation detail; options.ts only
   // depends on the set of terminals.
