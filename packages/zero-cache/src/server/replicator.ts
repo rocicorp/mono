@@ -23,8 +23,8 @@ import {
 import {reserveAndGetSnapshotStatus} from '../services/change-streamer/snapshot.ts';
 import {
   exitAfter,
-  ProcessManager,
   runUntilKilled,
+  SupportingProcesses,
 } from '../services/life-cycle.ts';
 import {
   readLocalReplica,
@@ -179,13 +179,13 @@ export default async function runWorker(
   // The backup-replicator manages the litestream backup process. It is
   // started after the write worker has prepared the db file in order to
   // avoid contending on the sqlite lock.
-  const processes =
-    mode === 'backup' ? new ProcessManager(lc, parent) : undefined;
-  processes?.addSubprocess(
-    startReplicaBackupProcess(lc, config.litestream, dbPath),
-    'supporting',
-    'litestream',
-  );
+  const processes = new SupportingProcesses(lc, parent);
+  if (mode === 'backup') {
+    processes.add(
+      startReplicaBackupProcess(lc, config.litestream, dbPath),
+      'litestream',
+    );
+  }
 
   const replicator = new ReplicatorService(
     lc,
@@ -220,17 +220,7 @@ export default async function runWorker(
     parent.send(['ready', {ready: true}]);
   });
 
-  if (!processes) {
-    return runUntilKilled(lc, parent, replicator);
-  }
-
-  try {
-    await runUntilKilled(lc, parent, replicator);
-  } catch (err) {
-    processes.logErrorAndExit(err, workerName);
-  } finally {
-    await processes.shutdown();
-  }
+  return runUntilKilled(lc, parent, replicator, processes);
 }
 
 export function setupMetrics(

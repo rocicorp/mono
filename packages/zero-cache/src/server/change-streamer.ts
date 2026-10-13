@@ -27,8 +27,8 @@ import {
 } from '../services/change-streamer/storer.ts';
 import {
   exitAfter,
-  ProcessManager,
   runUntilKilled,
+  SupportingProcesses,
 } from '../services/life-cycle.ts';
 import {deleteLitestreamMetaDir} from '../services/litestream/commands.ts';
 import {
@@ -58,6 +58,11 @@ import {REPLICATOR_URL} from './worker-urls.ts';
 
 // Default LogContext, overridden in runWorker
 let lc = new LogContext('info', {}, consoleLogSink);
+
+// Errors thrown once the services are running are reported by the services
+// themselves (e.g. as 'Replicating' status events), and are thus not
+// published as 'Initializing' errors.
+let running = false;
 
 export default async function runWorker(
   parent: Worker,
@@ -372,7 +377,9 @@ export default async function runWorker(
   // impossible: upstream must have advanced in order for replication to be stuck.
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
-  const processes = new ProcessManager(lc, parent);
+  // The backup-replicator is stopped with the other services, i.e. after the
+  // ChangeStreamerHttpServer has drained its subscribers.
+  const processes = new SupportingProcesses(lc, parent);
   const profileSubWorkers: Worker[] = [];
   const {promise: replicatorReady, resolve} = resolver();
   if (!backupURL) {
@@ -386,13 +393,12 @@ export default async function runWorker(
     // Start a backup replicator, which starts up the corresponding
     // litestream backup process.
     const backupReplicator = processes
-      .addWorker(
+      .add(
         childWorker(
           REPLICATOR_URL,
           {...env, ZERO_LITESTREAM_BACKUP_URL_OVERRIDE: backupURL},
           'backup' satisfies ReplicaFileMode,
         ),
-        'supporting',
         'backup-replicator',
       )
       .onceMessageType('ready', () => resolve());
@@ -467,13 +473,14 @@ export default async function runWorker(
   // TODO: Remove this delay and start the changeStreamer normally here once
   //       transitioned to RMv2, since changeStreamer startup will no longer
   //       disrupt an existing task.
-  try {
-    await runUntilKilled(lc, parent, changeStreamerWebServer, backupMonitor);
-  } catch (err) {
-    processes.logErrorAndExit(err, 'change-streamer');
-  } finally {
-    await processes.shutdown();
-  }
+  running = true;
+  await runUntilKilled(
+    lc,
+    parent,
+    changeStreamerWebServer,
+    backupMonitor,
+    processes,
+  );
 }
 
 // fork()
@@ -486,10 +493,12 @@ if (!singleProcessMode()) {
         process.env,
         ...process.argv.slice(2),
       ).catch(async e => {
-        await publishCriticalEvent(
-          lc,
-          replicationStatusError(lc, 'Initializing', e),
-        );
+        if (!running) {
+          await publishCriticalEvent(
+            lc,
+            replicationStatusError(lc, 'Initializing', e),
+          );
+        }
         throw e;
       }),
   );

@@ -15,6 +15,7 @@ import {
   type Subprocess,
   type Worker,
 } from '../types/processes.ts';
+import {orTimeout} from '../types/timeout.ts';
 import {RunningState} from './running-state.ts';
 import type {SingletonService} from './service.ts';
 
@@ -342,6 +343,121 @@ export class ProcessManager {
   }
 }
 
+/**
+ * Runs the supporting subprocesses of a worker (e.g. the litestream process
+ * of the backup-replicator) as a {@link SingletonService}.
+ *
+ * Unlike a {@link ProcessManager}, it does not forward `SIGTERM` or `SIGINT`
+ * to its subprocesses. Instead, {@link runUntilKilled} stops it along with the
+ * worker's other services, i.e. after they have drained, so that the
+ * subprocesses keep supporting them until then. Forceful signals (`SIGQUIT`
+ * and `SIGABRT`), on the other hand, are forwarded immediately once the
+ * service is running, and the subprocesses are killed if the worker exits
+ * before they are stopped.
+ *
+ * `run()` settles when a subprocess exits before {@link stop()} is called,
+ * which stops the worker: a clean exit resolves (and the parent in turn treats
+ * the worker's clean exit outside of a drain as an intentional shutdown),
+ * while any other exit rejects.
+ */
+export class SupportingProcesses implements SingletonService {
+  readonly id = 'supporting-processes';
+  readonly #lc: LogContext;
+  readonly #parent: EventEmitter;
+  readonly #procs = new Map<Subprocess, string>();
+  readonly #done = resolver<void>();
+  #signaled: NodeJS.Signals | undefined;
+
+  constructor(lc: LogContext, parent: EventEmitter) {
+    this.#lc = lc.withContext('component', 'supporting-processes');
+    this.#parent = parent;
+    // run() may never be called if the worker fails before running services.
+    this.#done.promise.catch(() => {});
+
+    parent.on('exit', code =>
+      this.#kill(
+        code === 0
+          ? 'SIGTERM'
+          : code === INTENTIONAL_SHUTDOWN_ERROR_CODE
+            ? 'SIGQUIT'
+            : 'SIGABRT',
+      ),
+    );
+  }
+
+  add<P extends Subprocess>(proc: P, name: string): P {
+    this.#procs.set(proc, name);
+    proc.on('close', (code: number | null, sig: NodeJS.Signals | null) =>
+      this.#onClose(proc, name, code, sig),
+    );
+    // As with the ProcessManager, 'error' events after a signal (e.g. failing
+    // to send a message to an exiting process) are logged at 'warn'.
+    proc.on('error', err =>
+      this.#lc[this.#signaled ? 'warn' : 'error']?.(
+        `error from ${name} ${proc.pid}`,
+        err,
+      ),
+    );
+    return proc;
+  }
+
+  run(): Promise<void> {
+    // Signal listeners are only installed when running, i.e. alongside those
+    // of runUntilKilled(). Installing them any earlier would consume signals
+    // received during worker initialization, which would otherwise terminate
+    // the worker (or be handled by the initialization logic).
+    for (const signal of FORCEFUL_SHUTDOWN) {
+      this.#parent.on(signal, () => this.#kill(signal));
+    }
+    return this.#done.promise;
+  }
+
+  async stop(): Promise<void> {
+    if (!this.#signaled) {
+      this.#kill('SIGTERM');
+    }
+    if (this.#procs.size === 0) {
+      this.#done.resolve();
+    }
+    await this.#done.promise.catch(() => {});
+  }
+
+  #onClose(
+    proc: Subprocess,
+    name: string,
+    code: number | null,
+    sig: NodeJS.Signals | null,
+  ) {
+    this.#procs.delete(proc);
+    const exit = sig
+      ? `${name} (${proc.pid}) killed with (${sig})`
+      : `${name} (${proc.pid}) exited with code (${code})`;
+
+    if (this.#signaled) {
+      this.#lc.info?.(exit);
+      if (this.#procs.size === 0) {
+        this.#done.resolve();
+      }
+    } else if (code === 0 || code === INTENTIONAL_SHUTDOWN_ERROR_CODE) {
+      this.#lc.info?.(exit);
+      this.#done.resolve();
+    } else {
+      this.#done.reject(new Error(exit));
+    }
+  }
+
+  #kill(signal: NodeJS.Signals) {
+    this.#signaled = signal;
+    for (const proc of this.#procs.keys()) {
+      try {
+        proc.kill(signal);
+      } catch (e) {
+        this.#lc.error?.(e);
+      }
+    }
+  }
+}
+
 export type SelfDrainOptions = {
   /**
    * The time after a self drain is requested at which the server sends itself
@@ -411,13 +527,21 @@ export class SelfDrain {
 }
 
 /**
+ * The maximum time that {@link runUntilKilled} waits for its services to stop
+ * (i.e. for their `run()` to settle) after stopping them.
+ */
+export const STOP_TIMEOUT_MS = 60_000;
+
+/**
  * Runs the specified services, stopping them on `SIGTERM` or `SIGINT` with
  * an optional {@link SingletonService.drain drain()}, or stopping them
- * without draining for `SIGQUIT`.
+ * without draining for `SIGQUIT`. If a service stops (or throws) on its own,
+ * the remaining services are stopped without draining.
  *
- * @returns a Promise that resolves/rejects when any of the services stops/throws.
+ * @returns a Promise that settles once all services have stopped (or
+ *          {@link STOP_TIMEOUT_MS} has elapsed), resolving or rejecting
+ *          with the outcome of the first service to stop.
  */
-
 export async function runUntilKilled(
   lc: LogContext,
   parent: EventEmitter,
@@ -426,6 +550,16 @@ export async function runUntilKilled(
   if (services.length === 0) {
     return;
   }
+  const stopped = new Set<SingletonService>();
+  const runs = services.map(svc => svc.run().finally(() => stopped.add(svc)));
+
+  const allStopped = resolver<void>();
+  let stopping: Promise<void> | undefined;
+  const stopAll = (reason: string) =>
+    (stopping ??= stopServices(lc, services, runs, stopped, reason).then(
+      allStopped.resolve,
+    ));
+
   for (const signal of [...GRACEFUL_SHUTDOWN, ...FORCEFUL_SHUTDOWN]) {
     parent.once(signal, async () => {
       const GRACEFUL_SIGNALS = GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[];
@@ -450,22 +584,53 @@ export async function runUntilKilled(
           }
         }
       }
-      services.forEach(async svc => {
-        lc.info?.(`stopping ${svc.constructor.name} ${svc.id} (${signal})`);
-        await svc.stop();
-      });
+      await stopAll(signal);
     });
   }
 
   try {
-    // Run all services and resolve when any of them stops.
-    const svc = await Promise.race(
-      services.map(svc => svc.run().then(() => svc)),
-    );
-    lc.info?.(`${svc.constructor.name} (${svc.id}) stopped`);
+    // Run all services and resolve when any of them stops, or when stopping
+    // them (after a signal) has timed out.
+    const svc = await Promise.race([
+      ...runs.map((run, i) => run.then(() => services[i])),
+      allStopped.promise,
+    ]);
+    if (svc) {
+      lc.info?.(`${svc.constructor.name} (${svc.id}) stopped`);
+    }
   } catch (e) {
     lc.error?.(`exiting on error`, e);
     throw e;
+  } finally {
+    await stopAll('stopped');
+  }
+}
+
+async function stopServices(
+  lc: LogContext,
+  services: SingletonService[],
+  runs: Promise<void>[],
+  stopped: Set<SingletonService>,
+  reason: string,
+) {
+  for (const svc of services) {
+    if (!stopped.has(svc)) {
+      lc.info?.(`stopping ${svc.constructor.name} ${svc.id} (${reason})`);
+      void svc
+        .stop()
+        .catch(e =>
+          lc.warn?.(`error stopping ${svc.constructor.name} ${svc.id}`, e),
+        );
+    }
+  }
+  if (
+    (await orTimeout(Promise.allSettled(runs), STOP_TIMEOUT_MS)) === 'timed-out'
+  ) {
+    const running = services.filter(svc => !stopped.has(svc));
+    lc.warn?.(
+      `services did not stop within ${STOP_TIMEOUT_MS} ms: ` +
+        running.map(svc => `${svc.constructor.name} ${svc.id}`).join(', '),
+    );
   }
 }
 
